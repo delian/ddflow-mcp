@@ -123,6 +123,21 @@ Several of those are judgement you do directly — that is fine and expected. It
 list to re-read when a gate has been passing suspiciously easily.
 {% endif %}
 
+{% if queue_is_empty %}{% if importable %}
+## This project has history, and the queue is empty
+
+{{ importable }} file(s) that usually hold a project's work were found — a todo
+checklist, a lessons corpus, architecture decisions, a research log, an engineering
+journal, a cross-session memory store — and nothing is in the queue yet.
+An empty queue will tell you "nothing is in flight" about a project that may have
+several things in flight, and you will believe it.
+
+Call `orchard_import` (it writes nothing) and put what it found to the operator. The
+`import-existing-project` prompt walks through the half that needs judgement: which
+open items are actually live, what the branches mean, which lessons still apply, and
+the globs and dependencies nobody wrote down.
+{% endif %}{% endif %}
+
 ## Before you start anything non-trivial
 
 `orchard_recall` — one search across every decision, lesson, research verdict, past bug,
@@ -160,8 +175,15 @@ reports which companion tools (roborev, codeguide-mcp, context7, a memory server
 present on this machine and which are missing.
 
 Then set the project's test command with `orchard_configure`, wire up what
-`orchard_companions` reports missing, and add work with `orchard_phase_add` /
-`orchard_task_add`.
+`orchard_companions` reports missing, and add work.
+
+**If this project is not brand new, call `orchard_import` before adding anything by
+hand.** It reads the todo checklists, lessons, ADRs, research log, engineering journal,
+cross-session memory store and unmerged branches that are already there and proposes
+them, so the queue starts where the project actually is rather than empty. It writes
+nothing until `apply` is true, and it will tell you what it could NOT decide — headings
+that claim the work shipped over unticked boxes, dependencies pointing at ids nothing
+defines. Put those to the operator rather than resolving them yourself.
 
 Do not call the other tools before `orchard_setup`; they will report that there is no
 queue.

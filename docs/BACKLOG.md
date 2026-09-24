@@ -167,12 +167,14 @@ Filed rather than fixed, each with why it is not urgent.
   *shorter* than the truth, which is the harmless direction for a figure nobody gates on.
   *Found by: writing the inheritance fix.*
 
-- **B28. The parallelism cap counts leases, not worktrees.** `plan()` now measures
-  in-flight work from live leases across the whole queue rather than from the filtered
-  candidate list. A lease taken with `--no-worktree` therefore consumes a slot from
-  `worktree.max_parallel`, which is a statement about disk and CPU. Over-counting is the
-  safe direction and the two knobs are separately configurable, so this is a precision
-  gap rather than a defect. *Found by: the cap fix.*
+- **B28. The parallelism cap counts leases, not worktrees. ✅ CLOSED.** The two knobs
+  were combined with `min()`, which is one number pretending to be one statement:
+  `schedule.max_parallel_tasks` says how many items may be IN FLIGHT, `worktree.
+  max_parallel` says how many trees may EXIST. Under the old form a machine allowed one
+  tree could not run a second `--no-worktree` task, and a queue allowed four in flight
+  silently became one — the silent-knob-drop class. Now two independent checks, both
+  counted across the whole queue, each naming itself when it is the one that refused.
+  `tests/test_rubber_duck_findings.py` mutation-verified.
 
 - **B29. Companion detection has no cache.** `orchard companions` probes on every call,
   and an `npx`-based probe can take seconds on a cold cache. `adopt` pays this once, and
@@ -203,10 +205,11 @@ Filed rather than fixed, each with why it is not urgent.
   matters most is the one CI does not run. (Ceremony note: they take ~2 minutes and
   spawn processes, so they want their own marker and job, not inclusion in `tests/`.)
 
-- **B34. `orchard history` does not exist as one view.** `status`, `progress`, `replay`
-  and `recall` each answer part of "what has happened here", and an operator asking that
-  question has to know which to run. A single reverse-chronological timeline over the
-  log, filterable by item and kind, would subsume the common case.
+- **B34. `orchard history` does not exist as one view. ✅ CLOSED.** One
+  reverse-chronological timeline over the log, filterable by `--item`, `--kind`
+  (families or exact kinds), `--since` and `--limit`, on both surfaces. The MCP tool was
+  missing on the first pass and `tests/test_mcp_parity.py` caught it, which is what that
+  ratchet is for.
 
 ## B35–B40 — from roborev's architecture pass, 2026-09-24
 
@@ -225,6 +228,14 @@ of recording it is to stop the next reading re-deriving it.
   application layer (`orchard/api.py`) that both surfaces call; it is a large change
   and the ratchets make the current shape safe, so it waits for a reason rather than a
   free afternoon.
+
+  **`services/outcome.py` was the groundwork and shipped DEAD** — 91 lines, zero
+  importers, committed in 89386614 and never wired into any of the ~60 command
+  functions. Deleted 2026-09-24 rather than left in place: an unreferenced module that
+  ships in the package is worse than a backlog entry, because it is importable,
+  untested and reads as live API to the next person. `git show 89386614:orchard/orchard/services/outcome.py`
+  has it when B35 is actually done. *Found by: reading the change surface before
+  committing.*
 
 - **B36. `cli.py` is a god module — 3,041 lines.** ~60 command functions, a 430-line
   parser builder, an embedded starter-TOML string, and real **domain policy**:
@@ -257,3 +268,163 @@ of recording it is to stop the next reading re-deriving it.
   `max_chunk_chars` and reports reasoning-token counts, the gemini copy names neither.
   Same class as the four duplications fixed in this pass, just lower blast radius —
   it degrades a message rather than a decision. *Found by: roborev duplication (D6).*
+
+## B41–B51 — the importer against a real 400-day corpus, 2026-09-24 ✅ ALL CLOSED
+
+Eleven defects, none of which any fixture test could see. Full measurements, before and
+after, in [docs/RESEARCH.md §R11](RESEARCH.md#r11--the-importer-against-a-real-400-day-corpus-not-a-fixture);
+all eleven ship with a mutation-verified regression test in
+`tests/test_import_real_project.py`.
+
+- **B41. A numeric-dotted id was not an id.** `### 142.A` — the shape this project has
+  used for two hundred phases — was slugged, because the pattern required a leading
+  letter. Broke 39 of 47 declared dependencies at once.
+- **B42. An id inside a spanning bold was not an id.** `**DRIVERFIX.1 — step 1 …**`
+  matched neither the delimited nor the bare form.
+- **B43. The child-prefix rename overruled a declared heading id**, renaming the phase
+  out from under every `Needs:` pointing at it.
+- **B44. Derived task ids voted in that rename**, which is circular, and one of them was
+  enough to empty the common prefix.
+- **B45. 42 pairs of ids collided** — silent data loss, because the second event folds
+  over the first.
+- **B46. One `##` research entry became five**, its `###` sub-parts promoted to siblings.
+- **B47. `docs/adr/README.md` imported as a decision.**
+- **B48. Every journal entry was dated the day of the import.**
+- **B49. The fold dropped `seq`, `ident` and `source` from notes**, so the idempotency
+  check compared `""` with `""` — a projection silently deciding a field does not exist.
+- **B50. Every memory printed twice**, its excerpt concatenated with the line it was an
+  excerpt of.
+- **B51. Over the cap, 790 phases were proposed with zero tasks**, and the human preview
+  listed five of the eight kinds.
+
+Two things the scan now REPORTS and deliberately does not resolve: a phase heading that
+says `SHIPPED` over unticked boxes (32 of them, corroborated by the same repository's
+own OptMem store), and a dependency on an id nothing produced.
+
+## B52 — the worktree cap cannot be applied per item
+
+`plan()` now counts the two caps separately — `schedule.max_parallel_tasks` over every
+live lease, `worktree.max_parallel` over the leases that actually made a tree — but it
+still emits ONE `slots` number for all ready items, so a full tree cap withholds a task
+that would have taken no tree.
+
+It cannot do better today: `--no-worktree` is a flag on `claim`, not a field on `Item`,
+so at planning time nothing distinguishes the two. The fix is an item-level declaration
+(`needs_worktree`, or deriving it from a tag or the absence of globs) — a model change
+that wants a reason rather than a free afternoon, and the current form is a strict
+relaxation of what it replaced, so nothing regressed.
+
+*Found by: the cross-family critic, 2026-09-24, raised as THEORETICAL. Tier-0 probe —
+`[f.name for f in fields(Item)]` — confirmed there is no such field, which is what keeps
+it a granularity gap rather than a counting bug.*
+
+## B53–B56 — the 2026-09-24 review stack on the import work
+
+Three reviewers, disjoint findings, which is the whole reason all three are run.
+
+- **B53. `orchard merge` acted on an item REMOVED from the queue. ✅ CLOSED.** It was
+  the one mutating command not routed through `_require_item`. Removal is a FLAG on an
+  item that still folds, so `st.items.get()` found it and only the flag said it was
+  gone — and `orchard merge T1` landed the branch of work the operator had explicitly
+  dropped, printing `merged T1 (0638b5c6) into main`. Probe first, fix second; the
+  probe ships as `tests/test_roborev_findings.py::test_merge_refuses_an_item_that_was_removed_from_the_queue`
+  and was mutation-verified. Swept the class: three other `st.items.get()` sites in
+  `surfaces/` are read-only helpers that tolerate a missing item, so this was the only
+  one. *Found by: `roborev analyze duplication`, as a side-effect of the duplication it
+  was actually asked about.*
+
+- **B54. `EventLog.head()` read its two components in two separate walks. ✅ CLOSED.**
+  Size from one pass over the shards, Lamport high-water mark from another — so an
+  append landing between them, carrying a clock value at or below the current high,
+  was invisible to BOTH: the size walk had already read that shard, the tail walk saw
+  no higher clock, and the fingerprint came back byte-identical to the pre-append one.
+  That is precisely the interleaving the byte count was added to catch, defeated by the
+  read order. Now one pass, size and tail adjacent per shard. Two regression tests, one
+  structural (`head()` walks the shard set exactly once) and one behavioural (a second
+  agent's shard with a LOWER clock still moves the fingerprint). *Found by: the
+  cross-family critic, raised THEORETICAL.*
+
+- **B55. `State._child_index` is cached with no invalidation. ✅ CLOSED as REFUTED,
+  with a ratchet.** The critic's reading was right about the shape — a `children()`
+  call during the fold would freeze the index against a partial item set, and
+  `descendants()`/`plan()` would silently return a smaller queue with nothing raised.
+  An AST probe over all 23 `_h_*` handlers found zero index-consuming calls, so it is
+  not reachable today. The probe ships as
+  `tests/test_layering.py::test_no_fold_handler_reads_the_child_index`, because the
+  invariant was held only by a docstring and a docstring has never once stopped a
+  handler being added.
+
+- **B56. The three `##`-section scanners were three copies of one loop. ✅ CLOSED.**
+  Collapsed into `_scan_sections(repo, globs, kind, ident, extra)`; the three public
+  scanners are now three lines each. Verified output-identical against the real
+  400-day corpus before and after (same 442/72/1727 counts, same zero duplicate ids,
+  same zero unresolvable dependencies). *Found by: `roborev analyze duplication` (C1).*
+
+- **B57. The index fingerprint described a log NEWER than the projection. ✅ CLOSED.**
+  `rebuild()` read the events, projected them, and only then took `log.head()` — so an
+  append landing in that window was in the fingerprint and not in the index. The next
+  `stale()` compared equal, returned False, and those events were never projected;
+  `recall` omits them, and permanently if the log then stops growing, because only a
+  later append would move the fingerprint again. The stored comment argued the opposite
+  ("written from the SAME cheap read it will use"), which was true and beside the point:
+  the disagreement it removed WAS the signal that the projection was behind. Fingerprint
+  now taken first, so it can only under-report — at worst one unnecessary rebuild.
+  Probe injects the append at the exact point the window opens
+  (`tests/test_critic_findings.py::test_a_rebuild_that_races_an_append_reports_itself_stale`),
+  mutation-verified. *Found by: the cross-family critic, raised THEORETICAL.*
+
+- **B58. Does an existing schema-5 index gain the new `role` column? ✅ CLOSED as
+  REFUTED.** `rebuild()` unlinks and re-creates a temp database, so `init()` always runs
+  against an empty file and every column exists; `stale()` refuses any `schema != 6`
+  outright. There is no migration path because there is never anything to migrate — the
+  design note at `store.py:13` says exactly this. Raised by the critic as "the one thing
+  I would want a human to confirm", which was the right call and cost one read.
+
+- **B59. `gate verify` certified an already-red gate. ✅ CLOSED.** The anti-vacuous-pass
+  check, being vacuous. A gate that exits non-zero on the UNMUTATED source — one
+  pre-existing failing test, a tool that stopped being installed, a flake — reports
+  `failed` for every mutation, so every `detected` is True and `verify` reported "this
+  gate CAN fail". It could not; it was red before anything was touched. Now a green
+  baseline is run first and its absence is a named failure. Probe first, fix second
+  (`test_a_gate_that_is_ALREADY_red_does_not_count_as_detecting_anything`), mutation-
+  verified on both the human and JSON surfaces. *Found by: the cross-family critic —
+  its only CONFIRMED finding, and the most valuable one in the pass.*
+
+- **B60. `verify`'s two failure channels made a pre-flight failure look like a pass.
+  ✅ CLOSED.** Every pre-flight refusal returns `([], reason)`, and `all([])` is True —
+  so a caller scoring on `results` alone reads "unknown gate" and "no registered
+  mutations" as verified. The CLI now applies all three clauses
+  (`bool(results) and not reason and all(r.ok ...)`) and the contract says so in the
+  docstring. *Found by: the cross-family critic, THEORETICAL.*
+
+- **B61. A stale worktree path silently mutated the PRIMARY checkout. ✅ CLOSED.**
+  `cwd = W.load_path(repo, item.worktree) or repo` — so an item recording a worktree
+  that no longer resolves had the mutation written into the real repository working
+  tree, and the verdict then described the wrong tree entirely. Interrupted between the
+  write and the `finally`, it leaves the primary checkout mutated. Now refused and
+  named. *Found by: the cross-family critic, THEORETICAL.*
+
+- **B62–B64. Three more from the critic's last chunk, all in the importer itself, all
+  probed CONFIRMED and fixed. ✅ CLOSED.**
+  - The unresolvable-dependency note checked against `plan.found` alone, which by
+    construction excludes everything already in the queue — so the SECOND run of an
+    incremental import reported every dependency on a first-run item as missing, with a
+    consequence sentence that is false (the fold resolves against the folded queue, not
+    against one scan's output). It sent the operator to fix something that was not
+    broken, on the exact path the module exists for.
+  - `**Globs:**` / `**Needs:**` attached to `found[-1]`, and `found` is never reset
+    between files — so an annotation at the top of `b.md` landed on the last task of
+    `a.md`, invisibly, because that task's `source` still points at its own line. Now
+    anchored to a per-file, per-heading pointer.
+  - `_parse_needs` stripped `_` as markdown decoration while `_is_id` admits it, so a
+    project using `TASK_1` recorded a dependency on `TASK1` — permanently blocked on a
+    token appearing nowhere in the project. The two halves of one grammar now agree.
+
+  A fourth finding in the same chunk (branch idents bypassing `_unique`) was already
+  fixed before the critic reported it; it reviewed the earlier diff.
+
+The rest of roborev's consolidation list (C2–C10: table-spec-driven inserts, an
+`applicable_decisions` helper, `Ctx.emit`, a `_kept` merge helper, module-level imports)
+is pre-existing structural debt in files this change did not own. It is subsumed by B35
+and deliberately not started here: ~215 lines across five modules is a refactor that
+wants its own commit and its own review, not a tail-end of an import change.

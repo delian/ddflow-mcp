@@ -20,11 +20,14 @@ auto-deletes would have destroyed it. Recovery is: inspect, salvage, then releas
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..config import Config
-from ..core.model import DONE, RUNNING, Lease, State, fold
+from ..core import schedule
+from ..core.model import DONE, Lease, State, fold
 from ..core.schedule import conflicts, plan_blocker
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -242,43 +245,83 @@ def _alternatives(state: State, cfg: Config, item_id: str, holder: str, now: flo
     )[:5]
 
 
-def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
+def _transition(
+    log: EventLog,
+    item_id: str,
+    kind: str,
+    *,
+    mine: bool,
+    holder: str,
+    payload: Callable[[Lease], dict[str, Any]],
+) -> bool:
+    """Append one lease-lifecycle event, under the lock, if the lease is in a fit state.
+
+    `renew`, `release` and `expire` were ~85% one body: open a transaction, fold, find
+    the item, check it has a lease, append. They differed in a guard (renew requires the
+    lease to be MINE; the other two do not) and in a payload. Three copies of a
+    read-then-write under a lock is three chances for one of them to drift out of the
+    lock — and the copies had already drifted in whether they recorded the holder.
+
+    The fold must stay INSIDE the transaction: the whole point is that the read which
+    decides and the write which acts cannot be separated by another agent's append.
+    """
     holder = holder or log.agent_id
     with log.transaction():
         state = fold(log.read_all(), strict=False)
         it = state.items.get(item_id)
-        if not it or not it.lease or it.lease.holder != holder:
+        if not it or not it.lease:
             return False
-        log.append("lease.renewed", item_id, {"at": time.time(), "holder": holder})
+        if mine and it.lease.holder != holder:
+            return False
+        log.append(kind, item_id, payload(it.lease))
         return True
+
+
+def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
+    """Extend MY lease. Refuses on someone else's: a renewal is a claim of possession."""
+    holder = holder or log.agent_id
+    return _transition(
+        log,
+        item_id,
+        "lease.renewed",
+        mine=True,
+        holder=holder,
+        payload=lambda _lease: {"at": time.time(), "holder": holder},
+    )
 
 
 def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bool:
-    holder = holder or log.agent_id
-    with log.transaction():
-        state = fold(log.read_all(), strict=False)
-        it = state.items.get(item_id)
-        if not it or not it.lease:
-            return False
-        log.append(
-            "lease.released", item_id, {"holder": it.lease.holder, "by": holder, "note": note}
-        )
-        return True
+    """Give up a lease. Records WHOSE it was and WHO released it, which can differ —
+    an operator releasing a crashed agent's lease is the normal case."""
+    by = holder or log.agent_id
+    return _transition(
+        log,
+        item_id,
+        "lease.released",
+        mine=False,
+        holder=by,
+        payload=lambda lease: {"holder": lease.holder, "by": by, "note": note},
+    )
 
 
 def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
-    """Record that a lease has expired. Idempotent: folding two expiries is one."""
-    with log.transaction():
-        state = fold(log.read_all(), strict=False)
-        it = state.items.get(item_id)
-        if not it or not it.lease:
-            return False
-        log.append(
-            "lease.expired",
-            item_id,
-            {"holder": it.lease.holder, "reason": reason, "worktree": it.lease.worktree},
-        )
-        return True
+    """Record that a lease has expired. Idempotent: folding two expiries is one.
+
+    Carries the worktree forward, because expiry is exactly when someone needs to know
+    where the crashed agent's uncommitted work is.
+    """
+    return _transition(
+        log,
+        item_id,
+        "lease.expired",
+        mine=False,
+        holder="",
+        payload=lambda lease: {
+            "holder": lease.holder,
+            "reason": reason,
+            "worktree": lease.worktree,
+        },
+    )
 
 
 # -- recovery ------------------------------------------------------------------------
@@ -300,6 +343,9 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
     """
     now = time.time() if now is None else now
     state = fold(log.read_all(), strict=False)
+    # The same live-lease view the scheduler computes, so `schedule.interrupted` is
+    # answering about the same moment `next` would.
+    live = state.active_leases(now, cfg.lease.grace_s)
     out: list[Recovery] = []
 
     for it in state.items.values():
@@ -331,13 +377,15 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
             )
             _measure(rec, repo, cfg)
             out.append(rec)
-        elif not lease and it.state == RUNNING:
+        elif schedule.interrupted(state, it, live):
+            # Same predicate the scheduler uses, so `recover` and `next` cannot
+            # disagree about which items are mid-flight with nobody on them.
             rec = Recovery(
                 item=it.id,
                 holder="(none)",
                 kind="stale_running",
-                advice=f"`orchard lease acquire {it.id}` to resume, or "
-                f"`orchard item block {it.id} --reason ...`",
+                advice=f"`orchard claim {it.id}` to resume, or "
+                f"`orchard block {it.id} --reason ...`",
             )
             out.append(rec)
     return sorted(out, key=lambda r: (r.kind, r.item))

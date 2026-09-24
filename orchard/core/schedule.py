@@ -45,6 +45,9 @@ class Plan:
     blocked: list[Blocked] = field(default_factory=list)
     running: list[Item] = field(default_factory=list)
     cycles: list[list[str]] = field(default_factory=list)
+    #: Items the log says are RUNNING with nobody holding them — see `interrupted`.
+    #: Offered as ready (someone must resume them) but never silently.
+    interrupted: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         parts = [
@@ -54,6 +57,8 @@ class Plan:
         ]
         if self.cycles:
             parts.append(f"{len(self.cycles)} CYCLE(S)")
+        if self.interrupted:
+            parts.append(f"{len(self.interrupted)} INTERRUPTED")
         return ", ".join(parts)
 
 
@@ -287,6 +292,32 @@ def item_blocker(
     return None
 
 
+def interrupted(state: State, it: Item, live: dict[str, Lease]) -> str:
+    """Why this item looks mid-flight with nobody on it. ``""`` when it does not.
+
+    RUNNING with no live lease means the agent died between starting and claiming, or
+    released without finishing. `lease.scan` has always called that `stale_running` and
+    told an operator to recover it; `plan()` handed the same item to the next agent as
+    ordinary ready work, with no mention that someone had been there. Both behaviours
+    are defensible. Deciding them in two modules that never consult each other is not —
+    the second agent starts from scratch on work that may exist, uncommitted, in a
+    worktree nobody mentioned.
+
+    So the classification lives here, once, and both callers ask it. The scheduler does
+    NOT refuse the item — someone has to resume it, and refusing would strand it — it
+    annotates the offer. `lease.scan` measures the worktree, which is I/O and stays in
+    the service layer; this says only what the log says.
+    """
+    if it.state != RUNNING or it.id in live:
+        return ""
+    where = f" in {it.worktree}" if it.worktree else ""
+    return (
+        f"{it.id} is RUNNING with no live lease{where}: an agent started it and did not "
+        f"finish. Run `orchard recover --item {it.id}` before starting from scratch — "
+        f"its worktree may hold uncommitted work."
+    )
+
+
 def plan(
     state: State,
     cfg: Config,
@@ -344,26 +375,59 @@ def plan(
         if blocker is not None:
             p.blocked.append(blocker)
         else:
+            note = interrupted(state, it, live)
+            if note:
+                p.interrupted.append(note)
             p.ready.append(it)
 
-    cap = min(cfg.schedule.max_parallel_tasks, cfg.worktree.max_parallel)
-    # Count what is running in the WHOLE queue, not just in the slice this call asked
-    # about. `p.running` holds only candidates from `phase`, so with `--phase` the cap
-    # was applied against a count of ~0 every time: two agents each asking about their
-    # own phase were both told to go ahead, and `worktree.max_parallel` — a statement
-    # about this machine's capacity — was exceeded without anything refusing.
-    in_flight = len([i for i in live if not state.items[i].removed]) if live else 0
-    slots = max(0, cap - in_flight)
+    # TWO caps, because they are two different statements and `min()` of them was one
+    # number pretending to be one statement:
+    #
+    #   schedule.max_parallel_tasks — how many items may be IN FLIGHT at once. A
+    #     `--no-worktree` lease (a review, a research task) is in flight, so it counts.
+    #   worktree.max_parallel       — how many worktrees may EXIST at once. That is a
+    #     claim about this machine's disk and CPU, and a lease that never made a tree
+    #     consumes neither, so it does not count against it.
+    #
+    # Under the old `min()` a queue allowed four in flight silently became one on a
+    # machine allowed one worktree, whatever the leases were actually doing.
+    #
+    # What this does NOT do, precisely because it cannot: apply the tree cap per item.
+    # `--no-worktree` is a flag on `claim`, not a field on `Item`, so at planning time
+    # nothing distinguishes a task that will take a tree from one that will not, and
+    # `slots` is necessarily one number for all of them. A full tree cap therefore
+    # still withholds a task that would have taken no tree. The counting is right and
+    # the granularity is not; making it right needs an item-level declaration, which is
+    # filed rather than guessed (docs/BACKLOG.md, B52). Raised as THEORETICAL by the
+    # cross-family critic on 2026-09-24 and confirmed as a granularity gap, not a
+    # counting bug: the new form is a strict relaxation of the old one in every case.
+    #
+    # Counted across the WHOLE queue, not the slice this call asked about: `p.running`
+    # holds only candidates from `phase`, so with `--phase` the cap was applied against
+    # a count of ~0 and two agents each asking about their own phase were both told to
+    # go ahead.
+    live_items = [i for i in live if i in state.items and not state.items[i].removed]
+    in_flight = len(live_items)
+    with_trees = len([i for i in live_items if live[i].worktree])
+    flight_slots = max(0, cfg.schedule.max_parallel_tasks - in_flight)
+    if cfg.worktree.enabled:
+        tree_slots = max(0, cfg.worktree.max_parallel - with_trees)
+    else:
+        tree_slots = flight_slots  # no trees are made, so no tree cap applies
+    slots = min(flight_slots, tree_slots)
+    if slots == flight_slots:
+        why = (
+            f"parallelism cap reached (schedule.max_parallel_tasks="
+            f"{cfg.schedule.max_parallel_tasks}); {in_flight} in flight across the queue"
+        )
+    else:
+        why = (
+            f"worktree cap reached (worktree.max_parallel={cfg.worktree.max_parallel}); "
+            f"{with_trees} worktrees live across the queue"
+        )
     if len(p.ready) > slots:
         for it in p.ready[slots:]:
-            p.blocked.append(
-                Blocked(
-                    it.id,
-                    "state",
-                    f"parallelism cap reached ({cap}); {in_flight} running across the queue",
-                    [],
-                )
-            )
+            p.blocked.append(Blocked(it.id, "state", why, []))
         p.ready = p.ready[:slots]
     return p
 
@@ -396,7 +460,11 @@ def critical_path(state: State, phase: str = "") -> list[str]:
         it = items.get(n)
         best: list[str] = []
         if it:
-            for dep in it.needs:
+            # INHERITED dependencies, like readiness uses. The path used to walk
+            # `it.needs` alone, so a phase-level dependency did not lengthen the
+            # reported floor at all — and the number exists precisely to stop someone
+            # adding a fifth agent to a phase whose runtime is set by a chain.
+            for _owner, dep in inherited_deps(state, it):
                 if dep in items and items[dep].state != DONE:
                     cand = longest(dep, seen | {n})
                     if len(cand) > len(best):

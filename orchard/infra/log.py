@@ -291,6 +291,48 @@ class EventLog:
                 continue
         return high
 
+    def head(self) -> tuple[int, int, int]:
+        """`(shards, highest_lamport, total_bytes)` — the cheap fingerprint of the log.
+
+        O(shards): a stat per file and one tail read each, never a full parse. Exists
+        so a caller can answer "has anything changed?" without answering "what is
+        everything?" — `Store.stale` used to call `read_all()` to decide whether it
+        needed to call `read_all()`, which on the NFS mount this was designed against
+        cost ~36x the local read it was trying to avoid.
+
+        Byte count is in the fingerprint as well as the Lamport high-water mark because
+        two shards can be appended to concurrently: the highest Lamport can stay put
+        while a second agent's shard grows, and an index that missed that would serve
+        a stale answer while reporting itself current.
+
+        **One pass, size and tail read adjacently per shard.** It used to stat every
+        shard and then call `_highest_lamport()`, which walked them all again — so an
+        append landing between the two walks, carrying a Lamport value at or below the
+        current high, was invisible in BOTH components and the fingerprint came back
+        byte-identical to the pre-append one. That is exactly the interleaving the byte
+        count was added to catch, defeated by the read order. Reading a shard's size
+        and its tail together makes the two components describe the same observation of
+        that shard. (Raised THEORETICAL by the cross-family critic 2026-09-24; probe and
+        regression test in `tests/test_rubber_duck_findings.py`.)
+        """
+        total = 0
+        shards = 0
+        high = 0
+        for p in self.shards():
+            try:
+                total += p.stat().st_size
+                shards += 1
+            except OSError:
+                continue
+            tail = _last_line(p)
+            if not tail:
+                continue
+            try:
+                high = max(high, int(json.loads(tail).get("lamport", 0)))
+            except (ValueError, TypeError):
+                continue
+        return shards, high, total
+
     # -- reading -------------------------------------------------------------------
     def read_all(self) -> list[Event]:
         out: list[Event] = []

@@ -35,7 +35,7 @@ from ..config import Config
 from ..core.model import State, fold
 from ..infra.log import EventLog
 
-SCHEMA = 5
+SCHEMA = 6
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -102,6 +102,7 @@ class Store:
             fixed_at text, regression_test text, lesson text);
         create table if not exists prompts(
             session text, seq integer, at text, item text, text text,
+            role text default 'prompt',
             primary key(session, seq));
         create table if not exists cadences(name text, at text, by text, result text);
         """)
@@ -137,9 +138,14 @@ class Store:
             return True
         if row.get("schema") != str(SCHEMA):
             return True
-        evs = log.read_all()
-        return row.get("events") != str(len(evs)) or row.get("lamport") != str(
-            max((e.lamport for e in evs), default=0)
+        # `EventLog.head()` is O(shards); the old comparison called `read_all()` to
+        # decide whether `read_all()` was needed, which is the shape of the problem
+        # rather than a solution to it.
+        shards, lamport, size = log.head()
+        return (
+            row.get("lamport") != str(lamport)
+            or row.get("bytes") != str(size)
+            or row.get("shards") != str(shards)
         )
 
     # -- projection -----------------------------------------------------------------
@@ -152,6 +158,16 @@ class Store:
         at ~12k events/second, which for any realistic backlog is far below the cost
         of the git operations surrounding it.
         """
+        # The fingerprint FIRST, then the events it describes. Taken afterwards it
+        # describes a log NEWER than the projection: an append landing between the two
+        # is in the fingerprint and not in the index, so the next `stale()` matches,
+        # returns False, and those events are never projected -- `recall` silently
+        # omits them, permanently, if the log then stops growing. Taken first the error
+        # is in the safe direction: the fingerprint is at or behind what was projected,
+        # so at worst one unnecessary rebuild, never a missed event. (Raised
+        # THEORETICAL by the cross-family critic 2026-09-24; probe in
+        # `tests/test_critic_findings.py`.)
+        fingerprint = log.head()
         events = log.read_all()
         state = fold(events, strict=False)
         # `rebuild` writes its temp database beside the index rather than through
@@ -241,17 +257,7 @@ class Store:
                     )
             _insert_decisions(con, state, self.fts)
             _insert_bugs(con, state, self.fts)
-            for s in state.sessions.values():
-                for pr in s.prompts:
-                    con.execute(
-                        "insert or replace into prompts values(?,?,?,?,?)",
-                        (s.id, pr["seq"], pr["at"], pr.get("item", ""), pr["text"]),
-                    )
-                    if self.fts:
-                        con.execute(
-                            "insert into prompts_fts values(?,?)",
-                            (f"{s.id}#{pr['seq']}", pr["text"]),
-                        )
+            _insert_sessions(con, state, self.fts)
             for name, runs in state.cadences.items():
                 for r in runs:
                     con.execute(
@@ -259,9 +265,15 @@ class Store:
                         (name, r["at"], r["by"], r["result"]),
                     )
             con.execute("insert or replace into meta values('events', ?)", (str(len(events)),))
+            # Written from the SAME cheap read `stale()` will use -- not recomputed
+            # from `events`, which cannot produce a byte count at all -- and captured
+            # BEFORE the events were read, so it can only under-report the log.
+            shards, high, size = fingerprint
+            for k, v in (("shards", shards), ("bytes", size)):
+                con.execute("insert or replace into meta values(?, ?)", (k, str(v)))
             con.execute(
                 "insert or replace into meta values('lamport', ?)",
-                (str(max((e.lamport for e in events), default=0)),),
+                (str(high),),
             )
             con.execute(
                 "insert or replace into meta values('built_at', ?), ('fts', ?)",
@@ -322,10 +334,16 @@ class Store:
                     if table == "prompts":
                         out = []
                         for ident in ids:
-                            sess, _, seq = ident.partition("#")
+                            # `<session>#p<seq>` or `<session>#n<seq>` — the letter says
+                            # whether it was the operator speaking or the agent noting.
+                            sess, _, tail = ident.partition("#")
+                            role, digits = (
+                                (tail[:1], tail[1:]) if tail[:1].isalpha() else ("p", tail)
+                            )
+                            seq = int(digits or 0) + (10_000 if role == "n" else 0)
                             r2 = con.execute(
                                 "select * from prompts where session=? and seq=?",
-                                (sess, int(seq or 0)),
+                                (sess, seq),
                             ).fetchone()
                             if r2:
                                 row = dict(r2)
@@ -378,7 +396,7 @@ RECALL_SOURCES: tuple[tuple[str, str, str], ...] = (
     ("research", "RESEARCH", "already investigated; check the verdict before redoing it"),
     ("bugs", "BUG", "this has broken before"),
     ("items", "TASK", "similar work already planned or done"),
-    ("prompts", "PROMPT", "the operator has asked something like this before"),
+    ("prompts", "PROMPT/NOTE", "the operator asked, or an agent recorded, something like this"),
 )
 
 
@@ -404,8 +422,46 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
         return f"{row.get('id', '')} — {row.get('title', '')}", (row.get("body") or "")[:width]
     if table == "prompts":
         text = (row.get("text") or "").strip().replace("\n", " ")
-        return f"{row.get('at', '')[:10]} operator asked:", text[:width]
+        # A note is the AGENT's record of the work — a dead end, a surprise, why it
+        # changed approach — and attributing one to the operator would put words in
+        # their mouth, which is worse than not surfacing it at all.
+        who = "the agent noted:" if row.get("role") == "note" else "operator asked:"
+        return f"{row.get('at', '')[:10]} {who}", text[:width]
     return row.get("id", ""), ""
+
+
+def _insert_sessions(con, state, fts: bool) -> None:
+    """Prompts AND notes, in one table, distinguished by `role`.
+
+    A note is what the agent recorded about the work — a dead end, a surprise, why it
+    changed approach — and it was folded, replayed and then never indexed, so `recall`
+    could not find the one record of why something was abandoned. Notes are shifted by
+    10,000 so a note and a prompt with the same `seq` do not collide on the primary key.
+    """
+    for sess in state.sessions.values():
+        entries = [(pr, "prompt") for pr in sess.prompts] + [(nt, "note") for nt in sess.notes]
+        for n, (entry, role) in enumerate(entries):
+            seq = int(entry.get("seq", n))
+            con.execute(
+                "insert or replace into prompts values(?,?,?,?,?,?)",
+                (
+                    sess.id,
+                    seq if role == "prompt" else 10_000 + seq,
+                    # `origin_at` when the note records something that happened before
+                    # it was written down -- an imported journal entry or memory --
+                    # so `recall` dates it by when it was TRUE, not by when the import
+                    # ran and stamped every one of them with today.
+                    entry.get("origin_at") or entry.get("at", ""),
+                    entry.get("item", ""),
+                    entry.get("text", ""),
+                    role,
+                ),
+            )
+            if fts:
+                con.execute(
+                    "insert into prompts_fts values(?,?)",
+                    (f"{sess.id}#{role[0]}{seq}", entry.get("text", "")),
+                )
 
 
 def _insert_decisions(con, state, fts: bool) -> None:

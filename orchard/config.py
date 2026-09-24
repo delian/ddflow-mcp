@@ -339,7 +339,7 @@ class ScheduleConfig:
 _doc(
     "schedule",
     "max_parallel_tasks",
-    "How many tasks the scheduler will offer as simultaneously runnable. Mirrors worktree.max_parallel; the lower of the two wins.",
+    "How many items may be in flight at once, counted across the whole queue. Every live lease counts, worktree or not -- a review task occupies an agent just as a coding task does. Distinct from worktree.max_parallel, which caps only the leases that made a tree.",
 )
 _doc(
     "schedule",
@@ -355,6 +355,30 @@ _doc(
     "schedule",
     "unknown_dep_policy",
     "A dependency on an id that does not exist. 'block' treats it as unmet so typos surface loudly; 'warn' ignores it. Blocking is the safe default.",
+)
+
+
+@dataclass
+class ImportConfig:
+    """Adopting Orchard on a project that already has history: `[importer]`.
+
+    Named for the module rather than the command because `import` is a keyword and a
+    section called `[import_]` would be a TOML wart the operator has to remember.
+    """
+
+    max_tasks: int = 200
+    preview_rows: int = 8
+
+
+_doc(
+    "importer",
+    "max_tasks",
+    "Refuse to propose more tasks than this in one import. An import writes events into a log that is committed to git, and five thousand of them is not recoverable by anything short of editing history; one real repository yielded 4,799. Raise it deliberately once you have looked at what it would write.",
+)
+_doc(
+    "importer",
+    "preview_rows",
+    "How many items of each kind the import proposal prints before summarising the rest. The whole list is always in the --json output; this only caps the human-readable preview.",
 )
 
 
@@ -590,6 +614,7 @@ class Config:
     lessons: LessonsConfig = field(default_factory=LessonsConfig)
     session: SessionConfig = field(default_factory=SessionConfig)
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
+    importer: ImportConfig = field(default_factory=ImportConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
@@ -693,6 +718,17 @@ class Config:
         return rows
 
 
+def csv_list(raw: str | None) -> list[str]:
+    """`"a, b ,c"` -> `["a", "b", "c"]`. Empty entries dropped, whitespace stripped.
+
+    One implementation. `cli._csv` and this module's list coercion were the same
+    expression written twice, in the two places a user's comma-separated string enters
+    the system — the CLI's `--needs a,b` and the env var `ORCHARD_GATES_REQUIRED=a,b`.
+    Two parsers for one notation is two answers to "is `a,,b` two items or three".
+    """
+    return [x.strip() for x in (raw or "").split(",") if x.strip()]
+
+
 def _maybe_json(raw: str, want: type) -> Any:
     """Parse ``raw`` as JSON if it looks like JSON of the wanted type, else None.
 
@@ -743,7 +779,7 @@ def _coerce(raw: Any, typ: Any) -> Any:
             return [str(x) for x in parsed]
         if "," not in raw:
             return [raw.strip()] if raw.strip() else []
-        return [p.strip() for p in raw.split(",") if p.strip()]
+        return csv_list(raw)
     if "dict" in ts:
         parsed = _maybe_json(raw, dict)
         if parsed is not None:

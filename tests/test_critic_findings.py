@@ -248,3 +248,47 @@ def test_the_invalid_pattern_error_names_the_json_remedy():
     cfg.session.redact_patterns = _coerce(r"(?i)\b(sk-[A-Za-z0-9]{16,})\b", "list[str]")
     with pytest.raises(ValueError, match="JSON"):
         S.redact("x", cfg)
+
+
+def test_a_rebuild_that_races_an_append_reports_itself_stale(repo):
+    """The index fingerprint must never describe a log NEWER than the projection.
+
+    `rebuild()` took it AFTER reading the events, so an append landing in that window
+    was in the fingerprint and not in the index: the next `stale()` compared equal,
+    returned False, and those events were never projected. `recall` omits them — and
+    if the log then stops growing (a rebuild at the end of a run, then read-only) it
+    omits them for good, because only a later append would ever move the fingerprint
+    again.
+
+    The window is a real concurrent-writer race, which is not a deterministic input;
+    it is made deterministic here by injecting the append at the exact point the window
+    opens, which is what the race would do at its worst.
+    """
+    from orchard.infra.log import EventLog
+    from orchard.infra.store import Store
+
+    log = EventLog(repo, "agent-a")
+    log.append("session.started", "s1", {})
+
+    store = Store(repo)
+    injected: list[int] = []
+    original = EventLog.read_all
+
+    def read_all_then_race(self):
+        out = original(self)
+        if not injected:
+            injected.append(1)
+            EventLog(repo, "agent-b").append("session.note", "s1", {"text": "raced in"})
+        return out
+
+    EventLog.read_all = read_all_then_race
+    try:
+        store.rebuild(log)
+    finally:
+        EventLog.read_all = original
+
+    assert injected, "the race never fired, so this test proves nothing"
+    assert store.stale(log) is True, (
+        "the index was built without the raced-in event and says it is current, so "
+        "nothing will ever rebuild it and `recall` will never find that event"
+    )

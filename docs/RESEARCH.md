@@ -639,3 +639,188 @@ body for `rewrite_localhost` and survived removal of the call, because the impor
 the comment stayed. The other asserted that a reader and a writer agree — which they
 still do when both are wrong in the same way. Rewritten to assert the URL actually
 requested, and the field VS Code actually reads.
+
+---
+
+## R11 — the importer against a real 400-day corpus, not a fixture
+
+**Question.** `orchard import` passes fourteen tests against a fixture and one
+end-to-end scenario. Does it actually work on a project that has been running for four
+hundred days — or does it only work on a file written by the person who wrote the
+parser?
+
+**Falsifier, stated first.** If the scan produces a queue whose ids match the ids the
+project has been using in its own commit trailers, whose declared dependencies all
+resolve, and which is unchanged by a second run, the importer works. Any one of those
+failing kills it.
+
+**Budget.** ≤2 hours, CPU only, on a corpus already on this machine.
+
+**Corpus.** `run_nemo_run`, the repository Orchard lives in: `docs/todo.md` (35,078
+lines, 4,799 checkboxes), `docs/todo/open/*.md` + `archive/*.md` (9 files),
+`docs/lessons.md` (14,362 lines), `docs/RESEARCH.md` (7,534 lines), `docs/log/*.md`
+(7 files), `docs/adr/` (5 files) and a 47-record OptMem store. Copied into a scratch
+repository first — an import writes events, and writing them into the project being
+read is not a test, it is an accident.
+
+**Verdict: REFUTED, then fixed.** The importer did not work. It ran, it reported
+success, and what it produced was unusable in eleven distinct ways. Every one of them
+was invisible to the fixture tests, and all eleven now ship with a mutation-verified
+regression test in `tests/test_import_real_project.py`.
+
+### What the first run actually produced
+
+```console
+$ orchard --repo /tmp/rnr-import import --max-tasks 5000
+  790 phase(s):
+    [ ] SESSION-DRIVERFIX-THE-DE   Session DRIVERFIX — the defects ...  docs/todo/open/DRIVERFIX.md:1
+    [ ] 160A-THE-DRAFT-SCORER-SC   160.A — the draft scorer: score ...  docs/todo/open/PHASE160.md:22
+  [no tasks at all, and no explanation next to them]
+  358 research(s):
+    [ ] R-sources-opened-not-snippet-cited  Sources (opened, not snippet-cited)
+```
+
+Measured, before and after:
+
+| | before | after |
+|---|---|---|
+| declared dependencies that resolve to an imported id | **8 / 47** | **45 / 45** |
+| colliding ids (silent data loss on fold) | **42 pairs** | **0** |
+| research entries vs. fragments of entries | 358 | 72 |
+| journal entries dated by when they happened | 0 | 1,727 |
+| phases carrying the project's own id | ~0 | 218 / 314 |
+| phases proposed with no task under them | 459 | 0 |
+
+### The eleven, each with the mechanism
+
+1. **`142.A` was not an id.** The id pattern required a leading *letter*, so every
+   numeric-dotted phase id — the shape this project has used for two hundred phases —
+   was slugged to `142A-THE-SCALING-LAW-ADV`. That alone broke 39 of the 47 declared
+   dependencies: they pointed at `142.A`, which then existed nowhere. Unknown
+   dependencies are treated as unmet *by design*, so the work imported permanently
+   blocked while the import reported success.
+2. **An id inside a spanning bold was not an id.** `- [ ] **DRIVERFIX.1 — step 1 picks
+   …**` matched neither the delimited pattern (which needs `**` straight after the id)
+   nor the bare one (anchored at `^`, blocked by the `**`).
+3. **The child-prefix rename destroyed the ids it existed to recover.** `### 142.A` has
+   children `142.1`, `142.2`, so the derived prefix is `142` — and taking it renamed the
+   phase out from under every `Needs: 142.A` in the file. A heading that declares its
+   own id now outranks the inference.
+4. **Derived task ids voted in that inference**, and one of them made the vote
+   unanimous-with-nobody: a checkbox with no id was given `<phase-slug>.<title-slug>`,
+   which disagrees in its first component, so the common prefix came out empty and 96
+   phases kept a prose slug they did not need.
+5. **42 pairs of ids collided.** Two lessons whose titles agree in their first 32
+   characters produce the same slug; the second `lesson.recorded` folds over the first,
+   one disappears, and the import reports both as written.
+6. **One research entry became five.** The section splitter matched `#{2,6}`, so the
+   `###` sub-parts of an entry — "Sources", "Known gaps" — became siblings of it. Four
+   of the five fragments meant nothing standing alone.
+7. **`docs/adr/README.md` imported as a decision** whose body was a table of contents.
+   Every ADR directory has one.
+8. **Every journal entry was dated the day the import ran**, destroying the one thing a
+   journal is for. The dates are in the headings (`… (2026-04-30)`, `2026-04-22 — …`)
+   and in the filenames.
+9. **The fold dropped every note field but three.** `seq`, `ident` and `source` went in
+   and never came out — so the idempotency check read `ident` back as `""`, compared it
+   against `""` and reported "already imported" for everything. A projection silently
+   deciding a field does not exist.
+10. **Each memory printed twice.** A memory is one line and has no title; the note
+    writer concatenated its title with its body, and the title *was* an excerpt of the
+    body.
+11. **Over the cap, 790 phases were proposed with zero tasks** — which reads as "this
+    project has 790 phases of work", the opposite of true — and the human preview listed
+    five of the eight kinds, so a repository whose history is a journal and a memory
+    store printed a header with nothing under it.
+
+### What it now reports rather than resolves
+
+Two findings the scan can make and must not act on, because either answer could be the
+wrong one:
+
+- **32 phase headings say `SHIPPED` over unticked checkboxes.** Independently
+  corroborated: memory `#3` in the same repository's OptMem store reads *"docs/todo.md
+  checkboxes DRIFT: many `[ ]` items are actually done"*. One-sided risk — if the
+  heading is right, the queue is about to hand out finished work.
+- **A dependency on an id nothing produced** stays unmet, deliberately, so a typo
+  surfaces as blocked work rather than as work that starts early. But it is now named:
+  "never offered" otherwise looks exactly like "nobody has got to it yet".
+
+### The end state
+
+```console
+$ orchard --repo /tmp/rnr-import import --max-tasks 5000 --apply
+Imported: 4 decision, 1727 journal, 442 lesson, 47 memory, 314 phase, 72 research, 1170 task, 9 task_done
+
+$ orchard --repo /tmp/rnr-import recall "H200" --max-chars 20000
+## PROMPT/NOTE  — the operator asked, or an agent recorded, something like this
+  [s-imported-memory#n2] 2026-07-31 the agent noted:
+      Hardware: 8x H200 GPUs on this box, usually idle. GPU-owed test items in
+      docs/todo.md can actually be run; check nvidia-smi first ...
+
+$ orchard --repo /tmp/rnr-import doctor ; echo "exit=$?"
+Healthy.
+exit=0
+
+$ orchard --repo /tmp/rnr-import import --max-tasks 5000 ; echo "exit=$?"
+Nothing to import.
+exit=2
+```
+
+3,789 events, 1,484 items, scan in 0.65 s and apply in 6.4 s.
+
+**The generalisable finding**, and the reason this belongs here rather than in a commit
+message: *a parser tested only against a fixture is tested against its own author's
+assumptions.* Fourteen fixture tests and one end-to-end scenario were all green while
+39 of 47 dependencies were broken. The corpus was free, already on the machine, and
+found eleven defects in under two hours. `tests/test_import_real_project.py` keeps both
+halves — a miniature carrying every real shape, plus a `@pytest.mark.slow` canary that
+runs the whole scan against the host project when there is one and skips otherwise.
+
+### R11 addendum — what the three reviewers found, and how disjoint they were
+
+The rulebook requires a cross-family critic, a subagent rubber-duck and roborev on every
+non-trivial change, on the argument that they find different things. Measured on this one:
+
+| Reviewer | Family | Findings that survived a probe | Overlap with the others |
+|---|---|---|---|
+| Own double-check | — | 4 (dead `outcome.py`, duplicate glob reads, an over-permissive date regex, the offer counting 3 of 7 sources) | 0 |
+| roborev (`analyze duplication`) | same | 2 (`cmd_merge` bypassing `_require_item`; the three-copy section scanner) | 0 |
+| Cross-family critic | different | 8 (`head()`'s two-pass fingerprint; the `rebuild` fingerprint ordering; `gate verify` certifying an already-red gate; its two-channel return; the silent primary-checkout fallback; the incremental-import false alarm; the cross-file annotation leak; the underscore stripped from ids) + 3 refuted by probe | 0 |
+
+**Zero overlap across fourteen findings.** The two labelled `THEORETICAL` by the critic
+were the two worth acting on — one was a real defect (`head()`), one was refuted by a
+five-line AST probe and left behind a ratchet. The reviewer that found the most
+consequential bug — `orchard merge` landing work the operator had explicitly dropped —
+found it while looking for something else entirely, which is the standing argument for
+running the duplication pass even when nothing feels duplicated.
+
+The critic's `CONFIRMED`/`THEORETICAL` labels were again not a ranking of importance.
+Six of its eight real findings were labelled `THEORETICAL`, and every one of them was a
+genuine defect with a deterministic regression test — including `rebuild`'s fingerprint
+ordering, which permanently loses events from `recall` if the log then stops growing.
+Its two refuted claims were also `THEORETICAL`, so the label carried no signal in either
+direction; what separated them was a probe, in every case costing under ten minutes.
+
+Its two other `THEORETICAL` claims died on inspection and are recorded because a
+reject re-checked is worth as much as a claim confirmed (§Research-rules 4): `gate
+verify` might dispatch to the `run` handler and silently execute the gate — refuted
+because `tests/conftest.py::run_cli` spawns a real `python -m orchard` subprocess, so
+every one of the thirteen `gate verify` tests drives the actual parser; and `_csv`
+losing its `(v or "")` guard — refuted because argparse never calls `type=` with `None`.
+
+Its single `CONFIRMED` was the best finding of the pass and deserves its own line:
+**`gate verify` — the anti-vacuous-pass check — was itself vacuous.** A gate already red
+for an unrelated reason reports `failed` for every mutation, so every mutation reads as
+"detected" and the gate is certified as able to fail when nothing has shown any such
+thing. The check written to catch the class contained the class. It now runs a green
+baseline first and refuses without one.
+
+One more measurement, from the tail of the same run: **the critic's last chunk — the one
+reviewing `importer.py`, the file this whole change is about — produced three of its
+eight real findings**, and the run then hit its 45-minute wall clock at 17 of 18 chunks
+(exit 124 = PARTIAL, recorded as such rather than as a pass). Chunked review is not
+uniformly valuable across a diff and the most valuable chunk was near the end; a budget
+that cuts it off loses exactly the part that was worth paying for. Next time: review the
+changed MODULE first and the incidental diff after, or raise the budget to match the
+diff (158 KB over 18 chunks here).

@@ -291,21 +291,56 @@ def test_a_re_recorded_decision_stays_superseded(repo, log):
 # -- 7. a global cap must be measured globally ----------------------------------------
 
 
-def test_the_parallelism_cap_counts_the_whole_queue_not_one_phase(repo):
+def _two_phases(repo, config: str):
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text("[worktree]\nmax_parallel = 1\n")
+    (repo / ".orchard" / "config.toml").write_text(config)
     run_cli(repo, "phase", "add", "P1", "--globs", "p1/**")
     run_cli(repo, "phase", "add", "P2", "--globs", "p2/**")
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
     run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "p2/a.py")
+
+
+def _ready_in(repo, phase: str, agent: str) -> list[str]:
+    _code, out, _ = run_cli(repo, "--json", "next", "--phase", phase, agent=agent)
+    return [r["id"] for r in json.loads(out)["ready"]]
+
+
+SCOPE = (
+    "`p.running` holds only candidates from the queried phase, so the cap was applied "
+    "against a count of zero: two agents each asking about their own phase were both "
+    "told to go ahead. ready={}"
+)
+
+
+def test_the_in_flight_cap_counts_the_whole_queue_not_one_phase(repo):
+    _two_phases(repo, "[schedule]\nmax_parallel_tasks = 1\n")
     run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")
 
-    _code, out, _ = run_cli(repo, "--json", "next", "--phase", "P2", agent="beta")
-    ready = [r["id"] for r in json.loads(out)["ready"]]
-    assert not ready, (
-        "`p.running` holds only candidates from the queried phase, so the cap was "
-        "applied against a count of zero: two agents each asking about their own "
-        f"phase were both told to go ahead. ready={ready}"
+    ready = _ready_in(repo, "P2", "beta")
+    assert not ready, SCOPE.format(ready)
+
+
+def test_the_worktree_cap_counts_the_whole_queue_not_one_phase(repo):
+    _two_phases(repo, "[worktree]\nmax_parallel = 1\n")
+    run_cli(repo, "claim", "P1.T1", agent="alpha")
+
+    ready = _ready_in(repo, "P2", "beta")
+    assert not ready, SCOPE.format(ready)
+
+
+def test_a_lease_that_made_no_worktree_does_not_consume_a_worktree_slot(repo):
+    """The two knobs are two statements, and `min()` of them was neither.
+
+    `worktree.max_parallel` is a claim about this machine's disk and CPU. A
+    `--no-worktree` lease -- a review, a research task -- creates no tree and consumes
+    neither, so counting it there is a silent knob drop: an operator who allowed four
+    in flight and one tree got one in flight, and nothing said so.
+    """
+    _two_phases(repo, "[worktree]\nmax_parallel = 1\n[schedule]\nmax_parallel_tasks = 4\n")
+    run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")
+
+    assert _ready_in(repo, "P2", "beta") == ["P2.T1"], (
+        "no worktree exists, so the worktree cap has nothing to cap"
     )
 
 
@@ -671,3 +706,62 @@ def test_an_omitted_field_is_still_left_alone(repo):
     assert item["title"] == "keep me", item
     assert item["globs"] == ["core/a.py"], item
     assert item["tags"] == ["alpha"], item
+
+
+# -- 11. a fingerprint read in two passes is not a fingerprint -------------------------
+
+
+def test_head_observes_each_shard_exactly_once(repo, monkeypatch):
+    """`head()` used to stat every shard, then walk them all AGAIN for the clock.
+
+    An append landing between the two walks, carrying a Lamport value at or below the
+    current high — a second agent whose clock is behind, which is the ordinary case on
+    a shared mount — was invisible in BOTH components: the size walk had already read
+    that shard, and the tail walk saw no higher Lamport. The fingerprint came back
+    byte-identical to the pre-append one, `Store.stale` said "current", and the index
+    served an answer that was missing events.
+
+    That is exactly the interleaving the byte count exists to catch, defeated by the
+    read order. Asserting the walk count rather than racing two processes: the defect
+    IS the second walk, and a scheduler-dependent race is a test that passes on the
+    machine that has the bug.
+    """
+    from orchard.infra.log import EventLog
+
+    log = EventLog(repo, "agent-a")
+    log.append("session.started", "s1", {})
+
+    walks = []
+    original = EventLog.shards
+    monkeypatch.setattr(
+        EventLog, "shards", lambda self: (walks.append(1), original(self))[1], raising=True
+    )
+    log.head()
+    assert len(walks) == 1, (
+        f"the size and the clock are read in {len(walks)} separate walks over the "
+        f"shards, so an append landing between them is missed by both"
+    )
+
+
+def test_a_second_agents_append_changes_the_fingerprint_even_with_a_lower_clock(repo):
+    """The byte component's whole job, stated as behaviour.
+
+    A shard written by an agent whose Lamport clock is BEHIND the global high moves no
+    high-water mark — only the byte count can see it.
+    """
+    from orchard.infra.log import EventLog
+
+    log = EventLog(repo, "agent-a")
+    for _ in range(5):
+        log.append("session.started", "s1", {})
+    before = log.head()
+
+    stale_line = json.dumps(
+        {"kind": "session.note", "subject": "s1", "lamport": 1, "agent": "agent-b", "data": {}}
+    )
+    (log.dir / "agent-b.jsonl").write_text(stale_line + "\n")
+
+    after = log.head()
+    assert after != before, (
+        f"a whole shard appeared and the fingerprint did not move: {before} == {after}"
+    )

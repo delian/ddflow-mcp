@@ -184,3 +184,48 @@ def test_no_module_is_left_at_the_top_level_by_accident():
         f"{loose} sit outside every layer, so the rule above says nothing about them. "
         f"Put each in core/ infra/ services/ views/ or surfaces/."
     )
+
+
+# -- the cache invariant the fold must not break --------------------------------------
+
+
+def test_no_fold_handler_reads_the_child_index():
+    """`State._child_index` is built lazily and never invalidated.
+
+    That is correct ONLY while nothing reads it during the fold: the first read freezes
+    the index against however many items have been applied so far, and every
+    `item.added` folded afterwards is missing from it for the rest of that State's life.
+    `children()` then returns a truncated list, `descendants()` and `plan()` silently
+    omit items, and nothing raises — the queue is just smaller than the log.
+
+    The docstring asserts the invariant; this asserts it mechanically, because a
+    docstring has never once stopped a handler being added. Raised as THEORETICAL by
+    the cross-family critic on 2026-09-24 and refuted by exactly this probe; shipping
+    the probe is what stops it becoming true later.
+    """
+    import ast
+
+    src = (PKG / "core" / "model.py").read_text()
+    tree = ast.parse(src)
+    handlers = {
+        n.name
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name.startswith("_h_")
+    }
+    assert len(handlers) > 10, f"the handler scan found almost nothing: {handlers}"
+
+    consumers = {"children", "descendants", "ancestors", "_is_umbrella", "_child_index"}
+    offenders = [
+        (n.name, c.func.attr, c.lineno)
+        for n in ast.walk(tree)
+        if isinstance(n, ast.FunctionDef) and n.name in handlers
+        for c in ast.walk(n)
+        if isinstance(c, ast.Call)
+        and isinstance(c.func, ast.Attribute)
+        and c.func.attr in consumers
+    ]
+    assert offenders == [], (
+        f"a fold handler reads the cached child index: {offenders}. Either invalidate "
+        f"the cache on every item mutation, or compute what the handler needs directly "
+        f"from `st.items`."
+    )

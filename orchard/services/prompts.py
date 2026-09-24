@@ -64,6 +64,14 @@ class Template:
 #: invokes, and these four are operator workflows, not primitives.
 #: name -> (title, one-line description, [argument names])
 COMMANDS: dict[str, tuple[str, str, list[str]]] = {
+    "import-existing-project": (
+        "Import an existing project's work into the queue",
+        "For a project that adopts Orchard mid-stream. Reads its todo checklists, "
+        "lessons, ADRs and unmerged branches, then walks the agent through the half "
+        "that needs judgement — globs, dependencies, what is actually live — WITH the "
+        "operator. A queue that starts empty tells the next agent nothing is in flight.",
+        ["scope"],
+    ),
     "bug-hunt": (
         "Hunt and fix bugs",
         "Bounded bug hunt under the empirical-repro rule: a finding may not change "

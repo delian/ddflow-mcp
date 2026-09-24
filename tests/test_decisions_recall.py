@@ -285,3 +285,51 @@ def test_status_surfaces_loops_and_recoverable_work(proj):
     data = json.loads(run_cli(proj, "--json", "status")[1])
     assert any(f["kind"] == "dependency_cycle" for f in data["loops"])
     assert "⚠" in run_cli(proj, "status")[1]
+
+
+# -- what the agent recorded is memory too --------------------------------------------
+
+
+def test_session_notes_are_searchable_and_attributed_to_the_agent(proj):
+    """A note was folded, replayed — and never indexed.
+
+    `session note` is where an agent records a dead end, a surprise, or why it changed
+    approach. All of that survived into the log and into `replay`, and none of it was
+    reachable from `recall`, so the one record of why something was abandoned could not
+    be found by the next agent about to try it again.
+
+    It is attributed distinctly, because a note is the AGENT speaking. Rendering it as
+    "operator asked" would put words in the operator's mouth, and a memory that
+    misattributes is worse than one that is merely incomplete.
+    """
+    code, out, _ = run_cli(proj, "--json", "session", "start", "--model", "claude-opus-5")
+    sid = json.loads(out)["session"]
+    run_cli(proj, "session", "prompt", sid, "--text", "Make the parser handle CRLF input.")
+    run_cli(
+        proj,
+        "session",
+        "note",
+        sid,
+        "--text",
+        "Tried a regex first; abandoned it, the lookbehind was quadratic.",
+    )
+
+    code, out, err = run_cli(proj, "recall", "quadratic lookbehind")
+    assert code == OK, err
+    assert "abandoned it" in out, f"the note is not searchable:\n{out}"
+    assert "the agent noted" in out, f"a note must not read as the operator's words:\n{out}"
+
+    code, out, _ = run_cli(proj, "recall", "CRLF parser")
+    assert "operator asked" in out, f"and a prompt must still read as the operator:\n{out}"
+
+
+def test_a_note_and_a_prompt_in_one_session_do_not_collide(proj):
+    """They share a `(session, seq)` primary key, and both start at seq 0."""
+    _code, out, _ = run_cli(proj, "--json", "session", "start", "--model", "m")
+    sid = json.loads(out)["session"]
+    run_cli(proj, "session", "prompt", sid, "--text", "zebra alpha the first prompt")
+    run_cli(proj, "session", "note", sid, "--text", "zebra alpha the first note")
+
+    _code, out, _ = run_cli(proj, "recall", "zebra alpha", "--limit", "10")
+    assert "the first prompt" in out, out
+    assert "the first note" in out, f"one overwrote the other:\n{out}"

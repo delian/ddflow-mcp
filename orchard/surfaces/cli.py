@@ -132,7 +132,10 @@ def _plain(obj: Any) -> Any:
 
 
 def _csv(v: str | None) -> list[str]:
-    return [x.strip() for x in (v or "").split(",") if x.strip()]
+    """`config.csv_list` — one parser for the comma-separated notation, not two."""
+    from ..config import csv_list
+
+    return csv_list(v)
 
 
 def _auto_id(prefix: str, *parts: str) -> str:
@@ -152,6 +155,24 @@ def _auto_id(prefix: str, *parts: str) -> str:
 
 
 # -- commands --------------------------------------------------------------------------
+
+
+def _require_item(c: Ctx, item_id: str, st=None):
+    """The item, or ``None`` after reporting why — the one place that says so.
+
+    `no such item` was written eleven times in this module and twice more, differently,
+    in `services.gates` and `services.leases`. Eleven copies of a two-line check is
+    eleven chances for one to forget `removed`, which is exactly what a caller acting
+    on a removed item does not expect: the item folds, so `.get()` finds it, and only
+    the flag says it is gone.
+    """
+    st = st if st is not None else c.state()
+    it = st.items.get(item_id)
+    if it is None or it.removed:
+        gone = " (it was removed from the queue)" if it is not None else ""
+        print(f"no such item {item_id!r}{gone}", file=sys.stderr)
+        return None
+    return it
 
 
 def cmd_init(a, c: Ctx) -> int:
@@ -300,9 +321,8 @@ def cmd_split(a, c: Ctx) -> int:
     what `orchard replay` needs to reconstruct the project.
     """
     st = c.state()
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     if it.state in (DONE, ABANDONED):
         print(
@@ -384,9 +404,8 @@ def cmd_split(a, c: Ctx) -> int:
 
 def cmd_item_update(a, c: Ctx) -> int:
     st = c.state()
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     d: dict[str, Any] = {}
     for f in ("title", "body"):
@@ -418,6 +437,7 @@ def cmd_next(a, c: Ctx) -> int:
                         "blocked": [_plain(b) for b in p.blocked],
                         "running": [i.id for i in p.running],
                         "cycles": p.cycles,
+                        "interrupted": p.interrupted,
                         "critical_path": critical_path(st, a.phase or ""),
                     }
                 ),
@@ -430,6 +450,10 @@ def cmd_next(a, c: Ctx) -> int:
         print("DEPENDENCY CYCLE(S) — nothing can be scheduled inside them:", file=sys.stderr)
         for cyc in p.cycles:
             print("  " + " -> ".join(cyc), file=sys.stderr)
+    # Offered, but never silently: an item RUNNING with nobody on it may have a
+    # worktree full of work, and starting it from scratch loses that.
+    for note in p.interrupted:
+        print(f"INTERRUPTED: {note}", file=sys.stderr)
     if not p.ready:
         print(f"Nothing actionable ({p.summary()}).")
         for b in p.blocked[:10]:
@@ -550,6 +574,52 @@ def _gates_ahead_of(st, cfg, item_id: str, gate: str) -> list[str]:
     return [g for g in before if it and not it.gate_outcome(g)]
 
 
+def _gate_verify(a, c: Ctx, st, it) -> int:
+    """`gate verify` — can this gate go red at all?
+
+    Its own function because it is the only gate subcommand that WRITES to the
+    working tree and restores it, and burying that in a chain of `if` arms is how a
+    reader misses it.
+    """
+    results, reason = G.verify(st, c.cfg, c.gates, a.gate, c.repo, it)
+    payload = {
+        "gate": a.gate,
+        "reason": reason,
+        "results": [
+            {
+                "file": r.file,
+                "applied": r.applied,
+                "detected": r.detected,
+                "detail": r.detail,
+            }
+            for r in results
+        ],
+        # All three clauses. `results` is empty on every pre-flight failure -- unknown
+        # gate, agent gate, no registered mutations, no green baseline -- and `all([])`
+        # is True, so scoring on `results` alone turns each of those into a pass.
+        "verified": bool(results) and not reason and all(r.ok for r in results),
+    }
+    if c.json:
+        print(json.dumps(payload, indent=2))
+        return OK if payload["verified"] else FAIL
+    if reason:
+        print(reason, file=sys.stderr)
+        return FAIL
+    for r in results:
+        mark = "OK  " if r.ok else "FAIL"
+        print(f"  {mark} {r.file}: {'detected' if r.detected else r.detail}")
+    if payload["verified"]:
+        print(f"\n{a.gate} CAN fail: every registered mutation was caught.")
+        return OK
+    print(
+        f"\n{a.gate} did NOT catch every mutation. A gate that cannot fail is "
+        f"worse than no gate — it reports success on every change and everyone "
+        f"downstream reads that as evidence.",
+        file=sys.stderr,
+    )
+    return FAIL
+
+
 def cmd_gate(a, c: Ctx) -> int:
     st = c.state()
     if a.gate_cmd == "status":
@@ -589,10 +659,17 @@ def cmd_gate(a, c: Ctx) -> int:
         print(f"unknown gate {a.gate!r}; known: {', '.join(sorted(c.gates))}", file=sys.stderr)
         return FAIL
     gdef = c.gates[a.gate]
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
+
+    # BEFORE the pipeline-order check, deliberately. `verify` asks whether this GATE
+    # can go red at all -- a question about the gate's own definition, not about the
+    # item's progress -- and with `enforce_order = "block"` it was refused for any gate
+    # whose predecessors had not run, which is every gate at the moment you most want
+    # to know the answer.
+    if a.gate_cmd == "verify":
+        return _gate_verify(a, c, st, it)
 
     skipped_ahead = _gates_ahead_of(st, c.cfg, a.id, a.gate)
     if skipped_ahead and c.cfg.gates.enforce_order != "off":
@@ -704,9 +781,8 @@ def cmd_complete(a, c: Ctx) -> int:
     actionable if it is complete.
     """
     st = c.state()
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     s = G.status(st, c.cfg, a.id)
     s_status = s
@@ -820,9 +896,8 @@ def cmd_abandon(a, c: Ctx) -> int:
     — which it otherwise does forever, since nothing else can ever finish it.
     """
     st = c.state()
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     if it.state == DONE and not a.force:
         print(
@@ -847,9 +922,8 @@ def cmd_remove(a, c: Ctx) -> int:
     planned and then dropped.
     """
     st = c.state()
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     # Any item with work beneath it, not just a phase. The `kind == "phase"` guard
     # predates sub-tasks: removing a task umbrella left its children live but
@@ -893,9 +967,8 @@ def cmd_block(a, c: Ctx) -> int:
     scheduler then offered to an agent as the next thing to do.
     """
     st = c.state()
-    it = st.items.get(a.id)
-    if not it or it.removed:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     c.log.append("item.blocked", a.id, {"reason": a.reason})
     c.out(f"{a.id} blocked: {a.reason}", {"id": a.id})
@@ -904,8 +977,15 @@ def cmd_block(a, c: Ctx) -> int:
 
 def cmd_merge(a, c: Ctx) -> int:
     st = c.state()
-    it = st.items.get(a.id)
-    if not it or not it.worktree:
+    # Through `_require_item`, like every other mutating command. This was the one that
+    # was not: `.get()` finds a removed item, because removal is a FLAG on an item that
+    # still folds, so `orchard merge` landed the branch of work the operator had
+    # explicitly dropped from the queue and reported "merged" -- the most consequential
+    # action in the package, taken on the item least likely to be wanted.
+    it = _require_item(c, a.id, st)
+    if it is None:
+        return FAIL
+    if not it.worktree:
         print(f"{a.id} has no worktree to merge", file=sys.stderr)
         return NOTHING
     wt = W.Worktree(
@@ -1229,9 +1309,8 @@ def _decision_applicable(a, c: Ctx, st) -> int:
     """
     from ..core.schedule import conflicts
 
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     hits = [d for d in st.decisions.values() if d.live and d.globs and conflicts(it.globs, d.globs)]
     wide = [d for d in st.decisions.values() if d.live and not d.globs]
@@ -1799,9 +1878,8 @@ def cmd_board(a, c: Ctx) -> int:
 
 def cmd_show(a, c: Ctx) -> int:
     st = c.state()
-    it = st.items.get(a.id)
-    if not it:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    it = _require_item(c, a.id, st)
+    if it is None:
         return FAIL
     if c.json:
         print(json.dumps(_resolved(c, it), indent=2, default=str))
@@ -2466,6 +2544,224 @@ def cmd_companions(a, c: Ctx) -> int:
     return NOTHING if gaps else OK
 
 
+#: How each event kind reads in a timeline. Absent kinds fall back to the kind name,
+#: which is honest — a new event type shows up as itself rather than being silently
+#: dropped from the history, which is the failure `replay` had with decisions.
+_HISTORY_VERBS: dict[str, str] = {
+    "phase.added": "phase added",
+    "task.added": "task added",
+    "task.updated": "updated",
+    "task.removed": "removed from the queue",
+    "phase.removed": "removed from the queue",
+    "item.blocked": "blocked",
+    "item.abandoned": "abandoned",
+    "item.completed": "completed",
+    "lease.acquired": "claimed",
+    "lease.renewed": "heartbeat",
+    "lease.released": "released",
+    "lease.expired": "lease EXPIRED",
+    "gate.recorded": "gate",
+    "worktree.created": "worktree created",
+    "worktree.removed": "worktree removed",
+    "merge.performed": "merged",
+    "session.started": "session opened",
+    "session.prompt": "operator said",
+    "session.note": "noted",
+    "session.ended": "session closed",
+    "lesson.recorded": "lesson",
+    "decision.recorded": "DECISION",
+    "decision.superseded": "decision superseded",
+    "research.recorded": "research",
+    "bug.found": "BUG found",
+    "bug.fixed": "bug fixed",
+    "cadence.ran": "cadence ran",
+}
+
+
+def _history_line(ev) -> str:
+    """One event, as a line someone can read."""
+    verb = _HISTORY_VERBS.get(ev.kind, ev.kind)
+    d = ev.data or {}
+    detail = (
+        d.get("title")
+        or d.get("text")
+        or d.get("summary")
+        or d.get("question")
+        or d.get("reason")
+        or d.get("note")
+        or ""
+    )
+    if ev.kind == "gate.recorded":
+        detail = f"{d.get('gate', '?')} = {d.get('outcome', '?')}"
+    elif ev.kind == "lease.acquired":
+        detail = f"by {d.get('holder', '?')}"
+    elif ev.kind == "item.completed" and d.get("sha"):
+        detail = f"as {d['sha'][:8]}"
+    detail = " ".join(str(detail).split())[:88]
+    return f"  {ev.ts[:16].replace('T', ' ')}  {ev.subject:<22.22s} {verb:<22s} {detail}"
+
+
+def cmd_history(a, c: Ctx) -> int:
+    """One reverse-chronological timeline of everything that happened.
+
+    `status`, `progress`, `replay` and `recall` each answer part of "what has happened
+    here", and an operator asking that question had to know which to run. This is the
+    plain answer: the log, newest first, filterable.
+
+    Ordered by `(lamport, agent, id)` like everything else — NOT by wall-clock
+    timestamp. Two agents on two machines have two clocks, and sorting a merged history
+    by `ts` would interleave them wrongly while looking perfectly plausible.
+    """
+    events = c.log.read_all()
+    if a.item:
+        events = [e for e in events if e.subject == a.item]
+    if a.kind:
+        wanted = set(_csv(a.kind))
+        events = [e for e in events if e.kind in wanted or e.kind.split(".")[0] in wanted]
+    if a.since:
+        events = [e for e in events if e.ts >= a.since]
+    events = sorted(events, key=lambda e: (e.lamport, e.agent, e.id), reverse=True)
+    shown = events[: a.limit]
+
+    if c.json:
+        print(
+            json.dumps(
+                {
+                    "total": len(events),
+                    "shown": len(shown),
+                    "events": [
+                        {
+                            "id": e.id,
+                            "at": e.ts,
+                            "lamport": e.lamport,
+                            "agent": e.agent,
+                            "kind": e.kind,
+                            "subject": e.subject,
+                            "data": e.data,
+                        }
+                        for e in shown
+                    ],
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return OK if shown else NOTHING
+    if not shown:
+        print("Nothing in the history matches.")
+        return NOTHING
+    print(f"{len(events)} event(s); newest {len(shown)} first:\n")
+    for e in shown:
+        print(_history_line(e))
+    if len(events) > len(shown):
+        print(f"\n  ... {len(events) - len(shown)} older. --limit to see more.")
+    print(
+        "\n  Ordered by Lamport clock, not wall time: two agents have two clocks, and "
+        "\n  sorting a merged history by timestamp interleaves them wrongly."
+    )
+    return OK
+
+
+def cmd_import(a, c: Ctx) -> int:
+    """Propose what an existing project already has, so the queue starts where it is.
+
+    Reads and reports by default; `--apply` writes. A project adopting Orchard on day
+    400 has four hundred days of work, and a queue that starts empty tells an agent
+    "nothing is in flight" about a repository with three branches in flight.
+
+    Exit 2 when there is nothing to propose — "no data" reported as itself.
+    """
+    from ..services import importer as IM
+
+    st = c.state()
+    # The flag overrides the knob; 0 means 'no flag given', so an operator who set
+    # [importer] max_tasks in the config is not silently overruled by an argparse
+    # default that looks like a choice and is not one.
+    plan = IM.plan_import(
+        c.repo,
+        st,
+        include_done=a.include_done,
+        max_tasks=a.max_tasks or c.cfg.importer.max_tasks,
+    )
+    payload = {
+        "summary": plan.summary(),
+        "found": [
+            {
+                "kind": f.kind,
+                "id": f.ident,
+                "title": f.title,
+                "source": f.source,
+                "done": f.done,
+                "needs": f.needs,
+                "globs": f.globs,
+            }
+            for f in plan.found
+        ],
+        "skipped_existing": plan.skipped_existing,
+        "empty_sources": plan.empty_sources,
+        "notes": plan.notes,
+        "applied": False,
+    }
+
+    if a.apply and plan.found:
+        counts = IM.apply_import(c.repo, c.log, plan)
+        payload["applied"] = True
+        payload["written"] = counts
+        c.out(
+            "Imported: "
+            + ", ".join(f"{v} {k}" for k, v in sorted(counts.items()))
+            + "\n  Every item records where it came from. Review with `orchard board`, "
+            "then give each task its globs — an item with no declared globs is one the "
+            "conflict detector cannot protect.",
+            payload,
+        )
+        return OK
+
+    if c.json:
+        print(json.dumps(payload, indent=2, default=str))
+        return OK if plan.found else NOTHING
+
+    if not plan.found:
+        print("Nothing to import.")
+        for n in plan.notes:
+            print(f"  {n}")
+        return NOTHING
+
+    lines = ["What this project already has (nothing written yet):", ""]
+    preview = c.cfg.importer.preview_rows
+    for kind in IM.KINDS:
+        rows = plan.by_kind(kind)
+        if not rows:
+            continue
+        lines.append(f"  {len(rows)} {kind}(s):")
+        for f in rows[:preview]:
+            mark = "[x]" if f.done else "[ ]"
+            lines.append(f"    {mark} {f.ident:<28s} {f.title[:52]:<52s} {f.source}")
+        if len(rows) > preview:
+            lines.append(f"    ... and {len(rows) - preview} more")
+        lines.append("")
+    if plan.skipped_existing:
+        lines.append(
+            f"  {len(plan.skipped_existing)} already in the queue, left alone "
+            f"(this command is safe to re-run)."
+        )
+        lines.append("")
+    for n in plan.notes:
+        lines.append(f"  NOTE: {n}")
+    lines += [
+        "",
+        "  `orchard import --apply` writes these. Before you do:",
+        "    - the headings became phases and the checkboxes tasks, which is a GUESS;",
+        "    - no task has globs unless the file declared them, and a task with no",
+        "      globs is one two agents can collide on;",
+        "    - dependencies are only what the file said.",
+        "  The `/import-existing-project` workflow walks an agent through fixing those",
+        "  WITH the operator, which is the half this command cannot do.",
+    ]
+    print("\n".join(lines))
+    return OK
+
+
 def cmd_adopt(a, c: Ctx) -> int:
     from ..services.adopt import AGENT_TARGETS, adopt
 
@@ -2662,22 +2958,25 @@ def build_parser() -> argparse.ArgumentParser:
 
     s.add_parser("init", help="create .orchard/ in this repository").set_defaults(fn=cmd_init)
 
-    pa = s.add_parser("phase", help="add a phase")
-    pa_s = pa.add_subparsers(dest="phase_cmd", required=True)
-    pad = pa_s.add_parser("add")
-    pad.add_argument("id")
-    pad.add_argument("--title", default="")
-    pad.add_argument("--needs")
-    pad.add_argument("--globs")
-    pad.add_argument("--tags")
-    pad.add_argument("--body")
-    pad.add_argument("--priority", type=int, default=100)
-    pad.set_defaults(fn=cmd_phase_add)
+    # A phase and a task differ by two arguments. Writing both blocks out by hand is
+    # how `--priority` ended up on one and not the other twice before, and how the
+    # `record`/`skip` pair right below this was loop-generated for the same reason.
+    def _item_parser(sub, name: str, help_text: str, fn):
+        grp = s.add_parser(name, help=help_text)
+        sub_p = grp.add_subparsers(dest=f"{name}_cmd", required=True)
+        add = sub_p.add_parser("add")
+        add.add_argument("id")
+        add.add_argument("--title", default="")
+        add.add_argument("--needs")
+        add.add_argument("--globs")
+        add.add_argument("--tags")
+        add.add_argument("--body")
+        add.add_argument("--priority", type=int, default=100)
+        add.set_defaults(fn=fn)
+        return add
 
-    ta = s.add_parser("task", help="add a task")
-    ta_s = ta.add_subparsers(dest="task_cmd", required=True)
-    tad = ta_s.add_parser("add")
-    tad.add_argument("id")
+    _item_parser(s, "phase", "add a phase", cmd_phase_add)
+    tad = _item_parser(s, "task", "add a task", cmd_task_add)
     tad.add_argument("--phase", default="", help="owning phase")
     tad.add_argument(
         "--parent",
@@ -2685,13 +2984,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="owning phase OR task — a task parent makes this a SUB-TASK, which "
         "carries its own globs and dependencies like any other task",
     )
-    tad.add_argument("--title", default="")
-    tad.add_argument("--needs")
-    tad.add_argument("--globs")
-    tad.add_argument("--tags")
-    tad.add_argument("--body")
-    tad.add_argument("--priority", type=int, default=100)
-    tad.set_defaults(fn=cmd_task_add)
 
     sp = s.add_parser(
         "split", help="split an item into sub-tasks in place, keeping its id and history"
@@ -2743,6 +3035,13 @@ def build_parser() -> argparse.ArgumentParser:
     grun.add_argument("id")
     grun.add_argument("gate")
     grun.set_defaults(fn=cmd_gate)
+    gvf = g_s.add_parser(
+        "verify",
+        help="break what this gate guards and require it to notice (exit 1 = it cannot)",
+    )
+    gvf.add_argument("id")
+    gvf.add_argument("gate")
+    gvf.set_defaults(fn=cmd_gate)
     for name in ("record", "skip"):
         gr = g_s.add_parser(name)
         gr.add_argument("id")
@@ -3039,6 +3338,38 @@ def build_parser() -> argparse.ArgumentParser:
         help="container image used by --launch docker",
     )
     ad.set_defaults(fn=cmd_adopt)
+
+    hi = s.add_parser("history", help="one timeline of everything that happened (exit 2 = nothing)")
+    hi.add_argument("--item", default="", help="restrict to one item")
+    hi.add_argument(
+        "--kind",
+        default="",
+        help="comma-separated event kinds or families: 'gate', 'lease.acquired', 'decision,bug'",
+    )
+    hi.add_argument("--since", default="", help="ISO timestamp lower bound")
+    hi.add_argument("--limit", type=int, default=40)
+    hi.set_defaults(fn=cmd_history)
+
+    im = s.add_parser(
+        "import",
+        help="propose the existing project's work, lessons and decisions (exit 2 = nothing)",
+    )
+    im.add_argument("--apply", action="store_true", help="write them; default is a dry run")
+    im.add_argument(
+        "--include-done",
+        action="store_true",
+        help="also import already-ticked items, as completed. Off by default: a "
+        "finished history is not a queue.",
+    )
+    im.add_argument(
+        "--max-tasks",
+        type=int,
+        default=0,
+        help="refuse to propose more tasks than this. 0 (the default) uses "
+        "[importer] max_tasks from the config, which ships at 200. A bigger number is "
+        "usually a whole history rather than a queue.",
+    )
+    im.set_defaults(fn=cmd_import)
 
     co = s.add_parser(
         "companions",

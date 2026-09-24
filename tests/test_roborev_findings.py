@@ -396,3 +396,25 @@ def test_the_cli_shows_the_unknown_state_distinctly(repo):
     _code, out, _ = run_cli(repo, "companions", "list", "--no-probe")
     assert "[?]" in out, f"an unchecked companion needs its own mark:\n{out}"
     assert "not checked" in out, out
+
+
+def test_merge_refuses_an_item_that_was_removed_from_the_queue(repo):
+    """`orchard merge` was the one mutating command not routed through `_require_item`.
+
+    Removal is a FLAG on an item that still folds, so `st.items.get()` finds it and
+    only the flag says it is gone. Every other mutating command — `split`, `update`,
+    `complete`, `abandon`, `remove`, `block`, `show` — goes through the one place that
+    checks the flag; `merge` did not, so the most consequential action in the package
+    was taken on the item least likely to be wanted, and it printed "merged".
+
+    Found by `roborev analyze duplication` as a consequence of the D-class duplication
+    it was actually looking for, and probed before it was fixed.
+    """
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    assert run_cli(repo, "claim", "T1")[0] == OK
+    assert run_cli(repo, "remove", "T1", "--reason", "dropped")[0] == OK
+
+    code, out, err = run_cli(repo, "merge", "T1")
+    assert code == FAIL, f"it merged work the operator dropped:\n{out}"
+    assert "removed from the queue" in err, err

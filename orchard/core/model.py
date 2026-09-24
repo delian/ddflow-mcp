@@ -257,8 +257,35 @@ class State:
         wanted = self.descendants(phase)
         return [i for i in live if i.id in wanted]
 
+    def _child_index(self) -> dict[str, list[Item]]:
+        """`parent -> [children]`, built once per fold and cached on the State.
+
+        `children()` was a full scan of `items`, and `descendants()` / `ancestors()` /
+        `_is_umbrella()` call it once per node per candidate — so `plan()` was roughly
+        quadratic in queue size. Measured before this (1 phase + N tasks):
+
+            n=100  2.0 ms      n=400  18.8 ms      n=800  46.1 ms
+
+        with cProfile attributing 74% of `plan()` at n=800 to 1,600 calls into
+        `children`. Harmless at realistic sizes and a cheap fix, which is exactly the
+        kind of thing that stays unfixed until someone has 2,000 items.
+
+        Cached on the instance rather than memoised globally: a `State` is the result
+        of one `fold` and is never mutated afterwards, so the index cannot go stale —
+        and a global cache keyed on a mutable object would be a bug waiting for the
+        first caller who does mutate one.
+        """
+        idx = getattr(self, "_children_cache", None)
+        if idx is None:
+            idx = {}
+            for i in self.items.values():
+                if not i.removed and i.parent:
+                    idx.setdefault(i.parent, []).append(i)
+            object.__setattr__(self, "_children_cache", idx)
+        return idx
+
     def children(self, item_id: str) -> list[Item]:
-        return [i for i in self.items.values() if i.parent == item_id and not i.removed]
+        return list(self._child_index().get(item_id, ()))
 
     def descendants(self, item_id: str) -> set[str]:
         """Every item below ``item_id``, transitively.
@@ -659,9 +686,27 @@ def _h_session_prompt(st: State, ev: Event) -> None:
 
 
 def _h_session_note(st: State, ev: Event) -> None:
-    _session(st, ev).notes.append(
-        {"at": ev.ts, "text": ev.data.get("text", ""), "item": ev.data.get("item", "")}
-    )
+    """A note, with the fields that make it addressable afterwards.
+
+    `seq`, `ident` and `source` used to be dropped here, which is how a projection
+    quietly decides a field does not exist: the importer wrote `ident` on every note to
+    make a second import idempotent, the fold discarded it, and the check that read it
+    back compared `""` against `""` and reported "already imported" for nothing.
+    """
+    note = {
+        "at": ev.ts,
+        "text": ev.data.get("text", ""),
+        "item": ev.data.get("item", ""),
+    }
+    for key in ("seq", "ident", "source"):
+        if ev.data.get(key) not in (None, ""):
+            note[key] = ev.data[key]
+    # When the note records something that happened BEFORE it was written down -- an
+    # imported journal entry, a memory dated months ago -- keep both: `at` is when
+    # Orchard learned it, `origin_at` is when it was true.
+    if ev.data.get("at"):
+        note["origin_at"] = ev.data["at"]
+    _session(st, ev).notes.append(note)
 
 
 def _h_session_ended(st: State, ev: Event) -> None:

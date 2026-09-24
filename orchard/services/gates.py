@@ -61,6 +61,11 @@ class GateDef:
     cwd: str = "worktree"  # worktree | repo
     env: dict[str, str] = field(default_factory=dict)
     prompt: str = ""  # instruction handed to the agent for an agent gate
+    #: Edits that MUST make this gate fail. Each `{file, old, new}` is applied to the
+    #: worktree, the gate is run, and a non-zero exit is required before the file is
+    #: restored. A gate with no registered mutation is a gate nobody has shown can go
+    #: red — see `verify`.
+    mutations: list[dict[str, str]] = field(default_factory=list)
 
     @property
     def is_command_gate(self) -> bool:
@@ -353,6 +358,148 @@ def inert_requirements(cfg: Config) -> list[str]:
     """
     pipelines = set(cfg.gates.task_pipeline) | set(cfg.gates.phase_pipeline)
     return sorted(set(cfg.gates.required) - pipelines)
+
+
+@dataclass
+class MutationResult:
+    gate: str
+    file: str
+    applied: bool
+    detected: bool
+    detail: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.applied and self.detected
+
+
+def verify(
+    state: State,
+    cfg: Config,
+    gates: dict[str, GateDef],
+    gate_id: str,
+    repo: Path,
+    item: Item | None = None,
+) -> tuple[list[MutationResult], str]:
+    """Break what a gate guards and require it to notice. Returns (results, reason).
+
+    **The anti-vacuous-pass check, turned on Orchard's own checks.** The pipeline has
+    ten gates and nothing anywhere proved a single one of them was capable of going
+    red. A gate that cannot fail is worse than no gate: it reports success on every
+    change, and everyone downstream reads that as evidence.
+
+    Two rules make this honest, and the first is the one that is usually got wrong:
+
+    1. **A mutation that did not apply is not a passed mutation test.** If `old` is not
+       found — or is found more than once, so the edit is ambiguous — the check FAILS
+       rather than skipping. Silently skipping turns "the mutation never happened" into
+       a green run, which reads as "the gate cannot detect this": the exact opposite of
+       the truth, delivered confidently.
+    2. **The file is restored whatever happens**, including on exception, or a failed
+       verification leaves the worktree broken and the next gate reports a failure that
+       is the verifier's fault.
+
+    3. **A green baseline is required first.** A gate that is already red — one
+       pre-existing failing test, a tool that stopped being installed, a flake — reports
+       `failed` for every mutation, so every `detected` comes back True and this
+       function certifies it as able to fail. It cannot: it was red before anything was
+       touched. That is the vacuous-pass class, inside the check written to catch the
+       vacuous-pass class, and it was CONFIRMED by the cross-family critic on
+       2026-09-24 with the probe now in `tests/test_gate_verify.py`.
+
+    A gate with zero registered mutations is itself reported as a failure. Declaring a
+    check you have never shown can fail is the thing this exists to catch.
+
+    **Callers must check BOTH components.** A non-empty `reason` is a pre-flight
+    failure and `results` is then empty — and `all([])` is True, so scoring on
+    `results` alone turns every pre-flight failure into a pass. The rule is
+    `verified = bool(results) and not reason and all(r.ok for r in results)`.
+    """
+    gdef = gates.get(gate_id)
+    if not gdef:
+        return [], f"unknown gate {gate_id!r}; known: {', '.join(sorted(gates))}"
+    if not gdef.is_command_gate:
+        return [], (
+            f"{gate_id} is an agent gate — it has no command to run, so there is "
+            f"nothing to mutate. Its honesty rests on the evidence contract instead."
+        )
+    if not gdef.mutations:
+        return [], (
+            f"{gate_id} has NO registered mutations, so nothing has ever shown it can "
+            f"fail. Add `mutations = [{{ file = '...', old = '...', new = '...' }}]` to "
+            f"[gate.{gate_id}]: an edit that this gate must catch."
+        )
+
+    cwd = repo
+    if item is not None and gdef.cwd == "worktree" and item.worktree:
+        from ..infra import worktree as W
+
+        # No `or repo` fallback. An item that HAS a worktree whose path no longer
+        # resolves is a broken state, and falling back writes the mutation into the
+        # primary checkout and then reports a verdict about the wrong tree. Refused,
+        # named, and nothing is touched.
+        resolved = W.load_path(repo, item.worktree)
+        if resolved is None:
+            return [], (
+                f"{item.id} records a worktree ({item.worktree}) that no longer "
+                f"resolves. Refusing to mutate the primary checkout in its place — "
+                f"run `orchard recover` or re-claim the item first."
+            )
+        cwd = resolved
+
+    # The baseline. Everything below compares against it, and without it a red gate
+    # "detects" every mutation.
+    baseline, base_ev = run_command_gate(gdef, cwd)
+    if baseline != "passed":
+        return [], (
+            f"{gate_id} does not pass on the UNMUTATED source — it reported "
+            f"{baseline!r} before anything was changed, so there is no green baseline "
+            f"to compare against and a 'detected' result would prove nothing. "
+            f"{base_ev.get('reason', '')}".strip()[:400]
+        )
+
+    results: list[MutationResult] = []
+    for mut in gdef.mutations:
+        target = cwd / mut.get("file", "")
+        old, new = mut.get("old", ""), mut.get("new", "")
+        if not target.is_file():
+            results.append(
+                MutationResult(gate_id, mut.get("file", ""), False, False, "file not found")
+            )
+            continue
+        src = target.read_text("utf-8")
+        count = src.count(old)
+        if count != 1:
+            results.append(
+                MutationResult(
+                    gate_id,
+                    mut.get("file", ""),
+                    False,
+                    False,
+                    f"`old` appears {count} time(s); the edit must be unambiguous. "
+                    f"A mutation that did not apply is NOT a passed mutation test.",
+                )
+            )
+            continue
+        try:
+            target.write_text(src.replace(old, new, 1), "utf-8")
+            outcome, ev = run_command_gate(gdef, cwd)
+            detected = outcome == "failed"
+            results.append(
+                MutationResult(
+                    gate_id,
+                    mut.get("file", ""),
+                    True,
+                    detected,
+                    ""
+                    if detected
+                    else f"the gate reported {outcome!r} on mutated source — it cannot "
+                    f"see this class of change. {ev.get('reason', '')}"[:300],
+                )
+            )
+        finally:
+            target.write_text(src, "utf-8")
+    return results, ""
 
 
 def digest(text: str) -> str:

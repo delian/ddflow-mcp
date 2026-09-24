@@ -200,6 +200,26 @@ TOOLS: dict[str, dict[str, Any]] = {
             ]
         ),
     },
+    "orchard_gate_verify": {
+        "description": (
+            "Break what a gate guards and require it to NOTICE. Applies each mutation "
+            "registered on the gate, runs it, requires a non-zero exit, and restores "
+            "the file.\n\n"
+            "This is the anti-vacuous-pass check turned on the checks themselves. A "
+            "gate that cannot fail is worse than no gate: it reports success on every "
+            "change and everyone downstream reads that as evidence. Exit 1 means the "
+            "gate did NOT catch its mutation — or that nobody has registered one, "
+            "which is the same problem earlier.\n\n"
+            "A mutation whose `old` text is absent or ambiguous is a FAILURE, not a "
+            "skip: the edit never happened, so the gate ran on pristine source and "
+            "passing proves the opposite of what it claims."
+        ),
+        "properties": {
+            "id": ("string", "Item whose worktree to mutate in.", True),
+            "gate": ("string", "Gate id. Must be a command gate.", True),
+        },
+        "argv": lambda a: ["--json", "gate", "verify", a["id"], a["gate"]],
+    },
     "orchard_gate_skip": {
         "description": (
             "Skip a gate ON THE RECORD, with a mandatory reason. This is the auditable "
@@ -805,6 +825,71 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {},
         "argv": lambda a: ["--json", "rebuild"],
+    },
+    "orchard_history": {
+        "description": (
+            "ONE timeline of everything that happened, in the order it happened: "
+            "claims, releases, gates, bugs, decisions, lessons, completions. The other "
+            "views answer 'what is true now'; this one answers 'how did it get like "
+            "this', which is the question you have when something looks wrong.\n\n"
+            "Filter with `item` for one task's whole life, `kind` for one family "
+            "('gate', 'lease.acquired', 'decision,bug'), `since` for a time window. "
+            "Exit 2 means nothing matched — which is an answer, not a failure."
+        ),
+        "properties": {
+            "item": ("string", "Restrict to one item's timeline.", False),
+            "kind": (
+                "string",
+                "Comma-separated event kinds or families: 'gate', 'lease.acquired', "
+                "'decision,bug'.",
+                False,
+            ),
+            "since": ("string", "ISO timestamp lower bound.", False),
+            "limit": ("integer", "Most recent N entries (default 40).", False),
+        },
+        "argv": lambda a: (
+            ["--json", "history"]
+            + (["--item", a["item"]] if a.get("item") else [])
+            + (["--kind", a["kind"]] if a.get("kind") else [])
+            + (["--since", a["since"]] if a.get("since") else [])
+            + (["--limit", str(a["limit"])] if a.get("limit") else [])
+        ),
+    },
+    "orchard_import": {
+        "description": (
+            "For a project that ALREADY HAS HISTORY and is adopting Orchard now: read "
+            "its todo checklists, lessons corpus, ADR files and unmerged branches, and "
+            "propose them as queue items. Reports by default and writes NOTHING until "
+            "`apply` is true.\n\n"
+            "Call this right after `orchard_setup` on any repository that is not brand "
+            "new. A queue that starts empty tells you nothing is in flight about a "
+            "project that may have three branches in flight.\n\n"
+            "The proposal is a GUESS about structure — headings became phases, "
+            "checkboxes became tasks, and almost nothing has globs. Use the "
+            "`import-existing-project` prompt, which walks through fixing that with the "
+            "operator. Exit 2 means nothing was found."
+        ),
+        "properties": {
+            "apply": ("boolean", "Write the proposal. Default false: look first.", False),
+            "include_done": (
+                "boolean",
+                "Also import already-ticked items as completed. Off by default — a "
+                "finished history is not a queue, and one real project yielded 3,638 of "
+                "them.",
+                False,
+            ),
+            "max_tasks": (
+                "integer",
+                "Refuse to propose more tasks than this (default 200).",
+                False,
+            ),
+        },
+        "argv": lambda a: (
+            ["--json", "import"]
+            + (["--apply"] if a.get("apply") else [])
+            + (["--include-done"] if a.get("include_done") else [])
+            + (["--max-tasks", str(a["max_tasks"])] if a.get("max_tasks") else [])
+        ),
     },
     "orchard_companions": {
         "description": (
@@ -1522,7 +1607,17 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         "loops": 0,
         "task_pipeline": [],
         "require_outcome": True,
+        "importable": 0,
+        "queue_is_empty": True,
     }
+    # Cheap enough for a handshake: `glob` on a handful of known paths, no parsing.
+    # The point is only to know whether to OFFER the import, not to do it.
+    try:
+        from ..services import importer as IM
+
+        v["importable"] = len(IM._files(repo, IM.SOURCE_GLOBS))
+    except Exception:
+        pass
     if not adopted:
         return v
 
@@ -1617,6 +1712,7 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         st = fold(events, strict=False)
         p = plan(st, cfg, agent=log.agent_id)
         v["ready"], v["running"] = len(p.ready), len(p.running)
+        v["queue_is_empty"] = not st.items
         v["blocked"] = len(p.blocked)
         v["open_bugs"] = sum(1 for b in st.bugs.values() if b.open)
         v["loops"] = len(PR.detect(events, st, cfg))

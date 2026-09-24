@@ -64,3 +64,14 @@ include = ["orchard/", "docs/", "tests/", "demos/", "probes/",
 # every file in a declared package directory. They were a SIBLING directory until a
 # real install raised FileNotFoundError for them -- a fault invisible from a source
 # checkout, which is why `tests/test_packaging.py` builds the wheel and looks inside.
+
+[tool.pytest.ini_options]
+# `slow` marks the end-to-end scenarios: real processes, real worktrees, real test runs
+# inside them. Deselected by default so the ordinary suite stays a thing people run;
+# `-m slow` opts in, and CI runs them as their own job.
+#
+# Registered here rather than left implicit because an unregistered marker is silently
+# a typo: `@pytest.mark.slwo` selects nothing and warns, and a test nobody selects is a
+# test nobody runs.
+markers = ["slow: end-to-end scenarios; minutes, not seconds"]
+addopts = "-m 'not slow'"

@@ -530,6 +530,31 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
         return None, f"bad response body: {exc}"
 
 
+def _truncated(rev: Reviewer, *, reasoning_tokens: object = None) -> str:
+    """The one way this package explains a reply that ran out of budget mid-thought.
+
+    Written three times before — once per backend — and already drifted: the OpenAI
+    copy named `max_chunk_chars` and reported reasoning-token usage, the Gemini copy
+    named neither. A reviewer that hit this returns UNAVAILABLE, and the difference
+    between "raise max_tokens" and "lower max_chunk_chars" is the difference between
+    a fix and another hour of the same failure, so the remedy has to be complete
+    wherever it is read.
+
+    Measured, not guessed: on Qwen3.8-Flash-Next-FP8 over a 30 KB diff, a 6,000-token
+    budget produced ZERO characters of content — the whole budget went to reasoning.
+    That is why the default is 32,000.
+    """
+    detail = ""
+    if reasoning_tokens not in (None, "", 0):
+        detail = f" ({reasoning_tokens} of them reasoning)"
+    return (
+        f"TRUNCATED: the model consumed all {rev.max_tokens} tokens{detail} before "
+        f"emitting any answer. This is UNAVAILABLE, not a clean review. Raise "
+        f"[[reviewer]].max_tokens, or lower [[reviewer]].max_chunk_chars so each "
+        f"chunk needs less thinking."
+    )
+
+
 def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
     """Anthropic Messages API: system is a TOP-LEVEL field, not a message."""
     key = rev.api_key()
@@ -556,10 +581,7 @@ def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> 
         return "", f"unexpected response shape: {str(body)[:300]}"
     text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
     if not text and body.get("stop_reason") == "max_tokens":
-        return "", (
-            f"TRUNCATED: hit max_tokens ({rev.max_tokens}) before emitting an "
-            f"answer. Raise [[reviewer]].max_tokens or lower max_chunk_chars."
-        )
+        return "", _truncated(rev)
     return text, ""
 
 
@@ -592,10 +614,7 @@ def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         return "", f"no candidate returned{f' ({fb})' if fb else ''}"
     text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
     if not text and cand.get("finishReason") == "MAX_TOKENS":
-        return "", (
-            f"TRUNCATED: hit maxOutputTokens ({rev.max_tokens}) before emitting "
-            f"an answer. Raise [[reviewer]].max_tokens."
-        )
+        return "", _truncated(rev)
     return text, ""
 
 
@@ -637,11 +656,7 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         # broken endpoint, when the endpoint is fine and the token budget is too small
         # for a model that thinks before it answers.
         used = (body.get("usage") or {}).get("completion_tokens_details") or {}
-        return "", (
-            f"TRUNCATED: the model consumed all {rev.max_tokens} tokens "
-            f"({used.get('reasoning_tokens', '?')} of them reasoning) before emitting "
-            f"any answer. Raise [[reviewer]].max_tokens or lower max_chunk_chars."
-        )
+        return "", _truncated(rev, reasoning_tokens=used.get("reasoning_tokens"))
     # Reasoning models split deliberation from the answer. We want the ANSWER; if the
     # model spent its whole budget reasoning and returned no content, that is an empty
     # completion (UNAVAILABLE), not a review that found nothing.

@@ -23,12 +23,14 @@ and an MCP server that are the same implementation.
   - [Publishing and registry](#publishing-and-registry)
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
   - [Companion MCP servers](#companion-mcp-servers)
+- [Adopting a project that already has history](#adopting-a-project-that-already-has-history)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
 - [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
 - [Architectural decisions](#architectural-decisions)
 - [Recall — "have we been here before?"](#recall--have-we-been-here-before)
 - [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
+  - [Proving a gate can fail at all](#proving-a-gate-can-fail-at-all)
 - [The phase pipeline](#the-phase-pipeline)
 - [Parallelism and coordination](#parallelism-and-coordination)
 - [Crash recovery](#crash-recovery)
@@ -343,6 +345,84 @@ args    = ["mcp"]
 install = "cargo install my-linter"
 ```
 
+## Adopting a project that already has history
+
+A queue that starts empty tells the next agent "nothing is in flight" about a repository
+with three branches in flight and forty open items in a todo file — and the agent
+believes it, because the tool said so. That is worse than having no tool at all.
+
+```console
+$ orchard import                      # looks; writes nothing
+What this project already has (nothing written yet):
+
+  314 phase(s):
+    [ ] 142.A     the scaling-law advisor is wrong (P0; CONFIRMED)   docs/todo.md:26517
+  1170 task(s):
+  442 lesson(s):
+  ...
+  47 memory(s):
+    [ ] M-0002    Hardware: 8x H200 GPUs on this box, usually idle.  .agent_memory/LOG.txt:3
+
+  NOTE: 3631 already-ticked task(s) were NOT imported. They are history, not a queue.
+  NOTE: 32 phase heading(s) say the work is finished while their checkboxes are still
+        unticked: 99 (4 open), 103 (3 open), ... Ask the operator which is stale.
+
+$ orchard import --apply              # writes them, each recording its source line
+```
+
+Seven sources, all optional, all in the places projects actually keep them:
+
+| Source | Read from | Becomes |
+|---|---|---|
+| Todo checklists | `docs/todo.md`, `docs/todo/open/*.md`, `tasks/todo.md`, `TODO.md`, `docs/plan.md`, `ROADMAP.md` | phases and tasks, with declared `Needs:`/`Globs:` |
+| Lessons | `docs/lessons.md`, `LESSONS.md`, `docs/retrospectives/*.md` | lessons, searchable by `orchard recall` |
+| Decisions | `docs/adr/*.md`, `docs/decisions/*.md` | decisions, `Superseded` preserved as superseded |
+| Research | `docs/RESEARCH.md` | research notes, `CONFIRMED`/`REFUTED`/`THEORETICAL` carried across |
+| Journal | `docs/log/*.md`, `CHANGELOG.md`, `docs/journal/*.md` | session notes, dated by **when they happened** |
+| Cross-session memory | `.agent_memory/LOG.txt` (OptMem), `.memo/`, `.optmem/` | session notes, with each record's own date |
+| In-flight work | branches with commits not on the base | tasks, named with how far ahead they are |
+
+### What it will and will not decide for you
+
+**Mechanical, and verifiable:** a ticked checkbox is a fact, a `##` heading is a
+section, a branch with unmerged commits is work. The id in `### 142.A — …` or
+`- [ ] **WFOPT.4.6** — …` is read, not invented, so the imported queue uses the ids the
+project has been writing in commit trailers for months.
+
+**Judgement, and yours:** which open items are actually live, what each task writes,
+what depends on what. The `/import-existing-project` prompt walks an agent through that
+with the operator. It is not automatable, and a confident guess produces a wrong queue
+the scheduler then hands out.
+
+Four guard rails, each of which exists because the alternative is silent:
+
+- **Dry run by default.** `--apply` writes. Looking is free and never a side effect.
+- **Finished work stays out** — it is history, not a queue — *except* a completed item
+  that open work depends on, which comes along as done so the open item is not stranded
+  on an id the queue has never heard of.
+- **`[importer] max_tasks` (default 200) refuses a whole history.** An import writes
+  events into a log that is committed to git; one real repository yielded 4,799
+  checkboxes. Over the cap it proposes none and says so — the phases are withheld with
+  them, because a queue of empty phases is not a smaller import, it is a misleading one.
+- **Idempotent.** Ids derive from the source, so re-running after you edit the todo adds
+  what is new and leaves the rest alone. A second run over an unchanged project exits 2.
+
+### What it reports rather than fixes
+
+Three kinds of drift it can see and must not resolve on its own, because either answer
+could be the wrong one:
+
+- **A phase heading that says `SHIPPED` over unticked checkboxes** (32 of them in the
+  repository this was measured against). One-sided risk: if the heading is right, the
+  queue is about to hand out work that is already done.
+- **A dependency on an id nothing produced.** Kept and treated as unmet — deliberately,
+  so a typo surfaces as blocked work rather than as work that starts early — but named,
+  because "never offered" otherwise looks exactly like "nobody has got to it yet".
+- **A file that matched a source pattern and yielded nothing**, which usually means an
+  unusual format rather than an empty file.
+
+---
+
 ## The model: phases, tasks, dependencies, globs
 
 ```
@@ -540,6 +620,46 @@ cannot complete P1.T1 — 1 unmet condition(s):
 
 Every unmet condition is listed **at once** — a refusal that reveals one problem at a
 time trains an agent to reach for `--force`.
+
+---
+
+### Proving a gate can fail at all
+
+```console
+$ orchard gate verify T1 unit_tests
+  OK   src/calc.py: detected
+
+unit_tests CAN fail: every registered mutation was caught.
+```
+
+A gate that cannot go red is worse than no gate — it reports success on every change,
+and everyone downstream reads that as evidence. `gate verify` breaks what the gate
+guards, using the `mutations` registered beside it, and requires the gate to notice:
+
+```toml
+[gate.unit_tests]
+command = "python -m pytest -q"
+cwd = "repo"
+mutations = [ { file = "src/calc.py", old = "return a + b", new = "return a - b" } ]
+```
+
+Four things make it honest rather than ceremonial, and the last one is this feature's
+own bug, found by a cross-family review of it:
+
+- **A mutation that did not apply is a FAILURE, not a skip.** If `old` is absent — or
+  present twice, so the edit is ambiguous — the check fails. Skipping turns "the
+  mutation never happened" into a green run, which reads as the opposite of the truth.
+- **The source is restored whatever happens**, including on exception, or a failed
+  verification leaves the tree broken and the next gate reports the verifier's fault.
+- **A gate with no registered mutations is reported as unproven.** Declaring a check
+  nobody has shown can fail is what this exists to catch. An agent gate says plainly
+  that it has no command to mutate and rests on its evidence contract instead.
+- **A green baseline is required first.** A gate already red for an unrelated reason —
+  one pre-existing failing test, a tool that stopped being installed, a flake — reports
+  `failed` for every mutation, so every mutation reads as *detected* and the gate is
+  certified as able to fail when nothing has shown any such thing. The check written to
+  catch the vacuous-pass class contained it. It now runs unmutated first and refuses
+  without a pass.
 
 ---
 
@@ -792,6 +912,7 @@ orchard gate status <id>         pipeline position + the next gate's instruction
 orchard gate run <id> <gate>     execute a command gate, record its evidence
 orchard gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model)
 orchard gate skip <id> <gate>    skip, with a mandatory reason
+orchard gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 
 orchard merge <id>               merge from the primary checkout, no checkout
 orchard complete <id>            finish        (3 = unmet conditions, all listed)
@@ -800,6 +921,9 @@ orchard block <id> --reason ..   mark blocked
 orchard brief [--item|--phase]   budgeted session-start pack
 orchard board / show <id>        human views
 orchard render                   regenerate docs/orchard/*.md
+
+orchard import [--apply]         propose an existing project's work  (2 = nothing)
+orchard history [--item|--kind]  one timeline of everything that happened (2 = nothing)
 
 orchard lesson add|search        capture and retrieve lessons
 orchard research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
@@ -823,7 +947,7 @@ orchard mcp                      run the MCP stdio server
 
 ## Configuration
 
-58 knobs across 11 sections, every one documented in place:
+61 knobs across 12 sections, every one documented in place:
 
 ```console
 $ orchard config --explain --filter lease
@@ -869,7 +993,7 @@ tests in [R6](docs/RESEARCH.md#r6--bugs-this-project-found-in-itself).
 | Document | Contents |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The event-log inversion, ordering, concurrency, module map, what is deliberately absent |
-| [docs/RESEARCH.md](docs/RESEARCH.md) | Ten research questions with probes, measured output and verdicts; the self-found bug catalogue, including the 2026-09-24 review pass (R10) |
+| [docs/RESEARCH.md](docs/RESEARCH.md) | Eleven research questions with probes, measured output and verdicts; the self-found bug catalogue, the 2026-09-24 review pass (R10), and the importer against a real 400-day corpus (R11) |
 | [docs/RECOVERY.md](docs/RECOVERY.md) | Operator runbook: crashes, corruption, divergence, full reconstruction |
 | [templates/drivers/implement-phase.md](templates/drivers/implement-phase.md) | The canonical agent-agnostic driver |
 | [templates/drivers/deltas/](templates/drivers/deltas/) | Per-agent deltas: Claude, Gemini, Codex, Copilot, Kilo |
