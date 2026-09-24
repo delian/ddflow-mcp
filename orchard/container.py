@@ -25,6 +25,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from . import proc as P
+
 HOST_ALIAS = "host.docker.internal"
 
 
@@ -123,9 +125,7 @@ def _reviewer_urls(repo: Path) -> list[tuple[str, str]]:
 
 
 def _repo_has_identity(repo: Path) -> bool:
-    import subprocess
-
-    r = subprocess.run(
+    r = P.run(
         ["git", "-C", str(repo), "config", "user.email"], capture_output=True, text=True, timeout=30
     )
     return bool(r.stdout.strip())

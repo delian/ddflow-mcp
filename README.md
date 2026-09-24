@@ -22,6 +22,7 @@ and an MCP server that are the same implementation.
   - [Extending it by writing text, not code](#extending-it-by-writing-text-not-code)
   - [Publishing and registry](#publishing-and-registry)
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
+  - [Companion MCP servers](#companion-mcp-servers)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
 - [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
 - [Architectural decisions](#architectural-decisions)
@@ -36,6 +37,7 @@ and an MCP server that are the same implementation.
 - [Cadences](#cadences)
 - [Keeping session-start cost flat](#keeping-session-start-cost-flat)
 - [Agent portability](#agent-portability)
+- [Keeping the two surfaces honest](#keeping-the-two-surfaces-honest)
 - [Command reference](#command-reference)
 - [Configuration](#configuration)
 - [Testing](#testing)
@@ -164,6 +166,23 @@ orchard prompts eject             # copy the shipped ones into .orchard/prompts/
 $EDITOR .orchard/prompts/review_system.md
 ```
 
+**Including the one the agent actually reads first.** `mcp_instructions.md` is the block
+an MCP client injects into the model's context on connect — the workflow, the reporting
+duties, and which companion tools to reach for. It is the file to edit when you want
+this project to work differently:
+
+```sh
+orchard prompts eject mcp_instructions
+$EDITOR .orchard/prompts/mcp_instructions.md      # or [prompts] mcp_instructions = "..."
+```
+
+It renders against the live state — `adopted`, `task_pipeline`, `setup_todo`,
+`companions`, `missing_companions`, `gate_gaps`, `recoverable`, `loops` — so the
+instruction is the next concrete action rather than a fixed blurb the model learns to
+skip. A broken override **says so in the instruction block itself** instead of falling
+back to the default: this is the one surface where nobody would ever notice their edit
+was not live.
+
 Templates render with **Jinja2 when it is installed, and a strict standard-library
 renderer otherwise** — Orchard cannot require Jinja without losing zero-dependency
 installability, but a project that already has it gets the full language. The shipped
@@ -176,7 +195,8 @@ diff it was supposed to carry is the vacuous review in template form — the mod
 dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
-reviewers (`[[reviewer]]`), enforcement (`[enforce]`), cadences, and 47 other knobs.
+reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
+cadences, and the rest of the 58 knobs.
 `orchard config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -253,6 +273,67 @@ there is.
 > truncated. That case is reported as `TRUNCATED` with the remedy named, never as an
 > empty completion and never as a clean review.
 
+### Companion MCP servers
+
+Orchard imposes the order and demands the evidence. It does not *perform* the judgement
+inside most of its gates: `standards` wants an automated standards review, `research`
+wants documentation to check a claim against, `rules` wants memory of the last time
+somebody hit this. A project that installs Orchard and stops has those gates wired to
+nothing — and because an agent gate passes on an assertion, that gap is invisible in
+exactly the way the rest of this design exists to prevent.
+
+So the gap is **named**:
+
+```console
+$ orchard companions
+Companion MCP servers
+
+  [x] context7   Current library documentation
+       gates: research, standards
+       registered for: claude, cursor
+  [+] roborev    Automated second-opinion code review
+       gates: standards, bug_hunt, dedupe
+       installed (roborev 0.9.1) but no agent is configured to launch it.
+       -> orchard companions add --id roborev
+  [ ] codeguide  Language and framework coding standards
+       gates: standards
+       not here: codeguide-mcp is not on PATH
+       -> npm install -g codeguide-mcp
+
+Gates in this project's task pipeline with no companion behind them:
+  rules, implement, rubber_duck, critic, unit_tests, bug_hunt, dedupe, merge
+```
+
+Three states, reported separately because the remedies differ: **registered**,
+**installed but not wired up** (one command away), **not installed** (with the command
+and the URL). `orchard adopt` prints the same summary, so the gap is visible at
+adoption rather than discovered six tasks later. Exit 2 when a default companion is
+missing — "no data", never collapsed into "no problem".
+
+| | Serves | Why |
+|---|---|---|
+| **roborev** | `standards`, `bug_hunt`, `dedupe` | Cross-file duplication analysis, which is the failure mode of agent-written code specifically: an agent changing replicated logic reliably updates one copy and misses the rest |
+| **codeguide** | `standards` | Checks against a written standard instead of the reviewer's taste |
+| **context7** | `research`, `standards` | A model's memory of a library's API is exactly the kind of claim that is cheap to check and often wrong |
+| **memory** | `rules` | Operational facts about *this machine* — Orchard's own `recall` covers the project's memory, which is a different thing and belongs in the committed log |
+
+**Nothing is installed automatically**, and `companions add` refuses to register a
+server that is not present: that writes a launch command which fails mid-task, at the
+moment a gate told the agent to reach for it. Detection is read-only and bounded.
+
+Adding a fifth is a TOML block in `.orchard/companions.toml`, not a patch:
+
+```toml
+[[companion]]
+id      = "my-linter"
+title   = "House linter"
+gates   = ["standards"]
+detect  = ["my-linter", "--version"]
+command = "my-linter"
+args    = ["mcp"]
+install = "cargo install my-linter"
+```
+
 ## The model: phases, tasks, dependencies, globs
 
 ```
@@ -275,8 +356,30 @@ orchard task add P2.T3 --phase P2 --title "checkout wiring" --needs "P2.T1,P2.T2
 **Declare globs.** They are what lets two agents work at once safely. A task with no
 declared globs is a task the conflict detector cannot protect.
 
-There is deliberately no third level. A sub-sub-task is representable as a task with a
-cross-phase dependency, and the extra level costs more bookkeeping than it buys.
+**Dependencies are inherited.** A phase is never claimed — only its tasks are — so
+`P2 needs P1` has to govern everything *inside* P2, or it governs nothing that anyone
+picks up. The readiness rule therefore consults an item's ancestors as well as itself:
+
+```console
+$ orchard next
+Ready (1 ready, 0 running, 1 blocked):
+  P1.T1  money
+  (blocked) P2.T1: deps — phase P1 has 3 open task(s) (inherited from P2)
+```
+
+The refusal names *where* the dependency came from, because an operator told only
+"P2.T1 needs P1" goes looking for a declaration that is not written there. The one
+dependency **not** inherited is one pointing into your own subtree: an umbrella that
+declares a dependency on its own child would otherwise make the child wait for itself,
+turning a plan typo into a permanent hang.
+
+`orchard claim` asks the *same* predicate `orchard next` does. They used to disagree —
+`next` withheld a task on its dependencies and `claim` handed out a worktree for it a
+second later — so an agent picking work by id rather than by asking bypassed the
+dependency graph entirely.
+
+There is deliberately no third level *of kind*: a sub-task is a task whose parent is a
+task, so depth is unlimited while the rules stay one set.
 
 ---
 
@@ -304,6 +407,13 @@ planned and what happened — which is exactly what `orchard replay` needs.
 An umbrella is never offered as ready (its children are), and cannot complete while any
 descendant at any depth is unfinished. An *abandoned* child counts as settled, so a
 sub-task you decide against does not hold its parent open forever.
+
+**Becoming an umbrella releases the lease**, however you get there — by `split`, or by
+adding the first sub-task to a task you are already working. An umbrella holding a live
+claim on globs that overlap every child's means a second agent cannot take one of those
+children, and crash recovery points at a worktree where nothing further will happen.
+`split` already did this; `task add --parent` did not, which is the shape of bug worth
+naming: one transition, two ways in, guarded on one.
 
 ## Architectural decisions
 
@@ -383,7 +493,16 @@ Ten gates, in order, configurable per project:
 | 9 | `dedupe` | agent | Did this re-implement something already present? |
 | 10 | `merge` | Orchard | Land it, from the primary checkout, with no checkout |
 
-Three things are enforced rather than requested:
+Four things are enforced rather than requested:
+
+**Silence is not a pass.** Every gate in the pipeline must carry *some* outcome before
+an item completes — passed, failed, unavailable, partial, or an explicit
+`orchard gate skip <id> <gate> --reason "..."`. Without this, `gates.required` held only
+`implement`, `unit_tests` and `merge`, so six of the ten steps could be omitted with no
+trace at all. `gates.require_outcome = false` makes the pipeline advisory again;
+`gates.enforce_order` ("warn" by default, or "block") reports a gate recorded before an
+earlier one has run, because a rubber-duck review recorded before `implement` reviewed
+an empty diff.
 
 **UNAVAILABLE is never a pass.** A reviewer whose endpoint was down approved nothing; a
 linter that is not installed found nothing. Each gets its own outcome and shows as a
@@ -394,9 +513,14 @@ linter reporting problems. Fixed, with a mutation-verified regression test.)
 **Evidence or it did not happen.** Gates in `gates.evidence_required` reject a bare pass;
 they want the command, its exit code and its output digest.
 
-**Reviewer independence is checked.** Same-family reviewers share the author's blind
-spots, so their agreement measures shared priors rather than correctness. `complete`
-refuses unless one reviewer came from a different pretraining family:
+**Reviewer independence is checked, and an unidentified reviewer establishes nothing.**
+Same-family reviewers share the author's blind spots, so their agreement measures shared
+priors rather than correctness. `complete` refuses unless one reviewer came from a
+different pretraining family — and a reviewer whose model is not in `[agent].families`
+counts as *unknown*, never as *different*. (It used to count as different: `gate record`
+defaults the reviewer to the agent id, so a `standards` gate recorded with no `--model`
+arrived as family "host-12345", compared unequal to "anthropic", and satisfied the
+independence requirement on its own.)
 
 ```console
 $ orchard complete P1.T1 --model claude-opus-5
@@ -613,6 +737,33 @@ Both surfaces are one implementation — the MCP server maps each tool onto the 
 
 ---
 
+## Keeping the two surfaces honest
+
+Every CLI command is reachable over MCP — that is the point of the tool list, and it is
+the requirement that an operator in a chat window, possibly driving a remote agent, can
+do everything a shell can. Three ratchets keep it true, and each one was added after the
+previous one turned out to be too shallow:
+
+| Ratchet | What it caught on its first run |
+|---|---|
+| every CLI **command** has a tool | the original check |
+| every CLI **subcommand** has a tool | `orchard gate skip` and `bug found` had none — `gate` counted as "covered" by `gate run`, and a parent's coverage says nothing about its children |
+| every CLI **flag** is reachable from its tool | **27 divergences** — 16 on its first run, and 11 more the moment it derived its own coverage instead of using a hand-written list. Including `phase add --globs`: over MCP a phase could not declare what it writes, so the conflict detector had nothing to compare at phase level |
+
+The flag ratchet derives its own input from the parser rather than a hand-written list —
+its first version carried eleven tools and was blind to `remove --force` for exactly
+that reason. Omissions are allowed, but each must be an entry in `FLAG_EXEMPTIONS` with
+its reason, so "we chose not to expose this" and "nobody noticed" stop looking alike.
+
+A fourth pins something subtler: **whether a tool returns JSON or prose is a decision,
+not an accident.** Some tools deliberately return prose — `brief`, `gate status` and
+`replay` exist to hand the model an *instruction* or a narrative, and JSON-encoding a
+paragraph so the client can decode it again helps nobody. But `decision add` returned
+JSON while `task add` returned prose for no reason either could state. Each prose tool
+now carries its justification in `PROSE_TOOLS`.
+
+---
+
 ## Command reference
 
 ```
@@ -663,7 +814,7 @@ orchard mcp                      run the MCP stdio server
 
 ## Configuration
 
-43 knobs across 8 sections, every one documented in place:
+58 knobs across 11 sections, every one documented in place:
 
 ```console
 $ orchard config --explain --filter lease
@@ -682,8 +833,8 @@ documentation, so the reference cannot rot.
 ## Testing
 
 ```sh
-python3 -m pytest tests/ -q          # 307 unit/integration tests
-python3 demos/run_all.py             # 5 end-to-end scenarios, 130 assertions
+python3 -m pytest tests/ -q          # 423 unit/integration tests
+python3 demos/run_all.py             # 6 end-to-end scenarios, 219 assertions
 ```
 
 The demos invent whole projects and drive them for real — real git worktrees, real
@@ -696,8 +847,9 @@ The demos invent whole projects and drive them for real — real git worktrees, 
 | `reconstruct-from-log` | The entire repository is deleted; everything rebuilds from 3.9 KB of JSONL, and nine specific facts are checked present |
 | `mcp-polyglot` | A Node.js project driven end-to-end over real MCP JSON-RPC, with both surfaces asserted to agree |
 | `mcp-orchestration` | **A whole two-phase Python library built by two agents entirely over MCP** — bootstrap, configure, discover a reviewer, fan out, get refused by the hook, real pytest, a real cross-family review, merge, close both phases, reconstruct. 24 steps, 57 assertions. |
+| `full-lifecycle` | **26 steps, 89 assertions — the whole arc, from an operator's first sentence to a rebuild from the log.** A double-entry bookkeeping library across two dependent phases with sub-tasks: the operator states requirements in English, a decision is recorded and scoped to the files it governs, two agents fan out, a task turns out to be two concerns and grows sub-tasks, a bug is found and may not be closed without its regression test, a phase closes on its own pipeline, a new requirement arrives **while a task is in flight**, that task is **split in place**, the guardrails are tested by trying to break them, and finally every `.py` file is deleted and the project is reconstructed from the log alone. |
 
-**The scenarios and the stress test have found most of the bugs this project fixed; the unit tests found few of them.** The composed MCP run alone found eight that 213 unit tests and four other scenarios missed — including two that made core features useless out of the box. They all lived in *seams*: between two processes, between a read and a write, between two output surfaces, between a declared vocabulary and its callers, including one that does
+**The scenarios and the stress test have found most of the bugs this project fixed; the unit tests found few of them.** The `full-lifecycle` scenario was written to exercise the *requirements* rather than the code, and found four defects before it passed once — every one of them a CLI/MCP divergence that command-level parity could not see. The composed MCP run alone found eight that 213 unit tests and four other scenarios missed — including two that made core features useless out of the box. They all lived in *seams*: between two processes, between a read and a write, between two output surfaces, between a declared vocabulary and its callers, including one that does
 not reproduce below ~6 concurrent processes. They are catalogued with their regression
 tests in [R6](docs/RESEARCH.md#r6--bugs-this-project-found-in-itself).
 
@@ -708,7 +860,7 @@ tests in [R6](docs/RESEARCH.md#r6--bugs-this-project-found-in-itself).
 | Document | Contents |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The event-log inversion, ordering, concurrency, module map, what is deliberately absent |
-| [docs/RESEARCH.md](docs/RESEARCH.md) | Six research questions with probes, measured output and verdicts; the self-found bug catalogue |
+| [docs/RESEARCH.md](docs/RESEARCH.md) | Ten research questions with probes, measured output and verdicts; the self-found bug catalogue, including the 2026-09-24 review pass (R10) |
 | [docs/RECOVERY.md](docs/RECOVERY.md) | Operator runbook: crashes, corruption, divergence, full reconstruction |
 | [templates/drivers/implement-phase.md](templates/drivers/implement-phase.md) | The canonical agent-agnostic driver |
 | [templates/drivers/deltas/](templates/drivers/deltas/) | Per-agent deltas: Claude, Gemini, Codex, Copilot, Kilo |

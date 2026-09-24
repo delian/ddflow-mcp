@@ -17,6 +17,7 @@ HERE = pathlib.Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE), str(HERE.parent)]
 
 import scenario_crash_recovery  # noqa: E402
+import scenario_full_lifecycle  # noqa: E402
 import scenario_mcp_orchestration  # noqa: E402
 import scenario_mcp_polyglot  # noqa: E402
 import scenario_parallel_phase  # noqa: E402
@@ -29,6 +30,7 @@ SCENARIOS = [
     ("reconstruct-from-log", scenario_reconstruct.run),
     ("mcp-polyglot", scenario_mcp_polyglot.run),
     ("mcp-orchestration", scenario_mcp_orchestration.run),
+    ("full-lifecycle", scenario_full_lifecycle.run),
 ]
 
 

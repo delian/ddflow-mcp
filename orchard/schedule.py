@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
 from .config import Config
-from .model import ABANDONED, DONE, RUNNING, Item, Lease, State
+from .model import ABANDONED, BLOCKED, DONE, RUNNING, Item, Lease, State
 
 
 @dataclass
@@ -142,6 +142,38 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
     return False, f"{dep} is {it.state}"
 
 
+def inherited_deps(state: State, it: Item) -> list[tuple[str, str]]:
+    """Every dependency that binds ``it``: its own, plus every ancestor's.
+
+    Returns ``(owner_id, dep_id)`` pairs so a refusal can say WHERE the dependency
+    came from — told only "P2.T1 needs P1", an operator goes looking for a
+    declaration that is not in P2.T1 and concludes the tool is confused.
+
+    **Why inheritance is the whole point.** A phase is never claimed; only its tasks
+    are. So a readiness rule reading ``it.needs`` and stopping there makes every
+    phase-level dependency decorative: ``P2 needs P1`` blocks P2, which no agent was
+    going to pick up, and permits every task inside P2, which is what an agent
+    actually starts. The same hole appeared one level down once sub-tasks existed —
+    an umbrella declaring ``needs A, B`` had children with empty ``needs``, so they
+    were handed out while A and B were still open.
+
+    The one dependency that must NOT be inherited is one pointing into ``it``'s own
+    subtree. An umbrella that declares a dependency on its own child would otherwise
+    make that child wait for itself, and a plan typo would become a permanent hang.
+    Beneath an umbrella, such a dependency is satisfied by running, not by waiting;
+    the umbrella still carries it, and the umbrella cannot close early anyway.
+    """
+    pairs: list[tuple[str, str]] = [(it.id, d) for d in it.needs]
+    ancestors = state.ancestors(it.id)
+    if not ancestors:
+        return pairs
+    mine = state.descendants(it.id) | {it.id}
+    for anc in ancestors:
+        pairs += [(anc.id, d) for d in anc.needs if d not in mine]
+    seen: set[tuple[str, str]] = set()
+    return [p for p in pairs if not (p in seen or seen.add(p))]
+
+
 def _is_umbrella(state: State, it: Item) -> bool:
     """Does this item have work beneath it?
 
@@ -150,6 +182,63 @@ def _is_umbrella(state: State, it: Item) -> bool:
     umbrella cannot complete until they do anyway.
     """
     return bool(state.open_descendants(it.id))
+
+
+def plan_blocker(
+    state: State,
+    cfg: Config,
+    it: Item,
+    *,
+    in_cycle: set[str] | None = None,
+    cycles: list[list[str]] | None = None,
+) -> Blocked | None:
+    """Why the PLAN forbids starting this item — umbrella, cycle or dependency.
+
+    Split out from :func:`item_blocker` because two layers need exactly this much and
+    no more. The scheduler adds the lease/conflict questions on top; the lease layer
+    asks them itself, unconditionally, because refusing an overlapping claim is a
+    safety property rather than a scheduling preference and must not be switchable
+    off by ``schedule.ready_policy``.
+
+    Sharing it is not tidiness. ``claim`` used to check leases and globs but *no*
+    dependencies at all, so `next` would report "T2: deps — T1 is open" and `claim T2`
+    would hand out a worktree one second later. An agent that picks work by id rather
+    than by asking `next` therefore bypassed the entire dependency graph — the one
+    guarantee the queue exists to provide.
+    """
+    if in_cycle is None or cycles is None:
+        cycles = find_cycles({i.id: i for i in state.items.values() if not i.removed})
+        in_cycle = {n for c in cycles for n in c}
+    if it.state == BLOCKED:
+        return Blocked(
+            it.id,
+            "state",
+            it.blocked_reason or "parked by an operator",
+            [],
+        )
+    if _is_umbrella(state, it):
+        kids = state.open_descendants(it.id)
+        return Blocked(
+            it.id,
+            "umbrella",
+            f"has {len(kids)} unfinished sub-task(s): "
+            f"{', '.join(k.id for k in kids[:6])}. Work those; this closes when they do.",
+            [k.id for k in kids],
+        )
+    if it.id in in_cycle and cfg.schedule.cycle_policy == "error":
+        cyc = next(c for c in cycles if it.id in c)
+        return Blocked(it.id, "cycle", " -> ".join(cyc), [])
+
+    unmet: list[str] = []
+    details: list[str] = []
+    for owner, dep in inherited_deps(state, it):
+        ok, why = dep_status(state, dep, cfg)
+        if not ok:
+            unmet.append(dep)
+            details.append(why if owner == it.id else f"{why} (inherited from {owner})")
+    if unmet:
+        return Blocked(it.id, "deps", "; ".join(details), unmet)
+    return None
 
 
 def item_blocker(
@@ -169,28 +258,9 @@ def item_blocker(
     places once decided this independently and the copies disagreed: an agent refused
     one item was offered an alternative the scheduler would also refuse.
     """
-    if _is_umbrella(state, it):
-        kids = state.open_descendants(it.id)
-        return Blocked(
-            it.id,
-            "umbrella",
-            f"has {len(kids)} unfinished sub-task(s): "
-            f"{', '.join(k.id for k in kids[:6])}. Work those; this closes when they do.",
-            [k.id for k in kids],
-        )
-    if it.id in in_cycle and cfg.schedule.cycle_policy == "error":
-        cyc = next(c for c in cycles if it.id in c)
-        return Blocked(it.id, "cycle", " -> ".join(cyc), [])
-
-    unmet: list[str] = []
-    details: list[str] = []
-    for dep in it.needs:
-        ok, why = dep_status(state, dep, cfg)
-        if not ok:
-            unmet.append(dep)
-            details.append(why)
-    if unmet:
-        return Blocked(it.id, "deps", "; ".join(details), unmet)
+    blocked = plan_blocker(state, cfg, it, in_cycle=in_cycle, cycles=cycles)
+    if blocked is not None:
+        return blocked
 
     if cfg.schedule.ready_policy != "deps_and_lease":
         return None
@@ -277,14 +347,20 @@ def plan(
             p.ready.append(it)
 
     cap = min(cfg.schedule.max_parallel_tasks, cfg.worktree.max_parallel)
-    slots = max(0, cap - len(p.running))
+    # Count what is running in the WHOLE queue, not just in the slice this call asked
+    # about. `p.running` holds only candidates from `phase`, so with `--phase` the cap
+    # was applied against a count of ~0 every time: two agents each asking about their
+    # own phase were both told to go ahead, and `worktree.max_parallel` — a statement
+    # about this machine's capacity — was exceeded without anything refusing.
+    in_flight = len([i for i in live if not state.items[i].removed]) if live else 0
+    slots = max(0, cap - in_flight)
     if len(p.ready) > slots:
         for it in p.ready[slots:]:
             p.blocked.append(
                 Blocked(
                     it.id,
                     "state",
-                    f"parallelism cap reached ({cap}); {len(p.running)} running",
+                    f"parallelism cap reached ({cap}); {in_flight} running across the queue",
                     [],
                 )
             )

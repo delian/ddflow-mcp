@@ -47,6 +47,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from . import proc as P
+
 SCHEMA_VERSION = 1
 
 #: Initial bytes read when seeking a shard's last line, doubled until a full line is
@@ -74,6 +76,16 @@ def _kinds() -> frozenset[str]:
 
 #: Kinds that carry operator intent and must survive every compaction, because they
 #: are the input to `orchard replay` — the from-scratch reconstruction path.
+#:
+#: Architectural decisions belong here and were missing, which made `replay` drop every
+#: one of them: the two decision renderers in `session._REPLAY_RENDERERS` were
+#: unreachable, and a superseded decision — the context, the rejected alternatives, the
+#: reason for the reversal — existed nowhere in the reconstruction. Live decisions still
+#: showed up in the brief because that reads folded state, so the loss was invisible
+#: exactly where it mattered: rebuilding from the log alone.
+#:
+#: `tests/test_provenance_complete.py` now pins this set against the replay renderers,
+#: so adding a renderer without adding its kind fails.
 PROVENANCE_KINDS: frozenset[str] = frozenset(
     {
         "session.started",
@@ -82,6 +94,8 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         "session.ended",
         "research.recorded",
         "lesson.recorded",
+        "decision.recorded",
+        "decision.superseded",
         "phase.added",
         "task.added",
     }
@@ -153,7 +167,7 @@ _AGENT_ID_CACHE: dict[str, str] = {}
 
 def _toplevel(path: str) -> str:
     try:
-        r = subprocess.run(
+        r = P.run(
             ["git", "-C", path, "rev-parse", "--show-toplevel"],
             capture_output=True,
             text=True,
@@ -166,7 +180,7 @@ def _toplevel(path: str) -> str:
 
 def _common_dir(path: str) -> str:
     try:
-        r = subprocess.run(
+        r = P.run(
             ["git", "-C", path, "rev-parse", "--git-common-dir"],
             capture_output=True,
             text=True,

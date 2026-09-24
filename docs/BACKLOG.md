@@ -155,3 +155,105 @@ from this list); these are the rest, ranked as it ranked them.
 - **B26 — test-polluter bisect.** Delta-bisect the test file that makes another fail only
   in full-suite order. Generic and high-value, but only once Orchard owns test execution
   rather than shelling out to a project's own command.
+
+## B27–B34 — from the 2026-09-24 review pass
+
+Filed rather than fixed, each with why it is not urgent.
+
+- **B27. `critical_path` ignores inherited dependencies.** Readiness now consults an
+  item's ancestors (`schedule.inherited_deps`), but the critical-path calculation still
+  walks `needs` alone, so a phase-level dependency does not lengthen the reported path.
+  The number is advisory — it sets an expectation, not a decision — and it is currently
+  *shorter* than the truth, which is the harmless direction for a figure nobody gates on.
+  *Found by: writing the inheritance fix.*
+
+- **B28. The parallelism cap counts leases, not worktrees.** `plan()` now measures
+  in-flight work from live leases across the whole queue rather than from the filtered
+  candidate list. A lease taken with `--no-worktree` therefore consumes a slot from
+  `worktree.max_parallel`, which is a statement about disk and CPU. Over-counting is the
+  safe direction and the two knobs are separately configurable, so this is a precision
+  gap rather than a defect. *Found by: the cap fix.*
+
+- **B29. Companion detection has no cache.** `orchard companions` probes on every call,
+  and an `npx`-based probe can take seconds on a cold cache. `adopt` pays this once, and
+  `--no-probe` exists, but a session-start hook that called it would feel it. A cached
+  result with a short TTL in the gitignored index would fix it. *Found by: the first
+  `adopt` run after companions landed.*
+
+- **B30. `gates.enforce_order` defaults to "warn" and nothing measures how often it
+  fires.** If the warning is routine it is noise and the default should move to "off"
+  for that project; if it is rare it should probably be "block". Neither can be argued
+  without a fire-rate, which is the same gap B22 names for gates generally.
+
+- **B31. No mutation test for the inherited-dependency rule at the CLI level.** The unit
+  tests mutation-verify `inherited_deps` and `plan_blocker`. The scenario asserts the
+  behaviour end to end but is not itself mutated, so a regression that only manifests
+  through the MCP path would be caught by the scenario failing rather than by a
+  demonstration that it *can* fail.
+
+- **B32. `companions.is_installed` is two-valued.** A probe that times out is reported
+  as not-installed with the timeout in the detail, which reads correctly to a human but
+  collapses "absent" and "could not tell" for any caller reading the boolean. `lease`
+  already solved this shape with a three-valued `salvageable: bool | None`; this should
+  follow it rather than invent a second convention.
+
+- **B33. The `full-lifecycle` scenario is not run by `pytest`.** Neither is any other
+  scenario — `demos/` is invoked separately and is not in the publish workflow. The
+  scenarios have found most of the real bugs in this project, so the one suite that
+  matters most is the one CI does not run. (Ceremony note: they take ~2 minutes and
+  spawn processes, so they want their own marker and job, not inclusion in `tests/`.)
+
+- **B34. `orchard history` does not exist as one view.** `status`, `progress`, `replay`
+  and `recall` each answer part of "what has happened here", and an operator asking that
+  question has to know which to run. A single reverse-chronological timeline over the
+  log, filterable by item and kind, would subsume the common case.
+
+## B35–B40 — from roborev's architecture pass, 2026-09-24
+
+Structural debt rather than defects. Filed with what it costs today, because the point
+of recording it is to stop the next reading re-deriving it.
+
+- **B35. There is no application layer; the protocol adapter depends on the
+  presentation layer.** `mcp_server → cli` is the only edge and it is carried by
+  **strings**: typed MCP arguments are flattened to argv, re-parsed by argparse, and the
+  result is recovered by scraping stdout plus an exit code. The costs are already
+  visible in the code — `_opt(..., clearable=True)` exists only to re-create the
+  "absent vs empty" distinction argv erased, and `_run_cli` swaps process-global
+  `sys.stdout`/`sys.stderr` for each call, which is not reentrant and forecloses
+  concurrency. Parity is held by ratchets where types would hold it structurally, and
+  those ratchets catch a *missing* flag, not a *changed* encoding. The fix is a real
+  application layer (`orchard/api.py`) that both surfaces call; it is a large change
+  and the ratchets make the current shape safe, so it waits for a reason rather than a
+  free afternoon.
+
+- **B36. `cli.py` is a god module — 3,041 lines.** ~60 command functions, a 430-line
+  parser builder, an embedded starter-TOML string, and real **domain policy**:
+  `cmd_complete` IS the completion rule-set (required gates, open descendants,
+  `require_outcome`, inert requirements, reviewer independence) and is reachable only
+  through `main(argv)`. Those rules deserve to be callable and testable without argv.
+  Same for `cmd_claim`'s loop refusal. Subsumed by B35 if B35 happens.
+
+- **B37. Dual presentation per command, hand-kept in sync.** `render.py` is the
+  presentation layer, yet `cmd_status` builds its JSON and its human view inline and
+  independently: 39 `c.out(...)`, 20 hand-rolled `if c.json` branches, 25 `json.dumps`,
+  204 bare `print(`. This package has already shipped the bug that produces — twice in
+  one function, and the comment is still there: *"it used to print only in human mode,
+  so an agent driving over MCP was never told that a gate had not run."*
+
+- **B38. Latent circular dependency `cli ↔ mcp_server`,** held apart only by a
+  function-local import. Hoisting it to module level reproduces:
+  `ImportError: cannot import name 'main' from partially initialized module
+  'orchard.cli'`. Harmless today; it is a tell for B35.
+
+- **B39. `State` has no parent index, so `children()` is a full scan** and
+  `descendants()`/`ancestors()`/`_is_umbrella()` call it per node per candidate.
+  Measured (1 phase + N tasks): `n=100 → 2.0 ms`, `n=400 → 18.8 ms`, `n=800 → 46.1 ms`;
+  cProfile at n=800 attributes 74% of `plan()` to 1600 calls into `children`. Roughly
+  quadratic, harmless at realistic sizes, and a cheap fix (build `parent → [child]`
+  once per fold). Related: every call refolds the whole log.
+
+- **B40. TRUNCATED-completion diagnostics are written three times** in `reviewer.py`
+  (openai, anthropic, gemini), and have already drifted: the openai copy names
+  `max_chunk_chars` and reports reasoning-token counts, the gemini copy names neither.
+  Same class as the four duplications fixed in this pass, just lower blast radius —
+  it degrades a message rather than a decision. *Found by: roborev duplication (D6).*

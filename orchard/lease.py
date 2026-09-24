@@ -27,7 +27,7 @@ from . import worktree as W
 from .config import Config
 from .events import EventLog
 from .model import DONE, RUNNING, Lease, State, fold
-from .schedule import conflicts
+from .schedule import conflicts, plan_blocker
 
 
 class LeaseError(RuntimeError):
@@ -59,6 +59,42 @@ class Recovery:
     #: worktree (broken gitdir, git absent, NFS stall) report "safe to remove" -- and
     #: `sweep(apply=True)` acts on exactly this flag.
     salvageable: bool | None = False
+
+
+def _renew_in_place(
+    log: EventLog,
+    existing: Lease,
+    item_id: str,
+    holder: str,
+    now: float,
+    worktree: str,
+    branch: str,
+    globs: list[str] | None,
+    note: str,
+) -> Lease:
+    """Re-acquire by the current holder: a renewal that CARRIES THROUGH attachments.
+
+    `claim` acquires the lease before the worktree exists and re-acquires to attach it,
+    so an early return that ignored these fields left the lease permanently pointing at
+    no worktree — and crash recovery then reported "nothing to salvage" over a tree
+    full of uncommitted work.
+    """
+    upd: dict[str, object] = {"at": now, "holder": holder}
+    if worktree:
+        upd["worktree"] = worktree
+    if branch:
+        upd["branch"] = branch
+    if globs is not None:
+        upd["globs"] = list(globs)
+    if note:
+        upd["note"] = note
+    log.append("lease.renewed", item_id, upd)
+    existing.renewed_at = now
+    existing.worktree = worktree or existing.worktree
+    existing.branch = branch or existing.branch
+    if globs is not None:
+        existing.globs = list(globs)
+    return existing
 
 
 def acquire(
@@ -104,27 +140,9 @@ def acquire(
         existing = it.lease
         if existing and not existing.expired(now, cfg.lease.grace_s):
             if existing.holder == holder:
-                # Renewing MUST carry through any attachment the caller supplied.
-                # `claim` acquires the lease before the worktree exists and re-acquires
-                # to attach it; an early return that ignored these fields left the
-                # lease permanently pointing at no worktree, and crash recovery then
-                # reported "nothing to salvage" over a tree full of work.
-                upd: dict[str, object] = {"at": now, "holder": holder}
-                if worktree:
-                    upd["worktree"] = worktree
-                if branch:
-                    upd["branch"] = branch
-                if globs is not None:
-                    upd["globs"] = list(globs)
-                if note:
-                    upd["note"] = note
-                log.append("lease.renewed", item_id, upd)
-                existing.renewed_at = now
-                existing.worktree = worktree or existing.worktree
-                existing.branch = branch or existing.branch
-                if globs is not None:
-                    existing.globs = list(globs)
-                return existing
+                return _renew_in_place(
+                    log, existing, item_id, holder, now, worktree, branch, globs, note
+                )
             raise LeaseError(
                 f"{item_id} is held by {existing.holder} for another "
                 f"{existing.remaining_s(now):.0f}s",
@@ -140,6 +158,28 @@ def acquire(
                 f"Run `orchard recover --item {item_id}`, then retry with --force.",
                 holder=existing.holder,
                 item=item_id,
+            )
+
+        # Dependencies, cycles and umbrellas, asked of the SAME predicate the
+        # scheduler uses. Without this, `orchard next` refused an item and
+        # `orchard claim <that item>` granted it a worktree a second later, so any
+        # agent choosing work by id rather than by asking `next` bypassed the
+        # dependency graph entirely.
+        blocked = plan_blocker(state, cfg, it)
+        if blocked is not None and not force:
+            raise LeaseError(
+                f"{item_id} is not ready: {blocked.reason} — {blocked.detail}"
+                + (
+                    "\nUse --force only if you mean to start it anyway."
+                    if blocked.reason != "umbrella"
+                    else ""
+                ),
+                item=item_id,
+                alternatives=(
+                    blocked.waiting_on
+                    if blocked.reason == "umbrella"
+                    else _alternatives(state, cfg, item_id, holder, now)
+                ),
             )
 
         mine = list(globs if globs is not None else it.globs)

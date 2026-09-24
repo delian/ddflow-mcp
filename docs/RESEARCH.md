@@ -459,3 +459,183 @@ adopted for anything load-bearing.
 reading, and were all surfaced by *scenarios that used the system the way a user would*.
 Defect 4 in particular does not reproduce below about six concurrent processes. Testing
 the happy path of each function would have found none of them.
+
+---
+
+## R10 — the 2026-09-24 review pass: what a second adversarial reading found
+
+**Question.** After 307 tests, five end-to-end scenarios, a cross-family critic run and
+a roborev pass, what is left? Specifically: is the *requirements* surface as sound as
+the *implementation* surface, or has the effort gone into making the code correct
+against a specification nobody re-read?
+
+**Budget.** Two adversarial subagents (one gap-audit against the operator's original
+requirements, one bug-hunt with mandatory probes), plus one new end-to-end scenario
+written deliberately to exercise the requirements rather than the code.
+
+**Verdict: REFUTED.** The requirements surface was *not* as sound. **Twenty-two
+defects** — fifteen from the two adversarial subagents and the new scenario, seven more
+from roborev's duplication and architecture passes — of which the two most serious were
+not code bugs at all but **features that were present, tested, documented and inert**.
+
+### The two that matter most
+
+**1. The phase dependency graph was decorative. CONFIRMED.**
+
+`P2 needs P1` blocked `P2` — an item nobody claims, because phases complete when their
+tasks do — and permitted every task *inside* P2, which is what an agent actually picks
+up. The same hole appeared one level down once sub-tasks existed: an umbrella declaring
+`needs A, B` had children with empty `needs`, handed out while A and B were open.
+
+```console
+$ orchard next
+Ready (4 ready, 0 running, 2 blocked):
+  P1.T1  money
+  P1.T2  account
+  P1.T3.a  posting rules        <-- its umbrella needs P1.T1 AND P1.T2
+  P2.T4  summary                <-- its phase needs P1, which is 0/5 done
+```
+
+**Why it survived five scenarios and 307 tests.** The pre-existing end-to-end scenario
+*did* assert "P2's task is withheld while P1 is open", and that assertion passed —
+because the scenario declared `needs="P1"` **on the task by hand** as well as on the
+phase. The test restated the thing under test as its own input, so it was true for a
+reason that had nothing to do with the phase graph. This is the sharpest instance yet
+of the rule that a test which supplies the property it is checking proves nothing;
+`tests/test_inherited_deps.py` never re-declares an inherited dependency, and says so
+in its docstring.
+
+**2. `orchard claim` never looked at dependencies at all. CONFIRMED.**
+
+```console
+$ orchard next
+  (blocked) T2: deps — T1 is open
+$ orchard claim T2
+claimed T2 (lease 1800s, renew every 300s)
+```
+
+`acquire` checked removed / done / leased / glob-overlap, and stopped. So an agent
+picking work by id — which is what "implement phase X" does when it walks a plan —
+bypassed the dependency graph entirely, and the failure is invisible: the work happens,
+just in the wrong order, against files that do not exist yet. Fixed by routing both
+callers through one `plan_blocker`, which is what `item_blocker`'s own docstring had
+claimed for months.
+
+### A third, found while writing a test for something else
+
+**An unidentified reviewer satisfied the independence requirement. CONFIRMED.**
+
+`gates.record` defaults the reviewer to the agent id, and `family_of` returned the
+unmatched name back — so a `standards` gate recorded with no `--model` arrived as family
+`"host-12345"`, compared unequal to the author's `"anthropic"`, and established
+cross-family independence on its own. The check whose entire purpose is to refuse
+*unverified* independence was passed by the **absence of information**.
+
+It was found because a fixture meant to set up a refusal produced a pass — which is the
+usual way, and an argument for writing the negative case first.
+
+Under it sat the older defect: **two `family_of` implementations**, one in `reviewer.py`
+with 23 substrings returning the model's own name for an unknown, one in `gates.py` with
+9 returning `"unknown"`. A Phi reviewer was `microsoft` to the layer that ran it and
+`phi-4` to the layer that decided whether it counted. Third instance of duplicate-then-
+drift in this package; eliminated rather than guarded.
+
+### The rest, by class
+
+| # | Defect | Class |
+|---|---|---|
+| 1 | `replay` dropped every `decision.recorded` — the two renderers were unreachable | provenance loss |
+| 2 | `split` appended children as it validated them; a collision on the second left the first written | non-atomic multi-write |
+| 3 | `remove` checked for children only on phases, orphaning a task umbrella's sub-tasks | hierarchy half-applied |
+| 4 | `block` was the one mutating command with no existence check; a typo created a phantom task the scheduler then offered | missing existence check |
+| 5 | a gate in `gates.required` but in no pipeline made the requirement *disappear* | vacuous truth |
+| 6 | `_h_lesson` rebuilt the object, dropping `superseded_by`; retired advice returned to the brief | fold reorder |
+| 7 | the parallelism cap was measured against the queried phase, not the queue | scope mismatch |
+| 8 | three loop detectors kept firing on removed items | stale finding |
+| 9 | the two search backends disagreed on the shortest usable term by one character | two implementations of one rule |
+| 10 | **a subprocess inherited the MCP server's stdin** | see below |
+| 11 | unknown tool arguments were silently ignored despite `additionalProperties: false` | silent knob drop |
+| 12 | `orchard_phase_add` had no `globs`; 15 more CLI flags unreachable over MCP | surface divergence |
+| 13 | `orchard gate skip` and `bug found` had no MCP tool at all | surface divergence |
+| 14 | adding a sub-task to a *claimed* task left the umbrella holding a lease that blocked its own children | transition reachable by two paths, guarded on one |
+| 15 | a protocol-level refusal returned exit 0 | exit vocabulary broken at the boundary |
+
+### #10 is the one to remember
+
+Orchard runs as an MCP server **over stdio**: the JSON-RPC session *is* the process's
+stdin and stdout. `subprocess.run(...)` with no explicit `stdin=` hands the child that
+same pipe. All twelve subprocess call sites did this, and one of them is `gate run`,
+which executes an arbitrary command from the project's own config.
+
+The failure mode is as quiet as it gets:
+
+```console
+setup: {"jsonrpc": "2.0", "id": 2, "result": ...}
+resp:  EMPTY
+rc: 0   STDERR:
+```
+
+Exit **zero**, empty stderr, closed stream, nothing to explain it. Found because a
+companion-detection probe added to `orchard setup` ended the session on the *next* tool
+call. Fixed with one `proc.py` whose default is `stdin=DEVNULL`, plus a ratchet that
+fails if any module calls the stdlib directly.
+
+**The mutation test for it passed at first, and proved nothing** — under pytest the
+parent's own stdin is already empty, so the child read `''` either way. The real test
+spawns a parent with a pipe carrying bytes; under mutation it now prints
+`CHILD_SAW='PROTOCOL-BYTES\n'` / `PARENT_KEPT=''`, which is the defect itself.
+
+### What changed in how this project is tested
+
+Three ratchets, each mechanically checkable, each mutation-verified:
+
+- **no module may call `subprocess` directly** (`tests/test_stdio_safety.py`);
+- **every CLI *subcommand*** must have an MCP tool, not just every command — the old
+  ratchet passed while `gate skip` had none, because `gate` was "covered" by
+  `gate run`;
+- **every CLI *flag*** must be reachable from its tool, with an exemption list that
+  carries reasons. This one found 15 divergences on its first run.
+
+And one scenario: `demos/scenario_full_lifecycle.py`, which drives a two-phase project
+with sub-tasks from the operator's first English sentence to a rebuild-from-log, over
+MCP. It was written to exercise the *requirements*, and it found defects 12, 13, 14 and
+15 before it finished passing once.
+
+### The seven roborev added
+
+Its duplication analysis found four **duplicate-then-drift pairs**, which is the third
+time that class has produced a real bug here, and the reason the house rule is
+*eliminate* a duplicate rather than guard it twice. What makes them hard to see is that
+both copies read as correct on their own — the defect exists only in the difference.
+
+| Pair | The drift, and what it cost |
+|---|---|
+| three TOML overlay loaders | companions **silently dropped** unknown keys while gates and reviewers raised, and read only its own file while the others also read `config.toml`. A misspelt `commmand` wrote a launch line that fails mid-task — the silent-knob-drop class, in a package whose config loader raises on a typo'd *section* to prevent exactly that. Now one `tomlcfg.py` with one policy. |
+| four HTTP call sites | three rewrote loopback for containers; the fourth is the only path `kind="anthropic"` and `kind="gemini"` use, so container support covered a third of the backends |
+| two "is this on PATH" checks | the weaker copy faced a *reviewer*: it split `FOO=bar claude -p` into a head of `FOO=bar` and reported a false UNAVAILABLE, had no builtin allowlist, and let `shlex.split`'s `ValueError` escape a function contracted never to raise |
+| two `family_of` wrappers | `resolved_family` used the shipped map while `reviewer_independence` used `[agent].families` — a project teaching the map its in-house model name had it honoured by the gate that decides whether a review counted and ignored by `reviewers list`. Half-unified earlier in this same pass; the wrappers re-opened the seam one level up |
+
+Its architecture pass added a fifth and a sixth: `resources/read` had **a second data
+path** folding the log directly in a module whose premise is "one implementation, two
+doors" (with a dead, shadowed table entry beside it, which is how a second path stays
+hidden — nothing reads the line, so nothing contradicts it), and `Store.__init__` ran
+`mkdir`, so a read-only `orchard status` **created `.orchard/` in a repository that had
+never adopted the tool**:
+
+```console
+$ git init -q /tmp/orchprobe && python -m orchard --repo /tmp/orchprobe status
+exit=0
+$ ls -a /tmp/orchprobe   →   .  ..  .git  .orchard
+```
+
+The rest of its architecture reading is structural debt rather than defect, filed as
+B35–B40 with its measurements — including a profiled demonstration that `plan()` is
+roughly quadratic in item count because `State` has no parent index (74% of `plan()` at
+n=800 is calls into `children`).
+
+**Two of my own mutation tests passed and proved nothing**, both for the same reason:
+they asserted on the *source text* rather than on behaviour. One grepped the function
+body for `rewrite_localhost` and survived removal of the call, because the import and
+the comment stayed. The other asserted that a reader and a writer agree — which they
+still do when both are wrong in the same way. Rewritten to assert the URL actually
+requested, and the field VS Code actually reads.

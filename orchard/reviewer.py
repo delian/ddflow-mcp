@@ -30,15 +30,18 @@ from __future__ import annotations
 import json
 import os
 import re
-import shlex
+import subprocess
 import time
-import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from . import proc as P
+from .config import family_for
+from .gates import _missing_executable
 
 REVIEWED, ERROR, UNAVAILABLE, PARTIAL = 0, 1, 2, 3
 
@@ -55,44 +58,12 @@ WELL_KNOWN_ENDPOINTS: tuple[tuple[str, str], ...] = (
     ("http://127.0.0.1:8081/v1", "llama.cpp (alt)"),
 )
 
-#: model-name substring -> pretraining family. Used to answer "is this reviewer
-#: independent of the author?". An unrecognised model becomes its own family, which is
-#: the safe direction: it can never be silently counted as matching the author.
-FAMILY_HINTS: dict[str, str] = {
-    "qwen": "alibaba",
-    "claude": "anthropic",
-    "gpt": "openai",
-    "o1": "openai",
-    "o3": "openai",
-    "codex": "openai",
-    "gemini": "google",
-    "gemma": "google",
-    "llama": "meta",
-    "mistral": "mistral",
-    "mixtral": "mistral",
-    "deepseek": "deepseek",
-    "grok": "xai",
-    "phi": "microsoft",
-    "command": "cohere",
-    "yi-": "01ai",
-    "glm": "zhipu",
-    "nemotron": "nvidia",
-    "granite": "ibm",
-    "kimi": "moonshot",
-    "minimax": "minimax",
-    "ernie": "baidu",
-}
-
 
 def family_of(model: str) -> str:
-    low = (model or "").lower()
-    for needle, fam in FAMILY_HINTS.items():
-        if needle in low:
-            return fam
-    # Unknown models get a family of their own name, never "unknown" shared by all --
-    # two different unrecognised models must not look like the same family to each
-    # other, or the independence check silently passes on a pair that is not.
-    return low.split("/")[-1] or "unknown"
+    """Delegates to `config.family_for`. Kept as a name because it reads better at the
+    call sites here, and because `Reviewer.resolved_family` is the natural home for the
+    "declared family wins over guessed family" rule."""
+    return family_for(model)
 
 
 #: Ready-made settings for the providers people actually use. `orchard reviewers add
@@ -257,6 +228,9 @@ class Reviewer:
     env: dict[str, str] = field(default_factory=dict)
 
     def resolved_family(self) -> str:
+        """Declared family wins over guessed. ``""`` means nobody has classified this
+        model — `orchard reviewers list` flags it, because an unclassified reviewer
+        cannot satisfy the different-family requirement."""
         return self.family or family_of(self.model)
 
     def launch_spec(self) -> LaunchSpec:
@@ -335,26 +309,33 @@ def load_reviewers(root: Path) -> list[Reviewer]:
     configure. ``.orchard/reviewers.toml`` is also read if present, for operators who
     prefer to split it; entries merge by name, with the dedicated file winning.
     """
-    found: dict[str, Reviewer] = {}
-    known = set(Reviewer.__dataclass_fields__)
-    for path in (
-        Path(root) / ".orchard" / "config.toml",
-        Path(root) / ".orchard" / "reviewers.toml",
-    ):
-        if not path.is_file():
-            continue
-        data = tomllib.loads(path.read_text("utf-8"))
-        for block in data.get("reviewer") or []:
-            if not isinstance(block, dict):
-                continue
-            unknown = set(block) - known
-            if unknown:
-                raise ValueError(
-                    f"unknown reviewer field(s) {sorted(unknown)} in {path}. Known: {sorted(known)}"
-                )
-            name = block.get("name") or block.get("model") or "reviewer"
-            found[name] = Reviewer(**{**block, "name": name})
-    return list(found.values())
+    from . import tomlcfg
+    from .config import Config
+
+    blocks = tomlcfg.overlay_array(
+        tomlcfg.config_paths(root, "reviewers.toml"),
+        "reviewer",
+        Reviewer,
+        key="name",
+        fallback_key="model",
+    )
+    # The project's own family map, not just the shipped one. `resolved_family` had no
+    # Config in scope, so it always used `FAMILY_HINTS` while `reviewer_independence`
+    # used `[agent].families` — a project that taught the map its in-house model name
+    # got it honoured by the check that decides whether a review counted and ignored by
+    # `orchard reviewers list` and by the family recorded on the result. Two surfaces,
+    # one question, two answers. Resolving it here means there is still exactly one map.
+    try:
+        families = Config.load(root).agent.families
+    except Exception:  # a broken config is reported by Config.load's own caller
+        families = None
+    out = []
+    for name, block in blocks.items():
+        rev = Reviewer(**{**block, "name": name})
+        if not rev.family and families is not None:
+            rev.family = family_for(rev.model, families)
+        out.append(rev)
+    return out
 
 
 def reviewers_for(reviewers: list[Reviewer], gate: str) -> list[Reviewer]:
@@ -484,20 +465,22 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     did not happen), and empty stdout is an error even on exit 0 -- a tool that printed
     nothing reviewed nothing, and treating that as "no findings" is the vacuous pass.
     """
-    import shutil
-    import subprocess
-
     cmd = rev.command.replace("{model}", rev.model)
     if not cmd.strip():
         return "", "kind='command' but no `command` is configured"
-    head = shlex.split(cmd)[0] if not any(c in cmd[:1] for c in _SHELL_START) else ""
-    if head and "/" not in head and not shutil.which(head):
+    # `gates._missing_executable`, not a second implementation of it. The copy here
+    # inspected only `cmd[:1]` for shell characters, so `FOO=bar claude -p` split to a
+    # head of `FOO=bar` and reported a false UNAVAILABLE; it had no builtin allowlist;
+    # and it let `shlex.split`'s ValueError on an unbalanced quote escape a function
+    # whose entire contract is to turn every way of not-reviewing into a reported one.
+    missing = _missing_executable(cmd)
+    if missing:
         return "", (
-            f"executable {head!r} is not on PATH -- the reviewer could not run. "
+            f"executable {missing!r} is not on PATH -- the reviewer could not run. "
             f"This is NOT a clean review."
         )
     try:
-        p = subprocess.run(
+        p = P.run(
             cmd,
             shell=True,
             input=f"{system}\n\n{user}",
@@ -518,12 +501,21 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     return out, ""
 
 
-_SHELL_START = ";|&<>()$`"
-
-
 def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tuple[dict | None, str]:
+    """POST JSON, returning (body, error). Never raises.
+
+    The container rewrite belongs HERE, not at the call sites. Three of the four places
+    that reach the network applied it and this one did not — and this one is the only
+    path `kind="anthropic"` and `kind="gemini"` use. So inside a container an
+    openai-kind reviewer on `127.0.0.1` was rewritten to the host and worked, while an
+    anthropic- or gemini-kind reviewer pointed at a local gateway (litellm, LM Studio,
+    an in-house proxy — all ordinary setups) reported UNAVAILABLE. Container support
+    silently covered two thirds of the backends.
+    """
+    from .container import rewrite_localhost
+
     req = urllib.request.Request(
-        url,
+        rewrite_localhost(url),
         data=json.dumps(payload).encode("utf-8"),
         headers={"Content-Type": "application/json", **headers},
     )
@@ -751,7 +743,6 @@ def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
     is returned. A reviewer stuck "starting" forever is indistinguishable from one that
     is down, except that it also holds a process.
     """
-    import subprocess
     import time as _time
 
     if rev.kind == "command":
@@ -771,7 +762,7 @@ def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
     if on_log:
         on_log(f"starting {rev.name}: {cmd}")
     try:
-        proc = subprocess.Popen(
+        proc = P.popen(
             cmd,
             shell=True,
             stdout=subprocess.DEVNULL,

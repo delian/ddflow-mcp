@@ -29,11 +29,11 @@ where the agent is not the one running it.
 from __future__ import annotations
 
 import stat
-import subprocess
 import sys
 import time
 from pathlib import Path
 
+from . import proc as P
 from . import worktree as W
 from .config import Config
 from .events import EventLog
@@ -95,7 +95,7 @@ def hooks_dir(repo: Path) -> Path:
     may relocate hooks entirely. Reading the resolved path from git rather than assuming
     `.git/hooks` is what makes this work inside the worktrees Orchard itself creates.
     """
-    r = subprocess.run(
+    r = P.run(
         ["git", "-C", str(repo), "rev-parse", "--git-path", "hooks"],
         capture_output=True,
         text=True,
@@ -162,9 +162,7 @@ def _this_worktree(repo: Path) -> Path | None:
     `--show-toplevel` from the cwd, because the hook's cwd IS the tree being committed
     — which is exactly the information needed to decide which lease applies.
     """
-    r = subprocess.run(
-        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=30
-    )
+    r = P.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=30)
     if r.returncode != 0 or not r.stdout.strip():
         return None
     return Path(r.stdout.strip()).resolve()
@@ -176,7 +174,7 @@ def staged_paths(repo: Path) -> list[str]:
     `--diff-filter=ACMR` over the INDEX, plus `--cached`, because a file the agent just
     created is not in HEAD and a diff against HEAD alone would not see it.
     """
-    r = subprocess.run(
+    r = P.run(
         ["git", "-C", str(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
         capture_output=True,
         text=True,
@@ -280,7 +278,7 @@ def check_item_trailer(repo: Path) -> tuple[int, str]:
     that most commits violate is a rule everyone learns to bypass.
     """
     msg_file = Path(repo) / ".git" / "COMMIT_EDITMSG"
-    r = subprocess.run(
+    r = P.run(
         ["git", "-C", str(repo), "rev-parse", "--git-path", "COMMIT_EDITMSG"],
         capture_output=True,
         text=True,

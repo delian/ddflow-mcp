@@ -110,7 +110,7 @@ def test_gates_overlay_rather_than_replace(repo, cfg):
 def test_an_unknown_gate_field_is_an_error_not_a_silent_drop(repo, cfg):
     (repo / ".orchard").mkdir(exist_ok=True)
     (repo / ".orchard" / "gates.toml").write_text('[gate.unit_tests]\ncomand = "typo"\n')
-    with pytest.raises(ValueError, match="unknown gate field"):
+    with pytest.raises(ValueError, match="unknown field"):
         G.load_gates(repo, cfg)
 
 

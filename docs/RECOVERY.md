@@ -232,3 +232,45 @@ git worktree prune
 - **Never delete a worktree you have not diffed against the base branch.**
 - **Never hand-edit `.orchard/events/`.** Append a correcting event instead.
 - **Never treat exit 2 as exit 0.** "Could not run" is not "fine".
+
+---
+
+## The MCP session ended and nothing said why
+
+**Symptom.** A tool call returns nothing. The client reports a closed stream. The server
+process has exited **zero**, its stderr is empty, and the log shows the previous call
+succeeding normally.
+
+**Cause, almost always.** A child process took the server's stdin. Orchard speaks MCP
+over stdio — the JSON-RPC session *is* the process's stdin and stdout — so any child
+spawned without an explicit `stdin=` inherits that pipe. A child that reads stdin eats
+the protocol bytes; one that closes it ends the session.
+
+Inside Orchard this cannot happen any more: every subprocess goes through `proc.run`,
+which detaches stdin, and `tests/test_stdio_safety.py` fails the suite if a module
+reaches for the stdlib directly. What remains is **your own gate commands**:
+
+```toml
+[gate.unit_tests]
+command = "pytest"           # fine
+command = "make test"        # fine
+command = "npm test"         # fine unless a script prompts
+```
+
+A command that *prompts* — a migration asking for confirmation, a linter offering to
+fix, anything that reads a TTY — is the hazard. Orchard hands it an empty stdin, so it
+will see EOF rather than hang; but a command whose behaviour on EOF is to wait anyway
+will hold the gate until `timeout_s`.
+
+**Diagnosis.** Run the gate command yourself with stdin closed:
+
+```sh
+orchard gate run <id> unit_tests < /dev/null
+```
+
+If that hangs, the command is the problem, not Orchard. Add `--yes`/`--ci`/
+`--non-interactive`, or set `[gate.unit_tests].timeout_s` low enough that a stuck gate
+reports rather than parks.
+
+**If the session has already ended:** nothing is lost. The event log is on disk and
+every completed call is in it — restart the server and run `orchard doctor`.

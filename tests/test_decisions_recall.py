@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import finish, run_cli
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -267,25 +267,7 @@ def test_recall_respects_its_character_budget(proj):
 
 def test_status_answers_what_has_been_completed(proj):
     run_cli(proj, "claim", "P1.T1", "--no-worktree")
-    for g in ("implement", "merge"):
-        run_cli(proj, "gate", "record", "P1.T1", g, "--outcome", "passed")
-    run_cli(
-        proj, "gate", "record", "P1.T1", "unit_tests", "--outcome", "passed", "--evidence", "ok"
-    )
-    run_cli(
-        proj,
-        "gate",
-        "record",
-        "P1.T1",
-        "rubber_duck",
-        "--outcome",
-        "passed",
-        "--evidence",
-        "ok",
-        "--model",
-        "gemini-2.5-pro",
-    )
-    run_cli(proj, "complete", "P1.T1", "--model", "claude-opus-5", "--sha", "abc1234")
+    assert finish(proj, "P1.T1", "--sha", "abc1234")[0] == OK
 
     data = json.loads(run_cli(proj, "--json", "status")[1])
     assert data["tasks"]["done"] == 1

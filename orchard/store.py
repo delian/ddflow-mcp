@@ -52,10 +52,22 @@ class Store:
         self.root = Path(root)
         self.cfg = cfg or Config.load(root)
         self.path = self.root / ".orchard" / "index.db"
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.fts = _has_fts5() and self.cfg.lessons.search_backend == "fts5"
 
+    def _ensure_dir(self) -> None:
+        """Create `.orchard/` only when something is actually about to be written.
+
+        It used to happen in `__init__`, and `Ctx` builds a Store for EVERY command —
+        so `orchard status` in a repository that had never run `orchard init` created
+        `.orchard/` and exited 0, as though the project had adopted the tool. A
+        read-only question must not leave a mark. The same rule was already applied to
+        the MCP server's handshake for the same reason; this is the second door onto
+        the same mistake.
+        """
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+
     def connect(self) -> sqlite3.Connection:
+        self._ensure_dir()
         con = sqlite3.connect(self.path, timeout=30.0, isolation_level=None)
         con.row_factory = sqlite3.Row
         con.execute("pragma journal_mode=WAL")
@@ -142,6 +154,11 @@ class Store:
         """
         events = log.read_all()
         state = fold(events, strict=False)
+        # `rebuild` writes its temp database beside the index rather than through
+        # `connect`, so it needs the directory itself. Both write paths ask; no read
+        # path does, which is the whole point — `orchard status` must not adopt a
+        # repository that never ran `orchard init`.
+        self._ensure_dir()
         tmp = self.path.with_suffix(".rebuilding")
         for p in (tmp, tmp.with_name(tmp.name + "-wal"), tmp.with_name(tmp.name + "-shm")):
             p.unlink(missing_ok=True)
@@ -321,7 +338,11 @@ class Store:
                     out = [dict(r) for r in full]
                     out.sort(key=lambda r: scores.get(r["id"], 0.0))
                     return out
-            terms = [t for t in re.split(r"\W+", query) if len(t) > MIN_TERM_CHARS][:8]
+            # `>=`, matching the FTS5 tokenizer above. The two disagreed by one, so
+            # searching "db" found a lesson on the machine whose SQLite has FTS5 and
+            # found nothing on the machine whose SQLite does not — the same query,
+            # two answers, decided by a build flag nobody sets deliberately.
+            terms = [t for t in re.split(r"\W+", query) if len(t) >= MIN_TERM_CHARS][:8]
             if not terms:
                 return []
             where = " or ".join(f"{c} like ?" for c in cols for _ in terms)

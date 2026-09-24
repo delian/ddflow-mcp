@@ -330,6 +330,20 @@ def run(sc: Scenario) -> None:
         "gpt-5",
         quiet=True,
     )
+    # `gates.require_outcome`: a gate left silent blocks completion, so the critic has
+    # to be recorded as UNAVAILABLE rather than simply not run. That is the whole
+    # point — "nobody ran it" and "it found nothing" must not look the same.
+    sc.orchard(
+        "gate",
+        "record",
+        "P1.T2",
+        "critic",
+        "--outcome",
+        "unavailable",
+        "--reason",
+        "no critic endpoint configured in this demo repository",
+        quiet=True,
+    )
     sc.orchard("merge", "P1.T2", agent="beta")
     sc.orchard("complete", "P1.T2", "--model", "claude-opus-5", agent="beta")
     ready = [r["id"] for r in sc.jorchard("next", "--phase", "P1")["ready"]]

@@ -178,7 +178,16 @@ def test_every_preset_is_structurally_valid():
         else:
             assert rev.base_url, f"{name}: no base_url"
         rev.launch_spec()  # must not raise
-        assert rev.resolved_family(), name
+        # A preset that names a model must name one whose family is recognisable —
+        # otherwise `orchard reviewers add --preset X` produces a reviewer that cannot
+        # satisfy the independence requirement and nothing says so. Aggregator presets
+        # (together, fireworks, openrouter) deliberately ship no model, because the
+        # family depends on which one you point them at.
+        if rev.model:
+            assert rev.resolved_family(), (
+                f"{name}: model {rev.model!r} is in no family; add it to "
+                f"config.FAMILY_HINTS or give the preset an explicit family"
+            )
 
 
 def test_no_preset_contains_a_literal_api_key():
@@ -204,10 +213,22 @@ def test_family_is_inferred_from_the_model_id(model, family):
     assert family_of(model) == family
 
 
-def test_two_unknown_models_are_not_the_same_family():
-    """Collapsing every unrecognised model into one 'unknown' family would let a pair of
-    unknown reviewers satisfy the independence check while possibly sharing a base."""
-    assert family_of("acme-1") != family_of("globex-2")
+def test_an_unrecognised_model_has_no_family_at_all():
+    """ "Cannot tell" is its own answer, and it is the only honest one here.
+
+    Both former implementations returned a non-empty stand-in for an unknown model —
+    one the literal name, one the string "unknown" — and either way it compared unequal
+    to every real family, so an unclassified reviewer SATISFIED the different-family
+    requirement. Since `gates.record` defaults the reviewer to the agent id, a
+    `standards` gate recorded with no `--model` arrived as family "host-12345" and
+    established independence on its own.
+
+    Naming unknowns after themselves does not fix that: `acme-1` and `acme-2` may
+    perfectly well share a base model. A reviewer this project cannot classify is
+    classified in `[[reviewer]].family`, deliberately, by a human.
+    """
+    assert family_of("acme-1") == ""
+    assert family_of("globex-2") == ""
 
 
 def test_reviewers_add_writes_a_block_without_the_key(repo):

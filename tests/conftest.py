@@ -49,3 +49,44 @@ def run_cli(repo: Path, *argv: str, agent: str = "") -> tuple[int, str, str]:
         args += ["--agent", agent]
     p = subprocess.run([*args, *argv], capture_output=True, text=True, env=env, timeout=300)
     return p.returncode, p.stdout, p.stderr
+
+
+#: Reviewer gates need a model from a family other than the author's, or
+#: `agent.reviewer_family_must_differ` refuses the completion.
+_CROSS_FAMILY_REVIEWER = "gemini-2.5-pro"
+
+
+def pass_pipeline(
+    repo: Path,
+    item: str,
+    *,
+    reviewer: str = _CROSS_FAMILY_REVIEWER,
+    omit: tuple[str, ...] = (),
+) -> None:
+    """Record a passing outcome for every gate in ``item``'s CONFIGURED pipeline.
+
+    Derived from `gate status`, not from a hardcoded list, so a project that trims or
+    reorders its pipeline does not silently stop being exercised here — the same
+    mistake `render.board` once made by re-typing the ten default gate ids.
+
+    Exists because `gates.require_outcome` makes silence block completion: a test that
+    only wants a finished item, as a fixture for something else, should not have to
+    restate the whole quality pipeline to get one.
+    """
+    import json as _json
+
+    code, out, err = run_cli(repo, "--json", "gate", "status", item)
+    assert code == 0, f"gate status {item}: {out}{err}"
+    for gate in _json.loads(out)["pipeline"]:
+        if gate in omit:
+            continue
+        extra = ["--evidence", f"{gate} evidence"]
+        if gate in ("rubber_duck", "critic"):
+            extra += ["--model", reviewer]
+        run_cli(repo, "gate", "record", item, gate, "--outcome", "passed", *extra)
+
+
+def finish(repo: Path, item: str, *args: str, model: str = "claude-opus-5") -> tuple[int, str, str]:
+    """Pass the whole pipeline and complete the item. Returns complete's result."""
+    pass_pipeline(repo, item)
+    return run_cli(repo, "complete", item, "--model", model, *args)

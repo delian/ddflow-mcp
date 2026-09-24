@@ -251,9 +251,16 @@ def run(sc: Scenario) -> None:
             "does not use Orchard yet" in init["instructions"]
             and "orchard_setup" in init["instructions"],
         )
+        # Asserted on INTENT, not on a phrase. This text is
+        # `templates/prompts/mcp_instructions.md` now — a project may rewrite it
+        # wholesale — so pinning its exact wording would make an operator's edit look
+        # like a regression. What must survive any rewording is the instruction itself:
+        # do not start talking about a work queue nobody asked for.
+        told = init["instructions"].lower()
         sc.check(
             "and does not nag a project that never asked for it",
-            "If the user has not asked for this" in init["instructions"],
+            "has not asked" in told and ("carry on" in told or "say nothing" in told),
+            init["instructions"][-300:],
         )
 
         sc.step("ALPHA bootstraps the project — no shell, only MCP")
@@ -520,6 +527,17 @@ def run(sc: Scenario) -> None:
                 outcome="passed",
                 evidence="no findings",
                 model=reviewer_model,
+            )
+            # `gates.require_outcome`: a gate left silent blocks completion. There is no
+            # critic endpoint in this invented project, so it is recorded as
+            # UNAVAILABLE — which is the whole distinction, since "nobody ran it" and
+            # "it found nothing" must not arrive looking the same.
+            agent.tool(
+                "orchard_gate_record",
+                id=item,
+                gate="critic",
+                outcome="unavailable",
+                reason="no critic endpoint is configured in this demo repository",
             )
             out, code = agent.tool("orchard_merge", id=item)
             sc.check(f"{item} merged cleanly", code == 0, out[:300])

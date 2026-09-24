@@ -55,8 +55,20 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "item": ("string", "Focus on this phase or task id (optional).", False),
             "phase": ("string", "Restrict the ready set to this phase (optional).", False),
+            "check_recovery": (
+                "boolean",
+                "Also scan for crashed agents' worktrees and lead with them. Worth it "
+                "at session start: unclaimed work left by a dead process is the one "
+                "thing to know BEFORE picking up something new.",
+                False,
+            ),
         },
-        "argv": lambda a: ["brief", *_opt("--item", a), *_opt("--phase", a)],
+        "argv": lambda a: [
+            "brief",
+            *_opt("--item", a),
+            *_opt("--phase", a),
+            *(["--check-recovery"] if a.get("check_recovery") else []),
+        ],
     },
     "orchard_next": {
         "description": (
@@ -86,8 +98,30 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id to claim.", True),
             "globs": ("string", "Comma-separated path globs this work will write.", False),
             "note": ("string", "What you intend to do.", False),
+            "no_worktree": (
+                "boolean",
+                "Lease the item without creating a worktree. For work that is not a "
+                "code change — a research or review task.",
+                False,
+            ),
+            "force": (
+                "boolean",
+                "Override a refusal. Legitimate for exactly one thing: retrying after "
+                "`orchard_recover` has told you a crashed agent's worktree holds "
+                "nothing. Forcing past a dependency or a live lease is how two agents "
+                "end up writing the same file, and the override is recorded either way.",
+                False,
+            ),
         },
-        "argv": lambda a: ["--json", "claim", a["id"], *_opt("--globs", a), *_opt("--note", a)],
+        "argv": lambda a: [
+            "--json",
+            "claim",
+            a["id"],
+            *_opt("--globs", a),
+            *_opt("--note", a),
+            *(["--no-worktree"] if a.get("no_worktree") else []),
+            *(["--force"] if a.get("force") else []),
+        ],
     },
     "orchard_heartbeat": {
         "description": (
@@ -116,7 +150,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id.", True),
             "gate": ("string", "Gate id, e.g. unit_tests.", True),
         },
-        "argv": lambda a: ["gate", "run", a["id"], a["gate"]],
+        "argv": lambda a: ["--json", "gate", "run", a["id"], a["gate"]],
     },
     "orchard_gate_record": {
         "description": (
@@ -133,6 +167,20 @@ TOOLS: dict[str, dict[str, Any]] = {
             "reason": ("string", "Required for failed/unavailable/partial/skipped.", False),
             "evidence": ("string", "What you ran and what it said. Required by some gates.", False),
             "model": ("string", "Model that performed it, e.g. 'gemini-2.5-pro'.", False),
+            "command": (
+                "string",
+                "The command you actually ran. This and `exit_code` are what make an "
+                "outcome evidence rather than an assertion; a gate listed in "
+                "`gates.evidence_required` is rejected without them.",
+                False,
+            ),
+            "exit_code": ("string", "That command's exit code.", False),
+            "output_file": (
+                "string",
+                "Path to its full output. A digest is recorded, so the claim can be "
+                "checked against the file later rather than taken on trust.",
+                False,
+            ),
         },
         "argv": lambda a: (
             [
@@ -146,8 +194,41 @@ TOOLS: dict[str, dict[str, Any]] = {
                 *_opt("--reason", a),
                 *_opt("--evidence", a),
                 *_opt("--model", a),
+                *_opt("--command", a),
+                *_opt("--exit-code", a, "exit_code"),
+                *_opt("--output-file", a, "output_file"),
             ]
         ),
+    },
+    "orchard_gate_skip": {
+        "description": (
+            "Skip a gate ON THE RECORD, with a mandatory reason. This is the auditable "
+            "escape hatch, and it is the one to reach for: `gates.require_outcome` "
+            "means a gate left silent BLOCKS completion, so the alternative to skipping "
+            "is forcing past everything at once. A skip names the single step you are "
+            "dropping and why, and that reason is in the event log permanently. "
+            "Skipping a gate listed in `gates.required` still blocks — those are not "
+            "optional."
+        ),
+        "properties": {
+            "id": ("string", "Item id.", True),
+            "gate": ("string", "Gate id.", True),
+            "reason": (
+                "string",
+                "Why this step does not apply HERE. 'n/a' is not a reason: the next "
+                "person reads this to decide whether you were right.",
+                True,
+            ),
+        },
+        "argv": lambda a: [
+            "--json",
+            "gate",
+            "skip",
+            a["id"],
+            a["gate"],
+            "--reason",
+            a.get("reason", ""),
+        ],
     },
     "orchard_complete": {
         "description": (
@@ -159,8 +240,23 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id.", True),
             "sha": ("string", "Commit sha this shipped as.", False),
             "model": ("string", "The AUTHOR's model.", False),
+            "force": (
+                "boolean",
+                "Complete over unmet conditions. Every one is recorded in the event "
+                "log as overridden, so this is visible forever rather than being the "
+                "quiet way past a gate. Prefer `orchard_gate_skip` with a reason: it "
+                "names the single step you are dropping instead of all of them.",
+                False,
+            ),
         },
-        "argv": lambda a: ["--json", "complete", a["id"], *_opt("--sha", a), *_opt("--model", a)],
+        "argv": lambda a: [
+            "--json",
+            "complete",
+            a["id"],
+            *_opt("--sha", a),
+            *_opt("--model", a),
+            *(["--force"] if a.get("force") else []),
+        ],
     },
     "orchard_merge": {
         "description": (
@@ -170,8 +266,23 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "id": ("string", "Item id.", True),
             "message": ("string", "Merge commit message.", False),
+            "keep": ("boolean", "Keep the worktree after merging, for inspection.", False),
+            "allow_dirty": (
+                "boolean",
+                "Merge although the worktree has uncommitted changes. They are NOT "
+                "included — that is the point of the refusal. Only pass this once you "
+                "have looked at what is dirty and decided it is build output.",
+                False,
+            ),
         },
-        "argv": lambda a: ["--json", "merge", a["id"], *_opt("--message", a)],
+        "argv": lambda a: [
+            "--json",
+            "merge",
+            a["id"],
+            *_opt("--message", a),
+            *(["--keep"] if a.get("keep") else []),
+            *(["--allow-dirty"] if a.get("allow_dirty") else []),
+        ],
     },
     "orchard_phase_add": {
         "description": (
@@ -184,10 +295,30 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Short stable id, e.g. 'P2' or 'auth'.", True),
             "title": ("string", "One-line description.", False),
             "needs": ("string", "Comma-separated ids this phase depends on.", False),
+            "globs": (
+                "string",
+                "Comma-separated path globs this phase writes. Set them: they are what "
+                "lets two agents work different phases in parallel safely, and the "
+                "phase's own dependencies are INHERITED by every task inside it.",
+                False,
+            ),
             "body": ("string", "Detail, acceptance criteria, context.", False),
+            "tags": ("string", "Comma-separated tags.", False),
+            "priority": ("integer", "Lower is offered first (default 100).", False),
         },
         "argv": lambda a: (
-            ["phase", "add", a["id"], *_opt("--title", a), *_opt("--needs", a), *_opt("--body", a)]
+            [
+                "--json",
+                "phase",
+                "add",
+                a["id"],
+                *_opt("--title", a),
+                *_opt("--needs", a),
+                *_opt("--globs", a),
+                *_opt("--body", a),
+                *_opt("--tags", a),
+                *_opt("--priority", a),
+            ]
         ),
     },
     "orchard_split": {
@@ -205,6 +336,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "The item to split.", True),
             "into": ("string", "Comma-separated 'sub-id=title' pairs. At least two.", True),
             "globs": ("string", "Globs for the children (default: inherit).", False),
+            "needs": (
+                "string",
+                "Dependencies for the FIRST child. The others chain from it if you set "
+                "theirs with orchard_update.",
+                False,
+            ),
         },
         "argv": lambda a: [
             "--json",
@@ -217,6 +354,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 for arg in ("--into", spec.strip())
             ],
             *_opt("--globs", a),
+            *_opt("--needs", a),
         ],
     },
     "orchard_task_add": {
@@ -227,29 +365,37 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Short stable id, e.g. 'P2.T1'.", True),
-            "phase": (
+            "phase": ("string", "Owning phase id. Give this OR `parent`.", False),
+            "parent": (
                 "string",
-                "Owning phase id — or another TASK's id, which makes this a "
-                "sub-task. Sub-tasks carry their own globs and dependencies and "
-                "run in parallel like any other task.",
-                True,
+                "Owning phase id OR another TASK's id — a task parent makes this a "
+                "SUB-TASK, which carries its own globs and dependencies and runs in "
+                "parallel with its siblings like any other task. Same field as "
+                "`phase`; both names exist because the CLI has both, and an argument "
+                "that exists in one surface and not the other is a trap.",
+                False,
             ),
             "title": ("string", "One-line description.", False),
             "needs": ("string", "Comma-separated ids this task depends on.", False),
             "globs": ("string", "Comma-separated path globs this task writes.", False),
             "body": ("string", "Detail and acceptance criteria.", False),
+            "tags": ("string", "Comma-separated tags.", False),
+            "priority": ("integer", "Lower is offered first (default 100).", False),
         },
         "argv": lambda a: (
             [
+                "--json",
                 "task",
                 "add",
                 a["id"],
                 "--phase",
-                a.get("phase", ""),
+                a.get("parent") or a.get("phase", ""),
                 *_opt("--title", a),
                 *_opt("--needs", a),
                 *_opt("--globs", a),
                 *_opt("--body", a),
+                *_opt("--tags", a),
+                *_opt("--priority", a),
             ]
         ),
     },
@@ -260,22 +406,44 @@ TOOLS: dict[str, dict[str, Any]] = {
             "different task must be able to apply it."
         ),
         "properties": {
+            "id": (
+                "string",
+                "Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; a generated id cannot be cited in advance.",
+                False,
+            ),
             "title": ("string", "The rule as a one-line statement.", True),
             "rule": ("string", "The rule in full.", False),
             "why": ("string", "Why it is true / what went wrong.", False),
             "how": ("string", "How to apply or detect it.", False),
             "tags": ("string", "Comma-separated tags.", False),
+            "seen_in": (
+                "string",
+                "Comma-separated item ids where this was hit. What makes a lesson "
+                "checkable later instead of merely memorable.",
+                False,
+            ),
+            "supersedes": (
+                "string",
+                "Comma-separated lesson ids this replaces. The old one is retired, not "
+                "deleted — retiring is how the corpus stops growing without losing the "
+                "record of what was once believed.",
+                False,
+            ),
         },
         "argv": lambda a: (
             [
+                "--json",
                 "lesson",
                 "add",
+                *_opt("--id", a),
                 "--title",
                 a.get("title", ""),
                 *_opt("--rule", a),
                 *_opt("--why", a),
                 *_opt("--how", a),
                 *_opt("--tags", a),
+                *_opt("--seen-in", a, "seen_in"),
+                *_opt("--supersedes", a),
             ]
         ),
     },
@@ -301,6 +469,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "adopted one: it stops the next session re-researching it."
         ),
         "properties": {
+            "id": (
+                "string",
+                "Stable id you choose. Referenced by `supersedes`, by commit messages and by the reconstruction; a generated id cannot be cited in advance.",
+                False,
+            ),
             "question": ("string", "What was asked.", True),
             "verdict": ("string", "CONFIRMED | REFUTED | THEORETICAL", True),
             "claim": ("string", "The falsifiable claim.", False),
@@ -308,11 +481,20 @@ TOOLS: dict[str, dict[str, Any]] = {
             "probe": ("string", "The command you ran.", False),
             "probe_output": ("string", "Its output, verbatim.", False),
             "sources": ("string", "Comma-separated URLs/DOIs you actually opened.", False),
+            "mechanism": (
+                "string",
+                "WHY it would work in this repo. The middle field of the triple — "
+                "claim, mechanism, falsifier — and the one most often skipped.",
+                False,
+            ),
+            "budget": ("string", "What you allowed yourself, e.g. '30 min, no GPU'.", False),
+            "item": ("string", "The task this research is for.", False),
         },
         "argv": lambda a: (
             [
                 "--json",
                 "research",
+                *_opt("--id", a),
                 "--question",
                 a.get("question", ""),
                 "--verdict",
@@ -322,6 +504,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                 *_opt("--probe", a),
                 *_opt("--probe-output", a, "probe_output"),
                 *_opt("--sources", a),
+                *_opt("--mechanism", a),
+                *_opt("--budget", a),
+                *_opt("--item", a),
             ]
         ),
     },
@@ -335,6 +520,13 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Bug id.", True),
             "regression_test": ("string", "Test that now guards this.", True),
             "lesson_title": ("string", "Capture a lesson at the same time.", False),
+            "lesson_rule": (
+                "string",
+                "The lesson in full — the transferable rule, not the incident. A "
+                "future agent on a different task has to be able to apply it.",
+                False,
+            ),
+            "lesson": ("string", "Id of an EXISTING lesson this bug belongs to.", False),
         },
         "argv": lambda a: (
             [
@@ -345,6 +537,8 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "--regression-test",
                 a.get("regression_test", ""),
                 *_opt("--lesson-title", a, "lesson_title"),
+                *_opt("--lesson-rule", a, "lesson_rule"),
+                *_opt("--lesson", a),
             ]
         ),
     },
@@ -355,8 +549,23 @@ TOOLS: dict[str, dict[str, Any]] = {
             "never deletes anything. Run this at the start of any session that follows "
             "an interruption."
         ),
-        "properties": {"item": ("string", "Restrict to one item.", False)},
-        "argv": lambda a: ["--json", "recover", *_opt("--item", a)],
+        "properties": {
+            "item": ("string", "Restrict to one item.", False),
+            "apply": (
+                "boolean",
+                "Act on the advice: release the leases and remove the worktrees this "
+                "reports as holding nothing. It only ever touches a tree MEASURED as "
+                "having no uncommitted and no unmerged work — one that could not be "
+                "measured is never removed, because 'could not tell' is not 'empty'.",
+                False,
+            ),
+        },
+        "argv": lambda a: [
+            "--json",
+            "recover",
+            *_opt("--item", a),
+            *(["--apply"] if a.get("apply") else []),
+        ],
     },
     "orchard_board": {
         "description": "The whole work queue as a readable board, with the critical path.",
@@ -414,6 +623,13 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "query": ("string", "What you are about to do, in plain words.", True),
             "limit": ("integer", "Hits per source (default 3).", False),
+            "max_chars": (
+                "integer",
+                "Total budget for the answer. The point of a budget is that recall is "
+                "called at the START of work, where a long answer costs the context the "
+                "work itself needs.",
+                False,
+            ),
             "sources": (
                 "string",
                 "Comma-separated subset: decisions,lessons,research,bugs,"
@@ -427,6 +643,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             a.get("query", ""),
             *(["--limit", str(a["limit"])] if a.get("limit") else []),
             *_opt("--sources", a),
+            *(["--max-chars", str(a["max_chars"])] if a.get("max_chars") else []),
         ],
     },
     "orchard_status": {
@@ -453,6 +670,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "rejected."
         ),
         "properties": {
+            "id": (
+                "string",
+                "Stable id, e.g. 'D1'. Choose one: `supersedes`, commit messages and "
+                "docs all reference it, and a generated id cannot be cited in advance.",
+                False,
+            ),
             "title": ("string", "The decision as a one-line statement.", True),
             "decision": ("string", "What was DECIDED (not what was discussed).", True),
             "context": ("string", "The forces: why a decision was needed at all.", False),
@@ -462,11 +685,20 @@ TOOLS: dict[str, dict[str, Any]] = {
             "by": ("string", "'operator' or 'agent' or a name.", False),
             "supersedes": ("string", "Comma-separated ids this replaces.", False),
             "item": ("string", "The task it arose from.", False),
+            "tags": ("string", "Comma-separated tags.", False),
+            "status": (
+                "string",
+                "proposed | accepted (default) | superseded. 'proposed' records a "
+                "decision the operator has not ratified, which is honest about its "
+                "standing rather than presenting it as settled.",
+                False,
+            ),
         },
         "argv": lambda a: [
             "--json",
             "decision",
             "add",
+            *_opt("--id", a),
             "--title",
             a.get("title", ""),
             "--decision",
@@ -478,6 +710,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             *_opt("--by", a),
             *_opt("--supersedes", a),
             *_opt("--item", a),
+            *_opt("--tags", a),
+            *_opt("--status", a),
         ],
     },
     "orchard_decision_list": {
@@ -528,16 +762,41 @@ TOOLS: dict[str, dict[str, Any]] = {
             "the project if the code is lost — it reproduces the DECISIONS, not the "
             "bytes."
         ),
-        "properties": {"out": ("string", "Write a recovery kit to this directory.", False)},
-        "argv": lambda a: ["replay", *_opt("--out", a)],
+        "properties": {
+            "out": ("string", "Write a recovery kit to this directory.", False),
+            "verify": (
+                "boolean",
+                "Re-resolve every recorded commit sha against this repository and "
+                "report the ones that are gone. A reconstruction citing shas nobody "
+                "can resolve is a narrative, not a record.",
+                False,
+            ),
+        },
+        "argv": lambda a: [
+            "replay",
+            *_opt("--out", a),
+            *(["--verify"] if a.get("verify") else []),
+        ],
     },
     "orchard_render": {
         "description": (
             "Regenerate the human-readable markdown views (queue, lessons, "
             "research) under docs/orchard/."
         ),
-        "properties": {},
-        "argv": lambda a: ["--json", "render"],
+        "properties": {
+            "out": ("string", "Directory for the generated views (default: docs/orchard).", False),
+            "show": (
+                "string",
+                "Print ONE view instead of writing files: lessons, research, or board. "
+                "This is what the orchard:// resources are served from.",
+                False,
+            ),
+        },
+        "argv": lambda a: (
+            ["render", "--show", a["show"]]
+            if a.get("show")
+            else ["--json", "render", *_opt("--out", a)]
+        ),
     },
     "orchard_rebuild": {
         "description": (
@@ -546,6 +805,115 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {},
         "argv": lambda a: ["--json", "rebuild"],
+    },
+    "orchard_companions": {
+        "description": (
+            "Which companion MCP servers serve this project's gates, which are "
+            "installed on this machine, and which are wired into an agent's config. "
+            "Orchard imposes the pipeline; it does not perform the judgement inside "
+            "most gates — `standards` wants an automated standards review, `research` "
+            "wants documentation to check a claim against, `rules` wants memory. A "
+            "project with none of them has agent gates passing on assertion alone. "
+            "Exit 2 means a default companion is missing or unregistered. Read-only: "
+            "it detects and advises, it never installs anything."
+        ),
+        "properties": {
+            "no_probe": ("boolean", "Skip the detection probes (faster, less certain).", False),
+        },
+        "argv": lambda a: (
+            ["--json", "companions", "list"] + (["--no-probe"] if a.get("no_probe") else [])
+        ),
+    },
+    "orchard_companions_add": {
+        "description": (
+            "Register companion MCP servers that are ALREADY installed into an "
+            "agent's MCP config, merging rather than overwriting what is there. "
+            "Refuses (exit 3) to register one that is not installed, because that "
+            "writes a launch command which fails mid-task, at the moment a gate told "
+            "the agent to reach for it."
+        ),
+        "properties": {
+            "id": ("string", "Comma-separated ids; default: every installed one.", False),
+            "agents": ("string", "Comma-separated agent keys (default: claude).", False),
+        },
+        "argv": lambda a: (
+            ["--json", "companions", "add"]
+            + (["--id", a["id"]] if a.get("id") else [])
+            + (["--agents", a["agents"]] if a.get("agents") else [])
+        ),
+    },
+    "orchard_bug_found": {
+        "description": (
+            "Report a bug the moment you find it, BEFORE fixing it. Recording it first "
+            "is what makes the fix accountable: `orchard_bug_fixed` refuses to close "
+            "one without naming the regression test, so a bug that was never opened is "
+            "a fix that never had to prove itself. Bug hunts that record nothing look "
+            "identical to bug hunts that found nothing."
+        ),
+        "properties": {
+            "id": ("string", "Stable id, e.g. 'B1'. You will cite it when closing.", False),
+            "summary": ("string", "What is wrong, in one line.", True),
+            "item": ("string", "The task it was found in or affects.", False),
+        },
+        "argv": lambda a: [
+            "--json",
+            "bug",
+            "found",
+            *_opt("--id", a),
+            "--summary",
+            a.get("summary", ""),
+            *_opt("--item", a),
+        ],
+    },
+    "orchard_session_note": {
+        "description": (
+            "Record something that happened during a session which is neither an "
+            "operator prompt nor a decision — a surprise, a dead end, why you changed "
+            "approach. It goes into the reconstruction alongside the prompts, and a "
+            "dead end recorded is a dead end nobody walks down twice."
+        ),
+        "properties": {
+            "session": ("string", "Session id from orchard_session_start.", True),
+            "text": ("string", "The note.", True),
+            "item": ("string", "Item it concerns.", False),
+        },
+        "argv": lambda a: [
+            "--json",
+            "session",
+            "note",
+            a.get("session", ""),
+            "--text",
+            a.get("text", ""),
+            *_opt("--item", a),
+        ],
+    },
+    "orchard_session_end": {
+        "description": (
+            "Close a session with a summary of what it achieved. The summary is what a "
+            "later reader sees before deciding whether to open the whole transcript, "
+            "so write it for someone who was not there."
+        ),
+        "properties": {
+            "session": ("string", "Session id.", True),
+            "summary": ("string", "What this session achieved.", False),
+        },
+        "argv": lambda a: [
+            "--json",
+            "session",
+            "end",
+            a.get("session", ""),
+            *_opt("--summary", a),
+        ],
+    },
+    "orchard_decision_show": {
+        "description": (
+            "Read ONE architectural decision in full — its context, what was decided, "
+            "the consequences, and what was rejected. `orchard_decision_list` gives "
+            "you the titles; this is what you read before working against one, and "
+            "especially before proposing something it already considered."
+        ),
+        "properties": {"id": ("string", "Decision id.", True)},
+        "argv": lambda a: ["--json", "decision", "show", a["id"]],
     },
     "orchard_prompts": {
         "description": (
@@ -591,8 +959,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "compression. Derived from completed work, so there is no state "
             "file to drift."
         ),
-        "properties": {"ran": ("string", "Record that this cadence just ran.", False)},
-        "argv": lambda a: ["--json", "cadence", *_opt("--ran", a)],
+        "properties": {
+            "ran": ("string", "Record that this cadence just ran.", False),
+            "note": ("string", "What the pass did, recorded with it.", False),
+        },
+        "argv": lambda a: ["--json", "cadence", *_opt("--ran", a), *_opt("--note", a)],
     },
     "orchard_session_prompt": {
         "description": (
@@ -702,8 +1073,17 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "disagree with. Defaults to the item's title and body.",
                 False,
             ),
+            "base": ("string", "Ref to diff against (default: the item's base branch).", False),
+            "context": ("string", "Extra context to hand the reviewer.", False),
         },
-        "argv": lambda a: ["review", a["id"], *_opt("--gate", a), *_opt("--intent", a)],
+        "argv": lambda a: [
+            "review",
+            a["id"],
+            *_opt("--gate", a),
+            *_opt("--intent", a),
+            *_opt("--base", a),
+            *_opt("--context", a),
+        ],
     },
     "orchard_show": {
         "description": (
@@ -726,18 +1106,29 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "id": ("string", "Item id.", True),
             "globs": ("string", "Comma-separated path globs this item writes.", False),
-            "needs": ("string", "Comma-separated ids it depends on.", False),
+            "needs": (
+                "string",
+                "Comma-separated ids it depends on. Pass an EMPTY string to clear them "
+                "— that is how you break a dependency cycle the loop detector found.",
+                False,
+            ),
             "title": ("string", "New title.", False),
             "body": ("string", "New detail / acceptance criteria.", False),
+            "tags": ("string", "Comma-separated tags.", False),
+            "priority": ("integer", "Lower is offered first (default 100).", False),
         },
         "argv": lambda a: [
             "--json",
             "update",
             a["id"],
-            *_opt("--globs", a),
-            *_opt("--needs", a),
+            # `clearable`: passing "" here MEANS "empty this", which is how you break a
+            # dependency cycle. Every other tool treats "" as "not supplied".
+            *_opt("--globs", a, clearable=True),
+            *_opt("--needs", a, clearable=True),
+            *_opt("--tags", a, clearable=True),
             *_opt("--title", a),
             *_opt("--body", a),
+            *_opt("--priority", a),
         ],
     },
     "orchard_abandon": {
@@ -751,8 +1142,22 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "id": ("string", "Item id.", True),
             "reason": ("string", "Why it is being dropped.", True),
+            "force": (
+                "boolean",
+                "Abandon although a sub-task is still open. Those sub-tasks do NOT "
+                "become abandoned with it — decide about each, or they sit in the "
+                "queue under a parent nobody will finish.",
+                False,
+            ),
         },
-        "argv": lambda a: ["--json", "abandon", a["id"], "--reason", a.get("reason", "")],
+        "argv": lambda a: [
+            "--json",
+            "abandon",
+            a["id"],
+            "--reason",
+            a.get("reason", ""),
+            *(["--force"] if a.get("force") else []),
+        ],
     },
     "orchard_remove": {
         "description": (
@@ -761,8 +1166,24 @@ TOOLS: dict[str, dict[str, Any]] = {
             "in replay, which keeps the record honest about work that was planned and "
             "then dropped. Refuses if another item depends on it."
         ),
-        "properties": {"id": ("string", "Item id.", True), "reason": ("string", "Why.", False)},
-        "argv": lambda a: ["--json", "remove", a["id"], *_opt("--reason", a)],
+        "properties": {
+            "id": ("string", "Item id.", True),
+            "reason": ("string", "Why.", False),
+            "force": (
+                "boolean",
+                "Remove although it still has open children, or although other items "
+                "depend on it. Both leave the queue inconsistent in a way the "
+                "scheduler then reports, so read the refusal before overriding it.",
+                False,
+            ),
+        },
+        "argv": lambda a: [
+            "--json",
+            "remove",
+            a["id"],
+            *_opt("--reason", a),
+            *(["--force"] if a.get("force") else []),
+        ],
     },
     "orchard_release": {
         "description": (
@@ -801,8 +1222,25 @@ TOOLS: dict[str, dict[str, Any]] = {
 }
 
 
-def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:
+def _opt(
+    flag: str, args: dict[str, Any], key: str | None = None, *, clearable: bool = False
+) -> list[str]:
+    """Build `--flag value`, or nothing when the caller did not supply one.
+
+    ``clearable`` distinguishes **"not supplied"** from **"supplied as empty"**, which
+    this conflated. An empty string was treated as absent, so over MCP a dependency
+    could be added and never removed: `orchard_update(id="X", needs="")` silently did
+    nothing, while `orchard update X --needs ""` cleared it. Breaking a dependency
+    cycle is exactly the operation that needs this, and it is the one the loop detector
+    tells you to perform.
+
+    Off by default, and deliberately so: a client that fills every optional property
+    with `""` would otherwise wipe fields it never meant to touch. Only `orchard_update`
+    — whose entire job is to change fields — passes it.
+    """
     k = key or flag.lstrip("-").replace("-", "_")
+    if clearable and k in args and args[k] is not None:
+        return [flag, str(args[k])]
     v = args.get(k)
     return [flag, str(v)] if v not in (None, "", []) else []
 
@@ -909,6 +1347,22 @@ class Server:
                 return _ok(
                     mid, _text(f"missing required argument(s): {', '.join(missing)}", error=True)
                 )
+            # An argument this tool does not have is an ERROR, not something to drop.
+            # Every schema here declares `additionalProperties: false` and nothing
+            # enforced it, so a caller passing `id="D1"` to a tool with no `id` got a
+            # success and a decision under a generated id — then `supersedes: D1`
+            # pointed at nothing. Silence at an API boundary is the silent-knob-drop
+            # class, and an agent cannot see it at all: it has only the reply.
+            unknown = sorted(set(args) - set(spec["properties"]))
+            if unknown:
+                return _ok(
+                    mid,
+                    _text(
+                        f"unknown argument(s) for {name}: {', '.join(unknown)}. "
+                        f"Known: {', '.join(sorted(spec['properties']))}",
+                        error=True,
+                    ),
+                )
             try:
                 argv = spec["argv"](args)
             except (KeyError, TypeError) as exc:
@@ -951,22 +1405,22 @@ class Server:
             )
         if method == "resources/read":
             uri = (msg.get("params") or {}).get("uri", "")
+            # Every resource goes through the CLI, like every tool. The lessons and
+            # research URIs used to fold the log directly — a second data path that
+            # re-wired EventLog + fold without `Ctx`'s config and agent resolution, in
+            # a module whose whole premise is "one implementation, two doors". The
+            # table also carried a dead entry for `orchard://lessons` that the branch
+            # above it shadowed, which is how a second path hides: nothing reads the
+            # line, so nothing contradicts it.
             cmd = {
                 "orchard://board": ["board"],
                 "orchard://brief": ["brief"],
-                "orchard://lessons": ["render", "--out", "/dev/null"],
+                "orchard://lessons": ["render", "--show", "lessons"],
+                "orchard://research": ["render", "--show", "research"],
             }.get(uri)
-            if uri in {"orchard://lessons", "orchard://research"}:
-                from . import render as R
-                from .events import EventLog
-                from .model import fold
-
-                st = fold(EventLog(self.repo).read_all(), strict=False)
-                body = R.lessons_md(st) if uri.endswith("lessons") else R.research_md(st)
-            elif cmd:
-                _, body = _run_cli(self.repo, cmd)
-            else:
+            if not cmd:
                 return _err(mid, -32602, f"unknown resource {uri!r}")
+            _, body = _run_cli(self.repo, cmd)
             return _ok(mid, {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": body}]})
         if method == "prompts/list":
             from . import prompts as P
@@ -1040,73 +1494,64 @@ def _test_gates(repo: Path) -> list[str]:
     )
 
 
-def _instructions(repo: Path) -> str:
-    """What the client injects into the model's context on connect.
+def _instruction_vars(repo: Path) -> dict[str, Any]:
+    """Everything `mcp_instructions.md` can render from.
 
-    **State-aware on purpose.** A fixed blurb describing a workflow the project has not
-    adopted is noise the model learns to skip; the useful instruction is the next
-    concrete action, and that depends on whether `.orchard/` exists, whether a test
-    command is set, whether a cross-family reviewer is configured, and whether anything
-    is waiting to be recovered. This is the only place the server gets to speak
-    unprompted, so it says the one thing that is true right now.
+    Gathered defensively: this runs inside the `initialize` handshake, which must
+    succeed even in a repository that is broken, half-configured or not adopted at all.
+    Every lookup that can fail contributes its own default rather than taking the whole
+    handshake down, because a server that refuses to start cannot tell anyone why.
+
+    It also must not WRITE anything — a handshake that adopts the repository is the bug
+    this file already fixed once, and `Store` learned the same lesson separately.
     """
-    # Keyed on config.toml, not on the directory: the directory is created by ordinary
-    # use (an append needs it), so "the directory exists" answers a different question
-    # than "someone adopted this project". config.toml is written only by init/adopt.
-    if not (repo / ".orchard" / "config.toml").is_file():
-        return (
-            "This repository does not use Orchard yet.\n\n"
-            "If the user wants a managed work queue — phases and tasks with "
-            "dependencies, parallel agents in isolated git worktrees, quality gates and "
-            "crash recovery — call `orchard_setup` ONCE. It creates .orchard/, writes "
-            "the driver, and adds a short section to AGENTS.md describing how work is "
-            "claimed here. Then set the project's test command with `orchard_configure` "
-            "and add work with `orchard_phase_add` / `orchard_task_add`.\n\n"
-            "Do not call the other tools before `orchard_setup`; they will report that "
-            "there is no queue.\n\n"
-            "If the user has not asked for this, say nothing about it and carry on."
-        )
+    adopted = (repo / ".orchard" / "config.toml").is_file()
+    v: dict[str, Any] = {
+        "adopted": adopted,
+        "setup_todo": [],
+        "companions": [],
+        "missing_companions": [],
+        "gate_gaps": [],
+        "recoverable": 0,
+        "ready": 0,
+        "running": 0,
+        "blocked": 0,
+        "open_bugs": 0,
+        "loops": 0,
+        "task_pipeline": [],
+        "require_outcome": True,
+    }
+    if not adopted:
+        return v
 
-    lines = [
-        "This repository's work is a queue managed by Orchard.",
-        "",
-        "**Call `orchard_brief` first.** It returns any work left over from a crashed "
-        "agent, what is ready to start now, why everything else is blocked, and the "
-        "past lessons relevant to the task — and it replaces reading this project's "
-        "rule and lesson files.",
-        "",
-        "**Claim before you edit.** `orchard_claim` leases an item and gives you an "
-        "isolated git worktree. An unclaimed edit can be destroyed by a parallel agent, "
-        "and in this repository it may also be refused at commit time.",
-        "",
-        "Loop: `orchard_next` → `orchard_claim` → work in the worktree → "
-        "`orchard_gate_status` and satisfy each gate → `orchard_merge` → "
-        "`orchard_complete`.",
-        "",
-        "A tool or reviewer that could not run is recorded `unavailable`, NEVER "
-        "`passed`. Exit code 2 means 'could not run / nothing to do' and is a result, "
-        "not an error — never treat it as success.",
-    ]
-
-    # Name the specific setup gaps, because "configure it properly" is not actionable
-    # and an agent cannot see the config file's contents from here.
-    todo = []
     try:
         from .config import Config
-        from .gates import load_gates
-        from .reviewer import load_reviewers
 
         cfg = Config.load(repo)
-        gates = load_gates(repo, cfg)
-        ut = gates.get("unit_tests")
+    except Exception:
+        return v
+    v["task_pipeline"] = list(cfg.gates.task_pipeline)
+    v["require_outcome"] = bool(cfg.gates.require_outcome)
+
+    # Each block is independent, and a failure in one must not cost the others: a
+    # project with a bad reviewer block should still be told what is ready to work.
+    try:
+        from .gates import load_gates
+
+        ut = load_gates(repo, cfg).get("unit_tests")
         if not ut or not ut.command or "set [gate.unit_tests]" in ut.command:
-            todo.append(
+            v["setup_todo"].append(
                 "No test command is configured. Set it with `orchard_configure`: "
                 '`[gate.unit_tests]` / `command = "<your test command>"`. Until then '
                 "the unit_tests gate reports UNAVAILABLE and cannot pass."
             )
+    except Exception:
+        pass
+    try:
+        from .reviewer import load_reviewers
+
         if not load_reviewers(repo):
-            todo.append(
+            v["setup_todo"].append(
                 "No cross-family reviewer is configured, so the `critic` gate cannot "
                 "run and `orchard_complete` will refuse. Call "
                 "`orchard_reviewers_detect` with write=true — it finds a local model "
@@ -1114,9 +1559,99 @@ def _instructions(repo: Path) -> str:
             )
     except Exception:
         pass
-    if todo:
-        lines += ["", "**Setup still needed:**", ""] + [f"- {t}" for t in todo]
-    return "\n".join(lines)
+    try:
+        # `probe=False`: detection shells out, and the handshake is the one call an
+        # agent waits on before it can do anything at all. Registration state is read
+        # from config files and is free; whether the binary exists can wait for
+        # `orchard_companions`, which is what the instruction tells it to call.
+        from . import companions as CO
+
+        statuses = CO.scan(repo, probe=False)
+        v["companions"] = [
+            {
+                "id": st.companion.id,
+                "title": st.companion.title,
+                "gates": list(st.companion.gates),
+                "state": st.state,
+                "install": st.companion.install,
+                "url": st.companion.url,
+                "default": st.companion.default,
+            }
+            for st in statuses
+        ]
+        v["missing_companions"] = [
+            c for c in v["companions"] if c["default"] and c["state"] != "registered"
+        ]
+        cover = CO.gate_coverage(repo, statuses, v["task_pipeline"])
+        v["gate_gaps"] = [g for g, ids in cover.items() if not ids]
+    except Exception:
+        pass
+    try:
+        from . import lease as L
+        from . import progress as PR
+        from .events import EventLog
+        from .model import fold
+        from .schedule import plan
+
+        log = EventLog(repo, cfg.agent.id or "")
+        events = log.read_all()
+        st = fold(events, strict=False)
+        p = plan(st, cfg, agent=log.agent_id)
+        v["ready"], v["running"] = len(p.ready), len(p.running)
+        v["blocked"] = len(p.blocked)
+        v["open_bugs"] = sum(1 for b in st.bugs.values() if b.open)
+        v["loops"] = len(PR.detect(events, st, cfg))
+        v["recoverable"] = len(L.scan(log, cfg, repo))
+    except Exception:
+        pass
+    return v
+
+
+def _instructions(repo: Path) -> str:
+    """What the client injects into the model's context on connect.
+
+    **State-aware on purpose.** A fixed blurb describing a workflow the project has not
+    adopted is noise the model learns to skip; the useful instruction is the next
+    concrete action, and that depends on whether `.orchard/` exists, whether a test
+    command is set, whether a reviewer and the companion tools are configured, and
+    whether anything is waiting to be recovered. This is the only place the server gets
+    to speak unprompted, so it says the one thing that is true right now.
+
+    **And it is a TEMPLATE, not a string literal.** Everything it says — the workflow,
+    the reporting duties, which companion tools to reach for — is
+    `templates/prompts/mcp_instructions.md`, overridable per project
+    (`.orchard/prompts/mcp_instructions.md`) or per config (`[prompts]
+    mcp_instructions`). That is the difference between a tool whose behaviour you
+    configure and one you have to fork.
+    """
+    from . import prompts as P
+
+    vars_ = _instruction_vars(repo)
+    overrides: dict[str, str] = {}
+    if vars_["adopted"]:
+        try:
+            from .config import Config
+
+            # Read by NAME, not by handing `prompts.__dict__` to the resolver. The
+            # dead-knob ratchet greps for the knob being read and would have reported
+            # this one as documented-but-never-read — correctly, because a bulk dict
+            # pass is also how a knob gets renamed in config and silently stops working.
+            path = Config.load(repo).prompts.mcp_instructions
+            if path:
+                overrides["mcp_instructions"] = path
+        except Exception:
+            pass
+    try:
+        tmpl = P.resolve("mcp_instructions", repo, overrides)
+        return P.render(tmpl, **vars_).strip()
+    except P.TemplateError as exc:
+        # A broken override must not silence the server: say what is wrong, in the one
+        # place the operator will see it, and still hand over the essentials.
+        return (
+            f"Orchard's instruction template could not be loaded: {exc}\n\n"
+            "Call `orchard_brief` for the state of the queue, and `orchard_prompts` to "
+            "inspect the template configuration."
+        )
 
 
 def _ok(mid: Any, result: dict[str, Any]) -> dict[str, Any]:
@@ -1128,9 +1663,19 @@ def _err(mid: Any, code: int, message: str) -> dict[str, Any]:
 
 
 def _text(body: str, *, error: bool = False, meta: dict | None = None) -> dict[str, Any]:
+    """One tool result.
+
+    An error carries `_meta.exit = 1` as well as `isError`, so the exit-code vocabulary
+    the whole package speaks — 0 healthy · 1 failure · 2 nothing · 3 refused — holds at
+    the protocol boundary too. Without it, a schema-level rejection (a missing required
+    argument, an unknown one) arrived as exit 0, and an agent reading only the exit code
+    could not tell a refused call from a successful one.
+    """
     res: dict[str, Any] = {"content": [{"type": "text", "text": body}], "isError": error}
     if meta:
         res["_meta"] = meta
+    elif error:
+        res["_meta"] = {"exit": 1}
     return res
 
 

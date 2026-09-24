@@ -259,6 +259,11 @@ def work(events: list[Event], state: State) -> dict[str, ItemWork]:
 # -- loop detection ----------------------------------------------------------------------
 
 
+def _is_removed(state: State, item_id: str) -> bool:
+    it = state.items.get(item_id)
+    return bool(it and it.removed)
+
+
 def detect(events: list[Event], state: State, cfg: Config) -> list[LoopFinding]:
     """Every loop pattern the log can show, each with its evidence.
 
@@ -268,7 +273,13 @@ def detect(events: list[Event], state: State, cfg: Config) -> list[LoopFinding]:
     """
     lc = cfg.loops
     found: list[LoopFinding] = []
-    tracked = work(events, state)
+    # Removed items are dropped once, here, rather than in each detector. Three of the
+    # six filtered on state alone, so an item taken out of the queue kept generating a
+    # "claimed and given up 3 times" warning whose suggested remedy — abandon it — had
+    # already been done in a stronger form; under `[loops] on_detect = "block"` that is
+    # a permanent block on work nobody is doing. `_static_cycles` and `_duplicate_work`
+    # already filtered `removed`, and that inconsistency was the tell.
+    tracked = {k: v for k, v in work(events, state).items() if not _is_removed(state, k)}
     sev = "block" if lc.on_detect == "block" else "warn"
 
     found += _static_cycles(state, sev)

@@ -34,11 +34,11 @@ import shlex
 import shutil
 import subprocess
 import time
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from . import proc as P
 from .config import Config
 from .events import EventLog
 from .model import GATE_OUTCOMES, Item, State
@@ -250,24 +250,17 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     policy. A file that had to restate all thirteen gates to change one would be copied
     once and then drift.
     """
+    from . import tomlcfg
+
     gates = {k: GateDef(**{**v.__dict__}) for k, v in DEFAULT_GATES.items()}
-    known = set(GateDef.__dataclass_fields__)
-    for path in (Path(root) / ".orchard" / "config.toml", Path(root) / ".orchard" / "gates.toml"):
-        if not path.is_file():
-            continue
-        data = tomllib.loads(path.read_text("utf-8"))
-        for gid, spec in (data.get("gate") or {}).items():
-            if not isinstance(spec, dict):
-                continue
-            base = gates.get(gid) or GateDef(id=gid)
-            for k, v in spec.items():
-                if k not in known:
-                    raise ValueError(
-                        f"unknown gate field '{gid}.{k}' in {path}. Known: {sorted(known)}"
-                    )
-                setattr(base, k, v)
-            base.id = gid
-            gates[gid] = base
+    for gid, spec in tomlcfg.overlay_table(
+        tomlcfg.config_paths(root, "gates.toml"), "gate", GateDef
+    ).items():
+        base = gates.get(gid) or GateDef(id=gid)
+        for k, v in spec.items():
+            setattr(base, k, v)
+        base.id = gid
+        gates[gid] = base
     for gid in cfg.gates.required:
         if gid in gates:
             gates[gid].required = True
@@ -291,6 +284,10 @@ class GateStatus:
     unavailable: list[str]
     skipped: list[str]
     complete: bool
+    #: Pipeline gates with NO recorded outcome at all. Silence is its own state: it is
+    #: neither a pass nor a failure, and `gates.require_outcome` decides whether it
+    #: blocks completion.
+    silent: list[str] = field(default_factory=list)
 
     def render(self) -> str:
         marks = {
@@ -337,7 +334,25 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         skipped=skipped,
         complete=complete,
         rows=rows,
+        silent=[g for g, o in rows if not o],
     )
+
+
+def inert_requirements(cfg: Config) -> list[str]:
+    """Gates named in ``gates.required`` that no pipeline actually runs.
+
+    A required gate is enforced by intersecting it with the item's pipeline, which
+    means naming one that is in neither pipeline makes the requirement quietly
+    **disappear** rather than raise — the vacuous-truth class applied to the very
+    mechanism that exists to stop vacuous passes. An operator who sets
+    ``required = ["critic"]`` and trims `critic` out of `task_pipeline` gets a project
+    where nothing is required at all, reported as fully compliant.
+
+    Reported rather than raised at load time, because a config that is wrong in one
+    field should still let `orchard doctor` run and explain itself.
+    """
+    pipelines = set(cfg.gates.task_pipeline) | set(cfg.gates.phase_pipeline)
+    return sorted(set(cfg.gates.required) - pipelines)
 
 
 def digest(text: str) -> str:
@@ -376,7 +391,7 @@ def run_command_gate(
     full_env = {**os.environ, **gdef.env, **(env or {})}
     start = time.time()
     try:
-        p = subprocess.run(
+        p = P.run(
             gdef.command,
             shell=True,
             cwd=str(cwd),
@@ -518,11 +533,11 @@ def record(
 
 
 def family_of(model: str, cfg: Config) -> str:
-    low = (model or "").lower()
-    for needle, fam in cfg.agent.families.items():
-        if needle in low:
-            return fam
-    return low or "unknown"
+    """This project's view of a model's family: `[agent].families`, which defaults to
+    the shipped map. ``""`` means "not recognised" — see `config.family_for`."""
+    from .config import family_for
+
+    return family_for(model, cfg.agent.families)
 
 
 def reviewer_independence(
@@ -539,17 +554,39 @@ def reviewer_independence(
         return False, f"no such item {item_id}"
     author_fam = family_of(author_model, cfg)
     fams: list[tuple[str, str]] = []
+    anonymous: list[str] = []
     for gname in ("rubber_duck", "critic", "standards"):
         rec = it.gates.get(gname)
-        if rec and rec.outcome in ("passed", "failed", "partial"):
-            m = str(rec.evidence.get("model", rec.by))
-            fams.append((gname, family_of(m, cfg)))
+        if not rec or rec.outcome not in ("passed", "failed", "partial"):
+            continue
+        m = str(rec.evidence.get("model", rec.by) or "").strip()
+        fam = family_of(m, cfg)
+        # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
+        if not fam:
+            anonymous.append(f"{gname}={m or 'no model'}")
+            continue
+        fams.append((gname, fam))
+    if not author_fam:
+        return False, (
+            f"the author's model {author_model!r} is not in [agent].families, so no "
+            f"reviewer can be shown to differ from it. Add it to the map, or pass "
+            f"`--model` with a name the map recognises."
+        )
     if not fams:
+        if anonymous:
+            return False, (
+                f"no reviewer named a model this project recognises "
+                f"({', '.join(anonymous)}), so nothing shows the review came from a "
+                f"different family than the author ({author_fam}). Re-record with "
+                f"`--model <the reviewer's model>`, or teach [agent].families the name."
+            )
         return False, "no reviewer ran at all"
     different = [(g, f) for g, f in fams if f != author_fam]
     if different:
         return True, f"{different[0][0]} was {different[0][1]} vs author {author_fam}"
     return False, (
-        f"every reviewer ({', '.join(g for g, _ in fams)}) was family {author_fam!r}, "
-        f"the same as the author. Same-family agreement is not independent evidence."
+        f"every identified reviewer ({', '.join(g for g, _ in fams)}) was family "
+        f"{author_fam!r}, the same as the author. Same-family agreement is not "
+        f"independent evidence."
+        + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
     )

@@ -167,6 +167,8 @@ class GatesConfig:
     )
     unavailable_is_failure: bool = False
     allow_skip_with_reason: bool = True
+    require_outcome: bool = True
+    enforce_order: str = "warn"
     evidence_required: list[str] = field(
         default_factory=lambda: [
             "unit_tests",
@@ -191,6 +193,16 @@ _doc(
     "gates",
     "required",
     "Gates whose failure BLOCKS completion. Everything else records its outcome and lets the pipeline continue — advisory vs blocking is an explicit field, never a convention.",
+)
+_doc(
+    "gates",
+    "require_outcome",
+    "Every gate in the pipeline must carry SOME recorded outcome before an item completes — passed, failed, unavailable, partial, or an explicit `gate skip --reason`. Silence is not a pass, for the same reason UNAVAILABLE is not. With this false, `required` alone blocks and the other gates become documentation. Default true: the fixed order is the point of the pipeline.",
+)
+_doc(
+    "gates",
+    "enforce_order",
+    "What `gate record` does when an EARLIER pipeline gate has no outcome yet: 'warn' (record it, say so), 'block' (refuse), 'off'. Default 'warn' — reviewing before the tests run is sometimes deliberate, skipping research entirely never is, and `require_outcome` is what catches the latter.",
 )
 _doc(
     "gates",
@@ -397,8 +409,14 @@ class PromptsConfig:
     review_user: str = ""
     gate_instruction: str = ""
     session_brief_header: str = ""
+    mcp_instructions: str = ""
 
 
+_doc(
+    "prompts",
+    "mcp_instructions",
+    "Path to the instruction block the MCP server hands the agent on connect — the workflow, the reporting duties and the companion tools it should use. This is the file to edit to change how the project works. `orchard prompts eject mcp_instructions` writes an editable copy into .orchard/prompts/.",
+)
 _doc(
     "prompts",
     "review_system",
@@ -487,25 +505,64 @@ _doc(
 )
 
 
+#: Model-name substring -> pretraining family, used to answer the one question the
+#: review stack rests on: "is this reviewer independent of the author?"
+#:
+#: One map, in one module. There were two — this one and a richer `FAMILY_HINTS` in
+#: `reviewer.py` — with different entries AND different answers for an unrecognised
+#: name, which is the duplicate-then-drift class that has already cost this package
+#: three bugs. The reviewer config's own `family` field is how a project classifies a
+#: model this map does not know.
+FAMILY_HINTS: dict[str, str] = {
+    "qwen": "alibaba",
+    "claude": "anthropic",
+    "gpt": "openai",
+    "o1": "openai",
+    "o3": "openai",
+    "codex": "openai",
+    "gemini": "google",
+    "gemma": "google",
+    "llama": "meta",
+    "mistral": "mistral",
+    "mixtral": "mistral",
+    "deepseek": "deepseek",
+    "grok": "xai",
+    "phi": "microsoft",
+    "command": "cohere",
+    "yi-": "01ai",
+    "glm": "zhipu",
+    "nemotron": "nvidia",
+    "granite": "ibm",
+    "kimi": "moonshot",
+    "minimax": "minimax",
+    "ernie": "baidu",
+}
+
+
+def family_for(model: str, families: dict[str, str] | None = None) -> str:
+    """Pretraining family for a model name, or ``""`` when it is not recognised.
+
+    The empty string is deliberate. Both former implementations returned a non-empty
+    stand-in for an unknown model — one the literal name, one the string "unknown" —
+    and both therefore compared unequal to every real family, so an unclassified
+    reviewer *established* independence. Two unrecognised names may well be the same
+    family; the honest answer is "cannot tell", and a check built to refuse unverified
+    independence must not be satisfied by the absence of information.
+    """
+    low = (model or "").lower()
+    for needle, fam in (families if families is not None else FAMILY_HINTS).items():
+        if needle in low:
+            return fam
+    return ""
+
+
 @dataclass
 class AgentConfig:
     """How Orchard talks to whichever agent is driving it."""
 
     id: str = ""  # "" = derive from hostname+pid
     reviewer_family_must_differ: bool = True
-    families: dict[str, str] = field(
-        default_factory=lambda: {
-            "claude": "anthropic",
-            "gpt": "openai",
-            "codex": "openai",
-            "gemini": "google",
-            "llama": "meta",
-            "deepseek": "deepseek",
-            "qwen": "alibaba",
-            "mistral": "mistral",
-            "grok": "xai",
-        }
-    )
+    families: dict[str, str] = field(default_factory=lambda: dict(FAMILY_HINTS))
 
 
 _doc(
@@ -573,7 +630,16 @@ class Config:
     #: Top-level TOML tables that are NOT config sections and must not be treated as
     #: typos. They are consumed by other loaders: `[gate.*]` by gates.load_gates,
     #: `[[reviewer]]` by reviewer.load_reviewers.
-    _FOREIGN_TABLES = frozenset({"gate", "reviewer"})
+    #: Tables in `.orchard/config.toml` that belong to another module, so this loader
+    #: passes over them rather than rejecting them as unknown sections. Each has its own
+    #: reader with its own dataclass, and each of those raises on a field it does not
+    #: know — the ignorance here is about the TABLE, never about its contents.
+    #:
+    #: `companion` was missing, which is why companions could only be configured in
+    #: their own file: putting a `[[companion]]` block in the obvious place made the
+    #: whole config unreadable. The list and the readers must stay in step, and
+    #: `tests/test_roborev_findings.py` asserts they do.
+    _FOREIGN_TABLES = frozenset({"gate", "reviewer", "companion"})
 
     def _apply(self, data: dict[str, Any], source: str) -> None:
         for sec, values in data.items():

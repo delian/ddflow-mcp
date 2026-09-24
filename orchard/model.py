@@ -278,6 +278,24 @@ class State:
                 stack.append(child.id)
         return seen
 
+    def ancestors(self, item_id: str) -> list[Item]:
+        """The parent chain above ``item_id``, nearest first.
+
+        Cycle-guarded for the same reason ``descendants`` is: the chain is
+        operator-authored, so a mistake can make it circular, and the code that walks
+        it is the code that diagnoses bad plans.
+        """
+        out: list[Item] = []
+        seen = {item_id}
+        node = self.items.get(item_id)
+        while node is not None and node.parent and node.parent not in seen:
+            seen.add(node.parent)
+            node = self.items.get(node.parent)
+            if node is None or node.removed:
+                break
+            out.append(node)
+        return out
+
     def open_descendants(self, item_id: str) -> list[Item]:
         """Descendants that are neither done nor abandoned — what blocks completion."""
         return [
@@ -319,12 +337,35 @@ def _item(state: State, ev: Event, kind: str) -> Item:
 # ---------------------------------------------------------------------------------
 
 
+def _safe_parent(st: State, item_id: str, parent: str) -> str:
+    """``parent``, unless accepting it would make ``item_id`` its own ancestor.
+
+    A self-parented item is its own open descendant, so it is permanently an umbrella:
+    never offered, never claimable, never completable, and the only diagnosis is a
+    blocked item that names itself. No CLI or MCP path can produce one today, but
+    `fold` must survive a hand-written or future-version event — it is the one function
+    in this package that is fed arbitrary JSON from disk and has no right to refuse it.
+    """
+    if not parent or parent == item_id:
+        return ""
+    seen = {item_id, parent}
+    node = st.items.get(parent)
+    while node is not None and node.parent:
+        if node.parent == item_id:
+            return ""
+        if node.parent in seen:
+            break
+        seen.add(node.parent)
+        node = st.items.get(node.parent)
+    return parent
+
+
 def _h_added(st: State, ev: Event, kind: str) -> None:
     it = _item(st, ev, kind)
     d = ev.data
     it.kind = kind
     it.title = d.get("title", it.title)
-    it.parent = d.get("parent", it.parent)
+    it.parent = _safe_parent(st, it.id, d.get("parent", it.parent))
     it.needs = list(d.get("needs", it.needs))
     it.globs = list(d.get("globs", it.globs))
     it.body = d.get("body", it.body)
@@ -338,7 +379,7 @@ def _h_updated(st: State, ev: Event, kind: str) -> None:
     d = ev.data
     for f in ("title", "parent", "body", "blocked_reason"):
         if f in d:
-            setattr(it, f, d[f])
+            setattr(it, f, _safe_parent(st, it.id, d[f]) if f == "parent" else d[f])
     for f in ("needs", "globs", "tags"):
         if f in d:
             setattr(it, f, list(d[f]))
@@ -499,17 +540,25 @@ def _h_bug_fixed(st: State, ev: Event) -> None:
 
 
 def _h_lesson(st: State, ev: Event) -> None:
+    """Merge, never replace — the same rule `_h_decision` and `_h_bug_found` follow.
+
+    Shard merges reorder, so a re-record of a lesson can fold AFTER the supersession
+    that retired it. Rebuilding the object wholesale dropped `superseded_by`, and the
+    retired lesson walked back into the reconstruction brief's standing knowledge and
+    into `recall` — advice the project had explicitly replaced, presented as current.
+    """
     d = ev.data
     prev = st.lessons.get(ev.subject)
     st.lessons[ev.subject] = Lesson(
         id=ev.subject,
-        title=d.get("title", ""),
-        rule=d.get("rule", ""),
-        why=d.get("why", ""),
-        how=d.get("how", ""),
+        title=d.get("title", "") or (prev.title if prev else ""),
+        rule=d.get("rule", "") or (prev.rule if prev else ""),
+        why=d.get("why", "") or (prev.why if prev else ""),
+        how=d.get("how", "") or (prev.how if prev else ""),
         seen_in=list(d.get("seen_in", [])),
-        tags=list(d.get("tags", [])),
-        at=ev.ts,
+        tags=list(d.get("tags", prev.tags if prev else [])),
+        at=prev.at if prev and prev.at else ev.ts,
+        superseded_by=prev.superseded_by if prev else "",
     )
     for sid in d.get("supersedes", []):
         if sid in st.lessons:
@@ -540,11 +589,18 @@ def _h_decision(st: State, ev: Event) -> None:
         tags=list(d.get("tags", prev.tags if prev else [])),
         status=d.get("status", "accepted"),
         decided_by=d.get("decided_by", "") or (prev.decided_by if prev else ""),
-        supersedes=list(d.get("supersedes", [])),
+        supersedes=list(d.get("supersedes", prev.supersedes if prev else [])),
         superseded_by=prev.superseded_by if prev else "",
         at=prev.at if prev and prev.at else ev.ts,
         item=d.get("item", "") or (prev.item if prev else ""),
     )
+    # `superseded_by` and `status` are one fact, so derive the second from the first
+    # instead of storing it twice and hoping they agree. A shard merge can deliver
+    # `decision.superseded` BEFORE a re-record of the decision it retired; the
+    # re-record then carried the default `status="accepted"` and the reconstruction
+    # presented a reversed decision as the one in force.
+    if dec.superseded_by:
+        dec.status = "superseded"
     st.decisions[ev.subject] = dec
     for old in dec.supersedes:
         target = st.decisions.setdefault(old, Decision(id=old))

@@ -169,8 +169,14 @@ def test_an_unadopted_repo_is_told_to_run_setup(repo):
     text = _instructions(repo)
     assert "does not use Orchard yet" in text
     assert "orchard_setup" in text
-    assert "If the user has not asked for this" in text, (
-        "an unadopted repo must not be nagged into adopting"
+    # On INTENT, not on a phrase. This text is now
+    # `templates/prompts/mcp_instructions.md`, which a project may rewrite wholesale —
+    # so pinning the exact wording would make an operator's edit read as a regression.
+    # What must survive any rewording is the instruction: do not start talking about a
+    # work queue nobody asked for.
+    low = text.lower()
+    assert "has not asked" in low and ("carry on" in low or "say nothing" in low), (
+        f"an unadopted repo must not be nagged into adopting:\n{text[-300:]}"
     )
 
 

@@ -72,11 +72,24 @@ git worktree. An unclaimed edit can be destroyed by a parallel agent.
 Then: `orchard_next` → `orchard_claim` → work in the worktree → `orchard_gate_status`
 and satisfy each gate → `orchard_merge` → `orchard_complete`.
 
-**Three rules are enforced, not requested:**
+**Four rules are enforced, not requested:**
 
 - A tool or reviewer that could not run is recorded `unavailable`, never `passed`.
+- Every gate in the pipeline must carry SOME outcome before an item completes. Silence
+  is not a pass; `orchard gate skip <id> <gate> --reason "..."` is the way past one.
 - At least one reviewer must come from a different model family than the author.
 - A bug is not closed without a regression test that fails against the unfixed code.
+
+**Record as you go:** the operator's words verbatim (`orchard session prompt`), a
+decision when it is settled (`orchard decision add --globs ...`), a bug when you find it
+and before you fix it, a lesson after any surprise. `orchard replay` rebuilds this
+project from those; a summary rebuilds the summary.
+
+**Before anything non-trivial:** `orchard recall "<what you are about to do>"`.
+
+**Companion tools the gates expect** — `orchard companions` says which are present:
+`roborev`, `codeguide-mcp`, `context7`, and a memory server. When one is absent, record
+its gate `unavailable`.
 
 **Exit codes:** `0` fine · `1` failure · `2` could not run / nothing to do · `3`
 refused. Never treat `2` as `0`.

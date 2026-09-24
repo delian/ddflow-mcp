@@ -16,29 +16,19 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import finish, run_cli
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
 def _finish(repo, item, model="claude-opus-5"):
-    for g in ("implement", "merge"):
-        run_cli(repo, "gate", "record", item, g, "--outcome", "passed")
-    run_cli(repo, "gate", "record", item, "unit_tests", "--outcome", "passed", "--evidence", "ok")
-    run_cli(
-        repo,
-        "gate",
-        "record",
-        item,
-        "rubber_duck",
-        "--outcome",
-        "passed",
-        "--evidence",
-        "ok",
-        "--model",
-        "gemini-2.5-pro",
-    )
-    return run_cli(repo, "complete", item, "--model", model)
+    """Pass the whole configured pipeline, then complete.
+
+    Routed through the shared helper so that when `gates.require_outcome` or the
+    default pipeline changes, every test that just wants a finished item follows
+    without a sweep through thirteen files.
+    """
+    return finish(repo, item, model=model)
 
 
 def _proj(repo):
@@ -277,3 +267,48 @@ def test_the_board_nests_sub_tasks_under_their_parent(repo):
     assert len(rows) == 3
     assert "&nbsp;" not in rows[0], "the parent must not be indented"
     assert "&nbsp;" in rows[1] and "&nbsp;" in rows[2], "children must be indented"
+
+
+def test_giving_a_claimed_task_its_first_child_releases_its_lease(repo):
+    """Becoming an umbrella is a transition, and it has to happen however you get there.
+
+    `orchard split` released the parent's lease with a comment explaining why: an
+    umbrella holding a live claim on globs that overlap every child's means a SECOND
+    agent cannot take one of those children, and crash recovery points at a worktree
+    where nothing further will ever happen. Adding a sub-task by hand reaches the same
+    state by a different route, and did not release — so the fix lived in one of the
+    two paths into the condition it guards.
+    """
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
+    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/entry.py")
+    assert run_cli(repo, "claim", "P1.T1", "--no-worktree", agent="alpha")[0] == OK
+
+    code, out, err = run_cli(
+        repo, "task", "add", "P1.T1.a", "--parent", "P1.T1", "--globs", "core/entry.py"
+    )
+    assert code == OK, err
+    assert "umbrella" in out.lower(), f"and it must say what it did and why: {out}"
+
+    shown = json.loads(run_cli(repo, "--json", "show", "P1.T1")[1])
+    assert not shown["lease"], f"the umbrella must not still hold a claim: {shown['lease']}"
+
+    # The point of releasing: a different agent can now take the child, whose globs
+    # overlap the parent's.
+    code, _out, err = run_cli(repo, "claim", "P1.T1.a", "--no-worktree", agent="beta")
+    assert code == OK, f"a second agent must be able to work the sub-task:\n{err}"
+
+
+def test_adding_a_task_to_a_claimed_PHASE_does_not_release_the_phase(repo):
+    """A phase with tasks is the normal state, not a transition — nothing to release.
+
+    Stated as its own test because the obvious over-correction is to release on every
+    `task add`, which would drop an operator's deliberate phase-level claim every time
+    they typed another task into the plan.
+    """
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--globs", "core/**")
+    run_cli(repo, "claim", "P1", "--no-worktree", agent="alpha")
+    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "core/a.py")
+    shown = json.loads(run_cli(repo, "--json", "show", "P1")[1])
+    assert shown["lease"], "a phase's claim survives its tasks being written"

@@ -267,7 +267,21 @@ def cmd_task_add(a, c: Ctx) -> int:
             "priority": a.priority,
         },
     )
-    c.out(f"task {a.id} added to {a.phase or '(no phase)'}", {"id": a.id})
+    # Giving a task its first child turns it into an umbrella, and an umbrella is not
+    # the thing being worked — its children are. Holding its lease from here would put
+    # a live claim on globs that overlap every child's, so a SECOND agent could not
+    # take one, and recovery would point at a worktree where nothing more will happen.
+    # `split` already released for exactly this reason; adding a sub-task by hand is
+    # the same transition by a different route, and it did not.
+    parent_item = st.items.get(parent) if parent else None
+    released = ""
+    if parent_item and parent_item.kind == "task" and parent_item.lease:
+        L.release(c.log, parent, note=f"became an umbrella when {a.id} was added")
+        released = (
+            f"\n  {parent} is now an umbrella, so its lease was released: the work is "
+            f"in its sub-tasks, and holding it would block them."
+        )
+    c.out(f"task {a.id} added to {a.phase or '(no phase)'}{released}", {"id": a.id})
     return OK
 
 
@@ -305,19 +319,37 @@ def cmd_split(a, c: Ctx) -> int:
         )
         return FAIL
 
-    created = []
+    # Resolve and validate EVERY child before appending anything. The loop used to
+    # validate and append in one pass, so a collision on the second `--into` exited
+    # non-zero having already written the first: the parent became an umbrella nobody
+    # asked for, un-claimable because it now had a child and un-completable because
+    # that child was open. It also never compared the specs to each other, so
+    # `--into X=one --into X=two` appended two `task.added` events for one id, `fold`
+    # merged them, and the split reported two children while producing one whose title
+    # was silently the second spec's.
+    planned: list[tuple[str, str]] = []
     for i, spec in enumerate(specs, 1):
         sub_id, _, title = spec.partition("=")
         sub_id = sub_id.strip() or f"{a.id}.{i}"
         if sub_id in st.items:
             print(f"{sub_id} already exists; choose another id", file=sys.stderr)
             return FAIL
+        if sub_id in [p_id for p_id, _ in planned]:
+            print(f"{sub_id} given twice in one split; each part needs its own id", file=sys.stderr)
+            return FAIL
+        if sub_id == a.id:
+            print(f"{sub_id} cannot be its own sub-task", file=sys.stderr)
+            return FAIL
+        planned.append((sub_id, title.strip() or f"{it.title} (part {i})"))
+
+    created = []
+    for i, (sub_id, title) in enumerate(planned, 1):
         c.log.append(
             "task.added",
             sub_id,
             {
                 "parent": a.id,
-                "title": title.strip() or f"{it.title} (part {i})",
+                "title": title,
                 # Inherit the parent's globs unless the child declares its own: while the
                 # split is half-done the children are the only things being worked, and a
                 # child with no declared globs is a child the conflict detector cannot
@@ -497,6 +529,26 @@ def cmd_release(a, c: Ctx) -> int:
     return OK if ok else NOTHING
 
 
+def _gates_ahead_of(st, cfg, item_id: str, gate: str) -> list[str]:
+    """Pipeline gates BEFORE ``gate`` that have no outcome yet.
+
+    The order in `gates.task_pipeline` is not decoration: a rubber-duck review
+    recorded before `implement` reviewed an empty diff, and a `merge` recorded before
+    `unit_tests` merged something nobody tested. Reported by default rather than
+    refused, because some interleaving is legitimate and a tool that blocks on every
+    harmless reordering gets `--force`d on reflex.
+    """
+    try:
+        s = G.status(st, cfg, item_id)
+    except KeyError:
+        return []
+    if gate not in s.pipeline:
+        return []
+    before = s.pipeline[: s.pipeline.index(gate)]
+    it = st.items.get(item_id)
+    return [g for g in before if it and not it.gate_outcome(g)]
+
+
 def cmd_gate(a, c: Ctx) -> int:
     st = c.state()
     if a.gate_cmd == "status":
@@ -540,6 +592,23 @@ def cmd_gate(a, c: Ctx) -> int:
     if not it:
         print(f"no such item {a.id!r}", file=sys.stderr)
         return FAIL
+
+    skipped_ahead = _gates_ahead_of(st, c.cfg, a.id, a.gate)
+    if skipped_ahead and c.cfg.gates.enforce_order != "off":
+        note = (
+            f"{a.gate} comes after {', '.join(skipped_ahead)} in the pipeline, and "
+            f"{'none of those have' if len(skipped_ahead) > 1 else 'that one has not'} "
+            f"run yet."
+        )
+        if c.cfg.gates.enforce_order == "block":
+            print(
+                f"{note}\nThe order is the point: reviewing a change before it is "
+                f"implemented reviews nothing. Run them in order, or set "
+                f"[gates].enforce_order = 'warn'.",
+                file=sys.stderr,
+            )
+            return REFUSED
+        print(f"NOTE: {note} Recording anyway ([gates].enforce_order = 'warn').", file=sys.stderr)
 
     if a.gate_cmd == "run":
         if not gdef.is_command_gate:
@@ -661,6 +730,26 @@ def cmd_complete(a, c: Ctx) -> int:
         blockers.append(
             f"{len(open_children)} {noun} unfinished: {', '.join(k.id for k in open_children[:8])}"
         )
+    # Silence is not a pass. Without this, an agent could complete a task having
+    # recorded implement/unit_tests/merge and never once touched research, the
+    # rubber-duck, the critic, the standards pass, the bug hunt or the dedupe check —
+    # six of the ten steps the pipeline exists to impose, omitted with no trace. An
+    # explicit `gate skip --reason` is still an outcome, so the escape hatch is the
+    # auditable one rather than the invisible one.
+    if c.cfg.gates.require_outcome and s.silent:
+        blockers.append(
+            f"gate(s) never run and never skipped: {', '.join(s.silent)}. "
+            f"Record an outcome (`orchard gate run|record`) or skip it on the record "
+            f"(`orchard gate skip <id> <gate> --reason ...`); "
+            f"set [gates].require_outcome = false to make the pipeline advisory."
+        )
+    inert = G.inert_requirements(c.cfg)
+    if inert:
+        blockers.append(
+            f"[gates].required names {', '.join(inert)}, which no pipeline runs — "
+            f"so that requirement enforces nothing. Add it to task_pipeline or "
+            f"phase_pipeline, or drop it from required."
+        )
     if c.cfg.gates.unavailable_is_failure and s.unavailable:
         blockers.append(
             f"gate(s) could not run: {', '.join(s.unavailable)} "
@@ -761,7 +850,12 @@ def cmd_remove(a, c: Ctx) -> int:
     if not it:
         print(f"no such item {a.id!r}", file=sys.stderr)
         return FAIL
-    kids = [t.id for t in st.tasks(a.id) if not t.removed] if it.kind == "phase" else []
+    # Any item with work beneath it, not just a phase. The `kind == "phase"` guard
+    # predates sub-tasks: removing a task umbrella left its children live but
+    # unreachable, because `State.tasks(phase)` walks `descendants()` and `children()`
+    # skips a removed node — so the phase view reported "nothing actionable" while two
+    # open tasks sat under the hole.
+    kids = [t.id for t in st.open_descendants(a.id)]
     if kids and not a.force:
         print(
             f"{a.id} still has {len(kids)} task(s): {', '.join(kids[:8])}.\n"
@@ -790,6 +884,18 @@ def cmd_remove(a, c: Ctx) -> int:
 
 
 def cmd_block(a, c: Ctx) -> int:
+    """Park an item on something outside the queue — a vendor, an operator decision.
+
+    The existence check is not ceremony. `fold`'s `_h_state` reaches items through
+    `_item()`, which CREATES one when the id is unknown, so this was the only mutating
+    command where a typo'd id materialised a titleless phantom task — which the
+    scheduler then offered to an agent as the next thing to do.
+    """
+    st = c.state()
+    it = st.items.get(a.id)
+    if not it or it.removed:
+        print(f"no such item {a.id!r}", file=sys.stderr)
+        return FAIL
     c.log.append("item.blocked", a.id, {"reason": a.reason})
     c.out(f"{a.id} blocked: {a.reason}", {"id": a.id})
     return OK
@@ -1639,7 +1745,38 @@ def cmd_rebuild(a, c: Ctx) -> int:
     return OK
 
 
+#: `render --show <name>` targets, and the function that produces each.
+#:
+#: `--show` exists so the MCP `resources/read` handler can serve these through the CLI
+#: like everything else. It used to fold the log itself — a second data path in a
+#: module whose whole premise is "one implementation, two doors", re-wiring EventLog
+#: and fold without the config and agent resolution `Ctx` does.
+_RENDERABLE = {
+    "lessons": render.lessons_md,
+    "research": render.research_md,
+    "board": render.board,
+}
+
+
 def cmd_render(a, c: Ctx) -> int:
+    show = getattr(a, "show", "")
+    if show:
+        fn = _RENDERABLE.get(show)
+        if fn is None:
+            print(
+                f"unknown view {show!r}; known: {', '.join(sorted(_RENDERABLE))}",
+                file=sys.stderr,
+            )
+            return FAIL
+        st = c.state()
+        # `board` takes the config; the two markdown views do not. Inspected rather
+        # than try/except'd, because a TypeError raised INSIDE a renderer would
+        # otherwise be caught and retried with the wrong arity.
+        import inspect
+
+        params = inspect.signature(fn).parameters
+        print(fn(st, c.cfg) if len(params) > 1 else fn(st))
+        return OK
     st = c.store.ensure(c.log)
     files = render.write_views(c.repo, st, c.cfg, subdir=a.out)
     c.out("\n".join(str(f) for f in files), {"files": [str(f) for f in files]})
@@ -1929,10 +2066,24 @@ def cmd_reviewers(a, c: Ctx) -> int:
         if not revs:
             print("No reviewers configured. Run `orchard reviewers detect --write`.")
             return NOTHING
+        unclassified = []
         for r in revs:
+            fam = r.resolved_family()
+            if not fam and r.enabled:
+                unclassified.append(r.name)
             print(
-                f"  {r.name:<22} {r.resolved_family():<12} gates={','.join(r.gates)} "
+                f"  {r.name:<22} {fam or '?':<12} gates={','.join(r.gates)} "
                 f"{'' if r.enabled else '(disabled) '}{r.base_url} [{r.model}]"
+            )
+        if unclassified:
+            # Not cosmetic: an unclassified reviewer cannot satisfy the
+            # different-family requirement, so `complete` will refuse and the reason
+            # will look like it is about the review rather than about this line.
+            print(
+                f"\n  {', '.join(unclassified)} have no known family (shown as '?'), so "
+                f"they cannot\n  satisfy [agent].reviewer_family_must_differ. Set "
+                f'`family = "..."` on each\n  in .orchard/config.toml, or add the '
+                f"model name to [agent].families."
             )
         return OK
 
@@ -2180,6 +2331,113 @@ def cmd_hooks(a, c: Ctx) -> int:
     return FAIL
 
 
+def cmd_companions(a, c: Ctx) -> int:
+    """Which companion MCP servers serve this project's gates, and what is missing.
+
+    Exit 0 when every default companion is registered; exit 2 when something is
+    installed-but-unregistered or absent — "no data" reported as itself, never
+    collapsed into "no problem". Never exits 1: a missing optional server is a gap to
+    close, not a failure of this command.
+    """
+    from . import companions as CO
+
+    statuses = CO.scan(c.repo, probe=not getattr(a, "no_probe", False))
+    by_id = {st.companion.id: st for st in statuses}
+
+    if a.companions_cmd == "add":
+        wanted = _csv(a.id) or [
+            st.companion.id for st in statuses if st.companion.default and st.installed
+        ]
+        unknown = [w for w in wanted if w not in by_id]
+        if unknown:
+            print(
+                f"unknown companion(s): {', '.join(unknown)}; known: {', '.join(by_id)}",
+                file=sys.stderr,
+            )
+            return FAIL
+        if not wanted:
+            print(
+                "nothing to add: none of the default companions is installed on this "
+                "machine. `orchard companions` lists them with their install commands.",
+                file=sys.stderr,
+            )
+            return NOTHING
+        # Registering a server that is not installed would write a config entry whose
+        # launch fails at the worst moment -- mid-task, as an agent reaches for the
+        # tool a gate told it to use. `--force` exists for the case where the operator
+        # is about to install it.
+        absent = [w for w in wanted if not by_id[w].installed and not a.force]
+        if absent:
+            print(
+                f"not installed here: {', '.join(absent)}. Registering one would write "
+                f"a launch command that fails mid-task. Install it first "
+                f"({'; '.join(by_id[w].companion.install for w in absent)}), or "
+                f"--force if you are about to.",
+                file=sys.stderr,
+            )
+            return REFUSED
+        agents = _csv(a.agents) or ["claude"]
+        actions = [CO.register(c.repo, by_id[w].companion, ag) for w in wanted for ag in agents]
+        c.out("\n".join(f"  {x}" for x in actions), {"actions": actions})
+        return OK
+
+    pipeline = list(c.cfg.gates.task_pipeline)
+    cover = CO.gate_coverage(c.repo, statuses, pipeline)
+    payload = {
+        "companions": [
+            {
+                "id": st.companion.id,
+                "title": st.companion.title,
+                "gates": st.companion.gates,
+                "state": st.state,
+                "registered_in": st.registered_in,
+                "detail": st.detail,
+                "install": st.companion.install,
+                "url": st.companion.url,
+                "default": st.companion.default,
+            }
+            for st in statuses
+        ],
+        "gate_coverage": cover,
+        "uncovered_gates": [g for g, ids in cover.items() if not ids],
+    }
+    gaps = [st for st in statuses if st.companion.default and st.state != "registered"]
+    if c.json:
+        print(json.dumps(payload, indent=2))
+        return NOTHING if gaps else OK
+
+    lines = ["Companion MCP servers", ""]
+    for st in statuses:
+        mark = {"registered": "[x]", "installed": "[+]", "missing": "[ ]"}[st.state]
+        tag = "" if st.companion.default else "  (opt-in)"
+        lines.append(f"  {mark} {st.companion.id:<10s} {st.companion.title}{tag}")
+        lines.append(f"       gates: {', '.join(st.companion.gates) or '—'}")
+        if st.state == "registered":
+            lines.append(f"       registered for: {', '.join(st.registered_in)}")
+        elif st.state == "installed":
+            lines.append(f"       installed ({st.detail}) but no agent is configured to launch it.")
+            lines.append(f"       -> orchard companions add --id {st.companion.id}")
+        else:
+            lines.append(f"       not here: {st.detail}")
+            lines.append(f"       -> {st.companion.install}")
+            if st.companion.url:
+                lines.append(f"          {st.companion.url}")
+        if st.companion.why:
+            lines.append(f"       {st.companion.why.strip().splitlines()[0]}")
+        lines.append("")
+    uncovered = payload["uncovered_gates"]
+    if uncovered:
+        lines += [
+            "Gates in this project's task pipeline with no companion behind them:",
+            f"  {', '.join(uncovered)}",
+            "  Not a failure — several of these are judgement an agent does directly.",
+            "  It is the list to check when a gate has been passing suspiciously easily.",
+            "",
+        ]
+    print("\n".join(lines))
+    return NOTHING if gaps else OK
+
+
 def cmd_adopt(a, c: Ctx) -> int:
     from .adopt import AGENT_TARGETS, adopt
 
@@ -2197,12 +2455,38 @@ def cmd_adopt(a, c: Ctx) -> int:
         print(str(exc), file=sys.stderr)
         return FAIL
     cmd_init(a, c)
+    # Name the companion gap at adoption time. A project that adopts Orchard and stops
+    # has a `standards` gate with nothing behind it and a `rules` gate reading no
+    # memory -- and because an agent gate passes on an assertion, that gap is invisible
+    # in exactly the way this design exists to prevent. Detection only; nothing is
+    # installed, because fetching and running code on someone's machine is not a thing
+    # a work-queue tool gets to do.
+    from . import companions as CO
+
+    ready, absent = [], []
+    for st in CO.scan(c.repo):
+        if not st.companion.default or st.state == "registered":
+            continue
+        (ready if st.installed else absent).append(st.companion.id)
+    tail = ""
+    if ready:
+        tail += (
+            f"\n\nInstalled here but not wired up: {', '.join(ready)}.\n"
+            f"  orchard companions add --agents {agents[0]}"
+        )
+    if absent:
+        tail += f"\n\nNot installed: {', '.join(absent)} — `orchard companions` has the commands."
     c.out(
         "\n".join(f"  {x}" for x in actions) + f"\n\nOrchard adopted for: {', '.join(agents)}.\n"
         f"  1. set your test command in .orchard/gates.toml\n"
         f"  2. orchard phase add P1 --title '...'\n"
-        f"  3. tell your agent: implement phase P1",
-        {"actions": actions, "agents": agents},
+        f"  3. tell your agent: implement phase P1" + tail,
+        {
+            "actions": actions,
+            "agents": agents,
+            "companions_ready": ready,
+            "companions_absent": absent,
+        },
     )
     return OK
 
@@ -2634,6 +2918,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     rn = s.add_parser("render", help="regenerate the human-readable views")
     rn.add_argument("--out", default="docs/orchard")
+    rn.add_argument(
+        "--show",
+        default="",
+        help="print ONE view to stdout instead of writing files: lessons, research, board",
+    )
     rn.set_defaults(fn=cmd_render)
     bd = s.add_parser("board")
     bd.add_argument("--phase", default="")
@@ -2722,6 +3011,22 @@ def build_parser() -> argparse.ArgumentParser:
         help="container image used by --launch docker",
     )
     ad.set_defaults(fn=cmd_adopt)
+
+    co = s.add_parser(
+        "companions",
+        help="companion MCP servers that serve the gates (exit 2 = a default one is missing)",
+    )
+    co_s = co.add_subparsers(dest="companions_cmd")
+    co_list = co_s.add_parser("list", help="what is known, installed and registered")
+    co_list.add_argument("--no-probe", action="store_true", help="skip the detection probes")
+    co_add = co_s.add_parser("add", help="register installed companions in an agent's MCP config")
+    co_add.add_argument("--id", default="", help="comma-separated; default: every installed one")
+    co_add.add_argument("--agents", default="", help="comma-separated (default: claude)")
+    co_add.add_argument("--force", action="store_true", help="register one that is not installed")
+    co_add.add_argument("--no-probe", action="store_true", help=argparse.SUPPRESS)
+    co.set_defaults(fn=cmd_companions, companions_cmd="list", no_probe=False)
+    co_list.set_defaults(fn=cmd_companions)
+    co_add.set_defaults(fn=cmd_companions)
 
     pr = s.add_parser("prompts", help="inspect and override the prompt templates")
     pr_s = pr.add_subparsers(dest="prompts_cmd", required=True)

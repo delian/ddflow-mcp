@@ -22,10 +22,10 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import proc as P
 from .config import Config
 
 
@@ -48,9 +48,7 @@ class GitResult:
 
 
 def git(repo: Path | str, *args: str, timeout: int = 300, check: bool = False) -> GitResult:
-    p = subprocess.run(
-        ["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout
-    )
+    p = P.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout)
     res = GitResult(p.returncode, p.stdout.strip(), p.stderr.strip())
     if check and not res.ok:
         raise GitError(f"git {' '.join(args)} failed ({res.code}): {res.err or res.out}")

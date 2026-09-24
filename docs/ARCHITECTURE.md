@@ -73,6 +73,29 @@ agent's worktree is sometimes irreplaceable and sometimes a superseded draft, an
 in the metadata tells them apart — only a diff does ([R5](RESEARCH.md)). `orchard
 recover` measures each tree and prints the exact `git diff` to run. It never deletes.
 
+## Dependencies are inherited
+
+`needs` is declared on an item; readiness is evaluated over an item **and all its
+ancestors**. This is not a convenience — it is what makes the two-level model mean
+anything. A phase is never claimed, because phases complete when their tasks do, so a
+phase-level dependency that governs only the phase item governs nothing an agent picks
+up. `schedule.inherited_deps` returns `(owner, dep)` pairs so a refusal can say where
+the dependency came from; an operator told only "P2.T1 needs P1" goes looking for a
+declaration that is not written there.
+
+One dependency is deliberately *not* inherited: one pointing into the item's own
+subtree. An umbrella that declares a dependency on its own child would make that child
+wait for itself, and a plan typo would become a permanent hang. Beneath an umbrella such
+a dependency is satisfied by running, not by waiting.
+
+`plan_blocker` — umbrella, cycle, dependencies — is shared by the scheduler and by
+`lease.acquire`. They disagreed for months: `next` withheld an item on its dependencies
+and `claim` granted it a worktree a second later, so choosing work by id rather than by
+asking bypassed the graph entirely. The lease layer still asks the conflict question
+itself, unconditionally, because refusing an overlapping claim is a safety property
+rather than a scheduling preference and must not be switchable off by
+`schedule.ready_policy`.
+
 ## Conflict detection
 
 Two agents are prevented from editing one file by *declared globs*, compared with a
@@ -103,31 +126,58 @@ Three mechanisms push back:
    nobody installed looked like a linter reporting problems.
 2. **Evidence is required** for gates listed in `gates.evidence_required`. A record with
    no command, no exit code and no output digest is rejected at the API boundary.
-3. **Reviewer family is checked.** Same-family reviewers share the author's blind spots,
-   so their agreement is not independent evidence — it measures shared priors.
-   `complete` refuses unless at least one reviewer came from a different pretraining
-   family.
+3. **Reviewer family is checked, and an unclassified reviewer proves nothing.**
+   Same-family reviewers share the author's blind spots, so their agreement is not
+   independent evidence — it measures shared priors. `complete` refuses unless at least
+   one reviewer came from a different pretraining family. `config.family_for` returns
+   `""` for a model it does not recognise, and that is load-bearing: the two former
+   implementations returned a non-empty stand-in (one the model's own name, one the
+   literal string "unknown"), both of which compared unequal to every real family — so
+   a reviewer recorded with no model at all *established* independence. A check built to
+   refuse unverified independence must not be satisfiable by the absence of information.
+4. **Silence is not an outcome.** With `gates.require_outcome` (default on), every gate
+   in the pipeline must carry some outcome before an item completes. Without it,
+   `gates.required` held three of ten steps and the other seven could be omitted with no
+   trace — which is the same failure as (1), one level up: not a wrong answer, an absent
+   one read as a good one. `gate skip --reason` is the auditable way past a step, and it
+   names the single step rather than overriding all of them.
+5. **A requirement that names nothing is an error.** `gates.required` is enforced by
+   intersecting it with the item's pipeline, so naming a gate no pipeline lists made the
+   requirement *disappear* instead of raising. `gates.inert_requirements` reports it and
+   `complete` refuses — the vacuous-truth class aimed squarely at the anti-vacuous-pass
+   mechanism.
 
 ## Module map
 
 | Module | Responsibility | Lines |
 |---|---|---|
-| `events.py` | append-only log, Lamport clock, `flock`, content addressing | 329 |
-| `model.py` | domain types and `fold` — pure, no I/O | 362 |
-| `schedule.py` | readiness, dependencies, glob conflicts, critical path | 243 |
-| `lease.py` | acquire/renew/release, crash scanning, salvage advice | 308 |
-| `worktree.py` | git worktree lifecycle, safe merge | 265 |
-| `gates.py` | gate definitions, command execution, evidence, independence | 400 |
-| `store.py` | SQLite projection + BM25 retrieval (disposable) | 262 |
-| `session.py` | prompt provenance, redaction, replay, bundles | 274 |
-| `render.py` | generated markdown views and the budgeted brief | 254 |
-| `cli.py` | the portable surface every agent drives | 972 |
-| `mcp_server.py` | MCP stdio server over the same functions | 441 |
-| `adopt.py` | one-command install into any project | 153 |
-| `config.py` | 43 documented knobs, TOML + env | 302 |
+| `events.py` | append-only log, Lamport clock, `flock`, content addressing | 477 |
+| `model.py` | domain types and `fold` — pure, no I/O | 742 |
+| `schedule.py` | readiness, dependencies, glob conflicts, critical path | 408 |
+| `lease.py` | acquire/renew/release, crash scanning, salvage advice | 408 |
+| `worktree.py` | git worktree lifecycle, safe merge | 396 |
+| `gates.py` | gate definitions, command execution, evidence, independence | 600 |
+| `store.py` | SQLite projection + BM25 retrieval (disposable) | 430 |
+| `session.py` | prompt provenance, redaction, replay, bundles | 436 |
+| `render.py` | generated markdown views and the budgeted brief | 397 |
+| `cli.py` | the portable surface every agent drives | 3041 |
+| `mcp_server.py` | MCP stdio server over the same functions | 1664 |
+| `adopt.py` | one-command install into any project | 295 |
+| `config.py` | documented knobs, TOML + env, and the one family map | 746 |
+| `companions.py` | detect and register the MCP servers that serve the gates | 215 |
+| `proc.py` | every subprocess, with stdin detached — see below | 47 |
 
 `fold` is pure and does no I/O, so every scheduling, gating and recovery rule is testable
-without a disk. `cli.py` is the only module that prints. Total: **4579 lines** of standard-library Python, no third-party dependency.
+without a disk. `cli.py` is the only module that prints. **12480 lines** of standard-library Python, no third-party dependency.
+
+**`proc.py` is 42 lines and exists for one reason.** Orchard runs as an MCP server over
+**stdio**: the JSON-RPC session is this process's stdin and stdout. `subprocess.run(...)`
+with no explicit `stdin=` hands the child that same pipe, so a child that reads stdin —
+an arbitrary shell command in a gate, a reviewer CLI, an `npx` that wants to prompt —
+eats the protocol bytes or closes the descriptor. The server then exits **zero**, with an
+empty stderr, and the client sees a closed stream with nothing to explain it. All twelve
+call sites had this. `proc.run` defaults to `stdin=DEVNULL`, and a ratchet fails the
+suite if any module reaches for the stdlib directly.
 
 ## What is deliberately absent
 

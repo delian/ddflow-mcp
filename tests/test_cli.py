@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import pass_pipeline, run_cli
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -122,39 +122,17 @@ def test_complete_refuses_on_unmet_required_gates(proj):
 
 
 def test_complete_refuses_a_same_family_review_panel(proj):
+    """Every reviewer from the author's own family is not an independent review.
+
+    Same-distribution models converge on the same plausible-wrong answer, so their
+    agreement amplifies shared error rather than testing it. A panel may KILL a
+    finding; it may never promote one, and it may never stand in for independence.
+    """
     run_cli(proj, "claim", "P1.T1", "--no-worktree")
-    for g in ("implement", "merge"):
-        run_cli(proj, "gate", "record", "P1.T1", g, "--outcome", "passed")
-    run_cli(
-        proj,
-        "gate",
-        "record",
-        "P1.T1",
-        "unit_tests",
-        "--outcome",
-        "passed",
-        "--evidence",
-        "pytest: 12 passed",
-        "--command",
-        "pytest",
-        "--exit-code",
-        "0",
-    )
-    run_cli(
-        proj,
-        "gate",
-        "record",
-        "P1.T1",
-        "rubber_duck",
-        "--outcome",
-        "passed",
-        "--evidence",
-        "reviewed",
-        "--model",
-        "claude-sonnet-5",
-    )
+    pass_pipeline(proj, "P1.T1", reviewer="claude-sonnet-5")
     code, _, err = run_cli(proj, "complete", "P1.T1", "--model", "claude-opus-5")
-    assert code == REFUSED and "independence not satisfied" in err.lower()
+    assert code == REFUSED and "independence not satisfied" in err.lower(), err
+
     run_cli(
         proj,
         "gate",
@@ -405,6 +383,9 @@ def test_a_coverage_gap_is_reported_on_the_json_surface_too(proj):
     run_cli(proj, "claim", "P1.T1", "--no-worktree")
     for g in ("implement", "merge"):
         run_cli(proj, "gate", "record", "P1.T1", g, "--outcome", "passed")
+    # The rest of the pipeline must carry an outcome too ([gates].require_outcome), or
+    # the refusal this test reads would be about silence rather than about the gap.
+    pass_pipeline(proj, "P1.T1", omit=("critic",))
     run_cli(
         proj,
         "gate",
@@ -450,6 +431,7 @@ def test_a_coverage_gap_is_reported_on_the_json_surface_too(proj):
     # And the human surface still says it in words.
     run_cli(proj, "task", "add", "P1.T8", "--phase", "P1", "--globs", "other/*")
     run_cli(proj, "claim", "P1.T8", "--no-worktree")
+    pass_pipeline(proj, "P1.T8", omit=("critic",))
     for g in ("implement", "merge"):
         run_cli(proj, "gate", "record", "P1.T8", g, "--outcome", "passed")
     run_cli(

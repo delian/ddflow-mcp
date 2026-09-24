@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from conftest import run_cli
+from conftest import finish, pass_pipeline, run_cli
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -29,32 +29,14 @@ def _queue(repo):
 
 def test_an_abandoned_task_stops_holding_its_phase_open(repo):
     _queue(repo)
-    for t in ("P1.T1",):
-        run_cli(repo, "claim", t, "--no-worktree")
-        for g in ("implement", "merge"):
-            run_cli(repo, "gate", "record", t, g, "--outcome", "passed")
-        run_cli(repo, "gate", "record", t, "unit_tests", "--outcome", "passed", "--evidence", "ok")
-        run_cli(
-            repo,
-            "gate",
-            "record",
-            t,
-            "rubber_duck",
-            "--outcome",
-            "passed",
-            "--evidence",
-            "ok",
-            "--model",
-            "gemini-2.5-pro",
-        )
-        run_cli(repo, "complete", t, "--model", "claude-opus-5")
+    run_cli(repo, "claim", "P1.T1", "--no-worktree")
+    assert finish(repo, "P1.T1")[0] == OK
 
+    pass_pipeline(repo, "P1")
     code, _, err = run_cli(repo, "complete", "P1", "--model", "claude-opus-5")
     assert code == REFUSED and "P1.T2" in err, err
 
     assert run_cli(repo, "abandon", "P1.T2", "--reason", "not needed")[0] == OK
-    for g in ("tasks", "unit_tests", "merge"):
-        run_cli(repo, "gate", "record", "P1", g, "--outcome", "passed", "--evidence", "ok")
     code, _out, err = run_cli(repo, "complete", "P1", "--model", "claude-opus-5")
     assert code == OK, f"the phase still will not close:\n{err}"
 
