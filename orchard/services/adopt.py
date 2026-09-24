@@ -22,6 +22,8 @@ import json
 import shutil
 from pathlib import Path
 
+from ..infra import paths
+
 BEGIN = "<!-- ORCHARD:BEGIN (managed — edits inside this block are overwritten) -->"
 END = "<!-- ORCHARD:END -->"
 
@@ -120,7 +122,7 @@ def adopt(
     # ship in the wheel. They were originally a sibling directory, which worked from a
     # source checkout and then raised FileNotFoundError for every installed user --
     # the classic packaging bug that only a real install reproduces.
-    templates = Path(package_dir or Path(__file__).resolve().parent) / "templates"
+    templates = Path(package_dir) / "templates" if package_dir else paths.templates_dir()
     if not (templates / "drivers" / "implement-phase.md").is_file():
         raise FileNotFoundError(
             f"driver templates are missing from {templates}. This is a packaging fault, "
@@ -155,7 +157,7 @@ def adopt(
         actions.append(_upsert_block(path, section))
 
     if install_hooks:
-        from .enforce import install as install_hook
+        from ..services.enforce import install as install_hook
 
         actions.append(install_hook(repo))
     for key in agents:
@@ -203,6 +205,26 @@ def _upsert_block(path: Path, section: str) -> str:
     return f"{'appended to' if existing.strip() else 'created'} {path.name}"
 
 
+#: The module an agent spawns to get the MCP server, and the directory that must be on
+#: `PYTHONPATH` for it to import.
+#:
+#: Both used to be hardcoded relative to THIS file (`parents[1]`, `orchard.mcp_server`)
+#: and both broke silently when the package was split into layers: the server spawned,
+#: could not import, printed nothing, and every client waiting on its handshake hung for
+#: as long as it was willing to wait. Derived now — the module name is checked against
+#: the import system by `tests/test_packaging.py`, and the parent comes from the
+#: package's own `__file__` rather than from counting directory levels above a file that
+#: may move again.
+MCP_MODULE = "orchard.surfaces.mcp"
+
+
+def _package_parent() -> str:
+    """The directory containing the `orchard` package — what goes on PYTHONPATH."""
+    from ..infra.paths import package_parent
+
+    return str(package_parent())
+
+
 def _launch_entry(
     launch: str = "auto", image: str = "ghcr.io/OWNER/orchard:latest"
 ) -> dict[str, object]:
@@ -243,10 +265,10 @@ def _launch_entry(
             ],
         }
     if launch == "python":
-        pkg_parent = str(Path(__file__).resolve().parents[1])
+        pkg_parent = _package_parent()
         return {
             "command": sys.executable,
-            "args": ["-m", "orchard.mcp_server"],
+            "args": ["-m", MCP_MODULE],
             "env": {"PYTHONPATH": pkg_parent},
         }
     if shutil.which("uvx") and not _running_from_source():
@@ -255,10 +277,10 @@ def _launch_entry(
         return {"command": "orchard-mcp", "args": []}
     # Source checkout: point at THIS tree, so a developer's project uses the code they
     # are editing.
-    pkg_parent = str(Path(__file__).resolve().parents[1])
+    pkg_parent = _package_parent()
     return {
         "command": sys.executable,
-        "args": ["-m", "orchard.mcp_server"],
+        "args": ["-m", MCP_MODULE],
         "env": {"PYTHONPATH": pkg_parent},
     }
 

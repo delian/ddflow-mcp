@@ -29,15 +29,16 @@ from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
-from . import gates as G
-from . import lease as L
-from . import render, session
-from . import worktree as W
-from .config import Config
-from .events import EventLog
-from .model import ABANDONED, DONE, GATE_OUTCOMES, fold
-from .schedule import critical_path, plan
-from .store import Store
+from ..config import Config
+from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, fold
+from ..core.schedule import critical_path, plan
+from ..infra import worktree as W
+from ..infra.log import EventLog
+from ..infra.store import Store
+from ..services import gates as G
+from ..services import leases as L
+from ..services import sessions as session
+from ..views import markdown as render
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -453,7 +454,7 @@ def cmd_claim(a, c: Ctx) -> int:
     refusal is the only thing that actually stops an agent spinning: a warning in a
     report is read by a human later, while a refused claim is read by the agent now.
     """
-    from . import progress as PR
+    from ..core import progress as PR
 
     events = c.log.read_all()
     st_now = fold(events, strict=False)
@@ -564,7 +565,7 @@ def cmd_gate(a, c: Ctx) -> int:
         print(s.render())
         gd = c.gates.get(s.current)
         if gd:
-            from . import prompts as P
+            from ..services import prompts as P
 
             try:
                 print(
@@ -979,7 +980,7 @@ def cmd_brief(a, c: Ctx) -> int:
     # Decisions governing THIS item's files, matched by glob rather than by search:
     # the whole point is that they reach the agent without its having to suspect they
     # exist.
-    from .schedule import conflicts
+    from ..core.schedule import conflicts
 
     decisions = []
     if item and item in st.items:
@@ -1066,7 +1067,7 @@ def cmd_recall(a, c: Ctx) -> int:
     does not have to learn the same thing twice. Both failures are invisible in the
     moment and obvious in the log.
     """
-    from .store import RECALL_SOURCES, summarise_row
+    from ..infra.store import RECALL_SOURCES, summarise_row
 
     c.store.ensure(c.log)
     want = _csv(a.sources) or [t for t, _, _ in RECALL_SOURCES]
@@ -1226,7 +1227,7 @@ def _decision_applicable(a, c: Ctx, st) -> int:
     about to write a set of paths is handed the decisions about them, without having
     to know they exist or guess a search term.
     """
-    from .schedule import conflicts
+    from ..core.schedule import conflicts
 
     it = st.items.get(a.id)
     if not it:
@@ -1326,7 +1327,7 @@ def cmd_status(a, c: Ctx) -> int:
     Written for a human asking in a chat window, which is a different question from
     any of the machine views: it wants the shape of the thing, not a table.
     """
-    from . import progress as PR
+    from ..core import progress as PR
 
     events = c.log.read_all()
     st = fold(events, strict=False)
@@ -1558,7 +1559,7 @@ def cmd_recover(a, c: Ctx) -> int:
 
 def cmd_progress(a, c: Ctx) -> int:
     """What work has actually been done, aggregated from the log."""
-    from . import progress as PR
+    from ..core import progress as PR
 
     events = c.log.read_all()
     st = fold(events, strict=False)
@@ -1604,7 +1605,7 @@ def cmd_progress(a, c: Ctx) -> int:
 
 def cmd_loops(a, c: Ctx) -> int:
     """Report circular references and runtime loops. Exit 2 when there are none."""
-    from . import progress as PR
+    from ..core import progress as PR
 
     events = c.log.read_all()
     st = fold(events, strict=False)
@@ -1632,7 +1633,7 @@ def cmd_loops(a, c: Ctx) -> int:
 
 def cmd_cleanup(a, c: Ctx) -> int:
     """Classify every Orchard worktree and branch; with --apply, land the safe ones."""
-    from . import cleanup as CL
+    from ..services import cleanup as CL
 
     st = c.store.ensure(c.log)
     plan = CL.survey(c.repo, c.cfg, st)
@@ -1688,10 +1689,18 @@ def cmd_doctor(a, c: Ctx) -> int:
         for dep in it.needs:
             if dep not in st.items:
                 problems.append(f"{it.id} needs unknown item {dep!r}")
-    from . import container as CT
-    from . import progress as PR
+    from ..core import progress as PR
+    from ..infra import container as CT
 
-    notes.extend(CT.warnings(c.repo, c.cfg))
+    # The reviewer endpoints are fetched HERE and handed down: `infra.container` must
+    # not reach up into `services.review` to get them.
+    try:
+        from ..services.review import load_reviewers
+
+        urls = [(r.name, r.base_url) for r in load_reviewers(c.repo) if r.enabled]
+    except Exception:
+        urls = []
+    notes.extend(CT.warnings(c.repo, c.cfg, urls))
     for f in PR.detect(c.log.read_all(), st, c.cfg):
         (problems if f.severity == "block" else notes).append(f.render())
     rec = L.scan(c.log, c.cfg, c.repo)
@@ -1987,7 +1996,7 @@ def _diff_for(c: Ctx, item_id: str, base: str = "") -> tuple[str, str]:
 
 
 def cmd_reviewers(a, c: Ctx) -> int:
-    from . import reviewer as R
+    from ..services import review as R
 
     if a.reviewers_cmd == "detect":
         found = R.detect()
@@ -2114,7 +2123,7 @@ def cmd_reviewers(a, c: Ctx) -> int:
 
 def cmd_review(a, c: Ctx) -> int:
     """Run every reviewer configured for a gate, and record the outcome."""
-    from . import reviewer as R
+    from ..services import review as R
 
     revs = R.reviewers_for(R.load_reviewers(c.repo), a.gate)
     if not revs:
@@ -2224,7 +2233,7 @@ def _prompt_overrides(c: Ctx) -> dict[str, str]:
 
 
 def cmd_prompts(a, c: Ctx) -> int:
-    from . import prompts as P
+    from ..services import prompts as P
 
     ov = _prompt_overrides(c)
     if a.prompts_cmd == "list":
@@ -2287,7 +2296,7 @@ def cmd_prompts(a, c: Ctx) -> int:
 
 
 def cmd_hooks(a, c: Ctx) -> int:
-    from . import enforce as E
+    from ..services import enforce as E
 
     if a.hooks_cmd == "install":
         msg = E.install(c.repo, force=a.force)
@@ -2339,7 +2348,7 @@ def cmd_companions(a, c: Ctx) -> int:
     collapsed into "no problem". Never exits 1: a missing optional server is a gap to
     close, not a failure of this command.
     """
-    from . import companions as CO
+    from ..services import companions as CO
 
     statuses = CO.scan(c.repo, probe=not getattr(a, "no_probe", False))
     by_id = {st.companion.id: st for st in statuses}
@@ -2458,7 +2467,7 @@ def cmd_companions(a, c: Ctx) -> int:
 
 
 def cmd_adopt(a, c: Ctx) -> int:
-    from .adopt import AGENT_TARGETS, adopt
+    from ..services.adopt import AGENT_TARGETS, adopt
 
     agents = _csv(a.agents) or list(AGENT_TARGETS)
     try:
@@ -2480,7 +2489,7 @@ def cmd_adopt(a, c: Ctx) -> int:
     # in exactly the way this design exists to prevent. Detection only; nothing is
     # installed, because fetching and running code on someone's machine is not a thing
     # a work-queue tool gets to do.
-    from . import companions as CO
+    from ..services import companions as CO
 
     ready, absent = [], []
     for st in CO.scan(c.repo):
@@ -2560,7 +2569,7 @@ def _lessons_cadence(st, cfg) -> list[dict[str, Any]]:
 
 
 def cmd_mcp(a, c: Ctx) -> int:
-    from .mcp_server import serve
+    from ..surfaces.mcp import serve
 
     serve(c.repo)
     return OK

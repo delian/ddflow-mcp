@@ -96,7 +96,9 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
 
 
 def builtin_dir() -> Path:
-    return Path(__file__).resolve().parent / "templates" / "prompts"
+    from ..infra.paths import templates_dir
+
+    return templates_dir() / "prompts"
 
 
 def command_dir() -> Path:

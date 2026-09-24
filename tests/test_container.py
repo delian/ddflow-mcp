@@ -14,9 +14,9 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard import container as CT
-from orchard import worktree as W
 from orchard.config import Config
+from orchard.infra import container as CT
+from orchard.infra import worktree as W
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -78,7 +78,13 @@ def test_warnings_name_the_linux_add_host_requirement(as_container, repo):
         '[[reviewer]]\nname = "local"\nbase_url = "http://127.0.0.1:8000/v1"\n'
         'model = "qwen"\nfamily = "alibaba"\ngates = ["critic"]\n',
     )
-    msgs = " ".join(CT.warnings(repo, Config.load(repo)))
+    # The endpoints are handed IN now: `infra.container` owns container primitives and
+    # has no business importing `services.review` to discover that reviewers exist.
+    from orchard.services.review import load_reviewers
+
+    urls = [(r.name, r.base_url) for r in load_reviewers(repo) if r.enabled]
+    assert urls, "the reviewer block must have been written"
+    msgs = " ".join(CT.warnings(repo, Config.load(repo), urls))
     assert "add-host" in msgs and CT.HOST_ALIAS in msgs
 
 

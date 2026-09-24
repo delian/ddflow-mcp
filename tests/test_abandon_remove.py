@@ -102,12 +102,14 @@ def test_every_declared_event_kind_can_actually_be_emitted():
     """
     import pathlib as _p
 
-    from orchard.model import HANDLERS
+    from orchard.core.model import HANDLERS
 
-    src = "".join(
-        _p.Path(f"orchard/{n}.py").read_text()
-        for n in ("cli", "lease", "gates", "session", "store", "worktree", "enforce")
-    )
+    # The WHOLE package, recursively. This used to name seven modules by path, which
+    # (a) went stale the moment the package was layered and (b) would have reported a
+    # kind as dead if the only thing emitting it moved to an eighth module. Scanning
+    # everything cannot be wrong about where the code is.
+    pkg = _p.Path(__file__).resolve().parents[1] / "orchard"
+    src = "".join(f.read_text("utf-8") for f in pkg.rglob("*.py") if "__pycache__" not in str(f))
     allowed_unemitted = {
         # Reserved for a compaction pass that is not implemented; filed as B6.
         "log.compacted",

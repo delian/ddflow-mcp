@@ -39,9 +39,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import proc as P
-from .config import family_for
-from .gates import _missing_executable
+from ..config import family_for
+from ..infra import proc as P
+from ..services.gates import _missing_executable
 
 REVIEWED, ERROR, UNAVAILABLE, PARTIAL = 0, 1, 2, 3
 
@@ -309,8 +309,8 @@ def load_reviewers(root: Path) -> list[Reviewer]:
     configure. ``.orchard/reviewers.toml`` is also read if present, for operators who
     prefer to split it; entries merge by name, with the dedicated file winning.
     """
-    from . import tomlcfg
-    from .config import Config
+    from ..config import Config
+    from ..infra import tomlcfg
 
     blocks = tomlcfg.overlay_array(
         tomlcfg.config_paths(root, "reviewers.toml"),
@@ -351,7 +351,7 @@ def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
     Deliberately short-timeout and exception-swallowing: this runs against a list of
     candidate ports, and a closed port must cost milliseconds, not a stack trace.
     """
-    from .container import rewrite_localhost
+    from ..infra.container import rewrite_localhost
 
     url = rewrite_localhost(base_url).rstrip("/") + "/models"
     try:
@@ -512,7 +512,7 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
     an in-house proxy — all ordinary setups) reported UNAVAILABLE. Container support
     silently covered two thirds of the backends.
     """
-    from .container import rewrite_localhost
+    from ..infra.container import rewrite_localhost
 
     req = urllib.request.Request(
         rewrite_localhost(url),
@@ -607,7 +607,7 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         "max_tokens": rev.max_tokens,
         **rev.extra_body,
     }
-    from .container import rewrite_localhost
+    from ..infra.container import rewrite_localhost
 
     req = urllib.request.Request(
         rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
@@ -800,7 +800,7 @@ def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
     A 401 or 404 counts: it means a server exists and is reachable, which is the
     question. Only a connection error or a 5xx means "not there".
     """
-    from .container import rewrite_localhost
+    from ..infra.container import rewrite_localhost
 
     try:
         with urllib.request.urlopen(rewrite_localhost(url), timeout=timeout_s) as r:
@@ -833,7 +833,7 @@ def review(
     chunks = split_diff(diff, rev.max_chunk_chars)
     res.chunks_total = len(chunks)
 
-    from . import prompts as P
+    from ..services import prompts as P
 
     overrides = dict(prompt_overrides or {})
     if rev.system_prompt_path:

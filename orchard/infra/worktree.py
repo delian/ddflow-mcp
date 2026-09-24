@@ -25,8 +25,8 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import proc as P
-from .config import Config
+from ..config import Config
+from ..infra import proc as P
 
 
 class GitError(RuntimeError):
@@ -113,7 +113,7 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "") -> Worktree
     base = base or cfg.worktree.base_ref or default_branch(root)
     name = safe_name(item_id)
     branch = f"{cfg.worktree.branch_prefix}{name}"
-    from .container import default_worktree_root
+    from ..infra.container import default_worktree_root
 
     # Inside a container the default sibling root lands on the ephemeral layer and is
     # destroyed on exit, taking uncommitted work with it. See container.py.

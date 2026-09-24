@@ -84,8 +84,8 @@ def test_the_container_host_rewrite_applies_to_every_reviewer_backend(monkeypatc
     A test that reads the code rather than running it proves the code says something,
     which is not what was in doubt.
     """
-    from orchard import container
-    from orchard import reviewer as R
+    from orchard.infra import container
+    from orchard.services import review as R
 
     monkeypatch.setattr(container, "in_container", lambda: True)
     seen: list[str] = []
@@ -117,7 +117,7 @@ def test_a_command_reviewer_with_an_env_prefix_is_not_reported_missing():
     handled this — and builtins, and shell metacharacters — which is exactly why there
     should not have been a second copy.
     """
-    from orchard.reviewer import Reviewer, _chat_command
+    from orchard.services.review import Reviewer, _chat_command
 
     _out, err = _chat_command(
         Reviewer(name="x", kind="command", command="ORCHARD_TEST=1 true", model="m"),
@@ -135,7 +135,7 @@ def test_a_command_reviewer_with_an_unbalanced_quote_does_not_raise():
     degrade to UNAVAILABLE — it propagates out of a function whose whole job is to
     convert every way of not-reviewing into a reported one.
     """
-    from orchard.reviewer import Reviewer, _chat_command
+    from orchard.services.review import Reviewer, _chat_command
 
     out, err = _chat_command(
         Reviewer(name="x", kind="command", command='claude -p "unbalanced', model="m"),
@@ -191,8 +191,8 @@ def test_the_companion_reader_and_writer_agree_on_the_config_field(repo):
     agent, this asserts the property: whatever `register` writes, `registered_in`
     finds, for every agent the package knows.
     """
-    from orchard import companions as CO
-    from orchard.adopt import AGENT_TARGETS
+    from orchard.services import companions as CO
+    from orchard.services.adopt import AGENT_TARGETS
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
@@ -213,7 +213,7 @@ def test_copilot_gets_the_field_name_vs_code_actually_reads(repo):
     """
     import json as _json
 
-    from orchard import companions as CO
+    from orchard.services import companions as CO
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
@@ -259,7 +259,7 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     """
     import inspect
 
-    from orchard import mcp_server as M
+    from orchard.surfaces import mcp as M
 
     src = inspect.getsource(M.Server.handle)
     read = src[src.index('if method == "resources/read"') :]
@@ -297,7 +297,7 @@ def test_a_companion_with_env_writes_TOML_a_parser_accepts(repo):
     """
     import tomllib
 
-    from orchard import companions as CO
+    from orchard.services import companions as CO
 
     run_cli(repo, "init")
     (repo / ".orchard" / "companions.toml").write_text(
@@ -316,7 +316,7 @@ def test_a_quote_in_a_command_does_not_corrupt_the_toml(repo):
     """Same class, different value: unescaped interpolation into a TOML string."""
     import tomllib
 
-    from orchard import companions as CO
+    from orchard.services import companions as CO
 
     run_cli(repo, "init")
     (repo / ".orchard" / "companions.toml").write_text(
@@ -343,7 +343,7 @@ def test_proc_run_guards_an_explicit_input_of_None():
 
     parent = (
         f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r});"
-        "from orchard import proc as P;"
+        "from orchard.infra import proc as P;"
         "r = P.run([sys.executable, '-c', 'import sys; sys.stdout.write(sys.stdin.read())'],"
         "          input=None, capture_output=True, text=True, timeout=30);"
         "print('CHILD_SAW=' + repr(r.stdout))"
@@ -374,7 +374,7 @@ def test_not_having_looked_is_reported_as_unknown_not_as_missing(repo):
     unavailable reviewer as a pass, one layer out: a value nobody measured, rendered
     as a measurement.
     """
-    from orchard import companions as CO
+    from orchard.services import companions as CO
 
     run_cli(repo, "init")
     unprobed = {st.companion.id: st for st in CO.scan(repo, probe=False)}

@@ -45,8 +45,8 @@ dev = ["pytest>=8", "ruff>=0.6"]
 [project.scripts]
 # Two entry points on purpose. `orchard` is the human/CI surface; `orchard-mcp` is what
 # an MCP client spawns, so the client's config never has to carry a subcommand.
-orchard = "orchard.cli:main"
-orchard-mcp = "orchard.mcp_server:main"
+orchard = "orchard.surfaces.cli:main"
+orchard-mcp = "orchard.surfaces.mcp:main"
 
 [project.urls]
 Homepage = "https://github.com/OWNER/orchard"

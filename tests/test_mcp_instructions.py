@@ -28,7 +28,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
 def _instructions(repo: Path) -> str:
-    from orchard.mcp_server import _instructions as fn
+    from orchard.surfaces.mcp import _instructions as fn
 
     return fn(repo)
 
@@ -136,7 +136,7 @@ def test_each_missing_companion_carries_its_install_command(repo):
 
 
 def test_a_registered_companion_is_not_listed_as_missing(repo):
-    from orchard import companions as CO
+    from orchard.services import companions as CO
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")

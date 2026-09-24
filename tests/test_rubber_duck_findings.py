@@ -88,8 +88,8 @@ def test_replay_carries_decisions_and_their_reversals(repo):
 def test_every_replay_renderer_has_a_provenance_kind(repo):
     """The ratchet: a renderer with no kind is dead code that looks like a feature."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from orchard.events import PROVENANCE_KINDS
-    from orchard.session import _REPLAY_RENDERERS
+    from orchard.infra.log import PROVENANCE_KINDS
+    from orchard.services.sessions import _REPLAY_RENDERERS
 
     orphans = set(_REPLAY_RENDERERS) - set(PROVENANCE_KINDS) - {"item.completed"}
     assert not orphans, (
@@ -256,7 +256,7 @@ def test_recording_a_gate_out_of_order_says_so(repo):
 
 def test_a_re_recorded_lesson_stays_superseded(repo, log):
     """`_h_decision` documents this hazard and guards it; its sibling did not."""
-    from orchard.model import fold
+    from orchard.core.model import fold
 
     log.append("lesson.recorded", "L1", {"title": "old", "rule": "do the old thing"})
     log.append(
@@ -274,7 +274,7 @@ def test_a_re_recorded_lesson_stays_superseded(repo, log):
 
 
 def test_a_re_recorded_decision_stays_superseded(repo, log):
-    from orchard.model import fold
+    from orchard.core.model import fold
 
     log.append("decision.recorded", "D1", {"title": "a", "decision": "use A"})
     log.append("decision.superseded", "D1", {"by": "D2"})
@@ -337,7 +337,7 @@ def test_both_search_backends_agree_on_the_shortest_usable_term(repo):
     Same query, two answers, decided by whether the local SQLite was built with FTS5 —
     a build flag nobody sets deliberately and no test would otherwise vary.
     """
-    from orchard import store as S
+    from orchard.infra import store as S
 
     src = Path(S.__file__).read_text("utf-8")
     comparisons = [ln.strip() for ln in src.splitlines() if "MIN_TERM_CHARS" in ln and "len(" in ln]
@@ -354,7 +354,7 @@ def test_fold_refuses_to_make_an_item_its_own_ancestor(repo, log):
     """`fold` is the one function fed arbitrary JSON from disk; it may not be broken
     by it. A self-parented item is its own open descendant, hence permanently an
     umbrella: never offered, never claimable, never completable."""
-    from orchard.model import fold
+    from orchard.core.model import fold
 
     log.append("task.added", "T1", {"title": "t1"})
     log.append("task.updated", "T1", {"parent": "T1"})
@@ -441,8 +441,8 @@ def test_one_family_map_serves_both_the_reviewer_and_the_gate(repo):
     review counted. Same drift class as the two that preceded it here.
     """
     from orchard.config import FAMILY_HINTS, Config
-    from orchard.gates import family_of as gate_family
-    from orchard.reviewer import family_of as reviewer_family
+    from orchard.services.gates import family_of as gate_family
+    from orchard.services.review import family_of as reviewer_family
 
     cfg = Config.load()
     assert cfg.agent.families == FAMILY_HINTS, "the config default IS the canonical map"

@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.cli import build_parser
-from orchard.mcp_server import TOOLS
+from orchard.surfaces.cli import build_parser
+from orchard.surfaces.mcp import TOOLS
 
 #: CLI command -> the MCP tool(s) that cover it, when the names differ.
 ALIASES: dict[str, tuple[str, ...]] = {
@@ -265,7 +265,7 @@ def test_every_cli_flag_is_reachable_from_its_mcp_tool(tool, argv):
     the operator could not scope. An agent driving over MCP had a strictly weaker tool
     than the same agent driving a shell, with nothing saying so.
     """
-    from orchard.mcp_server import TOOLS
+    from orchard.surfaces.mcp import TOOLS
 
     flags = _cli_flags(argv)
     props = set(TOOLS[tool]["properties"])

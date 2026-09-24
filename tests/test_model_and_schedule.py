@@ -5,8 +5,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.model import fold
-from orchard.schedule import critical_path, find_cycles, globs_overlap, plan
+from orchard.core.model import fold
+from orchard.core.schedule import critical_path, find_cycles, globs_overlap, plan
 
 
 def build(log, spec):
@@ -114,8 +114,8 @@ def test_a_stale_renewal_cannot_hijack_the_current_holders_worktree(log):
     renewal carry the worktree at all. Mutation-verified: dropping the `stale` guard in
     `fold` makes this red.
     """
-    from orchard.events import Event
-    from orchard.model import fold
+    from orchard.core.model import fold
+    from orchard.infra.log import Event
 
     def ev(lamport, agent, kind, data):
         e = Event(

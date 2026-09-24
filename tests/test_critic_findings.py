@@ -20,10 +20,10 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard import session as S
 from orchard.config import Config, _coerce
-from orchard.events import Event
-from orchard.model import fold
+from orchard.core.model import fold
+from orchard.infra.log import Event
+from orchard.services import sessions as S
 
 
 def ev(lamport: int, agent: str, kind: str, subject: str, data: dict) -> Event:

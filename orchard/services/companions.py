@@ -31,7 +31,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import proc as P
+from ..infra import paths
+from ..infra import proc as P
 from .adopt import AGENT_TARGETS
 
 #: How long a detection probe may take. These are `--version`/`--help` calls, but one
@@ -95,12 +96,12 @@ def load(repo: Path) -> list[Companion]:
     `companions add` would write into an agent's config as a launch line failing
     mid-task.
     """
-    from . import tomlcfg
+    from ..infra import tomlcfg
 
     out: dict[str, Companion] = {}
-    shipped = Path(__file__).resolve().parent / "templates" / "companions.toml"
-    paths = [shipped, *tomlcfg.config_paths(repo, "companions.toml")]
-    for cid, spec in tomlcfg.overlay_array(paths, "companion", Companion, key="id").items():
+    shipped = paths.templates_dir() / "companions.toml"
+    sources = [shipped, *tomlcfg.config_paths(repo, "companions.toml")]
+    for cid, spec in tomlcfg.overlay_array(sources, "companion", Companion, key="id").items():
         out[cid] = Companion(**spec)
     return list(out.values())
 

@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard import prompts as P
+from orchard.services import prompts as P
 
 
 def test_every_registered_template_ships_with_the_package():
@@ -130,7 +130,7 @@ def test_the_review_user_template_is_actually_used(repo, tmp_path, monkeypatch):
     anyway, so both override paths silently did nothing. Caught by ruff's F841 on the
     unused local — a lint rule finding a behavioural bug.
     """
-    from orchard.reviewer import Reviewer, review
+    from orchard.services.review import Reviewer, review
 
     custom = tmp_path / "u.md"
     custom.write_text("SENTINEL-TEMPLATE {{ intent }} :: {{ diff }}\n")
@@ -141,7 +141,7 @@ def test_the_review_user_template_is_actually_used(repo, tmp_path, monkeypatch):
         seen.append(user)
         return "STATUS: NO FINDINGS", ""
 
-    monkeypatch.setattr("orchard.reviewer._chat", fake_chat)
+    monkeypatch.setattr("orchard.services.review._chat", fake_chat)
     review(
         Reviewer(name="r", base_url="http://x/v1", model="m"),
         "diff --git a/x b/x\n+y\n",

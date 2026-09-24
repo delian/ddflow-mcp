@@ -180,7 +180,7 @@ def test_the_guard_actually_detaches_stdin():
     """
     parent = (
         f"import sys; sys.path.insert(0, {str(ROOT)!r});"
-        "from orchard import proc as P;"
+        "from orchard.infra import proc as P;"
         "r = P.run([sys.executable, '-c', 'import sys; sys.stdout.write(sys.stdin.read())'],"
         "          capture_output=True, text=True, timeout=30);"
         "print('CHILD_SAW=' + repr(r.stdout));"
@@ -209,7 +209,7 @@ def test_an_explicit_input_still_reaches_the_child():
     setting both `input` and `stdin` is a TypeError, which is how this nearly shipped
     as a regression in the reviewer backend.
     """
-    from orchard import proc as P
+    from orchard.infra import proc as P
 
     fed = P.run(
         [sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read())"],

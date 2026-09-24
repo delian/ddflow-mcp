@@ -38,10 +38,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from . import proc as P
-from .config import Config
-from .events import EventLog
-from .model import GATE_OUTCOMES, Item, State
+from ..config import Config
+from ..core.model import GATE_OUTCOMES, Item, State
+from ..infra import proc as P
+from ..infra.log import EventLog
 
 # Exit vocabulary lives in ONE place: `cli.py`. It used to be declared here too, with a
 # different third name for the same code, and nothing imported this copy.
@@ -250,7 +250,7 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     policy. A file that had to restate all thirteen gates to change one would be copied
     once and then drift.
     """
-    from . import tomlcfg
+    from ..infra import tomlcfg
 
     gates = {k: GateDef(**{**v.__dict__}) for k, v in DEFAULT_GATES.items()}
     for gid, spec in tomlcfg.overlay_table(
@@ -535,7 +535,7 @@ def record(
 def family_of(model: str, cfg: Config) -> str:
     """This project's view of a model's family: `[agent].families`, which defaults to
     the shipped map. ``""`` means "not recognised" — see `config.family_for`."""
-    from .config import family_for
+    from ..config import family_for
 
     return family_for(model, cfg.agent.families)
 

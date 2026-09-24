@@ -35,7 +35,7 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from .cli import main as cli_main
+from ..surfaces.cli import main as cli_main
 
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "orchard", "version": "0.1.0", "title": "Orchard work-queue kernel"}
@@ -1423,7 +1423,7 @@ class Server:
             _, body = _run_cli(self.repo, cmd)
             return _ok(mid, {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": body}]})
         if method == "prompts/list":
-            from . import prompts as P
+            from ..services import prompts as P
 
             return _ok(
                 mid,
@@ -1447,7 +1447,7 @@ class Server:
                 },
             )
         if method == "prompts/get":
-            from . import prompts as P
+            from ..services import prompts as P
 
             params = msg.get("params") or {}
             name = params.get("name", "")
@@ -1478,8 +1478,8 @@ def _test_gates(repo: Path) -> list[str]:
     that actually exist here, rather than a generic list the reader has to translate.
     """
     try:
-        from .config import Config
-        from .gates import load_gates
+        from ..config import Config
+        from ..services.gates import load_gates
 
         cfg = Config.load(repo)
         gates = load_gates(repo, cfg)
@@ -1527,7 +1527,7 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         return v
 
     try:
-        from .config import Config
+        from ..config import Config
 
         cfg = Config.load(repo)
     except Exception:
@@ -1538,7 +1538,7 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
     # Each block is independent, and a failure in one must not cost the others: a
     # project with a bad reviewer block should still be told what is ready to work.
     try:
-        from .gates import load_gates
+        from ..services.gates import load_gates
 
         ut = load_gates(repo, cfg).get("unit_tests")
         if not ut or not ut.command or "set [gate.unit_tests]" in ut.command:
@@ -1550,7 +1550,7 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
     except Exception:
         pass
     try:
-        from .reviewer import load_reviewers
+        from ..services.review import load_reviewers
 
         if not load_reviewers(repo):
             v["setup_todo"].append(
@@ -1566,7 +1566,7 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         # agent waits on before it can do anything at all. Registration state is read
         # from config files and is free; whether the binary exists can wait for
         # `orchard_companions`, which is what the instruction tells it to call.
-        from . import companions as CO
+        from ..services import companions as CO
 
         statuses = CO.scan(repo, probe=False)
         v["companions"] = [
@@ -1606,11 +1606,11 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
     except Exception:
         pass
     try:
-        from . import lease as L
-        from . import progress as PR
-        from .events import EventLog
-        from .model import fold
-        from .schedule import plan
+        from ..core import progress as PR
+        from ..core.model import fold
+        from ..core.schedule import plan
+        from ..infra.log import EventLog
+        from ..services import leases as L
 
         log = EventLog(repo, cfg.agent.id or "")
         events = log.read_all()
@@ -1643,13 +1643,13 @@ def _instructions(repo: Path) -> str:
     mcp_instructions`). That is the difference between a tool whose behaviour you
     configure and one you have to fork.
     """
-    from . import prompts as P
+    from ..services import prompts as P
 
     vars_ = _instruction_vars(repo)
     overrides: dict[str, str] = {}
     if vars_["adopted"]:
         try:
-            from .config import Config
+            from ..config import Config
 
             # Read by NAME, not by handing `prompts.__dict__` to the resolver. The
             # dead-knob ratchet greps for the knob being read and would have reported
@@ -1758,7 +1758,7 @@ def main(argv: list[str] | None = None) -> int:
 
     start = Path(args.repo) if args.repo else Path.cwd()
     try:
-        from .worktree import repo_root
+        from ..infra.worktree import repo_root
 
         repo = repo_root(start)
     except Exception:

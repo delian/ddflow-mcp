@@ -147,37 +147,81 @@ Three mechanisms push back:
    `complete` refuses — the vacuous-truth class aimed squarely at the anti-vacuous-pass
    mechanism.
 
+## Layers
+
+A module may import only from layers **below** it. `tests/test_layering.py` checks this
+by walking the AST, because this package has been bitten three times by a rule that
+existed only in prose — two `family_of` implementations, three TOML overlay loaders, and
+`mcp_server` reaching into `cli`. A layering rule nothing checks decays into a
+dependency graph.
+
+```
+surfaces/   cli.py, mcp.py              argparse and JSON-RPC. No policy.
+views/      human.py, markdown.py       one renderer per result kind.
+services/   queue, gates, review,       the application layer. Both surfaces call it.
+            knowledge, sessions,        Nothing here prints.
+            leases, health, setup
+infra/      log, worktree, proc,        disk, git, sqlite, subprocess, containers, TOML
+            store, container, tomlcfg
+core/       events, model, schedule,    PURE. No disk, no network, no subprocess.
+            progress
+config.py                               read by every layer; imports none of them
+```
+
+**`core` is pure, and that is load-bearing.** `fold`, the scheduler, the loop detectors
+and the `Event` record itself have no I/O, which is why every readiness, gating and
+recovery rule is testable without a fixture. The first run of the layering test found
+`core.model` importing `infra.events` — for the `Event` dataclass alone. That single
+import inverted the dependency the purity rests on, and nobody would have noticed until
+a test needed a temp directory to check an arithmetic rule. The fix split the two things
+`events.py` had been conflating all along: **`core.events` is the record** (a value, with
+a content-addressed id) and **`infra.log` is the store** (append-only, flock-serialised,
+per-agent shards).
+
+It also found `infra.container` importing `services.review` to discover reviewer URLs
+for its warnings. `infra` owns the container primitives and has no business knowing
+reviewers exist; the caller passes them in.
+
+`services` and `views` are declared PEERS rather than stacked: a service may render a
+markdown view as its result, and a view reads service types to render them. That is one
+layer split by role, and saying so is more honest than an exemption list that grows.
+
 ## Module map
 
-| Module | Responsibility | Lines |
-|---|---|---|
-| `events.py` | append-only log, Lamport clock, `flock`, content addressing | 477 |
-| `model.py` | domain types and `fold` — pure, no I/O | 742 |
-| `schedule.py` | readiness, dependencies, glob conflicts, critical path | 408 |
-| `lease.py` | acquire/renew/release, crash scanning, salvage advice | 408 |
-| `worktree.py` | git worktree lifecycle, safe merge | 396 |
-| `gates.py` | gate definitions, command execution, evidence, independence | 600 |
-| `store.py` | SQLite projection + BM25 retrieval (disposable) | 430 |
-| `session.py` | prompt provenance, redaction, replay, bundles | 436 |
-| `render.py` | generated markdown views and the budgeted brief | 397 |
-| `cli.py` | the portable surface every agent drives | 3041 |
-| `mcp_server.py` | MCP stdio server over the same functions | 1664 |
-| `adopt.py` | one-command install into any project | 295 |
-| `config.py` | documented knobs, TOML + env, and the one family map | 746 |
-| `companions.py` | detect and register the MCP servers that serve the gates | 215 |
-| `proc.py` | every subprocess, with stdin detached — see below | 47 |
+| Module | Responsibility |
+|---|---|
+| `core/events.py` | the `Event` record, Lamport stamp, content-addressed id |
+| `core/model.py` | domain types and `fold` — pure, no I/O |
+| `core/schedule.py` | readiness, inherited dependencies, glob conflicts, cycles |
+| `core/progress.py` | work aggregation and the six loop detectors |
+| `infra/log.py` | the append-only log: `flock`, `fsync`, per-agent shards |
+| `infra/worktree.py` | git worktree lifecycle, safe merge |
+| `infra/proc.py` | every subprocess, with stdin detached — see below |
+| `infra/store.py` | SQLite projection + BM25 retrieval (disposable) |
+| `infra/container.py` | container detection, loopback rewriting |
+| `infra/tomlcfg.py` | one TOML overlay loader, one unknown-key policy |
+| `services/queue.py` | the work queue: add, claim, complete, merge |
+| `services/leases.py` | acquire/renew/release, crash scanning, salvage advice |
+| `services/gates.py` | gate definitions, execution, evidence, independence |
+| `services/review.py` | reviewer backends — any LLM, four wire formats |
+| `services/sessions.py` | prompt provenance, redaction, replay, bundles |
+| `services/companions.py` | detect and register the MCP servers that serve the gates |
+| `services/adopt.py`, `enforce.py`, `cleanup.py`, `prompts.py` | install, the commit hook, worktree classification, templates |
+| `views/markdown.py` | the generated views and the budgeted brief |
+| `surfaces/cli.py` | argparse |
+| `surfaces/mcp.py` | MCP stdio server |
+| `config.py` | documented knobs, TOML + env, and the one family map |
 
-`fold` is pure and does no I/O, so every scheduling, gating and recovery rule is testable
-without a disk. `cli.py` is the only module that prints. **12480 lines** of standard-library Python, no third-party dependency.
+No third-party dependency.
 
-**`proc.py` is 42 lines and exists for one reason.** Orchard runs as an MCP server over
-**stdio**: the JSON-RPC session is this process's stdin and stdout. `subprocess.run(...)`
-with no explicit `stdin=` hands the child that same pipe, so a child that reads stdin —
-an arbitrary shell command in a gate, a reviewer CLI, an `npx` that wants to prompt —
-eats the protocol bytes or closes the descriptor. The server then exits **zero**, with an
-empty stderr, and the client sees a closed stream with nothing to explain it. All twelve
-call sites had this. `proc.run` defaults to `stdin=DEVNULL`, and a ratchet fails the
-suite if any module reaches for the stdlib directly.
+**`infra/proc.py` is 50 lines and exists for one reason.** Orchard runs as an MCP server
+over **stdio**: the JSON-RPC session is this process's stdin and stdout.
+`subprocess.run(...)` with no explicit `stdin=` hands the child that same pipe, so a
+child that reads stdin — an arbitrary shell command in a gate, a reviewer CLI, an `npx`
+that wants to prompt — eats the protocol bytes or closes the descriptor. The server then
+exits **zero**, with an empty stderr, and the client sees a closed stream with nothing to
+explain it. All twelve call sites had this. `proc.run` defaults to `stdin=DEVNULL`, and a
+ratchet fails the suite if any module reaches for the stdlib directly.
 
 ## What is deliberately absent
 

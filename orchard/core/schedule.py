@@ -25,8 +25,8 @@ import time
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
-from .config import Config
-from .model import ABANDONED, BLOCKED, DONE, RUNNING, Item, Lease, State
+from ..config import Config
+from ..core.model import ABANDONED, BLOCKED, DONE, RUNNING, Item, Lease, State
 
 
 @dataclass

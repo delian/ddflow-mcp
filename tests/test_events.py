@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.events import Event, EventLog, canonical
+from orchard.infra.log import Event, EventLog, canonical
 
 
 def test_event_id_is_a_content_address(log):

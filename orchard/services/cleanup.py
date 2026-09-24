@@ -25,9 +25,9 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import worktree as W
-from .config import Config
-from .model import DONE, State
+from ..config import Config
+from ..core.model import DONE, State
+from ..infra import worktree as W
 
 
 @dataclass

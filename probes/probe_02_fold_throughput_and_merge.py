@@ -9,8 +9,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.events import Event
-from orchard.model import fold
+from orchard.core.model import fold
+from orchard.infra.log import Event
 
 # (a) throughput ---------------------------------------------------------------------
 N = 20000

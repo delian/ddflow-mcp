@@ -12,7 +12,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.adopt import AGENT_TARGETS, NATIVE_RULES
+from orchard.services.adopt import AGENT_TARGETS, NATIVE_RULES
 
 
 def test_every_agent_has_a_delta_document():

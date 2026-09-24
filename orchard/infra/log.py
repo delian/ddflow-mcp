@@ -1,33 +1,11 @@
-"""The append-only event log — Orchard's single source of truth.
+"""The append-only log — the one place events are written and read.
 
-Everything else in this package is a *projection*: the SQLite index, the markdown
-boards, the lessons search table, the replay bundle. Delete any of them and
-``orchard rebuild`` re-derives them from the log alone. That inversion is what buys
-the four properties this system is built for:
+Serialised appends under `fcntl.flock` with an `fsync`, per-agent shards so two agents
+never write the same file, and a tail read for the Lamport clock so the cost of
+appending is O(shards) rather than O(events).
 
-* **Crash recovery.** The last event for an item says exactly where it stopped, and
-  a lease that stops being renewed expires on its own. There is no half-written
-  state machine to repair, because state is never *written* — only folded.
-* **Merge without conflict.** Each agent appends to its OWN shard file, so two
-  agents on two branches never touch the same bytes. Merging branches is a union of
-  files; re-folding the union is deterministic.
-* **Reproduction from logs alone.** Operator prompts are events. Replaying the log
-  reproduces the decision history that built the repo.
-* **Auditability.** Event ids are content addresses, so an event cannot be edited
-  after the fact without changing its id and orphaning everything that cites it.
-
-Ordering. Events carry a Lamport counter, and the total order is
-``(lamport, agent_id, event_id)``. Lamport gives causality (an event I wrote after
-seeing yours sorts after yours); the agent id and content hash break ties
-deterministically so two machines folding the same set get the same answer. Wall-clock
-``ts`` is recorded for humans and is explicitly NOT the sort key — clock skew between
-machines sharing an NFS checkout would otherwise reorder history.
-
-Durability. Appends are serialised by ``flock`` on a single lock file and followed by
-``fsync``. POSIX O_APPEND atomicity is *not* relied upon: NFS has no append operation,
-so the client does seek-then-write and two concurrent appends can interleave. The lock
-is the mechanism; it was measured working on this project's nfs4.2 mount (see
-``probes/probe_01_nfs_lock_primitives.py``).
+The `Event` record itself lives in `core.events`: it is a value with no I/O, and the
+domain layer needs it without needing this.
 """
 
 from __future__ import annotations
@@ -35,132 +13,36 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import getpass
-import hashlib
 import json
 import os
 import socket
 import subprocess
 import time
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..core.events import (
+    PROVENANCE_KINDS,
+    SCHEMA_VERSION,
+    TAIL_MAX_BYTES,
+    TAIL_WINDOW_BYTES,
+    Event,
+    _kinds,
+    canonical,
+    utcnow,
+)
 from . import proc as P
 
-SCHEMA_VERSION = 1
-
-#: Initial bytes read when seeking a shard's last line, doubled until a full line is
-#: found. One page: large enough that a single read almost always suffices, small
-#: enough that the tail read stays cheap on NFS (measured ~36x local I/O cost).
-TAIL_WINDOW_BYTES = 4096
-
-#: Ceiling on that search. An event larger than this is a bug elsewhere, and the bound
-#: is what keeps the Lamport clock read O(shards) rather than O(bytes).
-TAIL_MAX_BYTES = 65536
-
-
-def _kinds() -> frozenset[str]:
-    """The event vocabulary, DERIVED from ``model.HANDLERS``.
-
-    Declaring it here as well would make the vocabulary and its interpretation two
-    lists that nothing forces to agree -- a kind could be declared and never handled
-    (folding silently to "nothing happened"), or handled and never declared (rejected
-    at append time). Imported lazily because ``model`` imports this module.
-    """
-    from .model import HANDLERS
-
-    return frozenset(HANDLERS)
-
-
-#: Kinds that carry operator intent and must survive every compaction, because they
-#: are the input to `orchard replay` — the from-scratch reconstruction path.
-#:
-#: Architectural decisions belong here and were missing, which made `replay` drop every
-#: one of them: the two decision renderers in `session._REPLAY_RENDERERS` were
-#: unreachable, and a superseded decision — the context, the rejected alternatives, the
-#: reason for the reversal — existed nowhere in the reconstruction. Live decisions still
-#: showed up in the brief because that reads folded state, so the loss was invisible
-#: exactly where it mattered: rebuilding from the log alone.
-#:
-#: `tests/test_provenance_complete.py` now pins this set against the replay renderers,
-#: so adding a renderer without adding its kind fails.
-PROVENANCE_KINDS: frozenset[str] = frozenset(
-    {
-        "session.started",
-        "session.prompt",
-        "session.note",
-        "session.ended",
-        "research.recorded",
-        "lesson.recorded",
-        "decision.recorded",
-        "decision.superseded",
-        "phase.added",
-        "task.added",
-    }
-)
-
-
-def utcnow() -> str:
-    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-
-
-def canonical(obj: Any) -> str:
-    """Stable JSON: sorted keys, no spaces. The input to every content hash."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-
-
-@dataclass(frozen=True)
-class Event:
-    kind: str
-    subject: str
-    data: dict[str, Any] = field(default_factory=dict)
-    agent: str = ""
-    lamport: int = 0
-    ts: str = ""
-    id: str = ""
-    schema: int = SCHEMA_VERSION
-
-    def body(self) -> dict[str, Any]:
-        """The hashed part. `id` is excluded (it is the hash) but everything else is
-        in, including lamport and agent — so the same logical event emitted twice by
-        two agents is two distinct events, which is correct: they are two claims."""
-        return {
-            "agent": self.agent,
-            "data": self.data,
-            "kind": self.kind,
-            "lamport": self.lamport,
-            "schema": self.schema,
-            "subject": self.subject,
-            "ts": self.ts,
-        }
-
-    def compute_id(self) -> str:
-        return "e" + hashlib.blake2b(canonical(self.body()).encode(), digest_size=12).hexdigest()
-
-    def to_json(self) -> str:
-        d = self.body()
-        d["id"] = self.id or self.compute_id()
-        return canonical(d)
-
-    @staticmethod
-    def from_json(line: str) -> Event:
-        d = json.loads(line)
-        return Event(
-            kind=d["kind"],
-            subject=d.get("subject", ""),
-            data=d.get("data", {}),
-            agent=d.get("agent", ""),
-            lamport=int(d.get("lamport", 0)),
-            ts=d.get("ts", ""),
-            id=d.get("id", ""),
-            schema=int(d.get("schema", 1)),
-        )
-
-    def sort_key(self) -> tuple[int, str, str]:
-        return (self.lamport, self.agent, self.id or self.compute_id())
-
+__all__ = [
+    "PROVENANCE_KINDS",
+    "SCHEMA_VERSION",
+    "Event",
+    "EventLog",
+    "canonical",
+    "default_agent_id",
+    "utcnow",
+]
 
 _AGENT_ID_CACHE: dict[str, str] = {}
 

@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.mcp_server import TOOLS, _schema, serve
+from orchard.surfaces.mcp import TOOLS, _schema, serve
 
 
 @pytest.fixture
@@ -336,7 +336,7 @@ def test_the_prompts_capability_is_advertised(proj):
 
 
 def test_every_workflow_command_is_listed_with_a_usable_description(proj):
-    from orchard.prompts import COMMANDS
+    from orchard.services.prompts import COMMANDS
 
     r = rpc(proj, [{"jsonrpc": "2.0", "id": 1, "method": "prompts/list"}])
     listed = {p["name"]: p for p in r[0]["result"]["prompts"]}
@@ -373,7 +373,7 @@ def test_a_command_renders_with_and_without_its_optional_argument(proj):
 
 
 def test_every_shipped_command_renders_cleanly(proj):
-    from orchard.prompts import COMMANDS
+    from orchard.services.prompts import COMMANDS
 
     for name in COMMANDS:
         r = rpc(

@@ -31,9 +31,9 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-from .config import Config
-from .events import EventLog
-from .model import State, fold
+from ..config import Config
+from ..core.model import State, fold
+from ..infra.log import EventLog
 
 SCHEMA = 5
 

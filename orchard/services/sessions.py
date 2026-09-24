@@ -35,9 +35,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import Config
-from .events import PROVENANCE_KINDS, Event, EventLog
-from .model import State
+from ..config import Config
+from ..core.model import State
+from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 
 
 def redact(text: str, cfg: Config) -> tuple[str, int]:
@@ -391,7 +391,7 @@ def verify(state: State, repo: Path, cfg: Config) -> list[str]:
     corruption — a rebased or squashed branch loses shas legitimately — so the report
     says which and lets a human judge rather than declaring the log broken.
     """
-    from .worktree import git
+    from ..infra.worktree import git
 
     problems: list[str] = []
     if not cfg.session.replay_verify_diffs:
@@ -421,7 +421,7 @@ def bundle(
     copies and had already drifted by one file — the bundle silently omitted the
     research log, which is where the rejected approaches live.
     """
-    from .render import board, lessons_md, research_md
+    from ..views.markdown import board, lessons_md, research_md
 
     out_dir.mkdir(parents=True, exist_ok=True)
     written = [out_dir / "RECONSTRUCTION.md"]

@@ -23,11 +23,11 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import worktree as W
-from .config import Config
-from .events import EventLog
-from .model import DONE, RUNNING, Lease, State, fold
-from .schedule import conflicts, plan_blocker
+from ..config import Config
+from ..core.model import DONE, RUNNING, Lease, State, fold
+from ..core.schedule import conflicts, plan_blocker
+from ..infra import worktree as W
+from ..infra.log import EventLog
 
 
 class LeaseError(RuntimeError):
@@ -231,7 +231,7 @@ def _alternatives(state: State, cfg: Config, item_id: str, holder: str, now: flo
     take an item the scheduler would then also refuse. A refusal that recommends an
     impossible alternative is worse than one that recommends nothing.
     """
-    from .schedule import plan as _plan
+    from ..core.schedule import plan as _plan
 
     refused = state.items.get(item_id)
     kind = refused.kind if refused else "task"

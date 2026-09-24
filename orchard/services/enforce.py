@@ -33,12 +33,12 @@ import sys
 import time
 from pathlib import Path
 
-from . import proc as P
-from . import worktree as W
-from .config import Config
-from .events import EventLog
-from .model import fold
-from .schedule import globs_overlap
+from ..config import Config
+from ..core.model import fold
+from ..core.schedule import globs_overlap
+from ..infra import proc as P
+from ..infra import worktree as W
+from ..infra.log import EventLog
 
 HOOK_MARKER = "# ORCHARD-HOOK v1 — managed by `orchard hooks install`"
 
@@ -76,7 +76,9 @@ def _invocation() -> str:
     script = shutil.which("orchard")
     if script and not _running_from_source():
         return f'exec "{script}" hooks check-commit "$@"'
-    pkg_parent = str(Path(__file__).resolve().parents[1])
+    from ..infra.paths import package_parent
+
+    pkg_parent = str(package_parent())
     return (
         f'PYTHONPATH="{pkg_parent}${{PYTHONPATH:+:$PYTHONPATH}}" '
         f'exec "{sys.executable}" -m orchard hooks check-commit "$@"'

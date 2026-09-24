@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard import lease as L
-from orchard import worktree as W
 from orchard.config import Config
-from orchard.events import EventLog
-from orchard.model import fold
+from orchard.core.model import fold
+from orchard.infra import worktree as W
+from orchard.infra.log import EventLog
+from orchard.services import leases as L
 
 
 def seed(log, ids=("T1", "T2", "T3")):
@@ -276,7 +276,7 @@ def test_suggested_alternatives_are_exactly_what_the_scheduler_would_offer(repo,
     analysis. Fixed by delegating to `schedule.plan` instead of re-deriving.
     Mutation-verified: restoring the local rule makes this red.
     """
-    from orchard.schedule import plan
+    from orchard.core.schedule import plan
 
     log = EventLog(repo, "a")
     log.append("phase.added", "P1", {})

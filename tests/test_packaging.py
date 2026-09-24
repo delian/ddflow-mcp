@@ -9,6 +9,7 @@ catch that — the tree is exactly where it works.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -55,8 +56,8 @@ def test_the_wheel_declares_both_entry_points(wheel):
         .read(next(n for n in zipfile.ZipFile(wheel).namelist() if n.endswith("entry_points.txt")))
         .decode()
     )
-    assert "orchard = orchard.cli:main" in entry
-    assert "orchard-mcp = orchard.mcp_server:main" in entry
+    assert "orchard = orchard.surfaces.cli:main" in entry
+    assert "orchard-mcp = orchard.surfaces.mcp:main" in entry
 
 
 def test_the_package_has_no_runtime_dependencies(wheel):
@@ -142,7 +143,7 @@ def test_the_declared_versions_agree():
     from the tree; the release workflow checks the same invariant.
     """
     sys.path.insert(0, str(ROOT))
-    from orchard.mcp_server import SERVER_INFO
+    from orchard.surfaces.mcp import SERVER_INFO
 
     proj = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     srv = json.loads((ROOT / "server.json").read_text())
@@ -155,3 +156,65 @@ def test_the_declared_versions_agree():
         srv["packages"][0]["identifier"]
         == tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["name"]
     )
+
+
+# -- the spawn contract: a module path a move can silently invalidate ------------------
+
+
+def test_every_module_path_orchard_writes_into_a_config_actually_imports():
+    """`adopt` writes `python -m <module>` into other people's MCP configs.
+
+    A wrong module there fails in the worst possible place: the server spawns, cannot
+    import, writes nothing to stdout, and the client blocks on a handshake that will
+    never arrive. Nothing errors, nothing logs — the session just stops.
+
+    That is exactly what happened when the package was split into layers:
+    `orchard.mcp_server` became `orchard.surfaces.mcp` and the hardcoded string in
+    `_launch_entry` did not follow. The full suite ran for two hours before it was
+    killed. This asserts the string against the import system, which is the only thing
+    that can tell the truth about it.
+    """
+    import importlib
+
+    from orchard.services.adopt import MCP_MODULE
+
+    mod = importlib.import_module(MCP_MODULE)
+    assert hasattr(mod, "main"), f"{MCP_MODULE} has no main() to spawn"
+
+
+def test_the_pythonpath_adopt_writes_can_import_orchard():
+    """Counted paths (`parents[1]`) break when a file moves; derived ones do not."""
+    import subprocess
+    import sys as _sys
+
+    from orchard.services.adopt import MCP_MODULE, _package_parent
+
+    parent = _package_parent()
+    assert (Path(parent) / "orchard" / "__init__.py").is_file(), (
+        f"{parent} is not the directory containing the package"
+    )
+    # Prove it end to end: a clean interpreter with ONLY that on the path.
+    p = subprocess.run(
+        [_sys.executable, "-c", f"import {MCP_MODULE}; print('ok')"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        env={"PYTHONPATH": parent, "PATH": os.environ.get("PATH", "")},
+    )
+    assert p.returncode == 0 and "ok" in p.stdout, (
+        f"an agent spawning the server with this PYTHONPATH would hang:\n{p.stderr[-600:]}"
+    )
+
+
+def test_the_console_entry_points_resolve():
+    """`pyproject` names two entry points; both must be importable attributes."""
+    import importlib
+    import tomllib
+
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))
+    scripts = data["project"]["scripts"]
+    assert scripts, "the package must ship its console scripts"
+    for name, target in scripts.items():
+        mod_name, _, attr = target.partition(":")
+        mod = importlib.import_module(mod_name)
+        assert hasattr(mod, attr), f"entry point {name} = {target} does not resolve"

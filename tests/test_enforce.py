@@ -20,7 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard import enforce as E
+from orchard.services import enforce as E
 
 
 def _commit(repo: Path, message: str, *, agent: str = "", paths: list[str] | None = None):
@@ -144,7 +144,7 @@ def test_hooks_status_reports_a_policy_with_no_hook(repo):
 
 
 def _instructions(repo: Path) -> str:
-    from orchard.mcp_server import serve
+    from orchard.surfaces.mcp import serve
 
     out = io.StringIO()
     serve(
@@ -222,7 +222,7 @@ def test_the_default_identity_is_stable_across_processes(repo):
     env.pop("ORCHARD_AGENT", None)
     code = (
         "import sys;sys.path.insert(0,'.');"
-        "from orchard.events import default_agent_id;"
+        "from orchard.infra.log import default_agent_id;"
         "print(default_agent_id(" + repr(str(repo)) + "))"
     )
     a = sp.run(
@@ -277,9 +277,9 @@ def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
     """The robust rule: the hook runs inside a worktree, and the lease that produced
     that worktree is the relevant claim whatever identity string made it. Without this,
     claiming from the primary checkout and committing inside the worktree disagree."""
-    from orchard import lease as L
-    from orchard import worktree as W
-    from orchard.events import EventLog
+    from orchard.infra import worktree as W
+    from orchard.infra.log import EventLog
+    from orchard.services import leases as L
 
     run_cli(repo, "adopt", "--agents", "claude")
     run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")

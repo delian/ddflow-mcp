@@ -17,7 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.reviewer import (
+from orchard.services.review import (
     PRESETS,
     REVIEWED,
     UNAVAILABLE,

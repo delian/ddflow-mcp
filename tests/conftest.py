@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from orchard.config import Config
-from orchard.events import EventLog
+from orchard.infra.log import EventLog
 
 
 @pytest.fixture

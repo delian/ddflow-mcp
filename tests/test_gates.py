@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard import gates as G
-from orchard.model import fold
+from orchard.core.model import fold
+from orchard.services import gates as G
 
 
 @pytest.fixture

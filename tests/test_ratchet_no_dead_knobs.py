@@ -38,7 +38,15 @@ KNOWN_UNREAD: dict[str, str] = {
 
 def _sources() -> str:
     pkg = pathlib.Path(__file__).resolve().parents[1] / "orchard"
-    return "\n".join(p.read_text("utf-8") for p in pkg.glob("*.py") if p.name != "config.py")
+    # `rglob`, not `glob`: the package is layered (core/ infra/ services/ views/
+    # surfaces/) and a non-recursive scan sees only `__init__.py` and `config.py` —
+    # which reports every knob in the package as dead. `test_the_scan_is_not_vacuous`
+    # below is what caught that, and is why it exists.
+    return "\n".join(
+        p.read_text("utf-8")
+        for p in pkg.rglob("*.py")
+        if p.name != "config.py" and "__pycache__" not in str(p)
+    )
 
 
 def _alias_map(src: str) -> dict[str, str]:

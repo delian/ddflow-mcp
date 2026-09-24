@@ -25,7 +25,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from . import proc as P
+from ..infra import proc as P
 
 HOST_ALIAS = "host.docker.internal"
 
@@ -79,8 +79,14 @@ def rewrite_localhost(url: str) -> str:
     return url
 
 
-def warnings(repo: Path, cfg) -> list[str]:
-    """Container-specific problems worth telling the operator about."""
+def warnings(repo: Path, cfg, reviewer_urls: ReviewerUrls | None = None) -> list[str]:
+    """Container-specific problems worth telling the operator about.
+
+    ``reviewer_urls`` is passed IN rather than fetched: this module owns the container
+    primitives and has no business knowing that reviewers exist. It used to import
+    `services.review` from here, which pointed a dependency the wrong way up the stack
+    — caught by the layering test the moment the layers were named.
+    """
     if not in_container():
         return []
     out: list[str] = []
@@ -98,7 +104,7 @@ def warnings(repo: Path, cfg) -> list[str]:
             f"destroyed on exit. Orchard is relocating them to '.orchard-worktrees' "
             f"inside the repo; set it explicitly to silence this."
         )
-    for name, url in _reviewer_urls(repo):
+    for name, url in reviewer_urls or []:
         if any(n in url for n in ("127.0.0.1", "localhost", "[::1]")):
             out.append(
                 f"reviewer {name!r} points at {url}, which inside a container is the "
@@ -115,13 +121,12 @@ def warnings(repo: Path, cfg) -> list[str]:
     return out
 
 
-def _reviewer_urls(repo: Path) -> list[tuple[str, str]]:
-    try:
-        from .reviewer import load_reviewers
-
-        return [(r.name, r.base_url) for r in load_reviewers(repo) if r.enabled]
-    except Exception:
-        return []
+#: Endpoints to check for loopback addresses, supplied BY the caller.
+#:
+#: This used to reach up into `services.review` to fetch them itself, which inverted
+#: the dependency: `infra` is where the container primitives live, and it has no
+#: business knowing that reviewers exist. The caller already has them.
+ReviewerUrls = list[tuple[str, str]]
 
 
 def _repo_has_identity(repo: Path) -> bool:

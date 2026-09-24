@@ -36,9 +36,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from .config import Config
+from ..config import Config
+from ..core.model import ABANDONED, DONE, State
 from .events import Event
-from .model import ABANDONED, DONE, State
 
 #: Kinds that represent forward progress. Used by the no-progress detector: a window
 #: full of events none of which is one of these is a window in which nothing advanced.
@@ -292,7 +292,7 @@ def detect(events: list[Event], state: State, cfg: Config) -> list[LoopFinding]:
 
 
 def _static_cycles(state: State, sev: str) -> list[LoopFinding]:
-    from .schedule import find_cycles
+    from ..core.schedule import find_cycles
 
     items = {i.id: i for i in state.items.values() if not i.removed}
     out = []

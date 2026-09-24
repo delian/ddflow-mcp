@@ -15,11 +15,11 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard import lease as L
 from orchard.config import Config
-from orchard.events import EventLog
-from orchard.model import fold
-from orchard.schedule import conflicts, plan
+from orchard.core.model import fold
+from orchard.core.schedule import conflicts, plan
+from orchard.infra.log import EventLog
+from orchard.services import leases as L
 
 N_AGENTS = 8
 N_TASKS = 32
