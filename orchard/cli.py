@@ -95,6 +95,28 @@ class Ctx:
             print(human)
 
 
+def _resolved(c: Ctx, obj: Any) -> Any:
+    """Plain-data view with worktree paths resolved to absolute.
+
+    The LOG stores worktree paths relative to the repo root, which is what makes a
+    committed log true on every checkout. But a CALLER needs a path it can `cd` to: an
+    agent handed ".orchard-worktrees/T1" has to know what it is relative to, and will
+    resolve it against its own cwd — which is frequently not the repo root. Storage
+    portable, interface usable; the conversion happens here, at the boundary.
+    """
+    out = _plain(obj)
+    if isinstance(out, dict):
+        for key in ("worktree", "path"):
+            val = out.get(key)
+            if isinstance(val, str) and val and not os.path.isabs(val):
+                out[key] = str(W.load_path(c.repo, val))
+        if isinstance(out.get("lease"), dict):
+            lv = out["lease"].get("worktree")
+            if isinstance(lv, str) and lv and not os.path.isabs(lv):
+                out["lease"]["worktree"] = str(W.load_path(c.repo, lv))
+    return out
+
+
 def _plain(obj: Any) -> Any:
     if is_dataclass(obj) and not isinstance(obj, type):
         return {k: _plain(v) for k, v in asdict(obj).items()}
@@ -144,16 +166,53 @@ def cmd_init(a, c: Ctx) -> int:
     cfgp = d / "config.toml"
     if not cfgp.exists():
         cfgp.write_text(_starter_config(), "utf-8")
+    # An in-repo worktree root (the default inside a container, where a sibling path
+    # would land on the ephemeral layer) must be ignored, or every worktree shows up as
+    # hundreds of untracked files and the enforcement hook trips over them.
+    root_gi = c.repo / ".gitignore"
+    prev_gi = root_gi.read_text("utf-8") if root_gi.exists() else ""
+    if ".orchard-worktrees" not in prev_gi:
+        root_gi.write_text(
+            prev_gi
+            + ("" if prev_gi.endswith("\n") or not prev_gi else "\n")
+            + "\n# Orchard task worktrees (git worktrees; never commit them)\n"
+            ".orchard-worktrees/\n",
+            "utf-8",
+        )
+
     ga = c.repo / ".gitattributes"
     line = ".orchard/events/*.jsonl merge=union\n"
     prev = ga.read_text("utf-8") if ga.exists() else ""
     if "orchard/events" not in prev:
         ga.write_text(prev + ("" if prev.endswith("\n") or not prev else "\n") + line, "utf-8")
     c.store.rebuild(c.log)
+    # Setup touches TRACKED files (.gitignore, .gitattributes, AGENTS.md). Leaving them
+    # uncommitted makes the primary checkout dirty, and `orchard merge` then refuses --
+    # correctly, but with a message about "modified tracked files" that gives no hint
+    # the cause was Orchard's own setup two commands ago. Say so here instead.
+    touched = [
+        rel
+        for rel in (
+            ".gitignore",
+            ".gitattributes",
+            ".orchard",
+            "AGENTS.md",
+            "CLAUDE.md",
+            "docs/orchard",
+        )
+        if (c.repo / rel).exists() and W.git(c.repo, "status", "--porcelain", "--", rel).out.strip()
+    ]
+    commit_hint = ""
+    if touched:
+        commit_hint = (
+            "\n\n  Setup changed these files — commit them before your first merge, or "
+            "the primary\n  checkout stays dirty and `orchard merge` will refuse:\n"
+            f"    git add {' '.join(touched)} && git commit -m 'orchard: adopt'"
+        )
     c.out(
         f"Initialised Orchard in {d}\n"
         f"  config: {cfgp}\n"
-        f"  Next: `orchard phase add P1 --title 'First phase'`",
+        f"  Next: `orchard phase add P1 --title 'First phase'`" + commit_hint,
         {"root": str(d), "config": str(cfgp)},
     )
     return OK
@@ -281,16 +340,17 @@ def cmd_claim(a, c: Ctx) -> int:
     if c.cfg.worktree.enabled and not a.no_worktree:
         try:
             wt = W.create(c.repo, c.cfg, a.id)
+            stored = W.store_path(c.repo, wt.path)
             c.log.append(
                 "worktree.created",
                 a.id,
-                {"path": str(wt.path), "branch": wt.branch, "base": wt.base},
+                {"path": stored, "branch": wt.branch, "base": wt.base},
             )
             L.acquire(
                 c.log,
                 c.cfg,
                 a.id,
-                worktree=str(wt.path),
+                worktree=stored,
                 branch=wt.branch,
                 globs=_csv(a.globs) or None,
                 force=True,
@@ -340,8 +400,20 @@ def cmd_gate(a, c: Ctx) -> int:
         print(f"{a.id}: {'COMPLETE' if s.complete else 'next = ' + (s.current or '—')}")
         print(s.render())
         gd = c.gates.get(s.current)
-        if gd and gd.prompt:
-            print(f"\n{gd.title}: {gd.prompt}")
+        if gd:
+            from . import prompts as P
+
+            try:
+                print(
+                    "\n"
+                    + P.render(
+                        P.resolve("gate_instruction", c.repo, _prompt_overrides(c)),
+                        gate=gd,
+                        item=a.id,
+                    )
+                )
+            except P.TemplateError as exc:
+                print(f"\n{gd.title}: {gd.prompt}   [template error: {exc}]")
         if s.unavailable:
             print(
                 f"\n  NOTE: {', '.join(s.unavailable)} did not run. "
@@ -368,7 +440,9 @@ def cmd_gate(a, c: Ctx) -> int:
                 file=sys.stderr,
             )
             return NOTHING
-        cwd = Path(it.worktree) if (gdef.cwd == "worktree" and it.worktree) else c.repo
+        cwd = (
+            W.load_path(c.repo, it.worktree) if (gdef.cwd == "worktree" and it.worktree) else c.repo
+        )
         c.log.append("gate.started", a.id, {"gate": a.gate})
         outcome, ev = G.run_command_gate(gdef, cwd)
         reason = ev.get("reason", "")
@@ -530,7 +604,7 @@ def cmd_merge(a, c: Ctx) -> int:
         return NOTHING
     wt = W.Worktree(
         item=a.id,
-        path=Path(it.worktree),
+        path=W.load_path(c.repo, it.worktree),
         branch=it.branch,
         base=c.cfg.worktree.base_ref or W.default_branch(c.repo),
     )
@@ -601,6 +675,7 @@ def cmd_brief(a, c: Ctx) -> int:
         st,
         c.cfg,
         p,
+        repo=c.repo,
         item=item,
         lessons=lessons,
         rules=rules,
@@ -769,7 +844,7 @@ def cmd_recover(a, c: Ctx) -> int:
     found = L.sweep(c.log, c.cfg, c.repo, apply=a.apply)
     found = [r for r in found if not a.item or r.item == a.item]
     if c.json:
-        print(json.dumps([_plain(r) for r in found], indent=2, default=str))
+        print(json.dumps([_resolved(c, r) for r in found], indent=2, default=str))
         return OK if found else NOTHING
     if not found:
         print("Nothing to recover — no expired leases, no orphan worktrees.")
@@ -803,6 +878,9 @@ def cmd_doctor(a, c: Ctx) -> int:
         for dep in it.needs:
             if dep not in st.items:
                 problems.append(f"{it.id} needs unknown item {dep!r}")
+    from . import container as CT
+
+    notes.extend(CT.warnings(c.repo, c.cfg))
     rec = L.scan(c.log, c.cfg, c.repo)
     for r in rec:
         (problems if r.salvageable else notes).append(f"{r.kind}: {r.item} — {r.advice}")
@@ -811,7 +889,7 @@ def cmd_doctor(a, c: Ctx) -> int:
         for w in W.list_worktrees(c.repo)
         if c.cfg.worktree.branch_prefix.rstrip("/") in w.get("branch", "")
     ]
-    known = {it.worktree for it in st.items.values() if it.worktree}
+    known = {str(W.load_path(c.repo, it.worktree)) for it in st.items.values() if it.worktree}
     for g in ghosts:
         if g and g not in known:
             notes.append(f"worktree {g} exists but no item claims it")
@@ -873,7 +951,7 @@ def cmd_show(a, c: Ctx) -> int:
         print(f"no such item {a.id!r}", file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(_plain(it), indent=2, default=str))
+        print(json.dumps(_resolved(c, it), indent=2, default=str))
         return OK
     print(f"{it.id} [{it.kind}] {it.title}\n  state {it.state}")
     if it.needs:
@@ -883,7 +961,7 @@ def cmd_show(a, c: Ctx) -> int:
     if it.lease:
         print(f"  lease {it.lease.holder} ({it.lease.remaining_s(time.time()):.0f}s left)")
     if it.worktree:
-        print(f"  worktree {it.worktree} [{it.branch}]")
+        print(f"  worktree {W.load_path(c.repo, it.worktree)} [{it.branch}]")
     if it.body:
         print(f"\n{it.body}\n")
     print(G.status(st, c.cfg, a.id).render())
@@ -1041,25 +1119,27 @@ def cmd_cadence(a, c: Ctx) -> int:
 
 
 def _diff_for(c: Ctx, item_id: str, base: str = "") -> tuple[str, str]:
-    """(diff, how) for an item: its worktree branch vs base, else the dirty tree.
+    """(diff, how) for an item: its worktree branch vs base, plus the working tree.
 
-    Returns the branch diff when the item has a worktree, because by review time the
-    work is usually committed there and `git diff` alone would be empty -- and an empty
-    diff is the commonest way a review passes having examined nothing.
+    Goes through `worktree.capture_diff`, which includes UNTRACKED files via
+    intent-to-add. A plain `git diff` omits them, so the regression test an agent just
+    wrote is invisible to the reviewer — which then reports, correctly given its input
+    and wrongly given the facts, that the change ships no tests.
     """
     st = c.state()
     it = st.items.get(item_id)
     base = base or c.cfg.worktree.base_ref or W.default_branch(c.repo)
-    if it and it.worktree and Path(it.worktree).exists():
-        wt = Path(it.worktree)
-        merge_base = W.git(wt, "merge-base", base, "HEAD").out or base
-        committed = W.git(wt, "diff", f"{merge_base}..HEAD").out
-        dirty = W.git(wt, "diff").out
-        both = "\n".join(x for x in (committed, dirty) if x.strip())
-        if both.strip():
-            return both, f"{base}..HEAD (+ uncommitted) in {wt}"
-    dirty = W.git(c.repo, "diff", "HEAD").out
-    return dirty, f"uncommitted changes in {c.repo}"
+    wt_path = W.load_path(c.repo, it.worktree) if it and it.worktree else None
+    if wt_path and wt_path.exists():
+        wt = wt_path
+        diff = W.capture_diff(wt, base)
+        if diff.strip():
+            ok, missing = W.diff_covers_everything(wt, diff)
+            how = f"{base}..HEAD + working tree in {wt}"
+            if not ok:
+                how += f" (WARNING: {len(missing)} changed path(s) absent from the diff)"
+            return diff, how
+    return W.capture_diff(c.repo), f"working tree in {c.repo}"
 
 
 def cmd_reviewers(a, c: Ctx) -> int:
@@ -1093,6 +1173,48 @@ def cmd_reviewers(a, c: Ctx) -> int:
         else:
             print("\nAdd to .orchard/config.toml (or re-run with --write):")
             print("".join(blocks))
+        return OK
+
+    if a.reviewers_cmd == "presets":
+        for name, spec in sorted(R.PRESETS.items()):
+            where = spec.get("base_url") or spec.get("command", "")
+            print(f"  {name:<12} {spec['kind']:<9} {where}")
+        print("\nAdd one with:  orchard reviewers add --preset <name> [--model M]")
+        return OK
+
+    if a.reviewers_cmd == "add":
+        preset = dict(R.PRESETS.get(a.preset, {}))
+        if a.preset and not preset:
+            print(f"unknown preset {a.preset!r}; `orchard reviewers presets`", file=sys.stderr)
+            return FAIL
+        if a.model:
+            preset["model"] = a.model
+        if a.base_url:
+            preset["base_url"] = a.base_url
+        if a.gates:
+            preset["gates"] = _csv(a.gates)
+        name = a.name or a.preset or preset.get("model", "reviewer")
+        preset.setdefault("family", R.family_of(preset.get("model", "")))
+        preset.pop("launch", None) if a.no_launch else None
+        body = [f'\n[[reviewer]]\nname = "{name}"']
+        launch = preset.pop("launch", None)
+        for k, v in preset.items():
+            body.append(f"{k} = {json.dumps(v)}")
+        if launch:
+            body.append("launch = " + json.dumps(launch))
+        block = "\n".join(body) + "\n"
+        path = c.repo / ".orchard" / "config.toml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prev = path.read_text("utf-8") if path.exists() else ""
+        path.write_text(prev.rstrip() + "\n" + block, "utf-8")
+        note = ""
+        if preset.get("api_key_env"):
+            note = (
+                f"\n  Set ${preset['api_key_env']} in your environment. The KEY is "
+                f"never written to the config — only the variable's name, because "
+                f"this file is committed."
+            )
+        c.out(f"added reviewer {name!r} to {path}{note}", {"name": name})
         return OK
 
     revs = R.load_reviewers(c.repo)
@@ -1187,7 +1309,14 @@ def cmd_review(a, c: Ctx) -> int:
         print(
             f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}", flush=True
         )
-        res = R.review(r, diff, intent, context=a.context or "")
+        res = R.review(
+            r,
+            diff,
+            intent,
+            context=a.context or "",
+            repo=c.repo,
+            prompt_overrides=_prompt_overrides(c),
+        )
         results.append(res)
         print(
             f"  {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
@@ -1224,6 +1353,79 @@ def cmd_review(a, c: Ctx) -> int:
             f"family {best.family})"
         )
     return {R.REVIEWED: OK, R.PARTIAL: REFUSED, R.UNAVAILABLE: NOTHING, R.ERROR: FAIL}[best.status]
+
+
+def _prompt_overrides(c: Ctx) -> dict[str, str]:
+    from dataclasses import fields as _fields
+
+    return {
+        f.name: getattr(c.cfg.prompts, f.name)
+        for f in _fields(c.cfg.prompts)
+        if getattr(c.cfg.prompts, f.name)
+    }
+
+
+def cmd_prompts(a, c: Ctx) -> int:
+    from . import prompts as P
+
+    ov = _prompt_overrides(c)
+    if a.prompts_cmd == "list":
+        rows = P.list_all(c.repo, ov)
+        if c.json:
+            print(
+                json.dumps(
+                    [
+                        {
+                            "name": t.name,
+                            "source": t.source,
+                            "path": str(t.path),
+                            "chars": len(t.text),
+                        }
+                        for t in rows
+                    ],
+                    indent=2,
+                )
+            )
+            return OK
+        for t in rows:
+            print(f"  {t.name:<24} [{t.source:<7}] {t.path}")
+        print(
+            "\nEdit any of them with `orchard prompts eject <name>`, which copies the "
+            "shipped default into .orchard/prompts/ where it takes precedence."
+        )
+        return OK
+    if a.prompts_cmd == "show":
+        try:
+            print(P.resolve(a.name, c.repo, ov).text)
+        except P.TemplateError as exc:
+            print(str(exc), file=sys.stderr)
+            return FAIL
+        return OK
+    if a.prompts_cmd == "eject":
+        names = [a.name] if a.name else list(P.TEMPLATE_NAMES)
+        out = c.repo / ".orchard" / "prompts"
+        out.mkdir(parents=True, exist_ok=True)
+        written = []
+        for n in names:
+            try:
+                t = P.resolve(n, None, {})  # the SHIPPED default, not the override
+            except P.TemplateError as exc:
+                print(str(exc), file=sys.stderr)
+                return FAIL
+            dst = out / f"{n}.md"
+            if dst.exists() and not a.force:
+                print(f"  skipped {dst} (exists; --force to overwrite)")
+                continue
+            dst.write_text(t.text, "utf-8")
+            written.append(str(dst))
+        c.out(
+            "\n".join(f"  wrote {w}" for w in written)
+            + "\n\nThese now take precedence over the shipped defaults. Edit them "
+            "freely; they are plain text and are not parsed as code.",
+            {"written": written},
+        )
+        return OK
+    return FAIL
 
 
 def cmd_hooks(a, c: Ctx) -> int:
@@ -1277,7 +1479,12 @@ def cmd_adopt(a, c: Ctx) -> int:
     agents = _csv(a.agents) or list(AGENT_TARGETS)
     try:
         actions = adopt(
-            c.repo, agents, docs_dir=a.docs, install_hooks=c.cfg.enforce.install_hooks_on_setup
+            c.repo,
+            agents,
+            docs_dir=a.docs,
+            install_hooks=c.cfg.enforce.install_hooks_on_setup,
+            launch=a.launch,
+            image=a.image,
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -1657,6 +1864,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     rvd.set_defaults(fn=cmd_reviewers)
     rv_s.add_parser("list").set_defaults(fn=cmd_reviewers)
+    rv_s.add_parser("presets", help="ready-made provider settings").set_defaults(fn=cmd_reviewers)
+    rva = rv_s.add_parser("add", help="add a reviewer from a preset")
+    rva.add_argument("--preset", default="", help="see `orchard reviewers presets`")
+    rva.add_argument("--name", default="")
+    rva.add_argument("--model", default="")
+    rva.add_argument("--base-url", default="")
+    rva.add_argument("--gates", default="")
+    rva.add_argument(
+        "--no-launch",
+        action="store_true",
+        help="do not auto-start a local server for this reviewer",
+    )
+    rva.set_defaults(fn=cmd_reviewers)
     rvt = rv_s.add_parser("test", help="send a tiny known-buggy diff and check the reply")
     rvt.add_argument("name", nargs="?", default="")
     rvt.set_defaults(fn=cmd_reviewers)
@@ -1680,7 +1900,30 @@ def build_parser() -> argparse.ArgumentParser:
         help="comma-separated: claude,gemini,codex,copilot,kilo (default: all)",
     )
     ad.add_argument("--docs", default="docs/orchard", help="where to write the drivers")
+    ad.add_argument(
+        "--launch",
+        default="auto",
+        choices=["auto", "uvx", "docker", "python"],
+        help="how agents spawn the MCP server: 'auto' prefers uvx; 'docker' needs no "
+        "Python toolchain at all",
+    )
+    ad.add_argument(
+        "--image",
+        default="ghcr.io/OWNER/orchard:latest",
+        help="container image used by --launch docker",
+    )
     ad.set_defaults(fn=cmd_adopt)
+
+    pr = s.add_parser("prompts", help="inspect and override the prompt templates")
+    pr_s = pr.add_subparsers(dest="prompts_cmd", required=True)
+    pr_s.add_parser("list").set_defaults(fn=cmd_prompts)
+    prs = pr_s.add_parser("show")
+    prs.add_argument("name")
+    prs.set_defaults(fn=cmd_prompts)
+    pre = pr_s.add_parser("eject", help="copy the shipped templates into .orchard/prompts/")
+    pre.add_argument("name", nargs="?", default="")
+    pre.add_argument("--force", action="store_true")
+    pre.set_defaults(fn=cmd_prompts)
 
     hk = s.add_parser("hooks", help="install/inspect the enforcement git hook")
     hk_s = hk.add_subparsers(dest="hooks_cmd", required=True)

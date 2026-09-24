@@ -15,6 +15,7 @@ its docstring, which is the discoverability contract this module exists to keep.
 from __future__ import annotations
 
 import dataclasses
+import json
 import os
 import tomllib
 from dataclasses import dataclass, field, fields
@@ -265,10 +266,20 @@ class SessionConfig:
     log_prompts: bool = True
     redact_patterns: list[str] = field(
         default_factory=lambda: [
-            r"(?i)(api[-_ ]?key|token|secret|password|bearer)\s*[:=]\s*\S+",
+            # `key: value` and `key=value`.
+            r"(?i)(api[-_ ]?key|token|secret|password|passwd|pwd)\s*[:=]\s*\S+",
+            # `Authorization: Bearer <token>` — a SPACE, not a colon, after the scheme.
+            # The colon-or-equals pattern above does not match it, so bearer tokens were
+            # written to the committed log in full.
+            r"(?i)\b(bearer|basic|token)\s+[A-Za-z0-9._~+/=-]{12,}",
             r"(?i)\b(gh[pousr]_[A-Za-z0-9]{16,})\b",
-            r"(?i)\b(sk-[A-Za-z0-9]{16,})\b",
-            r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+            r"(?i)\b(sk-[A-Za-z0-9_-]{16,})\b",
+            r"(?i)\b(xox[abprs]-[A-Za-z0-9-]{10,})\b",
+            r"\bAKIA[0-9A-Z]{16}\b",
+            # The WHOLE PEM block, not just its header. Matching the header alone left
+            # the base64 key body — the actual secret — in the log.
+            r"(?s)-----BEGIN [A-Z ]*PRIVATE KEY-----.*?-----END [A-Z ]*PRIVATE KEY-----",
+            r"(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----",
         ]
     )
     brief_max_tokens: int = 1200
@@ -374,6 +385,39 @@ _doc(
 
 
 @dataclass
+class PromptsConfig:
+    """Paths to prompt templates that replace the shipped ones.
+
+    Empty means "use the project's `.orchard/prompts/<name>.md` if present, else the
+    packaged default". Set a path here to point somewhere else entirely -- a shared
+    prompts repository, for instance.
+    """
+
+    review_system: str = ""
+    review_user: str = ""
+    gate_instruction: str = ""
+    session_brief_header: str = ""
+
+
+_doc(
+    "prompts",
+    "review_system",
+    "Path to the reviewer's system prompt template, replacing the shipped one. `orchard prompts eject` writes an editable copy into .orchard/prompts/ to start from.",
+)
+_doc(
+    "prompts",
+    "review_user",
+    "Path to the per-chunk review message template. Variables: intent, context, diff, chunk_index, chunk_total.",
+)
+_doc(
+    "prompts",
+    "gate_instruction",
+    "Path to the template rendered when an agent asks what a gate requires. Variables: gate, item.",
+)
+_doc("prompts", "session_brief_header", "Path to the header template for `orchard brief`.")
+
+
+@dataclass
 class EnforceConfig:
     """Mechanical enforcement — the layer that does not rely on the agent agreeing."""
 
@@ -447,6 +491,7 @@ class Config:
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
+    prompts: PromptsConfig = field(default_factory=PromptsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "env"
@@ -480,10 +525,33 @@ class Config:
     def _sections(self) -> list[str]:
         return [f.name for f in fields(self) if f.name != "sources"]
 
+    #: Top-level TOML tables that are NOT config sections and must not be treated as
+    #: typos. They are consumed by other loaders: `[gate.*]` by gates.load_gates,
+    #: `[[reviewer]]` by reviewer.load_reviewers.
+    _FOREIGN_TABLES = frozenset({"gate", "reviewer"})
+
     def _apply(self, data: dict[str, Any], source: str) -> None:
         for sec, values in data.items():
-            if sec not in self._sections() or not isinstance(values, dict):
+            if sec in self._FOREIGN_TABLES:
                 continue
+            if sec not in self._sections():
+                # A typo'd section used to be skipped in silence -- so `[leases]` for
+                # `[lease]` left every knob at its default while the operator believed
+                # the file was in effect. That is the silent-knob-drop class, in the
+                # module written to prevent it.
+                near = [
+                    s for s in self._sections() if s.startswith(sec[:3]) or sec.startswith(s[:3])
+                ]
+                raise ValueError(
+                    f"unknown config section [{sec}]."
+                    + (f" Did you mean [{near[0]}]?" if near else "")
+                    + f" Known sections: {', '.join(sorted(self._sections()))}"
+                )
+            if not isinstance(values, dict):
+                raise ValueError(
+                    f"[{sec}] must be a table, got {type(values).__name__}. "
+                    f"(Did you write [[{sec}]] instead of [{sec}]?)"
+                )
             target = getattr(self, sec)
             known = {f.name: f for f in fields(target)}
             for knob, raw in values.items():
@@ -514,6 +582,25 @@ class Config:
         return rows
 
 
+def _maybe_json(raw: str, want: type) -> Any:
+    """Parse ``raw`` as JSON if it looks like JSON of the wanted type, else None.
+
+    Gives env vars a way to express values containing commas, without breaking the
+    plain comma-separated form that is pleasanter for simple cases.
+    """
+    text = raw.strip()
+    opener = "[" if want is list else "{"
+    if not text.startswith(opener):
+        return None
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"looks like JSON but does not parse: {exc}") from exc
+    if not isinstance(parsed, want):
+        raise ValueError(f"expected a JSON {want.__name__}, got {type(parsed).__name__}")
+    return parsed
+
+
 def _coerce(raw: Any, typ: Any) -> Any:
     """Coerce a TOML/env scalar into the field's declared type.
 
@@ -536,7 +623,28 @@ def _coerce(raw: Any, typ: Any) -> Any:
     if "float" in ts:
         return float(raw)
     if "list" in ts:
+        # JSON first: comma-splitting tears any element that CONTAINS a comma, and the
+        # default redaction patterns do -- `{16,}` is a regex quantifier. The split
+        # produced two invalid regexes, so secrets stopped being redacted while the
+        # config still looked set.
+        parsed = _maybe_json(raw, list)
+        if parsed is not None:
+            return [str(x) for x in parsed]
+        if "," not in raw:
+            return [raw.strip()] if raw.strip() else []
         return [p.strip() for p in raw.split(",") if p.strip()]
     if "dict" in ts:
-        return dict(p.split("=", 1) for p in raw.split(",") if "=" in p)
+        parsed = _maybe_json(raw, dict)
+        if parsed is not None:
+            return {str(k): str(v) for k, v in parsed.items()}
+        pairs = [p for p in raw.split(",") if p.strip()]
+        bad = [p for p in pairs if "=" not in p]
+        if bad:
+            # Silently dropping a malformed pair weakens whatever reads the map -- for
+            # `agent.families` that is the reviewer-independence check itself.
+            raise ValueError(
+                f"malformed dict entry {bad[0]!r}: expected key=value. "
+                f"Use JSON for values containing commas or '='."
+            )
+        return dict(p.split("=", 1) for p in pairs)
     return raw

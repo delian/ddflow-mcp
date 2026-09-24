@@ -19,6 +19,7 @@ Three rules encoded here, each from a failure that actually happened somewhere:
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import subprocess
@@ -114,7 +115,11 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "") -> Worktree
     base = base or cfg.worktree.base_ref or default_branch(root)
     name = safe_name(item_id)
     branch = f"{cfg.worktree.branch_prefix}{name}"
-    wt_root = (root / cfg.worktree.root).resolve()
+    from .container import default_worktree_root
+
+    # Inside a container the default sibling root lands on the ephemeral layer and is
+    # destroyed on exit, taking uncommitted work with it. See container.py.
+    wt_root = (root / default_worktree_root(cfg.worktree.root)).resolve()
     path = wt_root / name
     wt = Worktree(item=item_id, path=path, branch=branch, base=base)
 
@@ -285,3 +290,93 @@ def list_worktrees(repo: Path) -> list[dict[str, str]]:
     if cur:
         out.append(cur)
     return out
+
+
+def capture_diff(tree: Path, base: str = "", *, include_untracked: bool = True) -> str:
+    """The diff a reviewer should actually see, including NEW files.
+
+    `git diff` omits untracked files entirely. A reviewer handed that diff cannot see
+    the regression test you just wrote — and then reports "this change has no tests",
+    which is both wrong and expensive, because it is exactly the finding a careful
+    reviewer is supposed to produce. `git add -N` (intent-to-add) registers untracked
+    paths in the index so they appear as new-file diffs, without staging their content.
+
+    Ordering matters: intent-to-add FIRST, then one `git diff HEAD` that covers tracked
+    modifications and new files together. Concatenating two separate diffs produces
+    duplicate headers when a file is both modified and re-added.
+    """
+    untracked = [
+        ln
+        for ln in git(tree, "ls-files", "--others", "--exclude-standard").out.splitlines()
+        if ln.strip()
+    ]
+    if include_untracked and untracked:
+        git(tree, "add", "-N", "--", *untracked)
+    try:
+        if base:
+            merge_base = git(tree, "merge-base", base, "HEAD").out or base
+            committed = git(tree, "diff", f"{merge_base}..HEAD").out
+        else:
+            committed = ""
+        working = git(tree, "diff", "HEAD").out
+    finally:
+        if include_untracked and untracked:
+            # Undo intent-to-add so the caller's index is exactly as we found it. A
+            # review that leaves files staged changes what the next commit contains.
+            git(tree, "reset", "--quiet", "--", *untracked)
+    return "\n".join(part for part in (committed, working) if part.strip())
+
+
+def diff_covers_everything(tree: Path, diff: str) -> tuple[bool, list[str]]:
+    """Cross-check: every path git reports as changed must appear in the diff.
+
+    A silent omission is the failure this guards -- and it is silent by construction,
+    because a diff that is missing a file looks exactly like a diff of a change that
+    did not touch that file.
+    """
+    changed = [
+        ln[3:].strip().strip('"')
+        for ln in git(tree, "status", "--porcelain").out.splitlines()
+        if ln.strip()
+    ]
+    missing = [p for p in changed if p and p not in diff]
+    return (not missing), missing
+
+
+def store_path(repo: Path, path: Path | str) -> str:
+    """How a worktree path is written INTO the event log: relative to the repo root.
+
+    The log is committed and shared. An absolute path is true only on the machine that
+    wrote it, so storing one makes the log say something false on every other checkout:
+    a teammate who clones to a different directory, a CI job, and — most sharply — a
+    container, where the repo is `/repo` and nothing else on the host is.
+
+    Falls back to an absolute path only when the worktree genuinely lies outside the
+    repository tree AND `os.path.relpath` cannot express it portably. That case is
+    reported by `orchard doctor` rather than silently accepted.
+    """
+    p = Path(path).resolve()
+    root = Path(repo).resolve()
+    try:
+        return p.relative_to(root).as_posix()
+    except ValueError:
+        pass
+    try:
+        rel = os.path.relpath(p, root)
+    except ValueError:  # different drive on Windows
+        return str(p)
+    return Path(rel).as_posix()
+
+
+def load_path(repo: Path, stored: str) -> Path:
+    """Resolve a stored worktree path back to something on THIS machine.
+
+    Absolute stored paths are honoured as-is, because logs written by older versions
+    contain them and silently reinterpreting an absolute path as relative would point
+    recovery at a directory that does not exist -- which reports "nothing to salvage"
+    over real work, the one error this system must never make.
+    """
+    if not stored:
+        return Path()
+    p = Path(stored)
+    return p if p.is_absolute() else (Path(repo).resolve() / p).resolve()

@@ -317,7 +317,7 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
     unmerged-commit count into ``rev-list HEAD..HEAD`` = 0, so a tree holding unmerged
     work was reported "safe to remove" — the one error this function must never make.
     """
-    wt = Path(rec.worktree) if rec.worktree else None
+    wt = W.load_path(repo, rec.worktree) if rec.worktree else None
     if not wt or not wt.exists():
         rec.advice = (
             "worktree is gone; nothing to salvage. "

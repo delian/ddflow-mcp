@@ -42,6 +42,11 @@ def run(sc: Scenario) -> None:
 
     sc.step("Initialise Orchard and declare the phase's work queue")
     sc.orchard("init")
+    # Commit the setup, as a real operator does: `init` touches tracked files
+    # (.gitignore, .gitattributes) and an uncommitted change there leaves the primary
+    # checkout dirty, which `orchard merge` refuses.
+    sc.git("add", "-A")
+    sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "orchard: adopt")
     sc.write(
         ".orchard/gates.toml",
         """

@@ -96,6 +96,8 @@ def adopt(
     docs_dir: str = "docs/orchard",
     force: bool = False,
     install_hooks: bool = True,
+    launch: str = "auto",
+    image: str = "ghcr.io/OWNER/orchard:latest",
 ) -> list[str]:
     repo = Path(repo)
     actions: list[str] = []
@@ -142,7 +144,7 @@ def adopt(
 
         actions.append(install_hook(repo))
     for key in agents:
-        actions.append(_register_mcp(repo, key))
+        actions.append(_register_mcp(repo, key, launch=launch, image=image))
         if key in NATIVE_RULES:
             actions.append(_write_native_rule(repo, key, section))
     return actions
@@ -186,11 +188,52 @@ def _upsert_block(path: Path, section: str) -> str:
     return f"{'appended to' if existing.strip() else 'created'} {path.name}"
 
 
-def _launch_entry() -> dict[str, object]:
-    """How an MCP client should spawn Orchard."""
+def _launch_entry(
+    launch: str = "auto", image: str = "ghcr.io/OWNER/orchard:latest"
+) -> dict[str, object]:
+    """How an MCP client should spawn Orchard.
+
+    ``docker`` is the zero-toolchain option: the operator needs Docker and nothing
+    else, and it behaves identically on Linux, macOS and Windows. The flags are not
+    decoration —
+
+    * ``-i`` but **never** ``-t``: MCP is newline-delimited JSON-RPC over stdin/stdout,
+      and a TTY injects control sequences that corrupt the stream.
+    * ``--rm``: one container per session; the state lives in the mounted repo.
+    * ``-v <repo>:/repo``: the repo is the only durable thing; everything Orchard
+      writes goes there.
+    * ``--add-host=host.docker.internal:host-gateway``: lets a reviewer endpoint served
+      on the operator's own machine be reachable. Docker Desktop provides the name
+      already; on Linux it does not exist without this flag.
+    """
     import shutil
     import sys
 
+    if launch == "docker" or (
+        launch == "auto"
+        and not shutil.which("uvx")
+        and not shutil.which("orchard-mcp")
+        and shutil.which("docker")
+    ):
+        return {
+            "command": "docker",
+            "args": [
+                "run",
+                "-i",
+                "--rm",
+                "-v",
+                "${workspaceFolder}:/repo",
+                "--add-host=host.docker.internal:host-gateway",
+                image,
+            ],
+        }
+    if launch == "python":
+        pkg_parent = str(Path(__file__).resolve().parents[1])
+        return {
+            "command": sys.executable,
+            "args": ["-m", "orchard.mcp_server"],
+            "env": {"PYTHONPATH": pkg_parent},
+        }
     if shutil.which("uvx") and not _running_from_source():
         return {"command": "uvx", "args": ["orchard-mcp"]}
     if shutil.which("orchard-mcp") and not _running_from_source():
@@ -211,7 +254,9 @@ def _running_from_source() -> bool:
     return not any(part in ("site-packages", "dist-packages") for part in here.parts)
 
 
-def _register_mcp(repo: Path, key: str) -> str:
+def _register_mcp(
+    repo: Path, key: str, *, launch: str = "auto", image: str = "ghcr.io/OWNER/orchard:latest"
+) -> str:
     """Add the Orchard MCP server to one agent's config, preserving what is there.
 
     Merged rather than overwritten: these files hold the user's other servers, and a
@@ -226,7 +271,7 @@ def _register_mcp(repo: Path, key: str) -> str:
     # checkout rather than an installed distribution, fall back to that checkout --
     # otherwise developing Orchard would silently configure the project against the
     # PUBLISHED version instead of the one under test.
-    entry = _launch_entry()
+    entry = _launch_entry(launch, image)
 
     if rel.endswith(".toml"):
         text = path.read_text("utf-8") if path.exists() else ""

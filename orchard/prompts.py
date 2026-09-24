@@ -1,0 +1,164 @@
+"""External, overridable prompt templates — extend by writing text, not code.
+
+Every string this system sends to a model, and every instruction it gives an agent,
+lives in a template file rather than inline in Python. That is not tidiness: prompts are
+**operator-tunable behaviour**. Inline them and improving a reviewer's instructions
+becomes a code change, a release and a version bump; externalise them and it is an edit
+to a text file in the operator's own repository.
+
+Resolution order for template ``name``, first hit wins:
+
+1. ``[prompts].<name>`` in ``.orchard/config.toml`` — an explicit path;
+2. ``<repo>/.orchard/prompts/<name>.md`` — the conventional project override;
+3. the shipped default in ``orchard/templates/prompts/<name>.md``.
+
+**Rendering is Jinja2 when Jinja2 is importable, and a strict stdlib renderer
+otherwise.** Orchard takes no runtime dependencies — that is what lets it install inside
+a sandbox with no package index — so Jinja cannot be required. But a project that
+already has it gets loops, conditionals and filters for free, and the shipped templates
+are written in the subset both renderers agree on: ``{{ var }}``, ``{% if %}`` /
+``{% endif %}``, ``{% for %}`` / ``{% endfor %}``.
+
+The stdlib renderer is deliberately **strict about unknown variables**: an undefined
+name raises rather than rendering empty. A prompt silently missing the diff it was
+supposed to carry is the vacuous-review failure in template form — the model dutifully
+reviews nothing and reports no findings.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+#: Every template the system uses. Registered here so `orchard prompts list` can show
+#: them all, and so a typo in a template name fails loudly instead of falling back to a
+#: default nobody notices.
+TEMPLATE_NAMES: tuple[str, ...] = (
+    "review_system",  # the reviewer's system prompt
+    "review_user",  # the per-chunk user message
+    "gate_instruction",  # what an agent is told to do for an agent gate
+    "session_brief_header",
+)
+
+
+class TemplateError(RuntimeError):
+    pass
+
+
+@dataclass
+class Template:
+    name: str
+    text: str
+    source: str  # "config" | "project" | "builtin"
+    path: Path | None = None
+
+
+def builtin_dir() -> Path:
+    return Path(__file__).resolve().parent / "templates" / "prompts"
+
+
+def resolve(
+    name: str, repo: Path | None = None, overrides: dict[str, str] | None = None
+) -> Template:
+    if name not in TEMPLATE_NAMES:
+        raise TemplateError(f"unknown template {name!r}. Known: {', '.join(TEMPLATE_NAMES)}")
+    explicit = (overrides or {}).get(name, "")
+    if explicit:
+        path = Path(explicit)
+        if not path.is_absolute() and repo:
+            path = repo / path
+        if not path.is_file():
+            # A configured override that does not exist is an error, never a silent
+            # fallback: the operator asked for THEIR prompt and would otherwise get
+            # the default while believing their edit was live.
+            raise TemplateError(f"[prompts].{name} points at {path}, which does not exist")
+        return Template(name, path.read_text("utf-8"), "config", path)
+    if repo:
+        path = repo / ".orchard" / "prompts" / f"{name}.md"
+        if path.is_file():
+            return Template(name, path.read_text("utf-8"), "project", path)
+    path = builtin_dir() / f"{name}.md"
+    if not path.is_file():
+        raise TemplateError(f"shipped template {name}.md is missing from the package")
+    return Template(name, path.read_text("utf-8"), "builtin", path)
+
+
+def render(tmpl: Template | str, **vars: Any) -> str:
+    text = tmpl.text if isinstance(tmpl, Template) else tmpl
+    try:
+        import jinja2
+    except ImportError:
+        return _render_stdlib(text, vars)
+    env = jinja2.Environment(
+        undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
+    )
+    try:
+        return env.from_string(text).render(**vars)
+    except jinja2.UndefinedError as exc:
+        raise TemplateError(f"template {getattr(tmpl, 'name', '?')}: {exc}") from exc
+
+
+_VAR = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\}\}")
+_IF = re.compile(
+    r"\{%\s*if\s+([A-Za-z_][A-Za-z0-9_.]*)\s*%\}(.*?)"
+    r"(?:\{%\s*else\s*%\}(.*?))?\{%\s*endif\s*%\}",
+    re.S,
+)
+_FOR = re.compile(
+    r"\{%\s*for\s+([A-Za-z_]\w*)\s+in\s+([A-Za-z_][A-Za-z0-9_.]*)\s*%\}"
+    r"(.*?)\{%\s*endfor\s*%\}",
+    re.S,
+)
+
+
+def _lookup(vars: dict[str, Any], dotted: str) -> Any:
+    cur: Any = vars
+    for part in dotted.split("."):
+        if isinstance(cur, dict) and part in cur:
+            cur = cur[part]
+        elif hasattr(cur, part):
+            cur = getattr(cur, part)
+        else:
+            raise TemplateError(
+                f"template variable {dotted!r} is not defined. Available: {', '.join(sorted(vars))}"
+            )
+    return cur
+
+
+def _render_stdlib(text: str, vars: dict[str, Any]) -> str:
+    """Jinja's common subset, without Jinja.
+
+    Handles `{{ var }}`, `{% if %}`/`{% else %}`/`{% endif %}` and `{% for %}`. Blocks
+    are resolved innermost-first by repeated substitution, which is enough for prompt
+    templates and nowhere near a general template language — by design. A project that
+    wants the rest installs Jinja2 and gets it automatically.
+    """
+
+    def for_sub(m: re.Match) -> str:
+        var, seq_name, body = m.group(1), m.group(2), m.group(3)
+        seq = _lookup(vars, seq_name)
+        out = []
+        for element in seq or []:
+            out.append(_render_stdlib(body, {**vars, var: element}))
+        return "".join(out)
+
+    def if_sub(m: re.Match) -> str:
+        name, yes, no = m.group(1), m.group(2), m.group(3) or ""
+        try:
+            truthy = bool(_lookup(vars, name))
+        except TemplateError:
+            truthy = False  # `{% if x %}` on an absent name is False, not fatal
+        return yes if truthy else no
+
+    prev = None
+    while prev != text:
+        prev = text
+        text = _FOR.sub(for_sub, text)
+        text = _IF.sub(if_sub, text)
+    return _VAR.sub(lambda m: str(_lookup(vars, m.group(1))), text)
+
+
+def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) -> list[Template]:
+    return [resolve(n, repo, overrides) for n in TEMPLATE_NAMES]

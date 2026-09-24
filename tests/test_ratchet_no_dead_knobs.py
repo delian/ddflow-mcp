@@ -22,8 +22,18 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 from orchard.config import Config
 
-#: Knobs deliberately not read by this package. Each needs a written reason.
-KNOWN_UNREAD: dict[str, str] = {}
+#: Knobs the NAME-BASED scan cannot see. Each needs a written reason, and the list may
+#: only SHRINK — `test_the_allowlist_only_shrinks` fails on a stale entry.
+KNOWN_UNREAD: dict[str, str] = {
+    # Read dynamically: `cli._prompt_overrides` iterates `dataclasses.fields(cfg.prompts)`
+    # and pulls every non-empty value, so no source line ever spells `.prompts.<name>`.
+    # Verified live by `test_prompt_override_from_config_is_honoured`, which sets each
+    # one and asserts the template actually changes — a stronger check than the grep.
+    "prompts.review_system": "read dynamically via dataclasses.fields in _prompt_overrides",
+    "prompts.review_user": "read dynamically via dataclasses.fields in _prompt_overrides",
+    "prompts.gate_instruction": "read dynamically via dataclasses.fields in _prompt_overrides",
+    "prompts.session_brief_header": "read dynamically via dataclasses.fields in _prompt_overrides",
+}
 
 
 def _sources() -> str:

@@ -18,8 +18,10 @@ and an MCP server that are the same implementation.
 
 - [Why it is built this way](#why-it-is-built-this-way)
 - [Install into any project](#install-into-any-project)
+  - [Docker — for operators with no Python toolchain](#docker--for-operators-with-no-python-toolchain)
+  - [Extending it by writing text, not code](#extending-it-by-writing-text-not-code)
   - [Publishing and registry](#publishing-and-registry)
-  - [Cross-family review, configured in TOML](#cross-family-review-configured-in-toml)
+  - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
 - [The task pipeline](#the-task-pipeline)
 - [The phase pipeline](#the-phase-pipeline)
@@ -111,6 +113,68 @@ version.
 
 </details>
 
+### Docker — for operators with no Python toolchain
+
+```json
+{ "mcpServers": { "orchard": { "command": "docker", "args": [
+    "run", "-i", "--rm",
+    "-v", "${workspaceFolder}:/repo",
+    "--add-host=host.docker.internal:host-gateway",
+    "ghcr.io/OWNER/orchard:latest" ] } } }
+```
+
+`orchard adopt --launch docker` writes exactly that. The image is **107 MB** (Alpine;
+Orchard is pure standard library, so there is no compiled dependency to worry musl
+about) and behaves identically on Linux, macOS and Windows.
+
+Four things go wrong when a containerised tool touches a bind-mounted git repo. All
+four are silent, one of them loses work, and all four are handled:
+
+| Trap | What it looks like | Handled by |
+|---|---|---|
+| **Worktrees land outside the mount** | `worktree.root` defaults to `../.orchard-worktrees`, a sibling of the repo. In a container only the repo is mounted, so worktrees go to the ephemeral layer and **are destroyed on exit with the agent's uncommitted work inside them.** | `container.default_worktree_root` relocates a sibling root to `.orchard-worktrees` inside the repo, and `adopt` gitignores it |
+| **Root-owned files** | On a Linux bind mount the operator needs `sudo` to edit their own project afterwards | the entrypoint reads the mount's uid/gid and `su-exec`s down to it |
+| **git refuses the mount** | "detected dubious ownership", surfacing as an unexplained Orchard failure | `safe.directory` set in the entrypoint |
+| **No git identity** | `git commit` fails with "Please tell me who you are" | entrypoint prefers `GIT_AUTHOR_*`, then the repo's own config, then a clearly-marked placeholder |
+
+And one that cannot be fully handled, so it is reported: **`127.0.0.1` inside a
+container is the container.** A model server on your own machine is not reachable from
+there. Orchard rewrites loopback reviewer URLs to `host.docker.internal`, and `orchard
+doctor` tells you that on Linux you must also pass
+`--add-host=host.docker.internal:host-gateway`, because unlike Docker Desktop the Linux
+engine does not provide that name.
+
+> **The related portability fix:** worktree paths are stored in the event log
+> **relative to the repo root**. The log is committed and shared, so an absolute path is
+> true only on the machine that wrote it — false for a teammate who cloned elsewhere,
+> for CI, and for a container where the repo is `/repo`. Pinned by
+> `test_the_event_log_carries_no_absolute_paths`.
+
+### Extending it by writing text, not code
+
+Every prompt is an external template, resolved config → project → shipped:
+
+```sh
+orchard prompts list              # where each template currently comes from
+orchard prompts eject             # copy the shipped ones into .orchard/prompts/
+$EDITOR .orchard/prompts/review_system.md
+```
+
+Templates render with **Jinja2 when it is installed, and a strict standard-library
+renderer otherwise** — Orchard cannot require Jinja without losing zero-dependency
+installability, but a project that already has it gets the full language. The shipped
+templates use the subset both engines agree on, and a test renders each one through
+both and asserts the output matches, so a project that installs Jinja2 never silently
+gets different prompts from one that does not.
+
+Both renderers are **strict about undefined variables**: a prompt silently missing the
+diff it was supposed to carry is the vacuous review in template form — the model
+dutifully reviews nothing and reports no findings.
+
+The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
+reviewers (`[[reviewer]]`), enforcement (`[enforce]`), cadences, and 47 other knobs.
+`orchard config --set <key> <value>` edits one key in place, preserving comments.
+
 ### Publishing and registry
 
 `server.json` carries the [MCP registry](https://modelcontextprotocol.io/registry/quickstart)
@@ -120,30 +184,70 @@ using OIDC trusted publishing — no stored tokens. The workflow refuses to publ
 the tag, `pyproject.toml` and `server.json` disagree about the version, and
 `tests/test_packaging.py` pins the same invariant locally.
 
-### Cross-family review, configured in TOML
+### Any LLM as a reviewer — local, remote, SaaS, or a CLI
 
-The `critic` gate is run by Orchard, not claimed by the agent. Point it at any
-OpenAI-compatible endpoint:
+The `critic` and `rubber_duck` gates are **run by Orchard, not claimed by the agent**.
+Point them at whatever you have:
 
-```toml
-# .orchard/config.toml
-[[reviewer]]
-name      = "qwen-local"
-base_url  = "http://127.0.0.1:8000/v1"
-model     = "Qwen/Qwen3.8-Flash-Next-FP8"
-family    = "alibaba"          # must differ from the author's family
-gates     = ["critic"]
-# api_key_env = "MY_KEY"       # the NAME of an env var, never the key itself
+```sh
+orchard reviewers presets            # 19 ready-made provider settings
+orchard reviewers add --preset ollama --model qwen3:8b
+orchard reviewers detect --write     # probe local ports and register what is serving
+orchard reviewers test               # send a known-buggy diff, check the reply
 ```
 
-`orchard reviewers detect` probes ollama, vLLM, LM Studio, llama.cpp and sglang on their
-usual ports and writes this block for you, inferring the family from the model id.
+Four backends, because "any LLM" means four wire formats in practice:
 
-> **Reasoning models need a large `max_tokens`.** Default is 32000, and that is not
-> padding: measured on Qwen3.8-Flash-Next over a 30 KB diff, a 6000-token budget
-> produced **zero characters of content** — the entire budget went to reasoning and the
-> reply was truncated. Orchard reports that case as `TRUNCATED` with the remedy named,
-> rather than as an empty completion or, worse, a clean review.
+| `kind` | Reaches | Examples |
+|---|---|---|
+| `openai` *(default)* | anything OpenAI-compatible — which is most things | ollama, vLLM, LM Studio, llama.cpp, sglang, LiteLLM, OpenAI, DeepSeek, Groq, Together, Fireworks, Mistral, OpenRouter, xAI |
+| `anthropic` | the Messages API (system is a top-level field, not a message) | Claude |
+| `gemini` | `generateContent` (key in the query string, not a header) | Gemini |
+| `command` | **anything at all** — a CLI that reads a prompt on stdin and writes the reply to stdout | `claude -p`, `gemini -p`, `codex exec`, `llm -m`, your own script |
+
+`command` is the escape hatch that makes the answer to "can it use *X*?" always yes: a
+model with no HTTP API, behind a corporate gateway, or wrapped in an in-house tool is
+still usable, with no SDK and no dependency.
+
+```toml
+[[reviewer]]
+name   = "local-qwen"
+kind   = "openai"
+base_url = "http://127.0.0.1:11434/v1"
+model  = "qwen3:8b"
+family = "alibaba"              # must differ from the author's family
+gates  = ["critic"]
+# Optional: start it if it is not already running.
+launch = { command = "ollama serve", ready_url = "http://127.0.0.1:11434/v1/models" }
+
+[[reviewer]]
+name    = "claude-via-cli"
+kind    = "command"
+command = "claude -p --model {model}"
+model   = "claude-sonnet-5"
+family  = "anthropic"
+gates   = ["rubber_duck"]
+```
+
+Auto-launch is **opt-in per reviewer** — starting a multi-gigabyte model server as a
+side effect of asking for a code review is a surprise nobody wants by default. When it
+fails it never leaves a half-started process behind, because a reviewer stuck "starting"
+forever is indistinguishable from one that is down except that it also holds a process.
+
+**Keys are never written to the config.** Only `api_key_env`, the *name* of an
+environment variable — the config file is committed, and a key in git is a leaked key.
+
+Every way of not reviewing is reported distinctly, with its remedy: no key names the
+variable, a missing CLI names the binary, a dead server names the launch block you could
+add, a non-zero exit shows stderr, **and empty output on exit 0 is UNAVAILABLE rather
+than "no findings"** — the vacuous pass arriving by the most innocent-looking path
+there is.
+
+> **Reasoning models need a large `max_tokens`.** Default 32000, measured not guessed:
+> on Qwen3.8-Flash-Next over a 30 KB diff, a 6000-token budget produced **zero
+> characters of content** — the whole budget went to reasoning and the reply was
+> truncated. That case is reported as `TRUNCATED` with the remedy named, never as an
+> empty completion and never as a clean review.
 
 ## The model: phases, tasks, dependencies, globs
 
@@ -488,7 +592,7 @@ documentation, so the reference cannot rot.
 ## Testing
 
 ```sh
-python3 -m pytest tests/ -q          # 110 unit/integration tests
+python3 -m pytest tests/ -q          # 212 unit/integration tests
 python3 demos/run_all.py             # 4 end-to-end scenarios, 65 assertions
 ```
 

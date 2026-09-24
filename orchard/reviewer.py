@@ -30,9 +30,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import time
 import tomllib
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -93,11 +95,142 @@ def family_of(model: str) -> str:
     return low.split("/")[-1] or "unknown"
 
 
+#: Ready-made settings for the providers people actually use. `orchard reviewers add
+#: --preset openai` writes the block; nothing here is required, it just saves an operator
+#: looking up a base_url and guessing which env var the key lives in.
+PRESETS: dict[str, dict[str, Any]] = {
+    # --- SaaS, OpenAI-compatible -----------------------------------------------------
+    "openai": {
+        "kind": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "model": "gpt-5",
+    },
+    "deepseek": {
+        "kind": "openai",
+        "base_url": "https://api.deepseek.com/v1",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "model": "deepseek-chat",
+    },
+    "groq": {
+        "kind": "openai",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "model": "llama-3.3-70b-versatile",
+    },
+    "together": {
+        "kind": "openai",
+        "base_url": "https://api.together.xyz/v1",
+        "api_key_env": "TOGETHER_API_KEY",
+    },
+    "fireworks": {
+        "kind": "openai",
+        "base_url": "https://api.fireworks.ai/inference/v1",
+        "api_key_env": "FIREWORKS_API_KEY",
+    },
+    "mistral": {
+        "kind": "openai",
+        "base_url": "https://api.mistral.ai/v1",
+        "api_key_env": "MISTRAL_API_KEY",
+        "model": "mistral-large-latest",
+    },
+    "openrouter": {
+        "kind": "openai",
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+    },
+    "xai": {
+        "kind": "openai",
+        "base_url": "https://api.x.ai/v1",
+        "api_key_env": "XAI_API_KEY",
+        "model": "grok-4",
+    },
+    # --- SaaS, native wire formats ---------------------------------------------------
+    "anthropic": {
+        "kind": "anthropic",
+        "base_url": "https://api.anthropic.com/v1",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "model": "claude-sonnet-5",
+    },
+    "gemini": {
+        "kind": "gemini",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "api_key_env": "GEMINI_API_KEY",
+        "model": "gemini-2.5-pro",
+    },
+    # --- Local servers ---------------------------------------------------------------
+    "ollama": {
+        "kind": "openai",
+        "base_url": "http://127.0.0.1:11434/v1",
+        "model": "qwen3:8b",
+        "launch": {"command": "ollama serve", "ready_url": "http://127.0.0.1:11434/v1/models"},
+    },
+    "llamacpp": {"kind": "openai", "base_url": "http://127.0.0.1:8080/v1"},
+    "lmstudio": {"kind": "openai", "base_url": "http://127.0.0.1:1234/v1"},
+    "vllm": {"kind": "openai", "base_url": "http://127.0.0.1:8000/v1"},
+    # --- Anything else, via its own CLI ----------------------------------------------
+    # The universal escape hatch: if a model can be reached by a command that reads a
+    # prompt on stdin and writes the reply to stdout, it can be a reviewer here. No SDK,
+    # no wire format, no dependency.
+    "claude-cli": {
+        "kind": "command",
+        "command": "claude -p --model {model}",
+        "model": "claude-sonnet-5",
+        "family": "anthropic",
+    },
+    "gemini-cli": {
+        "kind": "command",
+        "command": "gemini -m {model} -p",
+        "model": "gemini-2.5-pro",
+        "family": "google",
+    },
+    "codex-cli": {
+        "kind": "command",
+        "command": "codex exec -m {model} -",
+        "model": "gpt-5",
+        "family": "openai",
+    },
+    "llm-cli": {"kind": "command", "command": "llm -m {model}", "family": "unknown"},
+    "litellm": {
+        "kind": "openai",
+        "base_url": "http://127.0.0.1:4000/v1",
+        "api_key_env": "LITELLM_API_KEY",
+        "launch": {
+            "command": "litellm --model {model} --port 4000",
+            "ready_url": "http://127.0.0.1:4000/v1/models",
+        },
+    },
+}
+
+
+@dataclass
+class LaunchSpec:
+    """How to start a local server that is not running yet.
+
+    Optional by design. An operator who already runs ollama gets nothing from this; an
+    operator who does not would otherwise see `UNAVAILABLE: unreachable` and have to go
+    find out what to start.
+    """
+
+    command: str = ""
+    ready_url: str = ""
+    ready_timeout_s: int = 120
+    stop_after: bool = False
+
+
 @dataclass
 class Reviewer:
-    """One configured reviewer endpoint."""
+    """One configured reviewer: local, remote, SaaS, or an arbitrary command."""
 
     name: str
+    #: openai | anthropic | gemini | command
+    kind: str = "openai"
+    #: For kind="command": a shell command that reads the prompt on stdin and writes
+    #: the reply to stdout. `{model}` is substituted. This is what makes ANY tool usable
+    #: as a reviewer -- a vendor CLI, an in-house script, a wrapper around a model with
+    #: no HTTP API at all.
+    command: str = ""
+    launch: dict[str, Any] = field(default_factory=dict)
     base_url: str = ""
     model: str = ""
     family: str = ""
@@ -120,9 +253,21 @@ class Reviewer:
     total_budget_s: int = 3600
     system_prompt_path: str = ""
     extra_body: dict[str, Any] = field(default_factory=dict)
+    #: Extra environment for a kind="command" reviewer (e.g. a per-reviewer API key).
+    env: dict[str, str] = field(default_factory=dict)
 
     def resolved_family(self) -> str:
         return self.family or family_of(self.model)
+
+    def launch_spec(self) -> LaunchSpec:
+        known = set(LaunchSpec.__dataclass_fields__)
+        unknown = set(self.launch) - known
+        if unknown:
+            raise ValueError(
+                f"reviewer {self.name!r}: unknown launch field(s) {sorted(unknown)}. "
+                f"Known: {sorted(known)}"
+            )
+        return LaunchSpec(**self.launch)
 
     def api_key(self) -> str:
         # The key is read from the environment, never stored in the config file. A key
@@ -225,7 +370,9 @@ def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
     Deliberately short-timeout and exception-swallowing: this runs against a list of
     candidate ports, and a closed port must cost milliseconds, not a stack trace.
     """
-    url = base_url.rstrip("/") + "/models"
+    from .container import rewrite_localhost
+
+    url = rewrite_localhost(base_url).rstrip("/") + "/models"
     try:
         with urllib.request.urlopen(url, timeout=timeout_s) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
@@ -248,32 +395,22 @@ def detect(
 
 # -- the review itself -------------------------------------------------------------------
 
-_SYSTEM = """\
-You are reviewing a code change. Your job is to REFUTE it, not to praise it: find the \
-input, interleaving, or environment that makes it WRONG.
+#: Kept ONLY as a last-resort fallback for a stripped deployment where the packaged
+#: templates are unreadable. The canonical text lives in
+#: `orchard/templates/prompts/review_system.md` and is what operators edit.
+_SYSTEM_FALLBACK = (
+    "Review this diff and REFUTE it. Report only defects, never style. If uncertain, "
+    "report nothing. End with 'STATUS: FINDINGS <n>' or 'STATUS: NO FINDINGS'."
+)
 
-Rules you must follow:
-- If you are uncertain about something, report nothing about it. A reviewer rewarded \
-for finding things finds things that are not there.
-- Do not report style, formatting, naming, or missing docstrings. Only defects.
-- Prefer concrete failure scenarios: "given input X, line N returns Y, which is wrong \
-because Z" beats "this could be fragile".
-
-You MUST end your reply with a status block in exactly this form, and nothing after it:
-
-STATUS: FINDINGS <n>
-or
-STATUS: NO FINDINGS
-
-Before the status block, list each finding as:
-
-FINDING <severity: HIGH|MEDIUM|LOW> <file:line or symbol>
-<one paragraph: what is wrong, and the input that demonstrates it>
-"""
 
 _STATUS_RE = re.compile(r"^STATUS:\s*(NO FINDINGS|FINDINGS\s+(\d+))\s*$", re.M | re.I)
+# The location group is `[^\n]*`, NOT `.*`: under re.S the dot crosses newlines, so the
+# location swallowed the whole finding body -- every finding rendered as one run-on blob
+# with an empty detail, and a multi-finding reply parsed as a single finding.
 _FINDING_RE = re.compile(
-    r"^FINDING\s+(HIGH|MEDIUM|LOW)\s*(.*)$(.*?)(?=^FINDING\s|^STATUS:|\Z)", re.M | re.I | re.S
+    r"^FINDING[ \t]+(HIGH|MEDIUM|LOW)[ \t]*([^\n]*)\n(.*?)(?=^FINDING[ \t]|^STATUS:|\Z)",
+    re.M | re.I | re.S,
 )
 
 
@@ -318,7 +455,159 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
 
 
 def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
-    """One chat completion. Returns (content, error). Never raises."""
+    """One completion, whatever the backend. Returns (content, error). Never raises.
+
+    Four backends, because "any LLM" means four wire formats in practice: the
+    OpenAI-compatible one that most providers and every local server speak, Anthropic's
+    Messages API, Google's generateContent, and -- the universal fallback -- an
+    arbitrary command reading stdin. The last one is what makes a model with no HTTP
+    API at all usable as a reviewer.
+    """
+    if rev.kind == "command":
+        return _chat_command(rev, system, user, timeout_s)
+    if rev.kind == "anthropic":
+        return _chat_anthropic(rev, system, user, timeout_s)
+    if rev.kind == "gemini":
+        return _chat_gemini(rev, system, user, timeout_s)
+    if rev.kind != "openai":
+        return "", (
+            f"unknown reviewer kind {rev.kind!r}; expected one of "
+            f"openai, anthropic, gemini, command"
+        )
+    return _chat_openai(rev, system, user, timeout_s)
+
+
+def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
+    """Run a CLI, prompt on stdin, reply on stdout.
+
+    Deliberately dumb and therefore universal. A non-zero exit is an error (the review
+    did not happen), and empty stdout is an error even on exit 0 -- a tool that printed
+    nothing reviewed nothing, and treating that as "no findings" is the vacuous pass.
+    """
+    import shutil
+    import subprocess
+
+    cmd = rev.command.replace("{model}", rev.model)
+    if not cmd.strip():
+        return "", "kind='command' but no `command` is configured"
+    head = shlex.split(cmd)[0] if not any(c in cmd[:1] for c in _SHELL_START) else ""
+    if head and "/" not in head and not shutil.which(head):
+        return "", (
+            f"executable {head!r} is not on PATH -- the reviewer could not run. "
+            f"This is NOT a clean review."
+        )
+    try:
+        p = subprocess.run(
+            cmd,
+            shell=True,
+            input=f"{system}\n\n{user}",
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            env={**os.environ, **rev.env},
+        )
+    except subprocess.TimeoutExpired:
+        return "", f"command timed out after {timeout_s:.0f}s"
+    except (OSError, ValueError) as exc:
+        return "", f"could not execute: {exc}"
+    out = (p.stdout or "").strip()
+    if p.returncode != 0:
+        return "", (f"command exited {p.returncode}: {((p.stderr or '') + out).strip()[:300]}")
+    if not out:
+        return "", "command produced no output on stdout"
+    return out, ""
+
+
+_SHELL_START = ";|&<>()$`"
+
+
+def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tuple[dict | None, str]:
+    req = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", **headers},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            return json.loads(resp.read().decode("utf-8", "replace")), ""
+    except urllib.error.HTTPError as exc:
+        return None, f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
+    except (urllib.error.URLError, OSError) as exc:
+        return None, f"unreachable: {exc}"
+    except (ValueError, json.JSONDecodeError) as exc:
+        return None, f"bad response body: {exc}"
+
+
+def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
+    """Anthropic Messages API: system is a TOP-LEVEL field, not a message."""
+    key = rev.api_key()
+    if not key:
+        return "", (f"no API key: set ${rev.api_key_env or 'ANTHROPIC_API_KEY'} in the environment")
+    body, err = _post_json(
+        rev.base_url.rstrip("/") + "/messages",
+        {
+            "model": rev.model,
+            "max_tokens": rev.max_tokens,
+            "temperature": rev.temperature,
+            "system": system,
+            "messages": [{"role": "user", "content": user}],
+            **rev.extra_body,
+        },
+        {"x-api-key": key, "anthropic-version": "2023-06-01"},
+        timeout_s,
+    )
+    if err:
+        return "", err
+    try:
+        blocks = body["content"]
+    except (KeyError, TypeError):
+        return "", f"unexpected response shape: {str(body)[:300]}"
+    text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
+    if not text and body.get("stop_reason") == "max_tokens":
+        return "", (
+            f"TRUNCATED: hit max_tokens ({rev.max_tokens}) before emitting an "
+            f"answer. Raise [[reviewer]].max_tokens or lower max_chunk_chars."
+        )
+    return text, ""
+
+
+def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
+    """Google generateContent: the key goes in the query string, not a header."""
+    key = rev.api_key()
+    if not key:
+        return "", f"no API key: set ${rev.api_key_env or 'GEMINI_API_KEY'}"
+    url = (
+        f"{rev.base_url.rstrip('/')}/models/{rev.model}:generateContent"
+        f"?key={urllib.parse.quote(key)}"
+    )
+    body, err = _post_json(
+        url,
+        {
+            "systemInstruction": {"parts": [{"text": system}]},
+            "contents": [{"role": "user", "parts": [{"text": user}]}],
+            "generationConfig": {"temperature": rev.temperature, "maxOutputTokens": rev.max_tokens},
+            **rev.extra_body,
+        },
+        {},
+        timeout_s,
+    )
+    if err:
+        return "", err
+    try:
+        cand = body["candidates"][0]
+    except (KeyError, IndexError, TypeError):
+        fb = (body or {}).get("promptFeedback", {})
+        return "", f"no candidate returned{f' ({fb})' if fb else ''}"
+    text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
+    if not text and cand.get("finishReason") == "MAX_TOKENS":
+        return "", (
+            f"TRUNCATED: hit maxOutputTokens ({rev.max_tokens}) before emitting "
+            f"an answer. Raise [[reviewer]].max_tokens."
+        )
+    return text, ""
+
+
+def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
     payload: dict[str, Any] = {
         "model": rev.model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
@@ -326,8 +615,10 @@ def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str,
         "max_tokens": rev.max_tokens,
         **rev.extra_body,
     }
+    from .container import rewrite_localhost
+
     req = urllib.request.Request(
-        rev.base_url.rstrip("/") + "/chat/completions",
+        rewrite_localhost(rev.base_url).rstrip("/") + "/chat/completions",
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Content-Type": "application/json",
@@ -372,7 +663,7 @@ def parse(text: str) -> tuple[list[Finding], bool]:
         Finding(
             severity=m.group(1).upper(),
             location=(m.group(2) or "").strip(),
-            title=(m.group(2) or "").strip() or (m.group(3) or "").strip()[:80],
+            title=(m.group(2) or "").strip() or " ".join((m.group(3) or "").split())[:80],
             detail=(m.group(3) or "").strip(),
         )
         for m in _FINDING_RE.finditer(text or "")
@@ -380,18 +671,23 @@ def parse(text: str) -> tuple[list[Finding], bool]:
     return findings, status is not None
 
 
-def review(
-    rev: Reviewer, diff: str, intent: str, *, context: str = "", on_chunk=None
-) -> ReviewResult:
-    """Run one reviewer over one diff. Never raises; encodes everything in the status."""
-    res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
-    started = time.time()
+def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | None:
+    """Everything that makes a review impossible before a single request is sent.
 
+    Returns the finished (UNAVAILABLE) result, or None to proceed. Separated out
+    because there are a lot of distinct ways not to review and each needs its own
+    remedy in the message -- collapsing them into one "review failed" sends an operator
+    hunting through the wrong half of the system.
+    """
     if not rev.enabled:
         res.status, res.reason = UNAVAILABLE, "reviewer is disabled in config"
         return res
-    if not rev.base_url or not rev.model:
-        res.status, res.reason = UNAVAILABLE, "reviewer has no base_url or model"
+    if rev.kind == "command":
+        if not rev.command:
+            res.status, res.reason = UNAVAILABLE, "kind='command' but no command is set"
+            return res
+    elif not rev.base_url or not rev.model:
+        res.status, res.reason = UNAVAILABLE, (f"reviewer {rev.name!r} has no base_url or model")
         return res
     if not diff.strip():
         # An empty diff is the commonest way a review passes vacuously: the command ran,
@@ -399,16 +695,166 @@ def review(
         res.status, res.reason = UNAVAILABLE, "the diff is empty — nothing was reviewed"
         return res
 
+    # Opt-in: start a local server if one is configured and not already answering.
+    # Starting a multi-gigabyte model server as a side effect of asking for a code
+    # review is a surprise nobody wants by default, so this runs only when the reviewer
+    # carries a `launch` block.
+    if rev.launch:
+        ok, note = ensure_running(rev)
+        if not ok:
+            res.status, res.reason = UNAVAILABLE, note
+            return res
+        if note:
+            res.reason = note
+
+    return None
+
+
+def _absorb_chunk(
+    res: ReviewResult, index: int, total: int, content: str, err: str, all_raw: list[str]
+) -> list[Finding] | None:
+    """Fold one chunk's reply into the result. Returns its findings, or None if it did
+    not produce a usable review.
+
+    The three not-a-review cases are kept distinct because their remedies differ:
+    a transport error (endpoint, key, binary), an EMPTY completion, and an
+    OFF-CONTRACT reply — thousands of tokens of deliberation with no STATUS block in
+    them. Only the last is easy to mistake for a review, which is why length is never
+    treated as a verdict.
+    """
+    if err:
+        res.reason = res.reason or f"chunk {index}/{total}: {err}"
+        return None
+    if not content:
+        res.chunks_off_contract += 1
+        res.reason = res.reason or f"chunk {index}: empty completion"
+        return None
+    all_raw.append(content)
+    findings, on_contract = parse(content)
+    if not on_contract:
+        res.chunks_off_contract += 1
+        res.reason = res.reason or (
+            f"chunk {index} came back OFF CONTRACT: {len(content)} chars with no "
+            f"STATUS: block. Not counted as reviewed."
+        )
+        return None
+    res.chunks_reviewed += 1
+    res.findings.extend(findings)
+    return findings
+
+
+def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
+    """Start a local server if one is configured and is not already answering.
+
+    Returns ``(available, note)``. Never raises, and never leaves a half-started process
+    behind: if the readiness probe never passes, the child is terminated and the reason
+    is returned. A reviewer stuck "starting" forever is indistinguishable from one that
+    is down, except that it also holds a process.
+    """
+    import subprocess
+    import time as _time
+
+    if rev.kind == "command":
+        return True, ""
+    spec = rev.launch_spec()
+    probe_url = spec.ready_url or (rev.base_url.rstrip("/") + "/models")
+    if _url_ok(probe_url):
+        return True, ""
+    if not spec.command:
+        return False, (
+            f"{rev.base_url} is not answering, and reviewer {rev.name!r} has no launch "
+            f"command. Start the server yourself, or add one:\n"
+            f'  launch = {{ command = "ollama serve" }}'
+        )
+
+    cmd = spec.command.replace("{model}", rev.model)
+    if on_log:
+        on_log(f"starting {rev.name}: {cmd}")
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            shell=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except (OSError, ValueError) as exc:
+        return False, f"could not start {cmd!r}: {exc}"
+
+    deadline = _time.monotonic() + spec.ready_timeout_s
+    while _time.monotonic() < deadline:
+        if proc.poll() is not None:
+            return False, (
+                f"the launch command {cmd!r} exited immediately with {proc.returncode}; "
+                f"{rev.base_url} is still not answering"
+            )
+        if _url_ok(probe_url):
+            return True, f"started {rev.name} via {cmd!r}"
+        _time.sleep(1.0)
+    proc.terminate()
+    return False, (
+        f"{cmd!r} did not become ready at {probe_url} within "
+        f"{spec.ready_timeout_s}s; the process was terminated"
+    )
+
+
+#: A server answering 401/404 still IS a server: the question `_url_ok` asks is
+#: "is something listening and reachable", not "did the request succeed".
+_HTTP_OK_FLOOR, _HTTP_SERVER_ERROR = 200, 500
+
+
+def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
+    """Is something listening and answering there?
+
+    A 401 or 404 counts: it means a server exists and is reachable, which is the
+    question. Only a connection error or a 5xx means "not there".
+    """
+    from .container import rewrite_localhost
+
+    try:
+        with urllib.request.urlopen(rewrite_localhost(url), timeout=timeout_s) as r:
+            return _HTTP_OK_FLOOR <= r.status < _HTTP_SERVER_ERROR
+    except urllib.error.HTTPError as exc:
+        return exc.code < _HTTP_SERVER_ERROR
+    except (urllib.error.URLError, OSError):
+        return False
+
+
+def review(
+    rev: Reviewer,
+    diff: str,
+    intent: str,
+    *,
+    context: str = "",
+    on_chunk=None,
+    repo: Path | None = None,
+    prompt_overrides: dict[str, str] | None = None,
+    extra_rules: str = "",
+) -> ReviewResult:
+    """Run one reviewer over one diff. Never raises; encodes everything in the status."""
+    res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
+    started = time.time()
+
+    problem = _preflight(rev, diff, res)
+    if problem is not None:
+        return problem
+
     chunks = split_diff(diff, rev.max_chunk_chars)
     res.chunks_total = len(chunks)
-    system = _SYSTEM
+
+    from . import prompts as P
+
+    overrides = dict(prompt_overrides or {})
     if rev.system_prompt_path:
-        path = Path(rev.system_prompt_path)
-        if path.is_file():
-            system = path.read_text("utf-8")
-        else:
-            res.status, res.reason = ERROR, f"system_prompt_path not found: {path}"
-            return res
+        # A per-reviewer override still wins: two reviewers may want different
+        # instructions, which a single project-wide template cannot express.
+        overrides["review_system"] = rev.system_prompt_path
+    try:
+        system = P.render(P.resolve("review_system", repo, overrides), extra_rules=extra_rules)
+        user_tmpl = P.resolve("review_user", repo, overrides)
+    except P.TemplateError as exc:
+        res.status, res.reason = ERROR, str(exc)
+        return res
 
     all_raw: list[str] = []
     for i, chunk in enumerate(chunks, 1):
@@ -418,35 +864,23 @@ def review(
                 f"total budget {rev.total_budget_s}s exhausted after {i - 1}/{len(chunks)} chunk(s)"
             )
             break
-        user = (
-            f"## Intent of this change\n\n{intent}\n\n"
-            + (f"## Context\n\n{context}\n\n" if context else "")
-            + f"## Diff (part {i} of {len(chunks)})\n\n```diff\n{chunk}\n```\n"
-        )
-        content, err = _chat(rev, system, user, min(rev.timeout_s, remaining))
-        if err:
-            res.reason = res.reason or f"chunk {i}/{len(chunks)}: {err}"
-            continue
-        if not content:
-            res.chunks_off_contract += 1
-            res.reason = res.reason or f"chunk {i}: empty completion"
-            continue
-        all_raw.append(content)
-        findings, on_contract = parse(content)
-        if not on_contract:
-            # Length is not a verdict. A reasoning model can emit thousands of tokens
-            # of deliberation with no conclusion in it; counting that as a clean review
-            # is the vacuous pass at the level of a whole reviewer.
-            res.chunks_off_contract += 1
-            res.reason = res.reason or (
-                f"chunk {i} came back OFF CONTRACT: {len(content)} chars with no "
-                f"STATUS: block. Not counted as reviewed."
+        try:
+            user = P.render(
+                user_tmpl,
+                intent=intent,
+                context=context,
+                diff=chunk,
+                chunk_index=i,
+                chunk_total=len(chunks),
             )
-            continue
-        res.chunks_reviewed += 1
-        res.findings.extend(findings)
-        if on_chunk:
-            on_chunk(i, len(chunks), findings)
+        except P.TemplateError as exc:
+            res.status, res.reason = ERROR, f"review_user template: {exc}"
+            return res
+
+        content, err = _chat(rev, system, user, min(rev.timeout_s, remaining))
+        note = _absorb_chunk(res, i, len(chunks), content, err, all_raw)
+        if note is not None and on_chunk:
+            on_chunk(i, len(chunks), note)
 
     res.raw = "\n\n---\n\n".join(all_raw)
     res.elapsed_s = time.time() - started

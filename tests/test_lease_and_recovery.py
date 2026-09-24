@@ -325,3 +325,44 @@ def test_an_unmeasurable_worktree_is_never_reported_as_safe_to_remove(repo, cfg)
 
     L.sweep(log, cfg, repo, apply=True)
     assert fold(log.read_all()).items["T1"].lease is not None, "an unmeasurable worktree was swept"
+
+
+def test_the_captured_diff_includes_untracked_files(repo, cfg):
+    """A reviewer handed a diff without the new test file reports "there are no tests".
+
+    `git diff` omits untracked files entirely, so the regression test an agent just
+    wrote is invisible to the critic gate — producing a finding that is correct given
+    its input and wrong given the facts. Found by mining this project's own lessons
+    corpus. Mutation-verified: setting include_untracked=False makes this red.
+    """
+    (repo / "existing.py").write_text("x = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "base"], check=True)
+
+    (repo / "existing.py").write_text("x = 2\n")  # tracked modification
+    (repo / "test_new_regression.py").write_text("def test_x(): assert True\n")  # NEW
+
+    diff = W.capture_diff(repo)
+    assert "existing.py" in diff, "the tracked modification is missing"
+    assert "test_new_regression.py" in diff, (
+        "the untracked regression test is missing from the diff a reviewer would see"
+    )
+    ok, missing = W.diff_covers_everything(repo, diff)
+    assert ok, f"diff omits: {missing}"
+
+
+def test_capturing_a_diff_leaves_the_index_untouched(repo, cfg):
+    """Intent-to-add must be undone: a review that stages files changes what the next
+    commit contains, which is a side effect no reviewer should have."""
+    (repo / "a.py").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "base"], check=True)
+    (repo / "untracked.py").write_text("y\n")
+    before = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
+    ).stdout
+    W.capture_diff(repo)
+    after = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
+    ).stdout
+    assert before == after, f"capture_diff changed the index:\n{before!r}\n{after!r}"

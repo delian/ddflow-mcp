@@ -200,7 +200,9 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
     out.append("")
 
 
-def _brief_current(out: list[str], state: State, cfg: Config, item: str) -> None:
+def _brief_current(
+    out: list[str], state: State, cfg: Config, item: str, repo: Path | None = None
+) -> None:
     from .gates import pipeline_for
 
     it = state.items.get(item)
@@ -216,7 +218,14 @@ def _brief_current(out: list[str], state: State, cfg: Config, item: str) -> None
     if it.globs:
         out.append("- writes: " + ", ".join(f"`{g}`" for g in it.globs))
     if it.worktree:
-        out.append(f"- worktree: `{it.worktree}` on `{it.branch}`")
+        # Resolved for display: a relative path is portable in the LOG and ambiguous in
+        # a brief, where the reader is about to `cd` to it.
+        from .worktree import load_path
+
+        out.append(
+            f"- worktree: `{load_path(repo, it.worktree) if repo else it.worktree}`"
+            f" on `{it.branch}`"
+        )
     todo = [g for g in pipeline_for(it, cfg) if it.gate_outcome(g) not in ("passed", "skipped")]
     out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
     if it.body:
@@ -263,6 +272,7 @@ def brief(
     cfg: Config,
     plan: Plan,
     *,
+    repo: Path | None = None,
     item: str = "",
     lessons: list[dict] | None = None,
     rules: str = "",
@@ -278,7 +288,7 @@ def brief(
     out: list[str] = ["# Orchard brief", ""]
     _brief_recovery(out, recovery or [])
     if item:
-        _brief_current(out, state, cfg, item)
+        _brief_current(out, state, cfg, item, repo)
     _brief_ready(out, plan)
     if rules:
         out += ["", "## Project rules", "", rules.strip()]

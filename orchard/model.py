@@ -78,6 +78,9 @@ class Lease:
     branch: str = ""
     globs: list[str] = field(default_factory=list)
     note: str = ""
+    #: Set when a `lease.expired` event was folded. The lease is KEPT so recovery can
+    #: still see which worktree it pointed at.
+    expired_at: str = ""
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
         return (now - self.renewed_at) > (self.ttl_s + grace_s)
@@ -292,7 +295,14 @@ def _h_lease_renewed(st: State, ev: Event) -> None:
     # lease at the dead agent's worktree, which every destructive path then targets.
     if "holder" in d and d["holder"] != it.lease.holder:
         return
-    it.lease.renewed_at = float(d.get("at", it.lease.renewed_at))
+    # A renewal may only move the clock FORWARD. A stale renewal reordered after a
+    # re-acquisition would otherwise set `renewed_at` back to its own older timestamp,
+    # and a live lease would read as expired -- inviting another agent to take an item
+    # someone is actively editing.
+    at = float(d.get("at", it.lease.renewed_at))
+    if at < it.lease.renewed_at:
+        return
+    it.lease.renewed_at = at
     # Absent keys leave the field alone; only a present key updates, so a plain
     # heartbeat never clears an attachment.
     if "worktree" in d:
@@ -306,9 +316,33 @@ def _h_lease_renewed(st: State, ev: Event) -> None:
 
 
 def _h_lease_gone(st: State, ev: Event) -> None:
+    """Handle `lease.released` and `lease.expired`.
+
+    Two rules, both learned from a cross-family review that probed reordered shards:
+
+    1. **A release only ends the lease it names.** Shard merges can order a former
+       holder's release AFTER a newer acquisition, and unconditionally clearing the
+       lease then destroys the CURRENT holder's claim — another agent can take the item
+       while the first is mid-edit. This is the same class as the stale-renewal bug
+       fixed earlier; that fix patched one handler and left its siblings, which is
+       exactly the incomplete-fix failure the rule against it describes.
+    2. **Expiry keeps the lease object, marked expired.** Deleting it loses the
+       worktree pointer, so `State.expired_leases()` could never report an expiry and a
+       cleanup pass sees an item with no lease at all. Keeping it with `ttl_s = 0` makes
+       `expired()` true, so it leaves `active_leases` and appears in `expired_leases`
+       with its worktree intact — which is what recovery needs to protect the tree.
+    """
     it = st.items.get(ev.subject)
-    if it:
-        it.lease = None
+    if not it or not it.lease:
+        return
+    holder = ev.data.get("holder")
+    if holder is not None and holder != it.lease.holder:
+        return
+    if ev.kind == "lease.expired":
+        it.lease.ttl_s = 0
+        it.lease.expired_at = ev.ts
+        return
+    it.lease = None
 
 
 def _h_state(new_state: str):
@@ -366,12 +400,12 @@ def _h_worktree_removed(st: State, ev: Event) -> None:
 
 
 def _h_bug_found(st: State, ev: Event) -> None:
-    st.bugs[ev.subject] = Bug(
-        id=ev.subject,
-        item=ev.data.get("item", ""),
-        summary=ev.data.get("summary", ""),
-        found_at=ev.ts,
-    )
+    """Merge, never replace. Folding `bug.found` after `bug.fixed` used to clear
+    `fixed_at`, so a bug that was fixed (with its regression test) read as open."""
+    bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
+    bug.item = ev.data.get("item", "") or bug.item
+    bug.summary = ev.data.get("summary", "") or bug.summary
+    bug.found_at = bug.found_at or ev.ts
 
 
 def _h_bug_fixed(st: State, ev: Event) -> None:
@@ -426,9 +460,11 @@ def _session(st: State, ev: Event) -> Session:
 
 
 def _h_session_started(st: State, ev: Event) -> None:
-    st.sessions[ev.subject] = Session(
-        id=ev.subject, agent=ev.agent, model=ev.data.get("model", ""), started_at=ev.ts
-    )
+    """Merge, never replace: a reordered shard can deliver a prompt before its
+    session.started, and replacing the object would drop an event that IS in the log."""
+    s = _session(st, ev)
+    s.model = ev.data.get("model", "") or s.model
+    s.started_at = s.started_at or ev.ts
 
 
 def _h_session_prompt(st: State, ev: Event) -> None:
