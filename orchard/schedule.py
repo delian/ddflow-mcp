@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
 from .config import Config
-from .model import DONE, RUNNING, Item, Lease, State
+from .model import ABANDONED, DONE, RUNNING, Item, Lease, State
 
 
 @dataclass
@@ -227,7 +227,7 @@ def plan(
     live = state.active_leases(now, grace)
 
     for it in sorted(candidates, key=lambda x: (x.priority, x.id)):
-        if it.state == DONE:
+        if it.state in (DONE, ABANDONED):
             continue
         if it.state == RUNNING and it.id in live:
             # Running and leased. Always reported as running; never offered as ready,

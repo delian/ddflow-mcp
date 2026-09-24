@@ -457,6 +457,91 @@ TOOLS: dict[str, dict[str, Any]] = {
         },
         "argv": lambda a: ["review", a["id"], *_opt("--gate", a), *_opt("--intent", a)],
     },
+    "orchard_show": {
+        "description": (
+            "Everything known about one phase or task: state, dependencies, declared "
+            "globs, the lease and who holds it, the worktree path you can cd to, and "
+            "every gate's outcome with its evidence. Use it to check your own work "
+            "before calling orchard_complete."
+        ),
+        "properties": {"id": ("string", "Item id.", True)},
+        "argv": lambda a: ["--json", "show", a["id"]],
+    },
+    "orchard_update": {
+        "description": (
+            "Change an item's fields. MOST IMPORTANT USE: widening `globs` when your "
+            "work turns out to touch files outside what you claimed. Do that BEFORE "
+            "writing them — the conflict detector and the commit hook both work from "
+            "the declared globs, so an undeclared file is a file no one is protecting "
+            "and the commit will be refused."
+        ),
+        "properties": {
+            "id": ("string", "Item id.", True),
+            "globs": ("string", "Comma-separated path globs this item writes.", False),
+            "needs": ("string", "Comma-separated ids it depends on.", False),
+            "title": ("string", "New title.", False),
+            "body": ("string", "New detail / acceptance criteria.", False),
+        },
+        "argv": lambda a: [
+            "--json",
+            "update",
+            a["id"],
+            *_opt("--globs", a),
+            *_opt("--needs", a),
+            *_opt("--title", a),
+            *_opt("--body", a),
+        ],
+    },
+    "orchard_abandon": {
+        "description": (
+            "Stop work on an item without completing it, with a reason. Use when a "
+            "task turns out to be unnecessary or impossible. DIFFERENT from blocking: "
+            "a blocked item is waiting and will resume; an abandoned one will not, and "
+            "so it stops holding its phase open — which an unfinished task otherwise "
+            "does forever, since nothing can ever finish it."
+        ),
+        "properties": {
+            "id": ("string", "Item id.", True),
+            "reason": ("string", "Why it is being dropped.", True),
+        },
+        "argv": lambda a: ["--json", "abandon", a["id"], "--reason", a.get("reason", "")],
+    },
+    "orchard_remove": {
+        "description": (
+            "Take an item out of the queue. The log is append-only, so this RECORDS a "
+            "removal rather than erasing anything — the item stays in the history and "
+            "in replay, which keeps the record honest about work that was planned and "
+            "then dropped. Refuses if another item depends on it."
+        ),
+        "properties": {"id": ("string", "Item id.", True), "reason": ("string", "Why.", False)},
+        "argv": lambda a: ["--json", "remove", a["id"], *_opt("--reason", a)],
+    },
+    "orchard_release": {
+        "description": (
+            "Give up a lease without completing the item — when you are handing off, "
+            "stopping, or recovering someone else's abandoned work after inspecting it. "
+            "The note is recorded in the log and is often the only lasting explanation "
+            "of why a claim was broken."
+        ),
+        "properties": {
+            "id": ("string", "Item id.", True),
+            "note": ("string", "Why you are releasing it.", False),
+        },
+        "argv": lambda a: ["--json", "release", a["id"], *_opt("--note", a)],
+    },
+    "orchard_block": {
+        "description": (
+            "Mark an item blocked on something outside the queue — a missing decision, "
+            "an upstream outage, a question for the operator. Better than silently "
+            "leaving it claimed: a blocked item states its reason, while a claimed one "
+            "that nobody is working just looks busy until the lease expires."
+        ),
+        "properties": {
+            "id": ("string", "Item id.", True),
+            "reason": ("string", "What it is waiting on.", True),
+        },
+        "argv": lambda a: ["--json", "block", a["id"], "--reason", a.get("reason", "")],
+    },
     "orchard_session_start": {
         "description": "Open a session for provenance logging. Returns the session id.",
         "properties": {
@@ -644,8 +729,10 @@ def _instructions(repo: Path) -> str:
     is waiting to be recovered. This is the only place the server gets to speak
     unprompted, so it says the one thing that is true right now.
     """
-    orchard_dir = repo / ".orchard"
-    if not orchard_dir.is_dir():
+    # Keyed on config.toml, not on the directory: the directory is created by ordinary
+    # use (an append needs it), so "the directory exists" answers a different question
+    # than "someone adopted this project". config.toml is written only by init/adopt.
+    if not (repo / ".orchard" / "config.toml").is_file():
         return (
             "This repository does not use Orchard yet.\n\n"
             "If the user wants a managed work queue — phases and tasks with "

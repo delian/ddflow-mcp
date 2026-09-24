@@ -197,3 +197,111 @@ def test_a_fully_configured_repo_gets_no_setup_nagging(repo):
     )
     text = _instructions(repo)
     assert "Setup still needed" not in text, text[-400:]
+
+
+# -- the out-of-box path: no ORCHARD_AGENT, no --agent, anywhere ----------------------
+
+
+def test_the_default_identity_is_stable_across_processes(repo):
+    """`host-pid` was stable for exactly ONE process.
+
+    So `orchard claim` and the `git commit` hook that ran seconds later were different
+    agents: the hook refused the holder's own commit AND reported that the lease
+    belonged to somebody else. Out of the box, the enforcement layer rejected correct
+    behaviour and blamed the user for it.
+    """
+    import subprocess as sp
+
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    env.pop("ORCHARD_AGENT", None)
+    code = (
+        "import sys;sys.path.insert(0,'.');"
+        "from orchard.events import default_agent_id;"
+        "print(default_agent_id(" + repr(str(repo)) + "))"
+    )
+    a = sp.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=120
+    ).stdout.strip()
+    b = sp.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, env=env, timeout=120
+    ).stdout.strip()
+    assert a == b and a, f"identity differs between processes: {a!r} vs {b!r}"
+    assert str(os.getpid()) not in a, "the pid leaked into the identity"
+
+
+def test_a_claimed_commit_succeeds_with_no_agent_configured_anywhere(repo):
+    """The out-of-box experience. No --agent, no ORCHARD_AGENT, nothing."""
+    run_cli(repo, "adopt", "--agents", "claude")
+    run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "a.py").write_text("x = 1\n")
+    (repo / "src" / "b.py").write_text("y = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "scaffold", "--no-verify"], check=True)
+    run_cli(repo, "phase", "add", "P1", "--title", "c")
+    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
+    run_cli(repo, "claim", "P1.T1", "--no-worktree")
+
+    (repo / "src" / "a.py").write_text("x = 2\n")
+    env = {k: v for k, v in os.environ.items() if k != "ORCHARD_AGENT"}
+    r = subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True)
+    r = subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "legit"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+    )
+    assert r.returncode == 0, f"the hook refused the holder's OWN commit:\n{r.stderr}"
+
+    # ...and an unclaimed path is still refused.
+    (repo / "src" / "b.py").write_text("y = 2\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/b.py"], check=True)
+    r = subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "unclaimed"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+    )
+    assert r.returncode != 0, "an unclaimed path was allowed through"
+
+
+def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
+    """The robust rule: the hook runs inside a worktree, and the lease that produced
+    that worktree is the relevant claim whatever identity string made it. Without this,
+    claiming from the primary checkout and committing inside the worktree disagree."""
+    from orchard import lease as L
+    from orchard import worktree as W
+    from orchard.events import EventLog
+
+    run_cli(repo, "adopt", "--agents", "claude")
+    run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")
+    run_cli(repo, "phase", "add", "P1", "--title", "c")
+    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/*")
+    wt = W.create(repo, cfg, "P1.T1")
+    log = EventLog(repo, "some-other-identity")
+    L.acquire(
+        log,
+        cfg,
+        "P1.T1",
+        holder="some-other-identity",
+        worktree=W.store_path(repo, wt.path),
+        branch=wt.branch,
+        globs=["src/*"],
+    )
+
+    (wt.path / "src").mkdir(exist_ok=True)
+    (wt.path / "src" / "new.py").write_text("x = 1\n")
+    subprocess.run(["git", "-C", str(wt.path), "add", "-A"], check=True)
+    env = {k: v for k, v in os.environ.items() if k != "ORCHARD_AGENT"}
+    r = subprocess.run(
+        ["git", "-C", str(wt.path), "commit", "-m", "in my worktree"],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=180,
+    )
+    assert r.returncode == 0, (
+        f"the hook refused a commit inside the very worktree the lease created:\n{r.stderr}"
+    )

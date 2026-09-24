@@ -158,3 +158,90 @@ def summarise(results: list[tuple[str, bool, int, int, float]]) -> int:
     total_checks = sum(r[3] for r in results)
     print(f"\n  {ok}/{len(results)} scenarios passed, {total_checks} assertions.")
     return 0 if ok == len(results) else 1
+
+
+class McpClient:
+    """A minimal MCP client speaking the real protocol to a real server process.
+
+    Deliberately not a mock. The whole point of an MCP scenario is to exercise the
+    transport an agent actually uses -- newline-delimited JSON-RPC over a pipe to a
+    separately-spawned process -- because that is where the failures live: a stray
+    print corrupting the stream, a notification that wrongly gets a reply, an exit code
+    that never reaches the model.
+    """
+
+    def __init__(self, repo: Path, root: Path, agent: str = "") -> None:
+        self.repo, self.root, self.agent, self._id = repo, root, agent, 0
+        env = {**os.environ, "PYTHONPATH": str(root)}
+        if agent:
+            env["ORCHARD_AGENT"] = agent
+        self.proc = subprocess.Popen(
+            [PY, "-m", "orchard", "--repo", str(repo), "mcp"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            env=env,
+        )
+
+    def notify(self, method: str, params: dict | None = None) -> None:
+        """Send a NOTIFICATION: write, do not read.
+
+        A JSON-RPC notification has no id and gets no reply. Reading one anyway blocks
+        forever -- the client waits for a line the server is right not to send, while
+        the server waits for the next request. Both processes then sit at 0% CPU
+        looking perfectly healthy, which is the worst shape a hang can take. Caught by
+        the orchestration scenario, which is the first thing here to send one.
+        """
+        self.proc.stdin.write(
+            json.dumps({"jsonrpc": "2.0", "method": method, "params": params or {}}) + "\n"
+        )
+        self.proc.stdin.flush()
+
+    def call(self, method: str, params: dict | None = None) -> dict:
+        self._id += 1
+        self.proc.stdin.write(
+            json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params or {}})
+            + "\n"
+        )
+        self.proc.stdin.flush()
+        line = self.proc.stdout.readline()
+        if not line:
+            err = self.proc.stderr.read()[:2000]
+            raise Fail(f"MCP server closed the stream. stderr:\n{err}")
+        return json.loads(line)
+
+    def tool(self, name: str, **args) -> tuple[str, int]:
+        """Returns (text, exit_code). Exit 2/3 are RESULTS, not errors."""
+        r = self.call("tools/call", {"name": name, "arguments": args})
+        if "error" in r:
+            raise Fail(f"{name} -> JSON-RPC error {r['error']}")
+        res = r["result"]
+        return res["content"][0]["text"], res.get("_meta", {}).get("exit", 0)
+
+    def jtool(self, name: str, **args) -> object:
+        text, _code = self.tool(name, **args)
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise Fail(f"{name} did not return JSON: {exc}\n{text[:400]}") from exc
+
+    def initialize(self) -> dict:
+        r = self.call(
+            "initialize",
+            {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "scenario", "version": "1"},
+            },
+        )
+        self.notify("notifications/initialized")
+        return r["result"]
+
+    def close(self) -> None:
+        try:
+            self.proc.stdin.close()
+            self.proc.wait(timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            self.proc.kill()

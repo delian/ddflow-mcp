@@ -34,10 +34,12 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import getpass
 import hashlib
 import json
 import os
 import socket
+import subprocess
 import time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
@@ -146,13 +148,86 @@ class Event:
         return (self.lamport, self.agent, self.id or self.compute_id())
 
 
-def default_agent_id() -> str:
-    return f"{socket.gethostname().split('.')[0]}-{os.getpid()}"
+_AGENT_ID_CACHE: dict[str, str] = {}
+
+
+def _toplevel(path: str) -> str:
+    try:
+        r = subprocess.run(
+            ["git", "-C", path, "rev-parse", "--show-toplevel"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    return r.stdout.strip() if r.returncode == 0 else ""
+
+
+def _common_dir(path: str) -> str:
+    try:
+        r = subprocess.run(
+            ["git", "-C", path, "rev-parse", "--git-common-dir"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return ""
+    if r.returncode != 0 or not r.stdout.strip():
+        return ""
+    p = Path(r.stdout.strip())
+    return str((Path(path) / p).resolve() if not p.is_absolute() else p.resolve())
+
+
+def default_agent_id(fallback_root: Path | str | None = None) -> str:
+    """A stable identity for "the agent working here".
+
+    It used to be ``{host}-{pid}``, which is stable for exactly one process — so
+    `orchard claim` and the `git commit` hook that ran seconds later were different
+    agents. The hook then refused the holder's own commit **and told them their lease
+    belonged to somebody else**. Out of the box, the enforcement layer rejected correct
+    behaviour and blamed the user for it.
+
+    The working model is **one agent per worktree**, so the worktree is the identity:
+
+    * inside a worktree of the managed repository -> that worktree's name, so two
+      parallel agents differ while every process inside one worktree agrees;
+    * anywhere else -> the managed repository's own name, so a command run with
+      ``--repo X`` from an unrelated directory still lands on X's identity rather than
+      on whatever happened to be the shell's cwd.
+
+    ``ORCHARD_AGENT`` overrides both, and a harness running several agents inside ONE
+    tree must set it — there is no signal that can distinguish them otherwise.
+    """
+    host = socket.gethostname().split(".")[0]
+    root = str(fallback_root or "")
+    key = f"{os.getcwd()}|{root}"
+    if key in _AGENT_ID_CACHE:
+        return _AGENT_ID_CACHE[key]
+
+    name = ""
+    here = _toplevel(os.getcwd())
+    # Only trust the cwd when it belongs to the SAME repository we are managing;
+    # otherwise `orchard --repo /elsewhere` run from another checkout would take that
+    # checkout's identity, and the hook in /elsewhere would disagree with it.
+    if here and (not root or _common_dir(here) == _common_dir(root)):
+        name = Path(here).name
+    elif root:
+        name = Path(root).name
+    if not name:
+        try:
+            name = getpass.getuser()
+        except Exception:
+            name = "agent"
+    ident = f"{host}-{name}"
+    _AGENT_ID_CACHE[key] = ident
+    return ident
 
 
 #: Transaction depth per (pid, lock path), NOT per EventLog instance.
-#: `fcntl.flock` is per-open-file-description, so a second `os.open` of the same file in
-#: the same process blocks forever against the lock this process already holds. Two
+#: `fcntl.flock` is per-open-file-description, so a second `os.open` of the same file
+#: in the same process blocks forever against the lock this process already holds. Two
 #: EventLog objects for one repo in one process is entirely reasonable and happens
 #: today, so the guard has to be keyed on what actually identifies the lock.
 _HELD: dict[tuple[int, str], int] = {}
@@ -203,10 +278,15 @@ class EventLog:
     def __init__(self, root: Path, agent_id: str = "", *, lock_timeout_s: float = 30.0) -> None:
         self.root = Path(root)
         self.dir = self.root / ".orchard" / "events"
-        self.agent_id = agent_id or default_agent_id()
+        self.agent_id = agent_id or default_agent_id(self.root)
         self.lock_path = self.root / ".orchard" / "events.lock"
         self.lock_timeout_s = lock_timeout_s
-        self.dir.mkdir(parents=True, exist_ok=True)
+        # NOT created here. Merely constructing a log -- which happens on every CLI
+        # invocation and every MCP handshake -- must not leave a directory behind in
+        # someone's repository. It also made the "is this project adopted?" check lie:
+        # the server created `.orchard/events/` while answering the handshake, so the
+        # next question about whether `.orchard` existed answered yes about itself.
+        # The directory is created on the first append instead.
         self._lamport = 0
         self.skipped_lines = 0
 
@@ -217,6 +297,8 @@ class EventLog:
         return self.dir / f"{safe}.jsonl"
 
     def shards(self) -> list[Path]:
+        if not self.dir.is_dir():
+            return []
         return sorted(self.dir.glob("*.jsonl"))
 
     # -- transactions ---------------------------------------------------------------
@@ -274,6 +356,7 @@ class EventLog:
             high = self._highest_lamport()
             for e in observed:
                 high = max(high, e.lamport)
+            self.dir.mkdir(parents=True, exist_ok=True)
             self._lamport = max(self._lamport, high) + 1
             ev = Event(
                 kind=kind,

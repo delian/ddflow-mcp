@@ -184,3 +184,30 @@ def test_a_rejected_approach_carries_the_measurement_that_killed_it(log, cfg):
     doc = session.render_reconstruction(st, session.replay(log.read_all()))
     assert "3 inconsistent balances out of 500" in doc, "the measurement was dropped"
     assert "probe_concurrent_balance.py" in doc
+
+
+def test_replay_carries_the_phase_and_task_BODIES(log, cfg):
+    """The body holds the acceptance criteria and the context — the part a rebuild most
+    needs. Emitting only the title reduced a phase to a label: "P1: Core" says nothing
+    about what Core has to do. Found by the end-to-end orchestration scenario.
+    """
+    log.append(
+        "phase.added",
+        "P1",
+        {"title": "Core", "body": "Duration parsing, statistics, and a CLI over both."},
+    )
+    log.append(
+        "task.added",
+        "P1.T1",
+        {
+            "parent": "P1",
+            "title": "parser",
+            "globs": ["src/parse.py"],
+            "body": "Must reject any input not fully consumed by the token pattern.",
+        },
+    )
+    st = fold(log.read_all())
+    doc = session.render_reconstruction(st, session.replay(log.read_all()))
+    assert "Duration parsing, statistics, and a CLI over both." in doc
+    assert "not fully consumed by the token pattern" in doc
+    assert "writes src/parse.py" in doc, "the declared file scope is part of the plan"

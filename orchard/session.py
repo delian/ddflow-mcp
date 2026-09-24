@@ -171,20 +171,24 @@ def replay(events: list[Event], *, include_outcomes: bool = True) -> list[Replay
                 )
             )
         elif ev.kind == "phase.added":
-            steps.append(
-                ReplayStep(n, ev.ts, "phase", f"{ev.subject}: {d.get('title', '')}", ev.subject)
-            )
+            # The BODY carries the acceptance criteria and the context — the part a
+            # rebuild most needs. Emitting the title alone reduced a phase to a label:
+            # "P1: Core" says nothing about what Core has to do.
+            text = f"{ev.subject}: {d.get('title', '')}"
+            if d.get("body"):
+                text += "\n\n" + d["body"].strip()
+            steps.append(ReplayStep(n, ev.ts, "phase", text, ev.subject))
         elif ev.kind == "task.added":
             needs = ", ".join(d.get("needs", [])) or "-"
-            steps.append(
-                ReplayStep(
-                    n,
-                    ev.ts,
-                    "task",
-                    f"{ev.subject}: {d.get('title', '')} (in {d.get('parent', '')}; needs {needs})",
-                    ev.subject,
-                )
+            text = (
+                f"{ev.subject}: {d.get('title', '')} "
+                f"(in {d.get('parent', '')}; needs {needs}"
+                + (f"; writes {', '.join(d['globs'])}" if d.get("globs") else "")
+                + ")"
             )
+            if d.get("body"):
+                text += "\n\n" + d["body"].strip()
+            steps.append(ReplayStep(n, ev.ts, "task", text, ev.subject))
         elif ev.kind == "research.recorded":
             steps.append(
                 ReplayStep(

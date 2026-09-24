@@ -194,3 +194,121 @@ def test_server_writes_nothing_but_frames_to_stdout(proj):
     )
     for line in out.getvalue().splitlines():
         json.loads(line)  # every line must be a valid JSON-RPC frame
+
+
+def test_a_notification_produces_no_frame_so_a_client_must_not_wait(proj):
+    """The deadlock shape: a notification correctly gets no reply, and a client that
+    reads one anyway blocks forever while both processes sit at 0% CPU looking healthy.
+
+    Caught by the orchestration scenario — the first thing here to send a notification
+    at all. The server was right; the client was wrong; the test pins the contract so a
+    future client cannot get it wrong silently.
+    """
+    out = rpc(
+        proj,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18"},
+            },
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "ping"},
+        ],
+    )
+    ids = [m.get("id") for m in out]
+    assert ids == [1, 2], (
+        f"expected exactly two frames (the notification must produce none), got {ids}"
+    )
+
+
+def test_every_cli_command_an_agent_needs_has_an_mcp_tool(proj):
+    """An MCP-only agent must not be told to do something MCP cannot express.
+
+    `orchard update --globs` is the sharp case: the canonical driver instructs the
+    agent to widen its declared globs BEFORE writing outside its claim, and without
+    the tool that instruction was impossible to follow over MCP.
+    """
+    needed = {
+        "show": "orchard_show",
+        "update": "orchard_update",
+        "release": "orchard_release",
+        "block": "orchard_block",
+        "next": "orchard_next",
+        "claim": "orchard_claim",
+        "merge": "orchard_merge",
+        "complete": "orchard_complete",
+        "brief": "orchard_brief",
+        "doctor": "orchard_doctor",
+    }
+    missing = [cli for cli, tool in needed.items() if tool not in TOOLS]
+    assert not missing, f"CLI commands with no MCP tool: {missing}"
+
+
+def test_the_new_tools_round_trip(proj):
+    r = rpc(
+        proj,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "orchard_update",
+                    "arguments": {"id": "P1.T1", "globs": "src/widened/*"},
+                },
+            },
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "orchard_show", "arguments": {"id": "P1.T1"}},
+            },
+        ],
+    )
+    assert r[0]["result"]["isError"] is False, r[0]["result"]["content"][0]["text"]
+    shown = json.loads(r[1]["result"]["content"][0]["text"])
+    assert shown["globs"] == ["src/widened/*"], shown["globs"]
+
+
+def test_starting_the_server_does_not_modify_the_repository(repo):
+    """A handshake is a read. It must not leave anything behind.
+
+    It used to create `.orchard/events/` merely by constructing the event log, which
+    (a) littered any repository an agent merely connected to, and (b) made the
+    "is this project adopted?" check answer yes about a directory the server had just
+    created itself.
+    """
+    before = sorted(p.name for p in repo.iterdir())
+    rpc(
+        repo,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18"},
+            },
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+        ],
+    )
+    assert sorted(p.name for p in repo.iterdir()) == before, "the handshake wrote to the repo"
+    assert not (repo / ".orchard").exists()
+
+
+def test_an_unadopted_repo_is_told_to_set_up_even_after_a_handshake(repo):
+    out = rpc(
+        repo,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18"},
+            }
+        ],
+    )
+    text = out[0]["result"]["instructions"]
+    assert "does not use Orchard yet" in text
+    assert "orchard_setup" in text

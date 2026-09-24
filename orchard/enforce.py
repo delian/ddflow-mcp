@@ -34,6 +34,7 @@ import sys
 import time
 from pathlib import Path
 
+from . import worktree as W
 from .config import Config
 from .events import EventLog
 from .model import fold
@@ -155,6 +156,20 @@ def _chmod_x(path: Path) -> None:
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def _this_worktree(repo: Path) -> Path | None:
+    """The git working tree this hook is running in, or None.
+
+    `--show-toplevel` from the cwd, because the hook's cwd IS the tree being committed
+    — which is exactly the information needed to decide which lease applies.
+    """
+    r = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, timeout=30
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    return Path(r.stdout.strip()).resolve()
+
+
 def staged_paths(repo: Path) -> list[str]:
     """Paths this commit will write.
 
@@ -197,10 +212,17 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     state = fold(log.read_all(), strict=False)
     now = time.time()
     me = log.agent_id
+    here = _this_worktree(repo)
     mine: list[str] = []
     others: dict[str, str] = {}
     for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
-        if lease.holder == me:
+        # A lease is "mine" if I hold it, OR if it created the very tree this commit is
+        # happening in. The second test is the robust one: the hook runs inside a
+        # worktree, and the lease that produced that worktree is the relevant claim no
+        # matter which process id or identity string made it.
+        leased_tree = W.load_path(repo, lease.worktree) if lease.worktree else None
+        same_tree = bool(here and leased_tree and leased_tree.resolve() == here)
+        if lease.holder == me or same_tree:
             mine.extend(lease.globs)
         else:
             for g in lease.globs:

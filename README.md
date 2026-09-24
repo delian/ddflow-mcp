@@ -592,8 +592,8 @@ documentation, so the reference cannot rot.
 ## Testing
 
 ```sh
-python3 -m pytest tests/ -q          # 212 unit/integration tests
-python3 demos/run_all.py             # 4 end-to-end scenarios, 65 assertions
+python3 -m pytest tests/ -q          # 234 unit/integration tests
+python3 demos/run_all.py             # 5 end-to-end scenarios, 122 assertions
 ```
 
 The demos invent whole projects and drive them for real — real git worktrees, real
@@ -605,8 +605,9 @@ The demos invent whole projects and drive them for real — real git worktrees, 
 | `crash-recovery` | An agent is killed holding uncommitted work; it is found, measured, never stolen, and adopted intact on resume |
 | `reconstruct-from-log` | The entire repository is deleted; everything rebuilds from 3.9 KB of JSONL, and nine specific facts are checked present |
 | `mcp-polyglot` | A Node.js project driven end-to-end over real MCP JSON-RPC, with both surfaces asserted to agree |
+| `mcp-orchestration` | **A whole two-phase Python library built by two agents entirely over MCP** — bootstrap, configure, discover a reviewer, fan out, get refused by the hook, real pytest, a real cross-family review, merge, close both phases, reconstruct. 24 steps, 57 assertions. |
 
-**These scenarios and the stress test found ten of the fourteen bugs this build fixed; the unit tests found none of them**, including one that does
+**The scenarios and the stress test have found most of the bugs this project fixed; the unit tests found few of them.** The composed MCP run alone found eight that 213 unit tests and four other scenarios missed — including two that made core features useless out of the box. They all lived in *seams*: between two processes, between a read and a write, between two output surfaces, between a declared vocabulary and its callers, including one that does
 not reproduce below ~6 concurrent processes. They are catalogued with their regression
 tests in [R6](docs/RESEARCH.md#r6--bugs-this-project-found-in-itself).
 

@@ -19,7 +19,7 @@ import textwrap
 from pathlib import Path
 
 from .config import Config
-from .model import DONE, OUTCOME_MARK, RUNNING, State
+from .model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, RUNNING, State
 from .schedule import Plan, critical_path
 
 GENERATED = (
@@ -55,10 +55,17 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
         return "\n".join(out)
     for ph in sorted(phases, key=lambda p: (p.priority, p.id)):
         tasks = sorted(state.tasks(ph.id), key=lambda t: (t.priority, t.id))
-        done = sum(1 for t in tasks if t.state == DONE)
+        # Abandoned tasks are SETTLED, not outstanding. Counting them in the
+        # denominator made a completed phase render as "3/4 tasks", which reads as
+        # unfinished work that no longer exists.
+        abandoned = [t for t in tasks if t.state == ABANDONED]
+        live = [t for t in tasks if t.state != ABANDONED]
+        done = sum(1 for t in live if t.state == DONE)
         out.append(f"## {ph.id} — {ph.title or '(untitled)'}")
         out.append("")
-        bits = [f"`{ph.state}`", f"{_bar(done, len(tasks))} {done}/{len(tasks)} tasks"]
+        bits = [f"`{ph.state}`", f"{_bar(done, len(live))} {done}/{len(live)} tasks"]
+        if abandoned:
+            bits.append(f"{len(abandoned)} abandoned")
         if ph.needs:
             bits.append("needs " + ", ".join(f"`{n}`" for n in ph.needs))
         if ph.lease:
@@ -72,11 +79,7 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             out.append("| | Task | State | Needs | Globs | Gates | Owner |")
             out.append("|---|---|---|---|---|---|---|")
             for t in tasks:
-                mark = (
-                    "x"
-                    if t.state == DONE
-                    else ("~" if t.state == RUNNING else ("!" if t.state == "blocked" else " "))
-                )
+                mark = {DONE: "x", RUNNING: "~", BLOCKED: "!", ABANDONED: "-"}.get(t.state, " ")
                 pipeline = (
                     pipeline_for(t, cfg) if cfg is not None else list(Config().gates.task_pipeline)
                 )

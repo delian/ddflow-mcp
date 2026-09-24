@@ -18,10 +18,9 @@ from __future__ import annotations
 
 import json
 import shutil
-import subprocess
 from pathlib import Path
 
-from harness import Scenario
+from harness import McpClient, Scenario
 
 SCAFFOLD = {
     ".gitignore": "node_modules/\n",
@@ -35,40 +34,6 @@ SCAFFOLD = {
     "src/.keep": "",
     "test/.keep": "",
 }
-
-
-class McpClient:
-    """A minimal MCP client speaking the real protocol to a real server process."""
-
-    def __init__(self, repo: Path, root: Path) -> None:
-        self.repo, self.root, self._id = repo, root, 0
-        self.proc = subprocess.Popen(
-            [__import__("sys").executable, "-m", "orchard", "--repo", str(repo), "mcp"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1,
-            env={**__import__("os").environ, "PYTHONPATH": str(root)},
-        )
-
-    def call(self, method: str, params: dict | None = None) -> dict:
-        self._id += 1
-        self.proc.stdin.write(
-            json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params or {}})
-            + "\n"
-        )
-        self.proc.stdin.flush()
-        return json.loads(self.proc.stdout.readline())
-
-    def tool(self, name: str, **args) -> tuple[str, int]:
-        r = self.call("tools/call", {"name": name, "arguments": args})
-        res = r["result"]
-        return res["content"][0]["text"], res.get("_meta", {}).get("exit", 0)
-
-    def close(self) -> None:
-        self.proc.stdin.close()
-        self.proc.wait(timeout=30)
 
 
 def run(sc: Scenario) -> None:

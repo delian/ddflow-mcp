@@ -366,3 +366,51 @@ def test_capturing_a_diff_leaves_the_index_untouched(repo, cfg):
         ["git", "-C", str(repo), "status", "--porcelain"], capture_output=True, text=True
     ).stdout
     assert before == after, f"capture_diff changed the index:\n{before!r}\n{after!r}"
+
+
+def test_merge_is_not_blocked_by_an_unrelated_dirty_file(repo, cfg):
+    """Orchard used to refuse any merge while the primary had a modified tracked file,
+    claiming "a merge would mix them into the result". A probe refutes that: the local
+    edit does not enter the merge commit and remains uncommitted. The check only ever
+    refused safe merges — routinely including one blocked by Orchard's own
+    freshly-written config.toml.
+    """
+    log = EventLog(repo, "a")
+    seed(log, ["T1"])
+    wt = W.create(repo, cfg, "T1")
+    (wt.path / "feature.py").write_text("def f(): return 1\n")
+    subprocess.run(["git", "-C", str(wt.path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(wt.path), "commit", "-qm", "feat"], check=True)
+
+    # Dirty an UNRELATED tracked file in the primary.
+    (repo / "README.md").write_text("# locally edited, not committed\n")
+
+    r = W.merge(repo, cfg, wt, message="merge T1")
+    assert r.ok, f"merge refused over an unrelated dirty file: {r.err or r.out}"
+    assert (repo / "feature.py").exists(), "the merge did not land"
+    status = subprocess.run(
+        ["git", "-C", str(repo), "status", "--porcelain", "README.md"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert status.strip().startswith("M"), "the local edit should still be uncommitted"
+    shown = subprocess.run(
+        ["git", "-C", str(repo), "show", "--stat", "HEAD"], capture_output=True, text=True
+    ).stdout
+    assert "README.md" not in shown, "the uncommitted edit leaked into the merge commit"
+
+
+def test_merge_still_refuses_when_git_itself_would(repo, cfg):
+    """The real conflict: the branch changed a file the primary has modified locally.
+    Git catches this precisely; Orchard must surface its message, not pre-empt it."""
+    log = EventLog(repo, "a")
+    seed(log, ["T2"])
+    wt = W.create(repo, cfg, "T2")
+    (wt.path / "README.md").write_text("# changed on the branch\n")
+    subprocess.run(["git", "-C", str(wt.path), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(wt.path), "commit", "-qm", "touch readme"], check=True)
+
+    (repo / "README.md").write_text("# changed locally, uncommitted\n")
+    r = W.merge(repo, cfg, wt, message="merge T2")
+    assert not r.ok, "a merge that would overwrite a local edit was allowed"
+    assert "README.md" in (r.err + r.out), "the refusal must name the conflicting file"

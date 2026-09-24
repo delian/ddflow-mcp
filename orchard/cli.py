@@ -35,7 +35,7 @@ from . import render, session
 from . import worktree as W
 from .config import Config
 from .events import EventLog
-from .model import GATE_OUTCOMES, fold
+from .model import ABANDONED, DONE, GATE_OUTCOMES, fold
 from .schedule import critical_path, plan
 from .store import Store
 
@@ -528,6 +528,7 @@ def cmd_complete(a, c: Ctx) -> int:
         print(f"no such item {a.id!r}", file=sys.stderr)
         return FAIL
     s = G.status(st, c.cfg, a.id)
+    s_status = s
     required = set(c.cfg.gates.required)
     blockers: list[str] = []
 
@@ -540,7 +541,10 @@ def cmd_complete(a, c: Ctx) -> int:
             + ")"
         )
     if it.kind == "phase":
-        open_tasks = [t.id for t in st.tasks(it.id) if t.state != "done"]
+        # `abandoned` is settled, like `done`. Without this an item you
+        # decided against holds its phase open forever, because nothing
+        # can ever finish it.
+        open_tasks = [t.id for t in st.tasks(it.id) if t.state not in (DONE, ABANDONED)]
         if open_tasks:
             blockers.append(
                 f"{len(open_tasks)} task(s) in this phase are unfinished: "
@@ -565,11 +569,17 @@ def cmd_complete(a, c: Ctx) -> int:
             file=sys.stderr,
         )
         return REFUSED
-    if s.unavailable and not c.json:
-        print(
-            f"NOTE: {', '.join(s.unavailable)} never ran — recorded as a coverage gap, "
-            f"not as a pass."
+    # The coverage gap must reach BOTH surfaces. It used to print only in human mode,
+    # so an agent driving over MCP -- which is always JSON -- completed an item and was
+    # never told that a gate had not run. The one fact most worth surfacing was
+    # invisible on precisely the surface that needed it.
+    gap_note = ""
+    if s.unavailable:
+        gap_note = (
+            f"{', '.join(s.unavailable)} never ran — recorded as a coverage gap, not as a pass."
         )
+        if not c.json:
+            print(f"NOTE: {gap_note}")
     c.log.append(
         "item.completed",
         a.id,
@@ -585,8 +595,86 @@ def cmd_complete(a, c: Ctx) -> int:
         f"{a.id} completed"
         + (f" as {a.sha}" if a.sha else "")
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else ""),
-        {"id": a.id, "sha": a.sha or "", "independence": why, "forced": bool(blockers and a.force)},
+        {
+            "id": a.id,
+            "sha": a.sha or "",
+            "independence": why,
+            "forced": bool(blockers and a.force),
+            # The coverage gap must reach BOTH surfaces: it used to print only in human
+            # mode, so an agent over MCP -- which is always JSON -- completed the item
+            # and was never told a gate had not run.
+            "coverage_gaps": s_status.unavailable,
+            "note": gap_note,
+        },
     )
+    return OK
+
+
+def cmd_abandon(a, c: Ctx) -> int:
+    """Stop work on an item without completing it, with a recorded reason.
+
+    Distinct from `block`: a blocked item is waiting for something and will resume,
+    an abandoned one will not. The phase completion check treats only `done` and
+    `abandoned` as settled, so an item you decided against stops holding its phase open
+    — which it otherwise does forever, since nothing else can ever finish it.
+    """
+    st = c.state()
+    it = st.items.get(a.id)
+    if not it:
+        print(f"no such item {a.id!r}", file=sys.stderr)
+        return FAIL
+    if it.state == DONE and not a.force:
+        print(
+            f"{a.id} is already done; abandoning it would rewrite finished history. "
+            f"--force if you really mean it.",
+            file=sys.stderr,
+        )
+        return REFUSED
+    c.log.append("item.abandoned", a.id, {"reason": a.reason, "kind": it.kind})
+    if it.lease:
+        L.release(c.log, a.id, note=f"abandoned: {a.reason}")
+    c.out(f"{a.id} abandoned: {a.reason}", {"id": a.id, "reason": a.reason})
+    return OK
+
+
+def cmd_remove(a, c: Ctx) -> int:
+    """Take an item out of the queue entirely.
+
+    The event log is append-only, so this RECORDS a removal rather than deleting
+    anything: the item and everything that happened to it stay in the history and in
+    `orchard replay`, which is what keeps the record honest about work that was
+    planned and then dropped.
+    """
+    st = c.state()
+    it = st.items.get(a.id)
+    if not it:
+        print(f"no such item {a.id!r}", file=sys.stderr)
+        return FAIL
+    kids = [t.id for t in st.tasks(a.id) if not t.removed] if it.kind == "phase" else []
+    if kids and not a.force:
+        print(
+            f"{a.id} still has {len(kids)} task(s): {', '.join(kids[:8])}.\n"
+            f"Remove them first, or --force to orphan them.",
+            file=sys.stderr,
+        )
+        return REFUSED
+    dependents = [o.id for o in st.items.values() if not o.removed and a.id in o.needs]
+    if dependents and not a.force:
+        print(
+            f"{', '.join(dependents)} depend"
+            f"{'s' if len(dependents) == 1 else ''} on {a.id}. Removing it would "
+            f"leave them blocked on something that no longer exists "
+            f"(unknown dependencies are treated as unmet, deliberately).\n"
+            f"Update them first, or --force.",
+            file=sys.stderr,
+        )
+        return REFUSED
+    if it.lease:
+        L.release(c.log, a.id, note="removed from the queue")
+    c.log.append(
+        "phase.removed" if it.kind == "phase" else "task.removed", a.id, {"reason": a.reason or ""}
+    )
+    c.out(f"{a.id} removed from the queue", {"id": a.id})
     return OK
 
 
@@ -1724,6 +1812,18 @@ def build_parser() -> argparse.ArgumentParser:
     cp.add_argument("--model", default="", help="the AUTHOR's model, for independence check")
     cp.add_argument("--force", action="store_true")
     cp.set_defaults(fn=cmd_complete)
+
+    ab = s.add_parser("abandon", help="stop work on an item without completing it")
+    ab.add_argument("id")
+    ab.add_argument("--reason", required=True)
+    ab.add_argument("--force", action="store_true")
+    ab.set_defaults(fn=cmd_abandon)
+
+    rm = s.add_parser("remove", help="take an item out of the queue (recorded, not erased)")
+    rm.add_argument("id")
+    rm.add_argument("--reason", default="")
+    rm.add_argument("--force", action="store_true")
+    rm.set_defaults(fn=cmd_remove)
 
     bl = s.add_parser("block")
     bl.add_argument("id")

@@ -221,17 +221,14 @@ def merge(repo: Path, cfg: Config, wt: Worktree, *, message: str = "") -> GitRes
                 f"Check out {wt.base} yourself in a quiet moment, then re-run."
             ),
         )
-    blocking = dirty(Worktree(wt.item, root, cur, wt.base), untracked=False)
-    if blocking:
-        return GitResult(
-            2,
-            "",
-            (
-                f"primary checkout has {len(blocking)} modified tracked file(s); a merge "
-                f"would mix them into the result. Commit or stash them first:\n  "
-                + "\n  ".join(blocking[:5])
-            ),
-        )
+    # NO blanket dirty check here. An earlier version refused whenever the primary had
+    # any modified tracked file, on the stated grounds that "a merge would mix them
+    # into the result". That premise is FALSE, and a probe says so: merging with an
+    # unrelated file dirty succeeds, the local edit does NOT enter the merge commit,
+    # and it stays uncommitted afterwards. Git refuses precisely and only when the
+    # merge would OVERWRITE a locally-modified file, and it names those files exactly.
+    # Duplicating that judgement more crudely only refused safe merges -- including,
+    # routinely, a merge blocked by Orchard's own freshly-written config.
     args = ["merge"]
     if cfg.worktree.merge_strategy == "no-ff":
         args.append("--no-ff")

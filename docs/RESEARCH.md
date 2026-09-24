@@ -354,6 +354,69 @@ loud, encountered against itself.
 
 ---
 
+## R9 — Does the orchestration actually work end to end over MCP?
+
+**Question (operator, 2026-09-24).** "Create a simulated project and test the tool as
+MCP and verify the orchestration end to end."
+
+**Claim.** The pieces are individually tested, so the whole works.
+
+**Falsifier.** Any defect that only appears when the pieces are composed.
+
+**Probe.** `demos/scenario_mcp_orchestration.py` — an invented two-phase Python library
+(`taskmetrics`: duration parsing, statistics, a CLI over both) built by two agents, each
+a separate MCP client process, **entirely over JSON-RPC with no CLI call at all**. 24
+steps, 57 assertions, ~4 minutes: bootstrap an unadopted repo, configure it, discover a
+local reviewer, fill a two-phase queue, fan out, get refused by the enforcement hook,
+run real pytest suites, run the real cross-family critic, merge, close both phases, and
+reconstruct from the log.
+
+**Verdict: REFUTED, decisively.** The composed run found **eight defects that 213 unit
+tests and four existing scenarios did not**, and two of them made core features useless
+out of the box:
+
+| # | Defect | Why the unit tests missed it |
+|---|---|---|
+| 1 | **The default agent identity was `{host}-{pid}`**, stable for exactly one process. So `orchard claim` and the `git commit` hook seconds later were different agents: the hook **refused the holder's own commit and told them their lease belonged to somebody else**. Out of the box, enforcement rejected correct behaviour and blamed the user. | Every enforcement test passed `agent=` explicitly. The default path was never exercised. |
+| 2 | **Merely starting the MCP server created `.orchard/events/`**, so a handshake wrote to any repository an agent connected to — and the "is this project adopted?" check then answered yes about a directory the server had just created itself. | No test asked whether a read-only operation mutated the repo. |
+| 3 | **A JSON-RPC notification deadlocked the client.** `notifications/initialized` correctly gets no reply; a client that reads one anyway blocks forever while both processes sit at 0% CPU looking healthy. | The server was right and tested; nothing had ever *sent* a notification. |
+| 4 | **The coverage gap was suppressed in JSON mode.** "gate X never ran" printed only for humans, so an agent over MCP — always JSON — completed an item and was never told a gate had not run. | The human path was asserted; the JSON payload was not. |
+| 5 | **Four CLI commands had no MCP tool** (`show`, `update`, `release`, `block`). The canonical driver *instructs* the agent to run `orchard update --globs` before writing outside its claim — an instruction impossible to follow over MCP. | Nothing compared the two surfaces for completeness. |
+| 6 | **No way to abandon or remove an item.** `item.abandoned`, `task.removed` and `phase.removed` were declared in the handler registry and handled by the fold, and nothing emitted any of them. A task created speculatively held its phase open **forever**, because completion counts any non-`done` task as unfinished and nothing could ever finish it. | A vocabulary with no way to say the words; no test tried to say them. |
+| 7 | **`replay` dropped the phase/task BODY**, reducing a phase to "P1: Core" — the acceptance criteria and context, the part a rebuild most needs, were absent from the reconstruction brief. | The replay test used items with no body. |
+| 8 | **The board counted abandoned tasks as outstanding**, so a completed phase rendered "3/4 tasks" — unfinished work that no longer exists. | Abandonment did not exist until #6 was fixed. |
+
+**A ninth, corrected by probe rather than found by the scenario.** The scenario's merge
+kept failing on a dirty `config.toml`, and the pre-check's stated reason was *"a merge
+would mix them into the result"*. That premise is false:
+
+```console
+$ git merge --no-ff -m "merge feat" feat      # with an UNRELATED file dirty
+exit=0 · Merge made by the 'ort' strategy.
+  is my local edit still uncommitted?   M other.txt
+  did it get into the merge commit?     0
+$ git merge --no-ff -m "merge feat2" feat2    # branch touches the dirty file
+exit=2 · error: Your local changes to the following files would be overwritten by merge:
+	shared.txt
+```
+
+Git refuses precisely and only when the merge would overwrite a locally-modified file,
+and names them. The blanket pre-check was both wrong in its reasoning and over-broad,
+refusing safe merges — routinely including one blocked by Orchard's own freshly-written
+config. Removed; git's own check is the better one.
+
+**The pattern, stated plainly.** Every one of these lived in a *seam*: between two
+processes (1, 3), between a read and a write (2), between two output surfaces (4, 5),
+between a declared vocabulary and its callers (6), between a record and its projection
+(7, 8). Unit tests exercise functions; seams only appear when the real pieces are
+composed the way a user composes them. **The scenario is worth more than its assertion
+count suggests, and "the parts are tested" is not evidence that the whole works.**
+
+**Cost:** ~4 minutes per run, including a real cross-family review against a local
+Qwen3.8-Flash-Next. Runs in the default `demos/run_all.py` sweep.
+
+---
+
 ## R6 — Bugs this project found in itself
 
 Each was found by a probe, fixed, and ships with a mutation-verified regression test.

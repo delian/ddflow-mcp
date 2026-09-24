@@ -393,3 +393,83 @@ def test_orchard_agent_env_var_is_honoured(proj):
         timeout=120,
     )
     assert '"flag"' in out.stdout
+
+
+def test_a_coverage_gap_is_reported_on_the_json_surface_too(proj):
+    """A gate that never ran is the single most important thing to surface at
+    completion — and it used to print only in human mode, so an agent driving over MCP
+    (always JSON) completed the item and was never told. Found by the end-to-end
+    orchestration scenario. Mutation-verified: dropping `coverage_gaps` from the
+    payload makes this red.
+    """
+    run_cli(proj, "claim", "P1.T1", "--no-worktree")
+    for g in ("implement", "merge"):
+        run_cli(proj, "gate", "record", "P1.T1", g, "--outcome", "passed")
+    run_cli(
+        proj,
+        "gate",
+        "record",
+        "P1.T1",
+        "unit_tests",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "pytest ok",
+    )
+    run_cli(
+        proj,
+        "gate",
+        "record",
+        "P1.T1",
+        "rubber_duck",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "ok",
+        "--model",
+        "gemini-2.5-pro",
+    )
+    run_cli(
+        proj,
+        "gate",
+        "record",
+        "P1.T1",
+        "critic",
+        "--outcome",
+        "unavailable",
+        "--reason",
+        "endpoint down",
+    )
+
+    code, out, _ = run_cli(proj, "--json", "complete", "P1.T1", "--model", "claude-opus-5")
+    assert code == OK, out
+    data = json.loads(out)
+    assert data["coverage_gaps"] == ["critic"], data
+    assert "never ran" in data["note"] and "not as a pass" in data["note"], data
+
+    # And the human surface still says it in words.
+    run_cli(proj, "task", "add", "P1.T8", "--phase", "P1", "--globs", "other/*")
+    run_cli(proj, "claim", "P1.T8", "--no-worktree")
+    for g in ("implement", "merge"):
+        run_cli(proj, "gate", "record", "P1.T8", g, "--outcome", "passed")
+    run_cli(
+        proj, "gate", "record", "P1.T8", "unit_tests", "--outcome", "passed", "--evidence", "ok"
+    )
+    run_cli(
+        proj,
+        "gate",
+        "record",
+        "P1.T8",
+        "rubber_duck",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "ok",
+        "--model",
+        "gemini-2.5-pro",
+    )
+    run_cli(
+        proj, "gate", "record", "P1.T8", "critic", "--outcome", "unavailable", "--reason", "down"
+    )
+    human = run_cli(proj, "complete", "P1.T8", "--model", "claude-opus-5")[1]
+    assert "never ran" in human and "critic" in human, human
