@@ -347,3 +347,49 @@ def test_the_board_renders_the_CONFIGURED_pipeline_not_a_hardcoded_one(repo):
     assert column == "xxx", f"expected 3 columns for a 3-gate pipeline, got {column!r}"
     assert "implement · unit_tests · merge." in board
     assert "rubber_duck" not in board, "the caption names gates this project does not run"
+
+
+def test_orchard_agent_env_var_is_honoured(proj):
+    """`ORCHARD_AGENT` is documented in server.json and used by MCP clients and the git
+    hook, both of which run where `--agent` cannot be passed. It was documented before
+    it was read; a dead env var in a published manifest is worse than an undocumented
+    one, because operators set it and nothing happens."""
+    import os
+    import subprocess as sp
+
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+        "ORCHARD_AGENT": "env-agent-xyz",
+    }
+    sp.run(
+        [sys.executable, "-m", "orchard", "--repo", str(proj), "claim", "P1.T1", "--no-worktree"],
+        capture_output=True,
+        env=env,
+        timeout=120,
+        check=True,
+    )
+    shown = json.loads(run_cli(proj, "--json", "show", "P1.T1")[1])
+    assert shown["lease"]["holder"] == "env-agent-xyz"
+
+    # An explicit --agent still wins over the environment.
+    out = sp.run(
+        [
+            sys.executable,
+            "-m",
+            "orchard",
+            "--repo",
+            str(proj),
+            "--agent",
+            "flag",
+            "--json",
+            "config",
+            "--filter",
+            "agent.id",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    assert '"flag"' in out.stdout

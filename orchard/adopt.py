@@ -32,55 +32,83 @@ AGENT_TARGETS: dict[str, tuple[str, str]] = {
     "codex": ("codex-cli.md", ".codex/config.toml"),
     "copilot": ("github-copilot.md", ".vscode/mcp.json"),
     "kilo": ("kilo-cline.md", ".kilo/kilo.json"),
+    "cursor": ("cursor.md", ".cursor/mcp.json"),
 }
 
+#: Agents whose NATIVE rules surface outranks `AGENTS.md`, and where writing only
+#: AGENTS.md would therefore be unreliable. Cursor's precedence is
+#: Team Rules > Project Rules > User Rules > .cursorrules > AGENTS.md, so a project
+#: rule is what actually binds; AGENTS.md is written too, as the fallback it is.
+NATIVE_RULES: dict[str, str] = {
+    "cursor": ".cursor/rules/orchard.mdc",
+}
+
+# The per-project text, deliberately SHORT.
+#
+# When Orchard is reached over MCP, the tool descriptions already carry the how: what
+# each call does, what its arguments mean, what an exit code means. Repeating that here
+# would be a second copy that drifts from the first, and the first is the one the model
+# actually reads at call time. So this block carries only what a tool description
+# cannot: that this project HAS a queue, that you must claim before you edit, and the
+# three rules that are enforced rather than requested.
+#
+# Projects that drive Orchard from a shell instead get the same block plus a pointer to
+# the full driver, which is where the long form lives.
 _SECTION = """{begin}
 ## Work queue — Orchard
 
-This project's work is a queue of **phases** containing **tasks**, with declared
-dependencies and declared file globs. It is managed by Orchard; the event log at
-`.orchard/events/` is the source of truth and is committed.
+Work in this project is a queue of **phases** containing **tasks**, with declared
+dependencies and declared file globs. It is managed by Orchard. The event log in
+`.orchard/events/` is the source of truth and is committed; everything else is derived.
 
-**Every session starts with:**
+**Start every session with `orchard_brief`** (MCP) or `orchard brief` (shell). It
+returns any work left over from a crash, what is ready now, why everything else is
+blocked, and the past lessons relevant to the task — and it replaces reading this
+project's lesson and rule files.
 
-```sh
-orchard doctor && orchard recover      # is anything broken or left over from a crash?
-orchard brief                          # ready work + the lessons relevant to it
-```
+**Claim before you edit.** `orchard_claim` leases the item and gives you an isolated
+git worktree. An unclaimed edit can be destroyed by a parallel agent.
 
-`orchard brief` replaces reading this project's lesson and rule corpora — it retrieves
-what bears on the task at hand, inside a token budget. Read it instead of them.
+Then: `orchard_next` → `orchard_claim` → work in the worktree → `orchard_gate_status`
+and satisfy each gate → `orchard_merge` → `orchard_complete`.
 
-**To work an item:** `orchard next` → `orchard claim <ID>` → work in the worktree it
-creates → `orchard gate status <ID>` and satisfy each gate → `orchard merge <ID>` →
-`orchard complete <ID>`.
-
-**Exit codes are the contract:** `0` healthy · `1` real failure · `2` could not run or
-nothing to do · `3` coordination refused. **Never treat 2 as 0** — "nothing is ready"
-and "everything is fine" are different facts.
-
-**Three rules that are enforced, not merely requested:**
+**Three rules are enforced, not requested:**
 
 - A tool or reviewer that could not run is recorded `unavailable`, never `passed`.
 - At least one reviewer must come from a different model family than the author.
 - A bug is not closed without a regression test that fails against the unfixed code.
 
-Full driver: [`{driver}`]({driver}) · per-agent notes: `{deltas}/`
+**Exit codes:** `0` fine · `1` failure · `2` could not run / nothing to do · `3`
+refused. Never treat `2` as `0`.
+
+{driver_line}
 {end}
 """
+
+_DRIVER_LINE = "Full driver: [`{driver}`]({driver}) · per-agent notes: `{deltas}/`"
 
 
 def adopt(
     repo: Path,
     agents: list[str],
     *,
-    package_dir: Path,
+    package_dir: Path | None = None,
     docs_dir: str = "docs/orchard",
     force: bool = False,
+    install_hooks: bool = True,
 ) -> list[str]:
     repo = Path(repo)
     actions: list[str] = []
-    templates = package_dir.parent / "templates"
+    # Templates live INSIDE the package (`orchard/templates/`), not beside it, so they
+    # ship in the wheel. They were originally a sibling directory, which worked from a
+    # source checkout and then raised FileNotFoundError for every installed user --
+    # the classic packaging bug that only a real install reproduces.
+    templates = Path(package_dir or Path(__file__).resolve().parent) / "templates"
+    if not (templates / "drivers" / "implement-phase.md").is_file():
+        raise FileNotFoundError(
+            f"driver templates are missing from {templates}. This is a packaging fault, "
+            f"not a configuration one: reinstall orchard-mcp."
+        )
 
     drivers_dst = repo / docs_dir / "drivers"
     drivers_dst.mkdir(parents=True, exist_ok=True)
@@ -98,8 +126,10 @@ def adopt(
     section = _SECTION.format(
         begin=BEGIN,
         end=END,
-        driver=f"{docs_dir}/drivers/implement-phase.md",
-        deltas=f"{docs_dir}/drivers/deltas",
+        driver_line=_DRIVER_LINE.format(
+            driver=f"{docs_dir}/drivers/implement-phase.md",
+            deltas=f"{docs_dir}/drivers/deltas",
+        ),
     )
     for name in ("AGENTS.md", "CLAUDE.md"):
         path = repo / name
@@ -107,9 +137,40 @@ def adopt(
             continue
         actions.append(_upsert_block(path, section))
 
+    if install_hooks:
+        from .enforce import install as install_hook
+
+        actions.append(install_hook(repo))
     for key in agents:
         actions.append(_register_mcp(repo, key))
+        if key in NATIVE_RULES:
+            actions.append(_write_native_rule(repo, key, section))
     return actions
+
+
+def _write_native_rule(repo: Path, key: str, section: str) -> str:
+    """Write the agent's own rules file, for agents whose native surface outranks
+    `AGENTS.md`.
+
+    The body is the SAME managed block, so there is one source for the project text and
+    the two copies cannot say different things. Only the frontmatter differs, and it is
+    what makes the rule bind: `alwaysApply: true`, because claim-before-you-edit is not
+    a rule that should depend on the model choosing to load it.
+    """
+    path = repo / NATIVE_RULES[key]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = section.replace(BEGIN, "").replace(END, "").strip()
+    frontmatter = (
+        "---\n"
+        "description: >-\n"
+        "  How work is queued, claimed and reviewed in this project. Read before\n"
+        "  starting any task, and before editing any file.\n"
+        "globs:\n"
+        "alwaysApply: true\n"
+        "---\n\n"
+    )
+    path.write_text(frontmatter + body + "\n", "utf-8")
+    return f"wrote {NATIVE_RULES[key]} (always-applied project rule)"
 
 
 def _upsert_block(path: Path, section: str) -> str:
@@ -125,6 +186,31 @@ def _upsert_block(path: Path, section: str) -> str:
     return f"{'appended to' if existing.strip() else 'created'} {path.name}"
 
 
+def _launch_entry() -> dict[str, object]:
+    """How an MCP client should spawn Orchard."""
+    import shutil
+    import sys
+
+    if shutil.which("uvx") and not _running_from_source():
+        return {"command": "uvx", "args": ["orchard-mcp"]}
+    if shutil.which("orchard-mcp") and not _running_from_source():
+        return {"command": "orchard-mcp", "args": []}
+    # Source checkout: point at THIS tree, so a developer's project uses the code they
+    # are editing.
+    pkg_parent = str(Path(__file__).resolve().parents[1])
+    return {
+        "command": sys.executable,
+        "args": ["-m", "orchard.mcp_server"],
+        "env": {"PYTHONPATH": pkg_parent},
+    }
+
+
+def _running_from_source() -> bool:
+    """True when this module lives in a checkout rather than in site-packages."""
+    here = Path(__file__).resolve()
+    return not any(part in ("site-packages", "dist-packages") for part in here.parts)
+
+
 def _register_mcp(repo: Path, key: str) -> str:
     """Add the Orchard MCP server to one agent's config, preserving what is there.
 
@@ -134,16 +220,20 @@ def _register_mcp(repo: Path, key: str) -> str:
     _, rel = AGENT_TARGETS[key]
     path = repo / rel
     path.parent.mkdir(parents=True, exist_ok=True)
-    entry = {"command": "python3", "args": ["-m", "orchard", "--repo", ".", "mcp"]}
+    # `uvx` fetches and runs the published package in an ephemeral environment, so a
+    # project adopting Orchard needs no clone, no virtualenv, no PYTHONPATH and no
+    # install step an operator can forget. When Orchard is running from a source
+    # checkout rather than an installed distribution, fall back to that checkout --
+    # otherwise developing Orchard would silently configure the project against the
+    # PUBLISHED version instead of the one under test.
+    entry = _launch_entry()
 
     if rel.endswith(".toml"):
         text = path.read_text("utf-8") if path.exists() else ""
         if "[mcp_servers.orchard]" in text:
             return f"{rel} already registers orchard"
-        block = (
-            '\n[mcp_servers.orchard]\ncommand = "python3"\n'
-            'args = ["-m", "orchard", "--repo", ".", "mcp"]\n'
-        )
+        args = ", ".join(f'"{a}"' for a in entry.get("args", []))
+        block = f'\n[mcp_servers.orchard]\ncommand = "{entry["command"]}"\nargs = [{args}]\n'
         path.write_text(text.rstrip() + "\n" + block if text.strip() else block.lstrip(), "utf-8")
         return f"registered orchard in {rel}"
 

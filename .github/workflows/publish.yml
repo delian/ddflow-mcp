@@ -1,0 +1,50 @@
+# Publish to PyPI and register in the official MCP registry, on a version tag.
+#
+# Both steps use OIDC trusted publishing rather than a stored token: a long-lived
+# secret in a repository is the credential most likely to leak, and neither registry
+# requires one any more.
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write          # OIDC trusted publishing; no PyPI token stored
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Verify the tag matches the declared version
+        run: |
+          # A tag that disagrees with pyproject.toml publishes a version nobody can
+          # reproduce from the tree. Fail loudly rather than shipping the mismatch.
+          tag="${GITHUB_REF_NAME#v}"
+          decl=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          srv=$(grep -m1 '"version"' server.json | cut -d'"' -f4)
+          test "$tag" = "$decl" || { echo "tag $tag != pyproject $decl"; exit 1; }
+          test "$tag" = "$srv"  || { echo "tag $tag != server.json $srv"; exit 1; }
+      - name: Test before publishing
+        run: uv run --with pytest python -m pytest tests/ -q
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  mcp-registry:
+    needs: pypi
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write          # OIDC auth to the MCP registry via GitHub identity
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: |
+          curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
+            | tar -xz -C /usr/local/bin mcp-publisher
+      - name: Publish server.json
+        run: |
+          mcp-publisher login github-oidc
+          mcp-publisher publish

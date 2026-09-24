@@ -18,6 +18,8 @@ and an MCP server that are the same implementation.
 
 - [Why it is built this way](#why-it-is-built-this-way)
 - [Install into any project](#install-into-any-project)
+  - [Publishing and registry](#publishing-and-registry)
+  - [Cross-family review, configured in TOML](#cross-family-review-configured-in-toml)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
 - [The task pipeline](#the-task-pipeline)
 - [The phase pipeline](#the-phase-pipeline)
@@ -66,38 +68,82 @@ The design decisions, with the probes that settled each, are in
 
 ## Install into any project
 
-```sh
-git clone <orchard> vendor/orchard          # or copy the orchard/ package anywhere
-export PYTHONPATH=vendor/orchard
-alias orchard='python3 -m orchard'
+**One line in your agent's MCP config. Nothing else.**
 
-cd /path/to/your/project
-orchard adopt --agents claude,gemini,codex  # or: --agents copilot,kilo (default: all)
+```json
+{ "mcpServers": { "orchard": { "command": "uvx", "args": ["orchard-mcp"] } } }
 ```
 
-`adopt` writes exactly four things, all idempotent, all in managed blocks that re-running
-updates without touching your own prose:
+`uvx` fetches and runs the published package in an ephemeral environment on first use —
+no clone, no virtualenv, no `PYTHONPATH`, no install step for an operator to forget, and
+no vendored copy to drift from upstream. Orchard has **zero runtime dependencies**
+beyond `python3` and `git`, which is what lets it install inside sandboxes, CI images
+and other tools' ephemeral containers.
 
-1. `.orchard/` — config, gate definitions, the event log, and a `.gitignore` that keeps
-   the derived index **out** of git and the log **in** it;
-2. `docs/orchard/drivers/` — the canonical driver plus a delta per agent;
-3. an **`AGENTS.md`** section (the cross-tool instruction file 30+ agents read), and a
-   pointer in `CLAUDE.md` for Claude Code;
-4. the MCP registration in each agent's own config, **merged** with whatever servers are
-   already there.
+Then, from the agent, with no shell at all:
 
-Then set your test command — the one project-specific line:
+| Call | What it does |
+|---|---|
+| `orchard_setup` | creates `.orchard/`, writes the driver and the `AGENTS.md` section |
+| `orchard_configure` with `toml: '[gate.unit_tests]\ncommand = "pytest -q"'` | sets your test command |
+| `orchard_reviewers_detect` with `write: true` | finds a local model server and registers it as a cross-family reviewer |
+| `orchard_phase_add`, `orchard_task_add` | fill the queue |
+| `orchard_brief` | start every session here |
+
+That is the whole adoption. **The per-project instruction text is 232 words** — a
+managed block in `AGENTS.md`, because the MCP tool descriptions already carry the
+how, and a second copy of that would drift from the one the model actually reads.
+
+<details><summary>Shell / CI installation, and running from a source checkout</summary>
+
+```sh
+uv tool install orchard-mcp        # or: pipx install orchard-mcp
+cd /path/to/your/project
+orchard adopt --agents claude,gemini,codex,copilot,kilo
+```
+
+`adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
+them and leaves your own prose alone. It writes the MCP registration into each agent's
+own config location, **merged** with whatever servers are already there. From a source
+checkout it points the config at that checkout instead of the published package, so
+developing Orchard does not silently configure your project against the released
+version.
+
+</details>
+
+### Publishing and registry
+
+`server.json` carries the [MCP registry](https://modelcontextprotocol.io/registry/quickstart)
+manifest (`io.github.OWNER/orchard`, PyPI package `orchard-mcp`, `runtimeHint: uvx`),
+and `.github/workflows/publish.yml` publishes to PyPI and the registry on a version tag
+using OIDC trusted publishing — no stored tokens. The workflow refuses to publish when
+the tag, `pyproject.toml` and `server.json` disagree about the version, and
+`tests/test_packaging.py` pins the same invariant locally.
+
+### Cross-family review, configured in TOML
+
+The `critic` gate is run by Orchard, not claimed by the agent. Point it at any
+OpenAI-compatible endpoint:
 
 ```toml
-# .orchard/gates.toml
-[gate.unit_tests]
-command = "pytest -q"            # or "npm test", "cargo test", "go test ./...", "make check"
+# .orchard/config.toml
+[[reviewer]]
+name      = "qwen-local"
+base_url  = "http://127.0.0.1:8000/v1"
+model     = "Qwen/Qwen3.8-Flash-Next-FP8"
+family    = "alibaba"          # must differ from the author's family
+gates     = ["critic"]
+# api_key_env = "MY_KEY"       # the NAME of an env var, never the key itself
 ```
 
-Orchard knows nothing about your language. A gate is a shell command and a task is a set
-of file globs; the polyglot demo drives a Node project with no adapter at all.
+`orchard reviewers detect` probes ollama, vLLM, LM Studio, llama.cpp and sglang on their
+usual ports and writes this block for you, inferring the family from the model id.
 
----
+> **Reasoning models need a large `max_tokens`.** Default is 32000, and that is not
+> padding: measured on Qwen3.8-Flash-Next over a 30 KB diff, a 6000-token budget
+> produced **zero characters of content** — the entire budget went to reasoning and the
+> reply was truncated. Orchard reports that case as `TRUNCATED` with the remedy named,
+> rather than as an empty completion or, worse, a clean review.
 
 ## The model: phases, tasks, dependencies, globs
 
@@ -413,6 +459,9 @@ orchard doctor                   integrity + health
 orchard rebuild                  re-derive the index
 orchard cadence [--ran NAME]     which periodic passes are due  (2 = none)
 orchard config --explain         every knob, its value, its source and its docs
+orchard config --append-toml ..  add config without a shell editor (validated first)
+orchard reviewers detect|list|test   find and check cross-family review endpoints
+orchard review <id> --gate ..    run the configured reviewer, record the evidence
 orchard mcp                      run the MCP stdio server
 ```
 
@@ -439,7 +488,7 @@ documentation, so the reference cannot rot.
 ## Testing
 
 ```sh
-python3 -m pytest tests/ -q          # 104 unit/integration tests
+python3 -m pytest tests/ -q          # 110 unit/integration tests
 python3 demos/run_all.py             # 4 end-to-end scenarios, 65 assertions
 ```
 

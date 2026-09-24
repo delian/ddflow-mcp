@@ -232,22 +232,39 @@ DEFAULT_GATES: dict[str, GateDef] = {
 
 
 def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
-    """Defaults, overlaid by ``.orchard/gates.toml``.
+    """Defaults, overlaid by ``[gate.*]`` from the config.
 
-    Overlay rather than replace: a project that only wants to set ``unit_tests.command``
-    writes three lines, and still inherits every prompt and policy. A file that had to
-    restate all thirteen gates to change one would be copied once and then drift.
+    Read from ``.orchard/config.toml`` first, then ``.orchard/gates.toml`` if it
+    exists. **Both**, because a project should have ONE place to configure and the
+    obvious place is the config file — but an operator who prefers to split the gate
+    definitions out should not be told they cannot. `gates.toml` wins on a conflict,
+    being the more specific file.
+
+    This read used to look at `gates.toml` ALONE, which meant `orchard configure` (and
+    the `orchard_configure` MCP tool) accepted a `[gate.unit_tests]` block, wrote it to
+    `config.toml`, reported success, and changed nothing. A config write that silently
+    does nothing is worse than one that errors.
+
+    Overlay rather than replace: a project that only wants to set
+    ``unit_tests.command`` writes three lines and still inherits every prompt and
+    policy. A file that had to restate all thirteen gates to change one would be copied
+    once and then drift.
     """
     gates = {k: GateDef(**{**v.__dict__}) for k, v in DEFAULT_GATES.items()}
-    path = Path(root) / ".orchard" / "gates.toml"
-    if path.is_file():
+    known = set(GateDef.__dataclass_fields__)
+    for path in (Path(root) / ".orchard" / "config.toml", Path(root) / ".orchard" / "gates.toml"):
+        if not path.is_file():
+            continue
         data = tomllib.loads(path.read_text("utf-8"))
         for gid, spec in (data.get("gate") or {}).items():
+            if not isinstance(spec, dict):
+                continue
             base = gates.get(gid) or GateDef(id=gid)
-            known = set(GateDef.__dataclass_fields__)
             for k, v in spec.items():
                 if k not in known:
-                    raise ValueError(f"unknown gate field '{gid}.{k}'; known: {sorted(known)}")
+                    raise ValueError(
+                        f"unknown gate field '{gid}.{k}' in {path}. Known: {sorted(known)}"
+                    )
                 setattr(base, k, v)
             base.id = gid
             gates[gid] = base

@@ -242,6 +242,118 @@ crash-recovery demo scenario.
 
 ---
 
+## R7 — Distribution: vendored scripts, or a published MCP package?
+
+**Question (operator, 2026-09-24).** "Make the project management code portable, using
+MCP... everything auto-installable... publish and register the MCP so they can be
+downloaded and installed automatically — so every project needs only a minimal startup
+language description."
+
+**Claim.** Shipping as a published package invoked by `uvx` removes every adoption step
+except one line of MCP config, and shrinks the per-project instruction text enough to
+matter.
+
+**Falsifier.** Any adoption step that survives; or a per-project text that does not
+actually get shorter.
+
+**Probe.** Built the wheel, installed it into a clean venv, adopted a fresh repo, and
+measured the resulting artefacts.
+
+```console
+$ uv build && pip install dist/orchard_mcp-0.1.0-py3-none-any.whl
+$ cd /tmp/fresh-repo && orchard adopt --agents cursor
+  wrote docs/orchard/drivers/implement-phase.md
+  registered orchard in .cursor/mcp.json
+  wrote .cursor/rules/orchard.mdc (always-applied project rule)
+
+$ cat .cursor/mcp.json
+{ "mcpServers": { "orchard": { "command": "uvx", "args": ["orchard-mcp"] } } }
+
+$ # the ENTIRE per-project instruction text:
+$ awk '/ORCHARD:BEGIN/,/ORCHARD:END/' AGENTS.md | wc -w
+232
+```
+
+**Verdict: CONFIRMED.** Adoption is one line of MCP config; `uvx` fetches and runs the
+package on first use, so there is no clone, no virtualenv, no `PYTHONPATH` and no
+install step to forget. The per-project text is **232 words**, because the MCP tool
+descriptions already carry the how — and a second copy of that in every project is a
+copy that drifts from the one the model reads at call time.
+
+**A defect this probe caught that nothing else could.** `templates/` lived BESIDE the
+package, so `adopt` worked perfectly from a source checkout and raised
+`FileNotFoundError` for every installed user. A source tree is exactly where that bug is
+invisible. Fixed by moving templates inside the package; pinned by
+`tests/test_packaging.py`, which builds the real wheel and looks inside it.
+Mutation-verified by moving the directory back out (2 tests red).
+
+**Zero runtime dependencies is load-bearing, not minimalism for its own sake.** It is
+what lets the server install inside a sandbox with no reachable package index, a CI
+image, or another tool's ephemeral container. `test_the_package_has_no_runtime_dependencies`
+fails if one creeps in.
+
+**Registry.** `server.json` follows the
+[MCP registry schema](https://modelcontextprotocol.io/registry/quickstart)
+(`io.github.OWNER/orchard`, PyPI `orchard-mcp`, `runtimeHint: uvx`), published by
+`.github/workflows/publish.yml` on a version tag via OIDC trusted publishing — no stored
+tokens. The workflow refuses when tag, `pyproject.toml` and `server.json` disagree about
+the version; `test_the_declared_versions_agree` pins the same invariant locally.
+
+---
+
+## R8 — Can a local model serve as the cross-family critic?
+
+**Question (operator, 2026-09-24).** "Maybe locally there is a QWEN model running, can
+you check if you can use it as cross critic?"
+
+**Probe — tier 0, existence check first.**
+
+```console
+$ ss -ltnp | grep :8000
+LISTEN 0 4096 0.0.0.0:8000 ...
+$ curl -s http://127.0.0.1:8000/v1/models
+{"object":"list","data":[{"id":"Qwen/Qwen3.8-Flash-Next-FP8","max_model_len":262144,...}]}
+$ nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv
+23335, VLLM::Worker_TP0, 123190 MiB      # TP4, ~123 GB/worker
+```
+
+**Verdict: CONFIRMED — and it is genuinely cross-family.** Qwen is Alibaba-pretrained;
+the author here is Anthropic. That is the only property this reviewer is selected for.
+
+**But the first real run returned UNAVAILABLE, and the failure is worth recording**,
+because it is the exact shape this project is built to refuse to paper over:
+
+```console
+=== UNAVAILABLE === 0/5 chunks reviewed, 5 off-contract in 201s
+reason: chunk 1: empty completion
+```
+
+**Diagnosis, measured on one 30 KB chunk:**
+
+| `max_tokens` | `finish_reason` | content chars | reasoning tokens | wall |
+|---|---|---|---|---|
+| 6 000 | `length` | **0** | 6 000 | 39 s |
+| 32 000 | `stop` | 2 396 (valid verdict) | 28 381 | 190 s |
+| 4 000, `enable_thinking=false` | `stop` | 18 (`STATUS: FINDINGS 1`, no findings body) | 0 | 0.6 s |
+
+A **reasoning model spends the token budget thinking before it emits anything**, so a
+budget sized for the answer alone yields a truncated reply with an *empty content field*.
+Disabling thinking is fast and useless: a verdict with no findings behind it.
+
+**What this changed.** `[[reviewer]].max_tokens` now defaults to 32000 and
+`max_chunk_chars` to 30000, both with the measurement in the comment; and a truncated
+completion is reported as `TRUNCATED: the model consumed all N tokens (M of them
+reasoning) before emitting any answer — raise max_tokens or lower max_chunk_chars`
+rather than as "empty completion", which sends an operator hunting a healthy endpoint.
+
+**The part worth keeping:** at no point did the pipeline report a pass. An endpoint that
+was up, answering, and burning 6 000 tokens per request still produced `UNAVAILABLE,
+5/5 off-contract` — because length is not a verdict, and the absence of a `STATUS:`
+block is the absence of a review. That is the failure mode this system exists to make
+loud, encountered against itself.
+
+---
+
 ## R6 — Bugs this project found in itself
 
 Each was found by a probe, fixed, and ships with a mutation-verified regression test.

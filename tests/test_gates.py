@@ -112,3 +112,32 @@ def test_an_unknown_gate_field_is_an_error_not_a_silent_drop(repo, cfg):
     (repo / ".orchard" / "gates.toml").write_text('[gate.unit_tests]\ncomand = "typo"\n')
     with pytest.raises(ValueError, match="unknown gate field"):
         G.load_gates(repo, cfg)
+
+
+def test_gate_config_is_read_from_config_toml_not_only_gates_toml(repo, cfg):
+    """`orchard configure` writes to config.toml; gates were read only from gates.toml.
+
+    The result was a config write that reported success and changed nothing — the MCP
+    `orchard_configure` tool accepted `[gate.unit_tests]`, wrote it, said "appended",
+    and the gate kept its default. Found by the state-aware-instructions test, which
+    configured a project and was still told the project was unconfigured.
+    Mutation-verified: dropping config.toml from the read list makes this red.
+    """
+    (repo / ".orchard").mkdir(exist_ok=True)
+    (repo / ".orchard" / "config.toml").write_text(
+        '[gate.unit_tests]\ncommand = "pytest -q --tb=short"\n'
+    )
+    gates = G.load_gates(repo, cfg)
+    assert gates["unit_tests"].command == "pytest -q --tb=short"
+
+
+def test_gates_toml_wins_over_config_toml(repo, cfg):
+    """Both are read; the more specific file decides, and neither is silently ignored."""
+    (repo / ".orchard").mkdir(exist_ok=True)
+    (repo / ".orchard" / "config.toml").write_text(
+        '[gate.unit_tests]\ncommand = "from-config"\ntimeout_s = 111\n'
+    )
+    (repo / ".orchard" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "from-gates"\n')
+    gates = G.load_gates(repo, cfg)
+    assert gates["unit_tests"].command == "from-gates"
+    assert gates["unit_tests"].timeout_s == 111, "the config.toml overlay was discarded"

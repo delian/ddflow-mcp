@@ -22,6 +22,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import asdict, is_dataclass
@@ -39,6 +40,7 @@ from .schedule import critical_path, plan
 from .store import Store
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
+UNAVAILABLE_EXIT = NOTHING
 
 #: How many offending files a refusal lists before summarising the rest. Enough to see
 #: whether they are build artefacts or real source -- which is the judgement the
@@ -61,8 +63,17 @@ class Ctx:
         except W.GitError:
             self.repo = start.resolve()
         self.cfg = Config.load(self.repo)
+        # `ORCHARD_AGENT` is the short alias documented in server.json and used by MCP
+        # clients and the git hook, which run in an environment where passing `--agent`
+        # is not possible. It was documented before it was read -- and a dead env var
+        # in a published manifest is worse than an undocumented one, because operators
+        # set it and nothing happens.
+        env_agent = os.environ.get("ORCHARD_AGENT", "")
         if args.agent:
             self.cfg.agent.id = args.agent
+        elif env_agent and self.cfg.sources.get("agent.id", "default") == "default":
+            self.cfg.agent.id = env_agent
+            self.cfg.sources["agent.id"] = "env"
         self.log = EventLog(
             self.repo, self.cfg.agent.id, lock_timeout_s=self.cfg.lease.acquire_timeout_s
         )
@@ -133,9 +144,6 @@ def cmd_init(a, c: Ctx) -> int:
     cfgp = d / "config.toml"
     if not cfgp.exists():
         cfgp.write_text(_starter_config(), "utf-8")
-    gp = d / "gates.toml"
-    if not gp.exists():
-        gp.write_text(_starter_gates(), "utf-8")
     ga = c.repo / ".gitattributes"
     line = ".orchard/events/*.jsonl merge=union\n"
     prev = ga.read_text("utf-8") if ga.exists() else ""
@@ -144,9 +152,9 @@ def cmd_init(a, c: Ctx) -> int:
     c.store.rebuild(c.log)
     c.out(
         f"Initialised Orchard in {d}\n"
-        f"  config: {cfgp}\n  gates:  {gp}\n"
+        f"  config: {cfgp}\n"
         f"  Next: `orchard phase add P1 --title 'First phase'`",
-        {"root": str(d), "config": str(cfgp), "gates": str(gp)},
+        {"root": str(d), "config": str(cfgp)},
     )
     return OK
 
@@ -883,6 +891,31 @@ def cmd_show(a, c: Ctx) -> int:
 
 
 def cmd_config(a, c: Ctx) -> int:
+    if a.set:
+        return _config_set(a, c)
+    if a.append_toml:
+        # Validated BEFORE writing: an agent composing TOML gets a parse error back as
+        # a readable message instead of leaving the project with a config that no
+        # later command can load.
+        import tomllib
+
+        try:
+            tomllib.loads(a.append_toml)
+        except tomllib.TOMLDecodeError as exc:
+            print(f"not valid TOML: {exc}", file=sys.stderr)
+            return FAIL
+        path = c.repo / ".orchard" / "config.toml"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        prev = path.read_text("utf-8") if path.exists() else ""
+        merged = prev.rstrip() + "\n\n" + a.append_toml.strip() + "\n"
+        try:
+            Config.load(c.repo, env={}) and tomllib.loads(merged)
+        except (tomllib.TOMLDecodeError, ValueError) as exc:
+            print(f"appending this would break the config: {exc}", file=sys.stderr)
+            return FAIL
+        path.write_text(merged, "utf-8")
+        c.out(f"appended to {path}", {"path": str(path)})
+        return OK
     rows = c.cfg.explain()
     if c.json:
         print(
@@ -900,6 +933,61 @@ def cmd_config(a, c: Ctx) -> int:
         if a.explain and d:
             for line in _wrap(d, 76):
                 print(f"    {line}")
+    return OK
+
+
+def _config_set(a, c: Ctx) -> int:
+    """`orchard config --set <section>.<key> <value>` — edit one key in place.
+
+    Exists because appending is not always possible: TOML forbids a duplicate table, so
+    once a section is present the documented "append a block" path fails. Editing in
+    place also preserves the surrounding comments, which for this file carry most of
+    the reasoning.
+    """
+    import tomllib
+
+    dotted, value = a.set, a.value
+    if "." not in dotted:
+        print("--set takes <section>.<key>, e.g. gate.unit_tests.command", file=sys.stderr)
+        return FAIL
+    section, _, key = dotted.rpartition(".")
+    path = c.repo / ".orchard" / "config.toml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = path.read_text("utf-8") if path.exists() else ""
+
+    literal = value
+    if not re.fullmatch(r"(true|false|-?\d+(\.\d+)?|\[.*\]|\{.*\})", value.strip()):
+        literal = json.dumps(value)  # quote + escape as a TOML basic string
+
+    lines = text.splitlines()
+    header = f"[{section}]"
+    try:
+        start = next(i for i, ln in enumerate(lines) if ln.strip() == header)
+    except StopIteration:
+        block = ["", header, f"{key} = {literal}"]
+        lines += block
+    else:
+        end = next(
+            (i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")),
+            len(lines),
+        )
+        for i in range(start + 1, end):
+            stripped = lines[i].lstrip()
+            if stripped.startswith(("#", ";")):
+                continue
+            if stripped.split("=")[0].strip() == key:
+                lines[i] = f"{key} = {literal}"
+                break
+        else:
+            lines.insert(end, f"{key} = {literal}")
+    new = "\n".join(lines).rstrip() + "\n"
+    try:
+        tomllib.loads(new)
+    except tomllib.TOMLDecodeError as exc:
+        print(f"that edit would break the config: {exc}", file=sys.stderr)
+        return FAIL
+    path.write_text(new, "utf-8")
+    c.out(f"{dotted} = {literal}", {"key": dotted, "value": value, "path": str(path)})
     return OK
 
 
@@ -952,13 +1040,244 @@ def cmd_cadence(a, c: Ctx) -> int:
     return OK
 
 
+def _diff_for(c: Ctx, item_id: str, base: str = "") -> tuple[str, str]:
+    """(diff, how) for an item: its worktree branch vs base, else the dirty tree.
+
+    Returns the branch diff when the item has a worktree, because by review time the
+    work is usually committed there and `git diff` alone would be empty -- and an empty
+    diff is the commonest way a review passes having examined nothing.
+    """
+    st = c.state()
+    it = st.items.get(item_id)
+    base = base or c.cfg.worktree.base_ref or W.default_branch(c.repo)
+    if it and it.worktree and Path(it.worktree).exists():
+        wt = Path(it.worktree)
+        merge_base = W.git(wt, "merge-base", base, "HEAD").out or base
+        committed = W.git(wt, "diff", f"{merge_base}..HEAD").out
+        dirty = W.git(wt, "diff").out
+        both = "\n".join(x for x in (committed, dirty) if x.strip())
+        if both.strip():
+            return both, f"{base}..HEAD (+ uncommitted) in {wt}"
+    dirty = W.git(c.repo, "diff", "HEAD").out
+    return dirty, f"uncommitted changes in {c.repo}"
+
+
+def cmd_reviewers(a, c: Ctx) -> int:
+    from . import reviewer as R
+
+    if a.reviewers_cmd == "detect":
+        found = R.detect()
+        if not found:
+            print(
+                "No local OpenAI-compatible endpoint answered on any well-known port.\n"
+                "Checked: " + ", ".join(u for u, _ in R.WELL_KNOWN_ENDPOINTS),
+                file=sys.stderr,
+            )
+            return NOTHING
+        blocks = []
+        for url, label, models in found:
+            for m in models:
+                fam = R.family_of(m)
+                print(f"  {url}  [{label}]\n      model  {m}\n      family {fam}")
+                blocks.append(
+                    f'\n[[reviewer]]\nname = "{m.split("/")[-1].lower()}"\n'
+                    f'base_url = "{url}"\nmodel = "{m}"\nfamily = "{fam}"\n'
+                    f'gates = ["critic"]\n'
+                )
+        if a.write:
+            cfg_path = c.repo / ".orchard" / "config.toml"
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            prev = cfg_path.read_text("utf-8") if cfg_path.exists() else ""
+            cfg_path.write_text(prev.rstrip() + "\n" + "".join(blocks), "utf-8")
+            print(f"\nappended {len(blocks)} reviewer block(s) to {cfg_path}")
+        else:
+            print("\nAdd to .orchard/config.toml (or re-run with --write):")
+            print("".join(blocks))
+        return OK
+
+    revs = R.load_reviewers(c.repo)
+    if a.reviewers_cmd == "list":
+        if not revs:
+            print("No reviewers configured. Run `orchard reviewers detect --write`.")
+            return NOTHING
+        for r in revs:
+            print(
+                f"  {r.name:<22} {r.resolved_family():<12} gates={','.join(r.gates)} "
+                f"{'' if r.enabled else '(disabled) '}{r.base_url} [{r.model}]"
+            )
+        return OK
+
+    if a.reviewers_cmd == "test":
+        targets = [r for r in revs if not a.name or r.name == a.name]
+        if not targets:
+            print(f"no reviewer named {a.name!r}; `orchard reviewers list`", file=sys.stderr)
+            return FAIL
+        worst = OK
+        for r in targets:
+            res = R.review(
+                r,
+                "diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n"
+                "@@ -1,3 +1,3 @@\n def f(items):\n-    return sum(items) / len(items)\n"
+                "+    return sum(items) / len(items) if items else 0\n",
+                intent="guard the empty-list case in the mean helper",
+            )
+            print(
+                f"  {r.name}: {res.label} ({res.coverage()}, {res.elapsed_s:.1f}s)"
+                + (f" — {res.reason}" if res.reason else "")
+            )
+            for f in res.findings[:3]:
+                print(f"      [{f.severity}] {f.title[:90]}")
+            worst = max(worst, 0 if res.status == R.REVIEWED else res.status)
+        return worst
+    return FAIL
+
+
+def cmd_review(a, c: Ctx) -> int:
+    """Run every reviewer configured for a gate, and record the outcome."""
+    from . import reviewer as R
+
+    revs = R.reviewers_for(R.load_reviewers(c.repo), a.gate)
+    if not revs:
+        print(
+            f"No reviewer is configured for gate {a.gate!r}. "
+            f"`orchard reviewers detect --write` finds local models.\n"
+            f"Recording UNAVAILABLE — which is NOT a pass.",
+            file=sys.stderr,
+        )
+        if a.id:
+            G.record(
+                c.log,
+                c.cfg,
+                a.id,
+                a.gate,
+                "unavailable",
+                reason=f"no reviewer configured for {a.gate}",
+                gates=c.gates,
+            )
+        return NOTHING
+
+    diff, how = _diff_for(c, a.id, a.base)
+    if not diff.strip():
+        print(f"Empty diff ({how}) — nothing to review. Recording UNAVAILABLE.", file=sys.stderr)
+        if a.id:
+            G.record(
+                c.log,
+                c.cfg,
+                a.id,
+                a.gate,
+                "unavailable",
+                reason=f"empty diff ({how})",
+                gates=c.gates,
+            )
+        return UNAVAILABLE_EXIT
+
+    st = c.state()
+    it = st.items.get(a.id)
+    intent = a.intent or (f"{it.title}. {it.body}".strip() if it else "")
+    if not intent:
+        print(
+            "--intent is required: the reviewer flags where the diff and the stated "
+            "intent disagree, so without it there is nothing to disagree with.",
+            file=sys.stderr,
+        )
+        return FAIL
+
+    results = []
+    for r in revs:
+        print(
+            f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}", flush=True
+        )
+        res = R.review(r, diff, intent, context=a.context or "")
+        results.append(res)
+        print(
+            f"  {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
+            f"{res.elapsed_s:.1f}s" + (f" — {res.reason}" if res.reason else ""),
+            flush=True,
+        )
+        for f in res.findings:
+            print(f"\n  [{f.severity}] {f.location or f.title}")
+            for line in f.detail.splitlines():
+                if line.strip():
+                    print(f"      {line.strip()}")
+
+    best = min(results, key=lambda r: r.status)
+    if a.id:
+        outcome = {
+            R.REVIEWED: ("failed" if best.findings else "passed"),
+            R.PARTIAL: "partial",
+            R.UNAVAILABLE: "unavailable",
+            R.ERROR: "unavailable",
+        }[best.status]
+        G.record(
+            c.log,
+            c.cfg,
+            a.id,
+            a.gate,
+            outcome,
+            reason=best.reason or (f"{len(best.findings)} finding(s)" if best.findings else ""),
+            evidence={**best.evidence(), "diff_source": how, "diff_chars": len(diff)},
+            gates=c.gates,
+            by=best.model,
+        )
+        print(
+            f"\nrecorded {a.id}.{a.gate} = {outcome} (reviewer {best.reviewer}, "
+            f"family {best.family})"
+        )
+    return {R.REVIEWED: OK, R.PARTIAL: REFUSED, R.UNAVAILABLE: NOTHING, R.ERROR: FAIL}[best.status]
+
+
+def cmd_hooks(a, c: Ctx) -> int:
+    from . import enforce as E
+
+    if a.hooks_cmd == "install":
+        msg = E.install(c.repo, force=a.force)
+        c.out(msg, {"message": msg})
+        return FAIL if msg.startswith("REFUSED") else OK
+    if a.hooks_cmd == "uninstall":
+        msg = E.uninstall(c.repo)
+        c.out(msg, {"message": msg})
+        return OK
+    if a.hooks_cmd == "status":
+        on = E.installed(c.repo)
+        mode = c.cfg.enforce.commit_without_lease
+        c.out(
+            f"pre-commit hook: {'installed' if on else 'NOT installed'}\n"
+            f"policy [enforce].commit_without_lease = {mode!r}"
+            + (
+                "\n\nNOTE: the hook is installed but the policy is 'warn', so it "
+                "reports and allows. Set it to 'block' to refuse."
+                if on and mode == "warn"
+                else ""
+            )
+            + (
+                "\n\nNOTE: the policy is 'block' but NO HOOK IS INSTALLED, so nothing "
+                "enforces it. Run `orchard hooks install`."
+                if not on and mode == "block"
+                else ""
+            ),
+            {"installed": on, "policy": mode},
+        )
+        return OK if on or mode == "off" else NOTHING
+    if a.hooks_cmd == "check-commit":
+        code, msg = E.check_commit(c.repo, c.cfg)
+        if msg:
+            print(msg, file=sys.stderr)
+        if code == 0 and c.cfg.enforce.require_item_trailer:
+            tcode, tmsg = E.check_item_trailer(c.repo)
+            if tmsg:
+                print(tmsg, file=sys.stderr)
+            return tcode
+        return code
+    return FAIL
+
+
 def cmd_adopt(a, c: Ctx) -> int:
     from .adopt import AGENT_TARGETS, adopt
 
     agents = _csv(a.agents) or list(AGENT_TARGETS)
     try:
         actions = adopt(
-            c.repo, agents, package_dir=Path(__file__).resolve().parent, docs_dir=a.docs
+            c.repo, agents, docs_dir=a.docs, install_hooks=c.cfg.enforce.install_hooks_on_setup
         )
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
@@ -1037,11 +1356,48 @@ def _wrap(text: str, width: int) -> list[str]:
 
 
 def _starter_config() -> str:
-    return """# Orchard configuration. `orchard config --explain` documents every knob.
-# Only what you change needs to be here; everything else keeps its default.
+    """The single configuration file.
+
+    One file, not two. An earlier version also wrote `.orchard/gates.toml` carrying a
+    placeholder `unit_tests.command`, and because gates.toml wins over config.toml that
+    placeholder silently overrode anything `orchard configure` wrote -- so the documented
+    way to set the test command could not set the test command. Splitting gates into
+    their own file is still supported for operators who want it; it is just not the
+    default, because a default that creates two sources of truth will produce two
+    sources of truth.
+    """
+    return """# Orchard configuration — everything in one file.
+# `orchard config --explain` documents every knob. Only what you change needs to be
+# here; everything else keeps its default.
+
+# ---------------------------------------------------------------------------------
+# THE ONE THING YOU MUST SET: how this project runs its tests.
+# ---------------------------------------------------------------------------------
+# [gate.unit_tests]
+# command = "pytest -q"     # or "npm test" · "cargo test" · "go test ./..." · "make check"
+#
+# Set it with:   orchard config --set gate.unit_tests.command "pytest -q"
+# Until it is set, the unit_tests gate reports UNAVAILABLE — which is honest, and
+# blocks completion, rather than passing vacuously.
+#
+# Left COMMENTED on purpose: an empty table here would collide with the block that
+# `orchard config --append-toml` writes, since TOML forbids a duplicate table, and the
+# documented way to configure the project would fail on a fresh install.
+
+# ---------------------------------------------------------------------------------
+# A cross-family reviewer makes the `critic` gate real rather than self-reported.
+# `orchard reviewers detect --write` finds a local model server and fills this in.
+# ---------------------------------------------------------------------------------
+# [[reviewer]]
+# name     = "local"
+# base_url = "http://127.0.0.1:11434/v1"
+# model    = "qwen3:8b"
+# family   = "alibaba"            # must differ from the authoring model's family
+# gates    = ["critic"]
+# api_key_env = "MY_API_KEY"      # the NAME of an env var, never the key itself
 
 [lease]
-ttl_s = 1800          # how long a claim survives without a heartbeat
+ttl_s = 1800            # how long a claim survives without a heartbeat
 heartbeat_s = 300
 
 [worktree]
@@ -1051,22 +1407,14 @@ max_parallel = 4
 [schedule]
 max_parallel_tasks = 4
 
+[enforce]
+# "block" makes the pre-commit hook REFUSE a commit touching paths no lease of yours
+# covers — the only layer of this workflow that does not rely on the agent agreeing.
+# Starts at "warn" so adopting Orchard never breaks an existing repo on day one.
+commit_without_lease = "warn"
+
 [session]
 brief_max_tokens = 1200
-"""
-
-
-def _starter_gates() -> str:
-    return """# Gate definitions. Defaults are overlaid, so you only declare what differs.
-# `orchard gate status <item>` shows the pipeline; agent gates print their prompt.
-
-[gate.unit_tests]
-# THE one gate you must set for your project. Anything that exits non-zero on failure.
-command = "echo 'set [gate.unit_tests].command in .orchard/gates.toml' && false"
-
-[gate.standards]
-# Optional: a linter / standards tool. Leave the command empty to make it an agent gate.
-command = ""
 """
 
 
@@ -1281,12 +1629,49 @@ def build_parser() -> argparse.ArgumentParser:
     cf = s.add_parser("config", help="print every knob, its value and its source")
     cf.add_argument("--explain", action="store_true")
     cf.add_argument("--filter", default="")
+    cf.add_argument(
+        "--set",
+        default="",
+        help="edit one key in place, e.g. --set gate.unit_tests.command 'pytest -q'",
+    )
+    cf.add_argument("value", nargs="?", default="", help="the value, when --set is used")
+    cf.add_argument(
+        "--append-toml",
+        default="",
+        help="append this TOML to .orchard/config.toml (validated first)",
+    )
     cf.set_defaults(fn=cmd_config)
 
     cd = s.add_parser("cadence", help="which periodic passes are due (exit 2 = none)")
     cd.add_argument("--ran", default="")
     cd.add_argument("--note", default="")
     cd.set_defaults(fn=cmd_cadence)
+
+    rv = s.add_parser("reviewers", help="find, list and test cross-family reviewers")
+    rv_s = rv.add_subparsers(dest="reviewers_cmd", required=True)
+    rvd = rv_s.add_parser("detect", help="probe well-known local endpoints")
+    rvd.add_argument(
+        "--write",
+        action="store_true",
+        help="append the discovered reviewers to .orchard/config.toml",
+    )
+    rvd.set_defaults(fn=cmd_reviewers)
+    rv_s.add_parser("list").set_defaults(fn=cmd_reviewers)
+    rvt = rv_s.add_parser("test", help="send a tiny known-buggy diff and check the reply")
+    rvt.add_argument("name", nargs="?", default="")
+    rvt.set_defaults(fn=cmd_reviewers)
+
+    rw = s.add_parser("review", help="run the configured reviewer(s) over an item's diff")
+    rw.add_argument("id", nargs="?", default="")
+    rw.add_argument("--gate", default="critic")
+    rw.add_argument(
+        "--intent",
+        default="",
+        help="what the change is meant to do (defaults to the item's title/body)",
+    )
+    rw.add_argument("--context", default="")
+    rw.add_argument("--base", default="")
+    rw.set_defaults(fn=cmd_review)
 
     ad = s.add_parser("adopt", help="install Orchard into this project for one or more agents")
     ad.add_argument(
@@ -1296,6 +1681,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ad.add_argument("--docs", default="docs/orchard", help="where to write the drivers")
     ad.set_defaults(fn=cmd_adopt)
+
+    hk = s.add_parser("hooks", help="install/inspect the enforcement git hook")
+    hk_s = hk.add_subparsers(dest="hooks_cmd", required=True)
+    hki = hk_s.add_parser("install")
+    hki.add_argument(
+        "--force",
+        action="store_true",
+        help="replace an existing pre-commit hook Orchard does not manage",
+    )
+    hki.set_defaults(fn=cmd_hooks)
+    hk_s.add_parser("uninstall").set_defaults(fn=cmd_hooks)
+    hk_s.add_parser("status").set_defaults(fn=cmd_hooks)
+    hk_s.add_parser("check-commit", help="(invoked by the hook)").set_defaults(fn=cmd_hooks)
 
     s.add_parser("mcp", help="run the MCP stdio server over this repository").set_defaults(
         fn=cmd_mcp

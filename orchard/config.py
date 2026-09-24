@@ -374,6 +374,32 @@ _doc(
 
 
 @dataclass
+class EnforceConfig:
+    """Mechanical enforcement — the layer that does not rely on the agent agreeing."""
+
+    commit_without_lease: str = "warn"  # block | warn | off
+    install_hooks_on_setup: bool = True
+    require_item_trailer: bool = False
+
+
+_doc(
+    "enforce",
+    "commit_without_lease",
+    "What the pre-commit hook does when a commit touches paths no live lease of yours covers. 'block' refuses (the only real enforcement Orchard has), 'warn' prints and allows, 'off' disables. Default 'warn' so adoption never breaks an existing repo on day one; switch to 'block' once the queue is populated.",
+)
+_doc(
+    "enforce",
+    "install_hooks_on_setup",
+    "Install the pre-commit hook during `orchard adopt`. The hook is what makes the workflow enforced rather than merely described; disable only if your project manages hooks centrally.",
+)
+_doc(
+    "enforce",
+    "require_item_trailer",
+    "Require every commit to carry an `Item: <id>` git trailer. Makes commits reconcilable against the queue by `git log --format='%(trailers:key=Item)'` instead of by parsing prose. Off by default because it is noisy on a repo with non-agent contributors.",
+)
+
+
+@dataclass
 class AgentConfig:
     """How Orchard talks to whichever agent is driving it."""
 
@@ -420,6 +446,7 @@ class Config:
     session: SessionConfig = field(default_factory=SessionConfig)
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
+    enforce: EnforceConfig = field(default_factory=EnforceConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "env"

@@ -68,11 +68,12 @@ item below.
 
 ## Coverage gaps
 
-- **B12 — No cross-family review has been run against `orchard/`.** The configured
-  critic's endpoint was unreachable during the whole build (HTTP 000, with a concurrent
-  session saturating it). Recorded as `unavailable`, never as a pass. This is the
-  single largest gap in the review of this code, because every reviewer that *did* run
-  shares the author's pretraining family.
+- **B12 — Cross-family review: PARTIALLY RETIRED.** A local
+  `Qwen/Qwen3.8-Flash-Next-FP8` (Alibaba family) was found on vLLM at
+  `127.0.0.1:8000` and is now wired in as a first-class reviewer — see
+  [R8](RESEARCH.md). The LAN endpoint originally configured remains unreachable. The
+  review of the *core package* with the corrected reasoning-model settings is the
+  remaining work; until it completes and its findings are triaged, treat this as open.
 - **B13 — Windows is untested.** `fcntl.flock` is POSIX-only; `events.py` would need an
   `msvcrt.locking` branch. The rest is portable. No probe was run, so this is
   `THEORETICAL`.

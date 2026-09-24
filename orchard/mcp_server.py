@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -368,6 +369,94 @@ TOOLS: dict[str, dict[str, Any]] = {
             ]
         ),
     },
+    "orchard_setup": {
+        "description": (
+            "Install Orchard into this repository: creates .orchard/, writes the driver "
+            "and the AGENTS.md section, and registers nothing else. Run this ONCE per "
+            "project, then set your test command with orchard_configure. Safe to re-run "
+            "— it updates a managed block and leaves your own prose alone."
+        ),
+        "properties": {
+            "agents": (
+                "string",
+                "Comma-separated agents to write driver deltas for: "
+                "claude,gemini,codex,copilot,kilo. Default: all.",
+                False,
+            )
+        },
+        "argv": lambda a: ["adopt", *_opt("--agents", a)],
+    },
+    "orchard_configure": {
+        "description": (
+            "Read or write .orchard/config.toml. With no arguments it prints every "
+            "knob, its value, its source and what it does. With `toml`, it APPENDS that "
+            "TOML to the config — the usual use is setting your project's test command:\n"
+            '  [gate.unit_tests]\n  command = "pytest -q"\n'
+            "This is how a project is configured without a shell."
+        ),
+        "properties": {
+            "set": (
+                "string",
+                "Dotted key to set, e.g. 'gate.unit_tests.command'. Preferred: it "
+                "edits in place and works whether or not the section exists.",
+                False,
+            ),
+            "value": ("string", "The value for `set`.", False),
+            "toml": (
+                "string",
+                "A whole TOML block to append. Fails if it would "
+                "duplicate an existing table — use `set` instead then.",
+                False,
+            ),
+            "filter": ("string", "Only show knobs whose name contains this.", False),
+        },
+        "argv": lambda a: (
+            ["config", "--set", a["set"], a.get("value", "")]
+            if a.get("set")
+            else ["config", "--append-toml", a["toml"]]
+            if a.get("toml")
+            else ["config", "--explain", *_opt("--filter", a)]
+        ),
+    },
+    "orchard_reviewers_detect": {
+        "description": (
+            "Probe well-known local ports for an OpenAI-compatible model server (ollama, "
+            "vLLM, LM Studio, llama.cpp, sglang) and report what is serving, with each "
+            "model's pretraining family. Use this to find a reviewer from a DIFFERENT "
+            "family than yourself — which the critic gate requires. Pass write=true to "
+            "add what it finds to .orchard/config.toml."
+        ),
+        "properties": {
+            "write": ("boolean", "Append the discovered reviewers to the config.", False)
+        },
+        "argv": lambda a: ["reviewers", "detect"] + (["--write"] if a.get("write") else []),
+    },
+    "orchard_reviewers_list": {
+        "description": "Show the configured reviewers, their families and which gates they serve.",
+        "properties": {},
+        "argv": lambda a: ["reviewers", "list"],
+    },
+    "orchard_review": {
+        "description": (
+            "Run the configured cross-family reviewer over an item's diff and record the "
+            "result. This is the critic gate performed by Orchard rather than claimed by "
+            "you — it calls a real endpoint, parses the verdict, and records the evidence. "
+            "If no reviewer is configured, or the endpoint is unreachable, or the model "
+            "returns no verdict, it records UNAVAILABLE and never a pass."
+        ),
+        "properties": {
+            "id": ("string", "Item whose diff to review.", True),
+            "gate": ("string", "Gate to record under: critic (default) or rubber_duck.", False),
+            "intent": (
+                "string",
+                "What the change is MEANT to do. The reviewer flags where the diff "
+                "and the intent disagree, so without it there is nothing to "
+                "disagree with. Defaults to the item's title and body.",
+                False,
+            ),
+        },
+        "argv": lambda a: ["review", a["id"], *_opt("--gate", a), *_opt("--intent", a)],
+    },
     "orchard_session_start": {
         "description": "Open a session for provenance logging. Returns the session id.",
         "properties": {
@@ -445,15 +534,7 @@ class Server:
                         "resources": {"listChanged": False},
                     },
                     "serverInfo": SERVER_INFO,
-                    "instructions": (
-                        "Orchard manages the work queue for this repository. Call "
-                        "orchard_brief FIRST in every session — it returns recoverable work, "
-                        "the ready set and the lessons relevant to the task, and it replaces "
-                        "reading the project's rule and lesson files. Claim before you edit; "
-                        "an unclaimed edit can be destroyed by a parallel agent. Record a "
-                        "gate as 'unavailable' when a tool or reviewer could not run: it is "
-                        "never a pass."
-                    ),
+                    "instructions": _instructions(self.repo),
                 },
             )
         if method in ("notifications/initialized", "notifications/cancelled"):
@@ -553,6 +634,83 @@ class Server:
         return _err(mid, -32601, f"method not found: {method}")
 
 
+def _instructions(repo: Path) -> str:
+    """What the client injects into the model's context on connect.
+
+    **State-aware on purpose.** A fixed blurb describing a workflow the project has not
+    adopted is noise the model learns to skip; the useful instruction is the next
+    concrete action, and that depends on whether `.orchard/` exists, whether a test
+    command is set, whether a cross-family reviewer is configured, and whether anything
+    is waiting to be recovered. This is the only place the server gets to speak
+    unprompted, so it says the one thing that is true right now.
+    """
+    orchard_dir = repo / ".orchard"
+    if not orchard_dir.is_dir():
+        return (
+            "This repository does not use Orchard yet.\n\n"
+            "If the user wants a managed work queue — phases and tasks with "
+            "dependencies, parallel agents in isolated git worktrees, quality gates and "
+            "crash recovery — call `orchard_setup` ONCE. It creates .orchard/, writes "
+            "the driver, and adds a short section to AGENTS.md describing how work is "
+            "claimed here. Then set the project's test command with `orchard_configure` "
+            "and add work with `orchard_phase_add` / `orchard_task_add`.\n\n"
+            "Do not call the other tools before `orchard_setup`; they will report that "
+            "there is no queue.\n\n"
+            "If the user has not asked for this, say nothing about it and carry on."
+        )
+
+    lines = [
+        "This repository's work is a queue managed by Orchard.",
+        "",
+        "**Call `orchard_brief` first.** It returns any work left over from a crashed "
+        "agent, what is ready to start now, why everything else is blocked, and the "
+        "past lessons relevant to the task — and it replaces reading this project's "
+        "rule and lesson files.",
+        "",
+        "**Claim before you edit.** `orchard_claim` leases an item and gives you an "
+        "isolated git worktree. An unclaimed edit can be destroyed by a parallel agent, "
+        "and in this repository it may also be refused at commit time.",
+        "",
+        "Loop: `orchard_next` → `orchard_claim` → work in the worktree → "
+        "`orchard_gate_status` and satisfy each gate → `orchard_merge` → "
+        "`orchard_complete`.",
+        "",
+        "A tool or reviewer that could not run is recorded `unavailable`, NEVER "
+        "`passed`. Exit code 2 means 'could not run / nothing to do' and is a result, "
+        "not an error — never treat it as success.",
+    ]
+
+    # Name the specific setup gaps, because "configure it properly" is not actionable
+    # and an agent cannot see the config file's contents from here.
+    todo = []
+    try:
+        from .config import Config
+        from .gates import load_gates
+        from .reviewer import load_reviewers
+
+        cfg = Config.load(repo)
+        gates = load_gates(repo, cfg)
+        ut = gates.get("unit_tests")
+        if not ut or not ut.command or "set [gate.unit_tests]" in ut.command:
+            todo.append(
+                "No test command is configured. Set it with `orchard_configure`: "
+                '`[gate.unit_tests]` / `command = "<your test command>"`. Until then '
+                "the unit_tests gate reports UNAVAILABLE and cannot pass."
+            )
+        if not load_reviewers(repo):
+            todo.append(
+                "No cross-family reviewer is configured, so the `critic` gate cannot "
+                "run and `orchard_complete` will refuse. Call "
+                "`orchard_reviewers_detect` with write=true — it finds a local model "
+                "server if one is running."
+            )
+    except Exception:
+        pass
+    if todo:
+        lines += ["", "**Setup still needed:**", ""] + [f"- {t}" for t in todo]
+    return "\n".join(lines)
+
+
 def _ok(mid: Any, result: dict[str, Any]) -> dict[str, Any]:
     return {"jsonrpc": "2.0", "id": mid, "result": result}
 
@@ -595,3 +753,50 @@ def serve(repo: Path, stdin=None, stdout=None) -> None:
         if reply is not None:
             outp.write(json.dumps(reply) + "\n")
             outp.flush()
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Console-script entry point: ``orchard-mcp [--repo PATH]``.
+
+    Kept argument-light on purpose. An MCP client spawns this with no arguments and a
+    working directory, so the default path -- resolve the repository from the cwd, and
+    from there to the PRIMARY checkout even if the cwd is a linked worktree -- has to
+    be the one that needs no configuration. ``ORCHARD_REPO`` overrides for clients that
+    spawn servers from a fixed directory.
+    """
+    import argparse
+
+    ap = argparse.ArgumentParser(
+        prog="orchard-mcp",
+        description="Orchard MCP stdio server. Add to your agent's MCP config as:\n"
+        '  {"mcpServers": {"orchard": {"command": "uvx", '
+        '"args": ["orchard-mcp"]}}}',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument(
+        "--repo",
+        default=os.environ.get("ORCHARD_REPO", ""),
+        help="repository root (default: cwd, resolved to the primary checkout)",
+    )
+    ap.add_argument("--version", action="store_true")
+    args = ap.parse_args(argv)
+    if args.version:
+        print(SERVER_INFO["version"])
+        return 0
+
+    start = Path(args.repo) if args.repo else Path.cwd()
+    try:
+        from .worktree import repo_root
+
+        repo = repo_root(start)
+    except Exception:
+        # Not a git repository, or git is absent. Serve anyway: `orchard_doctor` will
+        # say so in a way the model can read and relay, which is far more useful than
+        # a server that refuses to start and shows the client only "exited 1".
+        repo = start.resolve()
+    serve(repo)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

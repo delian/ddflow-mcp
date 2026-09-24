@@ -1,0 +1,66 @@
+# Orchard ships as a normal Python distribution so that adopting it is ONE line in an
+# agent's MCP config and nothing else:
+#
+#     {"mcpServers": {"orchard": {"command": "uvx", "args": ["orchard-mcp"]}}}
+#
+# `uvx` fetches and runs it in an ephemeral environment on first use. No clone, no
+# PYTHONPATH, no install step for the operator to forget and no vendored copy to drift
+# from upstream. That is the whole reason this file exists: a workflow distributed as
+# "copy these scripts into your repo" is a workflow that is a different version in
+# every repo within a month.
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "orchard-mcp"
+version = "0.1.0"
+description = "A portable, agent-agnostic work-queue kernel for AI coding agents — MCP server and CLI."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+keywords = ["mcp", "model-context-protocol", "agents", "workflow", "task-queue",
+            "git-worktree", "code-review", "orchestration"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Build Tools",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
+# DELIBERATELY EMPTY. Orchard runs on the standard library plus `git`, which is the
+# property that makes it installable everywhere an agent runs -- including sandboxes
+# with no package index reachable at runtime, CI images, and the inside of another
+# tool's ephemeral container. The MCP stdio transport is newline-delimited JSON-RPC and
+# is implemented here rather than taken as a dependency; see docs/ARCHITECTURE.md.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[project.scripts]
+# Two entry points on purpose. `orchard` is the human/CI surface; `orchard-mcp` is what
+# an MCP client spawns, so the client's config never has to carry a subcommand.
+orchard = "orchard.cli:main"
+orchard-mcp = "orchard.mcp_server:main"
+
+[project.urls]
+Homepage = "https://github.com/OWNER/orchard"
+Repository = "https://github.com/OWNER/orchard"
+Issues = "https://github.com/OWNER/orchard/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["orchard"]
+
+[tool.hatch.build.targets.sdist]
+include = ["orchard/", "docs/", "tests/", "demos/", "probes/",
+           "README.md", "server.json"]
+
+# Templates need no force-include: they live under `orchard/`, and hatchling ships
+# every file in a declared package directory. They were a SIBLING directory until a
+# real install raised FileNotFoundError for them -- a fault invisible from a source
+# checkout, which is why `tests/test_packaging.py` builds the wheel and looks inside.
