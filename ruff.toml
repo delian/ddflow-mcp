@@ -1,0 +1,62 @@
+# Orchard is a VENDORED, self-contained package: it ships as a directory you copy into
+# any project, and it carries its own conventions rather than inheriting the host
+# repository's. Ruff resolves configuration per file from the nearest config in that
+# file's ancestor directories, so this file governs `orchard/` and nothing else.
+#
+# The rule set is the host repo's, minus four exemptions. Each is written down, because
+# an undocumented ignore is how a lint config becomes a place to hide problems.
+
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "W", "B", "C4", "C90", "I", "UP", "PL", "RUF"]
+ignore = [
+    # Long explanatory comments are deliberate here; the reasoning behind a
+    # coordination rule is the part that stops the next reader "simplifying" it away.
+    "E501",
+    # Deferred imports are LOad-bearing in this package: `events` derives its
+    # vocabulary from `model`, which imports `events`; `lease` calls into `schedule`;
+    # `render` calls into `gates`. Each deferred import breaks a genuine cycle and is
+    # commented where it occurs. Hoisting them to the top would not compile.
+    "PLC0415",
+    # `subprocess.run(check=...)` -- this package deliberately inspects return codes
+    # rather than raising, because a non-zero git exit is frequently the ANSWER
+    # (is this tree dirty? is that branch ahead?) rather than an error.
+    "PLW1510",
+]
+
+[lint.per-file-ignores]
+# argparse construction is inherently one long sequence of near-identical statements.
+# Splitting `build_parser` into a dozen `_add_x_parser` helpers would move the length
+# without reducing the thing that actually matters -- how much you must read to know
+# what the CLI accepts.
+"orchard/cli.py" = ["PLR0915", "PLR0912", "C901"]
+# `Server.handle` is a protocol dispatch table written as a method; each arm is three
+# lines and maps one JSON-RPC method. A registry here would be indirection without
+# abstraction, since no arm is reachable from anywhere else.
+"orchard/mcp_server.py" = ["PLR0912", "C901"]
+# Tests and demos: magic values ARE the test, and a scenario is meant to read top to
+# bottom as a narrative rather than be decomposed into helpers.
+"tests/*" = ["PLR2004", "PLR0915", "PLR0912", "S101"]
+"demos/*" = ["PLR2004", "PLR0915", "PLR0912", "T201"]
+"probes/*" = ["PLR2004", "T201", "E402"]
+# Demo scenarios shell out constantly and read return codes by hand.
+"demos/harness.py" = ["PLW1510", "S603"]
+
+[lint.mccabe]
+# The host repository's threshold. A coordination function that enumerates the four
+# distinct reasons a claim can be refused is not complex in the sense the metric is
+# trying to catch -- it is exhaustive, which is the property we want it to have.
+max-complexity = 15
+
+[lint.pylint]
+# Functions that thread configuration through take more arguments than the default 5
+# allows; the alternative is a parameter object that exists only to satisfy a counter.
+max-args = 10
+max-statements = 100
+max-branches = 18
+# Early returns are how the refusal paths in `acquire`, `merge` and `cmd_gate` stay
+# readable: each names one reason and leaves. Collapsing them into a single exit would
+# require a result variable threaded through every branch.
+max-returns = 14
