@@ -317,9 +317,18 @@ missing — "no data", never collapsed into "no problem".
 | **context7** | `research`, `standards` | A model's memory of a library's API is exactly the kind of claim that is cheap to check and often wrong |
 | **memory** | `rules` | Operational facts about *this machine* — Orchard's own `recall` covers the project's memory, which is a different thing and belongs in the committed log |
 
-**Nothing is installed automatically**, and `companions add` refuses to register a
-server that is not present: that writes a launch command which fails mid-task, at the
-moment a gate told the agent to reach for it. Detection is read-only and bounded.
+**Orchard never installs anything itself** — running an install command on someone's
+machine is the operator's decision. What it does instead is *instruct the agent to ask*:
+the MCP instruction block lists each missing companion with the gates it serves and the
+exact command that would install it, and tells the agent to put that to the operator
+early, install it if they agree, and record the affected gates `unavailable` if they
+decline. Never on its own word.
+
+`companions add` also refuses to register a server that is not present: that writes a
+launch command which fails mid-task, at the moment a gate told the agent to reach for
+it. Detection is read-only and bounded — and when it has not run, the state is reported
+as **unknown**, not as absent. `orchard companions` probes; the MCP handshake does not,
+because making an agent wait on `npx` before it can do anything is the wrong trade.
 
 Adding a fifth is a TOML block in `.orchard/companions.toml`, not a patch:
 

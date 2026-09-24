@@ -1511,6 +1511,8 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         "setup_todo": [],
         "companions": [],
         "missing_companions": [],
+        "unregistered_companions": [],
+        "uninstalled_companions": [],
         "gate_gaps": [],
         "recoverable": 0,
         "ready": 0,
@@ -1572,6 +1574,12 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
                 "id": st.companion.id,
                 "title": st.companion.title,
                 "gates": list(st.companion.gates),
+                # Pre-joined, because `trim_blocks` eats the newline after a block tag:
+                # a nested `{% for %}` closed at the end of a content line takes that
+                # line's newline with it, and every bullet lands on one line. Both
+                # renderers agree on that, so it is the template's shape to avoid, not
+                # an engine difference to work around.
+                "gates_text": ", ".join(st.companion.gates) or "—",
                 "state": st.state,
                 "install": st.companion.install,
                 "url": st.companion.url,
@@ -1579,8 +1587,19 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
             }
             for st in statuses
         ]
+        # Split by what the AGENT would have to DO about each, because the two need
+        # different permission from the operator: wiring up a server that is already
+        # on the machine is a config edit, while installing one runs an install
+        # command. Reporting them as one list made the instruction vague where it
+        # most needed to be specific.
         v["missing_companions"] = [
             c for c in v["companions"] if c["default"] and c["state"] != "registered"
+        ]
+        v["unregistered_companions"] = [
+            c for c in v["missing_companions"] if c["state"] == "installed"
+        ]
+        v["uninstalled_companions"] = [
+            c for c in v["missing_companions"] if c["state"] == "missing"
         ]
         cover = CO.gate_coverage(repo, statuses, v["task_pipeline"])
         v["gate_gaps"] = [g for g, ids in cover.items() if not ids]

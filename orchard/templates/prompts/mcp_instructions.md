@@ -96,10 +96,26 @@ gate `unavailable` rather than passing it on your own word.
   for first; OptMem covers what is true of the environment, which is a different thing.
 
 {% if missing_companions %}
-**Not wired up here:** {% for c in missing_companions %}`{{ c.id }}` {% endfor %}
-Call `orchard_companions` for the state of each and the command that installs it. Say so
-to the operator rather than quietly doing without: a gate with nothing behind it passes
-on one model's unaided assertion, which is the failure this pipeline exists to prevent.
+### Not wired up here — propose it to the operator
+
+{% for c in missing_companions %}
+- **{{ c.id }}** — {{ c.title }}. Serves: {{ c.gates_text }}. Install: `{{ c.install }}`
+{% endfor %}
+
+**This is something to DO, not just to know.** Early in the session — before you reach a
+gate that needs one — tell the operator which are missing, what each one buys the gates
+it serves, and exactly what installing it would run on their machine. Then:
+
+1. **If they agree**, run the install command yourself and register it:
+   `orchard_companions` lists the command for each, and `orchard_companions_add` wires
+   it into this project's MCP config once it is present.
+2. **If they decline, or do not answer**, carry on — and when you reach a gate that
+   companion serves, record it `unavailable` with the reason. Never pass it on your own
+   unaided word: a gate with nothing behind it is the failure this pipeline exists to
+   prevent, and it is invisible unless you say so.
+3. **Do not install anything without asking.** Orchard deliberately never installs on
+   its own; running an install command on someone's machine is the operator's decision,
+   and yours is to make the case for it clearly enough that they can decide.
 {% endif %}
 {% if gate_gaps %}
 Gates in this project's pipeline with no tool behind them:{% for g in gate_gaps %} `{{ g }}`{% endfor %}.

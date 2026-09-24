@@ -65,7 +65,13 @@ class Companion:
 @dataclass
 class Status:
     companion: Companion
-    installed: bool
+    #: Three-valued: ``None`` means NOBODY LOOKED, which is not the same as absent.
+    #: `scan(probe=False)` — used by the MCP handshake, where a detection probe would
+    #: make an agent wait on `npx` before it can do anything — produces exactly that.
+    #: Collapsing it into `False` would have the instruction block assert "not
+    #: installed" on the strength of not having checked, which is the same mistake as
+    #: recording an unavailable reviewer as a pass, one layer out.
+    installed: bool | None
     registered_in: list[str] = field(default_factory=list)
     detail: str = ""
 
@@ -73,6 +79,8 @@ class Status:
     def state(self) -> str:
         if self.registered_in:
             return "registered"
+        if self.installed is None:
+            return "unknown"
         return "installed" if self.installed else "missing"
 
 
@@ -164,9 +172,13 @@ def registered_in(repo: Path, cid: str) -> list[str]:
 
 
 def scan(repo: Path, *, probe: bool = True) -> list[Status]:
+    """State of every known companion. ``probe=False`` skips the detection commands.
+
+    Without probing the install state is **unknown**, not absent — see `Status.installed`.
+    """
     out = []
     for c in load(repo):
-        inst, detail = is_installed(c) if probe else (False, "not probed")
+        inst, detail = is_installed(c) if probe else (None, "not probed")
         out.append(Status(c, inst, registered_in(repo, c.id), detail))
     return out
 

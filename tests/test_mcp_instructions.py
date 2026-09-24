@@ -97,12 +97,42 @@ def test_every_companion_is_named_with_the_gates_it_serves(repo):
     assert "orchard_companions" in text
 
 
-def test_the_ones_missing_HERE_are_called_out(repo):
-    """Naming all four is not enough; the agent needs to know which it actually has."""
+def test_the_ones_missing_HERE_are_called_out_with_what_to_do(repo):
+    """Naming all four is not enough, and neither is reporting which are absent.
+
+    The operator's instruction was explicit: the tool must not install anything itself,
+    and the agent must be told to PROPOSE installing them so the operator can decide.
+    A report with no action attached is a report nobody acts on — which is how a gate
+    ends up with nothing behind it while everyone believes it is covered.
+    """
     run_cli(repo, "init")
     text = _instructions(repo)
     assert "Not wired up here" in text, text[-800:]
-    assert "unaided assertion" in text, "and WHY that matters"
+
+    block = text.split("Not wired up here")[1]
+    assert "propose" in block.lower(), "the agent must be told to raise it, not just know it"
+    assert "If they agree" in block, "and what to do when the operator says yes"
+    assert "without asking" in block, "and that it must not install unilaterally"
+    assert "unavailable" in block, "and what to do when the operator says no"
+
+
+def test_each_missing_companion_carries_its_install_command(repo):
+    """Inline, so proposing it does not cost a second tool call.
+
+    An instruction that says "find out how to install it and then ask" is one the agent
+    defers; one that already has the command is one it can act on in the same turn.
+    """
+    run_cli(repo, "init")
+    block = _instructions(repo).split("Not wired up here")[1]
+    lines = [ln for ln in block.splitlines() if ln.startswith("- **")]
+    assert len(lines) >= 3, block[:600]
+    for ln in lines:
+        assert "Serves:" in ln and "Install:" in ln, ln
+    # One per line: `trim_blocks` once collapsed all three onto one unreadable line.
+    assert any("roborev" in ln for ln in lines), lines
+    assert not any(ln.count("**") > 2 for ln in lines), (
+        f"two companions rendered onto one line: {lines}"
+    )
 
 
 def test_a_registered_companion_is_not_listed_as_missing(repo):

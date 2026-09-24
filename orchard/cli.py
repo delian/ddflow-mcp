@@ -2408,7 +2408,9 @@ def cmd_companions(a, c: Ctx) -> int:
 
     lines = ["Companion MCP servers", ""]
     for st in statuses:
-        mark = {"registered": "[x]", "installed": "[+]", "missing": "[ ]"}[st.state]
+        mark = {"registered": "[x]", "installed": "[+]", "missing": "[ ]", "unknown": "[?]"}[
+            st.state
+        ]
         tag = "" if st.companion.default else "  (opt-in)"
         lines.append(f"  {mark} {st.companion.id:<10s} {st.companion.title}{tag}")
         lines.append(f"       gates: {', '.join(st.companion.gates) or '—'}")
@@ -2417,9 +2419,12 @@ def cmd_companions(a, c: Ctx) -> int:
         elif st.state == "installed":
             lines.append(f"       installed ({st.detail}) but no agent is configured to launch it.")
             lines.append(f"       -> orchard companions add --id {st.companion.id}")
+        elif st.state == "unknown":
+            lines.append(f"       not checked ({st.detail}) — re-run without --no-probe")
         else:
             lines.append(f"       not here: {st.detail}")
-            lines.append(f"       -> {st.companion.install}")
+            lines.append(f"       -> ask the operator, then: {st.companion.install}")
+            lines.append(f"          then: orchard companions add --id {st.companion.id}")
             if st.companion.url:
                 lines.append(f"          {st.companion.url}")
         if st.companion.why:
@@ -2432,6 +2437,20 @@ def cmd_companions(a, c: Ctx) -> int:
             f"  {', '.join(uncovered)}",
             "  Not a failure — several of these are judgement an agent does directly.",
             "  It is the list to check when a gate has been passing suspiciously easily.",
+            "",
+        ]
+    if gaps:
+        # Addressed to the agent, because the agent is who reads this. Orchard does not
+        # install anything itself -- running an install command on someone's machine is
+        # the operator's decision -- but "here is a gap" without "here is what to do
+        # about it" is a report nobody acts on.
+        lines += [
+            "WHAT TO DO ABOUT THIS (agent):",
+            "  Tell the operator which of these are missing, what each one buys, and",
+            "  what installing it would run. If they agree, run the install command",
+            "  yourself and then `orchard companions add --id <id>`. If they decline,",
+            "  record the gates it serves as `unavailable` when you reach them — never",
+            "  as passed on your own word.",
             "",
         ]
     print("\n".join(lines))
@@ -2467,7 +2486,7 @@ def cmd_adopt(a, c: Ctx) -> int:
     for st in CO.scan(c.repo):
         if not st.companion.default or st.state == "registered":
             continue
-        (ready if st.installed else absent).append(st.companion.id)
+        (ready if st.state == "installed" else absent).append(st.companion.id)
     tail = ""
     if ready:
         tail += (

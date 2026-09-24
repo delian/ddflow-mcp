@@ -359,3 +359,40 @@ def test_proc_run_guards_an_explicit_input_of_None():
     assert "CHILD_SAW=''" in p.stdout, (
         f"input=None let the child read the parent's stdin: {p.stdout!r}"
     )
+
+
+# -- companions: unknown is not the same as absent -------------------------------------
+
+
+def test_not_having_looked_is_reported_as_unknown_not_as_missing(repo):
+    """`scan(probe=False)` must not assert a companion is absent.
+
+    The MCP handshake skips detection deliberately — making an agent wait on `npx`
+    before it can do anything is the wrong trade — and the state then collapsed to
+    "missing", so the instruction block told the agent three tools were absent on the
+    strength of never having checked. That is the same mistake as recording an
+    unavailable reviewer as a pass, one layer out: a value nobody measured, rendered
+    as a measurement.
+    """
+    from orchard import companions as CO
+
+    run_cli(repo, "init")
+    unprobed = {st.companion.id: st for st in CO.scan(repo, probe=False)}
+    assert unprobed, "the shipped registry must load"
+    for st in unprobed.values():
+        assert st.installed is None, f"{st.companion.id}: nobody probed, so nobody knows"
+        assert st.state == "unknown", st.state
+
+    # And a registered one is still known to be registered — that reads config files,
+    # which is free, and is the half the handshake CAN answer.
+    comp = next(c for c in CO.load(repo) if c.id == "context7")
+    CO.register(repo, comp, "claude")
+    again = {st.companion.id: st for st in CO.scan(repo, probe=False)}
+    assert again["context7"].state == "registered"
+
+
+def test_the_cli_shows_the_unknown_state_distinctly(repo):
+    run_cli(repo, "init")
+    _code, out, _ = run_cli(repo, "companions", "list", "--no-probe")
+    assert "[?]" in out, f"an unchecked companion needs its own mark:\n{out}"
+    assert "not checked" in out, out

@@ -87,9 +87,11 @@ project from those; a summary rebuilds the summary.
 
 **Before anything non-trivial:** `orchard recall "<what you are about to do>"`.
 
-**Companion tools the gates expect** — `orchard companions` says which are present:
-`roborev`, `codeguide-mcp`, `context7`, and a memory server. When one is absent, record
-its gate `unavailable`.
+**Companion tools the gates expect** — `orchard companions` says which are present and
+what installing each would run: `roborev`, `codeguide-mcp`, `context7`, and a memory
+server. When one is missing, **propose it to the operator early** — what it buys, what
+it would run — and install it yourself if they agree. Never install without asking, and
+when they decline, record that gate `unavailable` rather than passing it unaided.
 
 **Exit codes:** `0` fine · `1` failure · `2` could not run / nothing to do · `3`
 refused. Never treat `2` as `0`.
