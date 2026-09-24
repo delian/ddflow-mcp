@@ -35,7 +35,11 @@ ignore = [
 # `Server.handle` is a protocol dispatch table written as a method; each arm is three
 # lines and maps one JSON-RPC method. A registry here would be indirection without
 # abstraction, since no arm is reachable from anywhere else.
-"orchard/mcp_server.py" = ["PLR0912", "C901"]
+# `Server.handle` is a protocol dispatch table written as a method: one arm per
+# JSON-RPC method, each three lines, none reachable from anywhere else. A registry
+# here would be indirection without abstraction, and the return count is just the
+# number of methods the protocol defines.
+"orchard/mcp_server.py" = ["PLR0912", "C901", "PLR0911"]
 # Tests and demos: magic values ARE the test, and a scenario is meant to read top to
 # bottom as a narrative rather than be decomposed into helpers.
 "tests/*" = ["PLR2004", "PLR0915", "PLR0912", "S101"]

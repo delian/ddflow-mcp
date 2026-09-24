@@ -150,65 +150,118 @@ def replay(events: list[Event], *, include_outcomes: bool = True) -> list[Replay
         ):
             continue
         n += 1
-        d = ev.data
-        if ev.kind == "session.prompt":
-            steps.append(ReplayStep(n, ev.ts, "prompt", d.get("text", ""), d.get("item", "")))
-        elif ev.kind == "session.note":
-            steps.append(ReplayStep(n, ev.ts, "note", d.get("text", ""), d.get("item", "")))
-        elif ev.kind == "session.started":
-            steps.append(
-                ReplayStep(
-                    n,
-                    ev.ts,
-                    "session",
-                    f"session {ev.subject} opened on {d.get('model') or 'unknown model'}",
-                )
-            )
-        elif ev.kind == "session.ended":
-            steps.append(
-                ReplayStep(
-                    n, ev.ts, "session", f"session {ev.subject} closed. {d.get('summary', '')}"
-                )
-            )
-        elif ev.kind == "phase.added":
-            # The BODY carries the acceptance criteria and the context — the part a
-            # rebuild most needs. Emitting the title alone reduced a phase to a label:
-            # "P1: Core" says nothing about what Core has to do.
-            text = f"{ev.subject}: {d.get('title', '')}"
-            if d.get("body"):
-                text += "\n\n" + d["body"].strip()
-            steps.append(ReplayStep(n, ev.ts, "phase", text, ev.subject))
-        elif ev.kind == "task.added":
-            needs = ", ".join(d.get("needs", [])) or "-"
-            text = (
-                f"{ev.subject}: {d.get('title', '')} "
-                f"(in {d.get('parent', '')}; needs {needs}"
-                + (f"; writes {', '.join(d['globs'])}" if d.get("globs") else "")
-                + ")"
-            )
-            if d.get("body"):
-                text += "\n\n" + d["body"].strip()
-            steps.append(ReplayStep(n, ev.ts, "task", text, ev.subject))
-        elif ev.kind == "research.recorded":
-            steps.append(
-                ReplayStep(
-                    n,
-                    ev.ts,
-                    "research",
-                    f"{d.get('question', '')} -> {d.get('claim', '')}",
-                    d.get("item", ""),
-                    verdict=d.get("verdict", ""),
-                )
-            )
-        elif ev.kind == "lesson.recorded":
-            steps.append(
-                ReplayStep(n, ev.ts, "lesson", f"{d.get('title', '')}: {d.get('rule', '')}")
-            )
-        elif ev.kind == "item.completed":
-            steps.append(
-                ReplayStep(n, ev.ts, "completed", ev.subject, ev.subject, sha=d.get("sha", ""))
-            )
+        step = _REPLAY_RENDERERS.get(ev.kind, lambda _n, _e: None)(n, ev)
+        if step is not None:
+            steps.append(step)
     return steps
+
+
+def _rs_prompt(n, ev):
+    return ReplayStep(n, ev.ts, "prompt", ev.data.get("text", ""), ev.data.get("item", ""))
+
+
+def _rs_note(n, ev):
+    return ReplayStep(n, ev.ts, "note", ev.data.get("text", ""), ev.data.get("item", ""))
+
+
+def _rs_session_started(n, ev):
+    model = ev.data.get("model") or "unknown model"
+    return ReplayStep(n, ev.ts, "session", f"session {ev.subject} opened on {model}")
+
+
+def _rs_session_ended(n, ev):
+    return ReplayStep(
+        n, ev.ts, "session", f"session {ev.subject} closed. {ev.data.get('summary', '')}"
+    )
+
+
+def _rs_phase(n, ev):
+    d = ev.data
+    text = f"{ev.subject}: {d.get('title', '')}"
+    if d.get("body"):
+        text += "\n\n" + d["body"].strip()
+    return ReplayStep(n, ev.ts, "phase", text, ev.subject)
+
+
+def _rs_task(n, ev):
+    d = ev.data
+    needs = ", ".join(d.get("needs", [])) or "-"
+    text = (
+        f"{ev.subject}: {d.get('title', '')} "
+        f"(in {d.get('parent', '')}; needs {needs}"
+        + (f"; writes {', '.join(d['globs'])}" if d.get("globs") else "")
+        + ")"
+    )
+    if d.get("body"):
+        text += "\n\n" + d["body"].strip()
+    return ReplayStep(n, ev.ts, "task", text, ev.subject)
+
+
+def _rs_decision(n, ev):
+    """The least recoverable thing in a project: source code shows WHAT was built and
+    never why, nor what was rejected on the way there."""
+    d = ev.data
+    parts = [d.get("title", "")]
+    for label, key in (
+        ("Context", "context"),
+        ("Decision", "decision"),
+        ("Consequences", "consequences"),
+        ("Rejected", "alternatives"),
+    ):
+        if d.get(key):
+            parts.append(f"{label}: {d[key]}")
+    if d.get("globs"):
+        parts.append(f"Governs: {', '.join(d['globs'])}")
+    return ReplayStep(n, ev.ts, "decision", "\n\n".join(parts), d.get("item", ""))
+
+
+def _rs_decision_superseded(n, ev):
+    d = ev.data
+    return ReplayStep(
+        n,
+        ev.ts,
+        "decision",
+        f"{ev.subject} was SUPERSEDED by {d.get('by', '?')}"
+        + (f": {d['reason']}" if d.get("reason") else ""),
+    )
+
+
+def _rs_research(n, ev):
+    d = ev.data
+    return ReplayStep(
+        n,
+        ev.ts,
+        "research",
+        f"{d.get('question', '')} -> {d.get('claim', '')}",
+        d.get("item", ""),
+        verdict=d.get("verdict", ""),
+    )
+
+
+def _rs_lesson(n, ev):
+    d = ev.data
+    return ReplayStep(n, ev.ts, "lesson", f"{d.get('title', '')}: {d.get('rule', '')}")
+
+
+def _rs_completed(n, ev):
+    return ReplayStep(n, ev.ts, "completed", ev.subject, ev.subject, sha=ev.data.get("sha", ""))
+
+
+#: kind -> renderer. A table rather than a ladder: each arm is independent, and the
+#: set of kinds that carry irreplaceable intent is exactly what this dict declares.
+_REPLAY_RENDERERS = {
+    "session.prompt": _rs_prompt,
+    "session.note": _rs_note,
+    "session.started": _rs_session_started,
+    "session.ended": _rs_session_ended,
+    "phase.added": _rs_phase,
+    "task.added": _rs_task,
+    "decision.recorded": _rs_decision,
+    "decision.superseded": _rs_decision_superseded,
+    "research.recorded": _rs_research,
+    "lesson.recorded": _rs_lesson,
+    "item.completed": _rs_completed,
+}
 
 
 def render_reconstruction(state: State, steps: list[ReplayStep], *, project: str = "") -> str:
@@ -235,48 +288,15 @@ def render_reconstruction(state: State, steps: list[ReplayStep], *, project: str
     A(f"- Phases: {len(state.phases())}")
     A(f"- Tasks: {len(state.tasks())}")
     A(f"- Lessons carried forward: {len(state.lessons)}")
+    A(f"- Architectural decisions in force: {len([d for d in state.decisions.values() if d.live])}")
     A(
         f"- Research notes: {len(state.research)} "
         f"({sum(1 for r in state.research.values() if r.verdict == 'CONFIRMED')} confirmed, "
         f"{sum(1 for r in state.research.values() if r.verdict == 'REFUTED')} refuted)"
     )
     A("")
-    A("## Standing knowledge — read before starting")
-    A("")
-    if state.lessons:
-        A("These were learned the hard way during the original build. They are inputs,")
-        A("not history: applying them is how the rebuild avoids repeating the mistakes.")
-        A("")
-        for ls in sorted(state.lessons.values(), key=lambda x: x.at):
-            if ls.superseded_by:
-                continue
-            A(f"- **{ls.title}** — {ls.rule}")
-    else:
-        A("_No lessons were recorded._")
-    A("")
-    refuted = [r for r in state.research.values() if r.verdict == "REFUTED"]
-    if refuted:
-        A("### Approaches already tried and rejected")
-        A("")
-        A("Re-researching these is the single largest waste a rebuild can incur.")
-        A("")
-        for r in refuted:
-            A(
-                f"- **{r.claim or r.question}** — REFUTED."
-                + (f" Falsifier: {r.falsifier}" if r.falsifier else "")
-            )
-            if r.probe:
-                A(f"  - probe: `{r.probe}`")
-            if r.probe_output:
-                # The measurement, not just the command. This is the line that makes
-                # the rejection re-checkable instead of merely assertable.
-                A("  - measured:")
-                A("")
-                A("    ```")
-                for line in r.probe_output.strip().splitlines():
-                    A(f"    {line}")
-                A("    ```")
-        A("")
+    _rc_decisions(A, state)
+    _rc_knowledge(A, state)
     A("## The instruction history")
     A("")
     for s in steps:
@@ -288,6 +308,7 @@ def render_reconstruction(state: State, steps: list[ReplayStep], *, project: str
             "task": "TASK",
             "research": "RESEARCH",
             "lesson": "LESSON",
+            "decision": "DECISION",
             "completed": "SHIPPED",
         }.get(s.kind, s.kind)
         head = f"### {s.n}. [{tag}] {s.at}"
@@ -303,6 +324,64 @@ def render_reconstruction(state: State, steps: list[ReplayStep], *, project: str
         A(textwrap.indent(body, "> " if s.kind == "prompt" else "") if body else "_(empty)_")
         A("")
     return "\n".join(out)
+
+
+def _rc_decisions(A, state: State) -> None:
+    """The architectural decisions section of the reconstruction brief."""
+    live = [d for d in state.decisions.values() if d.live]
+    if not live:
+        return
+    A("## Architectural decisions in force")
+    A("")
+    A("These bind the rebuild. They are the part no other artefact records: source")
+    A("code shows what was built and never why, nor what was rejected on the way.")
+    A("")
+    for d in sorted(live, key=lambda x: x.at):
+        A(f"- **{d.title}** — {d.decision}")
+        if d.alternatives:
+            A(f"  - rejected: {d.alternatives}")
+        if d.globs:
+            A(f"  - governs: {', '.join(d.globs)}")
+    A("")
+
+
+def _rc_knowledge(A, state: State) -> None:
+    """Lessons, then the approaches already tried and rejected."""
+    A("## Standing knowledge — read before starting")
+    A("")
+    if state.lessons:
+        A("These were learned the hard way during the original build. They are inputs,")
+        A("not history: applying them is how the rebuild avoids repeating the mistakes.")
+        A("")
+        for ls in sorted(state.lessons.values(), key=lambda x: x.at):
+            if ls.superseded_by:
+                continue
+            A(f"- **{ls.title}** — {ls.rule}")
+    else:
+        A("_No lessons were recorded._")
+    A("")
+    refuted = [r for r in state.research.values() if r.verdict == "REFUTED"]
+    if not refuted:
+        return
+    A("### Approaches already tried and rejected")
+    A("")
+    A("Re-researching these is the single largest waste a rebuild can incur.")
+    A("")
+    for r in refuted:
+        A(
+            f"- **{r.claim or r.question}** — REFUTED."
+            + (f" Falsifier: {r.falsifier}" if r.falsifier else "")
+        )
+        if r.probe:
+            A(f"  - probe: `{r.probe}`")
+        if r.probe_output:
+            A("  - measured:")
+            A("")
+            A("    ```")
+            for line in r.probe_output.strip().splitlines():
+                A(f"    {line}")
+            A("    ```")
+    A("")
 
 
 def verify(state: State, repo: Path, cfg: Config) -> list[str]:

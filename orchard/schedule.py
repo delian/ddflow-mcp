@@ -142,6 +142,16 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
     return False, f"{dep} is {it.state}"
 
 
+def _is_umbrella(state: State, it: Item) -> bool:
+    """Does this item have work beneath it?
+
+    An umbrella is not something to claim — its children are. Offering it would give an
+    agent a worktree for an item whose actual work lives in three other items, and the
+    umbrella cannot complete until they do anyway.
+    """
+    return bool(state.open_descendants(it.id))
+
+
 def item_blocker(
     state: State,
     cfg: Config,
@@ -159,6 +169,15 @@ def item_blocker(
     places once decided this independently and the copies disagreed: an agent refused
     one item was offered an alternative the scheduler would also refuse.
     """
+    if _is_umbrella(state, it):
+        kids = state.open_descendants(it.id)
+        return Blocked(
+            it.id,
+            "umbrella",
+            f"has {len(kids)} unfinished sub-task(s): "
+            f"{', '.join(k.id for k in kids[:6])}. Work those; this closes when they do.",
+            [k.id for k in kids],
+        )
     if it.id in in_cycle and cfg.schedule.cycle_policy == "error":
         cyc = next(c for c in cycles if it.id in c)
         return Blocked(it.id, "cycle", " -> ".join(cyc), [])
@@ -217,11 +236,18 @@ def plan(
     p = Plan()
     grace = cfg.lease.grace_s
 
-    candidates = [
-        i
-        for i in state.items.values()
-        if i.kind == kind and not i.removed and (not phase or phase in (i.parent, i.id))
-    ]
+    if kind == "task":
+        # `state.tasks(phase)` walks DESCENDANTS, so sub-tasks nested below a task are
+        # candidates too. Filtering on direct parentage excluded them entirely: a task
+        # split into two left both halves unreachable, and the queue looked empty while
+        # holding the only work there was.
+        candidates = state.tasks(phase)
+    else:
+        candidates = [
+            i
+            for i in state.items.values()
+            if i.kind == kind and not i.removed and (not phase or phase in (i.parent, i.id))
+        ]
     p.cycles = find_cycles({i.id: i for i in state.items.values() if not i.removed})
     in_cycle = {n for c in p.cycles for n in c}
     live = state.active_leases(now, grace)

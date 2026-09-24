@@ -152,6 +152,51 @@ class Lesson:
 
 
 @dataclass
+class Decision:
+    """An architectural decision, in the log rather than in someone's memory.
+
+    The shape is a deliberately small ADR: what was decided, why, and what it costs.
+    The fields that make it *usable later* rather than merely recorded are:
+
+    * ``globs`` — the code this decision governs. An agent about to write
+      ``src/storage/*`` can be handed the decisions about storage without searching
+      for them, which is the difference between a rule that is consulted and one that
+      is merely filed.
+    * ``alternatives`` — what was rejected. Without it, the next agent re-proposes the
+      rejected option, and the only answer anyone remembers is "we discussed that".
+    * ``superseded_by`` — decisions are never edited or deleted. A reversal is a NEW
+      decision that names the old one, so the history of how the architecture got here
+      survives, which is exactly what a rebuild needs.
+    """
+
+    id: str
+    title: str = ""
+    context: str = ""  # the forces: why a decision was needed at all
+    decision: str = ""  # what was chosen
+    consequences: str = ""  # what it costs, including what it makes harder
+    alternatives: str = ""  # what was rejected, and why
+    globs: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    status: str = "accepted"  # proposed | accepted | superseded
+    decided_by: str = ""  # operator | agent | a name
+    supersedes: list[str] = field(default_factory=list)
+    superseded_by: str = ""
+    at: str = ""
+    item: str = ""
+
+    @property
+    def live(self) -> bool:
+        return self.status == "accepted" and not self.superseded_by
+
+    def text(self) -> str:
+        return "\n".join(
+            x
+            for x in (self.title, self.context, self.decision, self.consequences, self.alternatives)
+            if x
+        )
+
+
+@dataclass
 class ResearchNote:
     id: str
     question: str = ""
@@ -184,6 +229,7 @@ class State:
     bugs: dict[str, Bug] = field(default_factory=dict)
     lessons: dict[str, Lesson] = field(default_factory=dict)
     research: dict[str, ResearchNote] = field(default_factory=dict)
+    decisions: dict[str, Decision] = field(default_factory=dict)
     sessions: dict[str, Session] = field(default_factory=dict)
     cadences: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     last_lamport: int = 0
@@ -197,10 +243,47 @@ class State:
         return [i for i in self.items.values() if i.kind == "phase" and not i.removed]
 
     def tasks(self, phase: str = "") -> list[Item]:
+        """Tasks under ``phase``, INCLUDING sub-tasks nested any depth below it.
+
+        A task may parent another task — that is what a sub-task is here, rather than a
+        separate concept with its own rules. Everything that applies to a task applies
+        to a sub-task unchanged: it can declare its own globs, carry its own
+        dependencies, be claimed by a different agent, and run in parallel with its
+        siblings when nothing links them.
+        """
+        live = [i for i in self.items.values() if i.kind == "task" and not i.removed]
+        if not phase:
+            return live
+        wanted = self.descendants(phase)
+        return [i for i in live if i.id in wanted]
+
+    def children(self, item_id: str) -> list[Item]:
+        return [i for i in self.items.values() if i.parent == item_id and not i.removed]
+
+    def descendants(self, item_id: str) -> set[str]:
+        """Every item below ``item_id``, transitively.
+
+        Iterative and cycle-guarded: a parent chain is operator-authored, so it can be
+        both deep and — if someone makes a mistake — circular, and a health check that
+        blows the stack while diagnosing a bad plan is no use.
+        """
+        seen: set[str] = set()
+        stack = [item_id]
+        while stack:
+            node = stack.pop()
+            for child in self.children(node):
+                if child.id in seen:
+                    continue
+                seen.add(child.id)
+                stack.append(child.id)
+        return seen
+
+    def open_descendants(self, item_id: str) -> list[Item]:
+        """Descendants that are neither done nor abandoned — what blocks completion."""
         return [
-            i
-            for i in self.items.values()
-            if i.kind == "task" and not i.removed and (not phase or i.parent == phase)
+            self.items[i]
+            for i in sorted(self.descendants(item_id))
+            if self.items[i].state not in (DONE, ABANDONED)
         ]
 
     def active_leases(self, now: float, grace_s: int = 0) -> dict[str, Lease]:
@@ -437,6 +520,46 @@ def _h_lesson(st: State, ev: Event) -> None:
         )
 
 
+def _h_decision(st: State, ev: Event) -> None:
+    """Record an architectural decision.
+
+    Merges rather than replaces, for the same reason every other handler here does: a
+    shard merge can deliver a supersession before the decision it supersedes, and
+    replacing would drop the marker that is already correct.
+    """
+    d = ev.data
+    prev = st.decisions.get(ev.subject)
+    dec = Decision(
+        id=ev.subject,
+        title=d.get("title", "") or (prev.title if prev else ""),
+        context=d.get("context", "") or (prev.context if prev else ""),
+        decision=d.get("decision", "") or (prev.decision if prev else ""),
+        consequences=d.get("consequences", "") or (prev.consequences if prev else ""),
+        alternatives=d.get("alternatives", "") or (prev.alternatives if prev else ""),
+        globs=list(d.get("globs", prev.globs if prev else [])),
+        tags=list(d.get("tags", prev.tags if prev else [])),
+        status=d.get("status", "accepted"),
+        decided_by=d.get("decided_by", "") or (prev.decided_by if prev else ""),
+        supersedes=list(d.get("supersedes", [])),
+        superseded_by=prev.superseded_by if prev else "",
+        at=prev.at if prev and prev.at else ev.ts,
+        item=d.get("item", "") or (prev.item if prev else ""),
+    )
+    st.decisions[ev.subject] = dec
+    for old in dec.supersedes:
+        target = st.decisions.setdefault(old, Decision(id=old))
+        target.superseded_by = ev.subject
+        target.status = "superseded"
+
+
+def _h_decision_superseded(st: State, ev: Event) -> None:
+    """Mark a decision replaced. Never deletes: the history of how the architecture
+    got here is the part a rebuild most needs."""
+    target = st.decisions.setdefault(ev.subject, Decision(id=ev.subject))
+    target.superseded_by = ev.data.get("by", "")
+    target.status = "superseded"
+
+
 def _h_research(st: State, ev: Event) -> None:
     d = ev.data
     st.research[ev.subject] = ResearchNote(
@@ -531,6 +654,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "bug.fixed": _h_bug_fixed,
     "lesson.recorded": _h_lesson,
     "research.recorded": _h_research,
+    "decision.recorded": _h_decision,
+    "decision.superseded": _h_decision_superseded,
     "session.started": _h_session_started,
     "session.prompt": _h_session_prompt,
     "session.note": _h_session_note,

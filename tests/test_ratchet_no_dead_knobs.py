@@ -41,6 +41,20 @@ def _sources() -> str:
     return "\n".join(p.read_text("utf-8") for p in pkg.glob("*.py") if p.name != "config.py")
 
 
+def _alias_map(src: str) -> dict[str, str]:
+    """Local names bound to a config section: ``lc = cfg.loops`` -> {"lc": "loops"}.
+
+    Resolving these keeps the detector strong. The alternative -- allowlisting every
+    knob read through an alias -- would grow the exemption list for a pattern that is
+    perfectly good style, and an exemption list that grows for good reasons stops being
+    read for the bad ones.
+    """
+    out: dict[str, str] = {}
+    for m in re.finditer(r"^\s*(\w+)\s*=\s*(?:self\.)?(?:c\.)?cfg\.(\w+)\s*$", src, re.M):
+        out[m.group(1)] = m.group(2)
+    return out
+
+
 def dead_knobs(keys: list[str] | None = None, src: str | None = None) -> list[str]:
     """Which of ``keys`` never appear in ``src``.
 
@@ -50,10 +64,18 @@ def dead_knobs(keys: list[str] | None = None, src: str | None = None) -> list[st
     """
     src = _sources() if src is None else src
     keys = [k for k, *_ in Config.load().explain()] if keys is None else keys
+    aliases = _alias_map(src)
     dead = []
     for key in keys:
         section, knob = key.split(".", 1)
         if re.search(rf"\.{re.escape(section)}\.{re.escape(knob)}\b", src):
+            continue
+        # ...or through a local alias of that section.
+        if any(
+            re.search(rf"\b{re.escape(alias)}\.{re.escape(knob)}\b", src)
+            for alias, sec in aliases.items()
+            if sec == section
+        ):
             continue
         dead.append(key)
     return dead
@@ -69,6 +91,13 @@ def test_no_knob_is_dead():
 def test_the_allowlist_only_shrinks():
     stale = [k for k in KNOWN_UNREAD if k not in dead_knobs()]
     assert not stale, f"allowlisted knobs that are now read; remove them: {stale}"
+
+
+def test_the_detector_resolves_section_aliases():
+    """`lc = cfg.loops` then `lc.max_gate_flaps` is a read, and must not be reported."""
+    src = "lc = cfg.loops\nif flips < lc.max_gate_flaps: pass"
+    assert dead_knobs(["loops.max_gate_flaps"], src) == []
+    assert dead_knobs(["loops.max_reopens"], src) == ["loops.max_reopens"]
 
 
 def test_the_detector_can_still_see():

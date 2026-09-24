@@ -23,6 +23,10 @@ and an MCP server that are the same implementation.
   - [Publishing and registry](#publishing-and-registry)
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
+- [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
+- [Architectural decisions](#architectural-decisions)
+- [Recall — "have we been here before?"](#recall--have-we-been-here-before)
+- [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
 - [The phase pipeline](#the-phase-pipeline)
 - [Parallelism and coordination](#parallelism-and-coordination)
@@ -275,6 +279,92 @@ There is deliberately no third level. A sub-sub-task is representable as a task 
 cross-phase dependency, and the extra level costs more bookkeeping than it buys.
 
 ---
+
+## Work that changes shape while you do it
+
+Tasks can be added at any time, including while their parent is being worked — mid-task
+discovery is the normal case, not an exception, and a queue that cannot absorb it pushes
+the work into someone's head.
+
+**Sub-tasks are just tasks whose parent is a task.** Not a separate concept with its own
+rules: a sub-task declares its own globs, carries its own dependencies, is claimed by its
+own agent, and runs in parallel with its siblings when nothing links them — exactly like
+any other task.
+
+```sh
+orchard task add P1.T1a --parent P1.T1 --globs "src/parse.py"
+orchard split P1.T1 --into "P1.T1a=parse input" --into "P1.T1b=write records"
+```
+
+`split` works **in place**: the original keeps its id, its lease history and everything
+recorded against it, and becomes an *umbrella* that completes when its children do.
+Closing it and opening two new ones instead would lose the thread between what was
+planned and what happened — which is exactly what `orchard replay` needs.
+
+An umbrella is never offered as ready (its children are), and cannot complete while any
+descendant at any depth is unfinished. An *abandoned* child counts as settled, so a
+sub-task you decide against does not hold its parent open forever.
+
+## Architectural decisions
+
+The code shows *what* was built and never *why*, nor what was rejected on the way. So
+decisions are recorded as events, and reach the person writing the code:
+
+```sh
+orchard decision add --title "Storage is SQLite with WAL" \
+  --decision "One file, WAL mode, BEGIN IMMEDIATE for writes." \
+  --context "Three call sites were each opening their own connection." \
+  --alternatives "Postgres — rejected: no server allowed in this deployment." \
+  --globs "src/storage/*" --by operator
+```
+
+**`--globs` is what makes a decision consulted rather than merely filed.** `orchard
+brief` and `orchard decision applicable <item>` surface the decisions governing an
+item's declared files automatically — the agent does not have to suspect they exist.
+
+Decisions are never edited or deleted. A reversal is a *new* decision naming the old
+one (`--supersedes`), so the history of how the architecture got here survives, and a
+superseded decision is shown with a pointer to its replacement rather than silently
+withheld.
+
+## Recall — "have we been here before?"
+
+```sh
+orchard recall "how should durations be represented"
+```
+
+One search across **everything the project remembers**: architectural decisions,
+lessons, research verdicts, past bugs, similar tasks, and the operator's own earlier
+prompts. Results are labelled by kind, because a binding decision, a transferable lesson
+and a prompt from three weeks ago should change what you do in different ways.
+
+It exists so the operator does not have to say the same thing twice and the agent does
+not have to learn the same thing twice. Both failures are invisible in the moment and
+obvious in the log.
+
+## Status, progress, and loops
+
+```sh
+orchard status      # what is done, in flight, ready, blocked — one answer
+orchard progress    # attempts, hours held, gate runs, commits, per item
+orchard loops       # circular references and runtime loops (exit 2 = none)
+```
+
+Dependency cycles are the easy case. The expensive ones are *runtime* loops, where the
+graph is perfectly acyclic and the work still never finishes:
+
+| Detector | Catches |
+|---|---|
+| `dependency_cycle` | A needs B needs C needs A — always blocking |
+| `repeat_claims` | claimed and given up N times without completing (crash-expiries excluded: that is a different problem) |
+| `gate_flapping` | a gate whose verdict keeps flipping — flaky, or measuring a moving target |
+| `reopened` | work that will not stay done, usually because the acceptance criteria are not in the item |
+| `duplicate_work` | two live items declaring the same files |
+| `no_progress` | N recent events with no completion, no gate pass, no merge |
+
+Every threshold is a `[loops]` knob, and `on_detect = "block"` makes `orchard claim`
+**refuse** an item that is already looping — a warning is read by a human later, a
+refused claim is read by the agent now.
 
 ## The task pipeline
 
@@ -592,8 +682,8 @@ documentation, so the reference cannot rot.
 ## Testing
 
 ```sh
-python3 -m pytest tests/ -q          # 234 unit/integration tests
-python3 demos/run_all.py             # 5 end-to-end scenarios, 122 assertions
+python3 -m pytest tests/ -q          # 307 unit/integration tests
+python3 demos/run_all.py             # 5 end-to-end scenarios, 130 assertions
 ```
 
 The demos invent whole projects and drive them for real — real git worktrees, real

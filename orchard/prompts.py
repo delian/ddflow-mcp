@@ -55,8 +55,67 @@ class Template:
     path: Path | None = None
 
 
+#: Workflow commands, surfaced over MCP as PROMPTS -- which is what a client turns into
+#: a slash command. Tools are things an agent calls; prompts are things an operator
+#: invokes, and these four are operator workflows, not primitives.
+#: name -> (title, one-line description, [argument names])
+COMMANDS: dict[str, tuple[str, str, list[str]]] = {
+    "bug-hunt": (
+        "Hunt and fix bugs",
+        "Bounded bug hunt under the empirical-repro rule: a finding may not change "
+        "source unless a runnable probe demonstrates it and ships as the regression "
+        "test, mutation-verified.",
+        ["scope"],
+    ),
+    "code-deduplication": (
+        "Find and remove duplicated code",
+        "Mechanical clone report first, then grep by OPERATION. Second occurrence: "
+        "reuse or extract. Third: extraction is mandatory. Prefer eliminating a "
+        "duplicate over guarding it twice.",
+        ["scope"],
+    ),
+    "code-clean": (
+        "Land everything in flight and leave the tree clean",
+        "Classify every worktree and branch, deal with dirty trees by hand, land the "
+        "unmerged work through its gates, remove what is finished, then bug-hunt, "
+        "deduplicate and commit.",
+        [],
+    ),
+    "all-tests": (
+        "Run every suite and fix what fails",
+        "Clean first, then run every configured suite (unit, integration, UI, e2e) in "
+        "full, and fix failures under the bug-hunt rule. An unconfigured suite is "
+        "absent, not passing.",
+        [],
+    ),
+}
+
+
 def builtin_dir() -> Path:
     return Path(__file__).resolve().parent / "templates" / "prompts"
+
+
+def command_dir() -> Path:
+    return builtin_dir() / "commands"
+
+
+def resolve_command(name: str, repo: Path | None = None) -> Template:
+    """A workflow command template, project override first.
+
+    Same precedence as any other template: ``.orchard/prompts/commands/<name>.md``
+    beats the shipped default, so a project can rewrite a whole workflow without
+    touching code -- which is the point of shipping them as text.
+    """
+    if name not in COMMANDS:
+        raise TemplateError(f"unknown command {name!r}. Known: {', '.join(sorted(COMMANDS))}")
+    if repo:
+        local = Path(repo) / ".orchard" / "prompts" / "commands" / f"{name}.md"
+        if local.is_file():
+            return Template(name, local.read_text("utf-8"), "project", local)
+    path = command_dir() / f"{name}.md"
+    if not path.is_file():
+        raise TemplateError(f"shipped command {name}.md is missing from the package")
+    return Template(name, path.read_text("utf-8"), "builtin", path)
 
 
 def resolve(

@@ -377,3 +377,22 @@ def load_path(repo: Path, stored: str) -> Path:
         return Path()
     p = Path(stored)
     return p if p.is_absolute() else (Path(repo).resolve() / p).resolve()
+
+
+def branches(repo: Path, prefix: str = "") -> list[str]:
+    """Local branches, optionally filtered to a prefix."""
+    r = git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads/")
+    names = [ln.strip() for ln in r.out.splitlines() if ln.strip()] if r.ok else []
+    return [n for n in names if not prefix or n.startswith(prefix)]
+
+
+def is_merged(repo: Path, branch: str, base: str) -> bool:
+    """Is every commit on ``branch`` already reachable from ``base``?
+
+    Asked with `rev-list --count base..branch == 0` rather than `branch --merged`,
+    because the latter answers about the CURRENT checkout's HEAD when given no
+    argument, and a cleanup pass that silently asked the wrong question would delete
+    branches that were not merged at all.
+    """
+    r = git(repo, "rev-list", "--count", f"{base}..{branch}")
+    return r.ok and r.out.strip() == "0"

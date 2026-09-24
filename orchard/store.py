@@ -35,7 +35,7 @@ from .config import Config
 from .events import EventLog
 from .model import State, fold
 
-SCHEMA = 3
+SCHEMA = 5
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -81,6 +81,10 @@ class Store:
         create table if not exists research(
             id text primary key, question text, claim text, verdict text,
             probe text, sources text, at text, item text);
+        create table if not exists decisions(
+            id text primary key, title text, context text, decision text,
+            consequences text, alternatives text, globs text, tags text,
+            status text, decided_by text, superseded_by text, at text, item text);
         create table if not exists bugs(
             id text primary key, item text, summary text, found_at text,
             fixed_at text, regression_test text, lesson text);
@@ -97,6 +101,13 @@ class Store:
             create virtual table if not exists research_fts using fts5(
                 id unindexed, question, claim, probe, verdict,
                 tokenize='porter unicode61');
+            create virtual table if not exists decisions_fts using fts5(
+                id unindexed, title, context, decision, consequences, alternatives,
+                tokenize='porter unicode61');
+            create virtual table if not exists prompts_fts using fts5(
+                id unindexed, text, tokenize='porter unicode61');
+            create virtual table if not exists bugs_fts using fts5(
+                id unindexed, summary, lesson, tokenize='porter unicode61');
             create virtual table if not exists items_fts using fts5(
                 id unindexed, title, body, tags, tokenize='porter unicode61');
             """)
@@ -211,25 +222,19 @@ class Store:
                         "insert into research_fts values(?,?,?,?,?)",
                         (rn.id, rn.question, rn.claim, rn.probe, rn.verdict),
                     )
-            for bg in state.bugs.values():
-                con.execute(
-                    "insert or replace into bugs values(?,?,?,?,?,?,?)",
-                    (
-                        bg.id,
-                        bg.item,
-                        bg.summary,
-                        bg.found_at,
-                        bg.fixed_at,
-                        bg.regression_test,
-                        bg.lesson,
-                    ),
-                )
+            _insert_decisions(con, state, self.fts)
+            _insert_bugs(con, state, self.fts)
             for s in state.sessions.values():
                 for pr in s.prompts:
                     con.execute(
                         "insert or replace into prompts values(?,?,?,?,?)",
                         (s.id, pr["seq"], pr["at"], pr.get("item", ""), pr["text"]),
                     )
+                    if self.fts:
+                        con.execute(
+                            "insert into prompts_fts values(?,?)",
+                            (f"{s.id}#{pr['seq']}", pr["text"]),
+                        )
             for name, runs in state.cadences.items():
                 for r in runs:
                     con.execute(
@@ -273,7 +278,10 @@ class Store:
         """
         cols = {
             "lessons": ("title", "rule", "why", "how"),
+            "decisions": ("title", "context", "decision", "consequences", "alternatives"),
             "research": ("question", "claim", "probe"),
+            "bugs": ("summary", "lesson"),
+            "prompts": ("text",),
             "items": ("title", "body"),
         }[table]
         with closing(self.connect()) as con:
@@ -294,6 +302,20 @@ class Store:
                 if rows:
                     ids = [r["id"] for r in rows]
                     scores = {r["id"]: r["score"] for r in rows}
+                    if table == "prompts":
+                        out = []
+                        for ident in ids:
+                            sess, _, seq = ident.partition("#")
+                            r2 = con.execute(
+                                "select * from prompts where session=? and seq=?",
+                                (sess, int(seq or 0)),
+                            ).fetchone()
+                            if r2:
+                                row = dict(r2)
+                                row["id"] = ident
+                                out.append(row)
+                        out.sort(key=lambda r: scores.get(r["id"], 0.0))
+                        return out
                     ph = ",".join("?" * len(ids))
                     full = con.execute(f"select * from {table} where id in ({ph})", ids).fetchall()
                     out = [dict(r) for r in full]
@@ -324,3 +346,81 @@ def _fts_query(text: str) -> str:
     """
     terms = [t for t in re.split(r"[^\w]+", text) if len(t) >= MIN_TERM_CHARS]
     return " OR ".join(f'"{t}"' for t in terms[:12])
+
+
+#: What `recall` searches, in the order a reader should weigh them. Decisions first
+#: because they are binding, lessons next because they are transferable, then evidence,
+#: then history. The order is the answer to "which of these should change what I do".
+RECALL_SOURCES: tuple[tuple[str, str, str], ...] = (
+    ("decisions", "DECISION", "binding — follow it unless the operator says otherwise"),
+    ("lessons", "LESSON", "learned the hard way here"),
+    ("research", "RESEARCH", "already investigated; check the verdict before redoing it"),
+    ("bugs", "BUG", "this has broken before"),
+    ("items", "TASK", "similar work already planned or done"),
+    ("prompts", "PROMPT", "the operator has asked something like this before"),
+)
+
+
+def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[str, str]:
+    """(headline, body) for one hit, per source table."""
+    if table == "decisions":
+        head = f"{row.get('title', '')}"
+        if row.get("status") != "accepted" or row.get("superseded_by"):
+            head += f"  [{row.get('status')}"
+            head += f" -> {row['superseded_by']}]" if row.get("superseded_by") else "]"
+        return head, (row.get("decision") or "")[:width]
+    if table == "lessons":
+        return row.get("title", ""), (row.get("rule") or "")[:width]
+    if table == "research":
+        return (
+            f"{row.get('question', '')}  [{row.get('verdict', '')}]",
+            (row.get("claim") or "")[:width],
+        )
+    if table == "bugs":
+        state = "fixed" if row.get("fixed_at") else "OPEN"
+        return f"{row.get('summary', '')}  [{state}]", (row.get("lesson") or "")[:width]
+    if table == "items":
+        return f"{row.get('id', '')} — {row.get('title', '')}", (row.get("body") or "")[:width]
+    if table == "prompts":
+        text = (row.get("text") or "").strip().replace("\n", " ")
+        return f"{row.get('at', '')[:10]} operator asked:", text[:width]
+    return row.get("id", ""), ""
+
+
+def _insert_decisions(con, state, fts: bool) -> None:
+    """Decisions + their search index. Split out of `rebuild` because the per-table
+    inserts are independent and reading six of them in one function obscured that."""
+    for dc in state.decisions.values():
+        con.execute(
+            "insert or replace into decisions values(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                dc.id,
+                dc.title,
+                dc.context,
+                dc.decision,
+                dc.consequences,
+                dc.alternatives,
+                json.dumps(dc.globs),
+                json.dumps(dc.tags),
+                dc.status,
+                dc.decided_by,
+                dc.superseded_by,
+                dc.at,
+                dc.item,
+            ),
+        )
+        if fts:
+            con.execute(
+                "insert into decisions_fts values(?,?,?,?,?,?)",
+                (dc.id, dc.title, dc.context, dc.decision, dc.consequences, dc.alternatives),
+            )
+
+
+def _insert_bugs(con, state, fts: bool) -> None:
+    for bg in state.bugs.values():
+        if fts:
+            con.execute("insert into bugs_fts values(?,?,?)", (bg.id, bg.summary, bg.lesson))
+        con.execute(
+            "insert or replace into bugs values(?,?,?,?,?,?,?)",
+            (bg.id, bg.item, bg.summary, bg.found_at, bg.fixed_at, bg.regression_test, bg.lesson),
+        )

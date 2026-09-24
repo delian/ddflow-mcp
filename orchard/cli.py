@@ -40,6 +40,9 @@ from .schedule import critical_path, plan
 from .store import Store
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
+
+#: Splitting into one piece is a rename, not a split.
+_MIN_SPLIT_PARTS = 2
 UNAVAILABLE_EXIT = NOTHING
 
 #: How many offending files a refusal lists before summarising the rest. Enough to see
@@ -236,13 +239,21 @@ def cmd_phase_add(a, c: Ctx) -> int:
 
 
 def cmd_task_add(a, c: Ctx) -> int:
+    """Add a task. Its parent may be a phase OR another task (making it a sub-task).
+
+    Tasks can be added at ANY time, including while their parent is being worked: a
+    task that turns out to contain two things is the normal case, not an exception, and
+    a queue that cannot absorb that discovery pushes the work into someone's head.
+    """
     st = c.state()
-    if a.phase and a.phase not in st.items:
+    parent = a.parent or a.phase
+    if parent and parent not in st.items:
         print(
-            f"no such phase {a.phase!r}. `orchard phase add {a.phase} --title ...` first",
+            f"no such parent {parent!r}. Add the phase or task first.",
             file=sys.stderr,
         )
         return FAIL
+    a.phase = parent
     c.log.append(
         "task.added",
         a.id,
@@ -257,6 +268,84 @@ def cmd_task_add(a, c: Ctx) -> int:
         },
     )
     c.out(f"task {a.id} added to {a.phase or '(no phase)'}", {"id": a.id})
+    return OK
+
+
+def cmd_split(a, c: Ctx) -> int:
+    """Split an item into sub-tasks, in place, without losing its history.
+
+    For the commonest discovery there is: a task turns out to be two things. The
+    original stays put and becomes an umbrella — it keeps its id, its lease history and
+    anything already recorded against it, and it completes when its children do. Its
+    declared globs are inherited by every child that does not declare its own, so the
+    conflict detector keeps working while the split is half-finished.
+
+    The alternative — closing the task and opening two new ones — loses the thread
+    between the work that was planned and the work that happened, which is exactly
+    what `orchard replay` needs to reconstruct the project.
+    """
+    st = c.state()
+    it = st.items.get(a.id)
+    if not it:
+        print(f"no such item {a.id!r}", file=sys.stderr)
+        return FAIL
+    if it.state in (DONE, ABANDONED):
+        print(
+            f"{a.id} is already {it.state}; splitting finished work would reopen it. "
+            f"Add new tasks instead.",
+            file=sys.stderr,
+        )
+        return REFUSED
+    specs = [x for x in (a.into or []) if x.strip()]
+    if len(specs) < _MIN_SPLIT_PARTS:
+        print(
+            "--into must be given at least twice: splitting into one piece is not a "
+            "split, it is a rename (`orchard update <id> --title ...`).",
+            file=sys.stderr,
+        )
+        return FAIL
+
+    created = []
+    for i, spec in enumerate(specs, 1):
+        sub_id, _, title = spec.partition("=")
+        sub_id = sub_id.strip() or f"{a.id}.{i}"
+        if sub_id in st.items:
+            print(f"{sub_id} already exists; choose another id", file=sys.stderr)
+            return FAIL
+        c.log.append(
+            "task.added",
+            sub_id,
+            {
+                "parent": a.id,
+                "title": title.strip() or f"{it.title} (part {i})",
+                # Inherit the parent's globs unless the child declares its own: while the
+                # split is half-done the children are the only things being worked, and a
+                # child with no declared globs is a child the conflict detector cannot
+                # protect.
+                "globs": _csv(a.globs) or list(it.globs),
+                "needs": _csv(a.needs) if i == 1 else [],
+                "priority": it.priority,
+            },
+        )
+        created.append(sub_id)
+
+    if it.lease:
+        # The umbrella is no longer the thing being worked; holding its lease would
+        # block its own children on a glob conflict with itself.
+        L.release(c.log, a.id, note=f"split into {', '.join(created)}")
+    c.log.append(
+        "task.updated",
+        a.id,
+        {"body": (it.body + "\n\n" if it.body else "") + f"Split into: {', '.join(created)}."},
+    )
+    c.out(
+        f"{a.id} split into {len(created)} sub-task(s): {', '.join(created)}\n"
+        f"  It keeps its id and history, and now completes when they do.\n"
+        f"  Give each its own --globs with `orchard update <id> --globs ...` if they "
+        f"write different files — they inherited {a.id}'s, so they cannot run in "
+        f"parallel until they differ.",
+        {"item": a.id, "created": created},
+    )
     return OK
 
 
@@ -326,7 +415,29 @@ def cmd_next(a, c: Ctx) -> int:
 
 
 def cmd_claim(a, c: Ctx) -> int:
-    """Acquire a lease and (optionally) create the worktree. Exit 3 if refused."""
+    """Acquire a lease and (optionally) create the worktree. Exit 3 if refused.
+
+    Refuses an item that is already looping when `[loops].on_detect = "block"`. That
+    refusal is the only thing that actually stops an agent spinning: a warning in a
+    report is read by a human later, while a refused claim is read by the agent now.
+    """
+    from . import progress as PR
+
+    events = c.log.read_all()
+    st_now = fold(events, strict=False)
+    looping = [
+        f for f in PR.detect(events, st_now, c.cfg) if f.item == a.id and f.severity == "block"
+    ]
+    if looping and not a.force:
+        print(f"refusing to claim {a.id}: it is already looping.", file=sys.stderr)
+        for f in looping:
+            print(f"  {f.render()}", file=sys.stderr)
+        print(
+            "\nRe-claiming it would continue the loop. Change the task, abandon it, "
+            "or --force if you have fixed the underlying cause.",
+            file=sys.stderr,
+        )
+        return REFUSED
     try:
         lz = L.acquire(
             c.log, c.cfg, a.id, globs=_csv(a.globs) or None, note=a.note or "", force=a.force
@@ -540,16 +651,16 @@ def cmd_complete(a, c: Ctx) -> int:
             + ", ".join(f"{g}={it.gate_outcome(g) or 'not run'}" for g in missing)
             + ")"
         )
-    if it.kind == "phase":
-        # `abandoned` is settled, like `done`. Without this an item you
-        # decided against holds its phase open forever, because nothing
-        # can ever finish it.
-        open_tasks = [t.id for t in st.tasks(it.id) if t.state not in (DONE, ABANDONED)]
-        if open_tasks:
-            blockers.append(
-                f"{len(open_tasks)} task(s) in this phase are unfinished: "
-                f"{', '.join(open_tasks[:8])}"
-            )
+    # Applies to ANY item with work beneath it, not only to phases: a task split into
+    # sub-tasks is an umbrella too, and completing it while its children are open marks
+    # work finished that nobody has done. `abandoned` counts as settled alongside
+    # `done`, or an item you decided against holds its parent open forever.
+    open_children = st.open_descendants(a.id)
+    if open_children:
+        noun = "task(s) in this phase" if it.kind == "phase" else "sub-task(s)"
+        blockers.append(
+            f"{len(open_children)} {noun} unfinished: {', '.join(k.id for k in open_children[:8])}"
+        )
     if c.cfg.gates.unavailable_is_failure and s.unavailable:
         blockers.append(
             f"gate(s) could not run: {', '.join(s.unavailable)} "
@@ -759,6 +870,20 @@ def cmd_brief(a, c: Ctx) -> int:
             rules = f"See `{cand}` (loaded separately by your agent)."
             break
     rec = L.scan(c.log, c.cfg, c.repo) if a.check_recovery else []
+    # Decisions governing THIS item's files, matched by glob rather than by search:
+    # the whole point is that they reach the agent without its having to suspect they
+    # exist.
+    from .schedule import conflicts
+
+    decisions = []
+    if item and item in st.items:
+        target = st.items[item]
+        decisions = [
+            d
+            for d in st.decisions.values()
+            if d.live and d.globs and conflicts(target.globs, d.globs)
+        ]
+        decisions += [d for d in st.decisions.values() if d.live and not d.globs]
     text = render.brief(
         st,
         c.cfg,
@@ -768,6 +893,7 @@ def cmd_brief(a, c: Ctx) -> int:
         lessons=lessons,
         rules=rules,
         recovery=[r for r in rec if r.salvageable],
+        decisions=decisions,
     )
     if c.json:
         print(
@@ -819,6 +945,380 @@ def cmd_lesson(a, c: Ctx) -> int:
             print(f"- {h['title']}\n    {(h.get('rule') or '')[: c.cfg.lessons.snippet_chars]}")
         return OK
     return FAIL
+
+
+def cmd_recall(a, c: Ctx) -> int:
+    """ "Have we been here before?" — one query across everything the project remembers.
+
+    Searches architectural decisions, lessons, research verdicts, past bugs, similar
+    tasks and the operator's own earlier prompts, and returns them ranked and labelled
+    by what kind of thing each is — because the answer to "should this change what I
+    do" is different for a binding decision, a transferable lesson and a prompt from
+    three weeks ago.
+
+    This exists so an operator does not have to say the same thing twice and an agent
+    does not have to learn the same thing twice. Both failures are invisible in the
+    moment and obvious in the log.
+    """
+    from .store import RECALL_SOURCES, summarise_row
+
+    c.store.ensure(c.log)
+    want = _csv(a.sources) or [t for t, _, _ in RECALL_SOURCES]
+    results: dict[str, list[dict]] = {}
+    for table, label, _why in RECALL_SOURCES:
+        if table not in want and label.lower() not in [w.lower() for w in want]:
+            continue
+        try:
+            hits = c.store.search(table, a.query, a.limit)
+        except Exception:
+            hits = []
+        if hits:
+            results[table] = hits
+
+    if c.json:
+        labels = {table: label for table, label, _ in RECALL_SOURCES}
+        print(
+            json.dumps(
+                {
+                    table: [
+                        {
+                            "id": r.get("id"),
+                            "kind": labels[table],
+                            "headline": summarise_row(table, r)[0],
+                            "body": summarise_row(table, r)[1],
+                            "raw": r,
+                        }
+                        for r in rows
+                    ]
+                    for table, rows in results.items()
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return OK if results else NOTHING
+
+    if not results:
+        print(
+            f"Nothing recalled for {a.query!r}.\n"
+            f"Searched: {', '.join(t for t, _, _ in RECALL_SOURCES)}."
+        )
+        return NOTHING
+
+    budget = a.max_chars
+    used = 0
+    for table, label, why in RECALL_SOURCES:
+        rows = results.get(table)
+        if not rows:
+            continue
+        header = f"\n## {label}  — {why}\n"
+        print(header, end="")
+        used += len(header)
+        for r in rows:
+            head, body = summarise_row(table, r)
+            block = f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
+            if used + len(block) > budget:
+                print(f"      … truncated at {budget} chars (--max-chars to raise)")
+                return OK
+            print(block, end="")
+            used += len(block)
+    print(
+        "\nRecall is a prompt to CHECK, not a verdict. A decision above is binding "
+        "unless the operator says otherwise; a lesson is advice; a past prompt is "
+        "context."
+    )
+    return OK
+
+
+def _decision_add(a, c: Ctx, st) -> int:
+    """Record a decision. Refuses without a stated DECISION, not merely a discussion."""
+    did = a.id or _auto_id("D", a.title, a.decision or "")
+    if not a.decision:
+        print(
+            "--decision is required: the record must say what was DECIDED, not only "
+            "what was discussed.",
+            file=sys.stderr,
+        )
+        return FAIL
+    c.log.append(
+        "decision.recorded",
+        did,
+        {
+            "title": a.title,
+            "context": a.context or "",
+            "decision": a.decision,
+            "consequences": a.consequences or "",
+            "alternatives": a.alternatives or "",
+            "globs": _csv(a.globs),
+            "tags": _csv(a.tags),
+            "status": a.status,
+            "decided_by": a.by or "",
+            "item": a.item or "",
+            "supersedes": _csv(a.supersedes),
+        },
+    )
+    extra = f"; supersedes {a.supersedes}" if a.supersedes else ""
+    if not _csv(a.globs):
+        extra += (
+            "\n  NOTE: no --globs, so this decision cannot be surfaced automatically "
+            "to an agent working the code it governs. It will only be found by search."
+        )
+    c.out(f"decision {did} recorded ({a.status}){extra}", {"id": did})
+    return OK
+
+
+def _decision_supersede(a, c: Ctx, st) -> int:
+    """Replace a decision. Never deletes one: how the architecture got here is the
+    part a rebuild most needs."""
+    if a.id not in st.decisions:
+        print(f"no such decision {a.id!r}", file=sys.stderr)
+        return FAIL
+    if not a.by:
+        print(
+            "--by <new decision id> is required: a decision is never simply deleted, "
+            "it is replaced by one that says what is true now.",
+            file=sys.stderr,
+        )
+        return FAIL
+    c.log.append("decision.superseded", a.id, {"by": a.by, "reason": a.reason or ""})
+    c.out(f"{a.id} superseded by {a.by}", {"id": a.id, "by": a.by})
+    return OK
+
+
+def _decision_show(a, c: Ctx, st) -> int:
+    """One decision in full."""
+    d = st.decisions.get(a.id)
+    if not d:
+        print(f"no such decision {a.id!r}", file=sys.stderr)
+        return FAIL
+    if c.json:
+        print(json.dumps(_plain(d), indent=2, default=str))
+        return OK
+    head = f"{d.id} — {d.title}\n  status {d.status}"
+    if d.superseded_by:
+        head += f" (superseded by {d.superseded_by})"
+    if d.decided_by:
+        head += f" · decided by {d.decided_by}"
+    print(head)
+    for label, val in (
+        ("Context", d.context),
+        ("Decision", d.decision),
+        ("Consequences", d.consequences),
+        ("Alternatives rejected", d.alternatives),
+    ):
+        if val:
+            print(f"\n{label}:\n  {val}")
+    if d.globs:
+        print(f"\nGoverns: {', '.join(d.globs)}")
+    return OK
+
+
+def _decision_applicable(a, c: Ctx, st) -> int:
+    """Decisions governing an item's declared files.
+
+    The mechanism that makes a decision CONSULTED rather than merely filed: an agent
+    about to write a set of paths is handed the decisions about them, without having
+    to know they exist or guess a search term.
+    """
+    from .schedule import conflicts
+
+    it = st.items.get(a.id)
+    if not it:
+        print(f"no such item {a.id!r}", file=sys.stderr)
+        return FAIL
+    hits = [d for d in st.decisions.values() if d.live and d.globs and conflicts(it.globs, d.globs)]
+    wide = [d for d in st.decisions.values() if d.live and not d.globs]
+    if c.json:
+        print(
+            json.dumps(
+                {
+                    "applicable": [_plain(d) for d in hits],
+                    "project_wide": [_plain(d) for d in wide],
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return OK if (hits or wide) else NOTHING
+    if not hits and not wide:
+        print(
+            f"No architectural decisions govern {a.id}'s files "
+            f"({', '.join(it.globs) or 'no globs declared'})."
+        )
+        return NOTHING
+    for d in hits:
+        print(f"  [{d.id}] {d.title}\n      {d.decision}")
+    for d in wide:
+        print(f"  [{d.id}] {d.title}  (project-wide)\n      {d.decision}")
+    return OK
+
+
+def _decision_search(a, c: Ctx, st) -> int:
+    """Free-text search across decisions."""
+    hits = c.store.search("decisions", a.query, a.limit)
+    if c.json:
+        print(json.dumps(hits, indent=2, default=str))
+        return OK if hits else NOTHING
+    if not hits:
+        print("no matching decisions")
+        return NOTHING
+    for h in hits:
+        print(f"  [{h['id']}] {h['title']}\n      {(h.get('decision') or '')[:200]}")
+    return OK
+
+
+def _decision_list(a, c: Ctx, st) -> int:
+    """Decisions in force; --all includes the superseded ones."""
+    live = [d for d in st.decisions.values() if d.live]
+    dead = [d for d in st.decisions.values() if not d.live]
+    rows = live + dead if getattr(a, "all", False) else live
+    if c.json:
+        print(json.dumps([_plain(d) for d in rows], indent=2, default=str))
+        return OK if rows else NOTHING
+    if not rows:
+        print(
+            "No architectural decisions recorded.\n"
+            "  orchard decision add --title '...' --decision '...' --globs 'src/x/*'"
+        )
+        return NOTHING
+    for d in sorted(rows, key=lambda x: x.at):
+        flag = ""
+        if not d.live:
+            flag = f"  [{d.status}"
+            flag += f" -> {d.superseded_by}]" if d.superseded_by else "]"
+        print(f"  {d.id:<14} {d.title}{flag}")
+        if d.globs:
+            print(f"                 governs {', '.join(d.globs)}")
+    if dead and not getattr(a, "all", False):
+        print(
+            f"\n({len(dead)} superseded; --all to include them — the history of how "
+            f"the architecture got here is kept, never deleted)"
+        )
+    return OK
+
+
+def cmd_decision(a, c: Ctx) -> int:
+    """Architectural decisions: record them, consult them, supersede them.
+
+    A thin dispatcher. Each subcommand is its own function because they share nothing
+    but the loaded state, and reading them interleaved obscured that.
+    """
+    st = c.store.ensure(c.log)
+    return {
+        "add": _decision_add,
+        "supersede": _decision_supersede,
+        "show": _decision_show,
+        "applicable": _decision_applicable,
+        "search": _decision_search,
+        "list": _decision_list,
+    }.get(getattr(a, "decision_cmd", "") or "list", _decision_list)(a, c, st)
+
+
+def cmd_status(a, c: Ctx) -> int:
+    """One answer to "what is the state of this project?".
+
+    Written for a human asking in a chat window, which is a different question from
+    any of the machine views: it wants the shape of the thing, not a table.
+    """
+    from . import progress as PR
+
+    events = c.log.read_all()
+    st = fold(events, strict=False)
+    tracked = PR.work(events, st)
+    loops = PR.detect(events, st, c.cfg)
+    p = plan(st, c.cfg, agent=c.log.agent_id)
+    rec = L.scan(c.log, c.cfg, c.repo)
+
+    phases = st.phases()
+    tasks = st.tasks()
+    done = [t for t in tasks if t.state == "done"]
+    running = [t for t in tasks if t.state == "running"]
+    blocked = [b for b in p.blocked if b.reason == "deps"]
+    hours = sum(w.total_seconds for w in tracked.values()) / 3600
+    commits = sum(len(w.commits) for w in tracked.values())
+
+    if c.json:
+        print(
+            json.dumps(
+                {
+                    "phases": {
+                        "total": len(phases),
+                        "done": sum(1 for x in phases if x.state == "done"),
+                    },
+                    "tasks": {
+                        "total": len(tasks),
+                        "done": len(done),
+                        "running": len(running),
+                        "ready": len(p.ready),
+                        "blocked": len(blocked),
+                    },
+                    "completed_tasks": [
+                        {"id": t.id, "title": t.title, "sha": t.merged_sha} for t in done
+                    ],
+                    "in_flight": [
+                        {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
+                        for t in running
+                    ],
+                    "ready_now": [{"id": t.id, "title": t.title} for t in p.ready],
+                    "agent_hours": round(hours, 2),
+                    "commits": commits,
+                    "decisions": len([d for d in st.decisions.values() if d.live]),
+                    "lessons": len(st.lessons),
+                    "open_bugs": len([b for b in st.bugs.values() if b.open]),
+                    "loops": [f.__dict__ for f in loops],
+                    "recoverable": [_plain(r) for r in rec if r.salvageable],
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return OK
+
+    print(f"# {c.repo.name}\n")
+    print(
+        f"{len(done)}/{len(tasks)} tasks complete across {len(phases)} phase(s); "
+        f"{hours:.1f} agent-hours, {commits} commit(s).\n"
+    )
+    if done:
+        print("Completed:")
+        for t in sorted(done, key=lambda x: x.completed_at)[-12:]:
+            print(
+                f"  [x] {t.id:<12} {t.title}" + (f"  ({t.merged_sha[:8]})" if t.merged_sha else "")
+            )
+    if running:
+        print("\nIn flight:")
+        for t in running:
+            print(f"  [~] {t.id:<12} {t.title}" + (f"  — {t.lease.holder}" if t.lease else ""))
+    if p.ready:
+        print("\nReady to start:")
+        for t in p.ready[:8]:
+            print(f"  [ ] {t.id:<12} {t.title}")
+    if blocked:
+        print(f"\nBlocked on dependencies: {', '.join(b.item for b in blocked[:8])}")
+    extras = []
+    if st.decisions:
+        extras.append(
+            f"{len([d for d in st.decisions.values() if d.live])} architectural decision(s)"
+        )
+    if st.lessons:
+        extras.append(f"{len(st.lessons)} lesson(s)")
+    open_bugs = [b for b in st.bugs.values() if b.open]
+    if open_bugs:
+        extras.append(f"{len(open_bugs)} OPEN bug(s)")
+    if extras:
+        print("\nRecorded: " + " · ".join(extras))
+    if rec:
+        salv = [r for r in rec if r.salvageable]
+        print(
+            f"\n⚠ {len(rec)} recoverable situation(s)"
+            + (f", {len(salv)} may contain unsaved work" if salv else "")
+            + " — `orchard recover`"
+        )
+    if loops:
+        print(f"\n⚠ {len(loops)} loop finding(s) — `orchard loops`")
+    if not loops and not rec:
+        print("\nNothing looping, nothing to recover.")
+    return OK
 
 
 def cmd_research(a, c: Ctx) -> int:
@@ -950,6 +1450,122 @@ def cmd_recover(a, c: Ctx) -> int:
     return OK
 
 
+def cmd_progress(a, c: Ctx) -> int:
+    """What work has actually been done, aggregated from the log."""
+    from . import progress as PR
+
+    events = c.log.read_all()
+    st = fold(events, strict=False)
+    tracked = PR.work(events, st)
+    rows = [r for r in tracked.values() if not a.id or r.item == a.id]
+    if a.id and not rows:
+        print(f"no such item {a.id!r}", file=sys.stderr)
+        return FAIL
+    rows.sort(key=lambda r: (-r.total_seconds, r.item))
+
+    if c.json:
+        print(json.dumps([r.summary() for r in rows], indent=2, default=str))
+        return OK
+    if not rows:
+        print("No work recorded yet.")
+        return NOTHING
+    print(f"{'item':<14} {'state':<10} {'att':>3} {'held':>9} {'gates':>5} {'commits':>7}  holders")
+    for r in rows:
+        held = f"{r.total_seconds / 60:.1f}m" if r.total_seconds else "-"
+        print(
+            f"{r.item:<14} {r.state:<10} {len(r.attempts):>3} {held:>9} "
+            f"{r.gate_runs:>5} {len(r.commits):>7}  "
+            f"{', '.join(sorted(set(r.holders))) or '-'}"
+        )
+    if a.id and rows:
+        r = rows[0]
+        print(f"\n{r.item} — {r.title}")
+        for i, att in enumerate(r.attempts, 1):
+            print(
+                f"  attempt {i}: {att.holder} · {att.seconds / 60:.1f}m · "
+                f"ended {att.ended_by or 'still open'} · "
+                f"{att.gates_passed} passed / {att.gates_failed} failed"
+            )
+        for gate, outcomes in sorted(r.gate_outcomes.items()):
+            print(f"  gate {gate:<14} {' -> '.join(outcomes)}")
+    total = sum(r.total_seconds for r in rows)
+    print(
+        f"\n{len(rows)} item(s) · {total / 3600:.1f} agent-hours recorded · "
+        f"{sum(len(r.commits) for r in rows)} commit(s)"
+    )
+    return OK
+
+
+def cmd_loops(a, c: Ctx) -> int:
+    """Report circular references and runtime loops. Exit 2 when there are none."""
+    from . import progress as PR
+
+    events = c.log.read_all()
+    st = fold(events, strict=False)
+    findings = PR.detect(events, st, c.cfg)
+    if c.json:
+        print(json.dumps([f.__dict__ for f in findings], indent=2))
+        return FAIL if findings else NOTHING
+    if not findings:
+        print(
+            f"No loops detected ({len(events)} events, {len(st.items)} items).\n"
+            f"Checked: dependency cycles, repeat claims, gate flapping, reopened "
+            f"items, duplicate work, stalled queue."
+        )
+        return NOTHING
+    for f in findings:
+        print(f"\n{f.render()}")
+    blocking = [f for f in findings if f.severity == "block"]
+    print(
+        f"\n{len(findings)} finding(s)"
+        + (f", {len(blocking)} blocking" if blocking else "")
+        + ". Thresholds are [loops] knobs; `orchard config --explain --filter loops`."
+    )
+    return FAIL
+
+
+def cmd_cleanup(a, c: Ctx) -> int:
+    """Classify every Orchard worktree and branch; with --apply, land the safe ones."""
+    from . import cleanup as CL
+
+    st = c.store.ensure(c.log)
+    plan = CL.survey(c.repo, c.cfg, st)
+    if c.json and not a.apply:
+        print(
+            json.dumps(
+                {
+                    "trees": [_plain(t) for t in plan.trees],
+                    "stale_branches": [_plain(t) for t in plan.stale_branches],
+                },
+                indent=2,
+                default=str,
+            )
+        )
+        return OK if (plan.trees or plan.stale_branches) else NOTHING
+    if not plan.trees and not plan.stale_branches:
+        print("Nothing to clean up: no Orchard worktrees or branches remain.")
+        return NOTHING
+    for t in plan.trees + plan.stale_branches:
+        print("  " + t.render())
+    if plan.needs_human:
+        print(
+            f"\n{len(plan.needs_human)} tree(s) hold UNCOMMITTED work and are never "
+            f"touched automatically. Inspect each before deciding."
+        )
+    if not a.apply:
+        actionable = plan.actionable
+        print(
+            f"\n{len(actionable)} safe action(s) available. Re-run with --apply to "
+            f"perform them; dirty trees are excluded whatever you pass."
+        )
+        return OK
+    done = CL.apply(c.repo, c.cfg, plan)
+    for line in done:
+        print(f"  {line}")
+    c.out(f"\n{len(done)} action(s) performed.", {"performed": done})
+    return OK
+
+
 def cmd_doctor(a, c: Ctx) -> int:
     problems: list[str] = []
     notes: list[str] = []
@@ -967,8 +1583,11 @@ def cmd_doctor(a, c: Ctx) -> int:
             if dep not in st.items:
                 problems.append(f"{it.id} needs unknown item {dep!r}")
     from . import container as CT
+    from . import progress as PR
 
     notes.extend(CT.warnings(c.repo, c.cfg))
+    for f in PR.detect(c.log.read_all(), st, c.cfg):
+        (problems if f.severity == "block" else notes).append(f.render())
     rec = L.scan(c.log, c.cfg, c.repo)
     for r in rec:
         (problems if r.salvageable else notes).append(f"{r.kind}: {r.item} — {r.advice}")
@@ -1747,7 +2366,13 @@ def build_parser() -> argparse.ArgumentParser:
     ta_s = ta.add_subparsers(dest="task_cmd", required=True)
     tad = ta_s.add_parser("add")
     tad.add_argument("id")
-    tad.add_argument("--phase", default="")
+    tad.add_argument("--phase", default="", help="owning phase")
+    tad.add_argument(
+        "--parent",
+        default="",
+        help="owning phase OR task — a task parent makes this a SUB-TASK, which "
+        "carries its own globs and dependencies like any other task",
+    )
     tad.add_argument("--title", default="")
     tad.add_argument("--needs")
     tad.add_argument("--globs")
@@ -1755,6 +2380,19 @@ def build_parser() -> argparse.ArgumentParser:
     tad.add_argument("--body")
     tad.add_argument("--priority", type=int, default=100)
     tad.set_defaults(fn=cmd_task_add)
+
+    sp = s.add_parser(
+        "split", help="split an item into sub-tasks in place, keeping its id and history"
+    )
+    sp.add_argument("id")
+    sp.add_argument(
+        "--into", action="append", default=[], help="repeatable: 'sub-id=title', or just 'sub-id'"
+    )
+    sp.add_argument(
+        "--globs", default="", help="globs for the children (default: inherit the parent's)"
+    )
+    sp.add_argument("--needs", default="", help="dependencies for the FIRST child")
+    sp.set_defaults(fn=cmd_split)
 
     up = s.add_parser("update", help="change an item's fields")
     up.add_argument("id")
@@ -1860,6 +2498,64 @@ def build_parser() -> argparse.ArgumentParser:
     lse.add_argument("--limit", type=int, default=None, help="default: [lessons].max_results")
     lse.set_defaults(fn=cmd_lesson)
 
+    rc = s.add_parser(
+        "recall",
+        help="'have we been here before?' — search decisions, lessons, research, bugs, "
+        "tasks and past prompts at once",
+    )
+    rc.add_argument("query")
+    rc.add_argument("--limit", type=int, default=3, help="hits per source")
+    rc.add_argument(
+        "--sources",
+        default="",
+        help="comma-separated subset: decisions,lessons,research,bugs,items,prompts",
+    )
+    rc.add_argument("--max-chars", type=int, default=4000)
+    rc.set_defaults(fn=cmd_recall)
+
+    dc = s.add_parser("decision", help="architectural decisions: record and consult")
+    dc_s = dc.add_subparsers(dest="decision_cmd", required=False)
+    dca = dc_s.add_parser("add")
+    dca.add_argument("--id", default="")
+    dca.add_argument("--title", required=True)
+    dca.add_argument("--decision", required=True, help="what was DECIDED (not what was discussed)")
+    dca.add_argument("--context", default="", help="the forces: why a decision was needed")
+    dca.add_argument("--consequences", default="", help="what it costs, incl. what it makes harder")
+    dca.add_argument("--alternatives", default="", help="what was rejected, and why")
+    dca.add_argument(
+        "--globs",
+        default="",
+        help="the code this governs; without it the decision can only be found by search",
+    )
+    dca.add_argument("--tags", default="")
+    dca.add_argument("--item", default="")
+    dca.add_argument("--by", default="", help="operator | agent | a name")
+    dca.add_argument("--status", default="accepted", choices=["proposed", "accepted", "superseded"])
+    dca.add_argument("--supersedes", default="")
+    dca.set_defaults(fn=cmd_decision)
+    dcl = dc_s.add_parser("list")
+    dcl.add_argument("--all", action="store_true")
+    dcl.set_defaults(fn=cmd_decision)
+    dcs = dc_s.add_parser("show")
+    dcs.add_argument("id")
+    dcs.set_defaults(fn=cmd_decision)
+    dcf = dc_s.add_parser("search")
+    dcf.add_argument("query")
+    dcf.add_argument("--limit", type=int, default=5)
+    dcf.set_defaults(fn=cmd_decision)
+    dcap = dc_s.add_parser("applicable", help="decisions governing an item's declared files")
+    dcap.add_argument("id")
+    dcap.set_defaults(fn=cmd_decision)
+    dcsu = dc_s.add_parser("supersede")
+    dcsu.add_argument("id")
+    dcsu.add_argument("--by", required=True, help="the decision that replaces it")
+    dcsu.add_argument("--reason", default="")
+    dcsu.set_defaults(fn=cmd_decision)
+    dc.set_defaults(fn=cmd_decision, decision_cmd="list", all=False)
+
+    stt = s.add_parser("status", help="one answer to 'what is the state of this project?'")
+    stt.set_defaults(fn=cmd_status)
+
     rs = s.add_parser("research")
     rs.add_argument("--id", default="")
     rs.add_argument("--question", required=True)
@@ -1919,6 +2615,19 @@ def build_parser() -> argparse.ArgumentParser:
     rc.add_argument("--item", default="")
     rc.add_argument("--apply", action="store_true")
     rc.set_defaults(fn=cmd_recover)
+
+    pg = s.add_parser("progress", help="work actually done, aggregated from the log")
+    pg.add_argument("id", nargs="?", default="")
+    pg.set_defaults(fn=cmd_progress)
+
+    lp = s.add_parser("loops", help="circular references and runtime loops (exit 2 = none)")
+    lp.set_defaults(fn=cmd_loops)
+
+    cu = s.add_parser(
+        "cleanup", help="classify Orchard worktrees/branches; --apply lands the safe ones"
+    )
+    cu.add_argument("--apply", action="store_true")
+    cu.set_defaults(fn=cmd_cleanup)
 
     s.add_parser("doctor", help="integrity + health check").set_defaults(fn=cmd_doctor)
     s.add_parser("rebuild", help="re-derive the index from the log").set_defaults(fn=cmd_rebuild)

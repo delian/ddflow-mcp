@@ -312,3 +312,132 @@ def test_an_unadopted_repo_is_told_to_set_up_even_after_a_handshake(repo):
     text = out[0]["result"]["instructions"]
     assert "does not use Orchard yet" in text
     assert "orchard_setup" in text
+
+
+# -- workflow commands, exposed as MCP prompts ----------------------------------------
+
+
+def test_the_prompts_capability_is_advertised(proj):
+    """Omitting it means a spec-respecting client never calls prompts/list, so the
+    commands exist and are unreachable — indistinguishable, from the operator's side,
+    from not having written them."""
+    r = rpc(
+        proj,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"protocolVersion": "2025-06-18"},
+            }
+        ],
+    )
+    assert "prompts" in r[0]["result"]["capabilities"]
+
+
+def test_every_workflow_command_is_listed_with_a_usable_description(proj):
+    from orchard.prompts import COMMANDS
+
+    r = rpc(proj, [{"jsonrpc": "2.0", "id": 1, "method": "prompts/list"}])
+    listed = {p["name"]: p for p in r[0]["result"]["prompts"]}
+    assert set(listed) == set(COMMANDS), f"listed {sorted(listed)}"
+    for name, p in listed.items():
+        assert p["title"], name
+        assert len(p["description"]) > 60, f"{name}: description too thin to choose by"
+        for arg in p["arguments"]:
+            assert arg["required"] is False, (
+                f"{name}.{arg['name']} is required; a slash command with a mandatory "
+                f"argument fails when invoked bare, which is how they are invoked"
+            )
+
+
+def test_a_command_renders_with_and_without_its_optional_argument(proj):
+    for args in ({}, {"scope": "the parser"}):
+        r = rpc(
+            proj,
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "prompts/get",
+                    "params": {"name": "bug-hunt", "arguments": args},
+                }
+            ],
+        )
+        assert "error" not in r[0], r[0].get("error")
+        text = r[0]["result"]["messages"][0]["content"]["text"]
+        assert "probe" in text and "regression test" in text
+        if args:
+            assert "the parser" in text
+        assert "{{" not in text and "{%" not in text, "template syntax leaked"
+
+
+def test_every_shipped_command_renders_cleanly(proj):
+    from orchard.prompts import COMMANDS
+
+    for name in COMMANDS:
+        r = rpc(
+            proj,
+            [
+                {
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "prompts/get",
+                    "params": {"name": name, "arguments": {}},
+                }
+            ],
+        )
+        assert "error" not in r[0], f"{name}: {r[0].get('error')}"
+        text = r[0]["result"]["messages"][0]["content"]["text"]
+        assert len(text) > 400, f"{name} rendered suspiciously short"
+        assert "{{" not in text and "{%" not in text, f"{name}: template syntax leaked"
+
+
+def test_an_unknown_command_is_an_error_naming_the_known_ones(proj):
+    r = rpc(
+        proj,
+        [{"jsonrpc": "2.0", "id": 1, "method": "prompts/get", "params": {"name": "not-a-command"}}],
+    )
+    assert "error" in r[0]
+    assert "code-clean" in r[0]["error"]["message"]
+
+
+def test_all_tests_names_the_projects_own_configured_suites(proj):
+    """A generic list the reader has to translate is worth less than the real one."""
+    (proj / ".orchard" / "config.toml").write_text(
+        '[gate.integration_tests]\ncommand = "pytest tests/integration -q"\n\n'
+        '[gate.e2e_tests]\ncommand = "npm run test:e2e"\n'
+    )
+    r = rpc(
+        proj,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "prompts/get",
+                "params": {"name": "all-tests", "arguments": {}},
+            }
+        ],
+    )
+    text = r[0]["result"]["messages"][0]["content"]["text"]
+    assert "integration_tests" in text and "e2e_tests" in text, text[:600]
+
+
+def test_a_project_can_override_a_shipped_command(proj):
+    """The workflows ship as text precisely so a project can rewrite one without
+    touching code."""
+    d = proj / ".orchard" / "prompts" / "commands"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "code-clean.md").write_text("OUR OWN CLEANUP PROCEDURE\n")
+    r = rpc(
+        proj,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "prompts/get",
+                "params": {"name": "code-clean", "arguments": {}},
+            }
+        ],
+    )
+    assert "OUR OWN CLEANUP PROCEDURE" in r[0]["result"]["messages"][0]["content"]["text"]

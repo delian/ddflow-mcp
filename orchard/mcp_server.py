@@ -190,6 +190,35 @@ TOOLS: dict[str, dict[str, Any]] = {
             ["phase", "add", a["id"], *_opt("--title", a), *_opt("--needs", a), *_opt("--body", a)]
         ),
     },
+    "orchard_split": {
+        "description": (
+            "Split an item into sub-tasks IN PLACE when the work turns out to be two "
+            "things. Use this the moment you discover it — mid-task discovery is the "
+            "normal case, not an exception.\n\n"
+            "The original keeps its id and history and becomes an umbrella that "
+            "completes when its children do; closing it and opening two new ones "
+            "instead would lose the thread between what was planned and what happened. "
+            "Children inherit the parent's globs, so give each its own afterwards if "
+            "they write different files — until then they cannot run in parallel."
+        ),
+        "properties": {
+            "id": ("string", "The item to split.", True),
+            "into": ("string", "Comma-separated 'sub-id=title' pairs. At least two.", True),
+            "globs": ("string", "Globs for the children (default: inherit).", False),
+        },
+        "argv": lambda a: [
+            "--json",
+            "split",
+            a["id"],
+            *[
+                arg
+                for spec in str(a.get("into", "")).split(",")
+                if spec.strip()
+                for arg in ("--into", spec.strip())
+            ],
+            *_opt("--globs", a),
+        ],
+    },
     "orchard_task_add": {
         "description": (
             "Add a task to a phase. ALWAYS set globs to the paths this task will write: "
@@ -198,7 +227,13 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Short stable id, e.g. 'P2.T1'.", True),
-            "phase": ("string", "Owning phase id.", True),
+            "phase": (
+                "string",
+                "Owning phase id — or another TASK's id, which makes this a "
+                "sub-task. Sub-tasks carry their own globs and dependencies and "
+                "run in parallel like any other task.",
+                True,
+            ),
             "title": ("string", "One-line description.", False),
             "needs": ("string", "Comma-separated ids this task depends on.", False),
             "globs": ("string", "Comma-separated path globs this task writes.", False),
@@ -327,6 +362,219 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": "The whole work queue as a readable board, with the critical path.",
         "properties": {"phase": ("string", "Restrict to one phase.", False)},
         "argv": lambda a: ["board", *_opt("--phase", a)],
+    },
+    "orchard_progress": {
+        "description": (
+            "What work has ACTUALLY been done, aggregated from the event log: attempts "
+            "per item, wall-clock held, gate runs, commits produced, and who did them. "
+            "Use it to answer 'how much effort has gone into this' and to see an item's "
+            "full gate history including the outcomes that were not passes."
+        ),
+        "properties": {"id": ("string", "One item, with its per-attempt detail.", False)},
+        "argv": lambda a: ["--json", "progress", *([a["id"]] if a.get("id") else [])],
+    },
+    "orchard_loops": {
+        "description": (
+            "Detect circular references and runtime loops: dependency cycles, an item "
+            "claimed and given up over and over, a gate whose verdict keeps flipping, "
+            "work completed and reopened repeatedly, duplicate items writing the same "
+            "files, and a queue where events keep arriving but nothing advances. "
+            "CALL THIS WHEN WORK FEELS REPETITIVE — it is the check that tells you to "
+            "stop and re-plan rather than trying the same thing again. Returns [] when "
+            "there is nothing wrong."
+        ),
+        "properties": {},
+        "argv": lambda a: ["--json", "loops"],
+    },
+    "orchard_cleanup": {
+        "description": (
+            "Classify every Orchard worktree and branch: merged (safe to remove), "
+            "unmerged (carries commits nobody landed), dirty (uncommitted edits — a "
+            "human looks), orphan, or stale branch. Reports by default; with "
+            "apply=true it removes merged worktrees and branches and lands commits for "
+            "items the queue already considers done. A dirty tree is NEVER touched "
+            "automatically, whatever you pass — it is the only thing here that exists "
+            "nowhere else."
+        ),
+        "properties": {"apply": ("boolean", "Perform the safe actions.", False)},
+        "argv": lambda a: ["cleanup", *(["--apply"] if a.get("apply") else ["--json"])],
+    },
+    "orchard_recall": {
+        "description": (
+            "'HAVE WE BEEN HERE BEFORE?' — one search across everything this project "
+            "remembers: architectural decisions, lessons learned, research verdicts, "
+            "past bugs, similar tasks, and the operator's own earlier prompts.\n\n"
+            "CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK. It exists so the operator "
+            "does not have to say the same thing twice and you do not have to learn "
+            "the same thing twice. Results are labelled by kind, because a binding "
+            "decision, a transferable lesson and a prompt from three weeks ago should "
+            "change what you do in different ways. A decision marked superseded names "
+            "its replacement — follow the replacement."
+        ),
+        "properties": {
+            "query": ("string", "What you are about to do, in plain words.", True),
+            "limit": ("integer", "Hits per source (default 3).", False),
+            "sources": (
+                "string",
+                "Comma-separated subset: decisions,lessons,research,bugs,"
+                "items,prompts. Default: all.",
+                False,
+            ),
+        },
+        "argv": lambda a: [
+            "--json",
+            "recall",
+            a.get("query", ""),
+            *(["--limit", str(a["limit"])] if a.get("limit") else []),
+            *_opt("--sources", a),
+        ],
+    },
+    "orchard_status": {
+        "description": (
+            "The state of the whole project in one answer: how many tasks are done and "
+            "which, what is in flight and who holds it, what is ready to start, what is "
+            "blocked, how many agent-hours and commits went in, and whether anything is "
+            "looping or waiting to be recovered. This is the tool for 'what is the "
+            "status of this project?' and 'what has been completed?'."
+        ),
+        "properties": {},
+        "argv": lambda a: ["--json", "status"],
+    },
+    "orchard_decision_add": {
+        "description": (
+            "Record an architectural decision so the project stays consistent and the "
+            "reasoning survives. Use when you or the operator settle a question about "
+            "HOW the software is built — a data representation, a boundary, a library "
+            "choice, an invariant.\n\n"
+            "ALWAYS set `globs` to the code it governs: that is what lets the decision "
+            "be surfaced automatically to whoever works those files later, instead of "
+            "only being findable by someone who already suspects it exists. Record "
+            "`alternatives` too — without it the next agent re-proposes what was "
+            "rejected."
+        ),
+        "properties": {
+            "title": ("string", "The decision as a one-line statement.", True),
+            "decision": ("string", "What was DECIDED (not what was discussed).", True),
+            "context": ("string", "The forces: why a decision was needed at all.", False),
+            "consequences": ("string", "What it costs, including what it makes harder.", False),
+            "alternatives": ("string", "What was rejected, and why.", False),
+            "globs": ("string", "Comma-separated paths this governs.", False),
+            "by": ("string", "'operator' or 'agent' or a name.", False),
+            "supersedes": ("string", "Comma-separated ids this replaces.", False),
+            "item": ("string", "The task it arose from.", False),
+        },
+        "argv": lambda a: [
+            "--json",
+            "decision",
+            "add",
+            "--title",
+            a.get("title", ""),
+            "--decision",
+            a.get("decision", ""),
+            *_opt("--context", a),
+            *_opt("--consequences", a),
+            *_opt("--alternatives", a),
+            *_opt("--globs", a),
+            *_opt("--by", a),
+            *_opt("--supersedes", a),
+            *_opt("--item", a),
+        ],
+    },
+    "orchard_decision_list": {
+        "description": (
+            "Every architectural decision in force. Superseded ones are "
+            "hidden unless you ask for them — they are kept, never deleted, "
+            "because how the architecture got here is what a rebuild needs."
+        ),
+        "properties": {"all": ("boolean", "Include superseded decisions.", False)},
+        "argv": lambda a: ["--json", "decision", "list", *(["--all"] if a.get("all") else [])],
+    },
+    "orchard_decision_applicable": {
+        "description": (
+            "The architectural decisions that govern a specific item's declared files. "
+            "CALL THIS BEFORE IMPLEMENTING: it is how a decision reaches the person "
+            "writing the code, without them having to know it exists. Returns "
+            "project-wide decisions too."
+        ),
+        "properties": {"id": ("string", "Item id.", True)},
+        "argv": lambda a: ["--json", "decision", "applicable", a["id"]],
+    },
+    "orchard_decision_supersede": {
+        "description": (
+            "Mark a decision replaced by a newer one. Decisions are never "
+            "edited or deleted; a reversal is a new decision that names the "
+            "old one."
+        ),
+        "properties": {
+            "id": ("string", "The decision being replaced.", True),
+            "by": ("string", "The decision that replaces it.", True),
+            "reason": ("string", "Why it changed.", False),
+        },
+        "argv": lambda a: [
+            "--json",
+            "decision",
+            "supersede",
+            a["id"],
+            "--by",
+            a.get("by", ""),
+            *_opt("--reason", a),
+        ],
+    },
+    "orchard_replay": {
+        "description": (
+            "Reconstruct the project's whole decision history from the log: every "
+            "operator prompt in order, every architectural decision, every research "
+            "verdict, every lesson, and the shape of the queue. This is what rebuilds "
+            "the project if the code is lost — it reproduces the DECISIONS, not the "
+            "bytes."
+        ),
+        "properties": {"out": ("string", "Write a recovery kit to this directory.", False)},
+        "argv": lambda a: ["replay", *_opt("--out", a)],
+    },
+    "orchard_render": {
+        "description": (
+            "Regenerate the human-readable markdown views (queue, lessons, "
+            "research) under docs/orchard/."
+        ),
+        "properties": {},
+        "argv": lambda a: ["--json", "render"],
+    },
+    "orchard_rebuild": {
+        "description": (
+            "Re-derive the search index from the event log. The index is a "
+            "disposable cache; this is never a data-loss operation."
+        ),
+        "properties": {},
+        "argv": lambda a: ["--json", "rebuild"],
+    },
+    "orchard_prompts": {
+        "description": (
+            "Inspect the prompt templates this project uses, and where each comes from "
+            "(shipped default, project override, or an explicit config path). Use "
+            "`eject` to copy the shipped ones into .orchard/prompts/ so the project can "
+            "edit them as plain text — reviewer instructions and workflow commands are "
+            "operator-tunable behaviour, not code."
+        ),
+        "properties": {
+            "action": ("string", "list (default), show, or eject.", False),
+            "name": ("string", "Template name, for show/eject.", False),
+        },
+        "argv": lambda a: (
+            ["--json", "prompts", "list"]
+            if a.get("action", "list") == "list"
+            else ["prompts", a["action"], *([a["name"]] if a.get("name") else [])]
+        ),
+    },
+    "orchard_hooks": {
+        "description": (
+            "Inspect or install the enforcement git hook — the one layer of this "
+            "workflow that does not depend on the agent agreeing. It refuses a commit "
+            "touching paths no live lease of yours covers. `status` reports whether it "
+            "is installed AND whether the policy actually blocks, since a block policy "
+            "with no hook installed enforces nothing."
+        ),
+        "properties": {"action": ("string", "status (default), install, uninstall.", False)},
+        "argv": lambda a: ["--json", "hooks", a.get("action", "status")],
     },
     "orchard_doctor": {
         "description": (
@@ -617,6 +865,12 @@ class Server:
                     "capabilities": {
                         "tools": {"listChanged": False},
                         "resources": {"listChanged": False},
+                        # Prompts are how a client surfaces a workflow as a slash
+                        # command. Omitting the capability means a spec-respecting
+                        # client never calls prompts/list, so the commands exist and
+                        # are unreachable — which is indistinguishable, from the
+                        # operator's side, from not having written them.
+                        "prompts": {"listChanged": False},
                     },
                     "serverInfo": SERVER_INFO,
                     "instructions": _instructions(self.repo),
@@ -715,8 +969,75 @@ class Server:
                 return _err(mid, -32602, f"unknown resource {uri!r}")
             return _ok(mid, {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": body}]})
         if method == "prompts/list":
-            return _ok(mid, {"prompts": []})
+            from . import prompts as P
+
+            return _ok(
+                mid,
+                {
+                    "prompts": [
+                        {
+                            "name": name,
+                            "title": title,
+                            "description": desc,
+                            "arguments": [
+                                {
+                                    "name": arg,
+                                    "description": f"Optional: narrow the workflow to {arg}.",
+                                    "required": False,
+                                }
+                                for arg in args
+                            ],
+                        }
+                        for name, (title, desc, args) in sorted(P.COMMANDS.items())
+                    ]
+                },
+            )
+        if method == "prompts/get":
+            from . import prompts as P
+
+            params = msg.get("params") or {}
+            name = params.get("name", "")
+            args = params.get("arguments") or {}
+            try:
+                tmpl = P.resolve_command(name, self.repo)
+                # Every declared argument is bound, empty when absent: the renderer is
+                # strict about undefined names, and a command that raises because the
+                # operator omitted an optional argument is a command nobody uses twice.
+                declared = dict.fromkeys(P.COMMANDS[name][2], "")
+                text = P.render(tmpl, **{**declared, **args, "test_gates": _test_gates(self.repo)})
+            except P.TemplateError as exc:
+                return _err(mid, -32602, str(exc))
+            return _ok(
+                mid,
+                {
+                    "description": P.COMMANDS[name][1],
+                    "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
+                },
+            )
         return _err(mid, -32601, f"method not found: {method}")
+
+
+def _test_gates(repo: Path) -> list[str]:
+    """Every configured gate that looks like a test suite, beyond `unit_tests`.
+
+    Read from the project's own config so the `all-tests` command names the suites
+    that actually exist here, rather than a generic list the reader has to translate.
+    """
+    try:
+        from .config import Config
+        from .gates import load_gates
+
+        cfg = Config.load(repo)
+        gates = load_gates(repo, cfg)
+    except Exception:
+        return []
+    return sorted(
+        g.id
+        for g in gates.values()
+        if g.id != "unit_tests"
+        and g.is_command_gate
+        and any(w in g.id for w in ("test", "e2e", "smoke", "integration", "ui"))
+    )
 
 
 def _instructions(repo: Path) -> str:

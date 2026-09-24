@@ -418,6 +418,50 @@ _doc("prompts", "session_brief_header", "Path to the header template for `orchar
 
 
 @dataclass
+class LoopsConfig:
+    """Runtime loop detection — work that repeats instead of finishing."""
+
+    max_claims_per_item: int = 3
+    max_gate_flaps: int = 4
+    max_reopens: int = 2
+    max_duplicate_items: int = 2
+    no_progress_window: int = 60
+    on_detect: str = "warn"  # warn | block
+
+
+_doc(
+    "loops",
+    "max_claims_per_item",
+    "How many times an item may be claimed and given up WITHOUT completing before it is reported as thrashing. Expiries (crash recovery) are excluded — only deliberate release/re-claim cycles count, because a crash is a different problem with a different remedy.",
+)
+_doc(
+    "loops",
+    "max_gate_flaps",
+    "How many times a gate's verdict may flip between passed and failed on one item before it is reported as flapping. A gate that cannot decide is flaky or measuring a moving target; re-running it will not converge.",
+)
+_doc(
+    "loops",
+    "max_reopens",
+    "How many times an item may be COMPLETED before that is reported as work that will not stay done — usually a sign the acceptance criteria are not written in the item, so each pass finishes something different.",
+)
+_doc(
+    "loops",
+    "max_duplicate_items",
+    "How many live items may declare exactly the same file globs before that is reported. Two items writing one file cannot run in parallel anyway, and one is usually a re-description of the other.",
+)
+_doc(
+    "loops",
+    "no_progress_window",
+    "How many recent events with NO completion, gate pass or merge count as a stalled queue. Measured in events, not minutes, because an agent that is thinking produces no events and waiting is not looping.",
+)
+_doc(
+    "loops",
+    "on_detect",
+    "'warn' reports loops in `doctor` and `next` and lets work continue; 'block' additionally makes `orchard claim` REFUSE an item that is already looping, which is the only thing that actually stops an agent spinning on it.",
+)
+
+
+@dataclass
 class EnforceConfig:
     """Mechanical enforcement — the layer that does not rely on the agent agreeing."""
 
@@ -491,6 +535,7 @@ class Config:
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
+    loops: LoopsConfig = field(default_factory=LoopsConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 

@@ -37,6 +37,43 @@ def _bar(done: int, total: int, width: int = 18) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
+def _depth(state: State, item, root: str) -> int:
+    """How far below the phase this item sits. Bounded, because a parent chain is
+    operator-authored and a cycle in it must not hang the renderer."""
+    depth, node, seen = 0, item, set()
+    while node.parent and node.parent != root and node.parent not in seen:
+        seen.add(node.id)
+        node = state.items.get(node.parent)
+        if node is None:
+            break
+        depth += 1
+    return min(depth, 6)
+
+
+def _nested(state: State, phase: str) -> list:
+    """Tasks under a phase, each sub-task immediately after its parent."""
+    tasks = state.tasks(phase)
+    by_parent: dict[str, list] = {}
+    for t in tasks:
+        by_parent.setdefault(t.parent, []).append(t)
+    out: list = []
+
+    def walk(parent: str, seen: set) -> None:
+        for t in sorted(by_parent.get(parent, []), key=lambda x: (x.priority, x.id)):
+            if t.id in seen:
+                continue
+            seen.add(t.id)
+            out.append(t)
+            walk(t.id, seen)
+
+    walk(phase, set())
+    # Anything whose parent chain does not reach the phase (an orphan, or a cycle)
+    # still belongs on the board: silently dropping it is how work disappears.
+    listed = {t.id for t in out}
+    out.extend(t for t in tasks if t.id not in listed)
+    return out
+
+
 def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
     """The whole queue as a markdown board.
 
@@ -54,7 +91,9 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
         out.append("_No phases yet. `orchard phase add <id> --title '...'`_")
         return "\n".join(out)
     for ph in sorted(phases, key=lambda p: (p.priority, p.id)):
-        tasks = sorted(state.tasks(ph.id), key=lambda t: (t.priority, t.id))
+        # Ordered so a sub-task follows its parent, and indented by depth: a flat list
+        # of "P1.T1, P1.T1a, P1.T1b" hides that two of them are halves of the first.
+        tasks = _nested(state, ph.id)
         # Abandoned tasks are SETTLED, not outstanding. Counting them in the
         # denominator made a completed phase render as "3/4 tasks", which reads as
         # unfinished work that no longer exists.
@@ -84,8 +123,9 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
                     pipeline_for(t, cfg) if cfg is not None else list(Config().gates.task_pipeline)
                 )
                 gates = "".join(OUTCOME_MARK.get(t.gate_outcome(g), " ") for g in pipeline)
+                indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * _depth(state, t, ph.id)
                 out.append(
-                    f"| [{mark}] | **{t.id}** {t.title} | {t.state} | "
+                    f"| [{mark}] | {indent}**{t.id}** {t.title} | {t.state} | "
                     f"{', '.join(t.needs) or '—'} | {', '.join(f'`{g}`' for g in t.globs) or '—'} | "
                     f"`{gates}` | {t.lease.holder if t.lease else '—'} |"
                 )
@@ -255,6 +295,33 @@ def _brief_ready(out: list[str], plan: Plan) -> None:
         out += [f"- `{b.item}` — {b.reason}: {b.detail}" for b in plan.blocked[:6]]
 
 
+def _brief_decisions(out: list[str], decisions: list) -> None:
+    """Architectural decisions governing the current item's files.
+
+    Placed ABOVE lessons on purpose: a decision is binding and a lesson is advice, and
+    an agent skimming a brief should meet the binding thing first. Surfaced by glob
+    match rather than by search, so a decision reaches whoever is about to write the
+    code it governs without their having to suspect it exists.
+    """
+    if not decisions:
+        return
+    out += [
+        "",
+        "## Architectural decisions governing these files",
+        "",
+        "_Binding unless the operator says otherwise. A superseded decision names "
+        "its replacement — follow the replacement._",
+        "",
+    ]
+    for d in decisions:
+        line = f"- **{d.title}** — {d.decision}"
+        if d.superseded_by:
+            line += f"  ⚠ SUPERSEDED by {d.superseded_by}"
+        out.append(line)
+        if d.alternatives:
+            out.append(f"  - rejected: {d.alternatives[:160]}")
+
+
 def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict]) -> None:
     if not lessons:
         return
@@ -280,6 +347,7 @@ def brief(
     lessons: list[dict] | None = None,
     rules: str = "",
     recovery: list | None = None,
+    decisions: list | None = None,
 ) -> str:
     """The session-start pack, under ``session.brief_max_tokens``.
 
@@ -293,6 +361,7 @@ def brief(
     if item:
         _brief_current(out, state, cfg, item, repo)
     _brief_ready(out, plan)
+    _brief_decisions(out, decisions or [])
     if rules:
         out += ["", "## Project rules", "", rules.strip()]
     _brief_lessons(out, cfg, lessons or [])

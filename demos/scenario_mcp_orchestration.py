@@ -666,6 +666,63 @@ def run(sc: Scenario) -> None:
             str([p.name for p in (sc.repo / ".orchard" / "events").glob("*")]),
         )
 
+        sc.step("Nothing looped, and the work done is accounted for")
+        loops, lcode = alpha.tool("orchard_loops")
+        sc.check(
+            "a healthy project reports NO loops (exit 2 = nothing to report)",
+            lcode == 2,
+            loops[:300],
+        )
+        prog = alpha.jtool("orchard_progress")
+        by_item = {r["item"]: r for r in prog}
+        sc.check(
+            "every completed task records exactly one attempt and one commit",
+            all(
+                by_item[t]["attempts"] == 1 and by_item[t]["commits"] == 1
+                for t in ("P1.T1", "P1.T2", "P1.T3")
+            ),
+            json.dumps([by_item[t] for t in ("P1.T1", "P1.T2", "P1.T3")]),
+        )
+        sc.check(
+            "the two agents are recorded as the holders",
+            by_item["P1.T1"]["holders"] == ["alpha"] and by_item["P1.T2"]["holders"] == ["beta"],
+            json.dumps([by_item["P1.T1"], by_item["P1.T2"]]),
+        )
+        sc.check(
+            "held time is measured to COMPLETION, not to now",
+            all(0 < by_item[t]["held_seconds"] < 3600 for t in ("P1.T1", "P1.T2")),
+            json.dumps({t: by_item[t]["held_seconds"] for t in ("P1.T1", "P1.T2")}),
+        )
+
+        sc.step("A deliberately circular plan is caught before anyone works it")
+        alpha.tool("orchard_phase_add", id="PX", title="circular")
+        alpha.tool("orchard_task_add", id="X.A", phase="PX", needs="X.C", globs="x/a")
+        alpha.tool("orchard_task_add", id="X.B", phase="PX", needs="X.A", globs="x/b")
+        alpha.tool("orchard_task_add", id="X.C", phase="PX", needs="X.B", globs="x/c")
+        loops, lcode = alpha.tool("orchard_loops")
+        found = json.loads(loops)
+        cyc = [f for f in found if f["kind"] == "dependency_cycle"]
+        sc.check("the cycle is detected", cyc, loops[:300])
+        sc.check(
+            "and is BLOCKING — nothing in the ring can ever start",
+            cyc[0]["severity"] == "block",
+            json.dumps(cyc[0]),
+        )
+        sc.check(
+            "the finding names the ring so it can be broken",
+            "->" in cyc[0]["detail"],
+            cyc[0]["detail"][:200],
+        )
+        nxt = alpha.jtool("orchard_next", phase="PX")
+        sc.check(
+            "and the scheduler offers none of the ring",
+            not nxt["ready"] and len(nxt["cycles"]) == 1,
+            json.dumps(nxt)[:300],
+        )
+        for t in ("X.A", "X.B", "X.C"):
+            alpha.tool("orchard_remove", id=t, reason="circular plan, rewritten")
+        alpha.tool("orchard_remove", id="PX", reason="circular plan, rewritten")
+
         sc.step("The whole project reconstructs from the log alone")
         _, _ = alpha.tool("orchard_board")
         replay = subprocess.run(
