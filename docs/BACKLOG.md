@@ -1229,3 +1229,80 @@ Not closed. Recorded so the runway is legible rather than rediscovered.
   (`status`, `doctor`, `progress`, `board`, `rebuild`, `cleanup`) is the natural next
   batch: no writes, and each already builds a JSON payload an `Outcome` can carry
   directly.
+
+## B118–B126 — roborev on the human-gate / dry-run / roborev-kind commit, 2026-09-25
+
+Nine findings on `137f362`, all applied. The theme again: **the new refusal shipped
+without updating the surfaces that TELL an agent what to do**, so the tool instructed
+the agent to run the command it would then refuse.
+
+- **B118. `approve` was the only gate-writing path with no existence check. ✅ CLOSED.**
+  Every sibling calls `_require_item`; `cmd_approve` went straight to `G.record`, and
+  `_h_gate` folds through `_item`, which CREATES an item for an unknown subject. So:
+
+      $ ddflow approve TYPO-NOT-REAL plan_approved --note "read it"
+      TYPO-NOT-REAL.plan_approved approved by delian — read it     # exit 0
+
+      items in projection: ['T1', 'TYPO-NOT-REAL']
+      T1 approved?       :            <- the one the operator meant
+      phantom approved?  : passed
+
+  A phantom task carrying a human approval, while the real item stayed unapproved — in
+  the one command whose entire value is that a person looked at a SPECIFIC thing.
+
+- **B119. Three surfaces still directed the agent to the refused commands. ✅ CLOSED.**
+  `gate_instruction.md` printed `ddflow gate record …` for a human gate (no branch on
+  kind); the `require_outcome` blocker suggested `gate run|record` and `gate skip`, all
+  three of which refuse; and `workflow.describe` computed `"command" if is_command_gate
+  else "agent"`, so `ddflow_workflow` — the tool an agent asks "what is the pipeline
+  here?" — reported it as an agent gate. The same mislabel fixed in `gates.verify` and
+  left in the three places an agent actually reads. `_gate_kind()` is now one
+  definition with four values.
+
+- **B120. The "impossible through the MCP surface" claim was FALSE. ✅ CLOSED.** Probed:
+  `ddflow_configure` with `set="gate.plan_approved.human", value="false"`, then
+  `ddflow_gate_record` — two calls, no shell, gate cleared. `Config.check` skips
+  `[gate.*]` as a foreign table and `human` is a real `GateDef` field, so the write
+  sailed through. Closed by refusing `gate.<id>.human` in `_write_config` (whether a
+  checkpoint belongs to the operator is not a configurable preference), AND the claim
+  is narrowed in all three places it appeared to what actually holds: *no MCP tool
+  records a human outcome*. The broad version was the overclaim this project keeps
+  catching in other people's docstrings.
+
+- **B121. The dry run was a second implementation of the write. ✅ CLOSED.** They had
+  already diverged: the TOML preview omitted the leading newline the write prepends,
+  and the JSON preview reported "WOULD add" over a file the write would REFUSE as
+  unparseable — signing the operator off on a change that could not happen, which is
+  the failure a preview exists to prevent. One decision now, both paths, and the JSON
+  preview shows the MERGED result rather than a lone entry.
+
+- **B122. `test_the_dry_run_preserves_an_existing_config_in_the_preview` never ran a
+  dry run. ✅ CLOSED.** It wrote a config, did a REAL add, and asserted the write
+  merged — while its docstring described the misleading-preview property it did not
+  check. The one test whose name covered that case passed regardless of the preview.
+  **Fifth vacuous test of this session, and the sixth docstring describing behaviour
+  the code did not have.** Now parametrised over both the JSON and TOML targets, plus
+  a case asserting a preview never promises a write that would be declined.
+
+- **B123. `gate verify` on a human gate returned FAIL. ✅ CLOSED.** The same commit
+  argued — correctly, in its own comment — that a human gate is a coordination refusal
+  and changed `gate record` to exit 3 for exactly that reason, then left `_gate_verify`
+  collapsing "there is nothing a mutation could demonstrate" into "this is broken". The
+  test asserted only the message, so the drift was unpinned.
+
+- **B124. The README sample contradicted the two sections around it. ✅ CLOSED.** It
+  still showed roborev as an unregistered MCP server offering `ddflow companions add
+  --id roborev`, a command that now exits 3, twenty lines above a table calling it
+  *(cli)*. Re-rendered from the cli branch, with `codeguide` taking over the
+  installed-but-not-wired-up example the paragraph goes on to explain.
+
+- **B125. Two backlog pointers resolved to the wrong entry. ✅ CLOSED.** The registry
+  header and a test both said `ddflow companions --verify` is "filed as B113"; it is
+  B114, and B113 is the roborev fix itself.
+
+- **B126. Test hygiene. ✅ CLOSED.** Leftover `print(..., file=stderr)` debugging firing
+  on every green run, and an assertion `"WOULD add" in text or "applied" in text` whose
+  second clause is in every `--json` payload and therefore could not fail.
+
+Mutation-verified: reverting the two behavioural guards (the item check and the config
+refusal) turns three of the new tests red.

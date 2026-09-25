@@ -96,12 +96,28 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # omitted with no trace. An explicit `gate skip --reason` is still an outcome, so
     # the escape hatch is the auditable one rather than the invisible one.
     if cfg.gates.require_outcome and s.silent:
-        v.blockers.append(
-            f"gate(s) never run and never skipped: {', '.join(s.silent)}. "
-            f"Record an outcome (`ddflow gate run|record`) or skip it on the record "
-            f"(`ddflow gate skip <id> <gate> --reason ...`); "
-            f"set [gates].require_outcome = false to make the pipeline advisory."
-        )
+        from . import gates as _G
+
+        gdefs = _G.load_gates(repo, cfg)
+        human = [g for g in s.silent if g in gdefs and gdefs[g].is_human_gate]
+        other = [g for g in s.silent if g not in human]
+        if other:
+            v.blockers.append(
+                f"gate(s) never run and never skipped: {', '.join(other)}. "
+                f"Record an outcome (`ddflow gate run|record`) or skip it on the record "
+                f"(`ddflow gate skip <id> <gate> --reason ...`); "
+                f"set [gates].require_outcome = false to make the pipeline advisory."
+            )
+        if human:
+            # Named separately, because all three commands the sentence above suggests
+            # REFUSE a human gate. Telling an agent to run them is telling it to
+            # collect an exit 3 and conclude something is broken.
+            v.blockers.append(
+                f"awaiting a person: {', '.join(human)}. Ask the operator to run "
+                f"`ddflow approve {item_id} {human[0]}` (or `--reject --reason ...`). "
+                f"You cannot record this one — `gate record` and `gate skip` both "
+                f"refuse it, and there is no MCP tool for it."
+            )
 
     inert = G.inert_requirements(cfg)
     if inert:

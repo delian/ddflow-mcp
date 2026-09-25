@@ -677,12 +677,19 @@ def _gate_verify(a, c: Ctx, st, it) -> int:
         # is True, so scoring on `results` alone turns each of those into a pass.
         "verified": bool(results) and not reason and all(r.ok for r in results),
     }
+    # A HUMAN gate is not unverifiable-because-broken: there is nothing a mutation
+    # could demonstrate about whether a person looked. That is a coordination refusal
+    # (3), the same vocabulary `gate record` uses for it — collapsing it into FAIL (1)
+    # is the drift this very change argued against two functions away.
+    human = a.gate in c.gates and c.gates[a.gate].is_human_gate
     if c.json:
         print(json.dumps(payload, indent=2))
-        return OK if payload["verified"] else FAIL
+        if payload["verified"]:
+            return OK
+        return REFUSED if human else FAIL
     if reason:
         print(reason, file=sys.stderr)
-        return FAIL
+        return REFUSED if human else FAIL
     for r in results:
         mark = "OK  " if r.ok else "FAIL"
         print(f"  {mark} {r.file}: {'detected' if r.detected else r.detail}")
@@ -884,6 +891,14 @@ def cmd_approve(a, c: Ctx) -> int:
     reason. A human checkpoint an agent can satisfy through the MCP surface is not a
     human checkpoint — it is a second `gate record` with a longer name.
     """
+    # `_require_item` FIRST, like every sibling. Without it `approve` was the one
+    # gate-writing path with no existence check: `_h_gate` folds through `_item`, which
+    # CREATES an item for an unknown subject, so a typo'd id printed "approved", exited
+    # 0, and materialised a phantom task carrying a human approval -- while the item the
+    # operator meant to approve stayed unapproved. That is the exact opposite of what
+    # this command is for.
+    if _require_item(c, a.id) is None:
+        return FAIL
     try:
         line = G.approve(
             c.log,
@@ -1782,9 +1797,7 @@ def cmd_loops(a, c: Ctx) -> int:
     if not out.data["findings"]:
         print(
             f"No loops detected ({out.data['events']} events, "
-            f"{out.data['items']} items).\nChecked: "
-            + ", ".join(out.data["checked"])
-            + "."
+            f"{out.data['items']} items).\nChecked: " + ", ".join(out.data["checked"]) + "."
         )
         return out.exit
     # Reconstructed from the dicts the Outcome already carries. Calling `PR.detect`
@@ -1794,8 +1807,7 @@ def cmd_loops(a, c: Ctx) -> int:
     for f in (PR.LoopFinding(**d) for d in out.data["findings"]):
         print(f"\n{f.render()}")
     print(
-        f"\n{out.reason}. Thresholds are [loops] knobs; "
-        f"`ddflow config --explain --filter loops`."
+        f"\n{out.reason}. Thresholds are [loops] knobs; `ddflow config --explain --filter loops`."
     )
     return out.exit
 
@@ -2195,6 +2207,22 @@ def _write_config(
     already broken could never be repaired by the tool that reports it broken.
     """
     import tomllib
+
+    # `gate.<id>.human` is not editable from here, and this is the one knob that is
+    # special. Everything else in this file is a preference; that flag decides whether
+    # a checkpoint belongs to the operator, and `ddflow_configure` is on the MCP
+    # surface. Two calls -- flip it false, then `ddflow_gate_record` -- cleared a human
+    # gate with no shell involved, which made the docstring claim that the ordinary
+    # path is closed simply untrue. Declaring the gate in `.ddflow/gates.toml` is the
+    # supported way, and that file is not writable from any tool.
+    blocked = [k for k, _v in pairs if k.startswith("gate.") and k.endswith(".human")]
+    if blocked:
+        return (
+            f"refusing to edit {', '.join(blocked)}: whether a gate is a human "
+            f"checkpoint is the operator's decision, not a configurable preference. "
+            f"Set `human` in .ddflow/gates.toml, which no tool writes.",
+            "",
+        )
 
     from ..services import workflow as WF
 

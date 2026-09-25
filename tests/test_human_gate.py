@@ -8,11 +8,14 @@ the compute is spent.
 
 **What this is, precisely.** An audit trail and a speed bump, not a security boundary.
 An agent with shell access can run `ddflow approve` itself, and nothing in this design
-changes that — the tool does not control the machine. What it guarantees is that the
-ordinary path is closed (there is no MCP tool, and `gate record` refuses), and that a
-clearance carries the OS user and a `human` flag, so a forged one is *visible* rather
-than indistinguishable from a real one. Claiming more than that would be the overclaim
-this project keeps finding in its own docstrings.
+changes that — the tool does not control the machine.
+
+The guarantee, as narrowly as it holds: no MCP tool records a human outcome, and a
+clearance carries the OS user and a `human` flag. The first version of this paragraph
+claimed the MCP surface could not satisfy the gate "at all", and roborev showed that
+false — `ddflow_configure` could flip `gate.<id>.human` off and `ddflow_gate_record`
+then cleared it, no shell involved. The config path is closed now, and the claim is
+narrow, because the broad one was the overclaim this project keeps catching elsewhere.
 
 *From `pimzino/spec-workflow-mcp`, whose per-phase human approval was the best idea in
 either rival server (R13). Their dashboard is declined and filed; the gate is the part
@@ -144,10 +147,6 @@ def test_no_mcp_tool_can_clear_a_human_gate(repo):
     # typo'd argument name. Asserted because it nearly did: an earlier version was
     # green under a mutation that disabled the refusal entirely, which means it was
     # measuring nothing.
-    import sys as _s
-
-    print("ATTEMPTED:", attempted, file=_s.stderr)
-    print("OUTCOME:", _outcome(repo), file=_s.stderr)
     assert any("plan_approved" in text for _n, text in attempted), (
         f"no call reached the gate at all, so the refusal was never exercised:\n{attempted}"
     )
@@ -283,3 +282,110 @@ def test_an_agent_cannot_SKIP_its_way_past_a_human_gate(repo):
     )
     assert code == REFUSED, f"an agent skipped a human gate: {code} {err}"
     assert _outcome(repo) != "skipped"
+
+
+# -- what roborev found on the first version ---------------------------------------------
+
+
+def test_approving_an_unknown_item_is_refused_and_creates_nothing(repo):
+    """`approve` was the only gate-writing path with no existence check.
+
+    `_h_gate` folds through `_item`, which CREATES an item for an unknown subject. So a
+    typo'd id printed "approved", exited 0, and materialised a phantom task carrying a
+    human approval — while the item the operator meant to approve stayed unapproved.
+    The one command whose entire value is that a person looked at a SPECIFIC thing.
+
+    *roborev on 137f362, CONFIRMED, reproduced before fixing.*
+    """
+    _setup(repo)
+    code, _out, err = run_cli(repo, "approve", "TYPO-NOT-REAL", "plan_approved", "--note", "x")
+    assert code == FAIL, f"approved a nonexistent item: {code}"
+    assert "TYPO-NOT-REAL" in err
+
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert "TYPO-NOT-REAL" not in st.items, f"a phantom item was created: {sorted(st.items)}"
+    assert _outcome(repo) != "passed", "the real item was left approved by the typo"
+
+
+def test_a_removed_item_cannot_be_approved(repo):
+    """`_require_item` exists because one hand-written copy of the check forgot
+    `removed`: the item still folds, so `.get()` finds it, and only the flag says it is
+    gone."""
+    _setup(repo)
+    run_cli(repo, "remove", "T1", "--reason", "not needed")
+    code, _out, _err = run_cli(repo, "approve", "T1", "plan_approved", "--note", "x")
+    assert code == FAIL
+
+
+def test_the_gate_instruction_tells_the_agent_to_ASK_not_to_record(repo):
+    """The refusal shipped without updating the surface that tells an agent what to do,
+    so `gate status` printed `ddflow gate record …` for a gate that refuses it —
+    instructing the agent to collect an exit 3 and conclude something is broken."""
+    _setup(repo)
+    _code, out, err = run_cli(repo, "gate", "status", "T1")
+    text = out + err
+    assert "ddflow approve T1 plan_approved" in text, text
+    assert "gate record T1 plan_approved --outcome passed" not in text, text
+
+
+def test_the_workflow_description_calls_it_a_human_gate(repo):
+    """`ddflow_workflow` is the tool an agent asks "what is the pipeline here?" — the
+    worst place to report a human gate as an agent gate, which is what it did."""
+    _setup(repo)
+    _code, out, _err = run_cli(repo, "workflow")
+    line = next(ln for ln in out.splitlines() if "plan_approved" in ln)
+    assert "human" in line, line
+    assert "agent" not in line, line
+
+
+def test_the_completion_blocker_names_approve_not_the_refused_commands(repo):
+    """The blocker for a silent gate suggested `gate run|record` and `gate skip` — all
+    three of which refuse a human gate."""
+    _setup(repo)
+    run_cli(repo, "claim", "T1", "--no-worktree")
+    _code, _out, err = run_cli(repo, "complete", "T1")
+    blocker = next(ln for ln in err.splitlines() if "plan_approved" in ln and "awaiting" in ln)
+    assert "ddflow approve T1 plan_approved" in blocker, blocker
+
+
+def test_the_human_flag_cannot_be_flipped_from_the_config_writer(repo):
+    """The claim that the MCP surface could not satisfy a human gate was FALSE: two
+    calls — `ddflow_configure` setting `gate.<id>.human = false`, then
+    `ddflow_gate_record` — cleared it with no shell involved.
+
+    Whether a checkpoint belongs to the operator is not a configurable preference.
+    """
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--append-toml", '[gate.plan_approved]\nhuman = true\nprompt = "p"')
+    run_cli(repo, "workflow", "pipeline", "task", "plan_approved,implement,merge")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+
+    srv = Server(repo)
+
+    def call(name, **args):
+        r = srv.handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": args},
+            }
+        )
+        return r["result"]["content"][0]["text"]
+
+    flip = call("ddflow_configure", set="gate.plan_approved.human", value="false")
+    assert "refusing" in flip.lower(), f"the flag was editable from MCP: {flip}"
+
+    call("ddflow_gate_record", id="T1", gate="plan_approved", outcome="passed", evidence="mine")
+    assert _outcome(repo) != "passed", "a human gate was cleared through two MCP calls"
+
+
+def test_gate_verify_on_a_human_gate_is_a_refusal_not_a_failure(repo):
+    """Same vocabulary `gate record` uses: nothing is broken, there is simply nothing a
+    mutation could demonstrate about whether a person looked. Collapsing it into FAIL
+    is the drift this feature argued against one function away."""
+    _setup(repo)
+    code, _out, _err = run_cli(repo, "gate", "verify", "T1", "plan_approved")
+    assert code == REFUSED, f"expected a coordination refusal, got {code}"

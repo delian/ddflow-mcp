@@ -97,17 +97,58 @@ def test_a_dry_run_says_so_when_nothing_would_change(repo):
 
 
 def test_the_dry_run_preserves_an_existing_config_in_the_preview(repo):
-    """The real write MERGES. If the preview showed a lone entry while the write merged
-    into a file holding the operator's other servers, the preview would be misleading
-    in the one way that matters."""
+    """The real write MERGES, so the preview must show the merged result.
+
+    The first version of this test never ran a dry run at all — it wrote a config, did
+    a REAL `companions add`, and asserted the write merged. Its docstring described the
+    misleading-preview property while the code checked the write, so the one test whose
+    name covered that case passed regardless of what the preview said. Found by roborev
+    on 137f362.
+    """
     _setup(repo)
     (repo / ".mcp.json").write_text(
         json.dumps({"mcpServers": {"mine": {"command": "keep-me"}}}, indent=2)
     )
+    _code, out, _err = run_cli(repo, "companions", "add", "--id", "fake", "--dry-run")
+    shown = json.loads(out[out.index("{") :])
+    assert "mine" in shown["mcpServers"], (
+        f"the preview shows a lone entry while the write would merge:\n{out}"
+    )
+    assert "fake" in shown["mcpServers"]
+
     run_cli(repo, "companions", "add", "--id", "fake")
     written = json.loads((repo / ".mcp.json").read_text())
-    assert "mine" in written["mcpServers"], "the real write dropped an existing server"
-    assert "fake" in written["mcpServers"]
+    assert written["mcpServers"] == shown["mcpServers"], (
+        "the operator approved one thing and got another"
+    )
+
+
+def test_a_preview_never_promises_a_write_that_would_be_declined(repo):
+    """An unparseable config makes the real write REFUSE. The preview used to report
+    "WOULD add" over it — signing the operator off on a change that cannot happen,
+    which is worse than showing them nothing."""
+    _setup(repo)
+    (repo / ".mcp.json").write_text("{ this is not json")
+    _code, out, err = run_cli(repo, "companions", "add", "--id", "fake", "--dry-run")
+    assert "WOULD add" not in (out + err), out + err
+    assert "not valid JSON" in (out + err)
+
+
+def test_the_preview_matches_the_write_for_a_TOML_target_too(repo):
+    """Parametrised over the second branch. `codex` writes `.codex/config.toml`, whose
+    preview was a copy-paste re-derivation and already differed from the write — no
+    test exercised it, because every other case here registers for `claude`."""
+    _setup(repo)
+    _code, out, err = run_cli(
+        repo, "companions", "add", "--id", "fake", "--agents", "codex", "--dry-run"
+    )
+    assert "config.toml" in out, out + err
+    assert not (repo / ".codex" / "config.toml").exists(), "the dry run wrote the file"
+
+    run_cli(repo, "companions", "add", "--id", "fake", "--agents", "codex")
+    written = (repo / ".codex" / "config.toml").read_text()
+    body = out[out.index("[mcp_servers") :].strip()
+    assert body in written, f"preview differs from the write:\npreview={body!r}\nwrote={written!r}"
 
 
 def test_the_mcp_tool_exposes_dry_run_and_says_to_use_it_first(repo):
@@ -142,5 +183,6 @@ def test_the_dry_run_reaches_the_tool_over_real_json_rpc(repo):
         }
     )
     text = reply["result"]["content"][0]["text"]
-    assert "WOULD add" in text or "applied" in text, text
+    # `"applied"` is in every --json payload, so the old `or` clause could not fail.
+    assert "WOULD add" in text, text
     assert not (repo / ".mcp.json").exists(), "a dry run over MCP wrote the config"

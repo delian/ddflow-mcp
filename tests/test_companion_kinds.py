@@ -418,7 +418,7 @@ def test_no_mcp_companion_launches_a_subcommand_its_probe_never_exercises(tmp_pa
     It stays narrow on purpose, and the general case is not mechanisable: nothing
     static can tell whether a binary speaks JSON-RPC. The registry header carries that
     instruction — LAUNCH it before marking it `mcp` — and `ddflow companions --verify`
-    is filed as B113 to do it for real.
+    is filed as B114 to do it for real.
     """
     for c in CO.load(tmp_path):
         if not c.is_mcp or not c.detect or c.detect[0] != c.command:

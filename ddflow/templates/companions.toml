@@ -23,7 +23,7 @@
 #               exist, so detection and launch were different code paths and only one
 #               was exercised. **Before marking anything `kind = "mcp"`, actually launch
 #               `command args` and confirm it speaks JSON-RPC.** There is no static
-#               check for this; `ddflow companions --verify` is filed as B113.
+#               check for this; `ddflow companions --verify` is filed as B114.
 #
 #               **Never `npx -y`.** The `-y` flag FETCHES AND INSTALLS the package in
 #               order to run it, so a detection probe would download software onto the

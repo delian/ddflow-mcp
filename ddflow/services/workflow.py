@@ -229,6 +229,16 @@ def check(cfg: Config, gates: dict[str, GateDef]) -> list[Finding]:
     return out
 
 
+def _gate_kind(g) -> str:
+    """`undefined` | `human` | `command` | `agent`. One definition, used by every
+    surface that names a gate's kind."""
+    if g is None:
+        return "undefined"
+    if g.is_human_gate:
+        return "human"
+    return "command" if g.is_command_gate else "agent"
+
+
 def describe(
     repo: Path,
     cfg: Config,
@@ -256,7 +266,11 @@ def describe(
         in_task = gid in cfg.gates.task_pipeline
         view = GateView(
             id=gid,
-            kind="undefined" if g is None else ("command" if g.is_command_gate else "agent"),
+            # THREE kinds. Reporting a human gate as "agent" told the reader its
+            # honesty rests on the evidence contract and that an agent may record it —
+            # both false, and `ddflow_workflow` is the tool an agent asks "what is the
+            # pipeline here?", so it is the worst place to be wrong.
+            kind=_gate_kind(g),
             in_task=in_task,
             in_phase=gid in cfg.gates.phase_pipeline,
             position=(cfg.gates.task_pipeline.index(gid) + 1) if in_task else 0,

@@ -90,11 +90,19 @@ class GateDef:
         **What this is, precisely.** An audit trail and a speed bump, NOT a security
         boundary. An agent with shell access can run `ddflow approve` itself, and no
         amount of design here changes that — the tool does not control the machine.
-        What it does guarantee is that satisfying the gate is (a) impossible through the
-        MCP surface at all, so the ordinary path is closed, and (b) recorded with the OS
-        user and a human flag, so a forged approval is visible in the log rather than
-        indistinguishable from a real one. Claiming more than that would be the exact
-        overclaim this project keeps finding in its own docstrings.
+
+        What it guarantees, stated as narrowly as it holds: **no MCP tool records a
+        human outcome.** `gate record` and `gate skip` refuse, and there is no approve
+        tool. An earlier version of this paragraph claimed satisfying the gate was
+        "impossible through the MCP surface at all", and that was FALSE: two calls —
+        `ddflow_configure` setting `gate.<id>.human = false`, then `ddflow_gate_record`
+        — cleared it with no shell involved. That path is now refused by `_write_config`
+        (the flag is not an editable preference), but the honest claim is the narrow one,
+        because the broad one was the kind of overclaim this project keeps catching in
+        its own docstrings and this docstring was no exception.
+
+        And (b): a clearance is recorded with the OS user and a `human` flag, so a
+        forged one is visible in the log rather than indistinguishable from a real one.
         """
         return self.human
 

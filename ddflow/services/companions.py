@@ -428,37 +428,26 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         raise ValueError(f"unknown agent {agent!r}; known: {', '.join(AGENT_TARGETS)}")
     _delta, rel = AGENT_TARGETS[agent]
     path = Path(repo) / rel
-    if dry_run:
-        # Everything the write would do, and NOTHING it would do: no mkdir, no file
-        # creation. A "dry run" that still creates a directory is a dry run that
-        # changed the machine.
-        if rel.endswith(".toml"):
-            text = path.read_text("utf-8") if path.exists() else ""
-            if f"[mcp_servers.{c.id}]" in text:
-                return f"{rel} already registers {c.id}; nothing would change"
-            body = (
-                f"[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\n"
-                f"args = {_toml(list(c.args))}\n"
-            )
-            if c.env:
-                body += f"env = {_toml(dict(c.env))}\n"
-        else:
-            if agent in registered_in(repo, c.id):
-                return f"{rel} already registers {c.id}; nothing would change"
-            body = json.dumps({_json_field(agent): {c.id: c.entry()}}, indent=2)
-        return f"WOULD add to {rel}:\n{body}"
-    path.parent.mkdir(parents=True, exist_ok=True)
 
+    # ONE decision, made once, for both paths. The dry run used to re-derive the entry
+    # by copy-paste, so the two already disagreed: the TOML preview omitted the leading
+    # newline the write prepends, and the JSON preview happily reported "WOULD add"
+    # over a file the write would REFUSE as unparseable -- an operator signing off on a
+    # change that could not happen, which is the failure the preview exists to prevent.
     if rel.endswith(".toml"):
         text = path.read_text("utf-8") if path.exists() else ""
         if f"[mcp_servers.{c.id}]" in text:
-            return f"{rel} already registers {c.id}"
+            return f"{rel} already registers {c.id}" + ("; nothing would change" if dry_run else "")
         block = (
             f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
         )
         if c.env:
             block += f"env = {_toml(dict(c.env))}\n"
-        path.write_text(text.rstrip() + "\n" + block if text.strip() else block.lstrip(), "utf-8")
+        new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
+        if dry_run:
+            return f"WOULD add to {rel}:\n{block.lstrip()}"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(new_text, "utf-8")
         return f"registered {c.id} in {rel}"
 
     data: dict = {}
@@ -466,8 +455,18 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         try:
             data = json.loads(path.read_text("utf-8") or "{}")
         except json.JSONDecodeError:
+            # Checked BEFORE the dry run reports, so a preview never promises a write
+            # that the real call would decline.
             return f"SKIPPED {rel}: it is not valid JSON; add {c.id} by hand"
+    if agent in registered_in(repo, c.id):
+        return f"{rel} already registers {c.id}" + ("; nothing would change" if dry_run else "")
     data.setdefault(_json_field(agent), {})[c.id] = c.entry()
+    if dry_run:
+        # The MERGED result, not a lone entry: the write merges into a file holding the
+        # operator's other servers, and a preview showing only the addition misleads in
+        # the one way that matters.
+        return f"WOULD add to {rel}:\n{json.dumps(data, indent=2)}"
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
     return f"registered {c.id} in {rel}"
 

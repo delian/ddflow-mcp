@@ -108,8 +108,12 @@ def loops(repo: Path) -> O.Outcome:
         "items": len(st.items),
         "blocking": [f for f in findings if f.get("severity") == "block"],
         "checked": [
-            "dependency cycles", "repeat claims", "gate flapping",
-            "reopened items", "duplicate work", "stalled queue",
+            "dependency cycles",
+            "repeat claims",
+            "gate flapping",
+            "reopened items",
+            "duplicate work",
+            "stalled queue",
         ],
     }
     if not findings:

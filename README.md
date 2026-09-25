@@ -493,10 +493,14 @@ Companion tools
   [x] context7   Current library documentation
        gates: research, standards
        registered for: claude, cursor
-  [+] roborev    Automated second-opinion code review
+  [x] roborev    Automated second-opinion code review
        gates: standards, bug_hunt, dedupe
-       installed (roborev 0.9.1) but no agent is configured to launch it.
-       -> ddflow companions add --id roborev
+       installed (roborev 0.9.1). A cli tool — the agent shells out to it, so
+       there is nothing to register.
+  [+] codeguide  Language and framework coding standards
+       gates: standards
+       installed (…) but no agent is configured to launch it.
+       -> ddflow companions add --id codeguide
   [ ] codeguide  Language and framework coding standards
        gates: standards
        not here: codeguide-mcp is not on PATH
@@ -1026,10 +1030,14 @@ refused too: *"the operator does not need to approve this"* is not the agent's c
 
 **What this is, precisely.** An audit trail and a speed bump, **not a security
 boundary.** An agent with shell access can run `ddflow approve` itself, and no design
-here changes that — the tool does not control the machine. What it guarantees is that
-the ordinary path is closed, and that a clearance carries the OS user and a `human`
-flag, so a forged approval is *visible in the log* rather than indistinguishable from a
-real one.
+here changes that — the tool does not control the machine.
+
+The guarantee, as narrowly as it holds: **no MCP tool records a human outcome**, and a
+clearance carries the OS user and a `human` flag, so a forged one is *visible in the
+log* rather than indistinguishable from a real one. (`gate.<id>.human` is also refused
+by the config writer, because two MCP calls — flip the flag, then record — used to
+clear the gate with no shell involved. Declare human gates in `.ddflow/gates.toml`,
+which no tool writes.)
 
 Opt-in: the shipped pipeline has no human gate, and a test keeps it that way.
 
