@@ -1,8 +1,12 @@
 """The layer rule, mechanised.
 
     surfaces/   argparse and JSON-RPC. No policy.
+    api.py      the application layer: one typed entry point per operation, for both
+                surfaces. Sits ABOVE services and BELOW surfaces, so a protocol adapter
+                never has to reach through a presentation layer to perform an
+                operation -- which is what `mcp -> cli` was, carried by argv strings.
     views/      one renderer per result kind.
-    services/   the application layer. Every operation returns an Outcome.
+    services/   the domain. Every operation returns an Outcome.
     infra/      disk, git, sqlite, subprocess, containers, TOML.
     core/       pure. No disk, no network, no subprocess.
     config.py   read by every layer; imports none of them.
@@ -37,7 +41,8 @@ ALLOWED: dict[str, set[str]] = {
     "infra": {"config", "core"},
     "views": {"config", "core", "infra", "services"},
     "services": {"config", "core", "infra", "views"},
-    "surfaces": {"config", "core", "infra", "services", "views"},
+    "api": {"config", "core", "infra", "services", "views"},
+    "surfaces": {"config", "core", "infra", "services", "views", "api"},
 }
 
 #: `services` and `views` are deliberately mutual: a service may render a markdown view
@@ -53,7 +58,9 @@ def _layer(path: Path) -> str:
         return rel.parts[0]
     # `__main__.py` IS an entry point — `python -m ddflow` — so it belongs with the
     # surfaces even though it sits at the top level next to `config.py`.
-    return "surfaces" if rel.name == "__main__.py" else "config"
+    if rel.name == "__main__.py":
+        return "surfaces"  # `python -m ddflow` IS an entry point
+    return "api" if rel.name == "api.py" else "config"
 
 
 def _modules() -> list[Path]:
@@ -174,11 +181,13 @@ def test_every_layer_is_declared():
 
 
 def test_no_module_is_left_at_the_top_level_by_accident():
-    """`config.py` is the only module outside a layer, and that is deliberate."""
+    """`config.py` and `api.py` are the only modules outside a directory, and both are
+    deliberate: config is read by every layer and imports none, and `api` IS a layer
+    that happens to be one file until it needs to be a package."""
     loose = sorted(
         p.name
         for p in PKG.glob("*.py")
-        if p.name not in ("__init__.py", "__main__.py", "config.py")
+        if p.name not in ("__init__.py", "__main__.py", "config.py", "api.py")
     )
     assert not loose, (
         f"{loose} sit outside every layer, so the rule above says nothing about them. "
@@ -229,3 +238,56 @@ def test_no_fold_handler_reads_the_child_index():
         f"the cache on every item mutation, or compute what the handler needs directly "
         f"from `st.items`."
     )
+
+
+# -- a module must not shadow its own name ----------------------------------------------
+
+
+def test_no_module_defines_the_same_top_level_name_twice():
+    """A second definition silently replaces the first, and every importer gets the
+    later one.
+
+    This shipped: a duplicate `GATE_OUTCOMES` 768 lines below the original, with
+    `started` added to it. Nothing failed — `--outcome`'s choices and the gate-outcome
+    validator simply started accepting `started`, which is an event kind and not an
+    outcome, so a caller could record a gate as having begun and never finished. The
+    whole suite stayed green, because no test asserts what is in that tuple.
+
+    Python will not warn, a linter treats it as a redefinition at most, and a reader
+    who greps finds the first one and stops. The only thing that catches it is asking.
+    """
+    import ast
+
+    offenders: list[str] = []
+    for path in sorted(PKG.rglob("*.py")):
+        tree = ast.parse(path.read_text("utf-8"))
+        seen: dict[str, int] = {}
+        for node in tree.body:  # top level only; a name inside a function is scoped
+            targets = []
+            if isinstance(node, ast.Assign):
+                targets = [t.id for t in node.targets if isinstance(t, ast.Name)]
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                targets = [node.target.id]
+            elif isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+                targets = [node.name]
+            for name in targets:
+                if name in seen and not name.startswith("_"):
+                    offenders.append(
+                        f"{path.relative_to(PKG)}:{node.lineno} redefines {name!r} "
+                        f"(first at line {seen[name]})"
+                    )
+                seen[name] = node.lineno
+    assert not offenders, "a module shadows its own name:\n  " + "\n  ".join(offenders)
+
+
+def test_the_recordable_gate_outcomes_are_exactly_the_five(repo):
+    """The specific thing the duplicate changed, pinned so a reword cannot.
+
+    `started` is an event kind, not an outcome. Accepting it as one lets a gate be
+    recorded as begun-and-never-finished, which reads as a settled outcome everywhere
+    that asks whether a gate has one.
+    """
+    from ddflow.core.model import GATE_OUTCOMES
+
+    assert set(GATE_OUTCOMES) == {"passed", "failed", "unavailable", "partial", "skipped"}
+    assert "started" not in GATE_OUTCOMES

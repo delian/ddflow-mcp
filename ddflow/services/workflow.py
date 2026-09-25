@@ -83,7 +83,16 @@ class WorkflowView:
     cadences: list[str] = field(default_factory=list)
     overridden_prompts: list[str] = field(default_factory=list)
     hook_installed: bool = False
+    #: How often recording a gate reached it before its predecessors had run, over how
+    #: many recordings. The evidence `enforce_order`'s default never had.
+    order_violations: int = 0
+    order_recordings: int = 0
     findings: list[Finding] = field(default_factory=list)
+
+    @property
+    def order_violation_rate(self) -> float | None:
+        """`None` when nothing has been recorded yet — which is not a rate of zero."""
+        return (self.order_violations / self.order_recordings) if self.order_recordings else None
 
     @property
     def problems(self) -> list[Finding]:
@@ -227,6 +236,7 @@ def describe(
     *,
     reviewers: list[Any] | None = None,
     cadences: list[str] | None = None,
+    state: Any = None,
 ) -> WorkflowView:
     """The rules in force here, joined into one answer."""
     v = WorkflowView(
@@ -277,6 +287,10 @@ def describe(
         v.overridden_prompts = sorted(p.stem for p in local.rglob("*.md"))
     hook = repo / ".git" / "hooks" / "pre-commit"
     v.hook_installed = hook.is_file()
+
+    for row in (getattr(state, "gate_order", {}) or {}).values():
+        v.order_violations += row.get("fired", 0)
+        v.order_recordings += row.get("recorded", 0)
 
     v.findings = check(cfg, gates)
     return v

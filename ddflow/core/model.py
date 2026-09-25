@@ -34,6 +34,14 @@ OPEN, RUNNING, BLOCKED, DONE, ABANDONED = "open", "running", "blocked", "done", 
 #: outcome imports from here. Previously this tuple existed and nothing referenced it,
 #: while five scattered literals did the real work -- so adding a sixth outcome meant
 #: finding all five. A dead constant that LOOKS canonical is worse than none at all.
+#: The outcomes a gate can be RECORDED with. `started` is deliberately absent: it is an
+#: event kind in the `gate.` namespace, not an outcome, and anything that accepts it as
+#: one lets a caller record a gate as having begun and never finished.
+#:
+#: `gate.` is a NAMESPACE, not a synonym for "an outcome was recorded" --
+#: `gate.out_of_order` lives there too and is neither. A consumer matching the PREFIX
+#: counted that as a gate run, which is how adding one event kind silently changed a
+#: metric two modules away.
 GATE_OUTCOMES: tuple[str, ...] = ("passed", "failed", "unavailable", "partial", "skipped")
 
 #: Outcome -> single-character mark, used by both the board and the gate status view.
@@ -190,6 +198,12 @@ class Decision:
     alternatives: str = ""  # what was rejected, and why
     globs: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    #: Where this decision came from: an ADR path, a URL, a commit sha. `Lesson` has
+    #: `seen_in` and `ResearchNote` has `sources`; a decision had only the prose
+    #: `context`, so the import's vanished-source check could cover items, lessons,
+    #: research and notes -- and not decisions. Parsing a path back out of a sentence
+    #: is the anti-pattern that check exists to replace, so the field is the fix.
+    sources: list[str] = field(default_factory=list)
     status: str = "accepted"  # proposed | accepted | superseded
     decided_by: str = ""  # operator | agent | a name
     supersedes: list[str] = field(default_factory=list)
@@ -251,6 +265,12 @@ class State:
     decisions: dict[str, Decision] = field(default_factory=dict)
     sessions: dict[str, Session] = field(default_factory=dict)
     cadences: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: gate id -> how many times recording it fired the pipeline-order check, and how
+    #: many times it was recorded at all. `enforce_order` has defaulted to "warn" since
+    #: it was written and nothing measured whether that warning is routine or rare --
+    #: so neither "make it block" nor "turn it off" could be argued, only asserted.
+    #: A rate needs a numerator AND a denominator; both are counted here.
+    gate_order: dict[str, dict[str, int]] = field(default_factory=dict)
     last_lamport: int = 0
     event_count: int = 0
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
@@ -538,6 +558,10 @@ def _h_state(new_state: str):
     return handler
 
 
+def _count_recording(st: State, gate: str) -> None:
+    st.gate_order.setdefault(gate, {"fired": 0, "recorded": 0})["recorded"] += 1
+
+
 def _h_gate(outcome: str):
     def handler(st: State, ev: Event) -> None:
         d = ev.data
@@ -547,6 +571,10 @@ def _h_gate(outcome: str):
             it.gates.setdefault(gate, GateRecord(gate=gate))
             it.gates[gate].at = ev.ts
         else:
+            # The denominator for the order-violation rate. `started` is excluded: it
+            # is not a recording, and counting it would deflate the rate by the number
+            # of command gates, which are the ones that emit it.
+            _count_recording(st, gate)
             it.gates[gate] = GateRecord(
                 gate=gate,
                 outcome=outcome,
@@ -639,6 +667,7 @@ def _h_decision(st: State, ev: Event) -> None:
         alternatives=d.get("alternatives", "") or (prev.alternatives if prev else ""),
         globs=list(d.get("globs", prev.globs if prev else [])),
         tags=list(d.get("tags", prev.tags if prev else [])),
+        sources=list(d.get("sources", prev.sources if prev else [])),
         status=d.get("status", "accepted"),
         decided_by=d.get("decided_by", "") or (prev.decided_by if prev else ""),
         supersedes=list(d.get("supersedes", prev.supersedes if prev else [])),
@@ -749,6 +778,18 @@ def _h_session_ended(st: State, ev: Event) -> None:
     _session(st, ev).ended_at = ev.ts
 
 
+def _h_gate_out_of_order(st: State, ev: Event) -> None:
+    """One recording that reached a gate before its predecessors had run.
+
+    Counted rather than merely printed, because `enforce_order`'s default is a
+    judgement nobody had evidence for. The denominator lives on the same record: a
+    count of violations without a count of recordings is a number that can be made to
+    say anything.
+    """
+    row = st.gate_order.setdefault(ev.data.get("gate", ev.subject), {"fired": 0, "recorded": 0})
+    row["fired"] += 1
+
+
 def _h_cadence(st: State, ev: Event) -> None:
     st.cadences.setdefault(ev.subject, []).append(
         {
@@ -780,10 +821,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.blocked": _h_state(BLOCKED),
     "item.completed": _h_state(DONE),
     "item.abandoned": _h_state(ABANDONED),
-    **{
-        f"gate.{o}": _h_gate(o)
-        for o in ("started", "passed", "failed", "unavailable", "partial", "skipped")
-    },
+    **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},
     "worktree.created": _h_worktree_created,
     "worktree.merged": _h_worktree_merged,
     "worktree.removed": _h_worktree_removed,
@@ -797,6 +835,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "session.prompt": _h_session_prompt,
     "session.note": _h_session_note,
     "session.ended": _h_session_ended,
+    "gate.out_of_order": _h_gate_out_of_order,
     "cadence.ran": _h_cadence,
     "log.compacted": _h_noop,
 }

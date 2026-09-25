@@ -343,6 +343,34 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
     )
 
 
+def stale_evidence(state: State, cfg: Config, item_id: str, cwd: Path) -> list[str]:
+    """Gates whose evidence describes a tree that has since changed.
+
+    The hazard B21 names, and the ordinary way it happens: run the tests, edit one more
+    thing, complete. The recorded pass is then true about source nobody is shipping —
+    and it is indistinguishable, in the log, from a pass about the code that shipped.
+
+    Only gates in `gates.evidence_required` are checked. The others legitimately record
+    before the work is finished: `implement` is *supposed* to precede the edits that
+    follow it, and flagging that would make this noise, which is how a real warning
+    stops being read.
+
+    Returns [] when the tree cannot be fingerprinted — a check that cannot run says so
+    by finding nothing, and `run_command_gate` records "" in exactly that case.
+    """
+    it = state.items.get(item_id)
+    now = tree_fingerprint(cwd)
+    if it is None or not now:
+        return []
+    stale = []
+    for gid in cfg.gates.evidence_required:
+        rec = it.gates.get(gid)
+        was = (rec.evidence or {}).get("tree_sha", "") if rec else ""
+        if rec and rec.outcome == "passed" and was and was != now:
+            stale.append(gid)
+    return sorted(stale)
+
+
 def inert_requirements(cfg: Config) -> list[str]:
     """Gates named in ``gates.required`` that no pipeline actually runs.
 
@@ -502,6 +530,28 @@ def verify(
     return results, ""
 
 
+def tree_fingerprint(cwd: Path) -> str:
+    """What the working tree looked like, committed and uncommitted.
+
+    `HEAD` alone is not enough -- the interesting state during a gate run is almost
+    always dirty -- so this is the commit plus a digest of `git status --porcelain`,
+    which moves when a tracked file is edited, staged, or an untracked one appears.
+
+    Not `write-tree`: that needs a clean index and would WRITE, and a function whose
+    job is to observe must not change what it observes. Outside a repository it returns
+    "" rather than raising, because a gate can legitimately run somewhere git does not
+    reach, and a missing fingerprint is honest where a fabricated one is not.
+    """
+    from ..infra import worktree as W
+
+    head = W.git(cwd, "rev-parse", "HEAD")
+    if not head.ok:
+        return ""
+    status = W.git(cwd, "status", "--porcelain")
+    dirt = digest(status.out) if status.ok and status.out.strip() else "clean"
+    return f"{head.out.strip()[:12]}+{dirt}"
+
+
 def digest(text: str) -> str:
     return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=8).hexdigest()
 
@@ -535,7 +585,13 @@ def run_command_gate(
             "command": gdef.command,
             "missing_executable": missing,
         }
-    full_env = {**os.environ, **gdef.env, **(env or {})}
+    # PYTHONDONTWRITEBYTECODE, before the gate's own env so an operator can still
+    # override it deliberately. CPython invalidates a `.pyc` on the source's mtime and
+    # SIZE -- and an agent editing in a loop produces same-second, same-size edits by
+    # accident, which leaves a stale cache that looks valid. The run AFTER a patch then
+    # executes the code from BEFORE it and reports a pass about source that is no
+    # longer there: the worst possible failure for a verification step.
+    full_env = {"PYTHONDONTWRITEBYTECODE": "1", **os.environ, **gdef.env, **(env or {})}
     start = time.time()
     try:
         p = P.run(
@@ -573,6 +629,11 @@ def run_command_gate(
         "output_digest": digest(out),
         "output_bytes": len(out),
         "tail": out[-2000:],
+        # WHICH tree this is evidence about. Without it "the tests passed" names
+        # nothing: a concurrent agent can move the tree underneath a running probe, and
+        # one agent editing between two gates makes the earlier gate's evidence describe
+        # source that no longer exists.
+        "tree_sha": tree_fingerprint(cwd),
     }
     return ("passed" if p.returncode == 0 else "failed"), ev
 

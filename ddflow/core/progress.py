@@ -37,7 +37,7 @@ from datetime import datetime
 from typing import Any
 
 from ..config import Config
-from ..core.model import ABANDONED, DONE, State
+from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, State
 from .events import Event
 
 #: Kinds that represent forward progress. Used by the no-progress detector: a window
@@ -192,7 +192,11 @@ def _absorb(ev: Event, rec, open_attempt: dict[str, Attempt]) -> None:
             att.ended_at = att.ended_at or _epoch(ev.ts)
             att.ended_by = "released" if kind.endswith("released") else "expired"
         rec(subj).last_touched = ev.ts
-    elif kind.startswith("gate."):
+    elif kind.startswith("gate.") and kind.split(".", 1)[1] in GATE_OUTCOMES:
+        # The membership test, not the prefix. `gate.` is a namespace and
+        # `gate.out_of_order` is in it without being an outcome; matching the prefix
+        # counted it as a gate run and inflated `gate_runs` for every item that ever
+        # recorded one early.
         outcome = kind.split(".", 1)[1]
         if outcome == "started":
             return

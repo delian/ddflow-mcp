@@ -4,8 +4,12 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
+
 from ddflow.core.model import fold
 from ddflow.services import gates as G
+
+OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
 @pytest.fixture
@@ -141,3 +145,97 @@ def test_gates_toml_wins_over_config_toml(repo, cfg):
     gates = G.load_gates(repo, cfg)
     assert gates["unit_tests"].command == "from-gates"
     assert gates["unit_tests"].timeout_s == 111, "the config.toml overlay was discarded"
+
+
+# -- B21: a probe is evidence about the tree it ran on ----------------------------------
+
+
+def _repo_with_a_command_gate(repo, command="python3 -c 'print(1)'"):
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "gates.toml").write_text(
+        f'[gate.unit_tests]\ncommand = "{command}"\ncwd = "repo"\n'
+    )
+
+
+def test_the_runner_forbids_bytecode_caching(repo):
+    """Same-second, same-size edits leave a valid-looking stale `.pyc`, so the run
+    AFTER a patch re-executes the code from BEFORE it — and reports a pass about source
+    that is no longer there. The interpreter's own cache invalidation is a timestamp
+    and a size, and an agent editing in a loop defeats both by accident."""
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    g = GateDef(
+        id="probe",
+        command="python3 -c \"import os; print(os.environ.get('PYTHONDONTWRITEBYTECODE'))\"",
+        cwd="repo",
+    )
+    _outcome, ev = run_command_gate(g, repo)
+    assert "1" in ev["tail"], f"PYTHONDONTWRITEBYTECODE not set for the gate: {ev['tail']!r}"
+
+
+def test_a_gate_result_records_which_tree_it_ran_on(repo):
+    """Evidence with no subject is an assertion. Two agents in two worktrees, or one
+    agent editing between gates, and 'the tests passed' stops naming what it passed on."""
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    _outcome, ev = run_command_gate(GateDef(id="probe", command="true", cwd="repo"), repo)
+    assert ev.get("tree_sha"), f"no tree_sha in the evidence: {sorted(ev)}"
+
+
+def test_the_tree_sha_changes_when_the_tree_does(repo):
+    """Otherwise it is a constant wearing a fingerprint's name."""
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    g = GateDef(id="probe", command="true", cwd="repo")
+    before = run_command_gate(g, repo)[1]["tree_sha"]
+    (repo / "new_file.py").write_text("x = 1\n")
+    after = run_command_gate(g, repo)[1]["tree_sha"]
+    assert before != after, "an untracked file appeared and the fingerprint did not move"
+
+
+def test_an_unchanged_tree_keeps_the_same_sha(repo):
+    """The other half: a fingerprint that changes every call identifies nothing."""
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    g = GateDef(id="probe", command="true", cwd="repo")
+    assert run_command_gate(g, repo)[1]["tree_sha"] == run_command_gate(g, repo)[1]["tree_sha"]
+
+
+def test_completing_warns_when_a_passing_gate_ran_on_a_different_tree(repo):
+    """The ordinary way it happens: run the tests, edit one more thing, complete.
+
+    The recorded pass is then true about source nobody is shipping — and in the log it
+    is indistinguishable from a pass about the code that shipped. A warning, not a
+    block: the evidence is real, and refusing on a comment-sized change is how a check
+    gets turned off.
+    """
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "true"\ncwd = "repo"\n'
+    )
+    run_cli(repo, "workflow", "pipeline", "task", "implement,unit_tests,merge")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1", "--no-worktree")
+    assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == OK
+    run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed")
+    run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")
+
+    (repo / "a.py").write_text("changed after the tests ran\n")
+    _code, _out, err = run_cli(repo, "complete", "T1")
+    assert "different tree" in err, err
+
+
+def test_it_stays_quiet_when_nothing_moved(repo):
+    """A warning that always fires is one nobody reads."""
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "true"\ncwd = "repo"\n'
+    )
+    run_cli(repo, "workflow", "pipeline", "task", "implement,unit_tests,merge")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1", "--no-worktree")
+    run_cli(repo, "gate", "run", "T1", "unit_tests")
+    run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed")
+    run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")
+    _code, _out, err = run_cli(repo, "complete", "T1")
+    assert "different tree" not in err, err

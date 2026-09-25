@@ -464,3 +464,43 @@ def test_a_vanished_lesson_or_research_source_is_named_too(repo):
     gone = {v["source"] for v in data["vanished_sources"]}
     assert "docs/lessons.md" in gone, gone
     assert "docs/RESEARCH.md" in gone, gone
+
+
+def test_a_vanished_DECISION_source_is_named_too(repo):
+    """B76, closed. Items, lessons, research and notes were covered; decisions were not,
+    because nothing on `Decision` held a path — only the prose `context`.
+
+    Parsing a path back out of a sentence is the anti-pattern this check exists to
+    replace, so the fix was the field, not a regex.
+    """
+    _imported(repo)
+    _code, data = _verify(repo)
+    assert data["imported"].get("decision"), data["imported"]
+
+    (repo / "docs" / "adr" / "0001-postgres.md").unlink()
+    _code, data = _verify(repo)
+    gone = {v["source"] for v in data["vanished_sources"]}
+    assert "docs/adr/0001-postgres.md" in gone, gone
+
+
+def test_a_hand_written_decision_can_carry_its_source(repo):
+    """Not only the importer's. An ADR path, a URL, a commit sha — the same field."""
+    run_cli(repo, "init")
+    assert (
+        run_cli(
+            repo,
+            "decision",
+            "add",
+            "--id",
+            "D1",
+            "--title",
+            "T",
+            "--decision",
+            "use X",
+            "--sources",
+            "docs/adr/0009-x.md",
+        )[0]
+        == OK
+    )
+    _code, out, _ = run_cli(repo, "--json", "decision", "show", "D1")
+    assert json.loads(out)["sources"] == ["docs/adr/0009-x.md"], out

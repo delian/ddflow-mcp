@@ -436,3 +436,64 @@ def test_concurrent_config_writes_do_not_lose_each_other(repo):
     text = (repo / ".ddflow" / "config.toml").read_text()
     missing = [k for k in keys if k.rsplit(".", 2)[1] not in text]
     assert not missing, f"{len(missing)} of {len(keys)} edits reported success and vanished"
+
+
+# -- B30: the fire rate the default never had --------------------------------------------
+
+
+def _pipeline_of(repo, *gates):
+    run_cli(repo, "init")
+    run_cli(repo, "workflow", "pipeline", "task", ",".join(gates))
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+
+
+def test_an_in_order_recording_counts_but_does_not_fire(repo):
+    """The denominator. A violation count with no recording count is a number that can
+    be made to say anything."""
+    _pipeline_of(repo, "implement", "unit_tests", "merge")
+    assert run_cli(repo, "gate", "record", "T1", "implement", "--outcome", "passed")[0] == OK
+    _code, out, _ = run_cli(repo, "--json", "workflow")
+    d = json.loads(out)
+    assert d["order_recordings"] == 1, d
+    assert d["order_violations"] == 0, d
+    assert d["order_violation_rate"] == 0.0
+
+
+def test_recording_a_gate_early_is_counted_not_only_printed(repo):
+    """`enforce_order` has defaulted to "warn" since it was written and nothing measured
+    whether that warning is routine or rare — so "make it block" and "turn it off" were
+    equally unarguable. Printing is not measuring."""
+    _pipeline_of(repo, "implement", "unit_tests", "merge")
+    assert run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")[0] == OK
+    _code, out, _ = run_cli(repo, "--json", "workflow")
+    d = json.loads(out)
+    assert d["order_violations"] == 1, d
+    assert d["order_recordings"] == 1, d
+    assert d["order_violation_rate"] == 1.0
+
+
+def test_the_rate_is_reported_beside_the_knob_it_argues_about(repo):
+    _pipeline_of(repo, "implement", "unit_tests", "merge")
+    run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")
+    _code, out, _ = run_cli(repo, "workflow")
+    line = next(ln for ln in out.splitlines() if "enforce_order" in ln)
+    assert "fired on 1 of 1" in line, line
+
+
+def test_no_recordings_is_not_a_rate_of_zero(repo):
+    """The empty-collection trap: 0/0 rendered as 0% reads as "this never fires", which
+    is the opposite of "nobody has tried yet"."""
+    _pipeline_of(repo, "implement", "merge")
+    _code, out, _ = run_cli(repo, "--json", "workflow")
+    assert json.loads(out)["order_violation_rate"] is None
+    _code, human, _ = run_cli(repo, "workflow")
+    assert "no gate recorded yet" in human
+
+
+def test_a_skip_out_of_order_is_counted_too(repo):
+    """A skip is a recording — it carries an outcome and moves the item. Counting only
+    `record` would undercount the thing being measured."""
+    _pipeline_of(repo, "implement", "unit_tests", "merge")
+    assert run_cli(repo, "gate", "skip", "T1", "merge", "--reason", "n/a")[0] == OK
+    _code, out, _ = run_cli(repo, "--json", "workflow")
+    assert json.loads(out)["order_violations"] == 1, out

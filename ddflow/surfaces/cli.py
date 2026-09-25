@@ -689,6 +689,16 @@ def cmd_gate(a, c: Ctx) -> int:
             return REFUSED
         print(f"NOTE: {note} Recording anyway ([gates].enforce_order = 'warn').", file=sys.stderr)
 
+    if skipped_ahead and c.cfg.gates.enforce_order != "off" and a.gate_cmd in ("record", "skip"):
+        # Recorded, not just printed. Whether "warn" should become "block" or "off" is
+        # a judgement about how often this fires, and for as long as it only ever
+        # printed, that judgement had no evidence behind it either way.
+        c.log.append(
+            "gate.out_of_order",
+            a.id,
+            {"gate": a.gate, "ahead": skipped_ahead, "policy": c.cfg.gates.enforce_order},
+        )
+
     if a.gate_cmd == "run":
         if not gdef.is_command_gate:
             print(
@@ -776,70 +786,27 @@ def cmd_gate(a, c: Ctx) -> int:
 def cmd_complete(a, c: Ctx) -> int:
     """Finish an item, refusing on an incomplete pipeline unless forced.
 
-    Every unmet condition is collected and reported TOGETHER. Reporting only the first
-    one turns a single refusal into a round-trip per problem, and an agent that has to
-    guess how many more are coming tends to reach for --force. A refusal is only
-    actionable if it is complete.
+    The rule-set itself lives in `services.completion` — it is domain policy, and
+    policy reachable only through `main(argv)` can only be tested by driving a
+    subprocess. This function does what a surface should: ask, render, exit.
     """
+    from ..services import completion as CM
+
     st = c.state()
     it = _require_item(c, a.id, st)
     if it is None:
         return FAIL
-    s = G.status(st, c.cfg, a.id)
-    s_status = s
-    required = set(c.cfg.gates.required)
-    blockers: list[str] = []
 
-    missing = [g for g in s.pipeline if g in required and it.gate_outcome(g) != "passed"]
-    if missing:
-        blockers.append(
-            f"required gate(s) not passed: {', '.join(missing)} "
-            f"(current outcome: "
-            + ", ".join(f"{g}={it.gate_outcome(g) or 'not run'}" for g in missing)
-            + ")"
-        )
-    # Applies to ANY item with work beneath it, not only to phases: a task split into
-    # sub-tasks is an umbrella too, and completing it while its children are open marks
-    # work finished that nobody has done. `abandoned` counts as settled alongside
-    # `done`, or an item you decided against holds its parent open forever.
-    open_children = st.open_descendants(a.id)
-    if open_children:
-        noun = "task(s) in this phase" if it.kind == "phase" else "sub-task(s)"
-        blockers.append(
-            f"{len(open_children)} {noun} unfinished: {', '.join(k.id for k in open_children[:8])}"
-        )
-    # Silence is not a pass. Without this, an agent could complete a task having
-    # recorded implement/unit_tests/merge and never once touched research, the
-    # rubber-duck, the critic, the standards pass, the bug hunt or the dedupe check —
-    # six of the ten steps the pipeline exists to impose, omitted with no trace. An
-    # explicit `gate skip --reason` is still an outcome, so the escape hatch is the
-    # auditable one rather than the invisible one.
-    if c.cfg.gates.require_outcome and s.silent:
-        blockers.append(
-            f"gate(s) never run and never skipped: {', '.join(s.silent)}. "
-            f"Record an outcome (`ddflow gate run|record`) or skip it on the record "
-            f"(`ddflow gate skip <id> <gate> --reason ...`); "
-            f"set [gates].require_outcome = false to make the pipeline advisory."
-        )
-    inert = G.inert_requirements(c.cfg)
-    if inert:
-        blockers.append(
-            f"[gates].required names {', '.join(inert)}, which no pipeline runs — "
-            f"so that requirement enforces nothing. Add it to task_pipeline or "
-            f"phase_pipeline, or drop it from required."
-        )
-    if c.cfg.gates.unavailable_is_failure and s.unavailable:
-        blockers.append(
-            f"gate(s) could not run: {', '.join(s.unavailable)} "
-            f"([gates].unavailable_is_failure is on, so a gap blocks like a failure)"
-        )
-    ok, why = G.reviewer_independence(st, c.cfg, a.id, a.model or "")
-    if c.cfg.agent.reviewer_family_must_differ and not ok and it.kind == "task":
-        blockers.append(f"reviewer independence not satisfied: {why}")
+    v = CM.verdict(st, c.cfg, a.id, repo=c.repo, model=a.model or "")
+    for warning in v.warnings:
+        print(f"NOTE: {warning}", file=sys.stderr)
 
-    if blockers and not a.force:
-        print(f"cannot complete {a.id} — {len(blockers)} unmet condition(s):", file=sys.stderr)
-        for b in blockers:
+    if not v.may_complete and not a.force:
+        print(
+            f"cannot complete {a.id} — {len(v.blockers)} unmet condition(s):",
+            file=sys.stderr,
+        )
+        for b in v.blockers:
             print(f"  - {b}", file=sys.stderr)
         print(
             f"\n`ddflow gate status {a.id}` shows the pipeline. --force overrides, "
@@ -847,42 +814,37 @@ def cmd_complete(a, c: Ctx) -> int:
             file=sys.stderr,
         )
         return REFUSED
-    # The coverage gap must reach BOTH surfaces. It used to print only in human mode,
-    # so an agent driving over MCP -- which is always JSON -- completed an item and was
-    # never told that a gate had not run. The one fact most worth surfacing was
-    # invisible on precisely the surface that needed it.
-    gap_note = ""
-    if s.unavailable:
-        gap_note = (
-            f"{', '.join(s.unavailable)} never ran — recorded as a coverage gap, not as a pass."
-        )
-        if not c.json:
-            print(f"NOTE: {gap_note}")
+
+    if v.coverage_note and not c.json:
+        print(f"NOTE: {v.coverage_note}")
+
+    forced = bool(v.blockers and a.force)
     c.log.append(
         "item.completed",
         a.id,
         {
             "sha": a.sha or "",
             "kind": it.kind,
-            "forced": bool(blockers and a.force),
-            "overridden": blockers if a.force else [],
+            "forced": forced,
+            "overridden": v.blockers if a.force else [],
         },
     )
     L.release(c.log, a.id, note="completed")
     c.out(
         f"{a.id} completed"
         + (f" as {a.sha}" if a.sha else "")
-        + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else ""),
+        + (f" [FORCED over {len(v.blockers)} unmet condition(s)]" if v.blockers else ""),
         {
             "id": a.id,
             "sha": a.sha or "",
-            "independence": why,
-            "forced": bool(blockers and a.force),
-            # The coverage gap must reach BOTH surfaces: it used to print only in human
-            # mode, so an agent over MCP -- which is always JSON -- completed the item
-            # and was never told a gate had not run.
-            "coverage_gaps": s_status.unavailable,
-            "note": gap_note,
+            "independence": v.independence,
+            "forced": forced,
+            # Both surfaces, always. This used to print only in human mode, so an agent
+            # over MCP -- which is always JSON -- completed the item and was never told
+            # a gate had not run: the one fact most worth surfacing, invisible on
+            # precisely the surface that needed it.
+            "coverage_gaps": v.coverage_gaps,
+            "note": v.coverage_note,
         },
     )
     return OK
@@ -1239,6 +1201,7 @@ def _decision_add(a, c: Ctx, st) -> int:
             "alternatives": a.alternatives or "",
             "globs": _csv(a.globs),
             "tags": _csv(a.tags),
+            "sources": _csv(a.sources),
             "status": a.status,
             "decided_by": a.by or "",
             "item": a.item or "",
@@ -2197,7 +2160,7 @@ def _workflow_view(c: Ctx):
         reviewers = load_reviewers(c.repo)
     except Exception:
         reviewers = []
-    return WF.describe(c.repo, c.cfg, c.gates, reviewers=reviewers)
+    return WF.describe(c.repo, c.cfg, c.gates, reviewers=reviewers, state=c.state())
 
 
 def _render_workflow(v) -> str:
@@ -2234,7 +2197,16 @@ def _render_workflow(v) -> str:
     out.append("## The rules, and where each came from")
     out.append("")
     for key, (value, source) in v.rules.items():
-        out.append(f"  {key:<38} {value!s:<28} [{source}]")
+        line = f"  {key:<38} {value!s:<28} [{source}]"
+        if key == "gates.enforce_order":
+            rate = v.order_violation_rate
+            line += (
+                "  — no gate recorded yet"
+                if rate is None
+                else f"  — fired on {v.order_violations} of {v.order_recordings} "
+                f"recording(s), {rate:.0%}"
+            )
+        out.append(line)
     out.append("")
     if v.reviewers:
         out.append("## Reviewers")
@@ -2278,6 +2250,9 @@ def _workflow_show(a, c: Ctx) -> int:
         "reviewers": v.reviewers,
         "overridden_prompts": v.overridden_prompts,
         "hook_installed": v.hook_installed,
+        "order_violations": v.order_violations,
+        "order_recordings": v.order_recordings,
+        "order_violation_rate": v.order_violation_rate,
         "findings": [_plain(f) for f in v.findings],
         "coherent": not v.problems,
     }
@@ -3716,6 +3691,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="the code this governs; without it the decision can only be found by search",
     )
     dca.add_argument("--tags", default="")
+    dca.add_argument(
+        "--sources",
+        default="",
+        help="where this came from: an ADR path, a URL, a commit sha (comma-separated)",
+    )
     dca.add_argument("--item", default="")
     dca.add_argument("--by", default="", help="operator | agent | a name")
     dca.add_argument("--status", default="accepted", choices=["proposed", "accepted", "superseded"])

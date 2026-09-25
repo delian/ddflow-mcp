@@ -1187,14 +1187,16 @@ def _note_sources(state, r: VerifyReport, paths: dict[str, list[str]]) -> None:
 def _memory_sources(state, paths: dict[str, list[str]]) -> None:
     """Source files named by imported lessons and research notes.
 
-    Both carry a STRUCTURED source -- `Lesson.seen_in`, `ResearchNote.sources` -- so
-    there is no reason for the vanished-source check to cover items only. Decisions are
-    the gap: nothing on `Decision` holds a path, so theirs lives in the prose `context`
-    and is deliberately not parsed out of it (docs/BACKLOG.md B76).
+    All three carry a STRUCTURED source -- `Lesson.seen_in`, `ResearchNote.sources`,
+    `Decision.sources` -- so there is no reason for the vanished-source check to cover
+    items only. Decisions were the gap until `Decision.sources` existed: theirs lived
+    in the prose `context`, and parsing a path back out of a sentence is the
+    anti-pattern this whole check exists to replace.
     """
     for holder, attr in (
         (getattr(state, "lessons", {}), "seen_in"),
         (getattr(state, "research", {}), "sources"),
+        (getattr(state, "decisions", {}), "sources"),
     ):
         for rec in holder.values():
             if "imported" not in getattr(rec, "tags", []):
@@ -1322,6 +1324,7 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
                 "status": f.extra.get("status", "accepted"),
                 "context": f"Imported from {f.source}.",
                 "tags": ["imported"],
+                "sources": [f.source],
             },
         )
         bump("decision")

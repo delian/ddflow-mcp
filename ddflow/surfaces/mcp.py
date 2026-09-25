@@ -713,6 +713,13 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "standing rather than presenting it as settled.",
                 False,
             ),
+            "sources": (
+                "string",
+                "Where this came from: an ADR path, a URL, a commit sha. "
+                "Comma-separated. Structured, so a later audit can check the source "
+                "still exists rather than parsing it out of the prose.",
+                False,
+            ),
         },
         "argv": lambda a: [
             "--json",
@@ -730,7 +737,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             *_opt("--by", a),
             *_opt("--supersedes", a),
             *_opt("--item", a),
-            *_opt("--tags", a),
+            *_opt("--tags", a) + _opt("--sources", a),
             *_opt("--status", a),
         ],
     },
@@ -1363,6 +1370,19 @@ TOOLS: dict[str, dict[str, Any]] = {
             *_opt("--body", a),
             *_opt("--priority", a),
         ],
+        # Typed: `None` means leave alone and `[]` means clear, which is what
+        # `_opt(clearable=True)` existed to rebuild after argv flattened both to
+        # an empty string. Here the distinction is simply the values themselves.
+        "api": lambda repo, a: _api().update(
+            repo,
+            a["id"],
+            title=a.get("title"),
+            body=a.get("body"),
+            needs=_list_or_none(a, "needs"),
+            globs=_list_or_none(a, "globs"),
+            tags=_list_or_none(a, "tags"),
+            priority=a.get("priority"),
+        ),
     },
     "ddflow_abandon": {
         "description": (
@@ -1492,6 +1512,44 @@ def _schema(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _api():
+    """Imported lazily: `surfaces` may reach `api`, and doing it at call time keeps the
+    module import graph flat for anything that only wants the tool table."""
+    from .. import api
+
+    return api
+
+
+def _list_or_none(args: dict[str, Any], key: str) -> list[str] | None:
+    """`None` when absent, a list when supplied — INCLUDING the empty one.
+
+    The whole point of the typed path. `""` supplied deliberately means "clear this
+    field", and over argv that was indistinguishable from not supplying it at all: over
+    MCP a dependency could be added and never removed, which is exactly the operation
+    the loop detector tells you to perform.
+    """
+    if key not in args or args[key] is None:
+        return None
+    from ..config import csv_list
+
+    return csv_list(args[key]) if isinstance(args[key], str) else list(args[key])
+
+
+def _outcome_result(out: Any) -> dict[str, Any]:
+    """An `Outcome` as an MCP tool result: JSON body, `isError` only for a real failure.
+
+    Exit 2 ("nothing to do") and 3 ("coordination refused") are RESULTS the model must
+    read and act on, exactly as on the string path. Only 1 is a failure. The reason,
+    when there is one, leads the body: a caller that reads the first line has the
+    actionable part, which is what the spec means by feedback a model can self-correct
+    from.
+    """
+    body = json.dumps(out.data, indent=2, default=str)
+    if out.reason:
+        body = f"{out.reason}\n\n{body}"
+    return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
+
+
 def _run_cli(repo: Path, argv: list[str]) -> tuple[int, str]:
     """Invoke the CLI in-process, capturing both streams.
 
@@ -1596,6 +1654,17 @@ class Server:
                         error=True,
                     ),
                 )
+            # The typed path, when this tool has one. No argv, no re-parsing, no
+            # scraping stdout, and no swapping process-global streams -- which is what
+            # made the string path non-reentrant. `api` is where a protocol adapter
+            # belongs: above the domain, beside the other surface, not THROUGH it.
+            if "api" in spec:
+                try:
+                    result = spec["api"](self.repo, args)
+                except (KeyError, TypeError, ValueError) as exc:
+                    return _ok(mid, _text(f"bad arguments: {exc}", error=True))
+                return _ok(mid, _outcome_result(result))
+
             try:
                 argv = spec["argv"](args)
             except (KeyError, TypeError) as exc:
