@@ -37,7 +37,29 @@ def _typed() -> list[str]:
 
 
 def _argv_only() -> list[str]:
-    return sorted(n for n, s in TOOLS.items() if "api" not in s)
+    """Tools that actually flatten to argv — keyed on the `argv` entry, NOT on the
+    absence of `api`.
+
+    The difference is not cosmetic. A third dispatch kind exists (`identify`, which
+    mutates the connection and calls neither layer), and "not typed" counted it as a
+    string-path tool — which would have forced the ceiling UP to admit a tool that does
+    not use the string path at all. A ratchet you raise to accommodate something it was
+    never measuring has stopped measuring anything.
+    """
+    return sorted(n for n, s in TOOLS.items() if "argv" in s)
+
+
+def test_every_tool_has_exactly_one_dispatch_mechanism():
+    """The guard that makes the count above meaningful.
+
+    With three kinds and no check, a tool carrying neither key is silently unreachable
+    -- its call falls through every branch -- and one carrying two is dispatched by
+    whichever branch is tested first. NEITHER is visible to a ratchet counting one key.
+    """
+    kinds = ("api", "argv", "identify")
+    for name, spec in TOOLS.items():
+        have = [k for k in kinds if k in spec]
+        assert len(have) == 1, f"{name} declares {have or 'no'} dispatch; exactly one is required"
 
 
 def test_the_string_path_only_ever_shrinks():
@@ -131,7 +153,7 @@ def test_the_dispatcher_actually_uses_the_typed_path(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
 
-    def boom(_repo, _args):
+    def boom(_repo, _args, _agent):
         raise ValueError("the typed path was taken")
 
     original = TOOLS["ddflow_update"]["api"]

@@ -75,6 +75,17 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
         "imported and switches to finishing and refreshing it rather than repeating it.",
         ["scope"],
     ),
+    "research-companions": (
+        "Research MCP servers worth enabling for this project's stack",
+        "The shipped registry covers the gates every project shares. It cannot know "
+        "your stack. This walks the agent from the pipeline's UNCOVERED gates, through "
+        "the repository's actual manifests, to candidate servers checked against their "
+        "primary sources -- provenance, maintenance, what they execute and what "
+        "credential they want -- and produces `[[companion]]` blocks the operator can "
+        "read and delete. Proposes only; installs nothing. A decline is part of the "
+        "report, so the next session does not re-research it.",
+        ["scope"],
+    ),
     "bug-hunt": (
         "Hunt and fix bugs",
         "Bounded bug hunt under the empirical-repro rule: a finding may not change "

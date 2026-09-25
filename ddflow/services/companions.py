@@ -41,6 +41,21 @@ from .adopt import AGENT_TARGETS
 #: time. Bounded so `ddflow companions` cannot hang a session start.
 DETECT_TIMEOUT_S = 20
 
+#: What a companion IS, which decides what `companions add` can do with it.
+#:
+#: * ``mcp`` — an MCP server. Registering it writes a launch entry into an agent's MCP
+#:   config, and the agent then has its tools.
+#: * ``cli`` — a command-line tool the agent SHELLS OUT to. There is no MCP config
+#:   entry to write, so `companions add` has nothing to do and says so instead of
+#:   pretending.
+#:
+#: The distinction is not pedantry. `entry()` would happily build a plausible-looking
+#: MCP block for any command, an agent would launch it, and it would fail the JSON-RPC
+#: handshake at the moment a gate reached for it — a registration that reads as done
+#: and is not, which is the vacuous-pass class in config form. OptMem is the live
+#: example: real tool, recommended on purpose, and not an MCP server.
+KINDS: tuple[str, ...] = ("mcp", "cli")
+
 
 @dataclass
 class Companion:
@@ -55,9 +70,26 @@ class Companion:
     install: str = ""
     url: str = ""
     default: bool = False
+    #: ``mcp`` (default) or ``cli`` — see :data:`KINDS`. Defaulting to ``mcp`` keeps
+    #: every existing registry entry and every project override working unchanged.
+    kind: str = "mcp"
+
+    @property
+    def is_mcp(self) -> bool:
+        return self.kind == "mcp"
 
     def entry(self) -> dict:
-        """The MCP config entry an agent launches this server with."""
+        """The MCP config entry an agent launches this server with.
+
+        Refuses for a non-MCP companion rather than returning a block that would be
+        written into a config and fail on first launch.
+        """
+        if not self.is_mcp:
+            raise ValueError(
+                f"{self.id!r} is a {self.kind} companion, not an MCP server; "
+                f"it has no MCP config entry. Install it ({self.install!r}) and "
+                f"ddflow will detect it."
+            )
         e: dict = {"command": self.command, "args": list(self.args)}
         if self.env:
             e["env"] = dict(self.env)
@@ -103,6 +135,13 @@ def load(repo: Path) -> list[Companion]:
     shipped = paths.templates_dir() / "companions.toml"
     sources = [shipped, *tomlcfg.config_paths(repo, "companions.toml")]
     for cid, spec in tomlcfg.overlay_array(sources, "companion", Companion, key="id").items():
+        # The loader rejects an unknown FIELD; it cannot know that `kind` has a closed
+        # vocabulary. An unvalidated `kind = "MCP"` would be neither "mcp" nor "cli",
+        # so `is_mcp` is False and the companion silently stops being registrable --
+        # a typo that turns into "nothing to register" with no error anywhere.
+        kind = spec.get("kind", "mcp")
+        if kind not in KINDS:
+            raise ValueError(f"companion {cid!r}: kind = {kind!r} is not one of {', '.join(KINDS)}")
         out[cid] = Companion(**spec)
     return list(out.values())
 
@@ -330,10 +369,24 @@ def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> di
 
     The empty lists are the interesting ones: a gate in your pipeline with no server
     behind it is a gate whose outcome is one model's unaided assertion.
+
+    "Usable here" means a different thing for the two kinds, and reading it as one
+    thing is a bug that hides:
+
+    * an **mcp** companion is usable once an agent is configured to LAUNCH it. Installed
+      but unregistered is one command away from usable, and is not usable yet.
+    * a **cli** companion is usable once it is INSTALLED. There is nothing to register,
+      so judging it by `registered` reports its gate as having nothing behind it while
+      the tool sits on the PATH — the report contradicting the line above it.
+
+    Neither counts on `installed is None`. A probe that could not run leaves the tool
+    exactly as unknown as before we asked, and counting it would be the
+    unavailable-as-success class inside the very report that exists to expose it.
     """
     cover: dict[str, list[str]] = {g: [] for g in pipeline}
     for st in statuses:
-        if st.state != "registered":
+        usable = st.state == "registered" if st.companion.is_mcp else st.installed is True
+        if not usable:
             continue
         for g in st.companion.gates:
             if g in cover:

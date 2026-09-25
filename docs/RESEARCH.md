@@ -903,3 +903,104 @@ result (B75).
 but "what is the mechanism *worth*". The answer was a single MUST-level sentence saying
 not to trust it, and reading it turned a two-line change (declare the annotation) into
 the correct one (validate server-side, describe the risk, offer a dry run).
+
+## R13 — Multi-agent identity, load behaviour, and two rival workflow MCPs (2026-09-25)
+
+**Budget declared up front:** ≤90 min total, ≤1 machine-hour, no GPU. Two strands
+(rival-server reading, local concurrency audit) fanned out in parallel; synthesis and
+every probe in one context.
+
+### Claim 1 — "Several agents sharing one repository are distinguishable." REFUTED
+
+*Mechanism.* Identity would come from the agent, so events could be attributed.
+*Falsifier.* Two connections in one tree writing under one identity.
+*Minimal decisive test.* Two `Server` objects on one repo, claim two items, read the
+lease holders.
+
+Run against the pre-fix code path (the `--agent` threading reverted), two `Server`
+objects on one repo, each declaring a distinct name, each claiming one item:
+
+```
+$ python - <<'EOF'   # two Servers, identify as agent-a / agent-b, claim T1 / T2, fold
+holders: {'T1': 'Monster3-ddf-ident', 'T2': 'Monster3-ddf-ident'}
+EOF
+```
+
+Both claims landed under the tree-derived identity; the declared names went nowhere. With
+the fix restored the same script prints `{'T1': 'agent-a', 'T2': 'agent-b'}`.
+
+`ddflow/infra/log.py:96` already documented the
+cause — *"a harness running several agents inside ONE tree must set [`DDFLOW_AGENT`] —
+there is no signal that can distinguish them otherwise"* — and over MCP there was no way
+to set it, because the env var is process-wide and the process is shared with nothing
+that varies per connection. **REFUTED**, and the consequence is not cosmetic: reviewer
+independence compares `agent != author`, so two subagents in one tree satisfy the review
+gate by reviewing their own work. Fixed in B80 via `ddflow_identify`; mutation-verified
+(dropping the threading turns three tests red).
+
+### Claim 2 — "The fold is fast enough to re-run on every call." CONFIRMED
+
+*Mechanism.* `Ctx.state()` is `fold(read_all())` with no snapshot, so cost is O(events)
+per call; the question is the constant.
+*Falsifier.* Superlinear growth, or a constant large enough to matter at realistic sizes.
+
+```
+  events  read_all ms    fold ms   total ms   us/event
+     500          8.3        3.1       11.5       22.9
+    2000         24.6        8.1       32.6       16.3
+    5000         32.8       13.2       46.0        9.2
+   10000         63.4       25.8       89.2        8.9
+   20000        123.7       51.0      174.7        8.7
+```
+
+Clean linear, converging on **~8.7 µs/event**. 20,000 events — beyond what this
+project's own 400-day corpus produced — costs ~175 ms per state-reading call.
+**CONFIRMED** for realistic sizes; ~100k events would be ~0.9 s, which is where B86
+starts to matter. Note the in-test figure of 212 µs/event at 200 events measures fixed
+per-call overhead (server construction, config load, arg parsing), not the fold — a
+reminder that a per-unit number taken at a small N mostly measures the constant.
+
+### Claim 3 — "Concurrent agents can deadlock or lose appends." REFUTED under test
+
+*Mechanism.* `EventLog.append` takes an exclusive `flock` and `flock` is per
+open-file-description, so a lock taken twice in one process blocks against itself.
+*Falsifier.* 12 concurrent agents completing with every event present and correctly
+attributed.
+
+12 agents × 15 writes through real JSON-RPC: 180/180 events present, zero repeated
+Lamport values within an agent, zero misattributed events, readers never starved by
+writers, and a read-modify-write loop under contention lost nothing. **REFUTED** (the
+failure did not reproduce) — and the point of `tests/test_mcp_load.py` is that it stays
+refuted. Per-agent shards are why: writers do not contend for a file, and the lock is
+held only to allocate a clock value, never across a full read.
+
+### Strand 2 — two existing workflow MCP servers
+
+Sources opened: `https://mcpmarket.com/server/workflows-2` →
+`https://raw.githubusercontent.com/dx-zero/mcpn/main/README.md`;
+`https://raw.githubusercontent.com/pimzino/spec-workflow-mcp/main/README.md` and its
+`docs/TOOLS-REFERENCE.md` (13 tools). The GitHub HTML pages rendered only file trees;
+every substantive claim below comes from the raw files above.
+
+**Adopting (filed, not built):** a human-approval gate with a review surface (B82);
+named parameterised prompt macros with a bound tool subset (B83); a diff statistic on
+gate evidence (B84).
+
+**Declining, with the reason, so this is not re-researched:**
+
+- **`toolMode: situational`** (mcpn) — the model picks freely from a bound tool set with
+  no recorded ordering or rationale. That is strictly less reproducible than a gate
+  pipeline whose every outcome is an event. Declined.
+- **An un-enumerated tool surface** (mcpn) — everything is YAML-defined and dispatched
+  through a generic wrapper, so there is no fixed tool list to parity-test. Fine for a
+  personal prompt library; incompatible with the CLI/MCP parity discipline here.
+- **A hard-sequenced Requirements→Design→Tasks phase order** (spec-workflow) — a good
+  default, but this project's per-kind pipeline with explicit skip-with-reason is
+  already the more flexible shape. Declined as a hard-coded order.
+- **Steering docs** — mostly covered by the existing doc import plus project config.
+  Declined as a separate concept.
+
+**Verifier separate from searcher:** the strand-2 subagent reported the feature list;
+the claims above were re-checked against the raw sources before being written down, and
+the one thing it could not establish (mcpn's actual MCP tool names, as opposed to its
+workflow names) is recorded here as unestablished rather than filled in.

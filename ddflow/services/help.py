@@ -51,7 +51,14 @@ TOPICS: dict[str, str] = {
 #: capability therefore has to be CLASSIFIED, instead of quietly vanishing from the
 #: inventory that is supposed to be complete.
 _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Setting up", ("setup", "configure", "companions", "hooks", "prompts", "adopt")),
+    # `identify` is here rather than under "Doing the work" because it belongs to the
+    # same one-time arming step as the rest: it is the thing you do BEFORE the first
+    # call that writes, and grouping it with the work would bury it under the commands
+    # whose attribution depends on it.
+    (
+        "Setting up",
+        ("setup", "configure", "companions", "hooks", "prompts", "adopt", "identify"),
+    ),
     ("The rules this project runs by", ("workflow",)),
     ("Shaping the work", ("phase", "task", "split", "update", "remove", "import")),
     ("Doing the work", ("next", "claim", "heartbeat", "release", "complete", "block", "abandon")),

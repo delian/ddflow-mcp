@@ -30,6 +30,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import sys
 import traceback
 from pathlib import Path
@@ -676,6 +677,33 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {},
         "argv": lambda a: ["--json", "status"],
+    },
+    "ddflow_identify": {
+        "description": (
+            "Declare WHO you are on this connection, before doing anything that writes. "
+            "Call this first if more than one agent or subagent is working this "
+            "repository at the same time. Every attribution in the queue depends on it: "
+            "who holds a claim, who ran a gate, and whether a review was done by an "
+            "agent other than the author. By default ddflow derives an identity from "
+            "the working tree, which is correct for one agent per tree and WRONG, with "
+            "no error, for several in the same tree — their work merges into one "
+            "identity, 'what was I doing' answers with someone else's task, and a "
+            "review passes independence against itself. There is no way to detect this "
+            "from the outside, so it has to be declared. Pick a name that is stable for "
+            "your whole session and distinct from the other agents': your role or "
+            "assignment, not a random string. Idempotent; call it again to correct it."
+        ),
+        "properties": {
+            "agent": (
+                "string",
+                "A short stable name for you on this connection, e.g. 'reviewer-2' "
+                "or 'importer'. Letters, digits, '.', '_' and '-' only, up to 64 "
+                "characters — it becomes a log filename. OMIT it to reset to the "
+                "tree-derived default and be told what that is.",
+                False,
+            ),
+        },
+        "identify": True,
     },
     "ddflow_decision_add": {
         "description": (
@@ -1357,25 +1385,19 @@ TOOLS: dict[str, dict[str, Any]] = {
             "tags": ("string", "Comma-separated tags.", False),
             "priority": ("integer", "Lower is offered first (default 100).", False),
         },
-        "argv": lambda a: [
-            "--json",
-            "update",
-            a["id"],
-            # `clearable`: passing "" here MEANS "empty this", which is how you break a
-            # dependency cycle. Every other tool treats "" as "not supplied".
-            *_opt("--globs", a, clearable=True),
-            *_opt("--needs", a, clearable=True),
-            *_opt("--tags", a, clearable=True),
-            *_opt("--title", a),
-            *_opt("--body", a),
-            *_opt("--priority", a),
-        ],
-        # Typed: `None` means leave alone and `[]` means clear, which is what
-        # `_opt(clearable=True)` existed to rebuild after argv flattened both to
-        # an empty string. Here the distinction is simply the values themselves.
-        "api": lambda repo, a: _api().update(
+        # Typed, and the argv lambda that used to sit here is GONE rather than kept
+        # "in case". The `api` branch runs first, so it was unreachable -- a second
+        # encoding of the same operation that no test could have caught drifting,
+        # because nothing executed it. That is the duplicate-then-drift shape, and
+        # keeping a dead fallback is how it starts.
+        #
+        # `None` means leave alone and `[]` means clear, which is what
+        # `_opt(clearable=True)` existed to rebuild after argv flattened both to an
+        # empty string. Here the distinction is simply the values themselves.
+        "api": lambda repo, a, agent: _api().update(
             repo,
             a["id"],
+            agent=agent,
             title=a.get("title"),
             body=a.get("body"),
             needs=_list_or_none(a, "needs"),
@@ -1550,7 +1572,22 @@ def _outcome_result(out: Any) -> dict[str, Any]:
     return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
 
 
-def _run_cli(repo: Path, argv: list[str]) -> tuple[int, str]:
+#: What a declared agent name may contain. It becomes a log SHARD FILENAME, so a name
+#: with a path separator in it would write outside the events directory, and one with a
+#: newline would corrupt the line-oriented log. Refused at declaration time, where the
+#: caller can read why, rather than at the first write.
+_VALID_AGENT = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+
+def _default_agent(repo: Path) -> str:
+    """The identity a connection gets when it declares none — reported, not hidden, so
+    an agent can SEE that it shares one with its siblings."""
+    from ..infra.log import default_agent_id
+
+    return default_agent_id(repo)
+
+
+def _run_cli(repo: Path, argv: list[str], agent: str = "") -> tuple[int, str]:
     """Invoke the CLI in-process, capturing both streams.
 
     In-process rather than subprocess: it is ~40x faster per call, and it guarantees
@@ -1560,8 +1597,13 @@ def _run_cli(repo: Path, argv: list[str]) -> tuple[int, str]:
     out, err = io.StringIO(), io.StringIO()
     real_out, real_err = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = out, err
+    # `--agent` BEFORE the subcommand: it is a top-level flag, and argparse puts a
+    # top-level flag appearing after the subcommand name into the subparser, where it
+    # does not exist. An identity silently dropped is worse than one never set -- the
+    # events would be attributed to the process default and look entirely plausible.
+    head = ["--repo", str(repo)] + (["--agent", agent] if agent else [])
     try:
-        code = cli_main(["--repo", str(repo), *argv])
+        code = cli_main([*head, *argv])
     except SystemExit as exc:
         code = int(exc.code or 0)
     except Exception:
@@ -1577,16 +1619,45 @@ def _run_cli(repo: Path, argv: list[str]) -> tuple[int, str]:
 
 
 class Server:
-    def __init__(self, repo: Path) -> None:
+    """One connection. Which, deliberately, is not the same thing as one agent.
+
+    Identity is how every attribution in the log works -- who holds a lease, who ran a
+    gate, whether the reviewer was a different agent than the author. The default is
+    derived from the working tree (`EventLog.default_agent_id`), and that is right for
+    the ordinary case of one agent per worktree.
+
+    It is WRONG, silently, for the case this tool exists to support: several agents or
+    subagents working the same tree at once. Each spawns its own stdio server, every
+    one of them resolves the same cwd to the same identity, and their events merge into
+    one indistinguishable stream. Nothing errors. `brief` then reports another agent's
+    item as "what you were doing", and reviewer-independence compares an agent with
+    itself and is satisfied.
+
+    There is no signal that can distinguish them -- so identity has to be DECLARED:
+    `DDFLOW_AGENT` in the environment, or `ddflow_identify` on the connection, or an
+    `agent` argument on the individual call. Explicit beats derived, innermost wins.
+    """
+
+    def __init__(self, repo: Path, agent: str = "") -> None:
         self.repo = Path(repo)
         self.protocol = SUPPORTED_PROTOCOLS[0]
+        #: Declared identity for this connection; empty means "use the process
+        #: default", which is the backward-compatible single-agent behaviour.
+        self.agent = agent
+        #: What the client called itself at `initialize`. A LABEL, never an identity:
+        #: every subagent of one harness reports the same `clientInfo.name`, so using
+        #: it as an id would reproduce the exact collapse above while looking specific.
+        self.client_info: dict[str, Any] = {}
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method = msg.get("method", "")
         mid = msg.get("id")
         if method == "initialize":
-            want = (msg.get("params") or {}).get("protocolVersion", "")
+            params = msg.get("params") or {}
+            want = params.get("protocolVersion", "")
             self.protocol = want if want in SUPPORTED_PROTOCOLS else SUPPORTED_PROTOCOLS[0]
+            ci = params.get("clientInfo")
+            self.client_info = dict(ci) if isinstance(ci, dict) else {}
             return _ok(
                 mid,
                 {
@@ -1658,9 +1729,37 @@ class Server:
             # scraping stdout, and no swapping process-global streams -- which is what
             # made the string path non-reentrant. `api` is where a protocol adapter
             # belongs: above the domain, beside the other surface, not THROUGH it.
+            if spec.get("identify"):
+                want = args.get("agent", "")
+                if not isinstance(want, str):
+                    return _ok(mid, _text("agent must be a string", error=True))
+                want = want.strip()
+                # A name that is not usable as a log shard filename is refused HERE,
+                # where the agent can read the reason and retry, rather than at the
+                # first write -- by which point the caller believes it is identified.
+                if want and not _VALID_AGENT.match(want):
+                    return _ok(
+                        mid,
+                        _text(
+                            f"{want!r} is not a usable agent name: use letters, digits, "
+                            f"'.', '_' or '-', up to 64 characters.",
+                            error=True,
+                        ),
+                    )
+                self.agent = want
+                who = want or _default_agent(self.repo)
+                return _ok(
+                    mid,
+                    _text(
+                        f"identified as {who!r}"
+                        + ("" if want else " (tree-derived default; not declared)")
+                        + ". Claims, gate outcomes and reviews on this connection are "
+                        "attributed to it."
+                    ),
+                )
             if "api" in spec:
                 try:
-                    result = spec["api"](self.repo, args)
+                    result = spec["api"](self.repo, args, self.agent)
                 except (KeyError, TypeError, ValueError) as exc:
                     return _ok(mid, _text(f"bad arguments: {exc}", error=True))
                 return _ok(mid, _outcome_result(result))
@@ -1669,7 +1768,7 @@ class Server:
                 argv = spec["argv"](args)
             except (KeyError, TypeError) as exc:
                 return _ok(mid, _text(f"bad arguments: {exc}", error=True))
-            code, body = _run_cli(self.repo, argv)
+            code, body = _run_cli(self.repo, argv, self.agent)
             # Exit 2 ("nothing to do") and 3 ("coordination refused") are RESULTS, not
             # errors: the model must read and act on them. Only 1 is a genuine failure.
             return _ok(mid, _text(body or f"(exit {code})", error=(code == 1), meta={"exit": code}))

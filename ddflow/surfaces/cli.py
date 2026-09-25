@@ -2838,7 +2838,9 @@ def cmd_companions(a, c: Ctx) -> int:
 
     if a.companions_cmd == "add":
         wanted = _csv(a.id) or [
-            st.companion.id for st in statuses if st.companion.default and st.installed
+            st.companion.id
+            for st in statuses
+            if st.companion.default and st.installed and st.companion.is_mcp
         ]
         unknown = [w for w in wanted if w not in by_id]
         if unknown:
@@ -2847,9 +2849,22 @@ def cmd_companions(a, c: Ctx) -> int:
                 file=sys.stderr,
             )
             return FAIL
+        not_servers = [w for w in wanted if not by_id[w].companion.is_mcp]
+        if not_servers:
+            print(
+                "not an MCP server: "
+                + "; ".join(
+                    f"{w} is a {by_id[w].companion.kind} tool ({by_id[w].companion.install})"
+                    for w in not_servers
+                )
+                + ". There is no MCP config entry to write. Install it and ddflow "
+                "detects it; `ddflow companions` shows it either way.",
+                file=sys.stderr,
+            )
+            return REFUSED
         if not wanted:
             print(
-                "nothing to add: none of the default companions is installed on this "
+                "nothing to add: no default MCP companion is installed on this "
                 "machine. `ddflow companions` lists them with their install commands.",
                 file=sys.stderr,
             )
@@ -2903,27 +2918,45 @@ def cmd_companions(a, c: Ctx) -> int:
                 "install": st.companion.install,
                 "url": st.companion.url,
                 "default": st.companion.default,
+                "kind": st.companion.kind,
             }
             for st in statuses
         ],
         "gate_coverage": cover,
         "uncovered_gates": [g for g, ids in cover.items() if not ids],
     }
-    gaps = [st for st in statuses if st.companion.default and st.state != "registered"]
+    # "Registered" is not a state a `cli` companion can reach -- there is nothing to
+    # register. Judging one by it would make `companions` exit 2 forever the moment a
+    # cli entry joined the registry, which trains the reader to ignore the exit code.
+    # For those, INSTALLED is the goal state.
+    gaps = [
+        st
+        for st in statuses
+        if st.companion.default
+        and st.state != "registered"
+        and not (not st.companion.is_mcp and st.installed is True)
+    ]
     if c.json:
         print(json.dumps(payload, indent=2))
         return NOTHING if gaps else OK
 
-    lines = ["Companion MCP servers", ""]
+    lines = ["Companion tools", ""]
     for st in statuses:
         mark = {"registered": "[x]", "installed": "[+]", "missing": "[ ]", "unknown": "[?]"}[
             st.state
         ]
         tag = "" if st.companion.default else "  (opt-in)"
+        if not st.companion.is_mcp and st.installed is True:
+            mark = "[x]"
         lines.append(f"  {mark} {st.companion.id:<10s} {st.companion.title}{tag}")
         lines.append(f"       gates: {', '.join(st.companion.gates) or '—'}")
         if st.state == "registered":
             lines.append(f"       registered for: {', '.join(st.registered_in)}")
+        elif st.state == "installed" and not st.companion.is_mcp:
+            lines.append(
+                f"       installed ({st.detail}). A {st.companion.kind} tool — the agent "
+                f"shells out to it, so there is nothing to register."
+            )
         elif st.state == "installed":
             lines.append(f"       installed ({st.detail}) but no agent is configured to launch it.")
             lines.append(f"       -> ddflow companions add --id {st.companion.id}")
@@ -2932,7 +2965,8 @@ def cmd_companions(a, c: Ctx) -> int:
         else:
             lines.append(f"       not here: {st.detail}")
             lines.append(f"       -> ask the operator, then: {st.companion.install}")
-            lines.append(f"          then: ddflow companions add --id {st.companion.id}")
+            if st.companion.is_mcp:
+                lines.append(f"          then: ddflow companions add --id {st.companion.id}")
             if st.companion.url:
                 lines.append(f"          {st.companion.url}")
         if st.companion.why:

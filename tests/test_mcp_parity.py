@@ -330,6 +330,13 @@ def test_every_tool_is_explicitly_json_or_explicitly_prose():
     }
     undeclared = []
     for name, spec in sorted(TOOLS.items()):
+        # Only the string path can be ambiguous about this. A tool on the typed path
+        # returns an `Outcome`, whose `data` is structured by construction, and an
+        # `identify` tool mutates the connection and returns a sentence -- neither has
+        # an argv to inspect, and asking "does its argv say --json" of them would be a
+        # KeyError dressed up as a parity finding.
+        if "argv" not in spec:
+            continue
         argv = spec["argv"](stub)
         if "--json" in argv or name in PROSE_TOOLS:
             continue

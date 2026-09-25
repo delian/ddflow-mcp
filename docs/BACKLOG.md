@@ -605,3 +605,79 @@ MCP or by hand.
   description and the README's agent table. Two README links to `templates/drivers/…`
   were also broken — the real path is `ddflow/templates/drivers/…`. A ratchet now
   asserts every key of `AGENT_TARGETS` is named in all three places.
+
+## B79–B86 — many agents on one server, and what two rival MCPs do better, 2026-09-25
+
+Prompted by an operator question that turned out to have a wrong answer in the code:
+*"if many agents and subagents call the same MCP server, how does it know which call
+comes from whom?"* It did not. Plus a read of two existing workflow MCP servers, for
+features worth taking.
+
+- **B79. A companion could only be an MCP server. ✅ CLOSED.** `entry()` would build a
+  plausible launch block from any `command`, `companions add` would write it into an
+  agent's config, and the agent would fail the JSON-RPC handshake the first time a gate
+  reached for the tool — a registration that reads as done and is not. `Companion.kind`
+  is now `mcp` or `cli`; `add` refuses a `cli` one and names its install command
+  instead. Registry gains **sequential-thinking** (`research`, `rubber_duck`,
+  `bug_hunt`) and **OptMem** (`cli`, `rules`), and the `codeguide` entry was pointing at
+  a different project than the one actually in use — corrected to
+  `docker.io/delian/codeguide-mcp`. *Found while adding OptMem, which has no MCP mode.*
+
+- **B80. Two agents in one worktree were ONE agent. ✅ CLOSED.** Identity was derived
+  from the working tree, and `log.py:96` already said in a docstring that a harness
+  running several agents in one tree "must set `DDFLOW_AGENT` — there is no signal that
+  can distinguish them otherwise". Over MCP there was no way to set it: the env var is
+  process-wide. So their events merged into one stream, `brief` answered with a
+  sibling's task, and reviewer-independence compared an agent with itself and passed —
+  a review gate satisfied by the author reviewing their own work. New `ddflow_identify`
+  declares identity per CONNECTION, threaded through both the argv and the typed
+  dispatch paths. Mutation-verified: dropping the threading turns three tests red.
+
+- **B81. The MCP surface had no load or concurrency coverage at all. ✅ CLOSED.**
+  `test_stress.py` and `test_lease_and_recovery.py` drive the CLI and the log directly;
+  nothing exercised the surface the agents actually use. `tests/test_mcp_load.py` runs
+  12 concurrent agents through real JSON-RPC and asserts no deadlock (a hard timeout —
+  a wedged `flock` hangs rather than fails), no lost append, no repeated Lamport value
+  within an agent, and correct attribution for EVERY event rather than a sample. Every
+  threshold is an environment variable, because a load test with a hardcoded budget
+  either flakes on a shared runner or is too loose to fail. Wired into CI as its own
+  step with `if: always()`.
+
+- **B82. No human-in-the-loop gate. FILED.** Every gate here is agent-driven or
+  command-driven. `spec-workflow-mcp` gates each phase on an explicit human approval
+  with a review UI, and for a plan or a spec that is the right checkpoint — an operator
+  may well want to approve before agents burn compute on it. Fits the existing
+  abstraction: a `human_review` gate kind that blocks on an approval record, plus a
+  read-only projection of queue state to review against. The dashboard is the large
+  part and is separable from the gate. *From: `pimzino/spec-workflow-mcp`.*
+
+- **B83. No ad-hoc prompt macros. FILED.** `dx-zero/mcpn` defines named workflows in
+  YAML — a system prompt plus a bound subset of tools plus `{{param}}` injection —
+  invoked as "enter debugger mode". That is a genuinely different axis from the gate
+  pipeline: operator-triggered modes that do not belong in the queue at all. `ddflow
+  prompts` already has the template resolution and override precedence this would need.
+  **Not to copy: their `toolMode: situational`**, where the model freely picks which
+  tool to call from a bound set with no recorded ordering or rationale — that
+  reintroduces the non-reproducibility the event log exists to remove.
+  *From: `dx-zero/mcpn`.*
+
+- **B84. Gate evidence records no diff statistic. FILED.** `spec-workflow-mcp` keeps
+  per-task implementation logs with code statistics. Cheap here — an optional
+  files/lines-changed field beside the existing evidence and `tree_sha` — and it makes
+  "what did this gate actually review" answerable rather than assumed.
+  *From: `pimzino/spec-workflow-mcp`.*
+
+- **B85. `prompts list` on the CLI omits the command templates. FILED.** The MCP
+  surface serves them through `prompts/list` from `P.COMMANDS`; the CLI's `list_all`
+  walks `TEMPLATE_NAMES` only, so `ddflow prompts list` shows five templates and none
+  of the six commands. A divergence in the direction the parity test does not look —
+  it checks that every CLI command is on MCP, not the reverse. *Found while adding
+  `research-companions`, which was invisible on the CLI.*
+
+- **B86. No compaction on the state-reading path. FILED, not urgent.** Every
+  state-reading call re-folds the whole log. Measured 2026-09-25: linear, converging on
+  **~8.7 µs/event** — 20,000 events is ~175 ms per call, which is fine. At ~100k events
+  it becomes ~0.9 s, which is not. Search and recall already avoid this via the SQLite
+  projection; the scheduling and status path does not. Filed with the numbers so the
+  decision to act is made against a measurement rather than a worry. *Supersedes the
+  vaguer B6.*

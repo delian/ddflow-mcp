@@ -55,3 +55,18 @@ jobs:
       - name: End-to-end scenarios
         # `-m slow` overrides the `not slow` in addopts (pytest takes the last -m).
         run: uv run --with pytest --with pytest-timeout python -m pytest tests/test_scenarios.py -m slow -q --timeout=1800
+
+      - name: Concurrency and load
+        # Separate step, and it runs even if the scenarios failed: a deadlock under
+        # contention and a broken scenario are different diagnoses, and skipping this
+        # because something else went red is how the concurrency surface ended up with
+        # no automated coverage in the first place.
+        if: always()
+        # Budgets are loosened for a shared runner. A load test that flakes on CI
+        # teaches people to ignore the suite, which is worse than not having one --
+        # so the DEADLOCK bound stays tight (a hang must fail, not hang) while the
+        # latency budget is generous.
+        env:
+          DDFLOW_WRITE_LATENCY_BUDGET_S: "6.0"
+          DDFLOW_GROWTH_TOLERANCE: "8.0"
+        run: uv run --with pytest --with pytest-timeout python -m pytest tests/test_mcp_load.py -m slow -q --timeout=1800

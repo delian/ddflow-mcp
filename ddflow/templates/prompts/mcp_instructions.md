@@ -38,6 +38,15 @@ files — do not read those instead; they are long and it has already ranked the
 worktree. An unclaimed edit can be destroyed by a parallel agent, and in this repository
 the commit hook may refuse it outright.
 
+**If you are one of SEVERAL agents or subagents on this repository, call
+`ddflow_identify` first.** Identity is what attributes every claim, gate outcome and
+review. Unasked, it is derived from the working tree — correct for one agent per tree,
+and wrong with no error for several in one tree: your work and theirs merge into a
+single identity, `ddflow_brief` answers with someone else's task, and a review gate
+compares you against yourself and passes. Nothing can detect this from the outside, so
+say who you are: a short stable name for your role or assignment. Working alone in your
+own worktree, skip it.
+
 **The loop:** `ddflow_next` → `ddflow_claim` → work in the worktree →
 `ddflow_gate_status` and satisfy each gate → `ddflow_merge` → `ddflow_complete`.
 
@@ -95,10 +104,22 @@ gate `unavailable` rather than passing it on your own word.
 - **context7** — `research`, `standards`. Resolve the library, then fetch current docs
   for any API you are about to use. Your memory of a library's API is exactly the kind
   of claim that is cheap to check and often wrong.
-- **OptMem** (`scripts/memo`) — `rules`. Cross-session memory of operational facts about
+- **OptMem** (`memo`) — `rules`. Cross-session memory of operational facts about
   *this machine and working state*. ddflow's own `ddflow_recall` covers the project's
   memory — decisions, lessons, research, bugs, past prompts — and is the one to reach
   for first; OptMem covers what is true of the environment, which is a different thing.
+  A command-line tool, not an MCP server: there is nothing to register.
+- **sequential-thinking** — `research`, `rubber_duck`, `bug_hunt`. The three gates that
+  are reasoning rather than tool-running. Use it where a chain has middle steps you
+  expect to RETRACT: a falsifiable claim and the probe that would kill it, or a bug
+  hunt's competing causes. In a plain transcript a retraction is just one more
+  assertion, and what you ruled out disappears — which is how an early, plausible-wrong
+  cause survives to the end.
+
+**Your stack needs servers this list cannot know about.** `ddflow_prompts_show` with
+`research-companions` walks you from this pipeline's *uncovered* gates, through the
+repository's actual manifests, to candidates checked against their primary sources, and
+produces `[[companion]]` blocks the operator can read and delete. Propose; never install.
 
 {% if missing_companions %}
 ### Not wired up here — propose it to the operator

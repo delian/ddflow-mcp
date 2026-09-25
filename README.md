@@ -40,6 +40,11 @@ and an MCP server that are the same implementation.
   - [Proving a gate can fail at all](#proving-a-gate-can-fail-at-all)
 - [The phase pipeline](#the-phase-pipeline)
 - [Parallelism and coordination](#parallelism-and-coordination)
+- [Many agents, one server: identity, state and sharing](#many-agents-one-server-identity-state-and-sharing)
+  - [Is it stateless?](#is-it-stateless)
+  - [Who is calling?](#who-is-calling)
+  - [Can one server serve several projects?](#can-one-server-serve-several-projects)
+  - [Locking, contention and measured cost](#locking-contention-and-measured-cost)
 - [Crash recovery](#crash-recovery)
 - [Reconstruction from logs alone](#reconstruction-from-logs-alone)
 - [Lessons, research and bugs](#lessons-research-and-bugs)
@@ -482,7 +487,7 @@ So the gap is **named**:
 
 ```console
 $ ddflow companions
-Companion MCP servers
+Companion tools
 
   [x] context7   Current library documentation
        gates: research, standards
@@ -512,6 +517,22 @@ missing — "no data", never collapsed into "no problem".
 | **codeguide** | `standards` | Checks against a written standard instead of the reviewer's taste |
 | **context7** | `research`, `standards` | A model's memory of a library's API is exactly the kind of claim that is cheap to check and often wrong |
 | **memory** | `rules` | Operational facts about *this machine* — ddflow's own `recall` covers the project's memory, which is a different thing and belongs in the committed log |
+| **sequential** | `research`, `rubber_duck`, `bug_hunt` | The three gates that are *reasoning*, not tool-running. A thought can be marked a revision or a branch instead of being appended to a transcript that only grows — so a retracted hypothesis reads as retracted, and what a bug hunt **ruled out** stays visible |
+| **optmem** *(cli)* | `rules` | Append-only cross-session memory that compresses as it grows. The other half of memory: `recall` answers "what did this project decide and learn", OptMem answers "what does this environment do" |
+
+**Servers and command-line tools are different things**, and the registry says which:
+`kind = "mcp"` is registrable into an agent's config, `kind = "cli"` is a tool the agent
+shells out to. OptMem is the live example — a real tool with no MCP mode, so
+`companions add` refuses it and says why instead of writing a launch entry that would
+fail its first handshake. A `cli` companion counts toward its gate's coverage once it is
+**installed**; `registered` is a state it cannot reach.
+
+**Your stack needs servers this registry cannot know about.** `ddflow prompts show
+research-companions` walks an agent from the pipeline's *uncovered* gates, through the
+repository's actual manifests, to candidates checked against their primary sources —
+provenance, maintenance, what they execute, what credential they want — and produces
+`[[companion]]` blocks you can read and delete. It proposes; you install. A rejection is
+part of its report, so the next session does not re-research it.
 
 **ddflow never installs anything itself** — running an install command on someone's
 machine is the operator's decision. What it does instead is *instruct the agent to ask*:
@@ -972,6 +993,96 @@ floor — adding a fifth agent to a phase whose runtime is a four-deep chain buy
 
 ---
 
+## Many agents, one server: identity, state and sharing
+
+Several agents and subagents sharing one queue is the case this tool is for. Here is
+exactly how that works, because each of these has a wrong answer that looks right.
+
+### Is it stateless?
+
+**The queue is. The connection is not, in exactly one respect.**
+
+The append-only event log is the sole source of truth, and every read re-derives state
+from it — `fold(read_all())`, from scratch, on every call. Nothing is cached between
+requests, so there is no stale projection, no invalidation, and no divergence between
+two agents' views. Restart the server mid-task and nothing is lost: it never had
+anything the log did not.
+
+The one piece of per-connection state is **who you are** (below). It is deliberately not
+in the log, because it is a property of the caller, not of the work.
+
+### Who is calling?
+
+By default, identity is derived from the working tree. That is right for one agent per
+worktree, and **silently wrong for several agents in one tree** — they all resolve the
+same path to the same name, their events merge into one stream, `brief` answers with a
+sibling's task, and reviewer-independence compares an agent with itself and passes.
+Nothing errors. There is no signal that can tell them apart, so identity is **declared**:
+
+| How | When |
+|---|---|
+| `ddflow_identify` (MCP) | An agent or subagent announcing itself on its connection. Call it first. |
+| `DDFLOW_AGENT` env var | A harness that spawns agents and knows their names. Process-wide. |
+| `--agent` (CLI) | Scripts and one-off commands. |
+| tree-derived default | One agent per worktree. Reported as *undeclared*, so you can see it. |
+
+Innermost wins. `ddflow_identify` is idempotent, persists for the connection, and
+refuses a name that could not be a log filename — it becomes one, and refusing at
+declaration time means the caller reads the reason rather than discovering it at the
+first write.
+
+**If more than one agent works one tree at once, declare identity.** Everything that
+attributes work depends on it.
+
+### Can one server serve several projects?
+
+**No — one server process serves one repository**, fixed at start from `--repo`,
+`DDFLOW_REPO`, or the working directory. No tool takes a repo argument, and a test
+asserts none ever does. Point a second agent at a second project by running a second
+server; they are cheap, and the isolation is the point.
+
+**One project shared by many agents is the supported case** — and the one that needs no
+special setup beyond declaring identity:
+
+- **Writes never contend.** Each agent appends to its **own log shard**, so parallel
+  writers do not queue behind one file. A short exclusive lock is taken only to allocate
+  the next Lamport clock value.
+- **Reads take no lock at all**, so a read-heavy agent cannot be starved by a write-heavy
+  one, and a reader can never block a writer.
+- **File ownership is coordinated by `globs`.** `claim` refuses an item whose writes
+  overlap one already held, and names what to take instead — exit `3`, not a failure.
+- **Lessons, decisions, research and bug history are shared** by construction: they are
+  events in the same log, so one agent's finding is immediately visible to every other.
+
+### Locking, contention and measured cost
+
+Measured on this machine, single process, full `read_all()` + `fold()`:
+
+| Events | read + fold | per event |
+|---:|---:|---:|
+| 500 | 11.5 ms | 22.9 µs |
+| 2,000 | 32.6 ms | 16.3 µs |
+| 5,000 | 46.0 ms | 9.2 µs |
+| 10,000 | 89.2 ms | 8.9 µs |
+| 20,000 | 174.7 ms | 8.7 µs |
+
+Linear, converging on **~8.7 µs/event**; the higher figure at small sizes is fixed
+per-call overhead, not the fold. A project with 20,000 events pays ~175 ms for a
+state-reading call. Search and recall do **not** pay this — they run off a SQLite
+projection rebuilt only when the log's head moves.
+
+`tests/test_mcp_load.py` runs 12 concurrent agents through the real MCP surface and
+asserts no deadlock, no lost append, no repeated Lamport value within an agent, and
+correct attribution for every event — not for a sample. Its thresholds are environment
+variables (`DDFLOW_LOAD_AGENTS`, `DDFLOW_WRITE_LATENCY_BUDGET_S`,
+`DDFLOW_GROWTH_TOLERANCE`, …) because a load test with a hardcoded budget either flakes
+on a shared runner or is too loose to fail.
+
+The deadlock bound is a **hard timeout**: a wedged lock does not fail, it hangs, and an
+unbounded hang reads as a broken CI runner rather than as a bug.
+
+---
+
 ## Crash recovery
 
 An agent is killed. Nothing is cleaned up, because in a real crash nothing runs.
@@ -1203,6 +1314,18 @@ ddflow reviewers detect|list|test   find and check cross-family review endpoints
 ddflow review <id> --gate ..    run the configured reviewer, record the evidence
 ddflow mcp                      run the MCP stdio server
 ```
+
+Every one of these is reachable over MCP, and a test enforces it. One tool goes the
+other way and has **no CLI equivalent**, because it has nothing to mean there:
+
+```
+ddflow_identify(agent=...)      declare who you are ON THIS CONNECTION (MCP only)
+```
+
+A CLI invocation is one process that exits, so it says who it is with `--agent` and the
+question does not outlive the command. An MCP connection is a session, so identity is
+declared once and persists — see
+[Who is calling?](#who-is-calling).
 
 ---
 

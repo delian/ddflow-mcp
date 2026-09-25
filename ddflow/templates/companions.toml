@@ -21,6 +21,11 @@
 #   install     the command a human runs to get it, quoted verbatim in the report
 #   url         where to read about it before installing something on your machine
 #   default     true = proposed by `adopt`; false = known but only on request
+#   kind        "mcp" (default) = an MCP server, registrable into an agent's config;
+#               "cli" = a command-line tool the agent shells out to. A cli companion
+#               is detected and recommended, and `companions add` refuses it, because
+#               there is no MCP entry to write and a plausible-looking one would fail
+#               the handshake the first time a gate reached for it.
 
 [[companion]]
 id = "roborev"
@@ -44,11 +49,11 @@ title = "Language and framework coding standards"
 gates = ["standards"]
 why = """Serves the house rules for the languages in play as MCP resources, so the \
 `standards` gate checks against a written standard instead of the reviewer's taste."""
-detect = ["codeguide-mcp", "--version"]
-command = "codeguide-mcp"
-args = []
-install = "npm install -g codeguide-mcp"
-url = "https://github.com/ArchimedesCrypto/codeguide-mcp"
+detect = ["docker", "image", "inspect", "docker.io/delian/codeguide-mcp"]
+command = "docker"
+args = ["run", "--rm", "-i", "docker.io/delian/codeguide-mcp"]
+install = "docker pull docker.io/delian/codeguide-mcp"
+url = "https://github.com/delian/codeguide-mcp"
 default = true
 
 [[companion]]
@@ -81,3 +86,29 @@ args = ["-y", "@modelcontextprotocol/server-memory"]
 install = "npx -y @modelcontextprotocol/server-memory"
 url = "https://github.com/modelcontextprotocol/servers/tree/main/src/memory"
 default = false
+
+[[companion]]
+id = "sequential"
+title = "Structured step-by-step reasoning"
+gates = ["research", "rubber_duck", "bug_hunt"]
+why = """Gives the agent an explicit scratchpad for multi-step reasoning it can revise: a thought can be marked a revision of an earlier one, or branch into an alternative line, instead of being appended to a transcript that only grows. That maps onto the three gates that are REASONING rather than tool-running. `research` asks for a falsifiable claim and the probe that would kill it -- which is a chain whose middle steps get retracted, and a linear transcript records the retraction as one more assertion. `bug_hunt` and `rubber_duck` want the hypothesis that was considered and DISCARDED to stay visible, because the recurring failure here is an agent converging early on a plausible-wrong cause and never recording what it ruled out."""
+detect = ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking", "--help"]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+install = "npx -y @modelcontextprotocol/server-sequential-thinking   # npx fetches it"
+url = "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking"
+default = true
+
+[[companion]]
+id = "optmem"
+title = "Append-only cross-session memory (command-line)"
+kind = "cli"
+gates = ["rules"]
+why = """Operational facts about THIS machine and working state that are expensive to rediscover and belong in no document -- which is the half of memory ddflow's own `recall` deliberately does not cover. `recall` answers "what did this project decide, learn, research, and break", from the event log, and that is the project's memory. OptMem answers "what does this environment do", and compresses it as it grows rather than accumulating forever.
+
+Listed as `kind = "cli"` because it IS one: `memo` is a command-line tool with no MCP mode. Recommending it as a server would produce a config entry that fails its first handshake."""
+detect = ["memo", "config"]
+command = "memo"
+install = "See the project README — and prefer a repo-local wrapper over a bare `memo`, so every git worktree resolves to ONE store instead of one per agent."
+url = "https://github.com/VictorTaelin/OptMem"
+default = true
