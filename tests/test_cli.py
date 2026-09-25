@@ -50,16 +50,16 @@ def test_init_gitignores_the_derived_index(proj):
     def ignored(rel: str) -> bool:
         return subprocess.run(["git", "-C", str(proj), "check-ignore", "-q", rel]).returncode == 0
 
-    assert ignored(".orchard/index.db"), "the derived index must not be committed"
-    assert ignored(".orchard/events.lock"), "the lock is machine-local"
-    assert not ignored(".orchard/events/agent-a.jsonl"), (
+    assert ignored(".ddflow/index.db"), "the derived index must not be committed"
+    assert ignored(".ddflow/events.lock"), "the lock is machine-local"
+    assert not ignored(".ddflow/events/agent-a.jsonl"), (
         "the event log is the source of truth and MUST be committed"
     )
 
 
 def test_init_sets_union_merge_on_the_log(proj):
     attrs = (proj / ".gitattributes").read_text()
-    assert ".orchard/events/*.jsonl merge=union" in attrs
+    assert ".ddflow/events/*.jsonl merge=union" in attrs
 
 
 def test_next_exit_zero_when_ready(proj):
@@ -150,7 +150,7 @@ def test_complete_refuses_a_same_family_review_panel(proj):
 
 
 def test_gate_run_reports_unavailable_for_a_missing_tool(proj):
-    (proj / ".orchard" / "gates.toml").write_text(
+    (proj / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "no-such-tool-xyzzy"\n'
     )
     run_cli(proj, "claim", "P1.T1", "--no-worktree")
@@ -160,7 +160,7 @@ def test_gate_run_reports_unavailable_for_a_missing_tool(proj):
 
 
 def test_gate_run_reports_failure_for_a_real_failure(proj):
-    (proj / ".orchard" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "exit 1"\n')
+    (proj / ".ddflow" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "exit 1"\n')
     run_cli(proj, "claim", "P1.T1", "--no-worktree")
     assert run_cli(proj, "gate", "run", "P1.T1", "unit_tests")[0] == FAIL
 
@@ -236,9 +236,9 @@ def test_rebuild_is_idempotent(proj):
 
 def test_render_is_byte_stable(proj):
     run_cli(proj, "render")
-    first = (proj / "docs" / "orchard" / "QUEUE.md").read_bytes()
+    first = (proj / "docs" / "ddflow" / "QUEUE.md").read_bytes()
     run_cli(proj, "render")
-    assert (proj / "docs" / "orchard" / "QUEUE.md").read_bytes() == first
+    assert (proj / "docs" / "ddflow" / "QUEUE.md").read_bytes() == first
 
 
 def test_a_failing_command_gate_is_recorded_not_crashed(proj):
@@ -249,7 +249,7 @@ def test_a_failing_command_gate_is_recorded_not_crashed(proj):
     polyglot demo scenario. Mutation-verified: removing the synthesised reason in
     `cmd_gate` makes this red with 'must carry a --reason'.
     """
-    (proj / ".orchard" / "gates.toml").write_text(
+    (proj / ".ddflow" / "gates.toml").write_text(
         "[gate.unit_tests]\ncommand = \"echo '3 tests, 1 failed' && exit 1\"\n"
     )
     run_cli(proj, "claim", "P1.T1", "--no-worktree")
@@ -312,7 +312,7 @@ def test_the_board_renders_the_CONFIGURED_pipeline_not_a_hardcoded_one(repo):
     Mutation-verified: restoring the hardcoded tuple makes this red.
     """
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text(
+    (repo / ".ddflow" / "config.toml").write_text(
         '[gates]\ntask_pipeline = ["implement", "unit_tests", "merge"]\n'
     )
     run_cli(repo, "phase", "add", "P1", "--title", "trimmed")
@@ -327,8 +327,8 @@ def test_the_board_renders_the_CONFIGURED_pipeline_not_a_hardcoded_one(repo):
     assert "rubber_duck" not in board, "the caption names gates this project does not run"
 
 
-def test_orchard_agent_env_var_is_honoured(proj):
-    """`ORCHARD_AGENT` is documented in server.json and used by MCP clients and the git
+def test_ddflow_agent_env_var_is_honoured(proj):
+    """`DDFLOW_AGENT` is documented in server.json and used by MCP clients and the git
     hook, both of which run where `--agent` cannot be passed. It was documented before
     it was read; a dead env var in a published manifest is worse than an undocumented
     one, because operators set it and nothing happens."""
@@ -338,10 +338,10 @@ def test_orchard_agent_env_var_is_honoured(proj):
     env = {
         **os.environ,
         "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
-        "ORCHARD_AGENT": "env-agent-xyz",
+        "DDFLOW_AGENT": "env-agent-xyz",
     }
     sp.run(
-        [sys.executable, "-m", "orchard", "--repo", str(proj), "claim", "P1.T1", "--no-worktree"],
+        [sys.executable, "-m", "ddflow", "--repo", str(proj), "claim", "P1.T1", "--no-worktree"],
         capture_output=True,
         env=env,
         timeout=120,
@@ -355,7 +355,7 @@ def test_orchard_agent_env_var_is_honoured(proj):
         [
             sys.executable,
             "-m",
-            "orchard",
+            "ddflow",
             "--repo",
             str(proj),
             "--agent",

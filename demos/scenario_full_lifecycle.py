@@ -50,7 +50,7 @@ ROOT = Path(__file__).resolve().parents[1]
 _BETA: list = [None]
 
 SCAFFOLD = {
-    ".gitignore": "__pycache__/\n*.pyc\n.pytest_cache/\n.orchard-worktrees/\n",
+    ".gitignore": "__pycache__/\n*.pyc\n.pytest_cache/\n.ddflow-worktrees/\n",
     "README.md": "# ledger\n\nDouble-entry bookkeeping primitives.\n",
     "ledger/__init__.py": "",
     "ledger/core/__init__.py": "",
@@ -368,7 +368,7 @@ def run(sc: Scenario) -> None:
     sc.head("Scenario 6 — a whole project: plan, build, change course, rebuild")
 
     repo = sc.make_repo("ledger", SCAFFOLD)
-    wt_root = sc.dir / ".orchard-worktrees"
+    wt_root = sc.dir / ".ddflow-worktrees"
 
     alpha = McpClient(repo, ROOT, agent="alpha")
     beta = McpClient(repo, ROOT, agent="beta")
@@ -396,27 +396,27 @@ def _act1_the_operator_speaks(sc, alpha, repo):
     sc.step("The operator opens a session and states the requirement")
     alpha.initialize()
     _BETA[0].initialize()
-    alpha.tool("orchard_setup", agents="claude")
-    session = alpha.jtool("orchard_session_start", model="claude-opus-5", tool="claude-code")
+    alpha.tool("ddflow_setup", agents="claude")
+    session = alpha.jtool("ddflow_session_start", model="claude-opus-5", tool="claude-code")
     sid = session["session"]
-    alpha.tool("orchard_session_prompt", session=sid, text=U1)
-    alpha.tool("orchard_session_prompt", session=sid, text=U2)
+    alpha.tool("ddflow_session_prompt", session=sid, text=U1)
+    alpha.tool("ddflow_session_prompt", session=sid, text=U2)
     sc.note(
         "The prompts are recorded verbatim, not summarised. Act 8 rebuilds the project "
         "from them, so a paraphrase written afterwards would be testing the paraphrase."
     )
 
     sc.step("The agent turns the requirement into a queue")
-    alpha.tool("orchard_phase_add", id="P1", title="core", globs="ledger/core/**")
-    alpha.tool("orchard_phase_add", id="P2", title="report", needs="P1", globs="ledger/report/**")
+    alpha.tool("ddflow_phase_add", id="P1", title="core", globs="ledger/core/**")
+    alpha.tool("ddflow_phase_add", id="P2", title="report", needs="P1", globs="ledger/report/**")
     for tid, title, needs, globs in (
         ("P1.T1", "money type", "", "ledger/core/money.py,tests/test_money.py"),
         ("P1.T2", "account model", "", "ledger/core/account.py,tests/test_account.py"),
         ("P1.T3", "journal entries", "P1.T1,P1.T2", "ledger/core/entry.py,tests/test_entry.py"),
     ):
-        alpha.tool("orchard_task_add", id=tid, phase="P1", title=title, needs=needs, globs=globs)
+        alpha.tool("ddflow_task_add", id=tid, phase="P1", title=title, needs=needs, globs=globs)
     alpha.tool(
-        "orchard_task_add",
+        "ddflow_task_add",
         id="P2.T4",
         phase="P2",
         title="balance summary",
@@ -425,7 +425,7 @@ def _act1_the_operator_speaks(sc, alpha, repo):
 
     sc.step("U2 is an architectural decision, so it is recorded as one")
     alpha.tool(
-        "orchard_decision_add",
+        "ddflow_decision_add",
         id="D1",
         title="Money is integer minor units",
         context="A ledger must reconcile exactly; binary floats cannot represent 0.10.",
@@ -436,13 +436,13 @@ def _act1_the_operator_speaks(sc, alpha, repo):
         globs="ledger/core/money.py,ledger/report/**",
         by="operator",
     )
-    applicable = alpha.jtool("orchard_decision_applicable", id="P1.T1")
+    applicable = alpha.jtool("ddflow_decision_applicable", id="P1.T1")
     sc.check(
         "the decision is surfaced for the task whose files it governs",
         any(d["id"] == "D1" for d in applicable["applicable"]),
         json.dumps(applicable),
     )
-    applicable = alpha.jtool("orchard_decision_applicable", id="P1.T2")
+    applicable = alpha.jtool("ddflow_decision_applicable", id="P1.T2")
     sc.check(
         "and NOT for a task it does not govern — scoping by globs, not by broadcast",
         not any(d["id"] == "D1" for d in applicable["applicable"]),
@@ -450,7 +450,7 @@ def _act1_the_operator_speaks(sc, alpha, repo):
     )
 
     sc.step("The plan is checked before any work starts")
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     ready = [r["id"] for r in plan["ready"]]
     blocked = {b["item"]: b for b in plan["blocked"]}
     sc.check(
@@ -471,7 +471,7 @@ def _act1_the_operator_speaks(sc, alpha, repo):
         "P2" in blocked["P2.T4"]["detail"],
         blocked["P2.T4"]["detail"],
     )
-    loops = alpha.jtool("orchard_loops")
+    loops = alpha.jtool("ddflow_loops")
     sc.check("a healthy plan reports no loops", not loops, json.dumps(loops))
 
 
@@ -482,11 +482,11 @@ def _act1_the_operator_speaks(sc, alpha, repo):
 
 def _work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
     """Claim, write, test, pass the pipeline, complete, merge. The per-task order."""
-    claim = client.jtool("orchard_claim", id=item)
+    claim = client.jtool("ddflow_claim", id=item)
     wt = Path(claim["worktree"])
     sc.check(f"{item} got its own worktree", wt.is_dir() and wt.parent == wt_root, str(wt))
 
-    brief = client.tool("orchard_brief", item=item)[0]
+    brief = client.tool("ddflow_brief", item=item)[0]
     sc.check(f"{item}'s brief carries the rules and decisions in force", "D1" in brief or True, "")
 
     for rel, body in files.items():
@@ -497,22 +497,22 @@ def _work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
 
     # research -> rules -> implement, then the review stack, then the tests.
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="research",
         outcome="passed",
         evidence=f"probed: the {item} API shape against a worked example",
     )
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="rules",
         outcome="passed",
-        evidence="orchard_brief read; D1 applies",
+        evidence="ddflow_brief read; D1 applies",
     )
-    client.tool("orchard_gate_record", id=item, gate="implement", outcome="passed")
+    client.tool("ddflow_gate_record", id=item, gate="implement", outcome="passed")
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="rubber_duck",
         outcome="passed",
@@ -520,7 +520,7 @@ def _work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
         model="qwen3-coder",
     )
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="critic",
         outcome="passed",
@@ -528,7 +528,7 @@ def _work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
         model="gemini-2.5-pro",
     )
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="standards",
         outcome="unavailable",
@@ -537,7 +537,7 @@ def _work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
 
     code, out = _pytest(wt)
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="unit_tests",
         outcome="passed" if code == 0 else "failed",
@@ -548,23 +548,23 @@ def _work(sc, client, repo, wt_root, item, files, *, author="claude-opus-5"):
     sc.check(f"{item}'s real tests really passed", code == 0, out[-800:])
 
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="bug_hunt",
         outcome="passed",
         evidence="swept: off-by-one, empty-collection, silent knob drop",
     )
     client.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id=item,
         gate="dedupe",
         outcome="passed",
         evidence="grepped the operation, not the name; nothing pre-existing",
     )
-    client.tool("orchard_gate_record", id=item, gate="merge", outcome="passed")
+    client.tool("ddflow_gate_record", id=item, gate="merge", outcome="passed")
 
-    merged = client.jtool("orchard_merge", id=item)
-    done, code = client.tool("orchard_complete", id=item, model=author)
+    merged = client.jtool("ddflow_merge", id=item)
+    done, code = client.tool("ddflow_complete", id=item, model=author)
     sc.check(f"{item} completes once its whole pipeline has an outcome", code == 0, done)
     return merged
 
@@ -582,8 +582,8 @@ def _pytest(wt: Path) -> tuple[int, str]:
 
 def _act2_phase_one_in_parallel(sc, alpha, beta, repo, wt_root):
     sc.step("Two agents claim the two independent tasks at the same time")
-    a_claim = alpha.jtool("orchard_claim", id="P1.T1")
-    b_claim = beta.jtool("orchard_claim", id="P1.T2")
+    a_claim = alpha.jtool("ddflow_claim", id="P1.T1")
+    b_claim = beta.jtool("ddflow_claim", id="P1.T2")
     sc.check(
         "they got different worktrees on different branches",
         a_claim["worktree"] != b_claim["worktree"] and a_claim["branch"] != b_claim["branch"],
@@ -594,15 +594,15 @@ def _act2_phase_one_in_parallel(sc, alpha, beta, repo, wt_root):
     gamma = McpClient(repo, ROOT, agent="gamma")
     try:
         gamma.initialize()
-        text, code = gamma.tool("orchard_claim", id="P1.T1")
+        text, code = gamma.tool("ddflow_claim", id="P1.T1")
         sc.check("refused with the coordination exit code, not an error", code == 3, text)
         sc.check("and told who holds it", "alpha" in text, text)
     finally:
         gamma.close()
 
     sc.step("Both release, then do the work properly through the per-task pipeline")
-    alpha.tool("orchard_release", id="P1.T1")
-    beta.tool("orchard_release", id="P1.T2")
+    alpha.tool("ddflow_release", id="P1.T1")
+    beta.tool("ddflow_release", id="P1.T2")
     _work(
         sc,
         alpha,
@@ -634,20 +634,20 @@ def _act2_phase_one_in_parallel(sc, alpha, beta, repo, wt_root):
 
 def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
     sc.step("With T1 and T2 landed, the dependent task opens")
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     sc.check("P1.T3 is now ready", "P1.T3" in [r["id"] for r in plan["ready"]], str(plan["ready"]))
 
     sc.step("Working it, the agent finds it is two concerns and adds sub-tasks")
-    alpha.tool("orchard_claim", id="P1.T3")
+    alpha.tool("ddflow_claim", id="P1.T3")
     alpha.tool(
-        "orchard_task_add",
+        "ddflow_task_add",
         id="P1.T3.a",
         parent="P1.T3",
         title="posting rules",
         globs="ledger/core/entry.py,tests/test_entry.py",
     )
     alpha.tool(
-        "orchard_task_add",
+        "ddflow_task_add",
         id="P1.T3.b",
         parent="P1.T3",
         title="entry validation",
@@ -655,17 +655,17 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
         globs="ledger/core/validate.py,tests/test_validate.py",
     )
 
-    shown = alpha.jtool("orchard_show", id="P1.T3")
+    shown = alpha.jtool("ddflow_show", id="P1.T3")
     sc.check(
         "adding a child released the parent's lease — an umbrella is not the work",
         not shown.get("lease"),
         json.dumps(shown.get("lease")),
     )
-    text, code = alpha.tool("orchard_claim", id="P1.T3")
+    text, code = alpha.tool("ddflow_claim", id="P1.T3")
     sc.check("and it is no longer claimable at all", code == 3, text)
     sc.check("the refusal names the children to work instead", "P1.T3.a" in text, text)
 
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     ready = [r["id"] for r in plan["ready"]]
     blocked = {b["item"]: b for b in plan["blocked"]}
     sc.check("only the unblocked sub-task is offered", ready == ["P1.T3.a"], str(ready))
@@ -684,19 +684,19 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
         {"ledger/core/entry.py": ENTRY_PY, "tests/test_entry.py": ENTRY_TEST},
     )
 
-    text, code = alpha.tool("orchard_complete", id="P1.T3", model="claude-opus-5")
+    text, code = alpha.tool("ddflow_complete", id="P1.T3", model="claude-opus-5")
     sc.check("the umbrella cannot close while a child is open", code == 3, text)
     sc.check("and it names the child", "P1.T3.b" in text, text)
 
     sc.step("The second sub-task opens, and working it uncovers a bug in the first")
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     sc.check("P1.T3.b is offered now", "P1.T3.b" in [r["id"] for r in plan["ready"]], str(plan))
 
-    bug = alpha.jtool("orchard_bug_fixed" if False else "orchard_claim", id="P1.T3.b")
+    bug = alpha.jtool("ddflow_bug_fixed" if False else "ddflow_claim", id="P1.T3.b")
     wt = Path(bug["worktree"])
     # The bug: an entry with NO postings totals to zero, so it "balances".
     text, _ = alpha.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id="P1.T3.b",
         gate="research",
         outcome="passed",
@@ -721,7 +721,7 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
     sc.check("the regression test passes with the fix in place", code == 0, out[-800:])
 
     sc.step("A bug may not be closed without the test that proves it stays fixed")
-    text, code = alpha.tool("orchard_bug_fixed", id="B1")
+    text, code = alpha.tool("ddflow_bug_fixed", id="B1")
     sc.check("closing a bug with no regression test is refused", code != 0, text)
 
     for gate, kw in (
@@ -739,20 +739,20 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
         ("merge", {}),
     ):
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P1.T3.b",
             gate=gate,
             outcome=kw.pop("outcome", "passed"),
             **kw,
         )
-    alpha.tool("orchard_merge", id="P1.T3.b")
-    text, code = alpha.tool("orchard_complete", id="P1.T3.b", model="claude-opus-5")
+    alpha.tool("ddflow_merge", id="P1.T3.b")
+    text, code = alpha.tool("ddflow_complete", id="P1.T3.b", model="claude-opus-5")
     sc.check("P1.T3.b completes", code == 0, text)
 
     sc.step("Now the umbrella closes, and the lesson survives the task that produced it")
     for gate in ("research", "rules", "implement", "bug_hunt", "dedupe", "merge"):
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P1.T3",
             gate=gate,
             outcome="passed",
@@ -760,7 +760,7 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
         )
     for gate, model in (("rubber_duck", "qwen3-coder"), ("critic", "gemini-2.5-pro")):
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P1.T3",
             gate=gate,
             outcome="passed",
@@ -768,7 +768,7 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
             model=model,
         )
     alpha.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id="P1.T3",
         gate="unit_tests",
         outcome="passed",
@@ -777,12 +777,12 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
         exit_code="0",
     )
 
-    text, code = alpha.tool("orchard_complete", id="P1.T3", model="claude-opus-5")
+    text, code = alpha.tool("ddflow_complete", id="P1.T3", model="claude-opus-5")
     sc.check("a gate left silent blocks the umbrella too — silence is not a pass", code == 3, text)
     sc.check("and it names the one step missing", "standards" in text, text)
 
     text, code = alpha.tool(
-        "orchard_gate_skip",
+        "ddflow_gate_skip",
         id="P1.T3",
         gate="standards",
         reason="each half was put through the standards pass on its own; no new code "
@@ -790,7 +790,7 @@ def _act3_subtasks_and_a_bug(sc, alpha, beta, repo, wt_root):
     )
     sc.check("skipping ON THE RECORD is the auditable way past it", code == 0, text)
 
-    text, code = alpha.tool("orchard_complete", id="P1.T3", model="claude-opus-5")
+    text, code = alpha.tool("ddflow_complete", id="P1.T3", model="claude-opus-5")
     sc.check("the umbrella completes once both children have", code == 0, text)
 
 
@@ -803,7 +803,7 @@ def _act4_close_the_phase(sc, alpha, repo):
     sc.step("The phase has its own pipeline, and it is not the task one")
     # `gate status` returns PROSE deliberately — it carries the next gate's instruction,
     # which is the half an agent acts on. The pipeline is readable straight out of it.
-    status, _ = alpha.tool("orchard_gate_status", id="P1")
+    status, _ = alpha.tool("ddflow_gate_status", id="P1")
     sc.check(
         "the phase pipeline has the live smoke run and the fan-out point",
         "live_test" in status and "tasks" in status,
@@ -820,7 +820,7 @@ def _act4_close_the_phase(sc, alpha, repo):
         status[:400],
     )
 
-    text, code = alpha.tool("orchard_complete", id="P1", model="claude-opus-5")
+    text, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
     sc.check("the phase will not close on its tasks alone", code == 3, text)
     sc.check(
         "and it lists every phase-level step that has no outcome",
@@ -859,8 +859,8 @@ def _act4_close_the_phase(sc, alpha, repo):
         ("corrections", "B1's fix applied and merged"),
         ("merge", "all task branches landed"),
     ):
-        alpha.tool("orchard_gate_record", id="P1", gate=gate, outcome="passed", evidence=ev)
-    text, code = alpha.tool("orchard_complete", id="P1", model="claude-opus-5")
+        alpha.tool("ddflow_gate_record", id="P1", gate=gate, outcome="passed", evidence=ev)
+    text, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
     sc.check("P1 closes", code == 0, text)
 
 
@@ -871,24 +871,24 @@ def _act4_close_the_phase(sc, alpha, repo):
 
 def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
     sc.step("P1 is done, so P2's tasks unblock — the inherited dependency released")
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     sc.check(
         "P2.T4 is offered now", "P2.T4" in [r["id"] for r in plan["ready"]], str(plan["ready"])
     )
 
     sc.step("The agent starts P2.T4. Mid-flight, the operator adds a requirement (U3)")
-    alpha.tool("orchard_claim", id="P2.T4")
-    sid = alpha.jtool("orchard_session_start", model="claude-opus-5")["session"]
-    alpha.tool("orchard_session_prompt", session=sid, text=U3)
+    alpha.tool("ddflow_claim", id="P2.T4")
+    sid = alpha.jtool("ddflow_session_start", model="claude-opus-5")["session"]
+    alpha.tool("ddflow_session_prompt", session=sid, text=U3)
     alpha.tool(
-        "orchard_task_add",
+        "ddflow_task_add",
         id="P2.T5",
         phase="P2",
         title="CSV export",
         needs="P2.T4",
         globs="ledger/report/csv_export.py,tests/test_csv.py",
     )
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     blocked = {b["item"]: b for b in plan["blocked"]}
     sc.check(
         "a task added while another is IN FLIGHT is accepted and correctly withheld",
@@ -897,16 +897,16 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
     )
 
     sc.step("Then the operator says the in-flight task is really two (U4) — split in place")
-    alpha.tool("orchard_session_prompt", session=sid, text=U4)
-    before = alpha.jtool("orchard_show", id="P2.T4")
+    alpha.tool("ddflow_session_prompt", session=sid, text=U4)
+    before = alpha.jtool("ddflow_show", id="P2.T4")
     text, code = alpha.tool(
-        "orchard_split",
+        "ddflow_split",
         id="P2.T4",
         into="P2.T4a=aggregate balances,P2.T4b=format the table",
     )
     sc.check("the split succeeds on a claimed, in-flight task", code == 0, text)
 
-    after = alpha.jtool("orchard_show", id="P2.T4")
+    after = alpha.jtool("ddflow_show", id="P2.T4")
     sc.check(
         "the task keeps its id and its history — the thread from plan to work is intact",
         after["id"] == before["id"] and after["created_at"] == before["created_at"],
@@ -917,10 +917,10 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
         not after.get("lease"),
         json.dumps(after.get("lease")),
     )
-    alpha.tool("orchard_update", id="P2.T4a", globs="ledger/report/aggregate.py")
-    alpha.tool("orchard_update", id="P2.T4b", globs="ledger/report/format.py", needs="P2.T4a")
+    alpha.tool("ddflow_update", id="P2.T4a", globs="ledger/report/aggregate.py")
+    alpha.tool("ddflow_update", id="P2.T4b", globs="ledger/report/format.py", needs="P2.T4a")
 
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     ready = [r["id"] for r in plan["ready"]]
     blocked = {b["item"]: b for b in plan["blocked"]}
     sc.check("the first half is offered", "P2.T4a" in ready, str(ready))
@@ -944,7 +944,7 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
 
     for gate in ("research", "rules", "implement", "bug_hunt", "dedupe", "merge"):
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P2.T4",
             gate=gate,
             outcome="passed",
@@ -952,7 +952,7 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
         )
     for gate, model in (("rubber_duck", "qwen3-coder"), ("critic", "gemini-2.5-pro")):
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P2.T4",
             gate=gate,
             outcome="passed",
@@ -960,7 +960,7 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
             model=model,
         )
     alpha.tool(
-        "orchard_gate_record",
+        "ddflow_gate_record",
         id="P2.T4",
         gate="unit_tests",
         outcome="passed",
@@ -969,15 +969,15 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
         exit_code="0",
     )
     alpha.tool(
-        "orchard_gate_skip",
+        "ddflow_gate_skip",
         id="P2.T4",
         gate="standards",
         reason="both halves passed it individually; no code lives at this level",
     )
-    text, code = alpha.tool("orchard_complete", id="P2.T4", model="claude-opus-5")
+    text, code = alpha.tool("ddflow_complete", id="P2.T4", model="claude-opus-5")
     sc.check("the split umbrella closes when both halves do", code == 0, text)
 
-    plan = alpha.jtool("orchard_next")
+    plan = alpha.jtool("ddflow_next")
     sc.check(
         "and the mid-flight task finally opens, its dependency satisfied through the split",
         "P2.T5" in [r["id"] for r in plan["ready"]],
@@ -1000,10 +1000,10 @@ def _act5_requirements_change_mid_flight(sc, alpha, beta, repo, wt_root):
 
 def _act6_the_guardrails(sc, alpha, repo):
     sc.step("A circular dependency is detected, named, and refused")
-    alpha.tool("orchard_phase_add", id="PX", title="a bad plan", globs="x/**")
+    alpha.tool("ddflow_phase_add", id="PX", title="a bad plan", globs="x/**")
     for tid, needs in (("X.A", "X.C"), ("X.B", "X.A"), ("X.C", "X.B")):
-        alpha.tool("orchard_task_add", id=tid, phase="PX", needs=needs, globs=f"x/{tid}.py")
-    loops = alpha.jtool("orchard_loops")
+        alpha.tool("ddflow_task_add", id=tid, phase="PX", needs=needs, globs=f"x/{tid}.py")
+    loops = alpha.jtool("ddflow_loops")
     cycles = [f for f in loops if f["kind"] == "dependency_cycle"]
     sc.check("the ring is reported", cycles, json.dumps(loops))
     sc.check(
@@ -1011,23 +1011,23 @@ def _act6_the_guardrails(sc, alpha, repo):
         all(n in cycles[0]["detail"] for n in ("X.A", "X.B", "X.C")),
         cycles[0]["detail"],
     )
-    text, code = alpha.tool("orchard_claim", id="X.A")
+    text, code = alpha.tool("ddflow_claim", id="X.A")
     sc.check("and nothing in the ring may be claimed", code == 3, text)
 
     sc.step("Breaking one edge is enough")
-    alpha.tool("orchard_update", id="X.A", needs="")
-    loops = alpha.jtool("orchard_loops")
+    alpha.tool("ddflow_update", id="X.A", needs="")
+    loops = alpha.jtool("ddflow_loops")
     sc.check(
         "the cycle is gone",
         not [f for f in loops if f["kind"] == "dependency_cycle"],
         json.dumps(loops),
     )
     for tid in ("X.A", "X.B", "X.C"):
-        alpha.tool("orchard_remove", id=tid, reason="the bad plan was a demonstration", force=True)
-    alpha.tool("orchard_remove", id="PX", reason="ditto", force=True)
+        alpha.tool("ddflow_remove", id=tid, reason="the bad plan was a demonstration", force=True)
+    alpha.tool("ddflow_remove", id="PX", reason="ditto", force=True)
 
     sc.step("A removed item stops generating findings nobody can act on")
-    loops = alpha.jtool("orchard_loops")
+    loops = alpha.jtool("ddflow_loops")
     sc.check(
         "no finding names a removed item",
         not [f for f in loops if f["item"].startswith("X.")],
@@ -1042,9 +1042,9 @@ def _act6_the_guardrails(sc, alpha, repo):
 
 def _act7_the_operator_asks(sc, alpha, repo):
     sc.step("U5: 'what is the status of the project?'")
-    sid = alpha.jtool("orchard_session_start", model="claude-opus-5")["session"]
-    alpha.tool("orchard_session_prompt", session=sid, text=U5)
-    status = alpha.jtool("orchard_status")
+    sid = alpha.jtool("ddflow_session_start", model="claude-opus-5")["session"]
+    alpha.tool("ddflow_session_prompt", session=sid, text=U5)
+    status = alpha.jtool("ddflow_status")
     sc.check(
         "one phase closed, one still open",
         status["phases"]["done"] == 1 and status["phases"]["total"] == 2,
@@ -1057,7 +1057,7 @@ def _act7_the_operator_asks(sc, alpha, repo):
     )
 
     sc.step("'have we been here before?' — one search across everything recorded")
-    recall = alpha.jtool("orchard_recall", query="float money rounding")
+    recall = alpha.jtool("ddflow_recall", query="float money rounding")
     blob = json.dumps(recall)
     sc.check(
         "the architectural decision is found",
@@ -1072,7 +1072,7 @@ def _act7_the_operator_asks(sc, alpha, repo):
     sc.note(f"sources with hits: {sorted(k for k, v in recall.items() if v)}")
 
     sc.step("The work done is derived from the log, not from anyone's memory")
-    progress = alpha.jtool("orchard_progress")
+    progress = alpha.jtool("ddflow_progress")
     commits = sum(r.get("commits", 0) for r in progress)
     attempts = sum(r.get("attempts", 0) for r in progress)
     sc.check(
@@ -1087,15 +1087,15 @@ def _act7_the_operator_asks(sc, alpha, repo):
 
 
 def _act8_rebuild_from_the_log(sc, alpha, repo):
-    sc.step("Every source file is deleted. Only .orchard/ survives.")
+    sc.step("Every source file is deleted. Only .ddflow/ survives.")
     for path in sorted(repo.rglob("*.py")):
-        if ".orchard" not in path.parts and ".git" not in path.parts:
+        if ".ddflow" not in path.parts and ".git" not in path.parts:
             path.unlink()
     remaining = [p for p in repo.rglob("*.py") if ".git" not in p.parts]
     sc.check("the code is genuinely gone", not remaining, str(remaining))
 
     sc.step("`replay` reconstructs the instruction history from the log alone")
-    text, code = alpha.tool("orchard_replay")
+    text, code = alpha.tool("ddflow_replay")
     sc.check("it runs against a repository with no source in it", code == 0, text[:300])
     for label, prompt in (("U1", U1), ("U2", U2), ("U3", U3), ("U4", U4)):
         sc.check(

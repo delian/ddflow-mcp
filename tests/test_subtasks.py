@@ -272,7 +272,7 @@ def test_the_board_nests_sub_tasks_under_their_parent(repo):
 def test_giving_a_claimed_task_its_first_child_releases_its_lease(repo):
     """Becoming an umbrella is a transition, and it has to happen however you get there.
 
-    `orchard split` released the parent's lease with a comment explaining why: an
+    `ddflow split` released the parent's lease with a comment explaining why: an
     umbrella holding a live claim on globs that overlap every child's means a SECOND
     agent cannot take one of those children, and crash recovery points at a worktree
     where nothing further will ever happen. Adding a sub-task by hand reaches the same

@@ -20,10 +20,10 @@ from datetime import UTC
 
 from conftest import run_cli
 
-from orchard.config import Config
-from orchard.core import progress as PR
-from orchard.core.model import fold
-from orchard.infra.log import Event
+from ddflow.config import Config
+from ddflow.core import progress as PR
+from ddflow.core.model import fold
+from ddflow.infra.log import Event
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 

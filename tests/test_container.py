@@ -14,23 +14,23 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.config import Config
-from orchard.infra import container as CT
-from orchard.infra import worktree as W
+from ddflow.config import Config
+from ddflow.infra import container as CT
+from ddflow.infra import worktree as W
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
 def as_container(monkeypatch):
-    monkeypatch.setenv("ORCHARD_IN_CONTAINER", "1")
+    monkeypatch.setenv("DDFLOW_IN_CONTAINER", "1")
     return True
 
 
 def test_detection_requires_positive_evidence(monkeypatch):
     """A false positive relocates worktrees on a host, so absence of evidence is not
     evidence of a container."""
-    monkeypatch.delenv("ORCHARD_IN_CONTAINER", raising=False)
+    monkeypatch.delenv("DDFLOW_IN_CONTAINER", raising=False)
     monkeypatch.setattr(CT.Path, "exists", lambda self: False)
     monkeypatch.setattr(CT.Path, "read_text", lambda self, *a, **k: "0::/user.slice")
     assert CT.in_container() is False
@@ -39,7 +39,7 @@ def test_detection_requires_positive_evidence(monkeypatch):
 def test_a_sibling_worktree_root_is_relocated_inside_the_repo(as_container):
     """THE data-loss case: only the repo is bind-mounted, so `../x` lands on the
     container's ephemeral layer and is destroyed on exit with the work inside it."""
-    assert CT.default_worktree_root("../.orchard-worktrees") == ".orchard-worktrees"
+    assert CT.default_worktree_root("../.ddflow-worktrees") == ".ddflow-worktrees"
 
 
 def test_an_explicit_inside_root_is_left_alone(as_container):
@@ -52,9 +52,9 @@ def test_an_absolute_root_is_left_alone(as_container):
 
 
 def test_nothing_is_relocated_outside_a_container(monkeypatch):
-    monkeypatch.delenv("ORCHARD_IN_CONTAINER", raising=False)
+    monkeypatch.delenv("DDFLOW_IN_CONTAINER", raising=False)
     monkeypatch.setattr(CT, "in_container", lambda: False)
-    assert CT.default_worktree_root("../.orchard-worktrees") == "../.orchard-worktrees"
+    assert CT.default_worktree_root("../.ddflow-worktrees") == "../.ddflow-worktrees"
 
 
 @pytest.mark.parametrize(
@@ -80,7 +80,7 @@ def test_warnings_name_the_linux_add_host_requirement(as_container, repo):
     )
     # The endpoints are handed IN now: `infra.container` owns container primitives and
     # has no business importing `services.review` to discover that reviewers exist.
-    from orchard.services.review import load_reviewers
+    from ddflow.services.review import load_reviewers
 
     urls = [(r.name, r.base_url) for r in load_reviewers(repo) if r.enabled]
     assert urls, "the reviewer block must have been written"
@@ -113,7 +113,7 @@ def test_the_event_log_carries_no_absolute_paths(repo):
     run_cli(repo, "phase", "add", "P1", "--title", "p")
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/*")
     run_cli(repo, "claim", "P1.T1")
-    log = "\n".join(p.read_text() for p in (repo / ".orchard" / "events").glob("*.jsonl"))
+    log = "\n".join(p.read_text() for p in (repo / ".ddflow" / "events").glob("*.jsonl"))
     entries = [json.loads(ln) for ln in log.splitlines() if ln.strip()]
     for ev in entries:
         for key in ("worktree", "path"):
@@ -130,7 +130,7 @@ def test_adopt_gitignores_an_in_repo_worktree_root(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     assert (
         subprocess.run(
-            ["git", "-C", str(repo), "check-ignore", "-q", ".orchard-worktrees/T1"]
+            ["git", "-C", str(repo), "check-ignore", "-q", ".ddflow-worktrees/T1"]
         ).returncode
         == 0
     )
@@ -139,7 +139,7 @@ def test_adopt_gitignores_an_in_repo_worktree_root(repo):
 def test_docker_launch_config_is_stdio_safe(repo):
     """`-t` would allocate a TTY and inject control sequences into a JSON-RPC stream."""
     run_cli(repo, "adopt", "--agents", "claude", "--launch", "docker")
-    args = json.loads((repo / ".mcp.json").read_text())["mcpServers"]["orchard"]["args"]
+    args = json.loads((repo / ".mcp.json").read_text())["mcpServers"]["ddflow"]["args"]
     assert args[0] == "run" and "-i" in args
     assert "-t" not in args and "-it" not in args, "a TTY corrupts the MCP stream"
     assert "--rm" in args
@@ -157,7 +157,7 @@ DOCKER = shutil.which("docker") is not None
 @pytest.mark.skipif(not DOCKER, reason="docker is not installed")
 @pytest.mark.slow
 def test_the_image_builds_and_serves_mcp(tmp_path):
-    img = "orchard:pytest"
+    img = "ddflow:pytest"
     build = subprocess.run(
         ["docker", "build", "-q", "-t", img, str(ROOT)],
         capture_output=True,
@@ -198,15 +198,15 @@ def test_the_image_builds_and_serves_mcp(tmp_path):
         timeout=600,
     )
     reply = json.loads(r.stdout.splitlines()[0])
-    assert reply["result"]["serverInfo"]["name"] == "orchard"
+    assert reply["result"]["serverInfo"]["name"] == "ddflow"
 
     # Files the container creates must belong to the host user, not root.
     subprocess.run(
-        ["docker", "run", "-i", "--rm", "-v", f"{repo}:/repo", img, "orchard", "init"],
+        ["docker", "run", "-i", "--rm", "-v", f"{repo}:/repo", img, "ddflow", "init"],
         capture_output=True,
         timeout=600,
     )
-    cfg = repo / ".orchard" / "config.toml"
+    cfg = repo / ".ddflow" / "config.toml"
     assert cfg.is_file()
     assert cfg.stat().st_uid == os.getuid(), (
         "the container wrote root-owned files into the host repo; the operator would "
@@ -218,7 +218,7 @@ def test_the_json_interface_returns_a_usable_absolute_path(repo):
     """Storage portable, interface usable.
 
     The log stores a relative path so a committed log is true on every checkout; but a
-    caller handed ".orchard-worktrees/T1" resolves it against its own cwd, which is
+    caller handed ".ddflow-worktrees/T1" resolves it against its own cwd, which is
     frequently not the repo root. Found by the demo scenarios, which `cd` into what
     `show --json` returns.
     """
@@ -233,5 +233,5 @@ def test_the_json_interface_returns_a_usable_absolute_path(repo):
     assert os.path.isabs(shown["lease"]["worktree"])
 
     # ...while the LOG still carries the portable form.
-    log = "\n".join(p.read_text() for p in (repo / ".orchard" / "events").glob("*.jsonl"))
+    log = "\n".join(p.read_text() for p in (repo / ".ddflow" / "events").glob("*.jsonl"))
     assert '"worktree":"/' not in log.replace(" ", "")

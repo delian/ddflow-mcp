@@ -46,7 +46,7 @@ def test_abandon_requires_a_reason_and_records_it(repo):
     code, _out2, _err2 = run_cli(repo, "abandon", "P1.T2")
     assert code != OK, "an unexplained abandonment is invisible later"
     run_cli(repo, "abandon", "P1.T2", "--reason", "superseded by P1.T1")
-    log = "\n".join(p.read_text() for p in (repo / ".orchard" / "events").glob("*.jsonl"))
+    log = "\n".join(p.read_text() for p in (repo / ".ddflow" / "events").glob("*.jsonl"))
     assert "superseded by P1.T1" in log
 
 
@@ -87,7 +87,7 @@ def test_removal_is_recorded_not_erased(repo):
     assert run_cli(repo, "remove", "P1.T9", "--reason", "not needed after all")[0] == OK
     data = json.loads(run_cli(repo, "--json", "next", "--phase", "P1")[1])
     assert "P1.T9" not in [r["id"] for r in data["ready"]]
-    log = "\n".join(p.read_text() for p in (repo / ".orchard" / "events").glob("*.jsonl"))
+    log = "\n".join(p.read_text() for p in (repo / ".ddflow" / "events").glob("*.jsonl"))
     assert "task.removed" in log and "P1.T9" in log
     assert "not needed after all" in log
 
@@ -102,13 +102,13 @@ def test_every_declared_event_kind_can_actually_be_emitted():
     """
     import pathlib as _p
 
-    from orchard.core.model import HANDLERS
+    from ddflow.core.model import HANDLERS
 
     # The WHOLE package, recursively. This used to name seven modules by path, which
     # (a) went stale the moment the package was layered and (b) would have reported a
     # kind as dead if the only thing emitting it moved to an eighth module. Scanning
     # everything cannot be wrong about where the code is.
-    pkg = _p.Path(__file__).resolve().parents[1] / "orchard"
+    pkg = _p.Path(__file__).resolve().parents[1] / "ddflow"
     src = "".join(f.read_text("utf-8") for f in pkg.rglob("*.py") if "__pycache__" not in str(f))
     allowed_unemitted = {
         # Reserved for a compaction pass that is not implemented; filed as B6.

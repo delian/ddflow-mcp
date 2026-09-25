@@ -1,7 +1,7 @@
 """Packaging is only testable by packaging. These tests build the real artefact.
 
 The bug that motivated this file: `templates/` lived BESIDE the package rather than
-inside it, so `orchard adopt` worked perfectly from a source checkout and raised
+inside it, so `ddflow adopt` worked perfectly from a source checkout and raised
 FileNotFoundError for every installed user. No amount of running from the tree can
 catch that — the tree is exactly where it works.
 """
@@ -42,7 +42,7 @@ def wheel(tmp_path_factory) -> Path:
 def test_the_wheel_contains_the_driver_templates(wheel):
     """`adopt` copies these at runtime; absent, every installed user gets a traceback."""
     names = zipfile.ZipFile(wheel).namelist()
-    assert "orchard/templates/drivers/implement-phase.md" in names, (
+    assert "ddflow/templates/drivers/implement-phase.md" in names, (
         "the canonical driver is missing from the wheel — adopt will fail for every "
         f"installed user. Wheel contains: {sorted(n for n in names if 'templ' in n)}"
     )
@@ -56,8 +56,8 @@ def test_the_wheel_declares_both_entry_points(wheel):
         .read(next(n for n in zipfile.ZipFile(wheel).namelist() if n.endswith("entry_points.txt")))
         .decode()
     )
-    assert "orchard = orchard.surfaces.cli:main" in entry
-    assert "orchard-mcp = orchard.surfaces.mcp:main" in entry
+    assert "ddflow = ddflow.surfaces.cli:main" in entry
+    assert "ddflow-mcp = ddflow.surfaces.mcp:main" in entry
 
 
 def test_the_package_has_no_runtime_dependencies(wheel):
@@ -91,17 +91,17 @@ def test_installed_adopt_works_end_to_end(wheel, tmp_path):
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "i"], check=True)
 
     r = subprocess.run(
-        [str(venv / "bin" / "orchard"), "adopt", "--agents", "claude"],
+        [str(venv / "bin" / "ddflow"), "adopt", "--agents", "claude"],
         cwd=str(repo),
         capture_output=True,
         text=True,
         timeout=300,
     )
     assert r.returncode == 0, f"installed adopt failed:\n{r.stdout}\n{r.stderr}"
-    assert (repo / "docs/orchard/drivers/implement-phase.md").is_file()
-    assert (repo / ".orchard" / "config.toml").is_file()
+    assert (repo / "docs/ddflow/drivers/implement-phase.md").is_file()
+    assert (repo / ".ddflow" / "config.toml").is_file()
     mcp = json.loads((repo / ".mcp.json").read_text())
-    assert "orchard" in mcp["mcpServers"]
+    assert "ddflow" in mcp["mcpServers"]
 
 
 def test_installed_mcp_server_completes_a_handshake(wheel, tmp_path):
@@ -125,7 +125,7 @@ def test_installed_mcp_server_completes_a_handshake(wheel, tmp_path):
         + "\n"
     )
     r = subprocess.run(
-        [str(venv / "bin" / "orchard-mcp")],
+        [str(venv / "bin" / "ddflow-mcp")],
         cwd=str(repo),
         input=msgs,
         capture_output=True,
@@ -133,7 +133,7 @@ def test_installed_mcp_server_completes_a_handshake(wheel, tmp_path):
         timeout=120,
     )
     reply = json.loads(r.stdout.splitlines()[0])
-    assert reply["result"]["serverInfo"]["name"] == "orchard"
+    assert reply["result"]["serverInfo"]["name"] == "ddflow"
 
 
 def test_the_declared_versions_agree():
@@ -143,7 +143,7 @@ def test_the_declared_versions_agree():
     from the tree; the release workflow checks the same invariant.
     """
     sys.path.insert(0, str(ROOT))
-    from orchard.surfaces.mcp import SERVER_INFO
+    from ddflow.surfaces.mcp import SERVER_INFO
 
     proj = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     srv = json.loads((ROOT / "server.json").read_text())
@@ -161,7 +161,7 @@ def test_the_declared_versions_agree():
 # -- the spawn contract: a module path a move can silently invalidate ------------------
 
 
-def test_every_module_path_orchard_writes_into_a_config_actually_imports():
+def test_every_module_path_ddflow_writes_into_a_config_actually_imports():
     """`adopt` writes `python -m <module>` into other people's MCP configs.
 
     A wrong module there fails in the worst possible place: the server spawns, cannot
@@ -169,28 +169,28 @@ def test_every_module_path_orchard_writes_into_a_config_actually_imports():
     never arrive. Nothing errors, nothing logs — the session just stops.
 
     That is exactly what happened when the package was split into layers:
-    `orchard.mcp_server` became `orchard.surfaces.mcp` and the hardcoded string in
+    `ddflow.mcp_server` became `ddflow.surfaces.mcp` and the hardcoded string in
     `_launch_entry` did not follow. The full suite ran for two hours before it was
     killed. This asserts the string against the import system, which is the only thing
     that can tell the truth about it.
     """
     import importlib
 
-    from orchard.services.adopt import MCP_MODULE
+    from ddflow.services.adopt import MCP_MODULE
 
     mod = importlib.import_module(MCP_MODULE)
     assert hasattr(mod, "main"), f"{MCP_MODULE} has no main() to spawn"
 
 
-def test_the_pythonpath_adopt_writes_can_import_orchard():
+def test_the_pythonpath_adopt_writes_can_import_ddflow():
     """Counted paths (`parents[1]`) break when a file moves; derived ones do not."""
     import subprocess
     import sys as _sys
 
-    from orchard.services.adopt import MCP_MODULE, _package_parent
+    from ddflow.services.adopt import MCP_MODULE, _package_parent
 
     parent = _package_parent()
-    assert (Path(parent) / "orchard" / "__init__.py").is_file(), (
+    assert (Path(parent) / "ddflow" / "__init__.py").is_file(), (
         f"{parent} is not the directory containing the package"
     )
     # Prove it end to end: a clean interpreter with ONLY that on the path.

@@ -1,10 +1,10 @@
 """Scenario 3 — everything is destroyed except the log, and the project is rebuilt.
 
-The strongest claim Orchard makes: *if you lose the source, the database, the boards
+The strongest claim ddflow makes: *if you lose the source, the database, the boards
 and the worktrees, the event log alone still contains everything needed to rebuild.*
 
 The scenario builds a small project while logging operator prompts, research verdicts
-and lessons, then deletes the entire repository except `.orchard/events/`, and checks
+and lessons, then deletes the entire repository except `.ddflow/events/`, and checks
 that what comes back is genuinely sufficient — not merely non-empty.
 
 It is explicit about what is NOT claimed: the source is not reproduced byte-for-byte.
@@ -25,10 +25,10 @@ SCAFFOLD = {"README.md": "# ledger\n", ".gitignore": "__pycache__/\n"}
 def run(sc: Scenario) -> None:
     sc.head("SCENARIO 3 — reconstruct the project from the event log alone")
     repo = sc.make_repo("ledger", SCAFFOLD)
-    sc.orchard("init")
+    sc.ddflow("init")
 
     sc.step("A working session: prompts, research, a rejected approach, a lesson")
-    sid = sc.jorchard("session", "start", "--model", "claude-opus-5", "--tool", "claude-code")[
+    sid = sc.jddflow("session", "start", "--model", "claude-opus-5", "--tool", "claude-code")[
         "session"
     ]
     prompts = [
@@ -40,8 +40,8 @@ def run(sc: Scenario) -> None:
         "correction is a new compensating entry.",
     ]
     for pr in prompts:
-        sc.orchard("session", "prompt", sid, "--text", pr, quiet=True)
-    sc.orchard(
+        sc.ddflow("session", "prompt", sid, "--text", pr, quiet=True)
+    sc.ddflow(
         "research",
         "--id",
         "R1",
@@ -60,7 +60,7 @@ def run(sc: Scenario) -> None:
         "--sources",
         "https://peps.python.org/pep-0327/",
     )
-    sc.orchard(
+    sc.ddflow(
         "research",
         "--id",
         "R2",
@@ -77,7 +77,7 @@ def run(sc: Scenario) -> None:
         "--verdict",
         "REFUTED",
     )
-    sc.orchard(
+    sc.ddflow(
         "lesson",
         "add",
         "--id",
@@ -94,8 +94,8 @@ def run(sc: Scenario) -> None:
         "--tags",
         "data-integrity,concurrency",
     )
-    sc.orchard("phase", "add", "P1", "--title", "Ledger core")
-    sc.orchard(
+    sc.ddflow("phase", "add", "P1", "--title", "Ledger core")
+    sc.ddflow(
         "task",
         "add",
         "P1.T1",
@@ -106,11 +106,11 @@ def run(sc: Scenario) -> None:
         "--globs",
         "ledger/entry.py",
     )
-    sc.orchard("session", "end", sid, "--summary", "designed the ledger core")
+    sc.ddflow("session", "end", sid, "--summary", "designed the ledger core")
 
     sc.step("Capture what the log knows, then destroy everything else")
-    before = sc.orchard("replay")[1]
-    events_dir = repo / ".orchard" / "events"
+    before = sc.ddflow("replay")[1]
+    events_dir = repo / ".ddflow" / "events"
     backup = sc.dir.parent / "SURVIVING_LOG_ledger"
     shutil.rmtree(backup, ignore_errors=True)
     shutil.copytree(events_dir, backup)
@@ -121,19 +121,19 @@ def run(sc: Scenario) -> None:
 
     sc.step("Rebuild a bare repository and restore ONLY the log")
     sc.make_repo("ledger", {"README.md": "# recovered\n"})
-    shutil.rmtree(repo / ".orchard", ignore_errors=True)
-    (repo / ".orchard").mkdir(parents=True)
-    shutil.copytree(backup, repo / ".orchard" / "events")
+    shutil.rmtree(repo / ".ddflow", ignore_errors=True)
+    (repo / ".ddflow").mkdir(parents=True)
+    shutil.copytree(backup, repo / ".ddflow" / "events")
     sc.check(
         "no index, no config, no source — only events/",
-        not (repo / ".orchard" / "index.db").exists()
-        and list((repo / ".orchard" / "events").glob("*.jsonl")),
+        not (repo / ".ddflow" / "index.db").exists()
+        and list((repo / ".ddflow" / "events").glob("*.jsonl")),
     )
 
     sc.step("Re-derive everything from the log")
-    _, out, _ = sc.orchard("rebuild")
+    _, out, _ = sc.ddflow("rebuild")
     sc.check("the index rebuilt from the log with no other input", "rebuilt index" in out, out)
-    after = sc.orchard("replay")[1]
+    after = sc.ddflow("replay")[1]
     sc.check(
         "the reconstruction brief is byte-identical to the pre-destruction one",
         after == before,
@@ -155,9 +155,9 @@ def run(sc: Scenario) -> None:
         sc.check(f"the brief carries {why}", fragment in after, f"missing fragment: {fragment!r}")
 
     sc.step("The queue state came back too, not just the prose")
-    board = sc.orchard("board")[1]
+    board = sc.ddflow("board")[1]
     sc.check("the work queue rebuilt", "P1.T1" in board and "Ledger core" in board, board[:300])
-    ready = [r["id"] for r in sc.jorchard("next", "--phase", "P1")["ready"]]
+    ready = [r["id"] for r in sc.jddflow("next", "--phase", "P1")["ready"]]
     sc.check("and it is schedulable again immediately", ready == ["P1.T1"], str(ready))
 
     sc.step("State what is NOT claimed")

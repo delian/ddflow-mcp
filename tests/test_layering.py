@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-PKG = ROOT / "orchard"
+PKG = ROOT / "ddflow"
 
 #: Layer -> what it may import. Lower layers appear in higher layers' lists, never the
 #: reverse. `config` is at the bottom: everything reads knobs, and it reads nobody.
@@ -41,7 +41,7 @@ ALLOWED: dict[str, set[str]] = {
 }
 
 #: `services` and `views` are deliberately mutual: a service may render a markdown view
-#: as its result (`orchard render`), and a view reads service types to render them. The
+#: as its result (`ddflow render`), and a view reads service types to render them. The
 #: pair is one layer split by role rather than two layers stacked, and saying so here is
 #: more honest than an exemption list that grows.
 PEERS = {("services", "views"), ("views", "services")}
@@ -51,7 +51,7 @@ def _layer(path: Path) -> str:
     rel = path.relative_to(PKG)
     if len(rel.parts) > 1:
         return rel.parts[0]
-    # `__main__.py` IS an entry point — `python -m orchard` — so it belongs with the
+    # `__main__.py` IS an entry point — `python -m ddflow` — so it belongs with the
     # surfaces even though it sits at the top level next to `config.py`.
     return "surfaces" if rel.name == "__main__.py" else "config"
 
@@ -64,7 +64,7 @@ def _imported_layers(path: Path) -> set[tuple[str, int]]:
     """Layers this module imports, with the line each import is on."""
     tree = ast.parse(path.read_text("utf-8"), str(path))
     here = _layer(path)
-    depth_of_pkg = 1 if here == "config" else 2  # `.` vs `..` reaches orchard/
+    depth_of_pkg = 1 if here == "config" else 2  # `.` vs `..` reaches ddflow/
     out: set[tuple[str, int]] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.level:
@@ -143,7 +143,7 @@ def test_the_detector_can_fail():
     import tempfile
 
     with tempfile.TemporaryDirectory() as td:
-        fake = Path(td) / "orchard" / "core"
+        fake = Path(td) / "ddflow" / "core"
         fake.mkdir(parents=True)
         f = fake / "bad.py"
         f.write_text("from ..services.gates import run\n")
@@ -158,7 +158,7 @@ def test_the_detector_can_fail():
 
 
 def test_every_layer_is_declared():
-    """A new directory under orchard/ must be given a place in the rule.
+    """A new directory under ddflow/ must be given a place in the rule.
 
     Otherwise the way to escape the layering is to invent a layer, which is exactly
     what someone under time pressure will do.

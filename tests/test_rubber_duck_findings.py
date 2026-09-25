@@ -88,8 +88,8 @@ def test_replay_carries_decisions_and_their_reversals(repo):
 def test_every_replay_renderer_has_a_provenance_kind(repo):
     """The ratchet: a renderer with no kind is dead code that looks like a feature."""
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from orchard.infra.log import PROVENANCE_KINDS
-    from orchard.services.sessions import _REPLAY_RENDERERS
+    from ddflow.infra.log import PROVENANCE_KINDS
+    from ddflow.services.sessions import _REPLAY_RENDERERS
 
     orphans = set(_REPLAY_RENDERERS) - set(PROVENANCE_KINDS) - {"item.completed"}
     assert not orphans, (
@@ -184,7 +184,7 @@ def test_a_required_gate_absent_from_every_pipeline_blocks_completion(repo):
     compliant.
     """
     _queue(repo)
-    (repo / ".orchard" / "config.toml").write_text(
+    (repo / ".ddflow" / "config.toml").write_text(
         '[gates]\nrequired = ["critic"]\ntask_pipeline = ["implement", "unit_tests", "merge"]\n'
     )
     for g in ("implement", "unit_tests", "merge"):
@@ -256,7 +256,7 @@ def test_recording_a_gate_out_of_order_says_so(repo):
 
 def test_a_re_recorded_lesson_stays_superseded(repo, log):
     """`_h_decision` documents this hazard and guards it; its sibling did not."""
-    from orchard.core.model import fold
+    from ddflow.core.model import fold
 
     log.append("lesson.recorded", "L1", {"title": "old", "rule": "do the old thing"})
     log.append(
@@ -274,7 +274,7 @@ def test_a_re_recorded_lesson_stays_superseded(repo, log):
 
 
 def test_a_re_recorded_decision_stays_superseded(repo, log):
-    from orchard.core.model import fold
+    from ddflow.core.model import fold
 
     log.append("decision.recorded", "D1", {"title": "a", "decision": "use A"})
     log.append("decision.superseded", "D1", {"by": "D2"})
@@ -293,7 +293,7 @@ def test_a_re_recorded_decision_stays_superseded(repo, log):
 
 def _two_phases(repo, config: str):
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text(config)
+    (repo / ".ddflow" / "config.toml").write_text(config)
     run_cli(repo, "phase", "add", "P1", "--globs", "p1/**")
     run_cli(repo, "phase", "add", "P2", "--globs", "p2/**")
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
@@ -372,7 +372,7 @@ def test_both_search_backends_agree_on_the_shortest_usable_term(repo):
     Same query, two answers, decided by whether the local SQLite was built with FTS5 —
     a build flag nobody sets deliberately and no test would otherwise vary.
     """
-    from orchard.infra import store as S
+    from ddflow.infra import store as S
 
     src = Path(S.__file__).read_text("utf-8")
     comparisons = [ln.strip() for ln in src.splitlines() if "MIN_TERM_CHARS" in ln and "len(" in ln]
@@ -389,7 +389,7 @@ def test_fold_refuses_to_make_an_item_its_own_ancestor(repo, log):
     """`fold` is the one function fed arbitrary JSON from disk; it may not be broken
     by it. A self-parented item is its own open descendant, hence permanently an
     umbrella: never offered, never claimable, never completable."""
-    from orchard.core.model import fold
+    from ddflow.core.model import fold
 
     log.append("task.added", "T1", {"title": "t1"})
     log.append("task.updated", "T1", {"parent": "T1"})
@@ -475,9 +475,9 @@ def test_one_family_map_serves_both_the_reviewer_and_the_gate(repo):
     "microsoft" to the reviewer layer and "phi-4" to the gate that decides whether the
     review counted. Same drift class as the two that preceded it here.
     """
-    from orchard.config import FAMILY_HINTS, Config
-    from orchard.services.gates import family_of as gate_family
-    from orchard.services.review import family_of as reviewer_family
+    from ddflow.config import FAMILY_HINTS, Config
+    from ddflow.services.gates import family_of as gate_family
+    from ddflow.services.review import family_of as reviewer_family
 
     cfg = Config.load()
     assert cfg.agent.families == FAMILY_HINTS, "the config default IS the canonical map"
@@ -494,9 +494,9 @@ def _mcp(repo, calls):
     import subprocess as sp
 
     root = Path(__file__).resolve().parents[1]
-    env = {**os.environ, "PYTHONPATH": str(root), "ORCHARD_AGENT": "mcp-test"}
+    env = {**os.environ, "PYTHONPATH": str(root), "DDFLOW_AGENT": "mcp-test"}
     proc = sp.Popen(
-        [sys.executable, "-m", "orchard", "--repo", str(repo), "mcp"],
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "mcp"],
         stdin=sp.PIPE,
         stdout=sp.PIPE,
         stderr=sp.PIPE,
@@ -527,7 +527,7 @@ def test_an_unknown_tool_argument_is_refused_not_ignored(repo):
     """Every tool schema declared `additionalProperties: false`; nothing enforced it.
 
     So a caller passing an argument the tool does not have got a SUCCESS and a
-    different result than it asked for. Concretely: `orchard_decision_add` had no `id`
+    different result than it asked for. Concretely: `ddflow_decision_add` had no `id`
     property, an agent passing `id="D1"` had it dropped, the decision landed under a
     generated id, and the `supersedes: ["D1"]` written moments later referenced
     nothing. An agent cannot see this — it has only the reply, and the reply said OK.
@@ -545,7 +545,7 @@ def test_an_unknown_tool_argument_is_refused_not_ignored(repo):
                 },
             ),
             ("notifications/initialized", {}),
-            ("tools/call", {"name": "orchard_status", "arguments": {"nonsense": "x"}}),
+            ("tools/call", {"name": "ddflow_status", "arguments": {"nonsense": "x"}}),
         ],
     )
     body = replies[-1]["result"]["content"][0]["text"]
@@ -571,7 +571,7 @@ def test_a_caller_chosen_id_survives_the_mcp_boundary(repo):
             (
                 "tools/call",
                 {
-                    "name": "orchard_decision_add",
+                    "name": "ddflow_decision_add",
                     "arguments": {
                         "id": "D1",
                         "title": "money is int",
@@ -582,7 +582,7 @@ def test_a_caller_chosen_id_survives_the_mcp_boundary(repo):
             (
                 "tools/call",
                 {
-                    "name": "orchard_lesson_add",
+                    "name": "ddflow_lesson_add",
                     "arguments": {
                         "id": "L1",
                         "title": "empty collections satisfy checks about their contents",
@@ -592,7 +592,7 @@ def test_a_caller_chosen_id_survives_the_mcp_boundary(repo):
             (
                 "tools/call",
                 {
-                    "name": "orchard_decision_add",
+                    "name": "ddflow_decision_add",
                     "arguments": {
                         "id": "D2",
                         "title": "and then it was not",
@@ -625,9 +625,9 @@ def test_a_dependency_can_be_CLEARED_over_mcp(repo):
     """Over MCP a dependency could be added and never removed.
 
     The argv builder treated an empty string as "the caller did not supply this", so
-    `orchard_update(id="X.A", needs="")` returned success and changed nothing, while
-    `orchard update X.A --needs ""` cleared it. Breaking a cycle is precisely the
-    operation that needs an empty value — and it is the operation `orchard loops` tells
+    `ddflow_update(id="X.A", needs="")` returned success and changed nothing, while
+    `ddflow update X.A --needs ""` cleared it. Breaking a cycle is precisely the
+    operation that needs an empty value — and it is the operation `ddflow loops` tells
     you to perform, so the tool's own advice was unfollowable from the surface it was
     delivered on.
     """
@@ -649,7 +649,7 @@ def test_a_dependency_can_be_CLEARED_over_mcp(repo):
                 },
             ),
             ("notifications/initialized", {}),
-            ("tools/call", {"name": "orchard_update", "arguments": {"id": "X.A", "needs": ""}}),
+            ("tools/call", {"name": "ddflow_update", "arguments": {"id": "X.A", "needs": ""}}),
         ],
     )
     assert not replies[-1]["result"].get("isError"), replies[-1]
@@ -696,7 +696,7 @@ def test_an_omitted_field_is_still_left_alone(repo):
             ("notifications/initialized", {}),
             (
                 "tools/call",
-                {"name": "orchard_update", "arguments": {"id": "T1", "body": "new body"}},
+                {"name": "ddflow_update", "arguments": {"id": "T1", "body": "new body"}},
             ),
         ],
     )
@@ -726,7 +726,7 @@ def test_head_observes_each_shard_exactly_once(repo, monkeypatch):
     IS the second walk, and a scheduler-dependent race is a test that passes on the
     machine that has the bug.
     """
-    from orchard.infra.log import EventLog
+    from ddflow.infra.log import EventLog
 
     log = EventLog(repo, "agent-a")
     log.append("session.started", "s1", {})
@@ -749,7 +749,7 @@ def test_a_second_agents_append_changes_the_fingerprint_even_with_a_lower_clock(
     A shard written by an agent whose Lamport clock is BEHIND the global high moves no
     high-water mark — only the byte count can see it.
     """
-    from orchard.infra.log import EventLog
+    from ddflow.infra.log import EventLog
 
     log = EventLog(repo, "agent-a")
     for _ in range(5):

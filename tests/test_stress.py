@@ -15,11 +15,11 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.config import Config
-from orchard.core.model import fold
-from orchard.core.schedule import conflicts, plan
-from orchard.infra.log import EventLog
-from orchard.services import leases as L
+from ddflow.config import Config
+from ddflow.core.model import fold
+from ddflow.core.schedule import conflicts, plan
+from ddflow.infra.log import EventLog
+from ddflow.services import leases as L
 
 N_AGENTS = 8
 N_TASKS = 32

@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.surfaces.mcp import TOOLS, _schema, serve
+from ddflow.surfaces.mcp import TOOLS, _schema, serve
 
 
 @pytest.fixture
@@ -83,7 +83,7 @@ def test_a_tool_call_returns_the_cli_result(proj):
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "orchard_next", "arguments": {"phase": "P1"}},
+                "params": {"name": "ddflow_next", "arguments": {"phase": "P1"}},
             }
         ],
     )
@@ -103,7 +103,7 @@ def test_nothing_to_do_is_a_result_not_an_error(proj):
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "orchard_next", "arguments": {"phase": "P1"}},
+                "params": {"name": "ddflow_next", "arguments": {"phase": "P1"}},
             }
         ],
     )
@@ -121,7 +121,7 @@ def test_a_refused_claim_reaches_the_model_as_content(proj):
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "orchard_claim", "arguments": {"id": "P1.T1"}},
+                "params": {"name": "ddflow_claim", "arguments": {"id": "P1.T1"}},
             }
         ],
     )
@@ -138,12 +138,12 @@ def test_unknown_tool_is_an_error_result_listing_alternatives(proj):
                 "jsonrpc": "2.0",
                 "id": 1,
                 "method": "tools/call",
-                "params": {"name": "orchard_teleport", "arguments": {}},
+                "params": {"name": "ddflow_teleport", "arguments": {}},
             }
         ],
     )
     assert r[0]["result"]["isError"] is True
-    assert "orchard_brief" in r[0]["result"]["content"][0]["text"]
+    assert "ddflow_brief" in r[0]["result"]["content"][0]["text"]
 
 
 def test_notifications_get_no_reply(proj):
@@ -166,7 +166,7 @@ def test_resources_are_readable(proj):
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "resources/read",
-                "params": {"uri": "orchard://board"},
+                "params": {"uri": "ddflow://board"},
             },
         ],
     )
@@ -185,7 +185,7 @@ def test_server_writes_nothing_but_frames_to_stdout(proj):
                     "jsonrpc": "2.0",
                     "id": 1,
                     "method": "tools/call",
-                    "params": {"name": "orchard_board", "arguments": {}},
+                    "params": {"name": "ddflow_board", "arguments": {}},
                 }
             )
             + "\n"
@@ -226,21 +226,21 @@ def test_a_notification_produces_no_frame_so_a_client_must_not_wait(proj):
 def test_every_cli_command_an_agent_needs_has_an_mcp_tool(proj):
     """An MCP-only agent must not be told to do something MCP cannot express.
 
-    `orchard update --globs` is the sharp case: the canonical driver instructs the
+    `ddflow update --globs` is the sharp case: the canonical driver instructs the
     agent to widen its declared globs BEFORE writing outside its claim, and without
     the tool that instruction was impossible to follow over MCP.
     """
     needed = {
-        "show": "orchard_show",
-        "update": "orchard_update",
-        "release": "orchard_release",
-        "block": "orchard_block",
-        "next": "orchard_next",
-        "claim": "orchard_claim",
-        "merge": "orchard_merge",
-        "complete": "orchard_complete",
-        "brief": "orchard_brief",
-        "doctor": "orchard_doctor",
+        "show": "ddflow_show",
+        "update": "ddflow_update",
+        "release": "ddflow_release",
+        "block": "ddflow_block",
+        "next": "ddflow_next",
+        "claim": "ddflow_claim",
+        "merge": "ddflow_merge",
+        "complete": "ddflow_complete",
+        "brief": "ddflow_brief",
+        "doctor": "ddflow_doctor",
     }
     missing = [cli for cli, tool in needed.items() if tool not in TOOLS]
     assert not missing, f"CLI commands with no MCP tool: {missing}"
@@ -255,7 +255,7 @@ def test_the_new_tools_round_trip(proj):
                 "id": 1,
                 "method": "tools/call",
                 "params": {
-                    "name": "orchard_update",
+                    "name": "ddflow_update",
                     "arguments": {"id": "P1.T1", "globs": "src/widened/*"},
                 },
             },
@@ -263,7 +263,7 @@ def test_the_new_tools_round_trip(proj):
                 "jsonrpc": "2.0",
                 "id": 2,
                 "method": "tools/call",
-                "params": {"name": "orchard_show", "arguments": {"id": "P1.T1"}},
+                "params": {"name": "ddflow_show", "arguments": {"id": "P1.T1"}},
             },
         ],
     )
@@ -275,7 +275,7 @@ def test_the_new_tools_round_trip(proj):
 def test_starting_the_server_does_not_modify_the_repository(repo):
     """A handshake is a read. It must not leave anything behind.
 
-    It used to create `.orchard/events/` merely by constructing the event log, which
+    It used to create `.ddflow/events/` merely by constructing the event log, which
     (a) littered any repository an agent merely connected to, and (b) made the
     "is this project adopted?" check answer yes about a directory the server had just
     created itself.
@@ -294,7 +294,7 @@ def test_starting_the_server_does_not_modify_the_repository(repo):
         ],
     )
     assert sorted(p.name for p in repo.iterdir()) == before, "the handshake wrote to the repo"
-    assert not (repo / ".orchard").exists()
+    assert not (repo / ".ddflow").exists()
 
 
 def test_an_unadopted_repo_is_told_to_set_up_even_after_a_handshake(repo):
@@ -310,8 +310,8 @@ def test_an_unadopted_repo_is_told_to_set_up_even_after_a_handshake(repo):
         ],
     )
     text = out[0]["result"]["instructions"]
-    assert "does not use Orchard yet" in text
-    assert "orchard_setup" in text
+    assert "does not use ddflow yet" in text
+    assert "ddflow_setup" in text
 
 
 # -- workflow commands, exposed as MCP prompts ----------------------------------------
@@ -336,7 +336,7 @@ def test_the_prompts_capability_is_advertised(proj):
 
 
 def test_every_workflow_command_is_listed_with_a_usable_description(proj):
-    from orchard.services.prompts import COMMANDS
+    from ddflow.services.prompts import COMMANDS
 
     r = rpc(proj, [{"jsonrpc": "2.0", "id": 1, "method": "prompts/list"}])
     listed = {p["name"]: p for p in r[0]["result"]["prompts"]}
@@ -373,7 +373,7 @@ def test_a_command_renders_with_and_without_its_optional_argument(proj):
 
 
 def test_every_shipped_command_renders_cleanly(proj):
-    from orchard.services.prompts import COMMANDS
+    from ddflow.services.prompts import COMMANDS
 
     for name in COMMANDS:
         r = rpc(
@@ -404,7 +404,7 @@ def test_an_unknown_command_is_an_error_naming_the_known_ones(proj):
 
 def test_all_tests_names_the_projects_own_configured_suites(proj):
     """A generic list the reader has to translate is worth less than the real one."""
-    (proj / ".orchard" / "config.toml").write_text(
+    (proj / ".ddflow" / "config.toml").write_text(
         '[gate.integration_tests]\ncommand = "pytest tests/integration -q"\n\n'
         '[gate.e2e_tests]\ncommand = "npm run test:e2e"\n'
     )
@@ -426,7 +426,7 @@ def test_all_tests_names_the_projects_own_configured_suites(proj):
 def test_a_project_can_override_a_shipped_command(proj):
     """The workflows ship as text precisely so a project can rewrite one without
     touching code."""
-    d = proj / ".orchard" / "prompts" / "commands"
+    d = proj / ".ddflow" / "prompts" / "commands"
     d.mkdir(parents=True, exist_ok=True)
     (d / "code-clean.md").write_text("OUR OWN CLEANUP PROCEDURE\n")
     r = rpc(

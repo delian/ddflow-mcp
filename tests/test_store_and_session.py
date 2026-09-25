@@ -4,9 +4,9 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.core.model import fold
-from orchard.infra.store import Store
-from orchard.services import sessions as session
+from ddflow.core.model import fold
+from ddflow.infra.store import Store
+from ddflow.services import sessions as session
 
 
 @pytest.fixture

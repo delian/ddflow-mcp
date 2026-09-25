@@ -39,7 +39,7 @@ def _scenarios():
 def test_every_scenario_still_imports():
     """Cheap, and it is the check that actually rots.
 
-    A scenario is a module that reaches deep into the package — `orchard_claim` tool
+    A scenario is a module that reaches deep into the package — `ddflow_claim` tool
     names, `Plan` fields, event kinds. When the package moves, a scenario breaks at
     IMPORT time, and nobody finds out until the next manual run. This is that check,
     and it costs a second.

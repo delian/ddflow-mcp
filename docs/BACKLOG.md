@@ -4,8 +4,8 @@ Each entry is a real finding from the review stack that was judged out of scope 
 initial build. None is a silent TODO in the source: they are all here, with the analysis
 that produced them, so the next session does not rediscover them.
 
-In an adopted project these would be Orchard tasks (`orchard task add ...`). They live in
-markdown here because Orchard is not yet dogfooding itself — which is itself the first
+In an adopted project these would be ddflow tasks (`ddflow task add ...`). They live in
+markdown here because ddflow is not yet dogfooding itself — which is itself the first
 item below.
 
 ## Structural
@@ -52,7 +52,7 @@ item below.
   is worse than declaring none. *Found by: roborev architecture (C10). Not urgent: at
   407k events/s the growth ceiling is far away.*
 
-- **B7 — Orchard does not dogfood itself.** This backlog should be an Orchard queue, and
+- **B7 — ddflow does not dogfood itself.** This backlog should be an ddflow queue, and
   this project's own development should run through its own gates. The reason it does
   not yet is bootstrapping order, not principle.
 
@@ -85,18 +85,18 @@ item below.
 ## From mining this project's source repository's lessons corpus (2026-09-24)
 
 A subagent read `docs/lessons-summary.md`, the 25 newest `docs/lessons.md` entries and
-the standing rulebooks of the project Orchard was extracted from, looking for
+the standing rulebooks of the project ddflow was extracted from, looking for
 capabilities born of repeated failure. Four were implemented immediately (they are gone
 from this list); these are the rest, ranked as it ranked them.
 
-- **B15 — `orchard gate verify <gate>`: mutation-verify that a gate CAN fail.** Orchard
+- **B15 — `ddflow gate verify <gate>`: mutation-verify that a gate CAN fail.** ddflow
   has ten gates and nothing proves any of them is capable of going red. A gate declares
   `mutations = [{file, old, new}]`; the runner asserts `src.count(old) == 1` *before*
   patching (a mutation that did not apply is not a passed mutation test — the suite goes
   green and reads as "the check cannot detect this", the opposite conclusion), requires
   a non-zero exit, restores. A gate with zero registered mutations is itself a failure.
   *This is the highest-value item on the list: it is the anti-vacuous-pass check applied
-  to Orchard's own checks.*
+  to ddflow's own checks.*
 
 - **B16 — diff-derived test selection plus a full-suite cadence.** "Choosing which tests
   to run by reasoning about the change is guessing — derive it." And targeted sweeps hide
@@ -111,10 +111,10 @@ from this list); these are the rest, ranked as it ranked them.
   while a reader who finds a wrong default trusts it.
 
 - **B18 — regenerate-and-diff guard for generated files.** Any file marked generated is
-  regenerated in pre-commit and must come back byte-identical. Orchard's own
-  `docs/orchard/*.md` views have exactly this hazard.
+  regenerated in pre-commit and must come back byte-identical. ddflow's own
+  `docs/ddflow/*.md` views have exactly this hazard.
 
-- **B19 — pickability audit.** After filing a task, assert `orchard next` can actually
+- **B19 — pickability audit.** After filing a task, assert `ddflow next` can actually
   offer it. On the source project 37 follow-ups — including four confirmed reviewer
   findings — were filed where the picker could not see them, and nothing failed: the
   counts reconciled and the audits exited 0.
@@ -135,17 +135,17 @@ from this list); these are the rest, ranked as it ranked them.
 - **B22 — prose-pin coverage before editing an instruction file.** Compressing a
   rulebook without checking which sentences are pinned by tests deletes rules silently;
   one by-eye pass on the source project broke nine pins, because "every sentence picked
-  read like rationale and was a rule". Orchard ships a driver and a rulebook block.
+  read like rationale and was a rule". ddflow ships a driver and a rulebook block.
 
 - **B23 — stale-rulebook / behind-count gate for long-lived branches.** Rulebook edits
   landing on the default branch are silently ignored by sessions that loaded them at
-  start, and drift compounds: a 98-commits-behind branch had to be hand-ported. Orchard
+  start, and drift compounds: a 98-commits-behind branch had to be hand-ported. ddflow
   creates long-lived worktrees and has no staleness half. Note the asymmetry the source
   project settled on: the session hook *informs* (always exit 0), the commit gate
   *blocks*.
 
 - **B24 — per-gate fire-rate tracking.** "A gate that fails on everything is worse than
-  no gate: it trains the next reader to skip it." Orchard has the event log to compute
+  no gate: it trains the next reader to skip it." ddflow has the event log to compute
   this from; a gate firing on ~100% of changes should be auto-flagged for repair.
 
 - **B25 — cadence fired-vs-scheduled counter.** "The mechanism you did not measure is the
@@ -153,7 +153,7 @@ from this list); these are the rest, ranked as it ranked them.
   ever fired, producing a 12-hour stall while an undesignated mechanism did the work.
 
 - **B26 — test-polluter bisect.** Delta-bisect the test file that makes another fail only
-  in full-suite order. Generic and high-value, but only once Orchard owns test execution
+  in full-suite order. Generic and high-value, but only once ddflow owns test execution
   rather than shelling out to a project's own command.
 
 ## B27–B34 — from the 2026-09-24 review pass
@@ -176,7 +176,7 @@ Filed rather than fixed, each with why it is not urgent.
   counted across the whole queue, each naming itself when it is the one that refused.
   `tests/test_rubber_duck_findings.py` mutation-verified.
 
-- **B29. Companion detection has no cache.** `orchard companions` probes on every call,
+- **B29. Companion detection has no cache.** `ddflow companions` probes on every call,
   and an `npx`-based probe can take seconds on a cold cache. `adopt` pays this once, and
   `--no-probe` exists, but a session-start hook that called it would feel it. A cached
   result with a short TTL in the gitignored index would fix it. *Found by: the first
@@ -205,7 +205,7 @@ Filed rather than fixed, each with why it is not urgent.
   matters most is the one CI does not run. (Ceremony note: they take ~2 minutes and
   spawn processes, so they want their own marker and job, not inclusion in `tests/`.)
 
-- **B34. `orchard history` does not exist as one view. ✅ CLOSED.** One
+- **B34. `ddflow history` does not exist as one view. ✅ CLOSED.** One
   reverse-chronological timeline over the log, filterable by `--item`, `--kind`
   (families or exact kinds), `--since` and `--limit`, on both surfaces. The MCP tool was
   missing on the first pass and `tests/test_mcp_parity.py` caught it, which is what that
@@ -225,7 +225,7 @@ of recording it is to stop the next reading re-deriving it.
   `sys.stdout`/`sys.stderr` for each call, which is not reentrant and forecloses
   concurrency. Parity is held by ratchets where types would hold it structurally, and
   those ratchets catch a *missing* flag, not a *changed* encoding. The fix is a real
-  application layer (`orchard/api.py`) that both surfaces call; it is a large change
+  application layer (`ddflow/api.py`) that both surfaces call; it is a large change
   and the ratchets make the current shape safe, so it waits for a reason rather than a
   free afternoon.
 
@@ -233,7 +233,7 @@ of recording it is to stop the next reading re-deriving it.
   importers, committed in 89386614 and never wired into any of the ~60 command
   functions. Deleted 2026-09-24 rather than left in place: an unreferenced module that
   ships in the package is worse than a backlog entry, because it is importable,
-  untested and reads as live API to the next person. `git show 89386614:orchard/orchard/services/outcome.py`
+  untested and reads as live API to the next person. `git show 89386614:ddflow/ddflow/services/outcome.py`
   has it when B35 is actually done. *Found by: reading the change surface before
   committing.*
 
@@ -254,7 +254,7 @@ of recording it is to stop the next reading re-deriving it.
 - **B38. Latent circular dependency `cli ↔ mcp_server`,** held apart only by a
   function-local import. Hoisting it to module level reproduces:
   `ImportError: cannot import name 'main' from partially initialized module
-  'orchard.cli'`. Harmless today; it is a tell for B35.
+  'ddflow.cli'`. Harmless today; it is a tell for B35.
 
 - **B39. `State` has no parent index, so `children()` is a full scan** and
   `descendants()`/`ancestors()`/`_is_umbrella()` call it per node per candidate.
@@ -322,10 +322,10 @@ it a granularity gap rather than a counting bug.*
 
 Three reviewers, disjoint findings, which is the whole reason all three are run.
 
-- **B53. `orchard merge` acted on an item REMOVED from the queue. ✅ CLOSED.** It was
+- **B53. `ddflow merge` acted on an item REMOVED from the queue. ✅ CLOSED.** It was
   the one mutating command not routed through `_require_item`. Removal is a FLAG on an
   item that still folds, so `st.items.get()` found it and only the flag said it was
-  gone — and `orchard merge T1` landed the branch of work the operator had explicitly
+  gone — and `ddflow merge T1` landed the branch of work the operator had explicitly
   dropped, printing `merged T1 (0638b5c6) into main`. Probe first, fix second; the
   probe ships as `tests/test_roborev_findings.py::test_merge_refuses_an_item_that_was_removed_from_the_queue`
   and was mutation-verified. Swept the class: three other `st.items.get()` sites in
@@ -476,14 +476,14 @@ anyone ask the tool what it does?
   and `Item` had no source field, so "which items came from the import" could only be
   answered by regexing a sentence. That is the metadata-key-vs-field class: reword the
   sentence and the count silently becomes zero while the verification passes. `Item`
-  now carries `source`, the body prose stays for `orchard show`, and `item.completed`'s
+  now carries `source`, the body prose stays for `ddflow show`, and `item.completed`'s
   `evidence` — written by the importer since day one and DROPPED by the fold, the third
   instance of that bug in this series — lands on `Item.completion_evidence`.
   `ResearchNote` gained `tags` so `imported` is spelled the same way on all three memory
   kinds; telling an imported note from a hand-written one by the SHAPE of its `sources`
   would have been a heuristic pretending to be a fact.
 
-- **B70. `orchard import --verify` / `orchard_import_verify`. ✅ CLOSED.** Status (what
+- **B70. `ddflow import --verify` / `ddflow_import_verify`. ✅ CLOSED.** Status (what
   is imported, per kind, and when), still-true (drift since, sources that yielded
   nothing, source files that have vanished) and finished (tasks with no globs, phases
   claiming SHIPPED over an open task). Exit 0/1/2 because there are three answers.
@@ -496,12 +496,12 @@ anyone ask the tool what it does?
   1,170 tasks and stopped there was never mentioned again. The handshake now reports
   unfinished imported work — computed from the already-folded queue, so the ~0.65 s
   source scan stays out of every session start — and tells the agent to run
-  `orchard_import_verify` before handing any of it out.
+  `ddflow_import_verify` before handing any of it out.
   `/import-existing-project` opens by checking what is already imported and branches to
   finishing-and-refreshing. Same name: renaming breaks anyone invoking it, and a second
   near-identical prompt is two documents that drift.
 
-- **B72. `orchard help` / `orchard_help`. ✅ CLOSED.** There was no help surface on MCP
+- **B72. `ddflow help` / `ddflow_help`. ✅ CLOSED.** There was no help surface on MCP
   at all, and argparse's listed 43 subcommands alphabetically without saying which to
   reach for first. Seven topics as overridable templates plus a generated capability
   inventory. Three ratchets: every command a page names must exist as a CLI leaf or an
@@ -526,8 +526,8 @@ MCP or by hand.
 - **B73. Nothing showed the configured workflow as a whole. ✅ CLOSED.** `gate status
   <id>` showed one item's position, `config --explain` printed ~60 flat knobs, and the
   only place that ever joined the pipeline, the gates and the companions was the MCP
-  handshake — computed once at connect and unreachable from a terminal. `orchard
-  workflow` / `orchard_workflow` now answers it, including **where each value came
+  handshake — computed once at connect and unreachable from a terminal. `ddflow
+  workflow` / `ddflow_workflow` now answers it, including **where each value came
   from**, so a deliberate choice is distinguishable from an untouched default.
 
 - **B74. A pipeline naming an undefined gate was a silent, permanent trap. ✅ CLOSED.**
@@ -536,7 +536,7 @@ MCP or by hand.
   rejects the id as unknown — so the item could never be completed at all except with
   `--force`, and nothing anywhere said why. One typo bricked every item entering the
   pipeline. Now refused at write time with the near miss named, and reported by both
-  `orchard workflow` and `orchard doctor`.
+  `ddflow workflow` and `ddflow doctor`.
 
 - **B75. The config write paths validated syntax only. ✅ CLOSED.** `--append-toml`
   parsed the merged text for SYNTAX and then validated `Config.load(repo)` — the config
@@ -556,14 +556,14 @@ MCP or by hand.
 
 - **B77. Imported notes were counted without a provenance filter. ✅ CLOSED.**
   `len(sess.notes)` counted every note in `s-imported-journal` / `s-imported-memory`,
-  and `orchard session note <sid>` accepts ANY session id — so one hand-written note
+  and `ddflow session note <sid>` accepts ANY session id — so one hand-written note
   inflated the imported count. Probed: 1 → 2. The sibling loop for lessons, decisions
   and research already filtered on the `imported` tag; this one did not. *Found by: the
   cross-family critic, raised THEORETICAL with a refutation ("if those sessions are
   written only by the import") that a five-line probe killed.*
 
 - **B78. Cursor was supported, in the default agent set, and named nowhere a user
-  looks. ✅ CLOSED.** Absent from the `--agents` help, the `orchard_setup` tool
+  looks. ✅ CLOSED.** Absent from the `--agents` help, the `ddflow_setup` tool
   description and the README's agent table. Two README links to `templates/drivers/…`
-  were also broken — the real path is `orchard/templates/drivers/…`. A ratchet now
+  were also broken — the real path is `ddflow/templates/drivers/…`. A ratchet now
   asserts every key of `AGENT_TARGETS` is named in all three places.

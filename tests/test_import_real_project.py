@@ -25,7 +25,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.services import importer as IM
+from ddflow.services import importer as IM
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -150,8 +150,8 @@ def plan(repo: Path):
 
 
 def _state(repo: Path):
-    from orchard.core.model import fold
-    from orchard.infra.log import EventLog
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
 
     return fold(EventLog(repo, "agent-test").read_all(), strict=False)
 
@@ -416,7 +416,7 @@ def test_the_knobs_are_configurable(repo):
     knob and 0 means "no flag given" rather than a default masquerading as a choice."""
     _real(repo)
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text("[importer]\nmax_tasks = 1\n")
+    (repo / ".ddflow" / "config.toml").write_text("[importer]\nmax_tasks = 1\n")
     _code, out, err = run_cli(repo, "import")
     assert "REFUSING" in out + err, out + err
     _code, out, _ = run_cli(repo, "import", "--max-tasks", "500")
@@ -430,7 +430,7 @@ def test_the_offer_counts_every_source_not_three_of_them(repo):
     history is an engineering journal and a cross-session memory store was told
     nothing, which is exactly the project the offer exists for.
     """
-    from orchard.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instructions
 
     (repo / "docs" / "log").mkdir(parents=True)
     (repo / ".agent_memory").mkdir()
@@ -439,7 +439,7 @@ def test_the_offer_counts_every_source_not_three_of_them(repo):
     run_cli(repo, "init")
 
     text = _instructions(repo)
-    assert "orchard_import" in text, text[-800:]
+    assert "ddflow_import" in text, text[-800:]
     assert "queue is empty" in text.lower(), text[-800:]
 
 
@@ -515,7 +515,7 @@ def test_an_underscore_in_an_id_survives_the_needs_line(repo):
 
 
 def _host_repo() -> Path | None:
-    """The repository Orchard itself lives in, if it is a long-lived one."""
+    """The repository ddflow itself lives in, if it is a long-lived one."""
     here = Path(__file__).resolve()
     for parent in here.parents:
         if (parent / "docs" / "lessons.md").is_file() and (parent / ".git").exists():

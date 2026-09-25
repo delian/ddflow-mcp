@@ -1,6 +1,6 @@
 """No child process may inherit the MCP server's stdin.
 
-Orchard speaks MCP over **stdio**: the JSON-RPC session is literally this process's
+ddflow speaks MCP over **stdio**: the JSON-RPC session is literally this process's
 stdin and stdout. `subprocess.run(...)` with no explicit `stdin=` hands the child that
 same pipe, so any child that reads stdin — an arbitrary shell command in a gate, a
 reviewer CLI, an `npx` that wants to prompt — eats the bytes the protocol needed, or
@@ -8,7 +8,7 @@ closes the descriptor outright.
 
 The failure is as quiet as a failure gets. The server exits **zero**, stderr is
 **empty**, and the client sees a closed stream with nothing at all to explain it. It
-was found when a companion-detection probe added to `orchard setup` ended the MCP
+was found when a companion-detection probe added to `ddflow setup` ended the MCP
 session on the *next* tool call, and it had been latent in all twelve subprocess call
 sites since the beginning: `gate run` executes an arbitrary project command, which is
 the one place a stdin-reading child is not merely possible but likely.
@@ -36,9 +36,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def _server(repo: Path) -> subprocess.Popen:
-    env = {**os.environ, "PYTHONPATH": str(ROOT), "ORCHARD_AGENT": "stdio-test"}
+    env = {**os.environ, "PYTHONPATH": str(ROOT), "DDFLOW_AGENT": "stdio-test"}
     return subprocess.Popen(
-        [sys.executable, "-m", "orchard", "--repo", str(repo), "mcp"],
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -81,7 +81,7 @@ def test_a_gate_command_that_reads_stdin_does_not_end_the_mcp_session(repo):
     stopped, with a zero exit code and an empty stderr on both sides.
     """
     run_cli(repo, "init")
-    (repo / ".orchard" / "gates.toml").write_text(
+    (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "cat"\ncwd = "repo"\n'
     )
     run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
@@ -103,7 +103,7 @@ def test_a_gate_command_that_reads_stdin_does_not_end_the_mcp_session(repo):
         ran = _rpc(
             proc,
             "tools/call",
-            {"name": "orchard_gate_run", "arguments": {"id": "P1.T1", "gate": "unit_tests"}},
+            {"name": "ddflow_gate_run", "arguments": {"id": "P1.T1", "gate": "unit_tests"}},
             rid=2,
         )
         assert ran, (
@@ -117,7 +117,7 @@ def test_a_gate_command_that_reads_stdin_does_not_end_the_mcp_session(repo):
             # what the bounded `select` above was added to prevent. The bounded read
             # only bounded the REPLY.
         )
-        after = _rpc(proc, "tools/call", {"name": "orchard_status", "arguments": {}}, rid=3)
+        after = _rpc(proc, "tools/call", {"name": "ddflow_status", "arguments": {}}, rid=3)
         assert after, (
             "the gate returned but the NEXT call found a closed stream: the child "
             "consumed the buffered protocol bytes rather than killing the process, "
@@ -151,7 +151,7 @@ def test_no_module_spawns_a_process_without_going_through_proc(repo):
         r"|^\s*from subprocess import"
     )
     offenders = []
-    for path in sorted((ROOT / "orchard").rglob("*.py")):
+    for path in sorted((ROOT / "ddflow").rglob("*.py")):
         if path.name == "proc.py":
             continue
         src = path.read_text("utf-8")
@@ -180,7 +180,7 @@ def test_the_guard_actually_detaches_stdin():
     """
     parent = (
         f"import sys; sys.path.insert(0, {str(ROOT)!r});"
-        "from orchard.infra import proc as P;"
+        "from ddflow.infra import proc as P;"
         "r = P.run([sys.executable, '-c', 'import sys; sys.stdout.write(sys.stdin.read())'],"
         "          capture_output=True, text=True, timeout=30);"
         "print('CHILD_SAW=' + repr(r.stdout));"
@@ -209,7 +209,7 @@ def test_an_explicit_input_still_reaches_the_child():
     setting both `input` and `stdin` is a TypeError, which is how this nearly shipped
     as a regression in the reviewer backend.
     """
-    from orchard.infra import proc as P
+    from ddflow.infra import proc as P
 
     fed = P.run(
         [sys.executable, "-c", "import sys; sys.stdout.write(sys.stdin.read())"],
@@ -244,7 +244,7 @@ def test_a_protocol_level_refusal_carries_a_non_zero_exit(repo):
         )
         _rpc(proc, "notifications/initialized")
         line = _rpc(
-            proc, "tools/call", {"name": "orchard_bug_fixed", "arguments": {"id": "B1"}}, rid=2
+            proc, "tools/call", {"name": "ddflow_bug_fixed", "arguments": {"id": "B1"}}, rid=2
         )
         res = json.loads(line)["result"]
         assert res["isError"], res

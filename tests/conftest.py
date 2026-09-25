@@ -7,8 +7,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from orchard.config import Config
-from orchard.infra.log import EventLog
+from ddflow.config import Config
+from ddflow.infra.log import EventLog
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ def log(repo: Path) -> EventLog:
 def run_cli(repo: Path, *argv: str, agent: str = "") -> tuple[int, str, str]:
     """Invoke the CLI as a real subprocess, as an agent would."""
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
-    args = [sys.executable, "-m", "orchard", "--repo", str(repo)]
+    args = [sys.executable, "-m", "ddflow", "--repo", str(repo)]
     if agent:
         args += ["--agent", agent]
     p = subprocess.run([*args, *argv], capture_output=True, text=True, env=env, timeout=300)

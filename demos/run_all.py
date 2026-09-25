@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run every Orchard demo scenario against freshly invented projects.
+"""Run every ddflow demo scenario against freshly invented projects.
 
 python3 demos/run_all.py             # all scenarios
 python3 demos/run_all.py crash       # substring-matched subset
@@ -39,7 +39,7 @@ def main(argv: list[str]) -> int:
     if not wanted:
         print(f"no scenario matches {argv}; known: {[s[0] for s in SCENARIOS]}")
         return 2
-    base = pathlib.Path("/tmp/orchard-demos")
+    base = pathlib.Path("/tmp/ddflow-demos")
     if base.exists():
         shutil.rmtree(base)
     results = []

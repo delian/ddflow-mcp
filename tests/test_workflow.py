@@ -1,4 +1,4 @@
-"""`orchard workflow` — the rules in force here, and changing them safely.
+"""`ddflow workflow` — the rules in force here, and changing them safely.
 
 Nothing joined the pipeline, the gates, the reviewers and the completion rules into one
 answer. `gate status <id>` showed one item's position, `config --explain` printed ~60
@@ -21,9 +21,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.config import Config
-from orchard.services.gates import load_gates
-from orchard.services.workflow import ADVISORY, PROBLEM, check
+from ddflow.config import Config
+from ddflow.services.gates import load_gates
+from ddflow.services.workflow import ADVISORY, PROBLEM, check
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -36,7 +36,7 @@ def _cfg(repo: Path, **over) -> Config:
 
 
 def _conf(repo: Path) -> str:
-    p = repo / ".orchard" / "config.toml"
+    p = repo / ".ddflow" / "config.toml"
     return p.read_text() if p.exists() else ""
 
 
@@ -122,7 +122,7 @@ def test_doctor_reports_the_incoherence_too(repo):
     # Written directly: the editor now REFUSES this state, which is the point of the
     # test above. `doctor` still has to diagnose a config that got there another way —
     # a hand edit, a merge, a config written before the check existed.
-    (repo / ".orchard" / "config.toml").write_text(
+    (repo / ".ddflow" / "config.toml").write_text(
         '[gates]\ntask_pipeline = ["research", "implment", "merge"]\nrequired = []\n'
     )
     code, out, _ = run_cli(repo, "doctor")
@@ -263,17 +263,17 @@ def test_a_rejected_edit_never_leaves_the_config_empty(repo):
 
 
 def test_every_workflow_command_is_reachable_over_mcp(repo):
-    from orchard.surfaces.mcp import TOOLS
+    from ddflow.surfaces.mcp import TOOLS
 
     for tool in (
-        "orchard_workflow",
-        "orchard_workflow_pipeline",
-        "orchard_workflow_gate",
-        "orchard_workflow_drop",
+        "ddflow_workflow",
+        "ddflow_workflow_pipeline",
+        "ddflow_workflow_gate",
+        "ddflow_workflow_drop",
     ):
         assert tool in TOOLS, sorted(t for t in TOOLS if "workflow" in t)
-    assert TOOLS["orchard_workflow"]["argv"]({}) == ["--json", "workflow"]
-    argv = TOOLS["orchard_workflow_gate"]["argv"](
+    assert TOOLS["ddflow_workflow"]["argv"]({}) == ["--json", "workflow"]
+    argv = TOOLS["ddflow_workflow_gate"]["argv"](
         {"id": "lint", "command": "x", "into": "task", "required": True, "dry_run": True}
     )
     assert "--required" in argv and "--dry-run" in argv and "--into" in argv, argv
@@ -282,9 +282,9 @@ def test_every_workflow_command_is_reachable_over_mcp(repo):
 def test_the_mutating_tools_tell_the_agent_to_ask_first(repo):
     """A pipeline governs every future item, not the one in hand. An agent that edits it
     unilaterally has changed the rules the operator set."""
-    from orchard.surfaces.mcp import TOOLS
+    from ddflow.surfaces.mcp import TOOLS
 
-    for tool in ("orchard_workflow_pipeline", "orchard_workflow_gate", "orchard_workflow_drop"):
+    for tool in ("ddflow_workflow_pipeline", "ddflow_workflow_gate", "ddflow_workflow_drop"):
         desc = TOOLS[tool]["description"]
         assert "operator" in desc, f"{tool} never mentions the operator"
         assert "WRITES" in desc, f"{tool} does not say it writes"
@@ -308,7 +308,7 @@ def test_a_pipeline_written_across_several_lines_can_still_be_changed(repo):
     operator did not write.
     """
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text(
+    (repo / ".ddflow" / "config.toml").write_text(
         '[gates]\ntask_pipeline = [\n  "research",\n  "implement",\n  "merge",\n]\n'
         "require_outcome = true\n"
     )
@@ -322,13 +322,13 @@ def test_a_section_header_with_a_trailing_comment_is_still_found(repo):
     """`[gates]  # the pipeline` did not match `ln.strip() == "[gates]"`, so a SECOND
     `[gates]` was appended — and TOML forbids declaring a table twice."""
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text(
+    (repo / ".ddflow" / "config.toml").write_text(
         "[gates]  # how work is checked\nrequire_outcome = true\n"
     )
     code, _out, err = run_cli(repo, "config", "--set", "gates.require_outcome", "false")
     assert code == OK, err
     assert Config.load(repo).gates.require_outcome is False
-    assert (repo / ".orchard" / "config.toml").read_text().count("[gates]") == 1
+    assert (repo / ".ddflow" / "config.toml").read_text().count("[gates]") == 1
 
 
 MULTILINE_GATE = '''[gate.design_review]
@@ -347,20 +347,20 @@ def test_an_edit_never_reaches_inside_a_multi_line_string(repo):
     A hand-written agent prompt is a `\"\"\"...\"\"\"` value, and a line inside it that
     happens to read `command = ...` matched the key scan. So `--command "ruff check ."`
     was written INTO the prompt, the real `command` key was never set, the gate was
-    added to the pipeline anyway, and `orchard workflow` certified the result coherent.
+    added to the pipeline anyway, and `ddflow workflow` certified the result coherent.
     Exit 0. Every future task would then be handed a tampered instruction.
 
     A `[` inside the prose is the same bug by the other route: the section scan stopped
     at it and inserted the new key into the middle of the prompt.
     """
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text(MULTILINE_GATE)
+    (repo / ".ddflow" / "config.toml").write_text(MULTILINE_GATE)
     code, out, err = run_cli(
         repo, "workflow", "gate", "design_review", "--command", "ruff check .", "--into", "task"
     )
     assert code == OK, out + err
 
-    from orchard.services.gates import load_gates
+    from ddflow.services.gates import load_gates
 
     cfg = Config.load(repo)
     g = load_gates(repo, cfg)["design_review"]
@@ -372,7 +372,7 @@ def test_an_edit_never_reaches_inside_a_multi_line_string(repo):
 def test_a_required_gate_cannot_be_created_outside_every_pipeline(repo):
     """The writer manufacturing the exact problem its own reader reports.
 
-    `--required` without `--into` exits 0 and leaves `orchard workflow` exiting 1 with
+    `--required` without `--into` exits 0 and leaves `ddflow workflow` exiting 1 with
     "required but is in neither pipeline". `drop` is careful about this class; `gate`
     was not — `_write_config` validated the SCHEMA and never the workflow.
     """
@@ -418,7 +418,7 @@ def test_a_gate_scoped_to_phases_is_not_silently_accepted_in_the_task_pipeline(r
 def test_concurrent_config_writes_do_not_lose_each_other(repo):
     """Read-modify-write with no lock, in a tool whose whole purpose is parallel agents.
 
-    Two agents each running `orchard workflow gate ...` is the normal case here, not an
+    Two agents each running `ddflow workflow gate ...` is the normal case here, not an
     exotic one, and 40 concurrent pairs lost half their edits while every call returned
     success. The package already owns the file lock the event log uses.
     """
@@ -433,6 +433,6 @@ def test_concurrent_config_writes_do_not_lose_each_other(repo):
     with cf.ThreadPoolExecutor(max_workers=6) as pool:
         assert all(code == OK for code in pool.map(write, keys))
 
-    text = (repo / ".orchard" / "config.toml").read_text()
+    text = (repo / ".ddflow" / "config.toml").read_text()
     missing = [k for k in keys if k.rsplit(".", 2)[1] not in text]
     assert not missing, f"{len(missing)} of {len(keys)} edits reported success and vanished"

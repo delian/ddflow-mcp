@@ -1,4 +1,4 @@
-"""Adopting Orchard on day 400 of a project, not day 1.
+"""Adopting ddflow on day 400 of a project, not day 1.
 
 A queue that starts empty tells the next agent "nothing is in flight" about a repository
 that may have three branches in flight and forty open items in a todo file — and the
@@ -224,18 +224,18 @@ def test_an_empty_repository_says_so_rather_than_failing(repo):
 
 
 def test_the_mcp_instructions_offer_it_when_there_is_history_and_no_queue(repo):
-    from orchard.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instructions
 
     _legacy(repo)
     run_cli(repo, "init")
     text = _instructions(repo)
-    assert "orchard_import" in text, text[-600:]
+    assert "ddflow_import" in text, text[-600:]
     assert "queue is empty" in text.lower(), text[-600:]
 
 
 def test_it_stops_offering_once_the_queue_has_work(repo):
     """Otherwise it becomes a standing banner, which is a thing readers learn to skip."""
-    from orchard.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instructions
 
     _legacy(repo)
     run_cli(repo, "init")
@@ -244,18 +244,18 @@ def test_it_stops_offering_once_the_queue_has_work(repo):
 
 
 def test_the_workflow_prompt_ships_and_covers_the_judgement_half(repo):
-    from orchard.services.prompts import COMMANDS, resolve_command
+    from ddflow.services.prompts import COMMANDS, resolve_command
 
     assert "import-existing-project" in COMMANDS
     body = resolve_command("import-existing-project").text
-    for must in ("globs", "operator", "in flight", "orchard_import"):
+    for must in ("globs", "operator", "in flight", "ddflow_import"):
         assert must in body, f"the prompt never mentions {must!r}"
     assert "guess" in body.lower(), "it must say which parts are guesses"
 
 
 def test_the_command_is_reachable_over_mcp(repo):
-    from orchard.surfaces.mcp import TOOLS
+    from ddflow.surfaces.mcp import TOOLS
 
-    assert "orchard_import" in TOOLS
-    argv = TOOLS["orchard_import"]["argv"]({"apply": True, "include_done": True})
+    assert "ddflow_import" in TOOLS
+    argv = TOOLS["ddflow_import"]["argv"]({"apply": True, "include_done": True})
     assert "--apply" in argv and "--include-done" in argv, argv
