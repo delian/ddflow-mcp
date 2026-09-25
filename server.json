@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.OWNER/orchard",
-  "title": "Orchard",
+  "name": "io.github.OWNER/ddflow",
+  "title": "ddflow",
   "description": "Work-queue kernel for AI coding agents: phases and tasks with dependencies, parallel git-worktree isolation, crash recovery, a quality-gate pipeline, and cross-family review. The event log is the source of truth, so the project rebuilds from it alone.",
   "repository": {
-    "url": "https://github.com/OWNER/orchard",
+    "url": "https://github.com/OWNER/ddflow",
     "source": "github"
   },
   "version": "0.1.0",
@@ -12,19 +12,19 @@
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
-      "identifier": "orchard-mcp",
+      "identifier": "ddflow-mcp",
       "version": "0.1.0",
       "runtimeHint": "uvx",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         {
-          "name": "ORCHARD_REPO",
-          "description": "Repository root Orchard manages. Defaults to the client's working directory, resolved to the primary checkout even when called from inside a git worktree.",
+          "name": "DDFLOW_REPO",
+          "description": "Repository root ddflow manages. Defaults to the client's working directory, resolved to the primary checkout even when called from inside a git worktree.",
           "isRequired": false,
           "isSecret": false
         },
         {
-          "name": "ORCHARD_AGENT",
+          "name": "DDFLOW_AGENT",
           "description": "Stable identity for this agent process. Shards the event log so concurrent agents never write the same file. Defaults to host-pid.",
           "isRequired": false,
           "isSecret": false

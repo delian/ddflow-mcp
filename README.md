@@ -1,4 +1,4 @@
-# Orchard
+# ddflow
 
 A portable, agent-agnostic **work-queue kernel** for AI coding agents.
 
@@ -57,20 +57,20 @@ and an MCP server that are the same implementation.
 ## Help: what it can do, and the workflow
 
 ```console
-$ orchard help                 # what this is, the loop, every capability grouped
-$ orchard help workflow        # workflow · import · gates · parallel · memory · recovery · config
+$ ddflow help                 # what this is, the loop, every capability grouped
+$ ddflow help workflow        # workflow · import · gates · parallel · memory · recovery · config
 ```
 
-Reachable as `orchard_help` over MCP, and that is the point: an agent connecting had 59
+Reachable as `ddflow_help` over MCP, and that is the point: an agent connecting had 59
 tool descriptions and a state-aware handshake, neither of which answers *"what is this,
 and how am I meant to work here"*. A tool description explains one tool to someone who
 already picked it; the handshake describes this repository right now.
 
 Two halves, deliberately:
 
-- **The narrative is a template** under `orchard/templates/prompts/help/`, so
-  `orchard prompts eject`-style overriding applies — put your own
-  `.orchard/prompts/help/workflow.md` in place and the tool teaches *your* workflow.
+- **The narrative is a template** under `ddflow/templates/prompts/help/`, so
+  `ddflow prompts eject`-style overriding applies — put your own
+  `.ddflow/prompts/help/workflow.md` in place and the tool teaches *your* workflow.
 - **The capability inventory is generated** from the live tool table. A hand-kept
   command list in a second place is the documentation-drift class, and this project has
   paid for it twice.
@@ -93,34 +93,34 @@ a tool, every flag is reachable, and each exemption carries a written reason.
 ### Standalone: a terminal, a Makefile, CI
 
 ```console
-$ orchard init
-$ orchard config --set gate.unit_tests.command "python -m pytest -q"
-$ orchard phase add P1 --title "Billing" --globs "src/billing/**"
-$ orchard task add P1.T1 --phase P1 --title "Tax rules" --globs "src/billing/tax.py"
+$ ddflow init
+$ ddflow config --set gate.unit_tests.command "python -m pytest -q"
+$ ddflow phase add P1 --title "Billing" --globs "src/billing/**"
+$ ddflow task add P1.T1 --phase P1 --title "Tax rules" --globs "src/billing/tax.py"
 
-$ orchard next                          # exit 2 = nothing actionable
-$ orchard claim P1.T1                   # exit 3 = refused, with the reason
-leased P1.T1 · worktree .orchard-worktrees/P1.T1 · branch orchard/P1.T1
+$ ddflow next                          # exit 2 = nothing actionable
+$ ddflow claim P1.T1                   # exit 3 = refused, with the reason
+leased P1.T1 · worktree .ddflow-worktrees/P1.T1 · branch ddflow/P1.T1
 
-$ cd .orchard-worktrees/P1.T1 && ...    # do the work
-$ orchard gate status P1.T1             # what the pipeline wants next
-$ orchard gate run P1.T1 unit_tests     # runs it; the exit code IS the evidence
-$ orchard gate record P1.T1 implement --outcome passed --evidence "added tax.py"
-$ orchard complete P1.T1                # exit 3 lists whatever is unsatisfied
-$ orchard merge P1.T1
+$ cd .ddflow-worktrees/P1.T1 && ...    # do the work
+$ ddflow gate status P1.T1             # what the pipeline wants next
+$ ddflow gate run P1.T1 unit_tests     # runs it; the exit code IS the evidence
+$ ddflow gate record P1.T1 implement --outcome passed --evidence "added tax.py"
+$ ddflow complete P1.T1                # exit 3 lists whatever is unsatisfied
+$ ddflow merge P1.T1
 ```
 
 You get everything except the judgement. Command gates run themselves; agent gates wait
-for a human to record an outcome, and `orchard gate skip <id> <gate> --reason "..."` is
+for a human to record an outcome, and `ddflow gate skip <id> <gate> --reason "..."` is
 the escape hatch — recorded as a skip, never as a pass.
 
 In CI, the exit codes are the interface:
 
 ```make
 check:
-	orchard doctor        # 1 = integrity problems, each named
-	orchard workflow      # 1 = the pipeline does not hang together
-	orchard cadence       # 2 = no periodic pass is due
+	ddflow doctor        # 1 = integrity problems, each named
+	ddflow workflow      # 1 = the pipeline does not hang together
+	ddflow cadence       # 2 = no periodic pass is due
 ```
 
 `2` is never "no problem". A job that treats it as success reports a green build for a
@@ -128,8 +128,8 @@ suite that never ran.
 
 ### As an MCP server
 
-`orchard mcp` speaks newline-delimited JSON-RPC over stdio. You rarely run it by hand —
-`orchard adopt` writes the launch entry into each agent's own config and leaves existing
+`ddflow mcp` speaks newline-delimited JSON-RPC over stdio. You rarely run it by hand —
+`ddflow adopt` writes the launch entry into each agent's own config and leaves existing
 servers alone:
 
 | Agent | MCP config it writes | Also |
@@ -139,9 +139,9 @@ servers alone:
 | Codex CLI | `.codex/config.toml` | `AGENTS.md` block |
 | GitHub Copilot | `.vscode/mcp.json` | `AGENTS.md` block |
 | Kilo / Cline | `.kilo/kilo.json` | `AGENTS.md` block |
-| Cursor | `.cursor/mcp.json` | `.cursor/rules/orchard.mdc`, always applied |
+| Cursor | `.cursor/mcp.json` | `.cursor/rules/ddflow.mdc`, always applied |
 
-It also copies the driver to `docs/orchard/drivers/`, and installs the pre-commit hook
+It also copies the driver to `docs/ddflow/drivers/`, and installs the pre-commit hook
 that enforces claim-before-you-edit.
 
 **What an agent sees the moment it connects**, with no call to make:
@@ -150,25 +150,25 @@ that enforces claim-before-you-edit.
   what is ready, what is in flight, which setup is missing, whether this project has
   history worth importing, whether an import was left unfinished.
 - **Tools** — one per CLI command.
-- **Resources** — `orchard://board`, `orchard://brief`, `orchard://lessons`,
-  `orchard://research`.
+- **Resources** — `ddflow://board`, `ddflow://brief`, `ddflow://lessons`,
+  `ddflow://research`.
 - **Prompts** — which a client turns into slash commands. **Tools are things an agent
   calls; prompts are things you invoke.**
 
-Two tools exist so an agent can orient itself without being told: `orchard_help` (what
-is this, what is the loop) and `orchard_workflow` (what are the rules *here*).
+Two tools exist so an agent can orient itself without being told: `ddflow_help` (what
+is this, what is the loop) and `ddflow_workflow` (what are the rules *here*).
 
 ### What goes in AGENTS.md / CLAUDE.md
 
-`orchard adopt` writes it as a managed block between `<!-- ORCHARD:BEGIN -->` and
-`<!-- ORCHARD:END -->`. Your own prose around it is preserved; re-running updates only
+`ddflow adopt` writes it as a managed block between `<!-- DDFLOW:BEGIN -->` and
+`<!-- DDFLOW:END -->`. Your own prose around it is preserved; re-running updates only
 what is inside. If you write it by hand, four things have to be in it:
 
-1. **Start every session with `orchard_brief`** (or `orchard brief` in a shell).
-2. **Claim before you edit** — `orchard_next` → `orchard_claim` → work in the worktree
+1. **Start every session with `ddflow_brief`** (or `ddflow brief` in a shell).
+2. **Claim before you edit** — `ddflow_next` → `ddflow_claim` → work in the worktree
    it creates.
-3. **The loop** — `orchard_gate_status` → satisfy each gate → `orchard_complete` →
-   `orchard_merge`.
+3. **The loop** — `ddflow_gate_status` → satisfy each gate → `ddflow_complete` →
+   `ddflow_merge`.
 4. **The exit codes**, and that `2` is not success.
 
 Without that block an agent sees the tools and has no reason to reach for them before
@@ -180,7 +180,7 @@ is 232 words, because an instruction file nobody finishes reading is one nobody 
 ## The workflow, and changing it
 
 ```console
-$ orchard workflow
+$ ddflow workflow
 # The workflow this project runs
 
    1. research      agent
@@ -206,13 +206,13 @@ deliberate choice is distinguishable from a default nobody touched.
 ### Changing it
 
 ```console
-$ orchard workflow gate lint --command "ruff check ." --into task --after implement --required
-$ orchard workflow pipeline task research,implement,lint,unit_tests,merge
-$ orchard workflow drop dedupe
+$ ddflow workflow gate lint --command "ruff check ." --into task --after implement --required
+$ ddflow workflow pipeline task research,implement,lint,unit_tests,merge
+$ ddflow workflow drop dedupe
 ```
 
-All four reach MCP — `orchard_workflow`, `orchard_workflow_pipeline`,
-`orchard_workflow_gate`, `orchard_workflow_drop` — so an agent can change the workflow
+All four reach MCP — `ddflow_workflow`, `ddflow_workflow_pipeline`,
+`ddflow_workflow_gate`, `ddflow_workflow_drop` — so an agent can change the workflow
 *with the operator's agreement*. Their descriptions say to ask first and offer
 `dry_run`, because a pipeline governs every future item, not the one in hand.
 
@@ -230,14 +230,14 @@ validate the **result**, then replace the file atomically.
 - **Dropping a gate takes it out of `required` too**, or it becomes a requirement that
   quietly requires nothing.
 
-`orchard workflow` and `orchard doctor` both re-run those checks against what is on
+`ddflow workflow` and `ddflow doctor` both re-run those checks against what is on
 disk. Everything is a file you can also edit by hand: gates in `[gate.<id>]`, reviewers
-in `[[reviewer]]`, companions in `.orchard/companions.toml`, and every prompt —
-including the instructions your agent receives at connect — under `.orchard/prompts/`.
+in `[[reviewer]]`, companions in `.ddflow/companions.toml`, and every prompt —
+including the instructions your agent receives at connect — under `.ddflow/prompts/`.
 
 **One caveat with MCP:** the connection instructions are computed once, when the server
 starts. A workflow changed mid-session is live for every tool call immediately, but the
-text the agent was handed is stale. Tell it to call `orchard_workflow`, or restart.
+text the agent was handed is stale. Tell it to call `ddflow_workflow`, or restart.
 
 ---
 
@@ -245,7 +245,7 @@ text the agent was handed is stale. Tell it to call `orchard_workflow`, or resta
 
 **The append-only event log is the source of truth; everything else is a projection that
 can be deleted and re-derived.** The SQLite index, the markdown boards, the search index,
-the recovery bundle — all disposable, all rebuilt by `orchard rebuild`.
+the recovery bundle — all disposable, all rebuilt by `ddflow rebuild`.
 
 That single inversion is what makes the four hard properties fall out for free rather
 than needing to be engineered:
@@ -275,12 +275,12 @@ The design decisions, with the probes that settled each, are in
 **One line in your agent's MCP config. Nothing else.**
 
 ```json
-{ "mcpServers": { "orchard": { "command": "uvx", "args": ["orchard-mcp"] } } }
+{ "mcpServers": { "ddflow": { "command": "uvx", "args": ["ddflow-mcp"] } } }
 ```
 
 `uvx` fetches and runs the published package in an ephemeral environment on first use —
 no clone, no virtualenv, no `PYTHONPATH`, no install step for an operator to forget, and
-no vendored copy to drift from upstream. Orchard has **zero runtime dependencies**
+no vendored copy to drift from upstream. ddflow has **zero runtime dependencies**
 beyond `python3` and `git`, which is what lets it install inside sandboxes, CI images
 and other tools' ephemeral containers.
 
@@ -288,11 +288,11 @@ Then, from the agent, with no shell at all:
 
 | Call | What it does |
 |---|---|
-| `orchard_setup` | creates `.orchard/`, writes the driver and the `AGENTS.md` section |
-| `orchard_configure` with `toml: '[gate.unit_tests]\ncommand = "pytest -q"'` | sets your test command |
-| `orchard_reviewers_detect` with `write: true` | finds a local model server and registers it as a cross-family reviewer |
-| `orchard_phase_add`, `orchard_task_add` | fill the queue |
-| `orchard_brief` | start every session here |
+| `ddflow_setup` | creates `.ddflow/`, writes the driver and the `AGENTS.md` section |
+| `ddflow_configure` with `toml: '[gate.unit_tests]\ncommand = "pytest -q"'` | sets your test command |
+| `ddflow_reviewers_detect` with `write: true` | finds a local model server and registers it as a cross-family reviewer |
+| `ddflow_phase_add`, `ddflow_task_add` | fill the queue |
+| `ddflow_brief` | start every session here |
 
 That is the whole adoption. **The per-project instruction text is 232 words** — a
 managed block in `AGENTS.md`, because the MCP tool descriptions already carry the
@@ -301,16 +301,16 @@ how, and a second copy of that would drift from the one the model actually reads
 <details><summary>Shell / CI installation, and running from a source checkout</summary>
 
 ```sh
-uv tool install orchard-mcp        # or: pipx install orchard-mcp
+uv tool install ddflow-mcp        # or: pipx install ddflow-mcp
 cd /path/to/your/project
-orchard adopt --agents claude,gemini,codex,copilot,kilo,cursor
+ddflow adopt --agents claude,gemini,codex,copilot,kilo,cursor
 ```
 
 `adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
 them and leaves your own prose alone. It writes the MCP registration into each agent's
 own config location, **merged** with whatever servers are already there. From a source
 checkout it points the config at that checkout instead of the published package, so
-developing Orchard does not silently configure your project against the released
+developing ddflow does not silently configure your project against the released
 version.
 
 </details>
@@ -318,15 +318,15 @@ version.
 ### Docker — for operators with no Python toolchain
 
 ```json
-{ "mcpServers": { "orchard": { "command": "docker", "args": [
+{ "mcpServers": { "ddflow": { "command": "docker", "args": [
     "run", "-i", "--rm",
     "-v", "${workspaceFolder}:/repo",
     "--add-host=host.docker.internal:host-gateway",
-    "ghcr.io/OWNER/orchard:latest" ] } } }
+    "ghcr.io/OWNER/ddflow:latest" ] } } }
 ```
 
-`orchard adopt --launch docker` writes exactly that. The image is **107 MB** (Alpine;
-Orchard is pure standard library, so there is no compiled dependency to worry musl
+`ddflow adopt --launch docker` writes exactly that. The image is **107 MB** (Alpine;
+ddflow is pure standard library, so there is no compiled dependency to worry musl
 about) and behaves identically on Linux, macOS and Windows.
 
 Four things go wrong when a containerised tool touches a bind-mounted git repo. All
@@ -334,14 +334,14 @@ four are silent, one of them loses work, and all four are handled:
 
 | Trap | What it looks like | Handled by |
 |---|---|---|
-| **Worktrees land outside the mount** | `worktree.root` defaults to `../.orchard-worktrees`, a sibling of the repo. In a container only the repo is mounted, so worktrees go to the ephemeral layer and **are destroyed on exit with the agent's uncommitted work inside them.** | `container.default_worktree_root` relocates a sibling root to `.orchard-worktrees` inside the repo, and `adopt` gitignores it |
+| **Worktrees land outside the mount** | `worktree.root` defaults to `../.ddflow-worktrees`, a sibling of the repo. In a container only the repo is mounted, so worktrees go to the ephemeral layer and **are destroyed on exit with the agent's uncommitted work inside them.** | `container.default_worktree_root` relocates a sibling root to `.ddflow-worktrees` inside the repo, and `adopt` gitignores it |
 | **Root-owned files** | On a Linux bind mount the operator needs `sudo` to edit their own project afterwards | the entrypoint reads the mount's uid/gid and `su-exec`s down to it |
-| **git refuses the mount** | "detected dubious ownership", surfacing as an unexplained Orchard failure | `safe.directory` set in the entrypoint |
+| **git refuses the mount** | "detected dubious ownership", surfacing as an unexplained ddflow failure | `safe.directory` set in the entrypoint |
 | **No git identity** | `git commit` fails with "Please tell me who you are" | entrypoint prefers `GIT_AUTHOR_*`, then the repo's own config, then a clearly-marked placeholder |
 
 And one that cannot be fully handled, so it is reported: **`127.0.0.1` inside a
 container is the container.** A model server on your own machine is not reachable from
-there. Orchard rewrites loopback reviewer URLs to `host.docker.internal`, and `orchard
+there. ddflow rewrites loopback reviewer URLs to `host.docker.internal`, and `ddflow
 doctor` tells you that on Linux you must also pass
 `--add-host=host.docker.internal:host-gateway`, because unlike Docker Desktop the Linux
 engine does not provide that name.
@@ -357,9 +357,9 @@ engine does not provide that name.
 Every prompt is an external template, resolved config → project → shipped:
 
 ```sh
-orchard prompts list              # where each template currently comes from
-orchard prompts eject             # copy the shipped ones into .orchard/prompts/
-$EDITOR .orchard/prompts/review_system.md
+ddflow prompts list              # where each template currently comes from
+ddflow prompts eject             # copy the shipped ones into .ddflow/prompts/
+$EDITOR .ddflow/prompts/review_system.md
 ```
 
 **Including the one the agent actually reads first.** `mcp_instructions.md` is the block
@@ -368,8 +368,8 @@ duties, and which companion tools to reach for. It is the file to edit when you 
 this project to work differently:
 
 ```sh
-orchard prompts eject mcp_instructions
-$EDITOR .orchard/prompts/mcp_instructions.md      # or [prompts] mcp_instructions = "..."
+ddflow prompts eject mcp_instructions
+$EDITOR .ddflow/prompts/mcp_instructions.md      # or [prompts] mcp_instructions = "..."
 ```
 
 It renders against the live state — `adopted`, `task_pipeline`, `setup_todo`,
@@ -380,7 +380,7 @@ back to the default: this is the one surface where nobody would ever notice thei
 was not live.
 
 Templates render with **Jinja2 when it is installed, and a strict standard-library
-renderer otherwise** — Orchard cannot require Jinja without losing zero-dependency
+renderer otherwise** — ddflow cannot require Jinja without losing zero-dependency
 installability, but a project that already has it gets the full language. The shipped
 templates use the subset both engines agree on, and a test renders each one through
 both and asserts the output matches, so a project that installs Jinja2 never silently
@@ -393,12 +393,12 @@ dutifully reviews nothing and reports no findings.
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
 cadences, and the rest of the 58 knobs.
-`orchard config --set <key> <value>` edits one key in place, preserving comments.
+`ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
 
 `server.json` carries the [MCP registry](https://modelcontextprotocol.io/registry/quickstart)
-manifest (`io.github.OWNER/orchard`, PyPI package `orchard-mcp`, `runtimeHint: uvx`),
+manifest (`io.github.OWNER/ddflow`, PyPI package `ddflow-mcp`, `runtimeHint: uvx`),
 and `.github/workflows/publish.yml` publishes to PyPI and the registry on a version tag
 using OIDC trusted publishing — no stored tokens. The workflow refuses to publish when
 the tag, `pyproject.toml` and `server.json` disagree about the version, and
@@ -406,14 +406,14 @@ the tag, `pyproject.toml` and `server.json` disagree about the version, and
 
 ### Any LLM as a reviewer — local, remote, SaaS, or a CLI
 
-The `critic` and `rubber_duck` gates are **run by Orchard, not claimed by the agent**.
+The `critic` and `rubber_duck` gates are **run by ddflow, not claimed by the agent**.
 Point them at whatever you have:
 
 ```sh
-orchard reviewers presets            # 19 ready-made provider settings
-orchard reviewers add --preset ollama --model qwen3:8b
-orchard reviewers detect --write     # probe local ports and register what is serving
-orchard reviewers test               # send a known-buggy diff, check the reply
+ddflow reviewers presets            # 19 ready-made provider settings
+ddflow reviewers add --preset ollama --model qwen3:8b
+ddflow reviewers detect --write     # probe local ports and register what is serving
+ddflow reviewers test               # send a known-buggy diff, check the reply
 ```
 
 Four backends, because "any LLM" means four wire formats in practice:
@@ -471,17 +471,17 @@ there is.
 
 ### Companion MCP servers
 
-Orchard imposes the order and demands the evidence. It does not *perform* the judgement
+ddflow imposes the order and demands the evidence. It does not *perform* the judgement
 inside most of its gates: `standards` wants an automated standards review, `research`
 wants documentation to check a claim against, `rules` wants memory of the last time
-somebody hit this. A project that installs Orchard and stops has those gates wired to
+somebody hit this. A project that installs ddflow and stops has those gates wired to
 nothing — and because an agent gate passes on an assertion, that gap is invisible in
 exactly the way the rest of this design exists to prevent.
 
 So the gap is **named**:
 
 ```console
-$ orchard companions
+$ ddflow companions
 Companion MCP servers
 
   [x] context7   Current library documentation
@@ -490,7 +490,7 @@ Companion MCP servers
   [+] roborev    Automated second-opinion code review
        gates: standards, bug_hunt, dedupe
        installed (roborev 0.9.1) but no agent is configured to launch it.
-       -> orchard companions add --id roborev
+       -> ddflow companions add --id roborev
   [ ] codeguide  Language and framework coding standards
        gates: standards
        not here: codeguide-mcp is not on PATH
@@ -502,7 +502,7 @@ Gates in this project's task pipeline with no companion behind them:
 
 Three states, reported separately because the remedies differ: **registered**,
 **installed but not wired up** (one command away), **not installed** (with the command
-and the URL). `orchard adopt` prints the same summary, so the gap is visible at
+and the URL). `ddflow adopt` prints the same summary, so the gap is visible at
 adoption rather than discovered six tasks later. Exit 2 when a default companion is
 missing — "no data", never collapsed into "no problem".
 
@@ -511,9 +511,9 @@ missing — "no data", never collapsed into "no problem".
 | **roborev** | `standards`, `bug_hunt`, `dedupe` | Cross-file duplication analysis, which is the failure mode of agent-written code specifically: an agent changing replicated logic reliably updates one copy and misses the rest |
 | **codeguide** | `standards` | Checks against a written standard instead of the reviewer's taste |
 | **context7** | `research`, `standards` | A model's memory of a library's API is exactly the kind of claim that is cheap to check and often wrong |
-| **memory** | `rules` | Operational facts about *this machine* — Orchard's own `recall` covers the project's memory, which is a different thing and belongs in the committed log |
+| **memory** | `rules` | Operational facts about *this machine* — ddflow's own `recall` covers the project's memory, which is a different thing and belongs in the committed log |
 
-**Orchard never installs anything itself** — running an install command on someone's
+**ddflow never installs anything itself** — running an install command on someone's
 machine is the operator's decision. What it does instead is *instruct the agent to ask*:
 the MCP instruction block lists each missing companion with the gates it serves and the
 exact command that would install it, and tells the agent to put that to the operator
@@ -523,10 +523,10 @@ decline. Never on its own word.
 `companions add` also refuses to register a server that is not present: that writes a
 launch command which fails mid-task, at the moment a gate told the agent to reach for
 it. Detection is read-only and bounded — and when it has not run, the state is reported
-as **unknown**, not as absent. `orchard companions` probes; the MCP handshake does not,
+as **unknown**, not as absent. `ddflow companions` probes; the MCP handshake does not,
 because making an agent wait on `npx` before it can do anything is the wrong trade.
 
-Adding a fifth is a TOML block in `.orchard/companions.toml`, not a patch:
+Adding a fifth is a TOML block in `.ddflow/companions.toml`, not a patch:
 
 ```toml
 [[companion]]
@@ -546,7 +546,7 @@ with three branches in flight and forty open items in a todo file — and the ag
 believes it, because the tool said so. That is worse than having no tool at all.
 
 ```console
-$ orchard import                      # looks; writes nothing
+$ ddflow import                      # looks; writes nothing
 What this project already has (nothing written yet):
 
   314 phase(s):
@@ -561,7 +561,7 @@ What this project already has (nothing written yet):
   NOTE: 32 phase heading(s) say the work is finished while their checkboxes are still
         unticked: 99 (4 open), 103 (3 open), ... Ask the operator which is stale.
 
-$ orchard import --apply              # writes them, each recording its source line
+$ ddflow import --apply              # writes them, each recording its source line
 ```
 
 Seven sources, all optional, all in the places projects actually keep them:
@@ -569,7 +569,7 @@ Seven sources, all optional, all in the places projects actually keep them:
 | Source | Read from | Becomes |
 |---|---|---|
 | Todo checklists | `docs/todo.md`, `docs/todo/open/*.md`, `tasks/todo.md`, `TODO.md`, `docs/plan.md`, `ROADMAP.md` | phases and tasks, with declared `Needs:`/`Globs:` |
-| Lessons | `docs/lessons.md`, `LESSONS.md`, `docs/retrospectives/*.md` | lessons, searchable by `orchard recall` |
+| Lessons | `docs/lessons.md`, `LESSONS.md`, `docs/retrospectives/*.md` | lessons, searchable by `ddflow recall` |
 | Decisions | `docs/adr/*.md`, `docs/decisions/*.md` | decisions, `Superseded` preserved as superseded |
 | Research | `docs/RESEARCH.md` | research notes, `CONFIRMED`/`REFUTED`/`THEORETICAL` carried across |
 | Journal | `docs/log/*.md`, `CHANGELOG.md`, `docs/journal/*.md` | session notes, dated by **when they happened** |
@@ -610,7 +610,7 @@ an imported queue nobody finished misrepresents the project exactly as an empty 
 believed harder because a tool produced it.
 
 ```console
-$ orchard import --verify
+$ ddflow import --verify
 Imported between 2026-09-25 and 2026-09-25:
 
        4 decision(s)
@@ -641,25 +641,25 @@ true** (what a re-run would add, which sources yielded nothing, which source fil
 since vanished), and **whether anyone finished it** (tasks with no globs; phases whose
 heading claims SHIPPED over an open task).
 
-It deliberately does **not** repeat `orchard doctor`, which already reports unresolved
+It deliberately does **not** repeat `ddflow doctor`, which already reports unresolved
 dependencies, duplicate globs and cycles. Two commands reporting one defect in different
 words is how an operator learns to read neither.
 
 Provenance is a **field**, not prose. `Item.source` is `docs/todo.md:41`; the body still
-says *"Imported from docs/todo.md:41."* for a human reading `orchard show`. Answering
+says *"Imported from docs/todo.md:41."* for a human reading `ddflow show`. Answering
 "which items came from the import" by regexing that sentence would mean the day someone
 rewords it, the count silently becomes zero and the verification passes.
 
 **The connection handshake follows through.** The offer to import stops once the queue
 has anything in it — but if imported work is still missing globs, or a phase still claims
 SHIPPED over open tasks, the MCP instructions say so and tell the agent to run
-`orchard_import_verify` before handing any of it out. That check is computed from the
+`ddflow_import_verify` before handing any of it out. That check is computed from the
 already-folded queue, so it costs nothing; the source re-scan (~0.65 s) stays out of
 every session start and happens only when someone asks for it.
 
 **Re-running is a first-class path.** `/import-existing-project` opens by checking what
 is already imported and switches to *finishing and refreshing* rather than repeating —
-fix the globs it names, ask the operator about the SHIPPED drift, re-run `orchard import`
+fix the globs it names, ask the operator about the SHIPPED drift, re-run `ddflow import`
 for sections added since.
 
 ### What it reports rather than fixes
@@ -690,10 +690,10 @@ one agent, one worktree, one pipeline, one merge. Both carry `needs` (dependenci
 may cross phases) and `globs` (the files they will write).
 
 ```sh
-orchard phase add P2 --title "Billing" --needs P1
-orchard task add P2.T1 --phase P2 --title "invoice model"  --globs "src/billing/invoice.py"
-orchard task add P2.T2 --phase P2 --title "tax rules"      --globs "src/billing/tax.py"
-orchard task add P2.T3 --phase P2 --title "checkout wiring" --needs "P2.T1,P2.T2" \
+ddflow phase add P2 --title "Billing" --needs P1
+ddflow task add P2.T1 --phase P2 --title "invoice model"  --globs "src/billing/invoice.py"
+ddflow task add P2.T2 --phase P2 --title "tax rules"      --globs "src/billing/tax.py"
+ddflow task add P2.T3 --phase P2 --title "checkout wiring" --needs "P2.T1,P2.T2" \
                                                             --globs "src/checkout/*"
 ```
 
@@ -705,7 +705,7 @@ declared globs is a task the conflict detector cannot protect.
 picks up. The readiness rule therefore consults an item's ancestors as well as itself:
 
 ```console
-$ orchard next
+$ ddflow next
 Ready (1 ready, 0 running, 1 blocked):
   P1.T1  money
   (blocked) P2.T1: deps — phase P1 has 3 open task(s) (inherited from P2)
@@ -717,7 +717,7 @@ dependency **not** inherited is one pointing into your own subtree: an umbrella 
 declares a dependency on its own child would otherwise make the child wait for itself,
 turning a plan typo into a permanent hang.
 
-`orchard claim` asks the *same* predicate `orchard next` does. They used to disagree —
+`ddflow claim` asks the *same* predicate `ddflow next` does. They used to disagree —
 `next` withheld a task on its dependencies and `claim` handed out a worktree for it a
 second later — so an agent picking work by id rather than by asking bypassed the
 dependency graph entirely.
@@ -739,14 +739,14 @@ own agent, and runs in parallel with its siblings when nothing links them — ex
 any other task.
 
 ```sh
-orchard task add P1.T1a --parent P1.T1 --globs "src/parse.py"
-orchard split P1.T1 --into "P1.T1a=parse input" --into "P1.T1b=write records"
+ddflow task add P1.T1a --parent P1.T1 --globs "src/parse.py"
+ddflow split P1.T1 --into "P1.T1a=parse input" --into "P1.T1b=write records"
 ```
 
 `split` works **in place**: the original keeps its id, its lease history and everything
 recorded against it, and becomes an *umbrella* that completes when its children do.
 Closing it and opening two new ones instead would lose the thread between what was
-planned and what happened — which is exactly what `orchard replay` needs.
+planned and what happened — which is exactly what `ddflow replay` needs.
 
 An umbrella is never offered as ready (its children are), and cannot complete while any
 descendant at any depth is unfinished. An *abandoned* child counts as settled, so a
@@ -765,15 +765,15 @@ The code shows *what* was built and never *why*, nor what was rejected on the wa
 decisions are recorded as events, and reach the person writing the code:
 
 ```sh
-orchard decision add --title "Storage is SQLite with WAL" \
+ddflow decision add --title "Storage is SQLite with WAL" \
   --decision "One file, WAL mode, BEGIN IMMEDIATE for writes." \
   --context "Three call sites were each opening their own connection." \
   --alternatives "Postgres — rejected: no server allowed in this deployment." \
   --globs "src/storage/*" --by operator
 ```
 
-**`--globs` is what makes a decision consulted rather than merely filed.** `orchard
-brief` and `orchard decision applicable <item>` surface the decisions governing an
+**`--globs` is what makes a decision consulted rather than merely filed.** `ddflow
+brief` and `ddflow decision applicable <item>` surface the decisions governing an
 item's declared files automatically — the agent does not have to suspect they exist.
 
 Decisions are never edited or deleted. A reversal is a *new* decision naming the old
@@ -784,7 +784,7 @@ withheld.
 ## Recall — "have we been here before?"
 
 ```sh
-orchard recall "how should durations be represented"
+ddflow recall "how should durations be represented"
 ```
 
 One search across **everything the project remembers**: architectural decisions,
@@ -799,9 +799,9 @@ obvious in the log.
 ## Status, progress, and loops
 
 ```sh
-orchard status      # what is done, in flight, ready, blocked — one answer
-orchard progress    # attempts, hours held, gate runs, commits, per item
-orchard loops       # circular references and runtime loops (exit 2 = none)
+ddflow status      # what is done, in flight, ready, blocked — one answer
+ddflow progress    # attempts, hours held, gate runs, commits, per item
+ddflow loops       # circular references and runtime loops (exit 2 = none)
 ```
 
 Dependency cycles are the easy case. The expensive ones are *runtime* loops, where the
@@ -816,7 +816,7 @@ graph is perfectly acyclic and the work still never finishes:
 | `duplicate_work` | two live items declaring the same files |
 | `no_progress` | N recent events with no completion, no gate pass, no merge |
 
-Every threshold is a `[loops]` knob, and `on_detect = "block"` makes `orchard claim`
+Every threshold is a `[loops]` knob, and `on_detect = "block"` makes `ddflow claim`
 **refuse** an item that is already looping — a warning is read by a human later, a
 refused claim is read by the agent now.
 
@@ -835,13 +835,13 @@ Ten gates, in order, configurable per project:
 | 7 | `unit_tests` | tooling | The project's suite, actually executed |
 | 8 | `bug_hunt` | agent | Hunt the recurring classes across everything touched |
 | 9 | `dedupe` | agent | Did this re-implement something already present? |
-| 10 | `merge` | Orchard | Land it, from the primary checkout, with no checkout |
+| 10 | `merge` | ddflow | Land it, from the primary checkout, with no checkout |
 
 Four things are enforced rather than requested:
 
 **Silence is not a pass.** Every gate in the pipeline must carry *some* outcome before
 an item completes — passed, failed, unavailable, partial, or an explicit
-`orchard gate skip <id> <gate> --reason "..."`. Without this, `gates.required` held only
+`ddflow gate skip <id> <gate> --reason "..."`. Without this, `gates.required` held only
 `implement`, `unit_tests` and `merge`, so six of the ten steps could be omitted with no
 trace at all. `gates.require_outcome = false` makes the pipeline advisory again;
 `gates.enforce_order` ("warn" by default, or "block") reports a gate recorded before an
@@ -867,7 +867,7 @@ arrived as family "host-12345", compared unequal to "anthropic", and satisfied t
 independence requirement on its own.)
 
 ```console
-$ orchard complete P1.T1 --model claude-opus-5
+$ ddflow complete P1.T1 --model claude-opus-5
 cannot complete P1.T1 — 1 unmet condition(s):
   - reviewer independence not satisfied: every reviewer (rubber_duck) was family
     'anthropic', the same as the author. Same-family agreement is not independent evidence.
@@ -881,7 +881,7 @@ time trains an agent to reach for `--force`.
 ### Proving a gate can fail at all
 
 ```console
-$ orchard gate verify T1 unit_tests
+$ ddflow gate verify T1 unit_tests
   OK   src/calc.py: detected
 
 unit_tests CAN fail: every registered mutation was caught.
@@ -934,7 +934,7 @@ and paste what it printed.
 ## Parallelism and coordination
 
 ```console
-$ orchard next --phase P1
+$ ddflow next --phase P1
 Ready (3 ready, 0 running, 1 blocked):
   P1.T1  persistent store
       writes: shortener/store.py, tests/test_store.py
@@ -945,11 +945,11 @@ These are independent — run them in parallel worktrees.
   (blocked) P1.T3: deps — P1.T1 is open; P1.T2 is open
 ```
 
-`orchard claim <ID>` leases the item and creates its worktree. A second agent is refused,
+`ddflow claim <ID>` leases the item and creates its worktree. A second agent is refused,
 and told what to take instead:
 
 ```console
-$ orchard claim P1.T4 --agent gamma
+$ ddflow claim P1.T4 --agent gamma
 P1.T4 writes 'shortener/store*.py' which overlaps 'shortener/store.py' held by alpha on P1.T1
 
 You could take instead: P1.T2, P1.T5
@@ -977,14 +977,14 @@ floor — adding a fifth agent to a phase whose runtime is a four-deep chain buy
 An agent is killed. Nothing is cleaned up, because in a real crash nothing runs.
 
 ```console
-$ orchard recover
+$ ddflow recover
 1 recoverable situation(s); 1 may contain work:
 
 !! P1.T1  [expired_lease]  was: delta
-     worktree /repo/../.orchard-worktrees/P1.T1
+     worktree /repo/../.ddflow-worktrees/P1.T1
      INSPECT FIRST — 1 uncommitted file(s), 1 unmerged commit(s).
      `git -C .../P1.T1 diff main` then salvage,
-     then `orchard release P1.T1 --note salvaged`.
+     then `ddflow release P1.T1 --note salvaged`.
 ```
 
 Four behaviours, each chosen against a specific way this goes wrong:
@@ -1004,7 +1004,7 @@ Four behaviours, each chosen against a specific way this goes wrong:
 ## Reconstruction from logs alone
 
 ```console
-$ orchard replay --out ./recovery-kit
+$ ddflow replay --out ./recovery-kit
 wrote:
   recovery-kit/RECONSTRUCTION.md
   recovery-kit/QUEUE.md
@@ -1032,9 +1032,9 @@ scrub at read time is a scrub that `git show` walks straight past.
 ## Lessons, research and bugs
 
 ```sh
-orchard lesson add --title "Truncating a slug can leave a trailing separator" \
+ddflow lesson add --title "Truncating a slug can leave a trailing separator" \
                    --rule "Strip separators AFTER slicing to length, not before."
-orchard lesson search "cutting a url short leaves a dangling hyphen"
+ddflow lesson search "cutting a url short leaves a dangling hyphen"
 ```
 
 Retrieval is BM25 over FTS5 and finds that entry despite no shared keyword. Probed
@@ -1045,7 +1045,7 @@ Research entries **must** carry a verdict, and `CONFIRMED`/`REFUTED` are refused
 a probe:
 
 ```console
-$ orchard research --question "is it fast?" --verdict CONFIRMED
+$ ddflow research --question "is it fast?" --verdict CONFIRMED
 CONFIRMED requires a --probe (and ideally --probe-output): a verdict with no probe behind
 it is an opinion. Use THEORETICAL and say why no probe was possible.
 ```
@@ -1053,7 +1053,7 @@ it is an opinion. Use THEORETICAL and say why no probe was possible.
 And a bug cannot be closed without the test that would catch it again:
 
 ```console
-$ orchard bug fixed B1
+$ ddflow bug fixed B1
 a bug may not be closed without --regression-test naming the test that would catch it
 again. Write the test, watch it FAIL against the unfixed code, then close.
 ```
@@ -1068,11 +1068,11 @@ Periodic whole-repo passes a per-task gate structurally cannot do. Due-ness is *
 from completed work**, so there is no state file to drift:
 
 ```console
-$ orchard cadence
+$ ddflow cadence
 DUE: integration_tests — 5 tasks since last (every 5)
 DUE: mutation_tests — 3 phases since last (every 3)
 
-Record one with: orchard cadence --ran <name>
+Record one with: ddflow cadence --ran <name>
 ```
 
 Configurable: integration tests, architecture review, mutation testing, duplication
@@ -1083,7 +1083,7 @@ sweep, lessons compression.
 ## Keeping session-start cost flat
 
 ```sh
-orchard brief --phase P2
+ddflow brief --phase P2
 ```
 
 Returns, inside `session.brief_max_tokens` (default 1200): recoverable work first, then
@@ -1098,7 +1098,7 @@ project's opening cost stays roughly constant as its lesson corpus grows.
 
 ## Agent portability
 
-One canonical driver, [`templates/drivers/implement-phase.md`](orchard/templates/drivers/implement-phase.md),
+One canonical driver, [`templates/drivers/implement-phase.md`](ddflow/templates/drivers/implement-phase.md),
 plus a **delta** per agent covering only what genuinely differs: how iteration continues,
 how to ask the operator, how to spawn a subagent, file-reference syntax.
 
@@ -1131,7 +1131,7 @@ previous one turned out to be too shallow:
 | Ratchet | What it caught on its first run |
 |---|---|
 | every CLI **command** has a tool | the original check |
-| every CLI **subcommand** has a tool | `orchard gate skip` and `bug found` had none — `gate` counted as "covered" by `gate run`, and a parent's coverage says nothing about its children |
+| every CLI **subcommand** has a tool | `ddflow gate skip` and `bug found` had none — `gate` counted as "covered" by `gate run`, and a parent's coverage says nothing about its children |
 | every CLI **flag** is reachable from its tool | **27 divergences** — 16 on its first run, and 11 more the moment it derived its own coverage instead of using a hand-written list. Including `phase add --globs`: over MCP a phase could not declare what it writes, so the conflict detector had nothing to compare at phase level |
 
 The flag ratchet derives its own input from the parser rather than a hand-written list —
@@ -1151,57 +1151,57 @@ now carries its justification in `PROSE_TOOLS`.
 ## Command reference
 
 ```
-orchard adopt [--agents ...]     install into a project, for one or more agents
-orchard init                     create .orchard/ only
+ddflow adopt [--agents ...]     install into a project, for one or more agents
+ddflow init                     create .ddflow/ only
 
-orchard phase add <id> [...]     add a phase
-orchard task add <id> --phase .. add a task
-orchard update <id> [...]        change title/body/needs/globs/tags/priority
+ddflow phase add <id> [...]     add a phase
+ddflow task add <id> --phase .. add a task
+ddflow update <id> [...]        change title/body/needs/globs/tags/priority
 
-orchard next [--phase P]         what may start now       (2 = nothing actionable)
-orchard claim <id> [--globs ..]  lease + create worktree  (3 = refused)
-orchard heartbeat <id>           renew a lease
-orchard release <id>             give it up
+ddflow next [--phase P]         what may start now       (2 = nothing actionable)
+ddflow claim <id> [--globs ..]  lease + create worktree  (3 = refused)
+ddflow heartbeat <id>           renew a lease
+ddflow release <id>             give it up
 
-orchard gate status <id>         pipeline position + the next gate's instruction
-orchard gate run <id> <gate>     execute a command gate, record its evidence
-orchard gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model)
-orchard gate skip <id> <gate>    skip, with a mandatory reason
-orchard gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
+ddflow gate status <id>         pipeline position + the next gate's instruction
+ddflow gate run <id> <gate>     execute a command gate, record its evidence
+ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model)
+ddflow gate skip <id> <gate>    skip, with a mandatory reason
+ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 
-orchard merge <id>               merge from the primary checkout, no checkout
-orchard complete <id>            finish        (3 = unmet conditions, all listed)
-orchard block <id> --reason ..   mark blocked
+ddflow merge <id>               merge from the primary checkout, no checkout
+ddflow complete <id>            finish        (3 = unmet conditions, all listed)
+ddflow block <id> --reason ..   mark blocked
 
-orchard brief [--item|--phase]   budgeted session-start pack
-orchard board / show <id>        human views
-orchard render                   regenerate docs/orchard/*.md
+ddflow brief [--item|--phase]   budgeted session-start pack
+ddflow board / show <id>        human views
+ddflow render                   regenerate docs/ddflow/*.md
 
-orchard help [topic]             what this is, what it can do, the workflow
-orchard workflow                 the rules this project runs by  (1 = incoherent)
-orchard workflow pipeline ...    set the gates a task or phase passes
-orchard workflow gate ...        define or change one gate
-orchard workflow drop <id>       take a gate out of the pipelines
-orchard import [--apply]         propose an existing project's work  (2 = nothing)
-orchard import --verify          is the import still true, and did anyone finish it?
-orchard history [--item|--kind]  one timeline of everything that happened (2 = nothing)
+ddflow help [topic]             what this is, what it can do, the workflow
+ddflow workflow                 the rules this project runs by  (1 = incoherent)
+ddflow workflow pipeline ...    set the gates a task or phase passes
+ddflow workflow gate ...        define or change one gate
+ddflow workflow drop <id>       take a gate out of the pipelines
+ddflow import [--apply]         propose an existing project's work  (2 = nothing)
+ddflow import --verify          is the import still true, and did anyone finish it?
+ddflow history [--item|--kind]  one timeline of everything that happened (2 = nothing)
 
-orchard lesson add|search        capture and retrieve lessons
-orchard research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
-orchard bug found|fixed          regression test required to close
+ddflow lesson add|search        capture and retrieve lessons
+ddflow research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
+ddflow bug found|fixed          regression test required to close
 
-orchard session start|prompt|note|end     provenance logging
-orchard replay [--out DIR] [--verify]     reconstruct from the log
+ddflow session start|prompt|note|end     provenance logging
+ddflow replay [--out DIR] [--verify]     reconstruct from the log
 
-orchard recover [--apply]        find crashed agents' work   (2 = nothing)
-orchard doctor                   integrity + health
-orchard rebuild                  re-derive the index
-orchard cadence [--ran NAME]     which periodic passes are due  (2 = none)
-orchard config --explain         every knob, its value, its source and its docs
-orchard config --append-toml ..  add config without a shell editor (validated first)
-orchard reviewers detect|list|test   find and check cross-family review endpoints
-orchard review <id> --gate ..    run the configured reviewer, record the evidence
-orchard mcp                      run the MCP stdio server
+ddflow recover [--apply]        find crashed agents' work   (2 = nothing)
+ddflow doctor                   integrity + health
+ddflow rebuild                  re-derive the index
+ddflow cadence [--ran NAME]     which periodic passes are due  (2 = none)
+ddflow config --explain         every knob, its value, its source and its docs
+ddflow config --append-toml ..  add config without a shell editor (validated first)
+ddflow reviewers detect|list|test   find and check cross-family review endpoints
+ddflow review <id> --gate ..    run the configured reviewer, record the evidence
+ddflow mcp                      run the MCP stdio server
 ```
 
 ---
@@ -1211,14 +1211,14 @@ orchard mcp                      run the MCP stdio server
 61 knobs across 12 sections, every one documented in place:
 
 ```console
-$ orchard config --explain --filter lease
+$ ddflow config --explain --filter lease
 lease.ttl_s = 1800   [default]
     Seconds a lease stays valid without a heartbeat. After this it is EXPIRED and
     reclaimable. Longer = fewer false expiries when an agent is deep in a slow gate;
     shorter = faster recovery after a crash.
 ```
 
-Resolution: dataclass defaults → `.orchard/config.toml` → `ORCHARD_<SECTION>_<KNOB>` env.
+Resolution: dataclass defaults → `.ddflow/config.toml` → `DDFLOW_<SECTION>_<KNOB>` env.
 An unknown knob is an **error**, never a silent drop. A test asserts every knob carries
 documentation, so the reference cannot rot.
 
@@ -1256,6 +1256,6 @@ tests in [R6](docs/RESEARCH.md#r6--bugs-this-project-found-in-itself).
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The event-log inversion, ordering, concurrency, module map, what is deliberately absent |
 | [docs/RESEARCH.md](docs/RESEARCH.md) | Twelve research questions with probes, measured output and verdicts; the self-found bug catalogue, the 2026-09-24 review pass (R10), the importer against a real 400-day corpus (R11), and what the MCP spec is worth for a mutating tool (R12) |
 | [docs/RECOVERY.md](docs/RECOVERY.md) | Operator runbook: crashes, corruption, divergence, full reconstruction |
-| [templates/drivers/implement-phase.md](orchard/templates/drivers/implement-phase.md) | The canonical agent-agnostic driver |
-| [templates/drivers/deltas/](orchard/templates/drivers/deltas/) | Per-agent deltas: Claude, Gemini, Codex, Copilot, Kilo, Cursor |
+| [templates/drivers/implement-phase.md](ddflow/templates/drivers/implement-phase.md) | The canonical agent-agnostic driver |
+| [templates/drivers/deltas/](ddflow/templates/drivers/deltas/) | Per-agent deltas: Claude, Gemini, Codex, Copilot, Kilo, Cursor |
 | [probes/](probes/) | Runnable probes behind the research verdicts |

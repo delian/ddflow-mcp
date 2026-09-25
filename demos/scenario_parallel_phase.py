@@ -40,15 +40,15 @@ def run(sc: Scenario) -> None:
     sc.head("SCENARIO 1 — a phase implemented by two agents in parallel")
     sc.make_repo("tinyurl", SCAFFOLD)
 
-    sc.step("Initialise Orchard and declare the phase's work queue")
-    sc.orchard("init")
+    sc.step("Initialise ddflow and declare the phase's work queue")
+    sc.ddflow("init")
     # Commit the setup, as a real operator does: `init` touches tracked files
     # (.gitignore, .gitattributes) and an uncommitted change there leaves the primary
-    # checkout dirty, which `orchard merge` refuses.
+    # checkout dirty, which `ddflow merge` refuses.
     sc.git("add", "-A")
-    sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "orchard: adopt")
+    sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "ddflow: adopt")
     sc.write(
-        ".orchard/gates.toml",
+        ".ddflow/gates.toml",
         """
         [gate.unit_tests]
         command = "python3 -m pytest tests/ -q"
@@ -57,7 +57,7 @@ def run(sc: Scenario) -> None:
         command = "python3 -m compileall -q shortener"
     """,
     )
-    sc.orchard(
+    sc.ddflow(
         "phase",
         "add",
         "P1",
@@ -73,7 +73,7 @@ def run(sc: Scenario) -> None:
         ("P1.T4", "store maintenance CLI", "", "shortener/store*.py"),
     ]
     for tid, title, needs, globs in tasks:
-        sc.orchard(
+        sc.ddflow(
             "task",
             "add",
             tid,
@@ -93,7 +93,7 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("Ask what may start now — before anyone has claimed anything")
-    plan = sc.jorchard("next", "--phase", "P1")
+    plan = sc.jddflow("next", "--phase", "P1")
     ready = [r["id"] for r in plan["ready"]]
     sc.check(
         "T1, T2 and T4 are all offered (nothing is claimed yet)",
@@ -113,11 +113,11 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("Agent ALPHA claims T1; agent BETA claims T2 — genuinely in parallel")
-    sc.orchard("claim", "P1.T1", agent="alpha")
-    sc.orchard("claim", "P1.T2", agent="beta")
-    st = sc.jorchard("show", "P1.T1")
+    sc.ddflow("claim", "P1.T1", agent="alpha")
+    sc.ddflow("claim", "P1.T2", agent="beta")
+    st = sc.jddflow("show", "P1.T1")
     wt_alpha = st["worktree"]
-    wt_beta = sc.jorchard("show", "P1.T2")["worktree"]
+    wt_beta = sc.jddflow("show", "P1.T2")["worktree"]
     sc.check(
         "alpha and beta got DIFFERENT worktrees", wt_alpha != wt_beta, f"{wt_alpha} vs {wt_beta}"
     )
@@ -127,7 +127,7 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("A third agent GAMMA tries to take T4 — which overlaps T1's files")
-    code, _, err = sc.orchard("claim", "P1.T4", agent="gamma", expect=3)
+    code, _, err = sc.ddflow("claim", "P1.T4", agent="gamma", expect=3)
     sc.check("the claim is REFUSED with exit 3, not silently allowed", code == 3)
     sc.check(
         "the refusal names the overlapping file pattern and the holder",
@@ -234,16 +234,16 @@ def run(sc: Scenario) -> None:
 
     sc.step("Run the gate pipeline for T1 — tests are REAL and actually execute")
     for gate in ("research", "rules", "implement"):
-        sc.orchard(
+        sc.ddflow(
             "gate", "record", "P1.T1", gate, "--outcome", "passed", "--evidence", "done", quiet=True
         )
-    code, out, _ = sc.orchard("gate", "run", "P1.T1", "unit_tests")
+    code, out, _ = sc.ddflow("gate", "run", "P1.T1", "unit_tests")
     sc.check(
         "the real pytest run passed and was recorded with evidence",
         "PASSED" in out.upper(),
         out[-300:],
     )
-    ev = sc.jorchard("show", "P1.T1")["gates"]["unit_tests"]["evidence"]
+    ev = sc.jddflow("show", "P1.T1")["gates"]["unit_tests"]["evidence"]
     sc.check(
         "the evidence carries the command, exit code and an output digest",
         ev["exit"] == 0 and ev["command"] and ev["output_digest"],
@@ -251,7 +251,7 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("A reviewer is UNAVAILABLE — the moment of truth for the whole design")
-    sc.orchard(
+    sc.ddflow(
         "gate",
         "record",
         "P1.T1",
@@ -261,10 +261,10 @@ def run(sc: Scenario) -> None:
         "--reason",
         "review endpoint returned 503",
     )
-    _, out, _ = sc.orchard("gate", "status", "P1.T1")
+    _, out, _ = sc.ddflow("gate", "status", "P1.T1")
     sc.check("the unavailable critic is NOT counted as a pass", "[?] critic" in out, out)
     sc.check("the gap is stated explicitly in the status output", "not a pass" in out, out)
-    code, _, err = sc.orchard("complete", "P1.T1", "--model", "claude-opus-5", expect=3)
+    code, _, err = sc.ddflow("complete", "P1.T1", "--model", "claude-opus-5", expect=3)
     sc.check("completion is REFUSED with exit 3", code == 3)
     sc.check(
         "the refusal lists EVERY unmet condition at once, not just the first",
@@ -277,7 +277,7 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("A different-family reviewer runs; now the task may complete")
-    sc.orchard(
+    sc.ddflow(
         "gate",
         "record",
         "P1.T1",
@@ -290,15 +290,15 @@ def run(sc: Scenario) -> None:
         "gemini-2.5-pro",
     )
     for g in ("standards", "bug_hunt", "dedupe"):
-        sc.orchard(
+        sc.ddflow(
             "gate", "record", "P1.T1", g, "--outcome", "passed", "--evidence", "clean", quiet=True
         )
-    sc.orchard("merge", "P1.T1")
-    sc.orchard("complete", "P1.T1", "--model", "claude-opus-5")
+    sc.ddflow("merge", "P1.T1")
+    sc.ddflow("complete", "P1.T1", "--model", "claude-opus-5")
     sc.check("T1's code is now on main", "class Store" in sc.git("show", "main:shortener/store.py"))
 
     sc.step("T3 was blocked on T1+T2; it must still be blocked on T2 alone")
-    plan = sc.jorchard("next", "--phase", "P1")
+    plan = sc.jddflow("next", "--phase", "P1")
     blk = {b["item"]: b for b in plan["blocked"]}
     sc.check(
         "T3 remains blocked, now waiting only on T2",
@@ -313,11 +313,11 @@ def run(sc: Scenario) -> None:
 
     sc.step("Finish T2, and confirm T3 unblocks automatically")
     for g in ("research", "rules", "implement", "standards", "bug_hunt", "dedupe"):
-        sc.orchard(
+        sc.ddflow(
             "gate", "record", "P1.T2", g, "--outcome", "passed", "--evidence", "ok", quiet=True
         )
-    sc.orchard("gate", "run", "P1.T2", "unit_tests", agent="beta")
-    sc.orchard(
+    sc.ddflow("gate", "run", "P1.T2", "unit_tests", agent="beta")
+    sc.ddflow(
         "gate",
         "record",
         "P1.T2",
@@ -333,7 +333,7 @@ def run(sc: Scenario) -> None:
     # `gates.require_outcome`: a gate left silent blocks completion, so the critic has
     # to be recorded as UNAVAILABLE rather than simply not run. That is the whole
     # point — "nobody ran it" and "it found nothing" must not look the same.
-    sc.orchard(
+    sc.ddflow(
         "gate",
         "record",
         "P1.T2",
@@ -344,11 +344,11 @@ def run(sc: Scenario) -> None:
         "no critic endpoint configured in this demo repository",
         quiet=True,
     )
-    sc.orchard("merge", "P1.T2", agent="beta")
-    sc.orchard("complete", "P1.T2", "--model", "claude-opus-5", agent="beta")
-    ready = [r["id"] for r in sc.jorchard("next", "--phase", "P1")["ready"]]
+    sc.ddflow("merge", "P1.T2", agent="beta")
+    sc.ddflow("complete", "P1.T2", "--model", "claude-opus-5", agent="beta")
+    ready = [r["id"] for r in sc.jddflow("next", "--phase", "P1")["ready"]]
     sc.check("T3 became ready the moment its last dependency landed", "P1.T3" in ready, str(ready))
     sc.note(
-        "No one told Orchard to unblock T3 — readiness is computed from the log, "
+        "No one told ddflow to unblock T3 — readiness is computed from the log, "
         "so it cannot drift from what actually shipped."
     )

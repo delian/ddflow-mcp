@@ -1,0 +1,83 @@
+# Companion MCP servers ddflow knows about.
+#
+# ddflow imposes the pipeline; it does not perform the judgement inside most of its
+# gates. These servers do — so a project that adopts ddflow and stops there has a
+# `standards` gate with nothing behind it and a `rules` gate that reads no memory.
+# The point of this file is that the gap is DETECTED and NAMED rather than left for
+# the operator to notice six tasks later.
+#
+# Extending it is config, not code: copy this file to `.ddflow/companions.toml`, add
+# a `[[companion]]` block, and `ddflow companions` picks it up. Nothing here is
+# compiled in.
+#
+# Fields
+#   id          stable key, and the name the server is registered under
+#   title       one line for a human
+#   gates       which ddflow gates this server serves — drives the recommendation
+#   why         what it buys you, in the terms the gate is phrased in
+#   detect      argv run to decide "is this installed?"; exit 0 = yes.
+#               Keep it cheap and side-effect free: it runs on every `companions` call.
+#   command/args/env   how the agent should launch it (written into the MCP config)
+#   install     the command a human runs to get it, quoted verbatim in the report
+#   url         where to read about it before installing something on your machine
+#   default     true = proposed by `adopt`; false = known but only on request
+
+[[companion]]
+id = "roborev"
+title = "Automated second-opinion code review"
+gates = ["standards", "bug_hunt", "dedupe"]
+why = """Reviews a commit, and analyses duplication, dead code, architecture and \
+complexity across a file set. The duplication analysis is the highest-value one: it \
+sees cross-file drift that a per-file review cannot, which is the failure mode of \
+agent-written code specifically — an agent changing replicated logic reliably updates \
+one copy and misses the rest."""
+detect = ["roborev", "--version"]
+command = "roborev"
+args = ["mcp"]
+install = "cargo install roborev  # or see the project README"
+url = "https://github.com/steipete/roborev"
+default = true
+
+[[companion]]
+id = "codeguide"
+title = "Language and framework coding standards"
+gates = ["standards"]
+why = """Serves the house rules for the languages in play as MCP resources, so the \
+`standards` gate checks against a written standard instead of the reviewer's taste."""
+detect = ["codeguide-mcp", "--version"]
+command = "codeguide-mcp"
+args = []
+install = "npm install -g codeguide-mcp"
+url = "https://github.com/ArchimedesCrypto/codeguide-mcp"
+default = true
+
+[[companion]]
+id = "context7"
+title = "Current library documentation"
+gates = ["research", "standards"]
+why = """Fetches up-to-date API documentation for the libraries a task touches. The \
+`research` gate asks for a falsifiable claim probed against reality; a model's memory \
+of a library's API is exactly the kind of claim that is cheap to check and often \
+wrong."""
+detect = ["npx", "-y", "@upstash/context7-mcp", "--help"]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+install = "npx -y @upstash/context7-mcp   # no install needed; npx fetches it"
+url = "https://github.com/upstash/context7"
+default = true
+
+[[companion]]
+id = "memory"
+title = "Cross-session memory"
+gates = ["rules"]
+why = """Operational facts about this machine and working state that are expensive to \
+rediscover and belong in no document. ddflow's own `recall` covers decisions, \
+lessons, research, bugs and past prompts — which is the project's memory. This covers \
+the other kind: what this environment does, which is not the same thing and does not \
+belong in a committed log."""
+detect = ["npx", "-y", "@modelcontextprotocol/server-memory", "--help"]
+command = "npx"
+args = ["-y", "@modelcontextprotocol/server-memory"]
+install = "npx -y @modelcontextprotocol/server-memory"
+url = "https://github.com/modelcontextprotocol/servers/tree/main/src/memory"
+default = false

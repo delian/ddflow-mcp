@@ -4,7 +4,7 @@ Written for the person at the terminal at 2 a.m. Every procedure starts with an
 inspection and ends with a decision, because the one irreversible mistake available here
 is deleting a worktree that held the only copy of something.
 
-**The rule underneath all of it:** the event log (`.orchard/events/*.jsonl`) is the only
+**The rule underneath all of it:** the event log (`.ddflow/events/*.jsonl`) is the only
 thing that must survive. Everything else — the index, the boards, the worktrees — is
 either derived or replaceable.
 
@@ -13,8 +13,8 @@ either derived or replaceable.
 ## First response, always
 
 ```sh
-orchard doctor          # integrity, cycles, unknown deps, orphaned trees, stale index
-orchard recover         # what a crash left behind, and what is in it
+ddflow doctor          # integrity, cycles, unknown deps, orphaned trees, stale index
+ddflow recover         # what a crash left behind, and what is in it
 ```
 
 `doctor` exits 1 if it found a problem, `recover` exits 2 if there is nothing to recover.
@@ -27,17 +27,17 @@ orchard recover         # what a crash left behind, and what is in it
 owner.
 
 ```console
-$ orchard recover
+$ ddflow recover
 1 recoverable situation(s); 1 may contain work:
 
 !! P2.T3  [expired_lease]  was: agent-hostname-41823
-     worktree /srv/proj/../.orchard-worktrees/P2.T3
+     worktree /srv/proj/../.ddflow-worktrees/P2.T3
      INSPECT FIRST — 3 uncommitted file(s), 2 unmerged commit(s).
      `git -C .../P2.T3 diff main` then salvage,
-     then `orchard release P2.T3 --note salvaged`.
+     then `ddflow release P2.T3 --note salvaged`.
 ```
 
-Entries marked `!!` were **measured** to contain work. Orchard will not touch them.
+Entries marked `!!` were **measured** to contain work. ddflow will not touch them.
 
 **Procedure.**
 
@@ -59,19 +59,19 @@ Entries marked `!!` were **measured** to contain work. Orchard will not touch th
 
    ```sh
    git -C <worktree> add <explicit paths> && git -C <worktree> commit -m "P2.T3: salvaged"
-   orchard release P2.T3 --note "salvaged 3 files"
-   orchard claim P2.T3                    # adopts the SAME worktree; no second tree
-   orchard merge P2.T3 && orchard complete P2.T3 --model "<your model>"
+   ddflow release P2.T3 --note "salvaged 3 files"
+   ddflow claim P2.T3                    # adopts the SAME worktree; no second tree
+   ddflow merge P2.T3 && ddflow complete P2.T3 --model "<your model>"
    ```
 
 4. **If it is genuinely nothing**, release and remove:
 
    ```sh
-   orchard release P2.T3 --note "inspected: superseded draft, discarded"
+   ddflow release P2.T3 --note "inspected: superseded draft, discarded"
    git worktree remove <worktree>
    ```
 
-**Bulk case.** `orchard recover --apply` expires only the leases whose trees it measured
+**Bulk case.** `ddflow recover --apply` expires only the leases whose trees it measured
 as *empty*. Anything marked `!!` is left for you, whatever the configured policy — the
 knob controls convenience, never safety.
 
@@ -79,12 +79,12 @@ knob controls convenience, never safety.
 
 ## 2. A lease is stuck and the holder is definitely gone
 
-Orchard refuses to steal, by design. Override deliberately:
+ddflow refuses to steal, by design. Override deliberately:
 
 ```sh
-orchard recover --item P2.T3        # confirm what is in the tree FIRST
-orchard release P2.T3 --note "holder confirmed dead: host rebooted 03:14"
-orchard claim   P2.T3               # or: orchard claim P2.T3 --force
+ddflow recover --item P2.T3        # confirm what is in the tree FIRST
+ddflow release P2.T3 --note "holder confirmed dead: host rebooted 03:14"
+ddflow claim   P2.T3               # or: ddflow claim P2.T3 --force
 ```
 
 The `--note` lands in the event log. Six months later that sentence is the only record of
@@ -99,9 +99,9 @@ append is durable, and an interrupted one leaves a torn final line that readers 
 `doctor` reports.
 
 ```sh
-orchard doctor          # reports "N unparseable line(s) — likely a torn append"
-orchard rebuild         # re-derive the index; the torn line is ignored
-orchard recover         # then work through §1 for each tree
+ddflow doctor          # reports "N unparseable line(s) — likely a torn append"
+ddflow rebuild         # re-derive the index; the torn line is ignored
+ddflow recover         # then work through §1 for each tree
 ```
 
 A torn line loses at most the one event being written when power failed. It cannot
@@ -109,17 +109,17 @@ corrupt earlier events, because appends never rewrite existing bytes.
 
 ---
 
-## 4. The index is corrupt, or you upgraded Orchard
+## 4. The index is corrupt, or you upgraded ddflow
 
 The index is disposable. This is never a data-loss event.
 
 ```sh
-rm -f .orchard/index.db*
-orchard rebuild
+rm -f .ddflow/index.db*
+ddflow rebuild
 ```
 
 There is no migration path and none is needed: the schema version is part of the
-staleness check, so an upgraded Orchard rebuilds automatically on first read.
+staleness check, so an upgraded ddflow rebuilds automatically on first read.
 
 ---
 
@@ -130,8 +130,8 @@ itself, and the `(lamport, agent, id)` ordering is total and deterministic.
 
 ```sh
 git merge <other-branch>      # shard files rarely conflict; each agent owns one
-orchard rebuild
-orchard doctor
+ddflow rebuild
+ddflow doctor
 ```
 
 **If a shard file *does* conflict** (only possible if two machines shared one agent id):
@@ -139,21 +139,21 @@ resolve by **keeping both sides' lines** — the file is append-only, order with
 recoverable from the Lamport field, and duplicates are removed on read.
 
 ```sh
-git checkout --theirs .orchard/events/<shard>.jsonl   # then re-add yours:
-git show :2:.orchard/events/<shard>.jsonl >> .orchard/events/<shard>.jsonl
-sort -u .orchard/events/<shard>.jsonl -o .orchard/events/<shard>.jsonl
-orchard doctor
+git checkout --theirs .ddflow/events/<shard>.jsonl   # then re-add yours:
+git show :2:.ddflow/events/<shard>.jsonl >> .ddflow/events/<shard>.jsonl
+sort -u .ddflow/events/<shard>.jsonl -o .ddflow/events/<shard>.jsonl
+ddflow doctor
 ```
 
 To prevent it recurring, give each machine a distinct agent id (`--agent`, or
-`[agent].id` in `.orchard/config.toml`).
+`[agent].id` in `.ddflow/config.toml`).
 
 ---
 
 ## 6. Someone hand-edited the log
 
 ```console
-$ orchard doctor
+$ ddflow doctor
   PROBLEM: e7a3f… : content does not match its address (edited after the fact?)
 ```
 
@@ -161,7 +161,7 @@ The event's id is the hash of its body, so any edit is detectable. There is no a
 repair, because guessing at the original content would be worse than the edit.
 
 - If the edit was a mistake, restore that shard from git history:
-  `git checkout HEAD~1 -- .orchard/events/<shard>.jsonl`
+  `git checkout HEAD~1 -- .ddflow/events/<shard>.jsonl`
 - If the change was intended, express it as a **new event** instead. The log is
   append-only; a correction is a later event, never a rewrite. This is the same discipline
   the ledger domain calls a compensating entry.
@@ -174,9 +174,9 @@ This is the case the whole design is for.
 
 ```sh
 mkdir recovered && cd recovered && git init
-mkdir -p .orchard && cp -r /backup/events .orchard/events
-orchard rebuild
-orchard replay --out ./recovery-kit
+mkdir -p .ddflow && cp -r /backup/events .ddflow/events
+ddflow rebuild
+ddflow replay --out ./recovery-kit
 ```
 
 You get:
@@ -198,7 +198,7 @@ constraints, which is the part that normally exists only in someone's memory.
 If the original repository still exists, check the log still describes it:
 
 ```sh
-orchard replay --verify     # every recorded commit sha must still resolve
+ddflow replay --verify     # every recorded commit sha must still resolve
 ```
 
 A sha that does not resolve is not necessarily corruption — a rebased or squashed branch
@@ -209,8 +209,8 @@ loses shas legitimately — so it reports rather than fails.
 ## 8. Worktrees exist that nothing claims
 
 ```console
-$ orchard doctor
-  note: worktree /srv/.orchard-worktrees/P1.T9 exists but no item claims it
+$ ddflow doctor
+  note: worktree /srv/.ddflow-worktrees/P1.T9 exists but no item claims it
 ```
 
 Usually left by a removed item or a `--force` release. Inspect as in §1, then:
@@ -225,12 +225,12 @@ git worktree prune
 ## What never to do
 
 - **Never `git checkout` / `git switch` in the primary checkout while agents are live.**
-  It swaps files underneath them. Orchard merges *from* the primary without a checkout,
+  It swaps files underneath them. ddflow merges *from* the primary without a checkout,
   and refuses if the primary is on the wrong branch rather than switching it for you.
 - **Never `git add -A` in a shared tree.** A parallel agent's unrelated file in your
   commit is very hard to notice and very hard to undo.
 - **Never delete a worktree you have not diffed against the base branch.**
-- **Never hand-edit `.orchard/events/`.** Append a correcting event instead.
+- **Never hand-edit `.ddflow/events/`.** Append a correcting event instead.
 - **Never treat exit 2 as exit 0.** "Could not run" is not "fine".
 
 ---
@@ -241,12 +241,12 @@ git worktree prune
 process has exited **zero**, its stderr is empty, and the log shows the previous call
 succeeding normally.
 
-**Cause, almost always.** A child process took the server's stdin. Orchard speaks MCP
+**Cause, almost always.** A child process took the server's stdin. ddflow speaks MCP
 over stdio — the JSON-RPC session *is* the process's stdin and stdout — so any child
 spawned without an explicit `stdin=` inherits that pipe. A child that reads stdin eats
 the protocol bytes; one that closes it ends the session.
 
-Inside Orchard this cannot happen any more: every subprocess goes through `proc.run`,
+Inside ddflow this cannot happen any more: every subprocess goes through `proc.run`,
 which detaches stdin, and `tests/test_stdio_safety.py` fails the suite if a module
 reaches for the stdlib directly. What remains is **your own gate commands**:
 
@@ -258,19 +258,19 @@ command = "npm test"         # fine unless a script prompts
 ```
 
 A command that *prompts* — a migration asking for confirmation, a linter offering to
-fix, anything that reads a TTY — is the hazard. Orchard hands it an empty stdin, so it
+fix, anything that reads a TTY — is the hazard. ddflow hands it an empty stdin, so it
 will see EOF rather than hang; but a command whose behaviour on EOF is to wait anyway
 will hold the gate until `timeout_s`.
 
 **Diagnosis.** Run the gate command yourself with stdin closed:
 
 ```sh
-orchard gate run <id> unit_tests < /dev/null
+ddflow gate run <id> unit_tests < /dev/null
 ```
 
-If that hangs, the command is the problem, not Orchard. Add `--yes`/`--ci`/
+If that hangs, the command is the problem, not ddflow. Add `--yes`/`--ci`/
 `--non-interactive`, or set `[gate.unit_tests].timeout_s` low enough that a stuck gate
 reports rather than parks.
 
 **If the session has already ended:** nothing is lost. The event log is on disk and
-every completed call is in it — restart the server and run `orchard doctor`.
+every completed call is in it — restart the server and run `ddflow doctor`.

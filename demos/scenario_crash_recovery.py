@@ -10,7 +10,7 @@ What must happen next, in order:
    uncommitted file.
 2. While the lease is live, the item stays claimed — a dead agent is indistinguishable
    from a slow one until the lease expires, and guessing is how work gets destroyed.
-3. Once expired, `orchard recover` finds it, measures the tree, and says what is in it.
+3. Once expired, `ddflow recover` finds it, measures the tree, and says what is in it.
 4. A new agent may NOT silently take it. It must acknowledge the situation.
 5. After salvage, the item returns to the pool and the work is still on disk.
 """
@@ -36,14 +36,14 @@ def run(sc: Scenario) -> None:
     sc.make_repo("feedparse", SCAFFOLD)
 
     sc.step("Set up a short lease TTL so a crash is observable inside a test")
-    sc.orchard("init")
+    sc.ddflow("init")
     # Commit the setup, as a real operator does: `init` touches tracked files
     # (.gitignore, .gitattributes) and an uncommitted change there leaves the primary
-    # checkout dirty, which `orchard merge` refuses.
+    # checkout dirty, which `ddflow merge` refuses.
     sc.git("add", "-A")
-    sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "orchard: adopt")
+    sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "ddflow: adopt")
     sc.write(
-        ".orchard/config.toml",
+        ".ddflow/config.toml",
         """
         [lease]
         ttl_s = 2
@@ -55,8 +55,8 @@ def run(sc: Scenario) -> None:
         required = ["implement", "merge"]
     """,
     )
-    sc.orchard("phase", "add", "P1", "--title", "Parsing")
-    sc.orchard(
+    sc.ddflow("phase", "add", "P1", "--title", "Parsing")
+    sc.ddflow(
         "task",
         "add",
         "P1.T1",
@@ -67,7 +67,7 @@ def run(sc: Scenario) -> None:
         "--globs",
         "feedparse/rss.py",
     )
-    sc.orchard(
+    sc.ddflow(
         "task",
         "add",
         "P1.T2",
@@ -80,8 +80,8 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("Agent DELTA claims the task and starts working")
-    sc.orchard("claim", "P1.T1", agent="delta")
-    wt = Path(sc.jorchard("show", "P1.T1")["worktree"])
+    sc.ddflow("claim", "P1.T1", agent="delta")
+    wt = Path(sc.jddflow("show", "P1.T1")["worktree"])
     sc.write(
         "feedparse/rss.py",
         '''
@@ -121,11 +121,11 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("Immediately after the crash, the item is still CLAIMED")
-    code, _, err = sc.orchard("claim", "P1.T1", agent="epsilon", expect=3)
+    code, _, err = sc.ddflow("claim", "P1.T1", agent="epsilon", expect=3)
     sc.check("another agent is refused while the lease is still live", code == 3)
     sc.check(
         "recover reports nothing yet — a dead agent looks like a slow one",
-        sc.orchard("recover", expect=2)[0] == 2,
+        sc.ddflow("recover", expect=2)[0] == 2,
     )
     sc.note(
         "This is deliberate. Treating a momentarily-quiet agent as dead is how two "
@@ -134,7 +134,7 @@ def run(sc: Scenario) -> None:
 
     sc.step("Wait for the lease to expire, then run recovery")
     time.sleep(2.5)
-    found = sc.jorchard("recover")
+    found = sc.jddflow("recover")
     sc.check("recovery finds exactly one situation", len(found) == 1, json.dumps(found))
     rec = found[0]
     sc.check("it is identified as an expired lease", rec["kind"] == "expired_lease")
@@ -162,7 +162,7 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("A new agent still cannot silently steal an expired lease")
-    code, _, err = sc.orchard("claim", "P1.T1", agent="epsilon", expect=3)
+    code, _, err = sc.ddflow("claim", "P1.T1", agent="epsilon", expect=3)
     sc.check("the claim is refused even though the lease expired", code == 3)
     sc.check(
         "the refusal explains WHY it will not auto-reclaim",
@@ -175,8 +175,8 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("An automatic sweep also leaves salvageable work alone")
-    sc.orchard("recover", "--apply")
-    st = sc.jorchard("show", "P1.T1")
+    sc.ddflow("recover", "--apply")
+    st = sc.jddflow("show", "P1.T1")
     sc.check(
         "the claim is still in place after --apply, because work was found",
         st["lease"] is not None,
@@ -185,11 +185,11 @@ def run(sc: Scenario) -> None:
 
     sc.step("The operator salvages, then releases — now the item returns to the pool")
     sc.commit_in(wt, "P1.T1: salvaged date normalisation")
-    sc.orchard("release", "P1.T1", "--note", "salvaged 1 file, 2 commits kept")
-    sc.orchard("claim", "P1.T1", agent="epsilon", expect=0)
+    sc.ddflow("release", "P1.T1", "--note", "salvaged 1 file, 2 commits kept")
+    sc.ddflow("claim", "P1.T1", agent="epsilon", expect=0)
     sc.check(
         "EPSILON adopted the EXISTING worktree rather than making a second one",
-        Path(sc.jorchard("show", "P1.T1")["worktree"]) == wt,
+        Path(sc.jddflow("show", "P1.T1")["worktree"]) == wt,
     )
     sc.check(
         "and the salvaged work is in that worktree's history",
@@ -197,11 +197,11 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("Meanwhile an unrelated task was never affected")
-    ready = [r["id"] for r in sc.jorchard("next", "--phase", "P1")["ready"]]
+    ready = [r["id"] for r in sc.jddflow("next", "--phase", "P1")["ready"]]
     sc.check("T2 stayed available throughout the whole incident", "P1.T2" in ready, str(ready))
 
     sc.step("The event log tells the full story of the incident")
-    _, out, _ = sc.orchard("doctor")
+    _, out, _ = sc.ddflow("doctor")
     sc.check(
         "doctor reports a healthy log after recovery",
         "Healthy" in out or "problem" not in out.lower(),

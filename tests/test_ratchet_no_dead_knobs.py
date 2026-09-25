@@ -20,7 +20,7 @@ import re
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-from orchard.config import Config
+from ddflow.config import Config
 
 #: Knobs the NAME-BASED scan cannot see. Each needs a written reason, and the list may
 #: only SHRINK — `test_the_allowlist_only_shrinks` fails on a stale entry.
@@ -37,7 +37,7 @@ KNOWN_UNREAD: dict[str, str] = {
 
 
 def _sources() -> str:
-    pkg = pathlib.Path(__file__).resolve().parents[1] / "orchard"
+    pkg = pathlib.Path(__file__).resolve().parents[1] / "ddflow"
     # `rglob`, not `glob`: the package is layered (core/ infra/ services/ views/
     # surfaces/) and a non-recursive scan sees only `__init__.py` and `config.py` —
     # which reports every knob in the package as dead. `test_the_scan_is_not_vacuous`

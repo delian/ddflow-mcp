@@ -9,11 +9,11 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.config import Config
-from orchard.core.model import fold
-from orchard.infra import worktree as W
-from orchard.infra.log import EventLog
-from orchard.services import leases as L
+from ddflow.config import Config
+from ddflow.core.model import fold
+from ddflow.infra import worktree as W
+from ddflow.infra.log import EventLog
+from ddflow.services import leases as L
 
 
 def seed(log, ids=("T1", "T2", "T3")):
@@ -139,17 +139,17 @@ def test_renewing_your_own_lease_does_not_drop_the_worktree(repo, cfg):
     log = EventLog(repo, "a")
     seed(log, ["T1"])
     L.acquire(log, cfg, "T1", holder="a")
-    L.acquire(log, cfg, "T1", holder="a", worktree="/tmp/wt-T1", branch="orchard/T1")
+    L.acquire(log, cfg, "T1", holder="a", worktree="/tmp/wt-T1", branch="ddflow/T1")
     lease = fold(log.read_all()).items["T1"].lease
     assert lease.worktree == "/tmp/wt-T1", "the worktree was silently dropped on renew"
-    assert lease.branch == "orchard/T1"
+    assert lease.branch == "ddflow/T1"
 
 
 def test_a_plain_heartbeat_never_clears_an_attachment(repo, cfg):
     """The inverse error: a bare renewal must not blank the fields it omits."""
     log = EventLog(repo, "a")
     seed(log, ["T1"])
-    L.acquire(log, cfg, "T1", holder="a", worktree="/tmp/wt-T1", branch="orchard/T1")
+    L.acquire(log, cfg, "T1", holder="a", worktree="/tmp/wt-T1", branch="ddflow/T1")
     L.renew(log, "T1", holder="a")
     lease = fold(log.read_all()).items["T1"].lease
     assert lease.worktree == "/tmp/wt-T1"
@@ -276,7 +276,7 @@ def test_suggested_alternatives_are_exactly_what_the_scheduler_would_offer(repo,
     analysis. Fixed by delegating to `schedule.plan` instead of re-deriving.
     Mutation-verified: restoring the local rule makes this red.
     """
-    from orchard.core.schedule import plan
+    from ddflow.core.schedule import plan
 
     log = EventLog(repo, "a")
     log.append("phase.added", "P1", {})
@@ -369,10 +369,10 @@ def test_capturing_a_diff_leaves_the_index_untouched(repo, cfg):
 
 
 def test_merge_is_not_blocked_by_an_unrelated_dirty_file(repo, cfg):
-    """Orchard used to refuse any merge while the primary had a modified tracked file,
+    """ddflow used to refuse any merge while the primary had a modified tracked file,
     claiming "a merge would mix them into the result". A probe refutes that: the local
     edit does not enter the merge commit and remains uncommitted. The check only ever
-    refused safe merges — routinely including one blocked by Orchard's own
+    refused safe merges — routinely including one blocked by ddflow's own
     freshly-written config.toml.
     """
     log = EventLog(repo, "a")
@@ -402,7 +402,7 @@ def test_merge_is_not_blocked_by_an_unrelated_dirty_file(repo, cfg):
 
 def test_merge_still_refuses_when_git_itself_would(repo, cfg):
     """The real conflict: the branch changed a file the primary has modified locally.
-    Git catches this precisely; Orchard must surface its message, not pre-empt it."""
+    Git catches this precisely; ddflow must surface its message, not pre-empt it."""
     log = EventLog(repo, "a")
     seed(log, ["T2"])
     wt = W.create(repo, cfg, "T2")

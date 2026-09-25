@@ -20,7 +20,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.services import enforce as E
+from ddflow.services import enforce as E
 
 
 def _commit(repo: Path, message: str, *, agent: str = "", paths: list[str] | None = None):
@@ -28,7 +28,7 @@ def _commit(repo: Path, message: str, *, agent: str = "", paths: list[str] | Non
         subprocess.run(["git", "-C", str(repo), "add", *paths], check=True)
     env = {**os.environ}
     if agent:
-        env["ORCHARD_AGENT"] = agent
+        env["DDFLOW_AGENT"] = agent
     return subprocess.run(
         ["git", "-C", str(repo), "commit", "-m", message],
         capture_output=True,
@@ -41,7 +41,7 @@ def _commit(repo: Path, message: str, *, agent: str = "", paths: list[str] | Non
 @pytest.fixture
 def enforced(repo):
     run_cli(repo, "adopt", "--agents", "claude")
-    (repo / ".orchard" / "config.toml").write_text('[enforce]\ncommit_without_lease = "block"\n')
+    (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "block"\n')
     (repo / "src").mkdir(exist_ok=True)
     (repo / "src" / "a.py").write_text("x = 1\n")
     (repo / "src" / "b.py").write_text("y = 1\n")
@@ -63,7 +63,7 @@ def test_an_unclaimed_commit_is_refused(enforced):
     r = _commit(enforced, "unclaimed", paths=["src/a.py"])
     assert r.returncode != 0, "the hook allowed an unclaimed commit"
     assert "not covered by a lease you hold" in r.stderr
-    assert "orchard claim" in r.stderr, "the refusal must name the remedy"
+    assert "ddflow claim" in r.stderr, "the refusal must name the remedy"
 
 
 def test_a_claimed_commit_is_allowed(enforced):
@@ -85,16 +85,16 @@ def test_committing_another_agents_file_names_the_holder(enforced):
     )
 
 
-def test_orchards_own_bookkeeping_needs_no_lease(enforced):
+def test_ddflows_own_bookkeeping_needs_no_lease(enforced):
     """The event log records the lease, so requiring a lease to commit it is a deadlock."""
-    (enforced / ".orchard" / "notes.txt").write_text("x\n")
-    r = _commit(enforced, "orchard state", paths=[".orchard"])
-    assert r.returncode == 0, f"could not commit Orchard's own state:\n{r.stderr}"
+    (enforced / ".ddflow" / "notes.txt").write_text("x\n")
+    r = _commit(enforced, "ddflow state", paths=[".ddflow"])
+    assert r.returncode == 0, f"could not commit ddflow's own state:\n{r.stderr}"
 
 
 def test_warn_mode_reports_but_allows(repo):
     run_cli(repo, "adopt", "--agents", "claude")
-    (repo / ".orchard" / "config.toml").write_text('[enforce]\ncommit_without_lease = "warn"\n')
+    (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "warn"\n')
     (repo / "f.py").write_text("x\n")
     r = _commit(repo, "unclaimed but warn only", paths=["f.py"])
     assert r.returncode == 0
@@ -103,7 +103,7 @@ def test_warn_mode_reports_but_allows(repo):
 
 def test_off_mode_says_nothing(repo):
     run_cli(repo, "adopt", "--agents", "claude")
-    (repo / ".orchard" / "config.toml").write_text('[enforce]\ncommit_without_lease = "off"\n')
+    (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "off"\n')
     (repo / "f.py").write_text("x\n")
     r = _commit(repo, "unclaimed, enforcement off", paths=["f.py"])
     assert r.returncode == 0
@@ -132,7 +132,7 @@ def test_uninstall_leaves_a_foreign_hook_alone(repo):
 
 def test_hooks_status_reports_a_policy_with_no_hook(repo):
     run_cli(repo, "init")
-    (repo / ".orchard" / "config.toml").write_text('[enforce]\ncommit_without_lease = "block"\n')
+    (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "block"\n')
     _code, out, _ = run_cli(repo, "hooks", "status")
     assert "NOT installed" in out
     assert "nothing" in out.lower() and "enforces" in out.lower(), (
@@ -144,7 +144,7 @@ def test_hooks_status_reports_a_policy_with_no_hook(repo):
 
 
 def _instructions(repo: Path) -> str:
-    from orchard.surfaces.mcp import serve
+    from ddflow.surfaces.mcp import serve
 
     out = io.StringIO()
     serve(
@@ -167,8 +167,8 @@ def _instructions(repo: Path) -> str:
 
 def test_an_unadopted_repo_is_told_to_run_setup(repo):
     text = _instructions(repo)
-    assert "does not use Orchard yet" in text
-    assert "orchard_setup" in text
+    assert "does not use ddflow yet" in text
+    assert "ddflow_setup" in text
     # On INTENT, not on a phrase. This text is now
     # `templates/prompts/mcp_instructions.md`, which a project may rewrite wholesale —
     # so pinning the exact wording would make an operator's edit read as a regression.
@@ -183,7 +183,7 @@ def test_an_unadopted_repo_is_told_to_run_setup(repo):
 def test_an_adopted_repo_names_its_remaining_setup_gaps(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     text = _instructions(repo)
-    assert "orchard_brief" in text and "Claim before you edit" in text
+    assert "ddflow_brief" in text and "Claim before you edit" in text
     assert "No test command is configured" in text
     assert "No cross-family reviewer is configured" in text
 
@@ -205,13 +205,13 @@ def test_a_fully_configured_repo_gets_no_setup_nagging(repo):
     assert "Setup still needed" not in text, text[-400:]
 
 
-# -- the out-of-box path: no ORCHARD_AGENT, no --agent, anywhere ----------------------
+# -- the out-of-box path: no DDFLOW_AGENT, no --agent, anywhere ----------------------
 
 
 def test_the_default_identity_is_stable_across_processes(repo):
     """`host-pid` was stable for exactly ONE process.
 
-    So `orchard claim` and the `git commit` hook that ran seconds later were different
+    So `ddflow claim` and the `git commit` hook that ran seconds later were different
     agents: the hook refused the holder's own commit AND reported that the lease
     belonged to somebody else. Out of the box, the enforcement layer rejected correct
     behaviour and blamed the user for it.
@@ -219,10 +219,10 @@ def test_the_default_identity_is_stable_across_processes(repo):
     import subprocess as sp
 
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
-    env.pop("ORCHARD_AGENT", None)
+    env.pop("DDFLOW_AGENT", None)
     code = (
         "import sys;sys.path.insert(0,'.');"
-        "from orchard.infra.log import default_agent_id;"
+        "from ddflow.infra.log import default_agent_id;"
         "print(default_agent_id(" + repr(str(repo)) + "))"
     )
     a = sp.run(
@@ -236,7 +236,7 @@ def test_the_default_identity_is_stable_across_processes(repo):
 
 
 def test_a_claimed_commit_succeeds_with_no_agent_configured_anywhere(repo):
-    """The out-of-box experience. No --agent, no ORCHARD_AGENT, nothing."""
+    """The out-of-box experience. No --agent, no DDFLOW_AGENT, nothing."""
     run_cli(repo, "adopt", "--agents", "claude")
     run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")
     (repo / "src").mkdir(exist_ok=True)
@@ -249,7 +249,7 @@ def test_a_claimed_commit_succeeds_with_no_agent_configured_anywhere(repo):
     run_cli(repo, "claim", "P1.T1", "--no-worktree")
 
     (repo / "src" / "a.py").write_text("x = 2\n")
-    env = {k: v for k, v in os.environ.items() if k != "ORCHARD_AGENT"}
+    env = {k: v for k, v in os.environ.items() if k != "DDFLOW_AGENT"}
     r = subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True)
     r = subprocess.run(
         ["git", "-C", str(repo), "commit", "-m", "legit"],
@@ -277,9 +277,9 @@ def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
     """The robust rule: the hook runs inside a worktree, and the lease that produced
     that worktree is the relevant claim whatever identity string made it. Without this,
     claiming from the primary checkout and committing inside the worktree disagree."""
-    from orchard.infra import worktree as W
-    from orchard.infra.log import EventLog
-    from orchard.services import leases as L
+    from ddflow.infra import worktree as W
+    from ddflow.infra.log import EventLog
+    from ddflow.services import leases as L
 
     run_cli(repo, "adopt", "--agents", "claude")
     run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")
@@ -300,7 +300,7 @@ def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
     (wt.path / "src").mkdir(exist_ok=True)
     (wt.path / "src" / "new.py").write_text("x = 1\n")
     subprocess.run(["git", "-C", str(wt.path), "add", "-A"], check=True)
-    env = {k: v for k, v in os.environ.items() if k != "ORCHARD_AGENT"}
+    env = {k: v for k, v in os.environ.items() if k != "DDFLOW_AGENT"}
     r = subprocess.run(
         ["git", "-C", str(wt.path), "commit", "-m", "in my worktree"],
         capture_output=True,

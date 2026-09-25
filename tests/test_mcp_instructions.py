@@ -28,7 +28,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
 def _instructions(repo: Path) -> str:
-    from orchard.surfaces.mcp import _instructions as fn
+    from ddflow.surfaces.mcp import _instructions as fn
 
     return fn(repo)
 
@@ -38,8 +38,8 @@ def _instructions(repo: Path) -> str:
 
 def test_an_unadopted_repository_is_told_how_to_adopt_and_nothing_else(repo):
     text = _instructions(repo)
-    assert "does not use Orchard yet" in text
-    assert "orchard_setup" in text
+    assert "does not use ddflow yet" in text
+    assert "ddflow_setup" in text
     assert "say nothing about it and carry on" in text, (
         "an agent connected to a project that did not ask for a work queue must not "
         "start talking about one"
@@ -49,7 +49,7 @@ def test_an_unadopted_repository_is_told_how_to_adopt_and_nothing_else(repo):
 def test_an_adopted_repository_is_told_the_loop_and_the_pipeline(repo):
     run_cli(repo, "init")
     text = _instructions(repo)
-    for must in ("orchard_brief", "orchard_claim", "orchard_next", "orchard_complete"):
+    for must in ("ddflow_brief", "ddflow_claim", "ddflow_next", "ddflow_complete"):
         assert must in text, must
     # The pipeline is rendered from the project's OWN configuration, not retyped — the
     # mistake `render.board` made once, which showed ten columns to a project that had
@@ -75,11 +75,11 @@ def test_the_agent_is_told_what_to_record_and_when(repo):
     run_cli(repo, "init")
     text = _instructions(repo)
     for tool in (
-        "orchard_session_prompt",
-        "orchard_decision_add",
-        "orchard_bug_found",
-        "orchard_lesson_add",
-        "orchard_research_add",
+        "ddflow_session_prompt",
+        "ddflow_decision_add",
+        "ddflow_bug_found",
+        "ddflow_lesson_add",
+        "ddflow_research_add",
     ):
         assert tool in text, f"{tool} is not mentioned, so nobody will call it"
     assert "verbatim" in text, "a summarised prompt reconstructs the summary"
@@ -94,7 +94,7 @@ def test_every_companion_is_named_with_the_gates_it_serves(repo):
     text = _instructions(repo)
     for name in ("roborev", "codeguide", "context7", "OptMem"):
         assert name in text, f"{name} is not named, so it will not be used"
-    assert "orchard_companions" in text
+    assert "ddflow_companions" in text
 
 
 def test_the_ones_missing_HERE_are_called_out_with_what_to_do(repo):
@@ -136,7 +136,7 @@ def test_each_missing_companion_carries_its_install_command(repo):
 
 
 def test_a_registered_companion_is_not_listed_as_missing(repo):
-    from orchard.services import companions as CO
+    from ddflow.services import companions as CO
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
@@ -156,7 +156,7 @@ def test_the_whole_instruction_is_an_editable_file(repo):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "prompts", "eject", "mcp_instructions")
     assert code == OK, err
-    ejected = repo / ".orchard" / "prompts" / "mcp_instructions.md"
+    ejected = repo / ".ddflow" / "prompts" / "mcp_instructions.md"
     assert ejected.is_file(), out
 
     ejected.write_text("Our house rules: {% if adopted %}ADOPTED{% endif %}. Ask Priya.\n")
@@ -169,7 +169,7 @@ def test_a_config_path_can_point_the_template_anywhere(repo, tmp_path):
     shared = tmp_path / "house-prompts" / "mcp.md"
     shared.parent.mkdir(parents=True)
     shared.write_text("From the shared prompts repository.\n")
-    cfg = repo / ".orchard" / "config.toml"
+    cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + f'\n[prompts]\nmcp_instructions = "{shared}"\n')
     assert _instructions(repo) == "From the shared prompts repository."
 
@@ -178,18 +178,18 @@ def test_a_broken_override_says_so_instead_of_going_quiet(repo):
     """A silent fallback would give the operator the default while they believed their
     edit was live — and this is the one surface where nobody would ever check."""
     run_cli(repo, "init")
-    cfg = repo / ".orchard" / "config.toml"
+    cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text() + '\n[prompts]\nmcp_instructions = "nope.md"\n')
     text = _instructions(repo)
     assert "could not be loaded" in text and "nope.md" in text, text
-    assert "orchard_brief" in text, "and it still has to hand over the essentials"
+    assert "ddflow_brief" in text, "and it still has to hand over the essentials"
 
 
 def test_the_template_is_listed_and_shipped(repo):
     run_cli(repo, "init")
     code, out, _ = run_cli(repo, "prompts", "list")
     assert code == OK and "mcp_instructions" in out, out
-    assert (ROOT / "orchard" / "templates" / "prompts" / "mcp_instructions.md").is_file()
+    assert (ROOT / "ddflow" / "templates" / "prompts" / "mcp_instructions.md").is_file()
 
 
 # -- it reaches the client, over the real protocol ------------------------------------
@@ -199,7 +199,7 @@ def test_the_instructions_arrive_in_the_initialize_response(repo):
     run_cli(repo, "init")
     env = {**os.environ, "PYTHONPATH": str(ROOT)}
     proc = subprocess.Popen(
-        [sys.executable, "-m", "orchard", "--repo", str(repo), "mcp"],
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -232,7 +232,7 @@ def test_the_instructions_arrive_in_the_initialize_response(repo):
         except subprocess.TimeoutExpired:
             proc.kill()
     body = res.get("instructions", "")
-    assert "orchard_brief" in body and "roborev" in body, body[:400]
+    assert "ddflow_brief" in body and "roborev" in body, body[:400]
 
 
 def test_the_handshake_does_not_write_to_the_repository(repo):

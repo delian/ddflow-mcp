@@ -6,13 +6,13 @@
 > that can be deleted and re-derived.**
 
 ```
-      .orchard/events/<agent>.jsonl          ← committed, append-only, one file per agent
+      .ddflow/events/<agent>.jsonl          ← committed, append-only, one file per agent
                    │
               fold() — pure, deterministic
                    │
      ┌─────────────┼──────────────┬────────────────────┐
      ▼             ▼              ▼                    ▼
-  State        index.db      docs/orchard/*.md    RECONSTRUCTION.md
+  State        index.db      docs/ddflow/*.md    RECONSTRUCTION.md
  (in memory)  (gitignored)    (generated)          (generated)
 ```
 
@@ -24,7 +24,7 @@ separately:
 | **Merge without conflict** | Each agent appends to its own file. Two branches touch two files. Measured: a real two-branch merge resolves clean, no conflicts ([R2](RESEARCH.md)). |
 | **Crash recovery** | State is never *written*, only folded. There is no half-updated record to repair; the last event about an item says exactly where it stopped. |
 | **Reconstruction from logs** | Operator prompts are events. Replaying the log replays the decision history. |
-| **Tamper-evidence** | Event ids are content addresses. Editing an event changes its id and orphans every reference to it; `orchard doctor` detects it. |
+| **Tamper-evidence** | Event ids are content addresses. Editing an event changes its id and orphans every reference to it; `ddflow doctor` detects it. |
 
 The cost is that there is no human-editable surface. That is deliberate. The project this
 was extracted from used markdown as its source of truth and needed a dedicated audit
@@ -70,7 +70,7 @@ finished* item, so an agent with a stale snapshot re-did completed work — 50 c
 
 **Expiry never steals.** `lease.reclaim_policy` defaults to `report`, because a crashed
 agent's worktree is sometimes irreplaceable and sometimes a superseded draft, and nothing
-in the metadata tells them apart — only a diff does ([R5](RESEARCH.md)). `orchard
+in the metadata tells them apart — only a diff does ([R5](RESEARCH.md)). `ddflow
 recover` measures each tree and prints the exact `git diff` to run. It never deletes.
 
 ## Dependencies are inherited
@@ -112,7 +112,7 @@ exit 3 with alternatives rather than simply failing.
 A gate is one checkpoint with one outcome. Two kinds:
 
 - **Command gates** have a shell command; the exit code decides.
-- **Agent gates** are judgement an LLM performs; Orchard demands the evidence and records
+- **Agent gates** are judgement an LLM performs; ddflow demands the evidence and records
   the answer.
 
 Agent gates are where a workflow rots, because "I reviewed it" costs nothing to say.
@@ -207,7 +207,7 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `services/sessions.py` | prompt provenance, redaction, replay, bundles |
 | `services/companions.py` | detect and register the MCP servers that serve the gates |
 | `services/importer.py` | read an existing project's todo/lessons/ADR/research/journal/OptMem corpus and PROPOSE it as a queue; `verify_import` answers whether it is still true and whether anyone finished it |
-| `services/help.py` | `orchard help`: narrative from templates, capability inventory generated from the live tool table |
+| `services/help.py` | `ddflow help`: narrative from templates, capability inventory generated from the live tool table |
 | `services/adopt.py`, `enforce.py`, `cleanup.py`, `prompts.py` | install, the commit hook, worktree classification, templates |
 | `views/markdown.py` | the generated views and the budgeted brief |
 | `surfaces/cli.py` | argparse |
@@ -216,7 +216,7 @@ layer split by role, and saying so is more honest than an exemption list that gr
 
 No third-party dependency.
 
-**`infra/proc.py` is 50 lines and exists for one reason.** Orchard runs as an MCP server
+**`infra/proc.py` is 50 lines and exists for one reason.** ddflow runs as an MCP server
 over **stdio**: the JSON-RPC session is this process's stdin and stdout.
 `subprocess.run(...)` with no explicit `stdin=` hands the child that same pipe, so a
 child that reads stdin — an arbitrary shell command in a gate, a reviewer CLI, an `npx`

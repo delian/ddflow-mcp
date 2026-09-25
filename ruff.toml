@@ -1,7 +1,7 @@
-# Orchard is a VENDORED, self-contained package: it ships as a directory you copy into
+# ddflow is a VENDORED, self-contained package: it ships as a directory you copy into
 # any project, and it carries its own conventions rather than inheriting the host
 # repository's. Ruff resolves configuration per file from the nearest config in that
-# file's ancestor directories, so this file governs `orchard/` and nothing else.
+# file's ancestor directories, so this file governs `ddflow/` and nothing else.
 #
 # The rule set is the host repo's, minus four exemptions. Each is written down, because
 # an undocumented ignore is how a lint config becomes a place to hide problems.
@@ -31,7 +31,7 @@ ignore = [
 # Splitting `build_parser` into a dozen `_add_x_parser` helpers would move the length
 # without reducing the thing that actually matters -- how much you must read to know
 # what the CLI accepts.
-"orchard/surfaces/cli.py" = ["PLR0915", "PLR0912", "C901"]
+"ddflow/surfaces/cli.py" = ["PLR0915", "PLR0912", "C901"]
 # `Server.handle` is a protocol dispatch table written as a method; each arm is three
 # lines and maps one JSON-RPC method. A registry here would be indirection without
 # abstraction, since no arm is reachable from anywhere else.
@@ -39,7 +39,7 @@ ignore = [
 # JSON-RPC method, each three lines, none reachable from anywhere else. A registry
 # here would be indirection without abstraction, and the return count is just the
 # number of methods the protocol defines.
-"orchard/surfaces/mcp.py" = ["PLR0912", "C901", "PLR0911"]
+"ddflow/surfaces/mcp.py" = ["PLR0912", "C901", "PLR0911"]
 # Tests and demos: magic values ARE the test, and a scenario is meant to read top to
 # bottom as a narrative rather than be decomposed into helpers.
 "tests/*" = ["PLR2004", "PLR0915", "PLR0912", "S101"]

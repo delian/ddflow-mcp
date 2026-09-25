@@ -12,11 +12,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.services.adopt import AGENT_TARGETS, NATIVE_RULES
+from ddflow.services.adopt import AGENT_TARGETS, NATIVE_RULES
 
 
 def test_every_agent_has_a_delta_document():
-    templates = Path(__file__).resolve().parents[1] / "orchard" / "templates" / "drivers"
+    templates = Path(__file__).resolve().parents[1] / "ddflow" / "templates" / "drivers"
     for key, (delta, _cfg) in AGENT_TARGETS.items():
         assert (templates / "deltas" / delta).is_file(), f"{key} has no delta doc"
 
@@ -29,11 +29,11 @@ def test_adopt_writes_a_usable_mcp_config(repo, agent):
     assert cfg.is_file(), f"{agent}: {cfg_rel} was not written"
     if cfg.suffix == ".toml":
         data = tomllib.loads(cfg.read_text())
-        entry = data["mcp_servers"]["orchard"]
+        entry = data["mcp_servers"]["ddflow"]
     else:
         data = json.loads(cfg.read_text())
         field = "servers" if "servers" in data else "mcpServers"
-        entry = data[field]["orchard"]
+        entry = data[field]["ddflow"]
     assert entry["command"], f"{agent}: no launch command"
     assert isinstance(entry.get("args", []), list)
 
@@ -58,7 +58,7 @@ def test_cursor_gets_an_always_applied_project_rule(repo):
     body = text.split("---", 2)[2].strip()
     agents_md = (repo / "AGENTS.md").read_text()
     assert body.splitlines()[0] in agents_md
-    assert "ORCHARD:BEGIN" not in text, "the managed marker leaked into the .mdc"
+    assert "DDFLOW:BEGIN" not in text, "the managed marker leaked into the .mdc"
 
 
 def test_adopt_is_idempotent(repo):
@@ -66,7 +66,7 @@ def test_adopt_is_idempotent(repo):
     first = (repo / "AGENTS.md").read_text()
     run_cli(repo, "adopt", "--agents", "claude,cursor")
     assert (repo / "AGENTS.md").read_text() == first
-    assert first.count("ORCHARD:BEGIN") == 1
+    assert first.count("DDFLOW:BEGIN") == 1
 
 
 def test_adopt_preserves_existing_mcp_servers(repo):
@@ -77,7 +77,7 @@ def test_adopt_preserves_existing_mcp_servers(repo):
     run_cli(repo, "adopt", "--agents", "cursor")
     data = json.loads((repo / ".cursor" / "mcp.json").read_text())
     assert "context7" in data["mcpServers"], "clobbered an existing server"
-    assert "orchard" in data["mcpServers"]
+    assert "ddflow" in data["mcpServers"]
 
 
 def test_adopt_keeps_the_users_own_prose(repo):
@@ -85,7 +85,7 @@ def test_adopt_keeps_the_users_own_prose(repo):
     run_cli(repo, "adopt", "--agents", "claude")
     text = (repo / "AGENTS.md").read_text()
     assert "My own notes that must survive." in text
-    assert "ORCHARD:BEGIN" in text
+    assert "DDFLOW:BEGIN" in text
 
 
 def test_the_project_instruction_block_stays_short(repo):
@@ -93,10 +93,10 @@ def test_the_project_instruction_block_stays_short(repo):
     and a long second copy of that is a copy that drifts from the one actually read."""
     run_cli(repo, "adopt", "--agents", "claude")
     text = (repo / "AGENTS.md").read_text()
-    block = text.split("ORCHARD:BEGIN")[1].split("ORCHARD:END")[0]
+    block = text.split("DDFLOW:BEGIN")[1].split("DDFLOW:END")[0]
     words = len(block.split())
     assert words < 400, f"the managed block has grown to {words} words"
-    for must in ("orchard_brief", "Claim before you edit", "unavailable", "Exit codes"):
+    for must in ("ddflow_brief", "Claim before you edit", "unavailable", "Exit codes"):
         assert must in block, f"the block lost {must!r}"
 
 
@@ -109,8 +109,8 @@ def test_every_supported_agent_is_named_where_a_user_would_look(repo):
     """
     import re
 
-    from orchard.surfaces.cli import build_parser
-    from orchard.surfaces.mcp import TOOLS
+    from ddflow.surfaces.cli import build_parser
+    from ddflow.surfaces.mcp import TOOLS
 
     readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
     action = next(
@@ -122,8 +122,8 @@ def test_every_supported_agent_is_named_where_a_user_would_look(repo):
         "--agents help": action.help,
         # Description AND property descriptions: an agent reads the whole spec, and the
         # agent list lives under `properties.agents`, not in the summary.
-        "orchard_setup spec": TOOLS["orchard_setup"]["description"]
-        + " ".join(d for _t, d, _r in TOOLS["orchard_setup"]["properties"].values()),
+        "ddflow_setup spec": TOOLS["ddflow_setup"]["description"]
+        + " ".join(d for _t, d, _r in TOOLS["ddflow_setup"]["properties"].values()),
         "README": readme,
     }
     for agent in AGENT_TARGETS:

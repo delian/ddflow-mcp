@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.core.model import fold
-from orchard.services import gates as G
+from ddflow.core.model import fold
+from ddflow.services import gates as G
 
 
 @pytest.fixture
@@ -100,31 +100,31 @@ def test_no_reviewer_at_all_is_not_independence(log, cfg):
 
 
 def test_gates_overlay_rather_than_replace(repo, cfg):
-    (repo / ".orchard").mkdir(exist_ok=True)
-    (repo / ".orchard" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "pytest -q"\n')
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "pytest -q"\n')
     gates = G.load_gates(repo, cfg)
     assert gates["unit_tests"].command == "pytest -q"
     assert gates["bug_hunt"].prompt, "unmentioned gates must keep their defaults"
 
 
 def test_an_unknown_gate_field_is_an_error_not_a_silent_drop(repo, cfg):
-    (repo / ".orchard").mkdir(exist_ok=True)
-    (repo / ".orchard" / "gates.toml").write_text('[gate.unit_tests]\ncomand = "typo"\n')
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "gates.toml").write_text('[gate.unit_tests]\ncomand = "typo"\n')
     with pytest.raises(ValueError, match="unknown field"):
         G.load_gates(repo, cfg)
 
 
 def test_gate_config_is_read_from_config_toml_not_only_gates_toml(repo, cfg):
-    """`orchard configure` writes to config.toml; gates were read only from gates.toml.
+    """`ddflow configure` writes to config.toml; gates were read only from gates.toml.
 
     The result was a config write that reported success and changed nothing — the MCP
-    `orchard_configure` tool accepted `[gate.unit_tests]`, wrote it, said "appended",
+    `ddflow_configure` tool accepted `[gate.unit_tests]`, wrote it, said "appended",
     and the gate kept its default. Found by the state-aware-instructions test, which
     configured a project and was still told the project was unconfigured.
     Mutation-verified: dropping config.toml from the read list makes this red.
     """
-    (repo / ".orchard").mkdir(exist_ok=True)
-    (repo / ".orchard" / "config.toml").write_text(
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text(
         '[gate.unit_tests]\ncommand = "pytest -q --tb=short"\n'
     )
     gates = G.load_gates(repo, cfg)
@@ -133,11 +133,11 @@ def test_gate_config_is_read_from_config_toml_not_only_gates_toml(repo, cfg):
 
 def test_gates_toml_wins_over_config_toml(repo, cfg):
     """Both are read; the more specific file decides, and neither is silently ignored."""
-    (repo / ".orchard").mkdir(exist_ok=True)
-    (repo / ".orchard" / "config.toml").write_text(
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text(
         '[gate.unit_tests]\ncommand = "from-config"\ntimeout_s = 111\n'
     )
-    (repo / ".orchard" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "from-gates"\n')
+    (repo / ".ddflow" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "from-gates"\n')
     gates = G.load_gates(repo, cfg)
     assert gates["unit_tests"].command == "from-gates"
     assert gates["unit_tests"].timeout_s == 111, "the config.toml overlay was discarded"

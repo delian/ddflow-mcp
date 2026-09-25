@@ -1,7 +1,7 @@
-# Orchard ships as a normal Python distribution so that adopting it is ONE line in an
+# ddflow ships as a normal Python distribution so that adopting it is ONE line in an
 # agent's MCP config and nothing else:
 #
-#     {"mcpServers": {"orchard": {"command": "uvx", "args": ["orchard-mcp"]}}}
+#     {"mcpServers": {"ddflow": {"command": "uvx", "args": ["ddflow-mcp"]}}}
 #
 # `uvx` fetches and runs it in an ephemeral environment on first use. No clone, no
 # PYTHONPATH, no install step for the operator to forget and no vendored copy to drift
@@ -14,7 +14,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "orchard-mcp"
+name = "ddflow-mcp"
 version = "0.1.0"
 description = "A portable, agent-agnostic work-queue kernel for AI coding agents — MCP server and CLI."
 readme = "README.md"
@@ -32,7 +32,7 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 
-# DELIBERATELY EMPTY. Orchard runs on the standard library plus `git`, which is the
+# DELIBERATELY EMPTY. ddflow runs on the standard library plus `git`, which is the
 # property that makes it installable everywhere an agent runs -- including sandboxes
 # with no package index reachable at runtime, CI images, and the inside of another
 # tool's ephemeral container. The MCP stdio transport is newline-delimited JSON-RPC and
@@ -43,24 +43,24 @@ dependencies = []
 dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
-# Two entry points on purpose. `orchard` is the human/CI surface; `orchard-mcp` is what
+# Two entry points on purpose. `ddflow` is the human/CI surface; `ddflow-mcp` is what
 # an MCP client spawns, so the client's config never has to carry a subcommand.
-orchard = "orchard.surfaces.cli:main"
-orchard-mcp = "orchard.surfaces.mcp:main"
+ddflow = "ddflow.surfaces.cli:main"
+ddflow-mcp = "ddflow.surfaces.mcp:main"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/orchard"
-Repository = "https://github.com/OWNER/orchard"
-Issues = "https://github.com/OWNER/orchard/issues"
+Homepage = "https://github.com/OWNER/ddflow"
+Repository = "https://github.com/OWNER/ddflow"
+Issues = "https://github.com/OWNER/ddflow/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["orchard"]
+packages = ["ddflow"]
 
 [tool.hatch.build.targets.sdist]
-include = ["orchard/", "docs/", "tests/", "demos/", "probes/",
+include = ["ddflow/", "docs/", "tests/", "demos/", "probes/",
            "README.md", "server.json"]
 
-# Templates need no force-include: they live under `orchard/`, and hatchling ships
+# Templates need no force-include: they live under `ddflow/`, and hatchling ships
 # every file in a declared package directory. They were a SIBLING directory until a
 # real install raised FileNotFoundError for them -- a fault invisible from a source
 # checkout, which is why `tests/test_packaging.py` builds the wheel and looks inside.

@@ -1,4 +1,4 @@
-"""`orchard gate verify` — the anti-vacuous-pass check, turned on Orchard's own checks.
+"""`ddflow gate verify` — the anti-vacuous-pass check, turned on ddflow's own checks.
 
 The pipeline has ten gates and, until this, nothing anywhere proved a single one of
 them was capable of going red. A gate that cannot fail is worse than no gate: it
@@ -41,7 +41,7 @@ def _project(repo: Path, *, mutation: str = 'old = "return a + b", new = "return
         ["git", "-C", str(repo), "commit", "-qm", "code"], check=True, capture_output=True
     )
     run_cli(repo, "init")
-    (repo / ".orchard" / "gates.toml").write_text(
+    (repo / ".ddflow" / "gates.toml").write_text(
         "[gate.unit_tests]\n"
         'command = "python -m pytest -q"\n'
         'cwd = "repo"\n'
@@ -69,7 +69,7 @@ def test_the_source_is_restored_afterwards(repo):
 
 def test_it_is_restored_even_when_the_gate_command_explodes(repo):
     _project(repo)
-    (repo / ".orchard" / "gates.toml").write_text(
+    (repo / ".ddflow" / "gates.toml").write_text(
         "[gate.unit_tests]\n"
         'command = "python -c \\"import sys; sys.exit(0)\\""\n'  # never fails: cannot detect
         'cwd = "repo"\n'
@@ -82,7 +82,7 @@ def test_it_is_restored_even_when_the_gate_command_explodes(repo):
 def test_a_gate_that_cannot_see_the_mutation_fails(repo):
     """The whole point: a command that always exits 0 is a gate that proves nothing."""
     _project(repo)
-    (repo / ".orchard" / "gates.toml").write_text(
+    (repo / ".ddflow" / "gates.toml").write_text(
         "[gate.unit_tests]\n"
         'command = "true"\n'
         'cwd = "repo"\n'
@@ -118,7 +118,7 @@ def test_an_ambiguous_mutation_is_also_a_failure(repo):
 def test_a_gate_with_no_registered_mutation_is_reported_as_unproven(repo):
     """Declaring a check nobody has shown can fail is what this exists to catch."""
     _project(repo)
-    (repo / ".orchard" / "gates.toml").write_text(
+    (repo / ".ddflow" / "gates.toml").write_text(
         '[gate.unit_tests]\ncommand = "python -m pytest -q"\ncwd = "repo"\n'
     )
     code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
@@ -144,9 +144,9 @@ def test_the_json_surface_says_whether_it_was_verified(repo):
 
 
 def test_it_is_reachable_over_mcp(repo):
-    from orchard.surfaces.mcp import TOOLS
+    from ddflow.surfaces.mcp import TOOLS
 
-    assert "orchard_gate_verify" in TOOLS, sorted(TOOLS)
+    assert "ddflow_gate_verify" in TOOLS, sorted(TOOLS)
 
 
 def test_it_is_not_refused_by_the_pipeline_order(repo):
@@ -157,7 +157,7 @@ def test_it_is_not_refused_by_the_pipeline_order(repo):
     the thing about to judge your work is capable of judging it.
     """
     _project(repo)
-    (repo / ".orchard" / "config.toml").write_text('[gates]\nenforce_order = "block"\n')
+    (repo / ".ddflow" / "config.toml").write_text('[gates]\nenforce_order = "block"\n')
     code, out, err = run_cli(repo, "gate", "verify", "T1", "unit_tests")
     assert code == OK, f"exit {code} (3 = refused on pipeline order)\n{out}\n{err}"
 

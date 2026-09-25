@@ -20,10 +20,10 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.config import Config, _coerce
-from orchard.core.model import fold
-from orchard.infra.log import Event
-from orchard.services import sessions as S
+from ddflow.config import Config, _coerce
+from ddflow.core.model import fold
+from ddflow.infra.log import Event
+from ddflow.services import sessions as S
 
 
 def ev(lamport: int, agent: str, kind: str, subject: str, data: dict) -> Event:
@@ -264,8 +264,8 @@ def test_a_rebuild_that_races_an_append_reports_itself_stale(repo):
     it is made deterministic here by injecting the append at the exact point the window
     opens, which is what the race would do at its worst.
     """
-    from orchard.infra.log import EventLog
-    from orchard.infra.store import Store
+    from ddflow.infra.log import EventLog
+    from ddflow.infra.store import Store
 
     log = EventLog(repo, "agent-a")
     log.append("session.started", "s1", {})

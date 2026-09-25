@@ -1,4 +1,4 @@
-"""A scenario harness that drives Orchard against invented projects, for real.
+"""A scenario harness that drives ddflow against invented projects, for real.
 
 Nothing here is mocked. Each "agent" is a real subprocess invoking the real CLI against
 a real git repository, creating real worktrees, running real test commands and making
@@ -69,7 +69,7 @@ class Scenario:
             raise Fail(f"{self.name}: {label}\n{detail}")
 
     # -- process ------------------------------------------------------------------
-    def orchard(
+    def ddflow(
         self,
         *argv: str,
         agent: str = "",
@@ -78,7 +78,7 @@ class Scenario:
         quiet: bool = False,
     ) -> tuple[int, str, str]:
         r = repo or self.repo
-        cmd = [PY, "-m", "orchard", "--repo", str(r)]
+        cmd = [PY, "-m", "ddflow", "--repo", str(r)]
         if agent:
             cmd += ["--agent", agent]
         cmd += list(argv)
@@ -87,18 +87,18 @@ class Scenario:
         if not quiet:
             shown = " ".join(argv[:4])
             print(
-                f"  {_C['dim']}$ orchard {shown}"
+                f"  {_C['dim']}$ ddflow {shown}"
                 f"{' (as ' + agent + ')' if agent else ''} → exit {p.returncode}{_C['end']}"
             )
         if expect is not None and p.returncode != expect:
             raise Fail(
-                f"`orchard {' '.join(argv)}` exit {p.returncode}, expected {expect}\n"
+                f"`ddflow {' '.join(argv)}` exit {p.returncode}, expected {expect}\n"
                 f"STDOUT:\n{p.stdout}\nSTDERR:\n{p.stderr}"
             )
         return p.returncode, p.stdout, p.stderr
 
-    def jorchard(self, *argv: str, **kw) -> object:
-        _, out, _ = self.orchard("--json", *argv, **kw)
+    def jddflow(self, *argv: str, **kw) -> object:
+        _, out, _ = self.ddflow("--json", *argv, **kw)
         return json.loads(out)
 
     def git(self, *argv: str, repo: Path | None = None) -> str:
@@ -116,7 +116,7 @@ class Scenario:
         # scenario put in this directory is left alone -- scenario 3 keeps its
         # surviving event log here on purpose.
         self.dir.mkdir(parents=True, exist_ok=True)
-        for victim in (repo, self.dir / ".orchard-worktrees"):
+        for victim in (repo, self.dir / ".ddflow-worktrees"):
             if victim.exists():
                 shutil.rmtree(victim)
         repo.mkdir(parents=True)
@@ -174,9 +174,9 @@ class McpClient:
         self.repo, self.root, self.agent, self._id = repo, root, agent, 0
         env = {**os.environ, "PYTHONPATH": str(root)}
         if agent:
-            env["ORCHARD_AGENT"] = agent
+            env["DDFLOW_AGENT"] = agent
         self.proc = subprocess.Popen(
-            [PY, "-m", "orchard", "--repo", str(repo), "mcp"],
+            [PY, "-m", "ddflow", "--repo", str(repo), "mcp"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

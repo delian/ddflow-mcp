@@ -128,7 +128,7 @@ Auditable, Forkable Agentic Systems*, arXiv:2605.21997](https://arxiv.org/abs/26
 Opened. The line taken: "the append-only event log is the source of truth; the working
 graph is a deterministic projection of that log", and its determinism contract —
 replay is made sound by *recording* model responses rather than assuming they reproduce.
-That caveat is why `orchard replay` reconstructs the decision history and says plainly
+That caveat is why `ddflow replay` reconstructs the decision history and says plainly
 that it does not reproduce the source.
 
 ---
@@ -154,7 +154,7 @@ $ # But: CI jobs, Makefiles, git hooks and humans consume none of it.
 but not for the workflow, because a meaningful share of the steps (a pre-commit gate, a
 CI check, an operator inspecting a crashed worktree at 2 a.m.) have no MCP client.
 
-**What this changed.** Orchard ships **both** surfaces over one implementation: the CLI is
+**What this changed.** ddflow ships **both** surfaces over one implementation: the CLI is
 primary and complete, and `mcp_server.py` maps each tool onto the same `cli.main()` call
 in-process. Two tests pin that they cannot diverge
 (`test_mcp.py::test_a_tool_call_returns_the_cli_result`, and the demo's
@@ -166,7 +166,7 @@ package index is reachable is not portable. `python3` and `git` are the entire r
 
 **Source:** [AGENTS.md](https://agents.md/) — the cross-tool instruction format, donated
 to the Linux Foundation's Agentic AI Foundation in December 2025, read by 30+ agents.
-This is why `orchard adopt` writes `AGENTS.md` and only *points* `CLAUDE.md` at it.
+This is why `ddflow adopt` writes `AGENTS.md` and only *points* `CLAUDE.md` at it.
 
 ---
 
@@ -233,7 +233,7 @@ $ # And the counter-case, from the same source:
 cannot be automated: a dirty worktree is sometimes irreplaceable and sometimes garbage,
 and nothing in the metadata distinguishes them. Only a diff does.
 
-**What this changed.** `lease.reclaim_policy` defaults to `report`. `orchard recover`
+**What this changed.** `lease.reclaim_policy` defaults to `report`. `ddflow recover`
 *measures* each tree (uncommitted files, unmerged commits) and prints the exact `git
 diff` command, but never deletes and never steals. `recover --apply` expires only trees
 it measured as empty. Pinned by
@@ -260,17 +260,17 @@ actually get shorter.
 measured the resulting artefacts.
 
 ```console
-$ uv build && pip install dist/orchard_mcp-0.1.0-py3-none-any.whl
-$ cd /tmp/fresh-repo && orchard adopt --agents cursor
-  wrote docs/orchard/drivers/implement-phase.md
-  registered orchard in .cursor/mcp.json
-  wrote .cursor/rules/orchard.mdc (always-applied project rule)
+$ uv build && pip install dist/ddflow_mcp-0.1.0-py3-none-any.whl
+$ cd /tmp/fresh-repo && ddflow adopt --agents cursor
+  wrote docs/ddflow/drivers/implement-phase.md
+  registered ddflow in .cursor/mcp.json
+  wrote .cursor/rules/ddflow.mdc (always-applied project rule)
 
 $ cat .cursor/mcp.json
-{ "mcpServers": { "orchard": { "command": "uvx", "args": ["orchard-mcp"] } } }
+{ "mcpServers": { "ddflow": { "command": "uvx", "args": ["ddflow-mcp"] } } }
 
 $ # the ENTIRE per-project instruction text:
-$ awk '/ORCHARD:BEGIN/,/ORCHARD:END/' AGENTS.md | wc -w
+$ awk '/DDFLOW:BEGIN/,/DDFLOW:END/' AGENTS.md | wc -w
 232
 ```
 
@@ -294,7 +294,7 @@ fails if one creeps in.
 
 **Registry.** `server.json` follows the
 [MCP registry schema](https://modelcontextprotocol.io/registry/quickstart)
-(`io.github.OWNER/orchard`, PyPI `orchard-mcp`, `runtimeHint: uvx`), published by
+(`io.github.OWNER/ddflow`, PyPI `ddflow-mcp`, `runtimeHint: uvx`), published by
 `.github/workflows/publish.yml` on a version tag via OIDC trusted publishing — no stored
 tokens. The workflow refuses when tag, `pyproject.toml` and `server.json` disagree about
 the version; `test_the_declared_versions_agree` pins the same invariant locally.
@@ -377,11 +377,11 @@ out of the box:
 
 | # | Defect | Why the unit tests missed it |
 |---|---|---|
-| 1 | **The default agent identity was `{host}-{pid}`**, stable for exactly one process. So `orchard claim` and the `git commit` hook seconds later were different agents: the hook **refused the holder's own commit and told them their lease belonged to somebody else**. Out of the box, enforcement rejected correct behaviour and blamed the user. | Every enforcement test passed `agent=` explicitly. The default path was never exercised. |
-| 2 | **Merely starting the MCP server created `.orchard/events/`**, so a handshake wrote to any repository an agent connected to — and the "is this project adopted?" check then answered yes about a directory the server had just created itself. | No test asked whether a read-only operation mutated the repo. |
+| 1 | **The default agent identity was `{host}-{pid}`**, stable for exactly one process. So `ddflow claim` and the `git commit` hook seconds later were different agents: the hook **refused the holder's own commit and told them their lease belonged to somebody else**. Out of the box, enforcement rejected correct behaviour and blamed the user. | Every enforcement test passed `agent=` explicitly. The default path was never exercised. |
+| 2 | **Merely starting the MCP server created `.ddflow/events/`**, so a handshake wrote to any repository an agent connected to — and the "is this project adopted?" check then answered yes about a directory the server had just created itself. | No test asked whether a read-only operation mutated the repo. |
 | 3 | **A JSON-RPC notification deadlocked the client.** `notifications/initialized` correctly gets no reply; a client that reads one anyway blocks forever while both processes sit at 0% CPU looking healthy. | The server was right and tested; nothing had ever *sent* a notification. |
 | 4 | **The coverage gap was suppressed in JSON mode.** "gate X never ran" printed only for humans, so an agent over MCP — always JSON — completed an item and was never told a gate had not run. | The human path was asserted; the JSON payload was not. |
-| 5 | **Four CLI commands had no MCP tool** (`show`, `update`, `release`, `block`). The canonical driver *instructs* the agent to run `orchard update --globs` before writing outside its claim — an instruction impossible to follow over MCP. | Nothing compared the two surfaces for completeness. |
+| 5 | **Four CLI commands had no MCP tool** (`show`, `update`, `release`, `block`). The canonical driver *instructs* the agent to run `ddflow update --globs` before writing outside its claim — an instruction impossible to follow over MCP. | Nothing compared the two surfaces for completeness. |
 | 6 | **No way to abandon or remove an item.** `item.abandoned`, `task.removed` and `phase.removed` were declared in the handler registry and handled by the fold, and nothing emitted any of them. A task created speculatively held its phase open **forever**, because completion counts any non-`done` task as unfinished and nothing could ever finish it. | A vocabulary with no way to say the words; no test tried to say them. |
 | 7 | **`replay` dropped the phase/task BODY**, reducing a phase to "P1: Core" — the acceptance criteria and context, the part a rebuild most needs, were absent from the reconstruction brief. | The replay test used items with no body. |
 | 8 | **The board counted abandoned tasks as outstanding**, so a completed phase rendered "3/4 tasks" — unfinished work that no longer exists. | Abandonment did not exist until #6 was fixed. |
@@ -402,7 +402,7 @@ exit=2 · error: Your local changes to the following files would be overwritten 
 
 Git refuses precisely and only when the merge would overwrite a locally-modified file,
 and names them. The blanket pre-check was both wrong in its reasoning and over-broad,
-refusing safe merges — routinely including one blocked by Orchard's own freshly-written
+refusing safe merges — routinely including one blocked by ddflow's own freshly-written
 config. Removed; git's own check is the better one.
 
 **The pattern, stated plainly.** Every one of these lived in a *seam*: between two
@@ -452,7 +452,7 @@ They are recorded because the *classes* recur, not because these instances matte
 
 **The cross-family gate is NOT satisfied for this work.** Recorded as `unavailable`, never as
 a pass — which is the same rule this system enforces on its users, applied to itself. A
-reviewer from a different pretraining family should review `orchard/` before it is
+reviewer from a different pretraining family should review `ddflow/` before it is
 adopted for anything load-bearing.
 
 **The pattern worth keeping:** defects 2, 3, 4 and 6 were invisible to unit tests and to
@@ -488,7 +488,7 @@ up. The same hole appeared one level down once sub-tasks existed: an umbrella de
 `needs A, B` had children with empty `needs`, handed out while A and B were open.
 
 ```console
-$ orchard next
+$ ddflow next
 Ready (4 ready, 0 running, 2 blocked):
   P1.T1  money
   P1.T2  account
@@ -505,12 +505,12 @@ of the rule that a test which supplies the property it is checking proves nothin
 `tests/test_inherited_deps.py` never re-declares an inherited dependency, and says so
 in its docstring.
 
-**2. `orchard claim` never looked at dependencies at all. CONFIRMED.**
+**2. `ddflow claim` never looked at dependencies at all. CONFIRMED.**
 
 ```console
-$ orchard next
+$ ddflow next
   (blocked) T2: deps — T1 is open
-$ orchard claim T2
+$ ddflow claim T2
 claimed T2 (lease 1800s, renew every 300s)
 ```
 
@@ -555,14 +555,14 @@ drift in this package; eliminated rather than guarded.
 | 9 | the two search backends disagreed on the shortest usable term by one character | two implementations of one rule |
 | 10 | **a subprocess inherited the MCP server's stdin** | see below |
 | 11 | unknown tool arguments were silently ignored despite `additionalProperties: false` | silent knob drop |
-| 12 | `orchard_phase_add` had no `globs`; 15 more CLI flags unreachable over MCP | surface divergence |
-| 13 | `orchard gate skip` and `bug found` had no MCP tool at all | surface divergence |
+| 12 | `ddflow_phase_add` had no `globs`; 15 more CLI flags unreachable over MCP | surface divergence |
+| 13 | `ddflow gate skip` and `bug found` had no MCP tool at all | surface divergence |
 | 14 | adding a sub-task to a *claimed* task left the umbrella holding a lease that blocked its own children | transition reachable by two paths, guarded on one |
 | 15 | a protocol-level refusal returned exit 0 | exit vocabulary broken at the boundary |
 
 ### #10 is the one to remember
 
-Orchard runs as an MCP server **over stdio**: the JSON-RPC session *is* the process's
+ddflow runs as an MCP server **over stdio**: the JSON-RPC session *is* the process's
 stdin and stdout. `subprocess.run(...)` with no explicit `stdin=` hands the child that
 same pipe. All twelve subprocess call sites did this, and one of them is `gate run`,
 which executes an arbitrary command from the project's own config.
@@ -576,7 +576,7 @@ rc: 0   STDERR:
 ```
 
 Exit **zero**, empty stderr, closed stream, nothing to explain it. Found because a
-companion-detection probe added to `orchard setup` ended the session on the *next* tool
+companion-detection probe added to `ddflow setup` ended the session on the *next* tool
 call. Fixed with one `proc.py` whose default is `stdin=DEVNULL`, plus a ratchet that
 fails if any module calls the stdlib directly.
 
@@ -619,13 +619,13 @@ Its architecture pass added a fifth and a sixth: `resources/read` had **a second
 path** folding the log directly in a module whose premise is "one implementation, two
 doors" (with a dead, shadowed table entry beside it, which is how a second path stays
 hidden — nothing reads the line, so nothing contradicts it), and `Store.__init__` ran
-`mkdir`, so a read-only `orchard status` **created `.orchard/` in a repository that had
+`mkdir`, so a read-only `ddflow status` **created `.ddflow/` in a repository that had
 never adopted the tool**:
 
 ```console
-$ git init -q /tmp/orchprobe && python -m orchard --repo /tmp/orchprobe status
+$ git init -q /tmp/orchprobe && python -m ddflow --repo /tmp/orchprobe status
 exit=0
-$ ls -a /tmp/orchprobe   →   .  ..  .git  .orchard
+$ ls -a /tmp/orchprobe   →   .  ..  .git  .ddflow
 ```
 
 The rest of its architecture reading is structural debt rather than defect, filed as
@@ -644,7 +644,7 @@ requested, and the field VS Code actually reads.
 
 ## R11 — the importer against a real 400-day corpus, not a fixture
 
-**Question.** `orchard import` passes fourteen tests against a fixture and one
+**Question.** `ddflow import` passes fourteen tests against a fixture and one
 end-to-end scenario. Does it actually work on a project that has been running for four
 hundred days — or does it only work on a file written by the person who wrote the
 parser?
@@ -656,7 +656,7 @@ failing kills it.
 
 **Budget.** ≤2 hours, CPU only, on a corpus already on this machine.
 
-**Corpus.** `run_nemo_run`, the repository Orchard lives in: `docs/todo.md` (35,078
+**Corpus.** `run_nemo_run`, the repository ddflow lives in: `docs/todo.md` (35,078
 lines, 4,799 checkboxes), `docs/todo/open/*.md` + `archive/*.md` (9 files),
 `docs/lessons.md` (14,362 lines), `docs/RESEARCH.md` (7,534 lines), `docs/log/*.md`
 (7 files), `docs/adr/` (5 files) and a 47-record OptMem store. Copied into a scratch
@@ -671,7 +671,7 @@ regression test in `tests/test_import_real_project.py`.
 ### What the first run actually produced
 
 ```console
-$ orchard --repo /tmp/rnr-import import --max-tasks 5000
+$ ddflow --repo /tmp/rnr-import import --max-tasks 5000
   790 phase(s):
     [ ] SESSION-DRIVERFIX-THE-DE   Session DRIVERFIX — the defects ...  docs/todo/open/DRIVERFIX.md:1
     [ ] 160A-THE-DRAFT-SCORER-SC   160.A — the draft scorer: score ...  docs/todo/open/PHASE160.md:22
@@ -749,20 +749,20 @@ wrong one:
 ### The end state
 
 ```console
-$ orchard --repo /tmp/rnr-import import --max-tasks 5000 --apply
+$ ddflow --repo /tmp/rnr-import import --max-tasks 5000 --apply
 Imported: 4 decision, 1727 journal, 442 lesson, 47 memory, 314 phase, 72 research, 1170 task, 9 task_done
 
-$ orchard --repo /tmp/rnr-import recall "H200" --max-chars 20000
+$ ddflow --repo /tmp/rnr-import recall "H200" --max-chars 20000
 ## PROMPT/NOTE  — the operator asked, or an agent recorded, something like this
   [s-imported-memory#n2] 2026-07-31 the agent noted:
       Hardware: 8x H200 GPUs on this box, usually idle. GPU-owed test items in
       docs/todo.md can actually be run; check nvidia-smi first ...
 
-$ orchard --repo /tmp/rnr-import doctor ; echo "exit=$?"
+$ ddflow --repo /tmp/rnr-import doctor ; echo "exit=$?"
 Healthy.
 exit=0
 
-$ orchard --repo /tmp/rnr-import import --max-tasks 5000 ; echo "exit=$?"
+$ ddflow --repo /tmp/rnr-import import --max-tasks 5000 ; echo "exit=$?"
 Nothing to import.
 exit=2
 ```
@@ -791,7 +791,7 @@ non-trivial change, on the argument that they find different things. Measured on
 **Zero overlap across seventeen findings.** The two labelled `THEORETICAL` by the critic
 were the two worth acting on — one was a real defect (`head()`), one was refuted by a
 five-line AST probe and left behind a ratchet. The reviewer that found the most
-consequential bug — `orchard merge` landing work the operator had explicitly dropped —
+consequential bug — `ddflow merge` landing work the operator had explicitly dropped —
 found it while looking for something else entirely, which is the standing argument for
 running the duplication pass even when nothing feels duplicated.
 
@@ -813,7 +813,7 @@ direction; what separated them was a probe, in every case costing under ten minu
 Its two other `THEORETICAL` claims died on inspection and are recorded because a
 reject re-checked is worth as much as a claim confirmed (§Research-rules 4): `gate
 verify` might dispatch to the `run` handler and silently execute the gate — refuted
-because `tests/conftest.py::run_cli` spawns a real `python -m orchard` subprocess, so
+because `tests/conftest.py::run_cli` spawns a real `python -m ddflow` subprocess, so
 every one of the thirteen `gate verify` tests drives the actual parser; and `_csv`
 losing its `(v or "")` guard — refuted because argparse never calls `type=` with `None`.
 
@@ -874,7 +874,7 @@ lines from the same page shaped what was built:
    change, validates the RESULT, then replaces the file atomically. Probed:
 
    ```console
-   $ orchard workflow pipeline task research,implment,merge
+   $ ddflow workflow pipeline task research,implment,merge
    no gate is defined for 'implment' (did you mean 'implement'?). Every item entering
    this pipeline would block on it forever.
    $ echo $?

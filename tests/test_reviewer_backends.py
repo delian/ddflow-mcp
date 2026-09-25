@@ -17,7 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.services.review import (
+from ddflow.services.review import (
     PRESETS,
     REVIEWED,
     UNAVAILABLE,
@@ -179,7 +179,7 @@ def test_every_preset_is_structurally_valid():
             assert rev.base_url, f"{name}: no base_url"
         rev.launch_spec()  # must not raise
         # A preset that names a model must name one whose family is recognisable —
-        # otherwise `orchard reviewers add --preset X` produces a reviewer that cannot
+        # otherwise `ddflow reviewers add --preset X` produces a reviewer that cannot
         # satisfy the independence requirement and nothing says so. Aggregator presets
         # (together, fireworks, openrouter) deliberately ship no model, because the
         # family depends on which one you point them at.
@@ -235,7 +235,7 @@ def test_reviewers_add_writes_a_block_without_the_key(repo):
     run_cli(repo, "init")
     code, out, _ = run_cli(repo, "reviewers", "add", "--preset", "openai", "--model", "gpt-5")
     assert code == 0
-    cfg = (repo / ".orchard" / "config.toml").read_text()
+    cfg = (repo / ".ddflow" / "config.toml").read_text()
     assert 'api_key_env = "OPENAI_API_KEY"' in cfg
     assert "sk-" not in cfg
     assert "OPENAI_API_KEY" in out, "the operator must be told to set the variable"

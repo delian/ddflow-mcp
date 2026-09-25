@@ -5,12 +5,12 @@
 # all four are silent until they are expensive. Each is handled here, once.
 set -e
 
-REPO="${ORCHARD_REPO:-/repo}"
+REPO="${DDFLOW_REPO:-/repo}"
 
 # (1) The repo must actually be mounted. Without this check the server starts, reports
-#     an empty queue, and the operator concludes Orchard lost their work.
+#     an empty queue, and the operator concludes ddflow lost their work.
 if [ ! -d "$REPO" ]; then
-  echo "orchard: $REPO is not mounted. Run with: -v \"\$PWD:$REPO\"" >&2
+  echo "ddflow: $REPO is not mounted. Run with: -v \"\$PWD:$REPO\"" >&2
   exit 2
 fi
 
@@ -24,7 +24,7 @@ OWNER_GID=$(stat -c '%g' "$REPO" 2>/dev/null || echo 0)
 # (3) git refuses to operate on a repository owned by a different uid ("detected
 #     dubious ownership"). The container is ephemeral and the mount is explicitly
 #     provided by the operator, so trusting it is correct here — and without it every
-#     git call fails with an error that reads like a permissions bug in Orchard.
+#     git call fails with an error that reads like a permissions bug in ddflow.
 git config --global --add safe.directory "$REPO" 2>/dev/null || true
 git config --global --add safe.directory '*' 2>/dev/null || true
 
@@ -35,8 +35,8 @@ git config --global --add safe.directory '*' 2>/dev/null || true
 if [ -z "$(git config --global user.email 2>/dev/null)" ]; then
   EMAIL="${GIT_AUTHOR_EMAIL:-$(git -C "$REPO" config user.email 2>/dev/null || true)}"
   NAME="${GIT_AUTHOR_NAME:-$(git -C "$REPO" config user.name 2>/dev/null || true)}"
-  git config --global user.email "${EMAIL:-orchard@container.invalid}"
-  git config --global user.name  "${NAME:-Orchard (container)}"
+  git config --global user.email "${EMAIL:-ddflow@container.invalid}"
+  git config --global user.name  "${NAME:-ddflow (container)}"
 fi
 
 if [ "$OWNER_UID" != "0" ] && [ "$(id -u)" = "0" ]; then

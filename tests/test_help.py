@@ -1,4 +1,4 @@
-"""`orchard help` — and the ratchets that stop it becoming wrong.
+"""`ddflow help` — and the ratchets that stop it becoming wrong.
 
 A help page that recommends a flag which was renamed is worse than no help page: the
 reader who finds nothing reads the code, and the reader who finds a wrong answer trusts
@@ -16,9 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.services import help as H
-from orchard.surfaces.cli import build_parser
-from orchard.surfaces.mcp import TOOLS
+from ddflow.services import help as H
+from ddflow.surfaces.cli import build_parser
+from ddflow.surfaces.mcp import TOOLS
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
@@ -27,7 +27,7 @@ def _cli_leaves() -> set[str]:
     """Every RUNNABLE command path as a space-joined string: `gate run`, `doctor`.
 
     A parent with subcommands counts too when it is runnable on its own —
-    `orchard workflow` shows the workflow, while `orchard gate` alone is an argparse
+    `ddflow workflow` shows the workflow, while `ddflow gate` alone is an argparse
     error. The tell is whether the parent itself carries an `fn` default.
     """
     out: set[str] = set()
@@ -53,7 +53,7 @@ def test_the_overview_explains_the_loop_not_just_the_commands(repo):
     which to reach for first, or why any of them refuses."""
     code, out, _ = run_cli(repo, "help")
     assert code == OK, out
-    for must in ("orchard next", "orchard claim", "orchard complete", "orchard merge"):
+    for must in ("ddflow next", "ddflow claim", "ddflow complete", "ddflow merge"):
         assert must in out, f"the loop never mentions {must!r}"
     assert "exit" in out.lower(), "the exit-code vocabulary is half the interface"
 
@@ -93,15 +93,15 @@ def test_every_tool_is_classified(repo):
     inventory that claims to be complete — and this keeps that bucket empty, so a new
     capability has to be given a group instead of silently disappearing."""
     assert H.unmapped_tools(TOOLS) == [], (
-        f"these tools belong to no group, so `orchard help` files them under "
+        f"these tools belong to no group, so `ddflow help` files them under "
         f"'Unmapped': {H.unmapped_tools(TOOLS)}. Add a prefix to `_GROUPS`."
     )
 
 
 def test_a_new_tool_changes_the_inventory(monkeypatch):
     """Mutation-proof that the inventory is derived and not a transcript of it."""
-    monkeypatch.setitem(TOOLS, "orchard_doctor_zzz", {"description": "", "properties": {}})
-    assert any("orchard_doctor_zzz" in members for _title, members in H.grouped_tools(TOOLS)), (
+    monkeypatch.setitem(TOOLS, "ddflow_doctor_zzz", {"description": "", "properties": {}})
+    assert any("ddflow_doctor_zzz" in members for _title, members in H.grouped_tools(TOOLS)), (
         "a tool was added and the generated inventory did not notice"
     )
 
@@ -110,28 +110,28 @@ def test_a_new_tool_changes_the_inventory(monkeypatch):
 
 
 def test_every_command_a_help_page_names_exists():
-    """The rot that matters. A page recommending `orchard gate check` — which never
+    """The rot that matters. A page recommending `ddflow gate check` — which never
     existed — costs a reader more than no page at all, because they believe it.
 
     Checked against BOTH registries: the argparse tree and the MCP tool table.
     """
     leaves = _cli_leaves()
-    tools = {t.removeprefix("orchard_") for t in TOOLS}
+    tools = {t.removeprefix("ddflow_") for t in TOOLS}
     tops = {leaf.split()[0] for leaf in leaves}
     #: A top-level command that HAS subcommands. Naming one without a valid subcommand
-    #: is the failure this catches -- `orchard gate check` reads as real and is not.
+    #: is the failure this catches -- `ddflow gate check` reads as real and is not.
     parents = {t for t in tops if any(leaf.startswith(f"{t} ") for leaf in leaves)}
 
     unknown: list[tuple[str, str]] = []
     pages = {"index": H.render_index(tools=TOOLS), **{t: H.render_topic(t) for t in H.TOPICS}}
     for page, text in pages.items():
-        for sep, mention in H.COMMAND_MENTION.findall(text):
+        for sep, mention in H.command_mentions(text):
             if sep == "_":
                 # An MCP tool name. Checked against the tool table, not the parser:
-                # `orchard_import_verify` is one tool and `orchard import --verify` is
+                # `ddflow_import_verify` is one tool and `ddflow import --verify` is
                 # a flag, and neither registry knows about the other's spelling.
                 if mention not in tools:
-                    unknown.append((page, f"orchard_{mention}"))
+                    unknown.append((page, f"ddflow_{mention}"))
                 continue
             if mention in leaves:
                 continue  # an exactly-runnable path, parent or leaf
@@ -156,7 +156,7 @@ def test_every_topic_has_a_shipped_page():
 def test_a_project_override_wins(repo):
     """Same precedence as every other template: help is operator-tunable text, not
     code."""
-    d = repo / ".orchard" / "prompts" / "help"
+    d = repo / ".ddflow" / "prompts" / "help"
     d.mkdir(parents=True)
     (d / "workflow.md").write_text("# Our workflow\n\nAsk Dana first.\n")
     _code, out, _ = run_cli(repo, "help", "workflow")
@@ -164,12 +164,12 @@ def test_a_project_override_wins(repo):
 
 
 def test_the_overview_can_be_overridden_too(repo):
-    d = repo / ".orchard" / "prompts" / "help"
+    d = repo / ".ddflow" / "prompts" / "help"
     d.mkdir(parents=True)
     (d / "index.md").write_text("# Ours\n\n{{ topics }}\n{{ inventory }}\n{{ tool_count }}\n")
     _code, out, _ = run_cli(repo, "help")
     assert out.startswith("# Ours"), out[:80]
-    assert "orchard_doctor" in out, "the generated inventory must still be injected"
+    assert "ddflow_doctor" in out, "the generated inventory must still be injected"
 
 
 # -- both surfaces ---------------------------------------------------------------------
@@ -179,11 +179,11 @@ def test_the_json_surface_carries_the_text_and_the_topics(repo):
     _code, out, _ = run_cli(repo, "--json", "help")
     data = json.loads(out)
     assert data["topic"] == "index"
-    assert "Orchard" in data["text"]
+    assert "ddflow" in data["text"]
     assert set(data["topics"]) == set(H.TOPICS)
 
 
 def test_it_is_reachable_over_mcp(repo):
-    assert "orchard_help" in TOOLS
-    assert TOOLS["orchard_help"]["argv"]({}) == ["--json", "help"]
-    assert TOOLS["orchard_help"]["argv"]({"topic": "gates"}) == ["--json", "help", "gates"]
+    assert "ddflow_help" in TOOLS
+    assert TOOLS["ddflow_help"]["argv"]({}) == ["--json", "help"]
+    assert TOOLS["ddflow_help"]["argv"]({"topic": "gates"}) == ["--json", "help", "gates"]

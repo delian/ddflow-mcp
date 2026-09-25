@@ -38,7 +38,7 @@ def test_an_unknown_companion_field_is_refused_not_dropped(repo):
     *section* specifically to prevent it.
     """
     run_cli(repo, "init")
-    (repo / ".orchard" / "companions.toml").write_text(
+    (repo / ".ddflow" / "companions.toml").write_text(
         '[[companion]]\nid = "mine"\ntitle = "x"\ncommmand = "typo"\n'
     )
     code, out, err = run_cli(repo, "companions", "list", "--no-probe")
@@ -55,7 +55,7 @@ def test_companions_may_be_configured_in_the_main_config_file(repo):
     dedicated file.
     """
     run_cli(repo, "init")
-    cfg = repo / ".orchard" / "config.toml"
+    cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(
         cfg.read_text() + '\n[[companion]]\nid = "mine"\ntitle = "in the main file"\n'
         'detect = ["definitely-not-a-real-binary-xyzzy"]\n'
@@ -84,8 +84,8 @@ def test_the_container_host_rewrite_applies_to_every_reviewer_backend(monkeypatc
     A test that reads the code rather than running it proves the code says something,
     which is not what was in doubt.
     """
-    from orchard.infra import container
-    from orchard.services import review as R
+    from ddflow.infra import container
+    from ddflow.services import review as R
 
     monkeypatch.setattr(container, "in_container", lambda: True)
     seen: list[str] = []
@@ -117,10 +117,10 @@ def test_a_command_reviewer_with_an_env_prefix_is_not_reported_missing():
     handled this — and builtins, and shell metacharacters — which is exactly why there
     should not have been a second copy.
     """
-    from orchard.services.review import Reviewer, _chat_command
+    from ddflow.services.review import Reviewer, _chat_command
 
     _out, err = _chat_command(
-        Reviewer(name="x", kind="command", command="ORCHARD_TEST=1 true", model="m"),
+        Reviewer(name="x", kind="command", command="DDFLOW_TEST=1 true", model="m"),
         "sys",
         "user",
         30,
@@ -135,7 +135,7 @@ def test_a_command_reviewer_with_an_unbalanced_quote_does_not_raise():
     degrade to UNAVAILABLE — it propagates out of a function whose whole job is to
     convert every way of not-reviewing into a reported one.
     """
-    from orchard.services.review import Reviewer, _chat_command
+    from ddflow.services.review import Reviewer, _chat_command
 
     out, err = _chat_command(
         Reviewer(name="x", kind="command", command='claude -p "unbalanced', model="m"),
@@ -155,7 +155,7 @@ def test_a_project_taught_a_model_name_has_it_honoured_by_BOTH_surfaces(repo):
 
     So a project that adds its in-house model to `[agent].families` got it honoured by
     the check that decides whether a review counted, and ignored by
-    `orchard reviewers list` and by the family recorded on the result. The two surfaces
+    `ddflow reviewers list` and by the family recorded on the result. The two surfaces
     answering the independence question disagreed — which is worse than either answer,
     because the operator sees one and the gate applies the other.
 
@@ -163,7 +163,7 @@ def test_a_project_taught_a_model_name_has_it_honoured_by_BOTH_surfaces(repo):
     one level up, which is what makes it worth its own test.
     """
     run_cli(repo, "init")
-    cfg = repo / ".orchard" / "config.toml"
+    cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(
         cfg.read_text() + '\n[agent.families]\nacme = "acme-labs"\n'
         '\n[[reviewer]]\nname = "house"\nkind = "openai"\n'
@@ -191,8 +191,8 @@ def test_the_companion_reader_and_writer_agree_on_the_config_field(repo):
     agent, this asserts the property: whatever `register` writes, `registered_in`
     finds, for every agent the package knows.
     """
-    from orchard.services import companions as CO
-    from orchard.services.adopt import AGENT_TARGETS
+    from ddflow.services import companions as CO
+    from ddflow.services.adopt import AGENT_TARGETS
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
@@ -213,7 +213,7 @@ def test_copilot_gets_the_field_name_vs_code_actually_reads(repo):
     """
     import json as _json
 
-    from orchard.services import companions as CO
+    from ddflow.services import companions as CO
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
@@ -232,17 +232,17 @@ def test_copilot_gets_the_field_name_vs_code_actually_reads(repo):
 # -- the architecture pass: two concrete defects --------------------------------------
 
 
-def test_a_read_only_command_does_not_create_orchard_in_an_unadopted_repo(repo):
+def test_a_read_only_command_does_not_create_ddflow_in_an_unadopted_repo(repo):
     """`Ctx` builds a Store for EVERY command, and `Store.__init__` ran `mkdir`.
 
-    So `orchard status` in a repository that had never run `orchard init` created
-    `.orchard/` and exited 0, as though the project had adopted the tool. A read-only
+    So `ddflow status` in a repository that had never run `ddflow init` created
+    `.ddflow/` and exited 0, as though the project had adopted the tool. A read-only
     question must not leave a mark — and the rule already existed: the MCP server's
     handshake was fixed for exactly this, which makes the Store the second door onto
     the same mistake.
     """
     code, out, err = run_cli(repo, "status")
-    assert not (repo / ".orchard").exists(), (
+    assert not (repo / ".ddflow").exists(), (
         f"asking a question adopted the tool: {sorted(p.name for p in repo.iterdir())}"
     )
     assert code in (OK, NOTHING, FAIL), f"{code}: {out}{err}"
@@ -254,12 +254,12 @@ def test_every_mcp_resource_is_served_through_the_cli(repo):
     Two of the four URIs folded the log directly, re-wiring `EventLog` and `fold`
     without `Ctx`'s config and agent resolution, in a module whose stated premise is
     "one implementation, two doors". The lookup table also carried an entry for
-    `orchard://lessons` that the branch above it shadowed — which is how a second path
+    `ddflow://lessons` that the branch above it shadowed — which is how a second path
     stays hidden: nothing reads the line, so nothing contradicts it.
     """
     import inspect
 
-    from orchard.surfaces import mcp as M
+    from ddflow.surfaces import mcp as M
 
     src = inspect.getsource(M.Server.handle)
     read = src[src.index('if method == "resources/read"') :]
@@ -297,10 +297,10 @@ def test_a_companion_with_env_writes_TOML_a_parser_accepts(repo):
     """
     import tomllib
 
-    from orchard.services import companions as CO
+    from ddflow.services import companions as CO
 
     run_cli(repo, "init")
-    (repo / ".orchard" / "companions.toml").write_text(
+    (repo / ".ddflow" / "companions.toml").write_text(
         '[[companion]]\nid = "keyed"\ntitle = "needs a key"\n'
         'command = "npx"\nargs = ["-y", "pkg"]\nenv = {API_KEY = "s3cret"}\n'
     )
@@ -316,10 +316,10 @@ def test_a_quote_in_a_command_does_not_corrupt_the_toml(repo):
     """Same class, different value: unescaped interpolation into a TOML string."""
     import tomllib
 
-    from orchard.services import companions as CO
+    from ddflow.services import companions as CO
 
     run_cli(repo, "init")
-    (repo / ".orchard" / "companions.toml").write_text(
+    (repo / ".ddflow" / "companions.toml").write_text(
         '[[companion]]\nid = "quoted"\ntitle = "t"\ncommand = \'say "hi"\'\nargs = [\'a"b\']\n'
     )
     comp = next(c for c in CO.load(repo) if c.id == "quoted")
@@ -343,7 +343,7 @@ def test_proc_run_guards_an_explicit_input_of_None():
 
     parent = (
         f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r});"
-        "from orchard.infra import proc as P;"
+        "from ddflow.infra import proc as P;"
         "r = P.run([sys.executable, '-c', 'import sys; sys.stdout.write(sys.stdin.read())'],"
         "          input=None, capture_output=True, text=True, timeout=30);"
         "print('CHILD_SAW=' + repr(r.stdout))"
@@ -374,7 +374,7 @@ def test_not_having_looked_is_reported_as_unknown_not_as_missing(repo):
     unavailable reviewer as a pass, one layer out: a value nobody measured, rendered
     as a measurement.
     """
-    from orchard.services import companions as CO
+    from ddflow.services import companions as CO
 
     run_cli(repo, "init")
     unprobed = {st.companion.id: st for st in CO.scan(repo, probe=False)}
@@ -399,7 +399,7 @@ def test_the_cli_shows_the_unknown_state_distinctly(repo):
 
 
 def test_merge_refuses_an_item_that_was_removed_from_the_queue(repo):
-    """`orchard merge` was the one mutating command not routed through `_require_item`.
+    """`ddflow merge` was the one mutating command not routed through `_require_item`.
 
     Removal is a FLAG on an item that still folds, so `st.items.get()` finds it and
     only the flag says it is gone. Every other mutating command — `split`, `update`,
@@ -465,7 +465,7 @@ def test_a_declared_id_that_was_already_taken_does_not_vote_as_if_it_had_been_us
     (repo / "docs" / "todo" / "open" / "b.md").write_text(
         "## Session BETA\n\n- [ ] **142.1** — a duplicate id in another file\n"
     )
-    from orchard.services import importer as IM
+    from ddflow.services import importer as IM
 
     found, _empty = IM.scan_todos(repo)
     dup = next(f for f in found if f.kind == "task" and f.source.startswith("docs/todo/open/b.md"))
@@ -490,9 +490,9 @@ def test_the_critical_path_cycle_guard_covers_the_graph_it_actually_walks(repo):
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
     run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "p2/a.py")
 
-    from orchard.core.model import fold
-    from orchard.core.schedule import critical_path
-    from orchard.infra.log import EventLog
+    from ddflow.core.model import fold
+    from ddflow.core.schedule import critical_path
+    from ddflow.infra.log import EventLog
 
     st = fold(EventLog(repo, "agent-test").read_all(), strict=False)
     assert critical_path(st) == [], (

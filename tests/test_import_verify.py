@@ -1,4 +1,4 @@
-"""`orchard import --verify` — was it imported, is it still true, did anyone finish it.
+"""`ddflow import --verify` — was it imported, is it still true, did anyone finish it.
 
 The import's weak spot was never the parsing. Run against a real 400-day corpus it
 produced 1,170 tasks, and the `import-existing-project` prompt tells an agent to give
@@ -248,10 +248,10 @@ def test_verify_and_apply_together_are_refused_rather_than_resolved(repo):
 
 
 def test_it_is_reachable_over_mcp(repo):
-    from orchard.surfaces.mcp import TOOLS
+    from ddflow.surfaces.mcp import TOOLS
 
-    assert "orchard_import_verify" in TOOLS, sorted(TOOLS)
-    assert TOOLS["orchard_import_verify"]["argv"]({}) == ["--json", "import", "--verify"]
+    assert "ddflow_import_verify" in TOOLS, sorted(TOOLS)
+    assert TOOLS["ddflow_import_verify"]["argv"]({}) == ["--json", "import", "--verify"]
 
 
 # -- the handshake follows through -----------------------------------------------------
@@ -261,18 +261,18 @@ def test_the_handshake_says_the_import_was_never_finished(repo):
     """The offer to import stops the moment the queue has anything in it. Without this
     block, an import that landed 1,170 tasks and stopped there is never mentioned
     again — and the agent has no reason to think anything is missing."""
-    from orchard.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instructions
 
     _imported(repo)
     text = _instructions(repo)
-    assert "orchard_import_verify" in text, text[-1200:]
+    assert "ddflow_import_verify" in text, text[-1200:]
     assert "declare no globs" in text, text[-1200:]
 
 
 def test_the_handshake_stays_quiet_once_the_import_is_finished(repo):
     """A standing banner is one readers learn to skip, and then they skip the one that
     mattered."""
-    from orchard.surfaces.mcp import _instructions
+    from ddflow.surfaces.mcp import _instructions
 
     _imported(repo)
     run_cli(repo, "update", "P7.T2", "--globs", "src/billing/invoice.py")
@@ -289,8 +289,8 @@ def test_the_handshake_does_not_rescan_the_sources(repo, monkeypatch):
     Deleting the source files instead would prove nothing: the three counts it reports
     come from the queue either way.
     """
-    from orchard.services import importer as IM
-    from orchard.surfaces.mcp import _instruction_vars
+    from ddflow.services import importer as IM
+    from ddflow.surfaces.mcp import _instruction_vars
 
     _imported(repo)
 
@@ -400,7 +400,7 @@ def test_prose_only_provenance_is_a_note_not_a_permanent_finding(repo):
     run_cli(repo, "update", "P7.T2", "--globs", "src/billing/invoice.py")
     run_cli(repo, "phase", "add", "LEGACY", "--globs", "x/**")
     # Simulate the old shape: prose body, no `source` field.
-    shard = next((repo / ".orchard" / "events").glob("*.jsonl"))
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
     shard.write_text(
         shard.read_text()
         + json.dumps(

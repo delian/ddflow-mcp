@@ -1,9 +1,9 @@
 .git
-.orchard
+.ddflow
 **/__pycache__
 **/*.pyc
 .pytest_cache
 .ruff_cache
 dist
 build
-docs/orchard
+docs/ddflow

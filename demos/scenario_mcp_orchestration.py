@@ -33,7 +33,7 @@ from harness import Fail, McpClient, Scenario
 ROOT = Path(__file__).resolve().parents[1]
 
 SCAFFOLD = {
-    ".gitignore": "__pycache__/\n*.pyc\n.pytest_cache/\n.orchard-worktrees/\n",
+    ".gitignore": "__pycache__/\n*.pyc\n.pytest_cache/\n.ddflow-worktrees/\n",
     "README.md": "# taskmetrics\n\nDuration parsing and task statistics.\n",
     "taskmetrics/__init__.py": "",
     "tests/__init__.py": "",
@@ -214,15 +214,15 @@ def test_no_arguments_is_an_empty_summary(capsys):
 def _commit_in(sc: Scenario, worktree: Path, message: str, agent: str = "") -> None:
     """Commit inside a worktree, exactly as an agent would.
 
-    No ORCHARD_AGENT is set unless the caller asks for one: the enforcement hook must
+    No DDFLOW_AGENT is set unless the caller asks for one: the enforcement hook must
     recognise the lease that created THIS worktree without being told who we are.
     """
     import os as _os
 
     env = {**_os.environ}
-    env.pop("ORCHARD_AGENT", None)
+    env.pop("DDFLOW_AGENT", None)
     if agent:
-        env["ORCHARD_AGENT"] = agent
+        env["DDFLOW_AGENT"] = agent
     subprocess.run(["git", "-C", str(worktree), "add", "-A"], check=True, timeout=120)
     r = subprocess.run(
         ["git", "-C", str(worktree), "commit", "-qm", message],
@@ -243,13 +243,13 @@ def run(sc: Scenario) -> None:
 
     try:
         # -- 1. bootstrap ---------------------------------------------------------
-        sc.step("Agent ALPHA connects to a repository that has never seen Orchard")
+        sc.step("Agent ALPHA connects to a repository that has never seen ddflow")
         init = alpha.initialize()
-        sc.check("the handshake succeeds", init["serverInfo"]["name"] == "orchard")
+        sc.check("the handshake succeeds", init["serverInfo"]["name"] == "ddflow")
         sc.check(
             "the server tells an unadopted repo to run setup FIRST",
-            "does not use Orchard yet" in init["instructions"]
-            and "orchard_setup" in init["instructions"],
+            "does not use ddflow yet" in init["instructions"]
+            and "ddflow_setup" in init["instructions"],
         )
         # Asserted on INTENT, not on a phrase. This text is
         # `templates/prompts/mcp_instructions.md` now — a project may rewrite it
@@ -264,26 +264,26 @@ def run(sc: Scenario) -> None:
         )
 
         sc.step("ALPHA bootstraps the project — no shell, only MCP")
-        out, code = alpha.tool("orchard_setup", agents="claude")
-        sc.check("orchard_setup succeeded", code == 0, out[-300:])
-        sc.check("it created the queue directory", (sc.repo / ".orchard").is_dir())
+        out, code = alpha.tool("ddflow_setup", agents="claude")
+        sc.check("ddflow_setup succeeded", code == 0, out[-300:])
+        sc.check("it created the queue directory", (sc.repo / ".ddflow").is_dir())
         sc.check(
             "it wrote the per-project instructions into AGENTS.md",
-            "ORCHARD:BEGIN" in (sc.repo / "AGENTS.md").read_text(),
+            "DDFLOW:BEGIN" in (sc.repo / "AGENTS.md").read_text(),
         )
         sc.check(
             "it installed the enforcement hook",
             (sc.repo / ".git" / "hooks" / "pre-commit").exists(),
         )
         sc.git("add", "-A")
-        sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "orchard: adopt")
+        sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "ddflow: adopt")
 
         sc.step("ALPHA configures the project through MCP")
         alpha.tool(
-            "orchard_configure", set="gate.unit_tests.command", value="python3 -m pytest tests/ -q"
+            "ddflow_configure", set="gate.unit_tests.command", value="python3 -m pytest tests/ -q"
         )
-        alpha.tool("orchard_configure", set="enforce.commit_without_lease", value="block")
-        detected, _ = alpha.tool("orchard_reviewers_detect", write=True)
+        alpha.tool("ddflow_configure", set="enforce.commit_without_lease", value="block")
+        detected, _ = alpha.tool("ddflow_reviewers_detect", write=True)
         has_reviewer = "family" in detected
         sc.note(
             f"reviewer discovery: {detected.strip().splitlines()[0][:90]}"
@@ -291,7 +291,7 @@ def run(sc: Scenario) -> None:
             else "no local model server found; the critic gate "
             "will report UNAVAILABLE, which is the point"
         )
-        listed, _ = alpha.tool("orchard_reviewers_list")
+        listed, _ = alpha.tool("ddflow_reviewers_list")
         if has_reviewer:
             sc.check(
                 "the discovered reviewer is registered and declares its family",
@@ -306,8 +306,8 @@ def run(sc: Scenario) -> None:
         finally:
             init2.close()
         sc.check(
-            "the instructions now point at orchard_brief, not setup",
-            "orchard_brief" in text and "does not use Orchard yet" not in text,
+            "the instructions now point at ddflow_brief, not setup",
+            "ddflow_brief" in text and "does not use ddflow yet" not in text,
         )
         sc.check(
             "and no longer ask for a test command",
@@ -318,13 +318,13 @@ def run(sc: Scenario) -> None:
         # -- 2. fill the queue ----------------------------------------------------
         sc.step("Build a two-phase queue with real dependencies")
         alpha.tool(
-            "orchard_phase_add",
+            "ddflow_phase_add",
             id="P1",
             title="Core",
             body="Duration parsing, statistics, and a CLI over both.",
         )
         alpha.tool(
-            "orchard_phase_add",
+            "ddflow_phase_add",
             id="P2",
             title="Reporting",
             needs="P1",
@@ -337,7 +337,7 @@ def run(sc: Scenario) -> None:
             ("P2.T4", "markdown report", "P1", "taskmetrics/report.py,tests/test_report.py"),
         ]:
             alpha.tool(
-                "orchard_task_add",
+                "ddflow_task_add",
                 id=tid,
                 phase=tid.split(".")[0],
                 title=title,
@@ -346,7 +346,7 @@ def run(sc: Scenario) -> None:
             )
 
         sc.step("The brief is what an agent reads instead of the rule files")
-        brief, _ = alpha.tool("orchard_brief", phase="P1")
+        brief, _ = alpha.tool("ddflow_brief", phase="P1")
         sc.check("it names what is ready", "P1.T1" in brief and "P1.T2" in brief)
         sc.check("it explains what is blocked and why", "Blocked" in brief and "P1.T3" in brief)
         sc.check(
@@ -357,7 +357,7 @@ def run(sc: Scenario) -> None:
 
         # -- 3. fan out -----------------------------------------------------------
         sc.step("Ask what may start — two independent tasks, one blocked")
-        plan = alpha.jtool("orchard_next", phase="P1")
+        plan = alpha.jtool("ddflow_next", phase="P1")
         ready = sorted(r["id"] for r in plan["ready"])
         sc.check("T1 and T2 are offered together", ready == ["P1.T1", "P1.T2"], str(ready))
         blocked = {b["item"]: b for b in plan["blocked"]}
@@ -375,10 +375,10 @@ def run(sc: Scenario) -> None:
 
         sc.step("ALPHA and BETA claim one task each, simultaneously")
         a_claim = alpha.jtool(
-            "orchard_claim", id="P1.T1", globs="taskmetrics/parse.py,tests/test_parse.py"
+            "ddflow_claim", id="P1.T1", globs="taskmetrics/parse.py,tests/test_parse.py"
         )
         b_claim = beta.jtool(
-            "orchard_claim", id="P1.T2", globs="taskmetrics/stats.py,tests/test_stats.py"
+            "ddflow_claim", id="P1.T2", globs="taskmetrics/stats.py,tests/test_stats.py"
         )
         wt_a, wt_b = Path(a_claim["worktree"]), Path(b_claim["worktree"])
         sc.check("each agent got its own worktree", wt_a != wt_b)
@@ -393,7 +393,7 @@ def run(sc: Scenario) -> None:
 
         sc.step("A third agent tries to take a task whose files overlap ALPHA's")
         alpha.tool(
-            "orchard_task_add",
+            "ddflow_task_add",
             id="P1.T9",
             phase="P1",
             title="parser tweak",
@@ -402,7 +402,7 @@ def run(sc: Scenario) -> None:
         gamma = McpClient(sc.repo, ROOT, agent="gamma")
         try:
             gamma.initialize()
-            msg, code = gamma.tool("orchard_claim", id="P1.T9")
+            msg, code = gamma.tool("ddflow_claim", id="P1.T9")
             sc.check(
                 "the claim is refused (exit 3), not silently allowed",
                 code == 3,
@@ -437,7 +437,7 @@ def run(sc: Scenario) -> None:
             ["git", "-C", str(wt_a), "commit", "-m", "poach"],
             capture_output=True,
             text=True,
-            env={**__import__("os").environ, "ORCHARD_AGENT": "alpha"},
+            env={**__import__("os").environ, "DDFLOW_AGENT": "alpha"},
             timeout=180,
         )
         sc.check("git refused the commit", r.returncode != 0)
@@ -465,18 +465,18 @@ def run(sc: Scenario) -> None:
         # -- 5. gates -------------------------------------------------------------
         sc.step("Run the real test suites through MCP")
         for agent, item in ((alpha, "P1.T1"), (beta, "P1.T2")):
-            out, code = agent.tool("orchard_gate_run", id=item, gate="unit_tests")
+            out, code = agent.tool("ddflow_gate_run", id=item, gate="unit_tests")
             sc.check(
                 f"{item}: the real pytest run passed",
                 code == 0 and "PASSED" in out.upper(),
                 out[-400:],
             )
-        status_a, _ = alpha.tool("orchard_gate_status", id="P1.T1")
+        status_a, _ = alpha.tool("ddflow_gate_status", id="P1.T1")
         sc.check("the gate status shows unit_tests ticked", "[x] unit_tests" in status_a, status_a)
 
         sc.step("Run the configured cross-family critic on ALPHA's diff")
         review_out, review_code = alpha.tool(
-            "orchard_review",
+            "ddflow_review",
             id="P1.T1",
             intent="Parse human duration strings like '1h30m' into seconds, rejecting "
             "anything not fully consumed by the token pattern.",
@@ -495,7 +495,7 @@ def run(sc: Scenario) -> None:
                 review_code == 2,
                 review_out[:200],
             )
-        st = alpha.jtool("orchard_show", id="P1.T1")
+        st = alpha.jtool("ddflow_show", id="P1.T1")
         critic = st["gates"].get("critic", {})
         sc.check(
             "whatever happened, the critic outcome is recorded honestly",
@@ -504,7 +504,7 @@ def run(sc: Scenario) -> None:
         )
 
         sc.step("Completion is refused until the remaining gates are satisfied")
-        msg, code = alpha.tool("orchard_complete", id="P1.T1", model="claude-opus-5")
+        msg, code = alpha.tool("ddflow_complete", id="P1.T1", model="claude-opus-5")
         sc.check(
             "exit 3, with every unmet condition listed at once",
             code == 3,
@@ -518,10 +518,10 @@ def run(sc: Scenario) -> None:
         ):
             for gate in ("research", "rules", "implement", "standards", "bug_hunt", "dedupe"):
                 agent.tool(
-                    "orchard_gate_record", id=item, gate=gate, outcome="passed", evidence="checked"
+                    "ddflow_gate_record", id=item, gate=gate, outcome="passed", evidence="checked"
                 )
             agent.tool(
-                "orchard_gate_record",
+                "ddflow_gate_record",
                 id=item,
                 gate="rubber_duck",
                 outcome="passed",
@@ -533,15 +533,15 @@ def run(sc: Scenario) -> None:
             # UNAVAILABLE — which is the whole distinction, since "nobody ran it" and
             # "it found nothing" must not arrive looking the same.
             agent.tool(
-                "orchard_gate_record",
+                "ddflow_gate_record",
                 id=item,
                 gate="critic",
                 outcome="unavailable",
                 reason="no critic endpoint is configured in this demo repository",
             )
-            out, code = agent.tool("orchard_merge", id=item)
+            out, code = agent.tool("ddflow_merge", id=item)
             sc.check(f"{item} merged cleanly", code == 0, out[:300])
-            out, code = agent.tool("orchard_complete", id=item, model="claude-opus-5")
+            out, code = agent.tool("ddflow_complete", id=item, model="claude-opus-5")
             sc.check(f"{item} completed", code == 0, out[:300])
 
         sc.check(
@@ -552,19 +552,19 @@ def run(sc: Scenario) -> None:
 
         # -- 6. the dependent task unblocks --------------------------------------
         sc.step("T3 was blocked on T1 AND T2 — it must now be ready")
-        plan = alpha.jtool("orchard_next", phase="P1")
+        plan = alpha.jtool("ddflow_next", phase="P1")
         ready = sorted(r["id"] for r in plan["ready"])
         sc.check(
             "T3 became ready the moment its last dependency landed", "P1.T3" in ready, str(ready)
         )
         sc.note(
-            "Nothing told Orchard to unblock it — readiness is computed from the "
+            "Nothing told ddflow to unblock it — readiness is computed from the "
             "log, so it cannot drift from what actually shipped."
         )
 
         sc.step("ALPHA builds the CLI on top of both modules")
         claim = alpha.jtool(
-            "orchard_claim", id="P1.T3", globs="taskmetrics/cli.py,tests/test_cli.py"
+            "ddflow_claim", id="P1.T3", globs="taskmetrics/cli.py,tests/test_cli.py"
         )
         wt_c = Path(claim["worktree"])
         sc.check(
@@ -575,18 +575,16 @@ def run(sc: Scenario) -> None:
         sc.write("taskmetrics/cli.py", CLI_PY, repo=wt_c)
         sc.write("tests/test_cli.py", CLI_TEST, repo=wt_c)
         _commit_in(sc, wt_c, "P1.T3: command line")
-        out, code = alpha.tool("orchard_gate_run", id="P1.T3", gate="unit_tests")
+        out, code = alpha.tool("ddflow_gate_run", id="P1.T3", gate="unit_tests")
         sc.check(
             "the WHOLE suite passes in the new worktree — all three modules",
             code == 0 and "PASSED" in out.upper(),
             out[-500:],
         )
         for gate in ("research", "rules", "implement", "standards", "bug_hunt", "dedupe"):
-            alpha.tool(
-                "orchard_gate_record", id="P1.T3", gate=gate, outcome="passed", evidence="ok"
-            )
+            alpha.tool("ddflow_gate_record", id="P1.T3", gate=gate, outcome="passed", evidence="ok")
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P1.T3",
             gate="rubber_duck",
             outcome="passed",
@@ -594,14 +592,14 @@ def run(sc: Scenario) -> None:
             model="gemini-2.5-pro",
         )
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P1.T3",
             gate="critic",
             outcome="unavailable",
             reason="endpoint busy with another review",
         )
-        alpha.tool("orchard_merge", id="P1.T3")
-        out, code = alpha.tool("orchard_complete", id="P1.T3", model="claude-opus-5")
+        alpha.tool("ddflow_merge", id="P1.T3")
+        out, code = alpha.tool("ddflow_complete", id="P1.T3", model="claude-opus-5")
         sc.check(
             "T3 completes, with the unavailable critic recorded as a GAP",
             code == 0 and "critic" in out,
@@ -610,15 +608,15 @@ def run(sc: Scenario) -> None:
 
         # -- 7. close the phase, unblock the next --------------------------------
         sc.step("P2 depends on P1 — it must still be blocked until P1 closes")
-        plan = alpha.jtool("orchard_next", phase="P2")
+        plan = alpha.jtool("ddflow_next", phase="P2")
         sc.check("P2's task is withheld while P1 is open", not plan["ready"], str(plan["ready"]))
 
         sc.step("The speculative task from step 8 is dropped, not left dangling")
         out, code = alpha.tool(
-            "orchard_abandon", id="P1.T9", reason="the conflict probe did not become real work"
+            "ddflow_abandon", id="P1.T9", reason="the conflict probe did not become real work"
         )
         sc.check("it can be abandoned with a recorded reason", code == 0, out[:200])
-        plan = alpha.jtool("orchard_next", phase="P1")
+        plan = alpha.jtool("ddflow_next", phase="P1")
         sc.check(
             "and is not offered again, nor listed as blocked",
             "P1.T9" not in [r["id"] for r in plan["ready"]]
@@ -628,23 +626,23 @@ def run(sc: Scenario) -> None:
 
         sc.step("Close phase P1 through its own pipeline")
         alpha.tool(
-            "orchard_gate_record",
+            "ddflow_gate_record",
             id="P1",
             gate="research",
             outcome="passed",
             evidence="scoped up front",
         )
-        out, code = alpha.tool("orchard_gate_run", id="P1", gate="unit_tests")
+        out, code = alpha.tool("ddflow_gate_run", id="P1", gate="unit_tests")
         sc.check("the phase-level suite runs against the merged result", code in (0, 2), out[-300:])
         for gate in ("tasks", "bug_hunt", "dedupe", "live_test", "corrections", "merge"):
             alpha.tool(
-                "orchard_gate_record", id="P1", gate=gate, outcome="passed", evidence="phase pass"
+                "ddflow_gate_record", id="P1", gate=gate, outcome="passed", evidence="phase pass"
             )
-        out, code = alpha.tool("orchard_complete", id="P1", model="claude-opus-5")
+        out, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
         sc.check("phase P1 completes once every task is done", code == 0, out[:300])
 
         sc.step("Now P2 unblocks")
-        plan = alpha.jtool("orchard_next", phase="P2")
+        plan = alpha.jtool("ddflow_next", phase="P2")
         sc.check(
             "P2.T4 became available when its phase dependency closed",
             [r["id"] for r in plan["ready"]] == ["P2.T4"],
@@ -664,15 +662,15 @@ def run(sc: Scenario) -> None:
         sc.check("and computes the right answer", "total  8100s" in r.stdout, r.stdout)
 
         sc.step("The board, the log, and the reconstruction all agree")
-        board, _ = alpha.tool("orchard_board")
+        board, _ = alpha.tool("ddflow_board")
         sc.check(
             "the board shows P1 fully done",
             "3/3 tasks" in board or "4/4 tasks" in board,
             board[:600],
         )
-        doctor, dcode = alpha.tool("orchard_doctor")
+        doctor, dcode = alpha.tool("ddflow_doctor")
         sc.check("doctor reports a healthy log", dcode == 0, doctor[-400:])
-        log = "\n".join(p.read_text() for p in (sc.repo / ".orchard" / "events").glob("*.jsonl"))
+        log = "\n".join(p.read_text() for p in (sc.repo / ".ddflow" / "events").glob("*.jsonl"))
         sc.check(
             "the committed log carries NO absolute paths — it is portable to "
             "another checkout, a container, or a teammate",
@@ -680,18 +678,18 @@ def run(sc: Scenario) -> None:
         )
         sc.check(
             "every agent wrote its own shard, so two agents never conflict",
-            len(list((sc.repo / ".orchard" / "events").glob("*.jsonl"))) >= 2,
-            str([p.name for p in (sc.repo / ".orchard" / "events").glob("*")]),
+            len(list((sc.repo / ".ddflow" / "events").glob("*.jsonl"))) >= 2,
+            str([p.name for p in (sc.repo / ".ddflow" / "events").glob("*")]),
         )
 
         sc.step("Nothing looped, and the work done is accounted for")
-        loops, lcode = alpha.tool("orchard_loops")
+        loops, lcode = alpha.tool("ddflow_loops")
         sc.check(
             "a healthy project reports NO loops (exit 2 = nothing to report)",
             lcode == 2,
             loops[:300],
         )
-        prog = alpha.jtool("orchard_progress")
+        prog = alpha.jtool("ddflow_progress")
         by_item = {r["item"]: r for r in prog}
         sc.check(
             "every completed task records exactly one attempt and one commit",
@@ -713,11 +711,11 @@ def run(sc: Scenario) -> None:
         )
 
         sc.step("A deliberately circular plan is caught before anyone works it")
-        alpha.tool("orchard_phase_add", id="PX", title="circular")
-        alpha.tool("orchard_task_add", id="X.A", phase="PX", needs="X.C", globs="x/a")
-        alpha.tool("orchard_task_add", id="X.B", phase="PX", needs="X.A", globs="x/b")
-        alpha.tool("orchard_task_add", id="X.C", phase="PX", needs="X.B", globs="x/c")
-        loops, lcode = alpha.tool("orchard_loops")
+        alpha.tool("ddflow_phase_add", id="PX", title="circular")
+        alpha.tool("ddflow_task_add", id="X.A", phase="PX", needs="X.C", globs="x/a")
+        alpha.tool("ddflow_task_add", id="X.B", phase="PX", needs="X.A", globs="x/b")
+        alpha.tool("ddflow_task_add", id="X.C", phase="PX", needs="X.B", globs="x/c")
+        loops, lcode = alpha.tool("ddflow_loops")
         found = json.loads(loops)
         cyc = [f for f in found if f["kind"] == "dependency_cycle"]
         sc.check("the cycle is detected", cyc, loops[:300])
@@ -731,20 +729,20 @@ def run(sc: Scenario) -> None:
             "->" in cyc[0]["detail"],
             cyc[0]["detail"][:200],
         )
-        nxt = alpha.jtool("orchard_next", phase="PX")
+        nxt = alpha.jtool("ddflow_next", phase="PX")
         sc.check(
             "and the scheduler offers none of the ring",
             not nxt["ready"] and len(nxt["cycles"]) == 1,
             json.dumps(nxt)[:300],
         )
         for t in ("X.A", "X.B", "X.C"):
-            alpha.tool("orchard_remove", id=t, reason="circular plan, rewritten")
-        alpha.tool("orchard_remove", id="PX", reason="circular plan, rewritten")
+            alpha.tool("ddflow_remove", id=t, reason="circular plan, rewritten")
+        alpha.tool("ddflow_remove", id="PX", reason="circular plan, rewritten")
 
         sc.step("The whole project reconstructs from the log alone")
-        _, _ = alpha.tool("orchard_board")
+        _, _ = alpha.tool("ddflow_board")
         replay = subprocess.run(
-            ["python3", "-m", "orchard", "--repo", str(sc.repo), "replay"],
+            ["python3", "-m", "ddflow", "--repo", str(sc.repo), "replay"],
             capture_output=True,
             text=True,
             timeout=300,

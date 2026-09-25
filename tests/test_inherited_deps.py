@@ -192,7 +192,7 @@ def test_claim_refuses_an_item_whose_own_dependency_is_open(repo):
     """The plainest case, and it was broken for the plainest reason.
 
     `acquire` checked removed / done / leased / glob-overlap and never once looked at
-    ``needs``. `orchard next` printed "T2: deps — T1 is open" and `orchard claim T2`
+    ``needs``. `ddflow next` printed "T2: deps — T1 is open" and `ddflow claim T2`
     handed out a worktree on the next line. Any agent that picks work by id — which is
     what "implement phase X" does when it walks a plan — skipped the dependency graph
     completely, and the failure is invisible: the work happens, just in the wrong order

@@ -10,7 +10,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from orchard.services import prompts as P
+from ddflow.services import prompts as P
 
 
 def test_every_registered_template_ships_with_the_package():
@@ -21,7 +21,7 @@ def test_every_registered_template_ships_with_the_package():
 
 def test_a_project_template_overrides_the_shipped_one(repo):
     run_cli(repo, "init")
-    d = repo / ".orchard" / "prompts"
+    d = repo / ".ddflow" / "prompts"
     d.mkdir(parents=True, exist_ok=True)
     (d / "review_system.md").write_text("MY PROJECT PROMPT\n")
     t = P.resolve("review_system", repo)
@@ -108,14 +108,14 @@ def test_eject_writes_editable_copies(repo):
     code, _out, _ = run_cli(repo, "prompts", "eject")
     assert code == 0
     for name in P.TEMPLATE_NAMES:
-        assert (repo / ".orchard" / "prompts" / f"{name}.md").is_file()
+        assert (repo / ".ddflow" / "prompts" / f"{name}.md").is_file()
     assert P.resolve("review_system", repo).source == "project"
 
 
 def test_eject_does_not_clobber_without_force(repo):
     run_cli(repo, "init")
     run_cli(repo, "prompts", "eject", "review_system")
-    path = repo / ".orchard" / "prompts" / "review_system.md"
+    path = repo / ".ddflow" / "prompts" / "review_system.md"
     path.write_text("MINE\n")
     run_cli(repo, "prompts", "eject", "review_system")
     assert path.read_text() == "MINE\n"
@@ -130,7 +130,7 @@ def test_the_review_user_template_is_actually_used(repo, tmp_path, monkeypatch):
     anyway, so both override paths silently did nothing. Caught by ruff's F841 on the
     unused local — a lint rule finding a behavioural bug.
     """
-    from orchard.services.review import Reviewer, review
+    from ddflow.services.review import Reviewer, review
 
     custom = tmp_path / "u.md"
     custom.write_text("SENTINEL-TEMPLATE {{ intent }} :: {{ diff }}\n")
@@ -141,7 +141,7 @@ def test_the_review_user_template_is_actually_used(repo, tmp_path, monkeypatch):
         seen.append(user)
         return "STATUS: NO FINDINGS", ""
 
-    monkeypatch.setattr("orchard.services.review._chat", fake_chat)
+    monkeypatch.setattr("ddflow.services.review._chat", fake_chat)
     review(
         Reviewer(name="r", base_url="http://x/v1", model="m"),
         "diff --git a/x b/x\n+y\n",

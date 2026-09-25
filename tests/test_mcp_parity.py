@@ -18,14 +18,14 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from orchard.surfaces.cli import build_parser
-from orchard.surfaces.mcp import TOOLS
+from ddflow.surfaces.cli import build_parser
+from ddflow.surfaces.mcp import TOOLS
 
 #: CLI command -> the MCP tool(s) that cover it, when the names differ.
 ALIASES: dict[str, tuple[str, ...]] = {
-    "init": ("orchard_setup",),
-    "adopt": ("orchard_setup",),
-    "config": ("orchard_configure",),
+    "init": ("ddflow_setup",),
+    "adopt": ("ddflow_setup",),
+    "config": ("ddflow_configure",),
 }
 
 #: CLI commands deliberately NOT exposed, each with its reason.
@@ -46,14 +46,14 @@ def covered(cmd: str) -> bool:
     for alias in ALIASES.get(cmd, ()):
         if alias in TOOLS:
             return True
-    return any(t == f"orchard_{cmd}" or t.startswith(f"orchard_{cmd}_") for t in TOOLS)
+    return any(t == f"ddflow_{cmd}" or t.startswith(f"ddflow_{cmd}_") for t in TOOLS)
 
 
 def cli_leaves() -> list[tuple[str, ...]]:
     """Every terminal subcommand PATH, e.g. ('gate', 'skip'), not just ('gate',).
 
-    The command-level check passed for years while `orchard gate skip` had no tool at
-    all — because `gate` was "covered" by `orchard_gate_run`. Coverage of a parent says
+    The command-level check passed for years while `ddflow gate skip` had no tool at
+    all — because `gate` was "covered" by `ddflow_gate_run`. Coverage of a parent says
     nothing about its children, and the child is where the capability lives: `gate
     skip` is the documented escape hatch for `gates.require_outcome`, so an agent
     driving over MCP had no way to drop a single step and had to force past all of them.
@@ -80,17 +80,17 @@ def cli_leaves() -> list[tuple[str, ...]]:
 #: Subcommand paths deliberately NOT exposed, each with its reason.
 LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
     ("mcp",): "starts the MCP server itself; exposing it over MCP would be recursive",
-    ("hooks", "status"): "covered by orchard_hooks, whose action argument selects it",
-    ("hooks", "install"): "covered by orchard_hooks, whose action argument selects it",
-    ("hooks", "uninstall"): "covered by orchard_hooks, whose action argument selects it",
-    ("prompts", "list"): "covered by orchard_prompts, whose action argument selects it",
-    ("prompts", "show"): "covered by orchard_prompts, whose action argument selects it",
-    ("prompts", "eject"): "covered by orchard_prompts, whose action argument selects it",
-    ("companions", "list"): "covered by orchard_companions",
-    ("companions", "add"): "covered by orchard_companions_add",
-    ("config",): "covered by orchard_configure, which reads and writes the same knobs",
+    ("hooks", "status"): "covered by ddflow_hooks, whose action argument selects it",
+    ("hooks", "install"): "covered by ddflow_hooks, whose action argument selects it",
+    ("hooks", "uninstall"): "covered by ddflow_hooks, whose action argument selects it",
+    ("prompts", "list"): "covered by ddflow_prompts, whose action argument selects it",
+    ("prompts", "show"): "covered by ddflow_prompts, whose action argument selects it",
+    ("prompts", "eject"): "covered by ddflow_prompts, whose action argument selects it",
+    ("companions", "list"): "covered by ddflow_companions",
+    ("companions", "add"): "covered by ddflow_companions_add",
+    ("config",): "covered by ddflow_configure, which reads and writes the same knobs",
     ("decision", "search"): (
-        "covered by orchard_recall, which searches decisions along with everything "
+        "covered by ddflow_recall, which searches decisions along with everything "
         "else the project remembers — one search beats five"
     ),
     ("hooks", "check-commit"): (
@@ -105,11 +105,11 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "writes an API-key env-var name into project config; a config edit an "
         "operator should make deliberately, not an agent mid-task"
     ),
-    ("reviewers", "detect"): "covered by orchard_reviewers_detect",
-    ("reviewers", "list"): "covered by orchard_reviewers_list",
-    ("reviewers", "test"): "covered by orchard_reviewers_detect, which probes the same way",
-    ("adopt",): "covered by orchard_setup",
-    ("init",): "covered by orchard_setup",
+    ("reviewers", "detect"): "covered by ddflow_reviewers_detect",
+    ("reviewers", "list"): "covered by ddflow_reviewers_list",
+    ("reviewers", "test"): "covered by ddflow_reviewers_detect, which probes the same way",
+    ("adopt",): "covered by ddflow_setup",
+    ("init",): "covered by ddflow_setup",
 }
 
 
@@ -117,14 +117,14 @@ def leaf_covered(path: tuple[str, ...]) -> bool:
     if path in LEAF_NOT_EXPOSED:
         return True
     joined = "_".join(path)
-    return f"orchard_{joined}" in TOOLS or any(t.startswith(f"orchard_{joined}_") for t in TOOLS)
+    return f"ddflow_{joined}" in TOOLS or any(t.startswith(f"ddflow_{joined}_") for t in TOOLS)
 
 
 def test_every_cli_SUBCOMMAND_is_reachable_over_mcp():
     missing = [p for p in cli_leaves() if not leaf_covered(p)]
     assert not missing, (
         "CLI subcommands with no MCP tool: "
-        + ", ".join("`orchard " + " ".join(p) + "`" for p in missing)
+        + ", ".join("`ddflow " + " ".join(p) + "`" for p in missing)
         + ". Add a tool, or add an entry to LEAF_NOT_EXPOSED with the reason."
     )
 
@@ -174,8 +174,8 @@ def test_the_status_and_recall_tools_exist_and_say_what_they_are_for():
     we done this before' — so their descriptions have to be recognisable as answers to
     those questions, not as API docs."""
     for name, must in (
-        ("orchard_status", "status of this project"),
-        ("orchard_recall", "HAVE WE BEEN HERE BEFORE"),
+        ("ddflow_status", "status of this project"),
+        ("ddflow_recall", "HAVE WE BEEN HERE BEFORE"),
     ):
         assert name in TOOLS, name
         assert must.lower() in TOOLS[name]["description"].lower(), name
@@ -200,7 +200,7 @@ def _cli_flags(argv: list[str]) -> set[str]:
 
     root = _Path(__file__).resolve().parents[1]
     p = _sp.run(
-        [_sys.executable, "-m", "orchard", *argv, "--help"],
+        [_sys.executable, "-m", "ddflow", *argv, "--help"],
         capture_output=True,
         text=True,
         env={"PYTHONPATH": str(root), "PATH": os.environ.get("PATH", "")},
@@ -221,30 +221,30 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     # record's evidence flags. They are meaningless for a skip: a skipped gate produced
     # no command, no exit code and no reviewer, which is the whole point of calling it
     # skipped rather than passed. Only `--reason` is real here, and it is required.
-    ("orchard_gate_skip", "--outcome"): "a skip IS the outcome",
-    ("orchard_gate_skip", "--evidence"): "a skipped gate produced none; that is what skipped means",
-    ("orchard_gate_skip", "--command"): "nothing ran",
-    ("orchard_gate_skip", "--exit-code"): "nothing ran",
-    ("orchard_gate_skip", "--output-file"): "nothing ran",
-    ("orchard_gate_skip", "--model"): "no reviewer performed it",
+    ("ddflow_gate_skip", "--outcome"): "a skip IS the outcome",
+    ("ddflow_gate_skip", "--evidence"): "a skipped gate produced none; that is what skipped means",
+    ("ddflow_gate_skip", "--command"): "nothing ran",
+    ("ddflow_gate_skip", "--exit-code"): "nothing ran",
+    ("ddflow_gate_skip", "--output-file"): "nothing ran",
+    ("ddflow_gate_skip", "--model"): "no reviewer performed it",
     # `import --verify` is a different QUESTION, not a mode of importing, so it gets
     # its own tool with its own description rather than a boolean on this one. Folding
     # it in would let an agent send `apply=true, verify=true`, which means nothing and
     # would silently do one of them.
-    ("orchard_import", "--verify"): "covered by orchard_import_verify, its own tool",
+    ("ddflow_import", "--verify"): "covered by ddflow_import_verify, its own tool",
 }
 
 
 def _tool_for(path: tuple[str, ...]) -> str | None:
     joined = "_".join(path)
-    return f"orchard_{joined}" if f"orchard_{joined}" in TOOLS else None
+    return f"ddflow_{joined}" if f"ddflow_{joined}" in TOOLS else None
 
 
 def _pairs() -> list[tuple[str, tuple[str, ...]]]:
     """Every (tool, CLI path) pair, DERIVED rather than listed.
 
     The first version of this ratchet carried a hand-written list of eleven tools, and
-    so was blind to `orchard remove --force` — which the scenario needed and which
+    so was blind to `ddflow remove --force` — which the scenario needed and which
     failed silently until the argument checker started rejecting unknown ones. A
     ratchet with a manually curated input has exactly the coverage someone remembered
     to give it.
@@ -264,13 +264,13 @@ def test_every_cli_flag_is_reachable_from_its_mcp_tool(tool, argv):
     """Command-level parity is not parity.
 
     The existing ratchet proved every CLI *command* has a tool, and passed while
-    `orchard_phase_add` had no `globs` at all — so over MCP a phase could not declare
+    `ddflow_phase_add` had no `globs` at all — so over MCP a phase could not declare
     what it writes, the conflict detector had nothing to compare at phase level, and
     (once phase dependencies became real) every task inside it inherited a dependency
     the operator could not scope. An agent driving over MCP had a strictly weaker tool
     than the same agent driving a shell, with nothing saying so.
     """
-    from orchard.surfaces.mcp import TOOLS
+    from ddflow.surfaces.mcp import TOOLS
 
     flags = _cli_flags(argv)
     props = set(TOOLS[tool]["properties"])
@@ -280,7 +280,7 @@ def test_every_cli_flag_is_reachable_from_its_mcp_tool(tool, argv):
         if f.lstrip("-").replace("-", "_") not in props and (tool, f) not in FLAG_EXEMPTIONS
     )
     assert not missing, (
-        f"{tool} cannot reach `orchard {' '.join(argv)}` flag(s) {missing}. "
+        f"{tool} cannot reach `ddflow {' '.join(argv)}` flag(s) {missing}. "
         f"Add the propert{'y' if len(missing) == 1 else 'ies'} and the argv entry, or "
         f"record the omission in FLAG_EXEMPTIONS with its reason."
     )
@@ -296,16 +296,16 @@ def test_every_cli_flag_is_reachable_from_its_mcp_tool(tool, argv):
 #: again helps nobody. But it was not a decision, it was an accident: `decision_add`
 #: returned JSON while `task_add` returned prose, for no reason either could state.
 PROSE_TOOLS: dict[str, str] = {
-    "orchard_brief": "a budgeted reading pack — rules, decisions and lessons as text to read",
-    "orchard_board": "a rendered markdown board, meant to be shown or committed as-is",
-    "orchard_gate_status": "carries the next gate's INSTRUCTION, which is the useful half",
-    "orchard_replay": "the reconstruction narrative; the whole output is the deliverable",
-    "orchard_doctor": "a health report written to be read, with remedies in prose",
-    "orchard_configure": "prints every knob with its documentation and its source",
-    "orchard_setup": "a checklist of what it wrote and what to do next",
-    "orchard_review": "reviewer findings, already formatted with their severities",
-    "orchard_reviewers_list": "a table, plus the warning about unclassified reviewers",
-    "orchard_reviewers_detect": "a probe report naming each endpoint and what answered",
+    "ddflow_brief": "a budgeted reading pack — rules, decisions and lessons as text to read",
+    "ddflow_board": "a rendered markdown board, meant to be shown or committed as-is",
+    "ddflow_gate_status": "carries the next gate's INSTRUCTION, which is the useful half",
+    "ddflow_replay": "the reconstruction narrative; the whole output is the deliverable",
+    "ddflow_doctor": "a health report written to be read, with remedies in prose",
+    "ddflow_configure": "prints every knob with its documentation and its source",
+    "ddflow_setup": "a checklist of what it wrote and what to do next",
+    "ddflow_review": "reviewer findings, already formatted with their severities",
+    "ddflow_reviewers_list": "a table, plus the warning about unclassified reviewers",
+    "ddflow_reviewers_detect": "a probe report naming each endpoint and what answered",
 }
 
 
