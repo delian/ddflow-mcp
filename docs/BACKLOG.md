@@ -464,3 +464,106 @@ commit, per §roborev.
   compare "(schema, event count, last lamport)" after it stopped reading the event
   count at all. A reader debugging a missing rebuild would look for a mismatch the code
   does not check.
+
+## B69–B72 — the import becomes verifiable, and the tool can explain itself ✅ ALL CLOSED
+
+Operator ask, 2026-09-25: can the bootstrap get the agent to run the import *and check
+it*, can that be re-run at any time, can an operator verify what was imported, and can
+anyone ask the tool what it does?
+
+- **B69. Imported items were not machine-identifiable. ✅ CLOSED.** Provenance for
+  phases, tasks and branches was PROSE in `body` — `"Imported from docs/todo.md:41."` —
+  and `Item` had no source field, so "which items came from the import" could only be
+  answered by regexing a sentence. That is the metadata-key-vs-field class: reword the
+  sentence and the count silently becomes zero while the verification passes. `Item`
+  now carries `source`, the body prose stays for `orchard show`, and `item.completed`'s
+  `evidence` — written by the importer since day one and DROPPED by the fold, the third
+  instance of that bug in this series — lands on `Item.completion_evidence`.
+  `ResearchNote` gained `tags` so `imported` is spelled the same way on all three memory
+  kinds; telling an imported note from a hand-written one by the SHAPE of its `sources`
+  would have been a heuristic pretending to be a fact.
+
+- **B70. `orchard import --verify` / `orchard_import_verify`. ✅ CLOSED.** Status (what
+  is imported, per kind, and when), still-true (drift since, sources that yielded
+  nothing, source files that have vanished) and finished (tasks with no globs, phases
+  claiming SHIPPED over an open task). Exit 0/1/2 because there are three answers.
+  Deliberately does not repeat `doctor`'s unresolved dependencies, duplicate globs or
+  cycles, and says so. `--verify` with `--apply` is REFUSED rather than silently
+  resolved: one reads and one writes.
+
+- **B71. The handshake follows through, and the prompt re-runs. ✅ CLOSED.** The offer
+  to import stopped the moment the queue had one item in it, so an import that landed
+  1,170 tasks and stopped there was never mentioned again. The handshake now reports
+  unfinished imported work — computed from the already-folded queue, so the ~0.65 s
+  source scan stays out of every session start — and tells the agent to run
+  `orchard_import_verify` before handing any of it out.
+  `/import-existing-project` opens by checking what is already imported and branches to
+  finishing-and-refreshing. Same name: renaming breaks anyone invoking it, and a second
+  near-identical prompt is two documents that drift.
+
+- **B72. `orchard help` / `orchard_help`. ✅ CLOSED.** There was no help surface on MCP
+  at all, and argparse's listed 43 subcommands alphabetically without saying which to
+  reach for first. Seven topics as overridable templates plus a generated capability
+  inventory. Three ratchets: every command a page names must exist as a CLI leaf or an
+  MCP tool (mutation-verified against three distinct rot modes — a bad subcommand, a bad
+  top-level command, a bad tool name), every topic offered must resolve, and every tool
+  must belong to a group.
+
+**Deferred, filed rather than guessed:** `verify` does not report phases still carrying a
+derived prose slug rather than a source id. Detecting that honestly needs the importer to
+record WHICH way an id was chosen (read from the heading, adopted from children, or
+slugged), and inferring it from the shape of the id afterwards is the heuristic this
+change spent its time removing elsewhere. Low value: the queue works, the ids are only
+unrecognisable.
+
+## B73–B78 — the workflow becomes visible and editable, 2026-09-25
+
+Operator ask: document how the tool is driven both standalone and as an MCP server
+(including what to put in `AGENTS.md`/`CLAUDE.md`), add a command that explains how the
+CURRENT workflow works, and let a project change that workflow — from the agent over
+MCP or by hand.
+
+- **B73. Nothing showed the configured workflow as a whole. ✅ CLOSED.** `gate status
+  <id>` showed one item's position, `config --explain` printed ~60 flat knobs, and the
+  only place that ever joined the pipeline, the gates and the companions was the MCP
+  handshake — computed once at connect and unreachable from a terminal. `orchard
+  workflow` / `orchard_workflow` now answers it, including **where each value came
+  from**, so a deliberate choice is distinguishable from an untouched default.
+
+- **B74. A pipeline naming an undefined gate was a silent, permanent trap. ✅ CLOSED.**
+  Nothing validated pipeline contents. `status()` folds the unknown id to `""`,
+  `require_outcome` defaults True so `complete` refuses forever, and `gate record`
+  rejects the id as unknown — so the item could never be completed at all except with
+  `--force`, and nothing anywhere said why. One typo bricked every item entering the
+  pipeline. Now refused at write time with the near miss named, and reported by both
+  `orchard workflow` and `orchard doctor`.
+
+- **B75. The config write paths validated syntax only. ✅ CLOSED.** `--append-toml`
+  parsed the merged text for SYNTAX and then validated `Config.load(repo)` — the config
+  already on DISK. A writer that validates the state it is replacing has checked
+  nothing: `[gatez]`, or any unknown knob, was written and broke every later command.
+  `Config.check(data)` now validates the RESULT, and `tomlcfg.atomic_write` replaces
+  the file through a temp + rename, because a truncating write interrupted halfway
+  leaves an empty config that loads as "no overrides at all" without saying so.
+
+- **B76. Decisions have no structured source. FILED.** Items carry `Item.source`,
+  lessons `seen_in`, research `sources`, notes `note["source"]` — decisions carry only
+  the prose `context`. So the vanished-source check covers items, lessons, research and
+  notes, and cannot cover decisions. Parsing the path back out of the sentence is the
+  anti-pattern this series spent its time removing, so the gap is recorded rather than
+  papered over. The fix is a `sources` field on `Decision`, which is a model change
+  wanting its own commit. *Found by: the cross-family critic, THEORETICAL, correctly.*
+
+- **B77. Imported notes were counted without a provenance filter. ✅ CLOSED.**
+  `len(sess.notes)` counted every note in `s-imported-journal` / `s-imported-memory`,
+  and `orchard session note <sid>` accepts ANY session id — so one hand-written note
+  inflated the imported count. Probed: 1 → 2. The sibling loop for lessons, decisions
+  and research already filtered on the `imported` tag; this one did not. *Found by: the
+  cross-family critic, raised THEORETICAL with a refutation ("if those sessions are
+  written only by the import") that a five-line probe killed.*
+
+- **B78. Cursor was supported, in the default agent set, and named nowhere a user
+  looks. ✅ CLOSED.** Absent from the `--agents` help, the `orchard_setup` tool
+  description and the README's agent table. Two README links to `templates/drivers/…`
+  were also broken — the real path is `orchard/templates/drivers/…`. A ratchet now
+  asserts every key of `AGENT_TARGETS` is named in all three places.

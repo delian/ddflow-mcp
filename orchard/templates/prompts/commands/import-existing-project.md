@@ -2,6 +2,23 @@ Bring this project's existing work into the queue{% if scope %}, starting from {
 
 This project has history. A queue that starts empty tells the next agent "nothing is in flight" about a repository that may have three branches in flight and a todo file with forty open items. That is worse than no queue, because the scheduler hands it out.
 
+## First: has this already been done?
+
+    orchard_import_verify           → what is imported, and what is still owed
+
+Run this before anything else. It is safe and it writes nothing, and its answer decides which half of this prompt you are doing. Exit 2 means nothing was ever imported.
+
+**If nothing is imported yet**, start at §1 below.
+
+**If something is imported already**, you are not repeating the import — you are finishing and refreshing it. Skip to §3 and work from what `orchard_import_verify` reported:
+
+- **Tasks with no globs.** The commonest leftover, and the one with teeth: an item that has not said what it writes is one the conflict detector cannot protect, so two agents can be handed the same file and neither is refused. `orchard_update <id> --globs "..."`.
+- **Phases claiming SHIPPED over an open task.** Real drift between a heading and its checkboxes. Do not guess which is stale — if the heading is right the queue is about to hand out finished work, and if the boxes are right the phase is not done. Ask the operator.
+- **The source has moved on.** `orchard_import` (no flags) shows exactly what a re-run would add; `apply=true` adds it. Re-running is safe and idempotent: ids derive from the source, so it adds what is new and leaves the rest alone.
+- **A source file that has vanished.** Something was renamed or deleted since the import. The items are still real; their provenance is not checkable any more. Tell the operator which.
+
+Then stop. Do not re-import work that is already in the queue, and do not "tidy" ids — the ids came from the project's own files and changing them breaks every `Needs:` pointing at them.
+
 ## What is mechanical, and what is yours
 
 `orchard_import` reads what it can **verify** — a ticked checkbox, a `##` heading in a lessons file, a file under `docs/adr/`, a branch with commits not on the base. It reports; it writes nothing until told.

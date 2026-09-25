@@ -649,6 +649,21 @@ class Config:
             cfg._apply(envdata, "env")
         return cfg
 
+    @classmethod
+    def check(cls, data: dict[str, Any]) -> None:
+        """Would this TOML load? Raises `ValueError` naming the first thing wrong.
+
+        The semantic half of validation, which the write paths did not have. They
+        parsed the merged text for SYNTAX and then validated the config already on
+        DISK -- so `[gatez]`, or a knob nobody has ever heard of, sailed through and
+        was written, and every later command failed to load the file. A writer that
+        validates the state it is replacing has checked nothing.
+
+        Applied to a throwaway instance so a rejected fragment cannot leave a
+        half-updated Config behind.
+        """
+        cls()._apply(data, "check")
+
     def _sections(self) -> list[str]:
         return [f.name for f in fields(self) if f.name != "sources"]
 

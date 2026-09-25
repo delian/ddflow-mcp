@@ -28,8 +28,12 @@ its table name, and an **array of tables** (`[[reviewer]]`) keyed by a field ins
 
 from __future__ import annotations
 
+import contextlib
+import fcntl
+import os
+import tempfile
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -91,3 +95,58 @@ def config_paths(root: Path, own: str) -> tuple[Path, Path]:
     the failure this whole module is about.
     """
     return (Path(root) / ".orchard" / "config.toml", Path(root) / ".orchard" / own)
+
+
+@contextlib.contextmanager
+def locked(path: Path) -> Iterator[None]:
+    """Hold an exclusive lock on `<path>.lock` for a read-modify-write.
+
+    Every config writer here is read-modify-write, and this package's whole purpose is
+    several agents working at once -- so two of them calling `orchard workflow gate ...`
+    is the normal case, not an exotic one. Unlocked, 40 concurrent pairs lost half their
+    edits and every call returned success. The event log has always taken a lock for
+    exactly this; the config writer did not.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = path.with_name(f".{path.name}.lock")
+    fd = os.open(lock, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        with contextlib.suppress(OSError):
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
+def atomic_write(path: Path, text: str) -> None:
+    """Write via a UNIQUE temp file in the same directory, then one `os.replace`.
+
+    A plain `write_text` truncates first: interrupted between truncate and write -- a
+    crash, a full disk, a killed agent -- it leaves an EMPTY config, which loads as "no
+    overrides at all" rather than as an error. Every knob silently reverts to its
+    default and nothing says so, which is the failure mode this module exists to
+    prevent one layer up.
+
+    The temp name is unique, and that is not fussiness. A FIXED name is shared: two
+    writers raced, one `os.replace`d the other's half-written file into place, and a
+    watcher caught `config.toml` TORN at 118 KB of a 400 KB write -- the truncated
+    config this function was written to make impossible. The `finally` unlink also
+    deleted whichever tmp existed, including the other writer's in flight, so 199 of
+    400 calls died with `FileNotFoundError` out of `os.replace`.
+
+    Same directory, so the rename stays within one filesystem and is therefore atomic.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        # Only on failure. Unconditionally is what let one writer delete another's.
+        tmp.unlink(missing_ok=True)
+        raise

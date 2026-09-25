@@ -114,6 +114,19 @@ class Item:
     created_at: str = ""
     completed_at: str = ""
     removed: bool = False
+    #: Where this item came from, when it was not created by hand: `docs/todo.md:41`,
+    #: `git:feature/x`. Empty for an item someone typed.
+    #:
+    #: A FIELD, not prose. The body already says "Imported from docs/todo.md:41." and a
+    #: human reads that in `orchard show` -- but "which items came from the import" is a
+    #: question a machine has to answer for `import --verify`, and answering it by
+    #: regexing a sentence is the metadata-key-vs-field class: the day someone rewords
+    #: the sentence, the count silently becomes zero and the verification passes.
+    source: str = ""
+    #: How a DONE item was shown to be done, when nobody ran its gates: "ticked in
+    #: docs/todo.md:41". Orchard does not invent completion, so when it records some it
+    #: records who said so.
+    completion_evidence: str = ""
 
     def gate_outcome(self, gate: str) -> str:
         rec = self.gates.get(gate)
@@ -207,6 +220,12 @@ class ResearchNote:
     probe_output: str = ""
     verdict: str = ""  # CONFIRMED | REFUTED | THEORETICAL
     sources: list[str] = field(default_factory=list)
+    #: Free-form labels. `Lesson` and `Decision` have always had these; research did
+    #: not, so "which notes came from an import" had no honest answer -- `sources` holds
+    #: an arXiv id for a hand-written note and `docs/RESEARCH.md:79` for an imported
+    #: one, and telling those apart by their SHAPE is a heuristic pretending to be a
+    #: fact. One marker, spelled the same way on all three.
+    tags: list[str] = field(default_factory=list)
     budget: str = ""
     at: str = ""
     item: str = ""
@@ -398,6 +417,7 @@ def _h_added(st: State, ev: Event, kind: str) -> None:
     it.body = d.get("body", it.body)
     it.tags = list(d.get("tags", it.tags))
     it.priority = int(d.get("priority", it.priority))
+    it.source = d.get("source", it.source)
     it.removed = False
 
 
@@ -507,6 +527,11 @@ def _h_state(new_state: str):
         elif new_state == DONE:
             it.completed_at = ev.ts
             it.merged_sha = ev.data.get("sha", it.merged_sha)
+            # The importer has always written this -- `{"imported": True, "evidence":
+            # "ticked in docs/todo.md:41"}` -- and the fold has always thrown it away,
+            # so the one record of WHY an item was closed without running a single gate
+            # existed only in the raw log. Third instance of this class in this series.
+            it.completion_evidence = ev.data.get("evidence", it.completion_evidence)
         elif new_state == ABANDONED:
             it.blocked_reason = ev.data.get("reason", "")
 
@@ -655,6 +680,7 @@ def _h_research(st: State, ev: Event) -> None:
         probe_output=d.get("probe_output", ""),
         verdict=d.get("verdict", "THEORETICAL"),
         sources=list(d.get("sources", [])),
+        tags=list(d.get("tags", [])),
         budget=d.get("budget", ""),
         at=ev.ts,
         item=d.get("item", ""),

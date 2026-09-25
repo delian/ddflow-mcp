@@ -18,6 +18,11 @@
     ready, running, blocked, open_bugs, loops   int
     task_pipeline      list    the gate ids every task passes through, in order
     require_outcome    bool    whether a silent gate blocks completion
+    importable         int     source files an import could read
+    queue_is_empty     bool    nothing in the queue at all
+    imported_total     int     items/records carrying import provenance
+    imported_no_globs  int     imported tasks with no declared globs
+    imported_shipped_drift int phases claiming SHIPPED over an open task
 #}
 {% if adopted %}
 This repository's work is a queue managed by Orchard. Follow it — the rules below are
@@ -137,6 +142,24 @@ Call `orchard_import` (it writes nothing) and put what it found to the operator.
 open items are actually live, what the branches mean, which lessons still apply, and
 the globs and dependencies nobody wrote down.
 {% endif %}{% endif %}
+{% if imported_no_globs or imported_shipped_drift %}
+## The import here was never finished
+
+This project's history was imported — {{ imported_total }} item(s) and record(s) carry
+a source — but the half that needs a person was left undone:
+{% if imported_no_globs %}
+- **{{ imported_no_globs }} imported task(s) declare no globs.** The conflict detector
+  cannot protect a task that has not said what it writes, so two agents can be handed
+  the same file and neither will be refused.
+{% endif %}{% if imported_shipped_drift %}
+- **{{ imported_shipped_drift }} phase(s) claim the work shipped** while a task under
+  them is still open. If the heading is right, this queue is about to hand out work
+  that is already done.
+{% endif %}
+Run `orchard_import_verify` before you hand out any imported work. It reports the full
+picture, including whether the source files have moved on since. Both of those are
+judgement calls: put them to the operator rather than resolving them yourself.
+{% endif %}
 
 ## Before you start anything non-trivial
 

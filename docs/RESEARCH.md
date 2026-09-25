@@ -832,3 +832,74 @@ uniformly valuable across a diff and the most valuable chunk was near the end; a
 that cuts it off loses exactly the part that was worth paying for. Next time: review the
 changed MODULE first and the incidental diff after, or raise the budget to match the
 diff (158 KB over 18 chunks here).
+
+---
+
+## R12 — how should an agent be allowed to change the workflow it works under?
+
+**Question.** The operator asked for the workflow to be editable per project, "from the
+agent (via MCP) or directly, as config" — and asked for the best way to be researched
+rather than assumed.
+
+**Falsifier, stated first.** If the MCP specification provides a mechanism that makes a
+mutating tool safe on the CLIENT side — an annotation a client is obliged to honour —
+then the right design is to declare it and rely on it. If it does not, the safety has
+to be in the server and the design must not depend on the client at all.
+
+**Budget.** ≤30 minutes, primary sources only.
+
+**Verdict: REFUTED — the client-side mechanism exists and is explicitly untrustworthy.**
+
+[MCP specification 2026-07-28, Server/Tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools),
+the one line that decided the design:
+
+> For trust & safety and security, clients **MUST** consider tool annotations to be
+> untrusted unless they come from trusted servers.
+
+So `destructiveHint` and its siblings are a display hint, not a guard. Three further
+lines from the same page shaped what was built:
+
+> Servers **MUST**: Validate all tool inputs
+
+> **Tool Execution Errors** contain actionable feedback that language models can use to
+> self-correct and retry with adjusted parameters … reported in tool results with
+> `isError: true`
+
+> `outputSchema`: Optional JSON Schema defining expected output structure … Servers
+> **MUST** provide structured results that conform to this schema.
+
+**What that produced here:**
+
+1. **Validation in the server, before the write.** Every workflow edit composes the
+   change, validates the RESULT, then replaces the file atomically. Probed:
+
+   ```console
+   $ orchard workflow pipeline task research,implment,merge
+   no gate is defined for 'implment' (did you mean 'implement'?). Every item entering
+   this pipeline would block on it forever.
+   $ echo $?
+   1
+   ```
+
+   The refusal is a tool *execution* error carrying the near miss — which is exactly
+   the "actionable feedback a model can self-correct from" the spec describes, and not
+   a protocol error, which the spec says models rarely recover from.
+
+2. **The human stays in the loop through the tool DESCRIPTION, not an annotation.**
+   Each mutating tool says it WRITES, says to ask the operator first, and offers
+   `dry_run`. A test asserts all three, because an untrusted annotation cannot.
+
+3. **`outputSchema` is not used by this server at all** — a real gap, filed rather than
+   rushed: every tool returns text plus `_meta.exit`, and clients are told to validate
+   structured results they are never given. Worth a pass of its own.
+
+**Two defects this research surfaced before a line was written**, both of which the new
+feature would have driven straight through, both now fixed with mutation-verified
+regressions: a pipeline naming an undefined gate was a silent permanent block (B74),
+and the config write paths validated the config already on disk rather than the merged
+result (B75).
+
+**The generalisable finding:** the spec question was not "what mechanism is available"
+but "what is the mechanism *worth*". The answer was a single MUST-level sentence saying
+not to trust it, and reading it turned a two-line change (declare the annotation) into
+the correct one (validate server-side, describe the risk, offer a dry run).

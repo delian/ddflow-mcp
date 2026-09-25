@@ -16,6 +16,12 @@ and an MCP server that are the same implementation.
 
 ## Table of contents
 
+- [Help: what it can do, and the workflow](#help-what-it-can-do-and-the-workflow)
+- [Two ways to drive it](#two-ways-to-drive-it)
+  - [Standalone: a terminal, a Makefile, CI](#standalone-a-terminal-a-makefile-ci)
+  - [As an MCP server](#as-an-mcp-server)
+  - [What goes in AGENTS.md / CLAUDE.md](#what-goes-in-agentsmd--claudemd)
+- [The workflow, and changing it](#the-workflow-and-changing-it)
 - [Why it is built this way](#why-it-is-built-this-way)
 - [Install into any project](#install-into-any-project)
   - [Docker — for operators with no Python toolchain](#docker--for-operators-with-no-python-toolchain)
@@ -24,6 +30,7 @@ and an MCP server that are the same implementation.
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
   - [Companion MCP servers](#companion-mcp-servers)
 - [Adopting a project that already has history](#adopting-a-project-that-already-has-history)
+  - [Verifying an import, at any time](#verifying-an-import-at-any-time)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
 - [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
 - [Architectural decisions](#architectural-decisions)
@@ -44,6 +51,193 @@ and an MCP server that are the same implementation.
 - [Configuration](#configuration)
 - [Testing](#testing)
 - [Documentation index](#documentation-index)
+
+---
+
+## Help: what it can do, and the workflow
+
+```console
+$ orchard help                 # what this is, the loop, every capability grouped
+$ orchard help workflow        # workflow · import · gates · parallel · memory · recovery · config
+```
+
+Reachable as `orchard_help` over MCP, and that is the point: an agent connecting had 59
+tool descriptions and a state-aware handshake, neither of which answers *"what is this,
+and how am I meant to work here"*. A tool description explains one tool to someone who
+already picked it; the handshake describes this repository right now.
+
+Two halves, deliberately:
+
+- **The narrative is a template** under `orchard/templates/prompts/help/`, so
+  `orchard prompts eject`-style overriding applies — put your own
+  `.orchard/prompts/help/workflow.md` in place and the tool teaches *your* workflow.
+- **The capability inventory is generated** from the live tool table. A hand-kept
+  command list in a second place is the documentation-drift class, and this project has
+  paid for it twice.
+
+Three ratchets keep the prose honest, because a page recommending a flag that was
+renamed is worse than no page — whoever finds nothing reads the code, and whoever finds
+a wrong answer trusts it. Every command a page names must exist as a CLI leaf or an MCP
+tool; every topic the index offers must resolve; and every tool must fall into a group,
+so a new capability has to be classified rather than quietly dropped from an inventory
+that claims to be complete.
+
+---
+
+## Two ways to drive it
+
+The CLI is the whole product. The MCP server is a second surface over the same
+commands, and `tests/test_mcp_parity.py` fails if the two diverge — every subcommand has
+a tool, every flag is reachable, and each exemption carries a written reason.
+
+### Standalone: a terminal, a Makefile, CI
+
+```console
+$ orchard init
+$ orchard config --set gate.unit_tests.command "python -m pytest -q"
+$ orchard phase add P1 --title "Billing" --globs "src/billing/**"
+$ orchard task add P1.T1 --phase P1 --title "Tax rules" --globs "src/billing/tax.py"
+
+$ orchard next                          # exit 2 = nothing actionable
+$ orchard claim P1.T1                   # exit 3 = refused, with the reason
+leased P1.T1 · worktree .orchard-worktrees/P1.T1 · branch orchard/P1.T1
+
+$ cd .orchard-worktrees/P1.T1 && ...    # do the work
+$ orchard gate status P1.T1             # what the pipeline wants next
+$ orchard gate run P1.T1 unit_tests     # runs it; the exit code IS the evidence
+$ orchard gate record P1.T1 implement --outcome passed --evidence "added tax.py"
+$ orchard complete P1.T1                # exit 3 lists whatever is unsatisfied
+$ orchard merge P1.T1
+```
+
+You get everything except the judgement. Command gates run themselves; agent gates wait
+for a human to record an outcome, and `orchard gate skip <id> <gate> --reason "..."` is
+the escape hatch — recorded as a skip, never as a pass.
+
+In CI, the exit codes are the interface:
+
+```make
+check:
+	orchard doctor        # 1 = integrity problems, each named
+	orchard workflow      # 1 = the pipeline does not hang together
+	orchard cadence       # 2 = no periodic pass is due
+```
+
+`2` is never "no problem". A job that treats it as success reports a green build for a
+suite that never ran.
+
+### As an MCP server
+
+`orchard mcp` speaks newline-delimited JSON-RPC over stdio. You rarely run it by hand —
+`orchard adopt` writes the launch entry into each agent's own config and leaves existing
+servers alone:
+
+| Agent | MCP config it writes | Also |
+|---|---|---|
+| Claude Code | `.mcp.json` | `CLAUDE.md` + `AGENTS.md` block |
+| Gemini CLI | `.gemini/settings.json` | `AGENTS.md` block |
+| Codex CLI | `.codex/config.toml` | `AGENTS.md` block |
+| GitHub Copilot | `.vscode/mcp.json` | `AGENTS.md` block |
+| Kilo / Cline | `.kilo/kilo.json` | `AGENTS.md` block |
+| Cursor | `.cursor/mcp.json` | `.cursor/rules/orchard.mdc`, always applied |
+
+It also copies the driver to `docs/orchard/drivers/`, and installs the pre-commit hook
+that enforces claim-before-you-edit.
+
+**What an agent sees the moment it connects**, with no call to make:
+
+- **Instructions**, returned inside the `initialize` result itself — and state-aware:
+  what is ready, what is in flight, which setup is missing, whether this project has
+  history worth importing, whether an import was left unfinished.
+- **Tools** — one per CLI command.
+- **Resources** — `orchard://board`, `orchard://brief`, `orchard://lessons`,
+  `orchard://research`.
+- **Prompts** — which a client turns into slash commands. **Tools are things an agent
+  calls; prompts are things you invoke.**
+
+Two tools exist so an agent can orient itself without being told: `orchard_help` (what
+is this, what is the loop) and `orchard_workflow` (what are the rules *here*).
+
+### What goes in AGENTS.md / CLAUDE.md
+
+`orchard adopt` writes it as a managed block between `<!-- ORCHARD:BEGIN -->` and
+`<!-- ORCHARD:END -->`. Your own prose around it is preserved; re-running updates only
+what is inside. If you write it by hand, four things have to be in it:
+
+1. **Start every session with `orchard_brief`** (or `orchard brief` in a shell).
+2. **Claim before you edit** — `orchard_next` → `orchard_claim` → work in the worktree
+   it creates.
+3. **The loop** — `orchard_gate_status` → satisfy each gate → `orchard_complete` →
+   `orchard_merge`.
+4. **The exit codes**, and that `2` is not success.
+
+Without that block an agent sees the tools and has no reason to reach for them before
+editing. The block is what makes the queue authoritative rather than optional — and it
+is 232 words, because an instruction file nobody finishes reading is one nobody follows.
+
+---
+
+## The workflow, and changing it
+
+```console
+$ orchard workflow
+# The workflow this project runs
+
+   1. research      agent
+   2. rules         agent
+   3. implement     agent       (required)
+   4. lint          command     (required, NOT proven able to fail)
+      $ ruff check .
+   ...
+
+## The rules, and where each came from
+
+  gates.require_outcome                  True              [default]
+  gates.enforce_order                    block             [file]
+  schedule.max_parallel_tasks            4                 [default]
+```
+
+One answer to "what are the rules here": every gate in order, which are commands and
+which you perform, which are required, which need evidence, which need a
+different-family reviewer, which have been **proven able to fail** — plus the
+completion rules, the caps, the reviewers, and **where each value came from**, so a
+deliberate choice is distinguishable from a default nobody touched.
+
+### Changing it
+
+```console
+$ orchard workflow gate lint --command "ruff check ." --into task --after implement --required
+$ orchard workflow pipeline task research,implement,lint,unit_tests,merge
+$ orchard workflow drop dedupe
+```
+
+All four reach MCP — `orchard_workflow`, `orchard_workflow_pipeline`,
+`orchard_workflow_gate`, `orchard_workflow_drop` — so an agent can change the workflow
+*with the operator's agreement*. Their descriptions say to ask first and offer
+`dry_run`, because a pipeline governs every future item, not the one in hand.
+
+Nothing is written until it is checked, and the order is the point: compose the change,
+validate the **result**, then replace the file atomically.
+
+- **A pipeline naming an undefined gate is refused**, naming the near miss. That one is
+  otherwise silent and permanent: the outcome folds to empty, completion refuses it
+  forever, and `gate record` rejects the id as unknown — so the item can never be
+  completed at all, and nothing says why.
+- **An unknown section or knob is refused**, with a suggestion. `[gatez]` is valid TOML
+  and used to be written happily, breaking every later command — the write path
+  validated the merged text for *syntax* and then validated the config already on
+  *disk*, which is a writer checking the state it is replacing.
+- **Dropping a gate takes it out of `required` too**, or it becomes a requirement that
+  quietly requires nothing.
+
+`orchard workflow` and `orchard doctor` both re-run those checks against what is on
+disk. Everything is a file you can also edit by hand: gates in `[gate.<id>]`, reviewers
+in `[[reviewer]]`, companions in `.orchard/companions.toml`, and every prompt —
+including the instructions your agent receives at connect — under `.orchard/prompts/`.
+
+**One caveat with MCP:** the connection instructions are computed once, when the server
+starts. A workflow changed mid-session is live for every tool call immediately, but the
+text the agent was handed is stale. Tell it to call `orchard_workflow`, or restart.
 
 ---
 
@@ -109,7 +303,7 @@ how, and a second copy of that would drift from the one the model actually reads
 ```sh
 uv tool install orchard-mcp        # or: pipx install orchard-mcp
 cd /path/to/your/project
-orchard adopt --agents claude,gemini,codex,copilot,kilo
+orchard adopt --agents claude,gemini,codex,copilot,kilo,cursor
 ```
 
 `adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
@@ -406,6 +600,67 @@ Four guard rails, each of which exists because the alternative is silent:
   them, because a queue of empty phases is not a smaller import, it is a misleading one.
 - **Idempotent.** Ids derive from the source, so re-running after you edit the todo adds
   what is new and leaves the rest alone. A second run over an unchanged project exits 2.
+
+### Verifying an import, at any time
+
+The import's weak spot was never the parsing. It is everything *after* `--apply`: 1,170
+tasks arrived in the real-corpus run, and the workflow prompt tells an agent to give each
+one globs and declare its dependencies. Nothing checked whether that ever happened — and
+an imported queue nobody finished misrepresents the project exactly as an empty one does,
+believed harder because a tool produced it.
+
+```console
+$ orchard import --verify
+Imported between 2026-09-25 and 2026-09-25:
+
+       4 decision(s)
+    1727 journal(s)
+     442 lesson(s)
+      47 memory(s)
+     314 phase(s)
+      72 research(s)
+    1170 task(s)
+
+Left to decide or fix:
+  - 1078 imported task(s) declare no globs, so the conflict detector cannot protect
+    them and two agents can be handed the same file: OPIK.1b, OPIK.2, ...
+  - 27 phase(s) say the work is finished while a task under them is still open: 99,
+    103, 115.D.2, ... Ask the operator which is stale before anyone claims from them.
+```
+
+Three answers, three exit codes, because collapsing them loses the one that matters:
+
+| Exit | Meaning |
+|---|---|
+| `0` | imported, still matches the sources, and every imported task says what it writes |
+| `1` | imported — and here is what a human still has to decide |
+| `2` | nothing was ever imported. An answer, not a failure |
+
+It reports **status** (what is imported, per kind, and when), **whether it is still
+true** (what a re-run would add, which sources yielded nothing, which source files have
+since vanished), and **whether anyone finished it** (tasks with no globs; phases whose
+heading claims SHIPPED over an open task).
+
+It deliberately does **not** repeat `orchard doctor`, which already reports unresolved
+dependencies, duplicate globs and cycles. Two commands reporting one defect in different
+words is how an operator learns to read neither.
+
+Provenance is a **field**, not prose. `Item.source` is `docs/todo.md:41`; the body still
+says *"Imported from docs/todo.md:41."* for a human reading `orchard show`. Answering
+"which items came from the import" by regexing that sentence would mean the day someone
+rewords it, the count silently becomes zero and the verification passes.
+
+**The connection handshake follows through.** The offer to import stops once the queue
+has anything in it — but if imported work is still missing globs, or a phase still claims
+SHIPPED over open tasks, the MCP instructions say so and tell the agent to run
+`orchard_import_verify` before handing any of it out. That check is computed from the
+already-folded queue, so it costs nothing; the source re-scan (~0.65 s) stays out of
+every session start and happens only when someone asks for it.
+
+**Re-running is a first-class path.** `/import-existing-project` opens by checking what
+is already imported and switches to *finishing and refreshing* rather than repeating —
+fix the globs it names, ask the operator about the SHIPPED drift, re-run `orchard import`
+for sections added since.
 
 ### What it reports rather than fixes
 
@@ -843,7 +1098,7 @@ project's opening cost stays roughly constant as its lesson corpus grows.
 
 ## Agent portability
 
-One canonical driver, [`templates/drivers/implement-phase.md`](templates/drivers/implement-phase.md),
+One canonical driver, [`templates/drivers/implement-phase.md`](orchard/templates/drivers/implement-phase.md),
 plus a **delta** per agent covering only what genuinely differs: how iteration continues,
 how to ask the operator, how to spawn a subagent, file-reference syntax.
 
@@ -922,7 +1177,13 @@ orchard brief [--item|--phase]   budgeted session-start pack
 orchard board / show <id>        human views
 orchard render                   regenerate docs/orchard/*.md
 
+orchard help [topic]             what this is, what it can do, the workflow
+orchard workflow                 the rules this project runs by  (1 = incoherent)
+orchard workflow pipeline ...    set the gates a task or phase passes
+orchard workflow gate ...        define or change one gate
+orchard workflow drop <id>       take a gate out of the pipelines
 orchard import [--apply]         propose an existing project's work  (2 = nothing)
+orchard import --verify          is the import still true, and did anyone finish it?
 orchard history [--item|--kind]  one timeline of everything that happened (2 = nothing)
 
 orchard lesson add|search        capture and retrieve lessons
@@ -993,8 +1254,8 @@ tests in [R6](docs/RESEARCH.md#r6--bugs-this-project-found-in-itself).
 | Document | Contents |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | The event-log inversion, ordering, concurrency, module map, what is deliberately absent |
-| [docs/RESEARCH.md](docs/RESEARCH.md) | Eleven research questions with probes, measured output and verdicts; the self-found bug catalogue, the 2026-09-24 review pass (R10), and the importer against a real 400-day corpus (R11) |
+| [docs/RESEARCH.md](docs/RESEARCH.md) | Twelve research questions with probes, measured output and verdicts; the self-found bug catalogue, the 2026-09-24 review pass (R10), the importer against a real 400-day corpus (R11), and what the MCP spec is worth for a mutating tool (R12) |
 | [docs/RECOVERY.md](docs/RECOVERY.md) | Operator runbook: crashes, corruption, divergence, full reconstruction |
-| [templates/drivers/implement-phase.md](templates/drivers/implement-phase.md) | The canonical agent-agnostic driver |
-| [templates/drivers/deltas/](templates/drivers/deltas/) | Per-agent deltas: Claude, Gemini, Codex, Copilot, Kilo |
+| [templates/drivers/implement-phase.md](orchard/templates/drivers/implement-phase.md) | The canonical agent-agnostic driver |
+| [templates/drivers/deltas/](orchard/templates/drivers/deltas/) | Per-agent deltas: Claude, Gemini, Codex, Copilot, Kilo, Cursor |
 | [probes/](probes/) | Runnable probes behind the research verdicts |

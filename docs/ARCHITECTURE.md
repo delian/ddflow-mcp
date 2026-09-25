@@ -206,7 +206,8 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `services/review.py` | reviewer backends — any LLM, four wire formats |
 | `services/sessions.py` | prompt provenance, redaction, replay, bundles |
 | `services/companions.py` | detect and register the MCP servers that serve the gates |
-| `services/importer.py` | read an existing project's todo/lessons/ADR/research/journal/OptMem corpus and PROPOSE it as a queue |
+| `services/importer.py` | read an existing project's todo/lessons/ADR/research/journal/OptMem corpus and PROPOSE it as a queue; `verify_import` answers whether it is still true and whether anyone finished it |
+| `services/help.py` | `orchard help`: narrative from templates, capability inventory generated from the live tool table |
 | `services/adopt.py`, `enforce.py`, `cleanup.py`, `prompts.py` | install, the commit hook, worktree classification, templates |
 | `views/markdown.py` | the generated views and the budgeted brief |
 | `surfaces/cli.py` | argparse |

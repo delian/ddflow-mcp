@@ -227,6 +227,11 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     ("orchard_gate_skip", "--exit-code"): "nothing ran",
     ("orchard_gate_skip", "--output-file"): "nothing ran",
     ("orchard_gate_skip", "--model"): "no reviewer performed it",
+    # `import --verify` is a different QUESTION, not a mode of importing, so it gets
+    # its own tool with its own description rather than a boolean on this one. Folding
+    # it in would let an agent send `apply=true, verify=true`, which means nothing and
+    # would silently do one of them.
+    ("orchard_import", "--verify"): "covered by orchard_import_verify, its own tool",
 }
 
 
@@ -320,6 +325,8 @@ def test_every_tool_is_explicitly_json_or_explicitly_prose():
         "reason": "r",
         "outcome": "passed",
         "phase": "P",
+        "which": "task",
+        "gates": "implement,merge",
     }
     undeclared = []
     for name, spec in sorted(TOOLS.items()):

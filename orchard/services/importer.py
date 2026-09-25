@@ -38,6 +38,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..core.model import ABANDONED, DONE
 from ..infra import proc as P
 from ..infra.log import EventLog
 
@@ -223,6 +224,15 @@ def _sections(text: str) -> list[tuple[str, str, int]]:
     return out
 
 
+#: The synthetic sessions imported notes land in: `(kind, session id, plural noun)`.
+#: Named once because the writer and `verify_import` must agree on them -- a verifier
+#: looking in the wrong session reports "nothing imported" about a full one, which is
+#: the confident-wrong answer this module exists to avoid.
+NOTE_SESSIONS: tuple[tuple[str, str, str], ...] = (
+    ("journal", "s-imported-journal", "journal entr(ies)"),
+    ("memory", "s-imported-memory", "cross-session memor(ies)"),
+)
+
 #: Every kind a scanner can produce, in the order a human wants to read them. ONE list:
 #: the CLI preview had its own and listed five of them, so a repository whose history is
 #: a journal and a memory store printed a header with nothing under it. A new scanner
@@ -312,6 +322,31 @@ _NEEDS_SPLIT = re.compile(r"\s*(?:,|\band\b|&|\+)\s*")
 _ID_DECOR = re.compile(r"[`*\[\]()\s]+")
 
 
+#: Markdown that decorates a PATH: backticks and quotes. NOT `*` -- `src/**` is a real
+#: glob and stripping its asterisks would silently turn a whole-subtree declaration into
+#: a single file. That is why globs get their own undecorator instead of reusing the id
+#: one, and why both live next to each other: the two halves of one grammar have to
+#: agree about what is decoration, and they disagree about the asterisk on purpose.
+_GLOB_DECOR = re.compile(r"^[`'\"\s]+|[`'\"\s]+$")
+
+
+def _parse_globs(text: str) -> list[str]:
+    """Paths from a `**Globs:** ...` line, undecorated.
+
+    A backticked path folded to ``["`src/a.py`"]`` -- backticks and all -- and
+    every consumer then compared that against a real path. `fnmatch` says no both ways
+    round and so does the prefix fallback, so the task was NOT protected by the conflict
+    detector while `orchard show` printed a glob that read like a declaration and
+    `import --verify` counted it as one.
+    """
+    out: list[str] = []
+    for chunk in text.split(","):
+        path = _GLOB_DECOR.sub("", chunk)
+        if path and path not in out:
+            out.append(path)
+    return out
+
+
 def _parse_needs(text: str) -> list[str]:
     """Ids from a `**Needs:** ...` line, undecorated and validated.
 
@@ -388,7 +423,7 @@ def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
                 # tell where they came from.
                 g = _GLOBS.search(line)
                 if g and anchor is not None:
-                    anchor.globs = [x.strip() for x in g.group(1).split(",") if x.strip()]
+                    anchor.globs = _parse_globs(g.group(1))
                 nd = _NEEDS.search(line)
                 if nd and anchor is not None:
                     anchor.needs = _parse_needs(nd.group(1))
@@ -977,6 +1012,256 @@ def plan_import(
     return plan
 
 
+@dataclass
+class VerifyReport:
+    """What an import left behind, and whether it is still true.
+
+    Three questions, and they cost different amounts, which is why they are separate
+    fields rather than one verdict:
+
+    * **status** -- what is imported, per kind. Read from the folded queue; free.
+    * **still true?** -- has the source moved since. Needs a fresh scan of every source
+      file (~0.65 s on a 4,799-checkbox corpus), so it is done here and NOT at the MCP
+      handshake.
+    * **finished?** -- the judgement half the `import-existing-project` prompt asks a
+      human for, which nothing checked until this existed. An imported queue nobody
+      finished misrepresents the project exactly as an empty one does, and is believed
+      harder because a tool produced it.
+
+    Deliberately does NOT re-report what `orchard doctor` already covers -- unresolved
+    dependencies, duplicate globs, cycles. Two commands reporting one defect in
+    different words is how an operator learns to read neither.
+    """
+
+    #: kind -> how many items of it carry import provenance.
+    imported: dict[str, int] = field(default_factory=dict)
+    #: Earliest and latest `created_at` among imported items; "" when none.
+    first_at: str = ""
+    last_at: str = ""
+    #: What a re-run would add now, because the source files moved on.
+    drift: list[Found] = field(default_factory=list)
+    #: Matched a source pattern and yielded nothing -- usually an unusual format
+    #: rather than an empty file, which is why it is reported and not ignored.
+    empty_sources: list[str] = field(default_factory=list)
+    #: `(item id, source)` for EVERY item whose file is gone -- not one per file. Built
+    #: per-file and reported per-item, four items sharing `docs/todo.md` came out as one
+    #: entry, and an agent auditing provenance fixes the one it was told about and
+    #: believes it has finished.
+    vanished: list[tuple[str, str]] = field(default_factory=list)
+    #: Imported tasks with no globs. The conflict detector cannot protect them, so two
+    #: agents can be handed the same file and neither is refused.
+    no_globs: list[str] = field(default_factory=list)
+    #: Imported BRANCHES with no globs, kept apart from `no_globs`. A branch arrives
+    #: without them by construction -- git knows which commits it carries, not which
+    #: files the work will touch -- so counting it as a task that failed to declare
+    #: made the arithmetic lie ("2 task(s) declare no globs" under "1 branch, 2 tasks")
+    #: and made the handshake say "never finished" forever about any repo with an
+    #: unmerged branch.
+    no_globs_branches: list[str] = field(default_factory=list)
+    #: Phases whose title still claims the work shipped while a task under them is open.
+    shipped_drift: list[str] = field(default_factory=list)
+    #: Items carrying the prose "Imported from ..." body but no `source` FIELD --
+    #: written by a version before the field existed. Reported as unknown rather than
+    #: guessed at by regexing the sentence.
+    unstructured: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        return sum(self.imported.values())
+
+    @property
+    def findings(self) -> list[str]:
+        """One line per thing a human has to decide or fix. Empty means consistent."""
+        out: list[str] = []
+        if self.no_globs:
+            out.append(
+                f"{len(self.no_globs)} imported task(s) declare no globs, so the "
+                f"conflict detector cannot protect them and two agents can be handed "
+                f"the same file: {', '.join(self.no_globs[:_NOTE_EXAMPLES])}"
+                + (", ..." if len(self.no_globs) > _NOTE_EXAMPLES else "")
+            )
+        if self.shipped_drift:
+            out.append(
+                f"{len(self.shipped_drift)} phase(s) say the work is finished while a "
+                f"task under them is still open: "
+                f"{', '.join(self.shipped_drift[:_NOTE_EXAMPLES])}"
+                + (", ..." if len(self.shipped_drift) > _NOTE_EXAMPLES else "")
+                + ". Ask the operator which is stale before anyone claims from them."
+            )
+        if self.drift:
+            out.append(
+                f"the source has moved on: {len(self.drift)} item(s) exist in the files "
+                f"that are not in the queue. Re-run the import to pick them up."
+            )
+        if self.vanished:
+            files = sorted({src for _i, src in self.vanished})
+            out.append(
+                f"{len(self.vanished)} imported item(s) across {len(files)} file(s) "
+                f"name a source that no longer exists, so their provenance cannot be "
+                f"checked: "
+                + ", ".join(f"{i} ({src})" for i, src in self.vanished[:_NOTE_EXAMPLES])
+                + (", ..." if len(self.vanished) > _NOTE_EXAMPLES else "")
+            )
+        if self.empty_sources:
+            out.append(
+                f"{len(self.empty_sources)} file(s) matched a source pattern and "
+                f"yielded nothing, which usually means an unusual format rather than an "
+                f"empty file: {', '.join(self.empty_sources[:_NOTE_EXAMPLES])}"
+            )
+        if self.no_globs_branches:
+            out.append(
+                f"{len(self.no_globs_branches)} imported branch(es) declare no globs. A "
+                f"branch arrives without them -- git knows its commits, not which files "
+                f"the work will touch -- so somebody has to say before it is claimed: "
+                f"{', '.join(self.no_globs_branches[:_NOTE_EXAMPLES])}"
+            )
+        return out
+
+
+def _scan_queue(state, r: VerifyReport) -> tuple[list[str], dict[str, list[str]]]:
+    """Everything answerable from the folded queue. Touches no file.
+
+    Returns `(created_at values, source path -> item ids)` for the caller's rescan.
+    """
+    ats: list[str] = []
+    paths: dict[str, list[str]] = {}
+    for it in getattr(state, "items", {}).values():
+        if it.removed:
+            continue
+        if not it.source:
+            # The prose body is the only remaining signal for an item imported before
+            # provenance was a field. COUNTED, never parsed: a body is a sentence
+            # someone may reword, and a count that silently becomes zero when they do
+            # is worse than an admitted unknown.
+            if it.body.startswith("Imported from "):
+                r.unstructured.append(it.id)
+            continue
+        r.imported["branch" if it.source.startswith("git:") else it.kind] = (
+            r.imported.get("branch" if it.source.startswith("git:") else it.kind, 0) + 1
+        )
+        if it.created_at:
+            ats.append(it.created_at)
+        if it.kind == "task" and not it.globs and it.state not in (DONE, ABANDONED):
+            (r.no_globs_branches if it.source.startswith("git:") else r.no_globs).append(it.id)
+        elif it.kind == "phase" and _DONE_MARKER.search(it.title) and _has_open_child(state, it):
+            r.shipped_drift.append(it.id)
+        if not it.source.startswith("git:"):
+            paths.setdefault(it.source.split(":", 1)[0], []).append(it.id)
+
+    for kind, holder in (
+        ("lesson", getattr(state, "lessons", {})),
+        ("decision", getattr(state, "decisions", {})),
+        ("research", getattr(state, "research", {})),
+    ):
+        n = sum(1 for rec in holder.values() if "imported" in getattr(rec, "tags", []))
+        if n:
+            r.imported[kind] = n
+    _note_sources(state, r, paths)
+    _memory_sources(state, paths)
+    return ats, paths
+
+
+def _note_sources(state, r: VerifyReport, paths: dict[str, list[str]]) -> None:
+    """Imported notes, counted and their sources collected.
+
+    Filtered on `source`, exactly as the memory records are filtered on the `imported`
+    tag. `orchard session note <sid>` takes ANY session id, so the import's own sinks
+    are not private to it -- one hand-written note in `s-imported-journal` counted as
+    an imported record, which is the missing-provenance-filter bug in the function
+    written to stop guessing at provenance.
+    """
+    for kind, sid, _what in NOTE_SESSIONS:
+        sess = getattr(state, "sessions", {}).get(sid)
+        if not sess:
+            continue
+        imported = [n for n in sess.notes if n.get("source")]
+        if imported:
+            r.imported[kind] = len(imported)
+        for n in imported:
+            rel = str(n["source"]).split(":", 1)[0]
+            if rel and not rel.startswith("git:"):
+                paths.setdefault(rel, []).append(f"{sid}#{n.get('ident', n.get('seq', '?'))}")
+
+
+def _memory_sources(state, paths: dict[str, list[str]]) -> None:
+    """Source files named by imported lessons and research notes.
+
+    Both carry a STRUCTURED source -- `Lesson.seen_in`, `ResearchNote.sources` -- so
+    there is no reason for the vanished-source check to cover items only. Decisions are
+    the gap: nothing on `Decision` holds a path, so theirs lives in the prose `context`
+    and is deliberately not parsed out of it (docs/BACKLOG.md B76).
+    """
+    for holder, attr in (
+        (getattr(state, "lessons", {}), "seen_in"),
+        (getattr(state, "research", {}), "sources"),
+    ):
+        for rec in holder.values():
+            if "imported" not in getattr(rec, "tags", []):
+                continue
+            for src in getattr(rec, attr, []) or []:
+                rel = str(src).split(":", 1)[0]
+                # Parenthesised, and narrow on purpose: `and` binds tighter than `or`,
+                # so the unbracketed form accepted `git:foo.md`. A lesson's `seen_in`
+                # also holds bug pins like "review-inverted-severity", which are not
+                # paths -- reporting those as vanished files would be a false positive
+                # in the check whose whole value is that its findings are real.
+                looks_like_a_path = "/" in rel or rel.endswith(".md")
+                if rel and not rel.startswith("git:") and looks_like_a_path:
+                    paths.setdefault(rel, []).append(rec.id)
+
+
+def _has_open_child(state, phase) -> bool:
+    return any(c.state not in (DONE, ABANDONED) and not c.removed for c in state.children(phase.id))
+
+
+def verify_import(repo: Path, state, *, rescan: bool = True) -> VerifyReport:
+    """Was the import done, is it still true, and did anyone finish it?
+
+    ``rescan=False`` answers only from the folded queue and touches no file. That is
+    the mode the MCP handshake uses: a full source scan is cheap for a command an
+    operator typed and expensive for something that runs at every session start.
+    """
+    r = VerifyReport()
+    ats, paths = _scan_queue(state, r)
+    r.first_at, r.last_at = (min(ats), max(ats)) if ats else ("", "")
+
+    if r.unstructured:
+        # A NOTE, not a finding. Its own text says re-running does not fix it, and a
+        # finding nobody can clear is a latch: `verified` could never go true again, and
+        # a report that can never go green is one people stop reading.
+        r.notes.append(
+            f"{len(r.unstructured)} item(s) were imported before provenance was a "
+            f"field, so what they came from is readable only as prose in their body. "
+            f"Nothing fixes that; it is history."
+        )
+    if not r.total and not r.unstructured:
+        r.notes.append(
+            "Nothing in this queue records an import. If this project has history in "
+            "docs/todo.md, a lessons corpus, ADRs, a research log, an engineering "
+            "journal or a memory store, `orchard import` proposes it and writes "
+            "nothing until you pass --apply."
+        )
+        return r
+    if not rescan:
+        return r
+
+    for rel, ids in sorted(paths.items()):
+        if not (repo / rel).is_file():
+            r.vanished.extend((i, rel) for i in sorted(ids))
+
+    plan = plan_import(repo, state, max_tasks=10**9)
+    r.drift = list(plan.found)
+    r.empty_sources = list(plan.empty_sources)
+    r.notes.extend(n for n in plan.notes if "already-ticked" not in n)
+    r.notes.append(
+        "Dependencies that do not resolve, duplicate globs and cycles are `orchard "
+        "doctor`'s job and it reports them in its own words -- this does not repeat "
+        "them."
+    )
+    return r
+
+
 def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     """Write the proposal to the log. Called only after someone has looked at it.
 
@@ -990,7 +1275,11 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
         counts[kind] = counts.get(kind, 0) + 1
 
     for f in plan.by_kind("phase"):
-        log.append("phase.added", f.ident, {"title": f.title, "body": f"Imported from {f.source}."})
+        log.append(
+            "phase.added",
+            f.ident,
+            {"title": f.title, "body": f"Imported from {f.source}.", "source": f.source},
+        )
         bump("phase")
     for f in plan.by_kind("task"):
         log.append(
@@ -1002,6 +1291,10 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
                 "needs": f.needs,
                 "globs": f.globs,
                 "body": f"Imported from {f.source}.",
+                # Both: the prose is what a human reads in `orchard show`, the field is
+                # what `import --verify` counts. Deriving one from the other by regex is
+                # how a reworded sentence silently zeroes a verification.
+                "source": f.source,
             },
         )
         bump("task")
@@ -1028,16 +1321,14 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
                 "decision": f.body,
                 "status": f.extra.get("status", "accepted"),
                 "context": f"Imported from {f.source}.",
+                "tags": ["imported"],
             },
         )
         bump("decision")
     # Journal entries and OptMem records are both "a record of something that was
     # true", which is what a session note IS. One session each rather than one per
     # entry: N synthetic sessions would bury the real ones in `replay`.
-    for kind, sid, what in (
-        ("journal", "s-imported-journal", "journal entr(ies)"),
-        ("memory", "s-imported-memory", "cross-session memor(ies)"),
-    ):
+    for kind, sid, what in NOTE_SESSIONS:
         entries = plan.by_kind(kind)
         if not entries:
             continue
@@ -1073,6 +1364,7 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
                 "claim": f.body[:600],
                 "verdict": f.extra.get("verdict", "THEORETICAL"),
                 "sources": [f.source],
+                "tags": ["imported"],
             },
         )
         bump("research")
@@ -1087,6 +1379,7 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
                     f"{f.extra.get('ahead', '?')} commit(s) not on the base branch. "
                     f"Declare its globs before anyone claims it."
                 ),
+                "source": f.source,
             },
         )
         bump("branch")

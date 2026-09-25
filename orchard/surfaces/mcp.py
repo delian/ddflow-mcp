@@ -891,6 +891,154 @@ TOOLS: dict[str, dict[str, Any]] = {
             + (["--max-tasks", str(a["max_tasks"])] if a.get("max_tasks") else [])
         ),
     },
+    "orchard_workflow": {
+        "description": (
+            "The rules THIS project runs by, in one answer: the gates every task and "
+            "phase passes through in order, which are commands and which you perform "
+            "yourself, which are required, which need evidence, which need a "
+            "different-family reviewer, which have been PROVEN able to fail — plus "
+            "the completion rules, the parallelism caps, the reviewers, and where each "
+            "value came from (a default, this project's config, or the environment).\n\n"
+            "Call it before your first `orchard_claim` in a session, and after any "
+            "workflow change: the connection instructions are computed once when the "
+            "server starts, so a pipeline edited mid-session is not reflected there.\n\n"
+            "Exit 1 means the workflow does not hang together — most importantly a "
+            "pipeline naming a gate that has no definition, which blocks every item "
+            "that reaches it forever. Read-only."
+        ),
+        "properties": {},
+        "argv": lambda a: ["--json", "workflow"],
+    },
+    "orchard_workflow_pipeline": {
+        "description": (
+            "Set the ordered list of gates a task or a phase must pass. WRITES to "
+            "this project's config.\n\n"
+            "Validated before anything is written: a gate id with no definition is "
+            "REFUSED and the error names the near miss, because an undefined gate in a "
+            "pipeline blocks every item that reaches it and cannot be recorded or "
+            "skipped. Define the gate first with `orchard_workflow_gate`.\n\n"
+            "Ask the operator before changing a pipeline. It governs every future item, "
+            "not the one you are working on, and removing a gate removes a check "
+            "somebody added deliberately. Use dry_run to show them what it would do."
+        ),
+        "properties": {
+            "which": ("string", "'task' or 'phase'.", True),
+            "gates": ("string", "Comma-separated gate ids, in the order they run.", True),
+            "dry_run": ("boolean", "Report the change and write nothing.", False),
+        },
+        "argv": lambda a: (
+            ["--json", "workflow", "pipeline", a["which"], a["gates"]]
+            + (["--dry-run"] if a.get("dry_run") else [])
+        ),
+    },
+    "orchard_workflow_gate": {
+        "description": (
+            "Define or change one gate, and optionally put it in a pipeline. WRITES to "
+            "this project's config.\n\n"
+            "`command` makes it a COMMAND gate: Orchard runs it and the exit code is "
+            "the evidence. `prompt` makes it an AGENT gate: you perform it and record "
+            "what you did. A gate needs one of the two — one with neither tells an "
+            "agent nothing and gives a reviewer no contract, so it is refused.\n\n"
+            "`into` adds it to a pipeline (`after` places it; default is last). "
+            "`required` means an item cannot complete without it.\n\n"
+            "Ask the operator first, and prefer dry_run to show them the change."
+        ),
+        "properties": {
+            "id": ("string", "The gate id, e.g. 'lint' or 'security_scan'.", True),
+            "command": ("string", "Shell command to run. Makes it a command gate.", False),
+            "prompt": ("string", "What an agent must do. Makes it an agent gate.", False),
+            "title": ("string", "Human-readable name.", False),
+            "cwd": ("string", "'worktree' (default) or 'repo'.", False),
+            "reviewer": (
+                "string",
+                "'different_family' to require a reviewer from another model family, "
+                "or 'same_family_ok'.",
+                False,
+            ),
+            "timeout": ("integer", "Seconds before the command counts as unavailable.", False),
+            "applies_to": ("string", "'task', 'phase' or 'both'.", False),
+            "into": ("string", "Add to the 'task', 'phase' or 'both' pipeline(s).", False),
+            "after": ("string", "Place it after this gate. Default: last.", False),
+            "required": ("boolean", "An item cannot complete without it.", False),
+            "dry_run": ("boolean", "Report the change and write nothing.", False),
+        },
+        "argv": lambda a: (
+            ["--json", "workflow", "gate", a["id"]]
+            + _opt("--command", a)
+            + _opt("--prompt", a)
+            + _opt("--title", a)
+            + _opt("--cwd", a)
+            + _opt("--reviewer", a)
+            + (["--timeout", str(a["timeout"])] if a.get("timeout") else [])
+            + _opt("--applies-to", a, "applies_to")
+            + _opt("--into", a)
+            + _opt("--after", a)
+            + (["--required"] if a.get("required") else [])
+            + (["--dry-run"] if a.get("dry_run") else [])
+        ),
+    },
+    "orchard_workflow_drop": {
+        "description": (
+            "Take a gate out of both pipelines, and out of `required` so it does not "
+            "become a requirement that quietly requires nothing. WRITES to config.\n\n"
+            "The gate's DEFINITION is left in place, so putting it back is one call. "
+            "Exit 2 means it was in neither pipeline.\n\n"
+            "Ask the operator first: a gate in a pipeline is a check somebody added on "
+            "purpose, and removing it weakens every future item."
+        ),
+        "properties": {
+            "id": ("string", "The gate id to remove from the pipelines.", True),
+            "dry_run": ("boolean", "Report the change and write nothing.", False),
+        },
+        "argv": lambda a: (
+            ["--json", "workflow", "drop", a["id"]] + (["--dry-run"] if a.get("dry_run") else [])
+        ),
+    },
+    "orchard_help": {
+        "description": (
+            "What Orchard IS, what it can do, and what the workflow is. Call this "
+            "first if you have not used it before — the other tool descriptions "
+            "explain one tool each to someone who already knows which to pick, and "
+            "the connection instructions describe THIS repository right now. Neither "
+            "answers 'how am I meant to work here'.\n\n"
+            "With no argument: the loop from picking work to landing it, what the exit "
+            "codes mean, and every capability grouped by what it is for. With a "
+            "`topic`: workflow, import, gates, parallel, memory, recovery, config.\n\n"
+            "Read-only. The pages are templates a project can override, so what this "
+            "returns may be this project's own instructions rather than the defaults."
+        ),
+        "properties": {
+            "topic": (
+                "string",
+                "workflow | import | gates | parallel | memory | recovery | config. "
+                "Omit for the overview, which lists them.",
+                False,
+            ),
+        },
+        "argv": lambda a: ["--json", "help"] + ([a["topic"]] if a.get("topic") else []),
+    },
+    "orchard_import_verify": {
+        "description": (
+            "Was this project's history imported, is that import still true, and did "
+            "anyone FINISH it? Read-only; writes nothing.\n\n"
+            "Three answers in one call. STATUS: how many phases, tasks, branches, "
+            "lessons, decisions, research notes, journal entries and memories carry "
+            "import provenance, and when. STILL TRUE: whether the source files have "
+            "moved on since (and what a re-run would add), and whether any imported "
+            "item names a source file that no longer exists. FINISHED: the half the "
+            "`import-existing-project` prompt asks a human for and nothing else "
+            "checks — imported tasks with no globs, which the conflict detector "
+            "cannot protect, and phases whose heading claims the work shipped while a "
+            "task under them is still open.\n\n"
+            "Call it after any import, and whenever you are about to hand out imported "
+            "work. Exit 1 means findings you should put to the operator; exit 2 means "
+            "nothing was ever imported, which is an answer, not a failure. It does not "
+            "repeat what `orchard_doctor` covers — unresolved dependencies, duplicate "
+            "globs, cycles — so run that too."
+        ),
+        "properties": {},
+        "argv": lambda a: ["--json", "import", "--verify"],
+    },
     "orchard_companions": {
         "description": (
             "Which companion MCP servers serve this project's gates, which are "
@@ -1084,7 +1232,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "agents": (
                 "string",
                 "Comma-separated agents to write driver deltas for: "
-                "claude,gemini,codex,copilot,kilo. Default: all.",
+                "claude,gemini,codex,copilot,kilo,cursor. Default: all.",
                 False,
             )
         },
@@ -1609,6 +1757,9 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         "require_outcome": True,
         "importable": 0,
         "queue_is_empty": True,
+        "imported_total": 0,
+        "imported_no_globs": 0,
+        "imported_shipped_drift": 0,
     }
     # Cheap enough for a handshake: `glob` on a handful of known paths, no parsing.
     # The point is only to know whether to OFFER the import, not to do it.
@@ -1705,6 +1856,7 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         from ..core.model import fold
         from ..core.schedule import plan
         from ..infra.log import EventLog
+        from ..services import importer as IM
         from ..services import leases as L
 
         log = EventLog(repo, cfg.agent.id or "")
@@ -1713,6 +1865,15 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         p = plan(st, cfg, agent=log.agent_id)
         v["ready"], v["running"] = len(p.ready), len(p.running)
         v["queue_is_empty"] = not st.items
+        # `rescan=False`: the queue-only half, which costs nothing because `st` is
+        # already folded. The source re-scan is ~0.65 s on a real corpus -- cheap for a
+        # command an operator typed, and not something to spend at every session start.
+        # What the handshake does instead is TELL the agent to run the full check, and
+        # only when the cheap half has already found something to act on.
+        iv = IM.verify_import(repo, st, rescan=False)
+        v["imported_total"] = iv.total
+        v["imported_no_globs"] = len(iv.no_globs)
+        v["imported_shipped_drift"] = len(iv.shipped_drift)
         v["blocked"] = len(p.blocked)
         v["open_bugs"] = sum(1 for b in st.bugs.values() if b.open)
         v["loops"] = len(PR.detect(events, st, cfg))

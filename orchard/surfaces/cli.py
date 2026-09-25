@@ -32,6 +32,7 @@ from typing import Any
 from ..config import Config
 from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, fold
 from ..core.schedule import critical_path, plan
+from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from ..infra.store import Store
@@ -1768,6 +1769,17 @@ def cmd_doctor(a, c: Ctx) -> int:
         for dep in it.needs:
             if dep not in st.items:
                 problems.append(f"{it.id} needs unknown item {dep!r}")
+    # The workflow's own coherence. A pipeline naming a gate that has no definition is
+    # the one config error that is both silent and permanent -- every item entering the
+    # pipeline blocks on an outcome that can never be recorded -- so it belongs in the
+    # command an operator runs when something is wrong, not only in `orchard workflow`.
+    from ..services import workflow as WF
+
+    for f in WF.check(c.cfg, c.gates):
+        # `f.subject: f.detail`, not `f.render()` -- doctor prefixes its own severity,
+        # and "PROBLEM: [problem] ..." reads like a bug in the tool reporting the bug.
+        (problems if f.level == WF.PROBLEM else notes).append(f"{f.subject}: {f.detail}")
+
     from ..core import progress as PR
     from ..infra import container as CT
 
@@ -1917,12 +1929,17 @@ def cmd_config(a, c: Ctx) -> int:
         path.parent.mkdir(parents=True, exist_ok=True)
         prev = path.read_text("utf-8") if path.exists() else ""
         merged = prev.rstrip() + "\n\n" + a.append_toml.strip() + "\n"
+        # The MERGED text, semantically. This used to validate `Config.load(c.repo)` --
+        # the config already on DISK -- and then only the SYNTAX of the merge, so an
+        # unknown section or knob was written and every later command failed to load
+        # the file. A writer that validates the state it is replacing has checked
+        # nothing.
         try:
-            Config.load(c.repo, env={}) and tomllib.loads(merged)
+            Config.check(tomllib.loads(merged))
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             print(f"appending this would break the config: {exc}", file=sys.stderr)
             return FAIL
-        path.write_text(merged, "utf-8")
+        TC.atomic_write(path, merged)
         c.out(f"appended to {path}", {"path": str(path)})
         return OK
     rows = c.cfg.explain()
@@ -1945,6 +1962,214 @@ def cmd_config(a, c: Ctx) -> int:
     return OK
 
 
+def _toml_literal(value: str) -> str:
+    """A TOML literal for `value`, quoting it unless it already is one."""
+    if re.fullmatch(r"(true|false|-?\d+(\.\d+)?|\[.*\]|\{.*\})", value.strip()):
+        return value
+    return json.dumps(value)  # quote + escape as a TOML basic string
+
+
+def _is_header(line: str, header: str) -> bool:
+    """Is this line the `[section]` header, allowing a trailing comment?
+
+    `[gates]  # how work is checked` did not match an exact compare, so the upsert
+    appended a SECOND `[gates]` -- and TOML forbids declaring a table twice, which means
+    every later edit failed with a parse error pointing at a line the operator did not
+    write. Commenting your own config should not disable the tool that edits it.
+    """
+    return line.split("#", 1)[0].strip() == header
+
+
+#: TOML's two multi-line string delimiters. Built rather than written so this module's
+#: own source does not have to escape them.
+_TRIPLES = ('"' * 3, "'" * 3)
+
+
+def _toml_lines(text: str) -> list[tuple[str, bool]]:
+    """Every line paired with "is this line INSIDE a multi-line string?".
+
+    The one thing a TOML line editor has to know. A hand-written agent prompt is a
+    triple-quoted value, and a line inside one reading `command = <what you ran>`
+    matched the key scan -- so `--command` was written INTO the prompt, the real key
+    was never set, and `orchard workflow` reported the result coherent. Exit 0: a
+    silently dropped knob, and every future task handed a tampered instruction. A `[`
+    in the same prose ended the section scan and inserted the new key mid-sentence.
+
+    Counts delimiters rather than parsing. The alternative is a TOML round-trip, and
+    the one thing worse than a line editor here is a writer that silently discards the
+    comments this file carries most of its reasoning in.
+    """
+    out: list[tuple[str, bool]] = []
+    delim = ""
+    for raw in text.splitlines():
+        inside = bool(delim)
+        rest = raw
+        while rest:
+            if delim:
+                hit = rest.find(delim)
+                if hit < 0:
+                    break
+                rest = rest[hit + 3 :]
+                delim = ""
+                continue
+            starts = [(rest.find(d), d) for d in _TRIPLES if d in rest]
+            if not starts:
+                break
+            at, d = min(starts)
+            if "#" in rest[:at]:
+                break  # the opener is inside a comment
+            delim = d
+            rest = rest[at + 3 :]
+        out.append((raw, inside))
+    return out
+
+
+def _value_span(lines: list[tuple[str, bool]], start: int) -> int:
+    """The index one past the end of the value beginning at `lines[start]`.
+
+    A value spans lines two ways: a bracketed array written one entry per line, which
+    is how a person writes a ten-gate pipeline, and a multi-line string. Replacing only
+    the first line left the rest orphaned -- `task_pipeline = ["x"]` followed by a
+    stray `]` -- which TOML rejects, so every later edit was refused with a parse error
+    blaming the operator for the editor's mistake.
+    """
+    depth = 0
+    for i in range(start, len(lines)):
+        raw, inside = lines[i]
+        body = "" if inside else raw.split("#", 1)[0]
+        depth += body.count("[") + body.count("{") - body.count("]") - body.count("}")
+        open_string = i + 1 < len(lines) and lines[i + 1][1]
+        if depth <= 0 and not open_string:
+            return i + 1
+    return len(lines)
+
+
+def _toml_upsert(text: str, dotted: str, literal: str) -> str:
+    """Set one `<section>.<key>` in TOML text, in place, preserving comments.
+
+    Pure, and takes TEXT rather than a path, so several edits compose into one write.
+    Applying them one file-write at a time would leave the config half-updated when the
+    third of four is rejected -- and a half-applied workflow change is the state nobody
+    can reason about.
+    """
+    section, _, key = dotted.rpartition(".")
+    lines = _toml_lines(text)
+    header = f"[{section}]"
+    try:
+        start = next(
+            i for i, (ln, inside) in enumerate(lines) if not inside and _is_header(ln, header)
+        )
+    except StopIteration:
+        body = "\n".join(ln for ln, _ in lines).rstrip()
+        return (f"{body}\n\n" if body else "") + f"{header}\n{key} = {literal}\n"
+    end = next(
+        (
+            i
+            for i in range(start + 1, len(lines))
+            if not lines[i][1] and lines[i][0].lstrip().startswith("[")
+        ),
+        len(lines),
+    )
+    i = start + 1
+    while i < end:
+        raw, inside = lines[i]
+        stripped = raw.lstrip()
+        if inside or stripped.startswith(("#", ";")) or "=" not in stripped:
+            i += 1
+            continue
+        if stripped.split("=")[0].strip() == key:
+            lines[i : _value_span(lines, i)] = [(f"{key} = {literal}", False)]
+            return "\n".join(ln for ln, _ in lines).rstrip() + "\n"
+        i = max(i + 1, _value_span(lines, i))
+    lines.insert(end, (f"{key} = {literal}", False))
+    return "\n".join(ln for ln, _ in lines).rstrip() + "\n"
+
+
+def _write_config(
+    repo: Path, pairs: list[tuple[str, str]], *, dry_run: bool = False, check_workflow: bool = True
+) -> tuple[str, str]:
+    """Apply every `(dotted, value)` edit, validate ONCE, write ONCE, under a lock.
+
+    Returns `(error, new_text)`; a non-empty error means nothing was written. The order
+    is the whole point -- compose, check the RESULT, then replace the file atomically --
+    because a writer that validates the state it is replacing has checked nothing, and
+    a truncating write interrupted halfway leaves an empty config that loads as "no
+    overrides at all" without saying so.
+
+    Two validations, not one. `Config.check` is the SCHEMA: is every section and knob
+    real. `workflow.check` is the MEANING: does the result hang together. Without the
+    second, `workflow gate X --required` (with no pipeline) exited 0 having created the
+    exact inert requirement that `orchard workflow` then reports as a problem -- the
+    writer manufacturing a defect its own reader diagnoses.
+
+    Only NEW problems are refused. Refusing on any problem at all would mean a config
+    already broken could never be repaired by the tool that reports it broken.
+    """
+    import tomllib
+
+    from ..services import workflow as WF
+
+    path = repo / ".orchard" / "config.toml"
+    with TC.locked(path):
+        text = path.read_text("utf-8") if path.exists() else ""
+        before = _workflow_problems(repo, text) if check_workflow else set()
+        for dotted, value in pairs:
+            if "." not in dotted:
+                return f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command", text
+            text = _toml_upsert(text, dotted, _toml_literal(value))
+        try:
+            Config.check(tomllib.loads(text))
+        except (tomllib.TOMLDecodeError, ValueError) as exc:
+            return f"that edit would break the config: {exc}", text
+        if check_workflow:
+            introduced = sorted(_workflow_problems(repo, text) - before)
+            if introduced:
+                return (
+                    "that edit would leave the workflow incoherent:\n  "
+                    + "\n  ".join(introduced)
+                    + f"\nNothing was written. ({WF.PROBLEM} findings are refused at "
+                    f"the point of writing; `orchard workflow` reports any that are "
+                    f"already there.)",
+                    text,
+                )
+        if not dry_run:
+            TC.atomic_write(path, text)
+    return "", text
+
+
+def _workflow_problems(repo: Path, text: str) -> set[str]:
+    """The workflow problems a given config TEXT would have. Never raises.
+
+    Loaded from the text rather than from disk, so the result can be judged before it
+    becomes the state. A text that will not even load has no workflow problems to
+    report -- `Config.check` is what catches that, and reporting it twice in different
+    words is how an operator learns to read neither message.
+    """
+    import tomllib
+
+    from ..services import workflow as WF
+    from ..services.gates import GateDef, load_gates
+
+    try:
+        data = tomllib.loads(text)
+        cfg = Config()
+        cfg._apply(data, "file")
+        gates = load_gates(repo, cfg)
+        # `load_gates` overlays `[gate.*]` from the FILE, and this text is not on disk
+        # yet -- so a gate being defined in the very same call was invisible, and
+        # defining `lint` and piping it in one command refused itself for naming an
+        # undefined gate. Judge the candidate, not the predecessor.
+        for gid, spec in (data.get("gate") or {}).items():
+            g = gates.get(gid) or GateDef(id=gid)
+            for field, value in (spec or {}).items():
+                if hasattr(g, field):
+                    setattr(g, field, value)
+            gates[gid] = g
+        return {f"{f.subject}: {f.detail}" for f in WF.check(cfg, gates) if f.level == WF.PROBLEM}
+    except Exception:
+        return set()
+
+
 def _config_set(a, c: Ctx) -> int:
     """`orchard config --set <section>.<key> <value>` — edit one key in place.
 
@@ -1953,51 +2178,256 @@ def _config_set(a, c: Ctx) -> int:
     place also preserves the surrounding comments, which for this file carry most of
     the reasoning.
     """
-    import tomllib
-
-    dotted, value = a.set, a.value
-    if "." not in dotted:
-        print("--set takes <section>.<key>, e.g. gate.unit_tests.command", file=sys.stderr)
+    err, _text = _write_config(c.repo, [(a.set, a.value)])
+    if err:
+        print(err, file=sys.stderr)
         return FAIL
-    section, _, key = dotted.rpartition(".")
-    path = c.repo / ".orchard" / "config.toml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    text = path.read_text("utf-8") if path.exists() else ""
-
-    literal = value
-    if not re.fullmatch(r"(true|false|-?\d+(\.\d+)?|\[.*\]|\{.*\})", value.strip()):
-        literal = json.dumps(value)  # quote + escape as a TOML basic string
-
-    lines = text.splitlines()
-    header = f"[{section}]"
-    try:
-        start = next(i for i, ln in enumerate(lines) if ln.strip() == header)
-    except StopIteration:
-        block = ["", header, f"{key} = {literal}"]
-        lines += block
-    else:
-        end = next(
-            (i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith("[")),
-            len(lines),
-        )
-        for i in range(start + 1, end):
-            stripped = lines[i].lstrip()
-            if stripped.startswith(("#", ";")):
-                continue
-            if stripped.split("=")[0].strip() == key:
-                lines[i] = f"{key} = {literal}"
-                break
-        else:
-            lines.insert(end, f"{key} = {literal}")
-    new = "\n".join(lines).rstrip() + "\n"
-    try:
-        tomllib.loads(new)
-    except tomllib.TOMLDecodeError as exc:
-        print(f"that edit would break the config: {exc}", file=sys.stderr)
-        return FAIL
-    path.write_text(new, "utf-8")
-    c.out(f"{dotted} = {literal}", {"key": dotted, "value": value, "path": str(path)})
+    c.out(
+        f"{a.set} = {_toml_literal(a.value)}",
+        {"key": a.set, "value": a.value, "path": str(c.repo / ".orchard" / "config.toml")},
+    )
     return OK
+
+
+def _workflow_view(c: Ctx):
+    from ..services import workflow as WF
+    from ..services.review import load_reviewers
+
+    try:
+        reviewers = load_reviewers(c.repo)
+    except Exception:
+        reviewers = []
+    return WF.describe(c.repo, c.cfg, c.gates, reviewers=reviewers)
+
+
+def _render_workflow(v) -> str:
+    """The rules in force, as prose a human reads once and an agent can act on."""
+
+    out = ["# The workflow this project runs", ""]
+    out.append("Every task passes through these gates, in order. An item cannot be")
+    out.append("completed until each carries an outcome.")
+    out.append("")
+    for g in v.gates:
+        if not g.in_task:
+            continue
+        marks = []
+        if g.required:
+            marks.append("required")
+        if g.evidence:
+            marks.append("evidence required")
+        if g.reviewer == "different_family":
+            marks.append("needs a different-family reviewer")
+        if g.kind == "command":
+            marks.append("proven able to fail" if g.provable else "NOT proven able to fail")
+        if g.kind == "undefined":
+            marks.append("UNDEFINED")
+        tail = f"  ({', '.join(marks)})" if marks else ""
+        out.append(f"  {g.position:>2}. {g.id:<14}{g.kind:<10}{tail}")
+        if g.command:
+            out.append(f"      $ {g.command}")
+        elif g.prompt:
+            first = g.prompt.strip().splitlines()[0] if g.prompt.strip() else ""
+            out.append(f"      asks: {first[:96]}")
+    out.append("")
+    out.append(f"A phase passes through: {', '.join(v.phase_pipeline)}")
+    out.append("")
+    out.append("## The rules, and where each came from")
+    out.append("")
+    for key, (value, source) in v.rules.items():
+        out.append(f"  {key:<38} {value!s:<28} [{source}]")
+    out.append("")
+    if v.reviewers:
+        out.append("## Reviewers")
+        out.append("")
+        for r in v.reviewers:
+            out.append(f"  {r['name']:<20} {r['model']:<32} family={r['family'] or '?'}")
+        out.append("")
+    else:
+        out.append("## Reviewers: none configured — the `critic` gate cannot run.")
+        out.append("   `orchard reviewers detect --write` finds one.")
+        out.append("")
+    if v.overridden_prompts:
+        out.append(f"## Rewritten locally: {', '.join(v.overridden_prompts)}")
+        out.append("")
+    out.append(f"Commit hook: {'installed' if v.hook_installed else 'not installed'}")
+    out.append("")
+    if v.findings:
+        out.append("## What does not hang together")
+        out.append("")
+        for f in v.findings:
+            out.append(f"  {f.render()}")
+        out.append("")
+    else:
+        out.append("Nothing incoherent: every gate in a pipeline is defined, every")
+        out.append("required gate is in one, and each has a command or a prompt.")
+        out.append("")
+    out.append("Change any of it with `orchard workflow pipeline|gate|drop`, or by")
+    out.append("editing .orchard/config.toml. Both are validated before anything is")
+    out.append("written. " + ("" if not v.findings else "Fix the problems above first."))
+    return "\n".join(out)
+
+
+def _workflow_show(a, c: Ctx) -> int:
+
+    v = _workflow_view(c)
+    payload = {
+        "task_pipeline": v.task_pipeline,
+        "phase_pipeline": v.phase_pipeline,
+        "gates": [_plain(g) for g in v.gates],
+        "rules": {k: {"value": val, "source": src} for k, (val, src) in v.rules.items()},
+        "reviewers": v.reviewers,
+        "overridden_prompts": v.overridden_prompts,
+        "hook_installed": v.hook_installed,
+        "findings": [_plain(f) for f in v.findings],
+        "coherent": not v.problems,
+    }
+    if c.json:
+        print(json.dumps(payload, indent=2, default=str))
+    else:
+        print(_render_workflow(v))
+    return FAIL if v.problems else OK
+
+
+def _workflow_pipeline(a, c: Ctx) -> int:
+    which = a.which
+    ids = [x.strip() for x in a.gates.split(",") if x.strip()]
+    if not ids:
+        print(
+            "a pipeline with no gates is a project with no checks at all; name at least one",
+            file=sys.stderr,
+        )
+        return FAIL
+    unknown = [g for g in ids if g not in c.gates]
+    if unknown:
+        # BEFORE writing. An unknown id in a pipeline is permanent, silent damage:
+        # every item entering it blocks forever and `gate record` refuses the id.
+        near = {u: [g for g in sorted(c.gates) if g.startswith(u[:3])] for u in unknown}
+        hint = "; ".join(
+            f"{u!r}" + (f" (did you mean {near[u][0]!r}?)" if near[u] else "") for u in unknown
+        )
+        print(
+            f"no gate is defined for {hint}. Every item entering this pipeline would "
+            f"block on it forever. Define it first with `orchard workflow gate <id> "
+            f"--command ... | --prompt ...`, or leave it out.\nKnown: "
+            f"{', '.join(sorted(c.gates))}",
+            file=sys.stderr,
+        )
+        return FAIL
+    key = f"gates.{which}_pipeline"
+    err, _text = _write_config(c.repo, [(key, json.dumps(ids))], dry_run=a.dry_run)
+    if err:
+        print(err, file=sys.stderr)
+        return FAIL
+    verb = "would set" if a.dry_run else "set"
+    c.out(
+        f"{verb} {key} = {', '.join(ids)}",
+        {"key": key, "gates": ids, "applied": not a.dry_run},
+    )
+    return OK
+
+
+def _workflow_gate(a, c: Ctx) -> int:
+    pairs: list[tuple[str, str]] = []
+    for flag, field in (
+        (a.command, "command"),
+        (a.prompt, "prompt"),
+        (a.cwd, "cwd"),
+        (a.reviewer, "reviewer"),
+        (a.title, "title"),
+    ):
+        if flag:
+            pairs.append((f"gate.{a.id}.{field}", flag))
+    if a.timeout:
+        pairs.append((f"gate.{a.id}.timeout_s", str(a.timeout)))
+    if a.applies_to:
+        pairs.append((f"gate.{a.id}.applies_to", a.applies_to))
+    if not pairs and not a.into:
+        print(
+            "nothing to change. Give it a --command (it runs something) or a --prompt "
+            "(an agent performs it and records evidence), or --into a pipeline.",
+            file=sys.stderr,
+        )
+        return FAIL
+
+    existing = c.gates.get(a.id)
+    defines = a.command or a.prompt or (existing and (existing.command or existing.prompt))
+    if a.into and not defines:
+        print(
+            f"{a.id!r} has neither a command nor a prompt, so putting it in a pipeline "
+            f"would block every item that reaches it. Give it one in the same call.",
+            file=sys.stderr,
+        )
+        return FAIL
+
+    if a.into:
+        for which in ("task", "phase") if a.into == "both" else (a.into,):
+            current = list(getattr(c.cfg.gates, f"{which}_pipeline"))
+            if a.id in current:
+                continue
+            at = len(current)
+            if a.after:
+                if a.after not in current:
+                    print(
+                        f"--after {a.after!r} is not in the {which} pipeline: {', '.join(current)}",
+                        file=sys.stderr,
+                    )
+                    return FAIL
+                at = current.index(a.after) + 1
+            current.insert(at, a.id)
+            pairs.append((f"gates.{which}_pipeline", json.dumps(current)))
+    if a.required:
+        req = sorted({*c.cfg.gates.required, a.id})
+        pairs.append(("gates.required", json.dumps(req)))
+
+    err, _text = _write_config(c.repo, pairs, dry_run=a.dry_run)
+    if err:
+        print(err, file=sys.stderr)
+        return FAIL
+    verb = "would configure" if a.dry_run else "configured"
+    c.out(
+        f"{verb} gate {a.id}: " + ", ".join(k for k, _v in pairs),
+        {"gate": a.id, "changed": [k for k, _v in pairs], "applied": not a.dry_run},
+    )
+    return OK
+
+
+def _workflow_drop(a, c: Ctx) -> int:
+    pairs: list[tuple[str, str]] = []
+    removed = []
+    for which in ("task", "phase"):
+        current = list(getattr(c.cfg.gates, f"{which}_pipeline"))
+        if a.id in current:
+            current.remove(a.id)
+            pairs.append((f"gates.{which}_pipeline", json.dumps(current)))
+            removed.append(which)
+    if a.id in c.cfg.gates.required:
+        # Otherwise it becomes an inert requirement: enforced by intersecting with the
+        # pipeline, so a required gate in no pipeline quietly requires nothing.
+        pairs.append(("gates.required", json.dumps([g for g in c.cfg.gates.required if g != a.id])))
+        removed.append("required")
+    if not pairs:
+        print(f"{a.id!r} is in neither pipeline; nothing to drop", file=sys.stderr)
+        return NOTHING
+    err, _text = _write_config(c.repo, pairs, dry_run=a.dry_run)
+    if err:
+        print(err, file=sys.stderr)
+        return FAIL
+    verb = "would drop" if a.dry_run else "dropped"
+    c.out(
+        f"{verb} {a.id} from: {', '.join(removed)}. Its [gate.{a.id}] definition is "
+        f"left in place — put it back with `orchard workflow gate {a.id} --into task`.",
+        {"gate": a.id, "removed_from": removed, "applied": not a.dry_run},
+    )
+    return OK
+
+
+def cmd_workflow(a, c: Ctx) -> int:
+    """`orchard workflow` — the rules in force here, and how to change them."""
+    return {
+        "pipeline": _workflow_pipeline,
+        "gate": _workflow_gate,
+        "drop": _workflow_drop,
+    }.get(a.workflow_cmd or "", _workflow_show)(a, c)
 
 
 def cmd_cadence(a, c: Ctx) -> int:
@@ -2662,6 +3092,112 @@ def cmd_history(a, c: Ctx) -> int:
     return OK
 
 
+def _help_topics() -> list[str]:
+    """The topic names, read from the one place that defines them.
+
+    Imported lazily and inside a function so `build_parser` does not drag the MCP tool
+    table in through `help.grouped_tools`: the parser is built on EVERY invocation,
+    including `orchard next` in a hot loop.
+    """
+    from ..services.help import TOPICS
+
+    return list(TOPICS)
+
+
+def cmd_help(a, c: Ctx) -> int:
+    """`orchard help [topic]` — what this is, what it can do, what the workflow is.
+
+    Not argparse's `--help`, which lists 43 subcommands alphabetically and explains
+    neither what any of them is for nor which to reach for first. The pages are
+    templates, so `orchard prompts`-style overriding applies: a project can rewrite its
+    own onboarding without a code change.
+    """
+    from ..services import help as H
+    from ..services.prompts import TemplateError
+
+    # The tool registry is handed IN: `services/` sits below `surfaces/`, so the help
+    # renderer may not reach up for it. Function-local for the same reason `cmd_mcp`'s
+    # is -- the parser is rebuilt on every invocation and must not drag it along.
+    from .mcp import TOOLS
+
+    try:
+        text = H.render_topic(a.topic, c.repo) if a.topic else H.render_index(c.repo, tools=TOOLS)
+    except TemplateError as e:
+        print(str(e), file=sys.stderr)
+        return FAIL
+    c.out(text, {"topic": a.topic or "index", "text": text, "topics": H.TOPICS})
+    return OK
+
+
+def _import_verify(c: Ctx, st) -> int:
+    """`orchard import --verify` — status, still-true, and did-anyone-finish-it.
+
+    Three exit codes because there are three answers and collapsing them loses the one
+    that matters: `2` is "nothing was ever imported", which is not a failure and not a
+    pass; `1` is "imported, and here is what a human still has to decide"; `0` is
+    "imported and consistent".
+    """
+    from ..services import importer as IM
+
+    r = IM.verify_import(c.repo, st)
+    findings = r.findings
+    payload = {
+        "imported": r.imported,
+        "total": r.total,
+        "first_at": r.first_at,
+        "last_at": r.last_at,
+        "findings": findings,
+        "tasks_without_globs": r.no_globs,
+        "shipped_with_open_tasks": r.shipped_drift,
+        "vanished_sources": [{"item": i, "source": src} for i, src in r.vanished],
+        "empty_sources": r.empty_sources,
+        "unstructured_provenance": r.unstructured,
+        "branches_without_globs": r.no_globs_branches,
+        # Separate from `verified` on purpose. "Nothing was imported" and "the import
+        # is in good order" are different answers, and a single boolean collapses them
+        # into the vacuous one: `verified: true` with `imported: {}` reads as checked-
+        # and-fine to anything that does not also read the exit code -- and over MCP
+        # exit 2 is not an error, so `_meta` is the only place the truth was.
+        "imported_anything": bool(r.total or r.unstructured),
+        "new_since_import": [
+            {"kind": f.kind, "id": f.ident, "title": f.title, "source": f.source} for f in r.drift
+        ],
+        "notes": r.notes,
+        "verified": bool(r.total) and not findings,
+    }
+    if c.json:
+        print(json.dumps(payload, indent=2, default=str))
+        return NOTHING if not r.total and not r.unstructured else (FAIL if findings else OK)
+
+    if not r.total and not r.unstructured:
+        print("Nothing in this queue was imported.")
+        for n in r.notes:
+            print(f"  {n}")
+        return NOTHING
+
+    when = f" between {r.first_at[:10]} and {r.last_at[:10]}" if r.first_at else ""
+    lines = [f"Imported{when}:", ""]
+    lines += [f"  {n:>6} {kind}(s)" for kind, n in sorted(r.imported.items())]
+    if r.unstructured:
+        lines.append(f"  {len(r.unstructured):>6} with prose-only provenance (older import)")
+    lines.append("")
+    if findings:
+        lines.append("Left to decide or fix:")
+        lines += [f"  - {f}" for f in findings]
+    else:
+        lines.append("Consistent: the queue matches the sources, and every imported")
+        lines.append("task declares what it writes.")
+    lines.append("")
+    lines += [f"  {n}" for n in r.notes]
+    lines.append("")
+    lines.append(
+        "`orchard import` (no flags) shows what a re-run would add; the "
+        "/import-existing-project prompt walks through the half that needs an operator."
+    )
+    print("\n".join(lines))
+    return FAIL if findings else OK
+
+
 def cmd_import(a, c: Ctx) -> int:
     """Propose what an existing project already has, so the queue starts where it is.
 
@@ -2674,6 +3210,31 @@ def cmd_import(a, c: Ctx) -> int:
     from ..services import importer as IM
 
     st = c.state()
+    if a.verify:
+        # `--include-done` and `--max-tasks` shape an IMPORT. Reading past them here
+        # would be the silent-knob-drop shape, standing next to a flag that is loudly
+        # refused two lines down.
+        shaping = [
+            f for f, on in (("--include-done", a.include_done), ("--max-tasks", a.max_tasks)) if on
+        ]
+        if shaping:
+            print(
+                f"--verify reports on the import that happened; {', '.join(shaping)} "
+                f"shape(s) one that has not. Run them separately.",
+                file=sys.stderr,
+            )
+            return FAIL
+        if a.apply:
+            # Refused rather than resolved. `--verify` READS and `--apply` WRITES, and
+            # picking one silently is how an operator who asked to import ends up
+            # having only looked -- or worse, the other way round.
+            print(
+                "--verify and --apply ask for different things: one reports on the "
+                "import that happened, the other performs one. Run them separately.",
+                file=sys.stderr,
+            )
+            return FAIL
+        return _import_verify(c, st)
     # The flag overrides the knob; 0 means 'no flag given', so an operator who set
     # [importer] max_tasks in the config is not silently overruled by an argparse
     # default that looks like a choice and is not one.
@@ -3322,7 +3883,7 @@ def build_parser() -> argparse.ArgumentParser:
     ad.add_argument(
         "--agents",
         default="",
-        help="comma-separated: claude,gemini,codex,copilot,kilo (default: all)",
+        help="comma-separated: claude,gemini,codex,copilot,kilo,cursor (default: all)",
     )
     ad.add_argument("--docs", default="docs/orchard", help="where to write the drivers")
     ad.add_argument(
@@ -3350,11 +3911,70 @@ def build_parser() -> argparse.ArgumentParser:
     hi.add_argument("--limit", type=int, default=40)
     hi.set_defaults(fn=cmd_history)
 
+    wf = s.add_parser(
+        "workflow",
+        help="the rules this project runs by, and how to change them (exit 1 = incoherent)",
+    )
+    wfs = wf.add_subparsers(dest="workflow_cmd")
+    wf.set_defaults(fn=cmd_workflow, dry_run=False)
+
+    wfp = wfs.add_parser("pipeline", help="set the gates a task or phase passes through")
+    wfp.add_argument("which", choices=["task", "phase"])
+    wfp.add_argument("gates", help="comma-separated gate ids, in order")
+    wfp.add_argument("--dry-run", action="store_true", help="show it; write nothing")
+    wfp.set_defaults(fn=cmd_workflow)
+
+    wfg = wfs.add_parser("gate", help="define or change one gate")
+    wfg.add_argument("id")
+    wfg.add_argument("--command", default="", help="what to run; makes it a command gate")
+    wfg.add_argument("--prompt", default="", help="what to ask an agent; makes it an agent gate")
+    wfg.add_argument("--title", default="")
+    wfg.add_argument("--cwd", default="", choices=["", "worktree", "repo"])
+    wfg.add_argument(
+        "--reviewer",
+        default="",
+        choices=["", "different_family", "same_family_ok"],
+        help="require a reviewer, and whether it must be a different model family",
+    )
+    wfg.add_argument("--timeout", type=int, default=0, help="seconds before it is unavailable")
+    wfg.add_argument("--applies-to", default="", choices=["", "task", "phase", "both"])
+    wfg.add_argument(
+        "--into", default="", choices=["", "task", "phase", "both"], help="add to a pipeline"
+    )
+    wfg.add_argument("--after", default="", help="place it after this gate (default: last)")
+    wfg.add_argument("--required", action="store_true", help="an item cannot complete without it")
+    wfg.add_argument("--dry-run", action="store_true", help="show it; write nothing")
+    wfg.set_defaults(fn=cmd_workflow)
+
+    wfd = wfs.add_parser("drop", help="take a gate out of the pipelines (its definition stays)")
+    wfd.add_argument("id")
+    wfd.add_argument("--dry-run", action="store_true", help="show it; write nothing")
+    wfd.set_defaults(fn=cmd_workflow)
+
+    hp = s.add_parser(
+        "help",
+        help="what Orchard is, what it can do, and the workflow (try: orchard help workflow)",
+    )
+    hp.add_argument(
+        "topic",
+        nargs="?",
+        default="",
+        help="one of: " + ", ".join(sorted(_help_topics())) + ". Omit for the overview.",
+    )
+    hp.set_defaults(fn=cmd_help)
+
     im = s.add_parser(
         "import",
         help="propose the existing project's work, lessons and decisions (exit 2 = nothing)",
     )
     im.add_argument("--apply", action="store_true", help="write them; default is a dry run")
+    im.add_argument(
+        "--verify",
+        action="store_true",
+        help="report what was already imported and whether it is still true: source "
+        "drift, vanished source files, and the globs and decisions the import left for "
+        "a human (exit 1 = findings, 2 = nothing imported)",
+    )
     im.add_argument(
         "--include-done",
         action="store_true",
