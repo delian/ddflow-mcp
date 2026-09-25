@@ -12,7 +12,15 @@
     adopted            bool    .ddflow/config.toml exists
     setup_todo         list    named setup gaps, each a sentence
     companions         list    {id, title, gates, state, install, url, default}
-    missing_companions list    the default ones not registered here
+    actionable_companions list  every default one not already usable, each carrying a
+                                `state_word`: "installed, not registered" / "not
+                                installed" / "not checked". ONE list, because the
+                                proposal an agent makes is the same in all three cases
+                                and only the claim about install state differs.
+    missing_companions     list  the subset KNOWN to need action (not "not checked")
+    unregistered_companions list  installed here, no agent configured to launch it
+    uninstalled_companions  list  known absent; `install` is the command
+    unchecked_companions    list  nobody probed (the handshake does not) — NOT "absent"
     gate_gaps          list    gate ids in the task pipeline with no companion behind them
     recoverable        int     crashed agents' worktrees waiting
     ready, running, blocked, open_bugs, loops   int
@@ -121,20 +129,28 @@ gate `unavailable` rather than passing it on your own word.
 repository's actual manifests, to candidates checked against their primary sources, and
 produces `[[companion]]` blocks the operator can read and delete. Propose; never install.
 
-{% if missing_companions %}
+{% if actionable_companions %}
 ### Not wired up here — propose it to the operator
 
-{% for c in missing_companions %}
-- **{{ c.id }}** — {{ c.title }}. Serves: {{ c.gates_text }}. Install: `{{ c.install }}`
+Each line says what is KNOWN about it. "not checked" is not "missing": the handshake
+does not probe, because a session start must not wait on `npx`.
+
+{% for c in actionable_companions %}
+- **{{ c.id }}** — {{ c.title }} [{{ c.state_word }}]. Serves: {{ c.gates_text }}. Install: `{{ c.install }}` — {{ c.url }}
 {% endfor %}
 
 **This is something to DO, not just to know.** Early in the session — before you reach a
 gate that needs one — tell the operator which are missing, what each one buys the gates
 it serves, and exactly what installing it would run on their machine. Then:
 
-1. **If they agree**, run the install command yourself and register it:
-   `ddflow_companions` lists the command for each, and `ddflow_companions_add` wires
-   it into this project's MCP config once it is present.
+0. **If it says "not checked", check first.** `ddflow_companions` probes and reports
+   each as installed, missing, or could-not-tell. Proposing to install something that
+   is already there wastes the operator's attention, and treating "not checked" as
+   "missing" is the same mistake this pipeline refuses everywhere else.
+1. **If they agree**, run the install command yourself, then register it IF it is an
+   MCP server: `ddflow_companions_add` wires a server into this project's MCP config
+   once it is present. A `cli` companion is a tool you shell out to — there is nothing
+   to register, and `ddflow_companions_add` will refuse it and say so.
 2. **If they decline, or do not answer**, carry on — and when you reach a gate that
    companion serves, record it `unavailable` with the reason. Never pass it on your own
    unaided word: a gate with nothing behind it is the failure this pipeline exists to

@@ -287,6 +287,86 @@ def test_stale_evidence_reports_a_same_file_re_edit(repo):
     )
 
 
+def test_the_tree_sha_changes_when_an_UNTRACKED_file_is_rewritten(repo):
+    """The other half of the same hole, and the commoner one.
+
+    `git diff HEAD` never shows untracked content and porcelain shows only `?? path`,
+    so a brand new module — untracked until its first commit, which is the ORDINARY
+    state of agent work — could be rewritten completely between the gate and the
+    completion with the fingerprint unmoved.
+
+    The B87 fix closed the tracked case and left this one, and the filed limit
+    (binaries) did not cover it. *Found by roborev on 0e23b31, CONFIRMED by git
+    semantics, reproduced before fixing.*
+    """
+    from ddflow.services.gates import tree_fingerprint
+
+    new_module = repo / "feature.py"
+    new_module.write_text("def a(): pass\n")  # never `git add`ed
+    before = tree_fingerprint(repo)
+    new_module.write_text("def a(): return 'completely rewritten'\n")
+    assert tree_fingerprint(repo) != before, (
+        "an untracked file was rewritten and the fingerprint did not move"
+    )
+
+
+def test_ddflows_OWN_bookkeeping_does_not_move_the_fingerprint(repo):
+    """Recording a gate outcome must not invalidate the gate it just recorded.
+
+    `.ddflow/` holds the event log, and appending to it is what taking a gate's outcome
+    DOES. Hashing untracked content without excluding it made the fingerprint move as a
+    direct consequence of recording — so `complete` warned "passed on a different tree"
+    after every single gate, on the ordinary path rather than an edge case. A warning
+    that always fires is one nobody reads, which is how this check gets switched off.
+
+    Introduced while fixing the untracked-file hole and caught by
+    `test_it_stays_quiet_when_nothing_moved`, which is why that test exists.
+    """
+    from ddflow.services.gates import tree_fingerprint
+
+    before = tree_fingerprint(repo)
+    run_cli(repo, "task", "add", "FPT1", "--globs", "fp.py")
+    run_cli(repo, "lesson", "add", "--title", "wrote several events")
+    assert tree_fingerprint(repo) == before, (
+        "ddflow writing its own events changed the fingerprint of the project's source"
+    )
+
+
+def test_fingerprinting_writes_nothing_to_the_object_store(repo):
+    """`git hash-object` WITHOUT `-w`. A function whose job is to observe must not
+    change what it observes, and the original docstring rejected `write-tree` for
+    exactly this reason — hashing untracked content must not smuggle it back."""
+    import subprocess
+
+    from ddflow.services.gates import tree_fingerprint
+
+    def count() -> str:
+        out = subprocess.run(
+            ["git", "-C", str(repo), "count-objects", "-v"], capture_output=True, text=True
+        )
+        return out.stdout
+
+    (repo / "untracked.py").write_text("x = 1\n")
+    before = count()
+    tree_fingerprint(repo)
+    assert count() == before, "fingerprinting wrote objects into the repository"
+
+
+def test_a_flood_of_untracked_files_degrades_LOUDLY_rather_than_silently(repo, monkeypatch):
+    """Above the cap it hashes names instead of content — and says so IN the digest.
+
+    A fingerprint that quietly stopped covering content would make `stale_evidence` go
+    silent for exactly the repositories where it matters most, and nothing would
+    indicate that the guarantee had weakened.
+    """
+    from ddflow.services import gates as G
+
+    monkeypatch.setattr(G, "MAX_UNTRACKED_HASHED", 2)
+    for i in range(5):
+        (repo / f"scratch{i}.py").write_text(f"x = {i}\n")
+    assert "names-only:5" in G._untracked_digest(repo)
+
+
 def test_an_unchanged_tree_keeps_the_same_sha(repo):
     """The other half: a fingerprint that changes every call identifies nothing."""
     from ddflow.services.gates import GateDef, run_command_gate

@@ -295,10 +295,79 @@ def test_the_handshake_never_tells_an_agent_to_register_a_cli_tool(repo):
         '[[companion]]\nid = "clitool"\nkind = "cli"\ncommand = "true"\n'
         'detect = ["true"]\ninstall = "brew install clitool"\ndefault = true\n'
     )
-    from ddflow.surfaces.mcp import _instruction_vars
+    from ddflow.surfaces.mcp import _instructions
+
+    # Asserted against the RENDERED TEXT, which is what an agent receives. The first
+    # version of this test read `unregistered_companions` — a variable the template
+    # referenced nowhere, so the fix computed three new lists, rendered none of them,
+    # and this test went green over an instruction block that had not changed a word.
+    # A test that reads an intermediate value proves the intermediate value.
+    text = _instructions(repo)
+    assert "clitool" in text, "the companion is not mentioned at all; the test proves nothing"
+    block = text[text.index("clitool") - 400 : text.index("clitool") + 400]
+    assert "companions_add" not in block, f"the handshake offers to register a cli tool:\n{block}"
+
+
+def test_the_handshake_calls_an_unprobed_companion_UNCHECKED_not_missing(repo):
+    """The three-valued collapse, one layer out.
+
+    `_instruction_vars` scans with `probe=False` so a session start does not wait on
+    `npx`, which leaves every `installed` as None. Treating that as "not usable" made
+    the handshake list tools as missing on every connection — including ones sitting on
+    the PATH — and report their gates as having nothing behind them.
+    """
+    run_cli(repo, "init")
+    from ddflow.surfaces.mcp import _instruction_vars, _instructions
 
     v = _instruction_vars(repo)
-    unregisterable = [c["id"] for c in v.get("unregistered_companions", []) if c["kind"] != "mcp"]
-    assert not unregisterable, (
-        f"{unregisterable} are offered for registration and cannot be registered"
+    assert v["unchecked_companions"], "nothing was reported as unchecked despite probe=False"
+    assert not v["missing_companions"], (
+        f"unprobed companions were reported as KNOWN missing: "
+        f"{[c['id'] for c in v['missing_companions']]}"
     )
+    # The rendered claim, not a heading: every companion is listed with a state word,
+    # and an unprobed one must say "not checked" rather than "not installed". A
+    # separate heading was tried and removed — it split the install command away from
+    # the companion it belonged to, leaving the agent nothing to act on in the turn
+    # where it proposes.
+    text = _instructions(repo)
+    assert "[not checked]" in text, text[-900:]
+    assert "[not installed]" not in text, (
+        "an unprobed companion was rendered as known-absent"
+    )
+    # ...and the command is still there to act on.
+    assert "Install: `" in text
+
+
+def test_a_gate_is_not_a_gap_when_its_companion_was_never_probed(repo):
+    """ "Nobody looked" must not render as "no tool behind this gate". `rules` is served
+    only by companions that need a probe, so with `probe=False` it was in `gate_gaps`
+    on every connection — the handshake asserting a gap on the strength of not having
+    checked, inside the report whose purpose is to expose exactly that."""
+    run_cli(repo, "init")
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    assert "rules" not in _instruction_vars(repo)["gate_gaps"], (
+        "an unprobed companion's gate was reported as having nothing behind it"
+    )
+
+
+def test_install_is_a_command_and_caveats_live_in_note(tmp_path):
+    """`install` is printed under "ask the operator, then:" and read as something to
+    paste. A sentence there renders as an instruction nobody can run — which is what
+    the OptMem entry did before `note` existed, and what a trailing `# comment` on the
+    sequential entry would have done to anyone pasting it into a non-shell context.
+
+    Checked structurally rather than by taste: an install line with sentence
+    punctuation in it is prose wearing a command's field.
+    """
+    for c in CO.load(tmp_path):
+        assert c.install.strip(), f"{c.id} has no install command"
+        assert "\n" not in c.install, f"{c.id}'s install spans lines"
+        assert "—" not in c.install and " - " not in c.install, (
+            f"{c.id}'s install reads as prose, not a command: {c.install!r}. "
+            f"Caveats belong in `note`."
+        )
+        assert "#" not in c.install, (
+            f"{c.id}'s install carries a trailing comment; put it in `note`"
+        )

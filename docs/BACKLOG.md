@@ -803,3 +803,131 @@ shown. `pyproject.toml` declares `requires-python = ">=3.11"` and CI runs 3.11 a
 so the trigger does not exist. Recorded as refuted rather than dropped — it is a
 correctly-reasoned finding about a premise that happens to be false, which is what
 `THEORETICAL` is for.
+
+## B96–B97 — the critic on 031313a, 2026-09-25
+
+Two findings, both correctly labelled THEORETICAL, both worth recording rather than
+acting on as bugs.
+
+- **B96. `_VALID_AGENT` did not refuse the character its comment singled out. ✅ CLOSED
+  as hardening, REFUTED as a defect.** `^[A-Za-z0-9._-]{1,64}$` with `.match()` accepts
+  `"reviewer\n"` — Python's `$` matches at end-of-string *or* immediately before a final
+  newline. Probed: the pattern does match it. Also probed: the handler strips the name
+  first, so nothing with a newline ever reached the check, and no shard filename could
+  be corrupted. No behaviour changed, so no regression test could have failed and none
+  is claimed. What changed is WHICH line carries the guarantee: `fullmatch`, no anchors,
+  and a comment that says the strip is a courtesy rather than the safety. Two lines
+  disagreeing about which is load-bearing is how the next edit deletes the wrong one —
+  the third instance this session of a comment promising what the code did not do.
+  *Cross-family critic, THEORETICAL, correctly: it could not see the call site.*
+
+- **B97. `_run_cli` swaps process-global `sys.stdout`/`sys.stderr` per call. FILED,
+  THEORETICAL.** Non-reentrant by construction: two overlapping calls would interleave
+  each other's captured output, and on a stdio transport the escaped writes would
+  corrupt the protocol stream. Not reachable today — `serve()` is a strictly sequential
+  `for raw in inp:` loop, one message fully handled before the next is read — and
+  `tests/test_mcp_load.py` contends with separate PROCESSES, so it does not exercise
+  this either. It is filed because the direction of travel makes it live: per-connection
+  identity, a load suite, and "several agents at once" all point at a dispatcher that
+  eventually overlaps. The fix is the migration already under way — every tool on the
+  typed `api` path returns an `Outcome` and captures nothing — so the right move is to
+  keep lowering `ARGV_TOOLS_CEILING`, not to add a lock around a stream swap.
+  *Cross-family critic, THEORETICAL, correctly: the dispatch model was in the half of
+  the diff it was not shown.*
+
+## B98–B105 — roborev on the review-fix commit itself, 2026-09-25
+
+Eight findings on `0e23b31`, and the theme is one sentence: **three of that commit's
+fixes stopped one site short**, in a commit whose message claimed a repo-wide sweep. The
+"generalize every bug fix — hunt the CLASS" rule failed three times in the act of
+applying it.
+
+- **B98. The handshake still told agents to register a `cli` companion, and the new
+  test could not see it. ✅ CLOSED.** `_instruction_vars` scans with `probe=False` (a
+  session start must not wait on `npx`), so every `installed` is `None`; `usable`
+  collapsed that to `False`, so `optmem` was in `missing_companions` on every
+  connection. Worse, the kind-aware lists that fix added were **referenced nowhere in
+  any template** — computed and dropped — and the regression test asserted on
+  `unregistered_companions`, a variable nothing rendered. It passed over an instruction
+  block that had not changed a word. **Third vacuous test of the session.** Now
+  bucketed by `Status.advice` (`ok`/`register`/`install`/`check`), every bucket
+  rendered, and the test reads `_instructions(repo)` — the string an agent receives.
+  Mutation-verified against the old template.
+
+- **B99. `Status.usable` collapsed three values into two, and its docstring said it
+  did not. ✅ CLOSED.** The docstring promised "neither counts on `installed is None`";
+  the code returned `False` for it. With `probe=False` that made "nobody looked" render
+  as "no tool": `gate_coverage` reported `rules` in `gate_gaps` on every connection
+  even with `memo` on the PATH. `usable` is now `bool | None`, `is_gap` is `usable is
+  False`, and a gate is only a gap when no companion serving it is unknown. **Fourth
+  instance this session of a comment promising what the code did not do.**
+
+- **B100. B88's sweep missed `_instruction_vars`'s own `EventLog`. ✅ CLOSED.**
+  `EventLog(repo, cfg.agent.id or "")` resolves neither `DDFLOW_AGENT` nor a declared
+  name, and that identity is what `plan()` uses to decide which items are "already
+  mine" — so the handshake reported the connection's own claimed work as someone
+  else's, at the one moment the agent is told what to do next. `_instructions` now
+  takes the connection's declared agent and threads it through.
+
+- **B101. B87's fix left the identical hole for UNTRACKED files. ✅ CLOSED.** `git diff
+  HEAD` never shows untracked content and porcelain shows only `?? path`, so a new
+  module — untracked until its first commit, which is the ordinary state of agent work
+  — could be rewritten entirely between the gate and the completion with the
+  fingerprint unmoved. Probed and confirmed. Now hashed with `git hash-object` (no
+  `-w`, so nothing is written), capped by the configurable `MAX_UNTRACKED_HASHED` with
+  a degraded-and-SAID-SO fallback above it.
+
+- **B102. ...and fixing B101 introduced a false positive on the ordinary path. ✅
+  CLOSED, self-inflicted.** Hashing untracked content included `.ddflow/` — where
+  recording a gate outcome appends an event. So the fingerprint moved as a direct
+  consequence of taking it, and **every completion warned "passed on a different
+  tree"**. A warning that always fires is one nobody reads, which is how this check
+  gets switched off. Caught by `test_it_stays_quiet_when_nothing_moved`, which is
+  exactly why that test exists. `FINGERPRINT_EXCLUDE` now drops `.ddflow/` from all
+  three git calls, as pathspecs so git does the matching rather than a post-filter that
+  would drift from what git considers inside the directory.
+
+- **B103. The isError-blind read counter survived in `_mixed`. ✅ CLOSED.** Fixed in
+  `_reader` and missed five lines below, in the same commit, in the file about
+  vacuous assertions. An error is returned AS a result with `isError: true`, so
+  `"result" in r` counted a failed `next` as a success and the assertion could only
+  see one that HUNG.
+
+- **B104. `cmd_adopt`'s `CO.scan` was the third of three sites, and the other two were
+  fixed. ✅ CLOSED.** A `kind = "MCP"` typo made `ddflow adopt` — documented as safe to
+  re-run — exit on a raw traceback *after* `init` had already written files. One
+  `_scan_companions` helper now guards all three, rather than a guard per call site,
+  which is what produced two-of-three in the first place.
+
+- **B105. `config --explain` blamed the environment for a value nothing set. ✅
+  CLOSED.** The source was inferred by comparing the resolved value against each
+  candidate, which is wrong whenever two agree: with nothing set, the derived name
+  differs from `cfg.agent.id` (`""`), so the branch fired and recorded `env`. An
+  operator debugging identity is the one person who cannot afford that. `resolve_agent_id`
+  returns the layer that won (`explicit`/`env`/`config`/`derived`) instead of leaving
+  two call sites to guess it, and `ddflow_identify` uses the same answer.
+
+- **B107. Fixing B98 dropped the install command from the handshake. ✅ CLOSED,
+  self-inflicted, caught by two existing tests.** Splitting the companions into three
+  rendered blocks was honest about state and useless to act on: the "not checked" block
+  — which with `probe=False` is EVERY companion — carried no install command and none
+  of the propose/agree/never-install-unilaterally guidance. Two tests encoding the
+  operator's original instruction went red
+  (`test_the_ones_missing_HERE_are_called_out_with_what_to_do`,
+  `test_each_missing_companion_carries_its_install_command`), and they were right. One
+  block again, each line carrying a `state_word` — so the CLAIM is accurate and the
+  ACTION is still available in the same turn. The correction to make twice-over: being
+  careful about what you assert is not a licence to say less.
+
+- **B106. `install` carried prose and shell comments. ✅ CLOSED.** The field is
+  documented as "the command a human runs" and is printed verbatim under "ask the
+  operator, then:" — so OptMem's entry rendered a full sentence where a command
+  belongs, and two PRE-EXISTING entries carried trailing `# comments` that break the
+  moment anyone pastes them somewhere without a shell. New `note` field for the
+  caveat, swept across all four affected entries rather than the one that was new,
+  with a ratchet. *Raised in passing by the cross-family critic before its run timed
+  out.*
+
+Also: `zip(ids, paths)` in the new untracked digest, caught by ruff `B905` — a short
+reply from `hash-object` would have paired hashes with the wrong paths and produced a
+plausible, meaningless fingerprint. Now length-checked with an honest fallback.

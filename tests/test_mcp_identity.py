@@ -288,3 +288,76 @@ def test_a_declared_name_still_beats_the_environment(repo, monkeypatch):
         e.agent for e in EventLog(repo).read_all() if e.kind in ("lease.acquired", "task.updated")
     }
     assert agents == {"declared-one"}, agents
+
+
+def test_the_name_check_itself_refuses_a_trailing_newline(repo):
+    """Pinning WHICH line is load-bearing.
+
+    `^[A-Za-z0-9._-]{1,64}$` with `.match()` accepts `"reviewer\\n"`: Python's `$`
+    matches at end-of-string *or* immediately before a final newline. The comment above
+    the pattern singles out newlines as the thing it refuses, and it did not.
+
+    It was never reachable — the handler strips the name before checking — so this is
+    not a bug fix, and no behaviour changes. It is a guarantee moved from an incidental
+    `.strip()` into the check that is credited with it, because two lines disagreeing
+    about which one is load-bearing is how the next edit deletes the wrong one.
+
+    *Raised THEORETICAL by the cross-family critic on 031313a; refuted as reachable,
+    confirmed as a property of the pattern.*
+    """
+    from ddflow.surfaces.mcp import _VALID_AGENT
+
+    assert not _VALID_AGENT.fullmatch("reviewer\n")
+    assert not _VALID_AGENT.fullmatch("rev\niewer")
+    assert not _VALID_AGENT.fullmatch("../escape")
+    assert _VALID_AGENT.fullmatch("reviewer-2")
+
+
+def test_whitespace_around_a_name_is_still_forgiven_not_refused(repo):
+    """The strip stays, and this says why it is not redundant with the check above:
+    a client that sends `" reviewer "` meant `reviewer`, and refusing that would be
+    pedantry an agent cannot debug from the other end of a pipe."""
+    run_cli(repo, "init")
+    srv = Server(repo)
+    result = _call(srv, "ddflow_identify", agent="  reviewer-2  ")
+    assert not result.get("isError"), result
+    assert srv.agent == "reviewer-2"
+
+
+def test_config_explain_names_the_layer_that_actually_set_the_identity(repo, monkeypatch):
+    """An operator debugging identity is the one person who cannot afford a wrong answer.
+
+    The source was inferred by comparing the resolved value against each candidate,
+    which is wrong whenever two candidates agree. With nothing set anywhere, the derived
+    name differs from `cfg.agent.id` (`""`), so the branch fired and recorded `env` —
+    and `config --explain` reported the environment as responsible for a variable
+    nothing had exported.
+
+    *Found by roborev on 0e23b31, CONFIRMED.*
+    """
+    run_cli(repo, "init")
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    _code, out, _err = run_cli(repo, "config", "--explain")
+    line = next(ln for ln in out.splitlines() if ln.strip().startswith("agent.id"))
+    assert "[derived]" in line, f"nothing set the identity and it was blamed on: {line}"
+
+    monkeypatch.setenv("DDFLOW_AGENT", "alpha")
+    _code, out, _err = run_cli(repo, "config", "--explain")
+    line = next(ln for ln in out.splitlines() if ln.strip().startswith("agent.id"))
+    assert "[env]" in line and "alpha" in line, line
+
+
+def test_the_resolver_reports_which_layer_won(repo, monkeypatch):
+    """Returned, not inferred — the property that makes the above possible."""
+    from ddflow.config import Config
+    from ddflow.infra.log import resolve_agent_id
+
+    run_cli(repo, "init")
+    cfg = Config.load(repo)
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    assert resolve_agent_id(repo, cfg)[1] == "derived"
+    assert resolve_agent_id(repo, cfg, "declared-name") == ("declared-name", "explicit")
+    monkeypatch.setenv("DDFLOW_AGENT", "alpha")
+    assert resolve_agent_id(repo, cfg) == ("alpha", "env")
+    # and an explicit declaration still beats it
+    assert resolve_agent_id(repo, cfg, "mine")[1] == "explicit"

@@ -73,7 +73,14 @@ class Companion:
     command: str = ""
     args: list[str] = field(default_factory=list)
     env: dict[str, str] = field(default_factory=dict)
+    #: The COMMAND a human runs, and nothing else — it is quoted verbatim in the
+    #: report under "ask the operator, then:", so a sentence there renders as an
+    #: instruction nobody can copy. Caveats go in `note`.
     install: str = ""
+    #: One line of context shown beneath the install command: a gotcha, a wrapper worth
+    #: preferring, a licence to check. Separate from `install` because that field is
+    #: read as something to paste.
+    note: str = ""
     url: str = ""
     default: bool = False
     #: ``mcp`` (default) or ``cli`` — see :data:`KINDS`. Defaulting to ``mcp`` keeps
@@ -124,30 +131,73 @@ class Status:
         return "installed" if self.installed else "missing"
 
     @property
-    def usable(self) -> bool:
-        """Can an agent actually reach this tool right now?
+    def usable(self) -> bool | None:
+        """Can an agent actually reach this tool right now? THREE answers, not two.
 
         ONE definition, because "goal state" differs by kind and re-deriving it per
-        call site is how three of four sites got it wrong:
+        call site is how four sites came to disagree:
 
         * an **mcp** companion is usable once an agent is configured to LAUNCH it.
-          Installed but unregistered is one command away, and is not usable yet.
+          Installed but unregistered is one command away, and is not usable yet. This
+          is always DEFINITE -- it reads a config file, not a probe.
         * a **cli** companion is usable once it is INSTALLED. `registered` is a state
           it cannot reach, so judging it by that reports its gate as unserved while the
           tool sits on the PATH, and tells the operator to run a command that refuses.
+          This is `None` when nobody probed.
 
-        Neither counts on `installed is None`: a probe that could not run leaves the
-        tool exactly as unknown as before we asked.
+        The tri-state is not decoration. `scan(probe=False)` -- which the MCP handshake
+        uses, so that a session start does not wait on `npx` -- leaves every `installed`
+        as `None`. Collapsing that to `False` made "nobody looked" render as "no tool":
+        the handshake reported `rules` as having nothing behind it on every connection
+        even with the tool on the PATH, and listed it as something to go install. That
+        is the three-valued collapse this module's own `is_installed` was rewritten to
+        avoid, reintroduced one layer out.
         """
         if self.companion.is_mcp:
             return bool(self.registered_in)
-        return self.installed is True
+        return self.installed
 
     @property
     def is_gap(self) -> bool:
-        """A DEFAULT companion that is not usable — the thing worth telling someone
-        about. Opt-in companions are absent on purpose and are not gaps."""
-        return self.companion.default and not self.usable
+        """A DEFAULT companion KNOWN not to be usable.
+
+        `usable is False`, never `not usable` — unknown is not a gap, it is a question.
+        Reporting it as a gap is how an unprobed scan turns into a list of things to
+        install that may all already be there.
+        """
+        return self.companion.default and self.usable is False
+
+    @property
+    def is_unknown(self) -> bool:
+        """A DEFAULT companion nobody probed. Reported separately, because the remedy
+        is "check", not "install"."""
+        return self.companion.default and self.usable is None
+
+    @property
+    def advice(self) -> str:
+        """What to DO about this one — the single question every surface actually asks.
+
+        Four answers, and they are not derivable from `state` alone. An mcp companion
+        scanned with `probe=False` is DEFINITELY not registered (that reads a config
+        file) while its install state is unknown, so it is neither "one command away"
+        nor "go install it": the honest advice is "check". Bucketing by `state` put it
+        in no bucket at all, and the handshake silently dropped it.
+
+        * ``ok``       — usable; nothing to do.
+        * ``register`` — installed, and an agent only needs to be told to launch it.
+        * ``install``  — known absent.
+        * ``check``    — we did not look, or looked and could not tell. NOT the same as
+                         absent, and the remedy is a probe rather than a download.
+        """
+        if self.usable is True:
+            return "ok"
+        if self.usable is None:
+            return "check"
+        if self.companion.is_mcp and self.installed is True:
+            return "register"
+        if self.installed is False:
+            return "install"
+        return "check"
 
 
 def load(repo: Path) -> list[Companion]:
@@ -417,7 +467,10 @@ def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> di
     """
     cover: dict[str, list[str]] = {g: [] for g in pipeline}
     for st in statuses:
-        if not st.usable:
+        # `is True`, so an unprobed companion does not silently count as coverage --
+        # and, equally, does not count as a gap. `gate_coverage` answers "what is
+        # behind this gate"; "we did not look" is not an answer either way.
+        if st.usable is not True:
             continue
         for g in st.companion.gates:
             if g in cover:

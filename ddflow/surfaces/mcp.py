@@ -1569,10 +1569,18 @@ def _outcome_result(out: Any) -> dict[str, Any]:
 
 
 #: What a declared agent name may contain. It becomes a log SHARD FILENAME, so a name
-#: with a path separator in it would write outside the events directory, and one with a
+#: with a path separator would write outside the events directory, and one with a
 #: newline would corrupt the line-oriented log. Refused at declaration time, where the
 #: caller can read why, rather than at the first write.
-_VALID_AGENT = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+#:
+#: `fullmatch`, and no anchors. With `^...$` and `.match()` this accepted
+#: `"reviewer\n"` — Python's `$` matches at end-of-string OR immediately before a final
+#: newline — so the pattern did not refuse the one character the comment above singles
+#: out. It was unreachable in practice only because the handler strips the name first,
+#: which means the guarantee lived in an incidental `.strip()` rather than in the check
+#: credited with it. Two lines that disagree about which one is load-bearing is how the
+#: next edit removes the wrong one.
+_VALID_AGENT = re.compile(r"[A-Za-z0-9._-]{1,64}")
 
 
 def _default_agent(repo: Path) -> tuple[str, str]:
@@ -1584,21 +1592,23 @@ def _default_agent(repo: Path) -> tuple[str, str]:
     guess that every sibling in this tree will make identically.
     """
     from ..config import Config
-    from ..infra.log import effective_agent_id
 
     # The EFFECTIVE default, not the tree-derived one. Reporting the tree name while
     # `DDFLOW_AGENT` was set made `ddflow_identify` misreport the single thing it
     # exists to make visible.
+    from ..infra.log import resolve_agent_id
+
     try:
         cfg = Config.load(repo)
     except Exception:
         cfg = None
-    who = effective_agent_id(repo, cfg)
-    if os.environ.get("DDFLOW_AGENT", "") == who and who:
-        return who, "DDFLOW_AGENT"
-    if cfg is not None and getattr(cfg.agent, "id", "") == who and who:
-        return who, "[agent].id in config"
-    return who, "derived from the working tree"
+    who, layer = resolve_agent_id(repo, cfg)
+    return who, {
+        "env": "from DDFLOW_AGENT",
+        "config": "from [agent].id in config",
+        "derived": "derived from the working tree",
+        "explicit": "declared",
+    }[layer]
 
 
 def _run_cli(repo: Path, argv: list[str], agent: str = "") -> tuple[int, str]:
@@ -1687,7 +1697,7 @@ class Server:
                         "prompts": {"listChanged": False},
                     },
                     "serverInfo": SERVER_INFO,
-                    "instructions": _instructions(self.repo),
+                    "instructions": _instructions(self.repo, self.agent),
                 },
             )
         if method in ("notifications/initialized", "notifications/cancelled"):
@@ -1751,7 +1761,7 @@ class Server:
                 # A name that is not usable as a log shard filename is refused HERE,
                 # where the agent can read the reason and retry, rather than at the
                 # first write -- by which point the caller believes it is identified.
-                if want and not _VALID_AGENT.match(want):
+                if want and not _VALID_AGENT.fullmatch(want):
                     return _ok(
                         mid,
                         _text(
@@ -1919,7 +1929,7 @@ def _test_gates(repo: Path) -> list[str]:
     )
 
 
-def _instruction_vars(repo: Path) -> dict[str, Any]:
+def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     """Everything `mcp_instructions.md` can render from.
 
     Gathered defensively: this runs inside the `initialize` handshake, which must
@@ -2027,6 +2037,9 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
                 # wanted to -- the same CLI/MCP divergence, inside the fix for it.
                 "kind": st.companion.kind,
                 "usable": st.usable,
+                "is_gap": st.is_gap,
+                "is_unknown": st.is_unknown,
+                "advice": st.advice,
             }
             for st in statuses
         ]
@@ -2039,15 +2052,50 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         # be "registered", so the old test put it in this list on every connection and
         # the template told the agent -- as "something to DO" -- to register it. The
         # agent obeys and gets a refusal, having been instructed by the server itself.
-        v["missing_companions"] = [c for c in v["companions"] if not c["usable"] and c["default"]]
-        v["unregistered_companions"] = [
-            c for c in v["missing_companions"] if c["state"] == "installed" and c["kind"] == "mcp"
-        ]
-        v["uninstalled_companions"] = [
-            c for c in v["missing_companions"] if c["state"] == "missing"
+        # Three buckets, because there are three different things to DO about them,
+        # and the template renders each separately. One list called
+        # "missing_companions" made the instruction say "install and register these"
+        # over a set that included a tool needing no registration and a tool nobody
+        # had looked for.
+        # Bucketed by ADVICE, not by state: with `probe=False` an mcp companion is
+        # definitely not registered and its install state is unknown, which is neither
+        # "one command away" nor "go install it". Splitting on `state` put it in no
+        # bucket, so the handshake computed three lists and dropped the only non-empty
+        # case on the floor.
+        by = {
+            a: [c for c in v["companions"] if c["advice"] == a and c["default"]]
+            for a in ("register", "install", "check")
+        }
+        v["unregistered_companions"] = by["register"]
+        v["uninstalled_companions"] = by["install"]
+        v["unchecked_companions"] = by["check"]
+        v["missing_companions"] = by["register"] + by["install"]
+        # ONE list for the template, because the proposal an agent makes is the same in
+        # all three cases -- tell the operator, give them the command, let them decide.
+        # Only the CLAIM about install state differs, and that is what `state_word`
+        # carries. Splitting them into three rendered blocks dropped the install
+        # command from the commonest case and left the agent nothing to act on.
+        word = {
+            "register": "installed, not registered",
+            "install": "not installed",
+            "check": "not checked",
+        }
+        v["actionable_companions"] = [
+            {**c, "state_word": word[c["advice"]]}
+            for c in by["register"] + by["install"] + by["check"]
         ]
         cover = CO.gate_coverage(repo, statuses, v["task_pipeline"])
-        v["gate_gaps"] = [g for g, ids in cover.items() if not ids]
+        # A gate is only a GAP if every companion that could serve it is known absent.
+        # With `probe=False` the cli companions are all `None`, so a plain "no ids"
+        # test reported `rules` as unserved on every connection even with the tool on
+        # the PATH -- telling the agent a gate has nothing behind it on the strength of
+        # not having checked.
+        unknown_for: dict[str, bool] = {}
+        for st in statuses:
+            if st.usable is None:
+                for g in st.companion.gates:
+                    unknown_for[g] = True
+        v["gate_gaps"] = [g for g, ids in cover.items() if not ids and not unknown_for.get(g)]
     except Exception as exc:
         # NOT `pass`. A broad catch here is right -- a malformed registry must not stop
         # the handshake, and an agent with no instructions is worse than one with
@@ -2065,11 +2113,17 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         from ..core import progress as PR
         from ..core.model import fold
         from ..core.schedule import plan
-        from ..infra.log import EventLog
+        from ..infra.log import EventLog, effective_agent_id
         from ..services import importer as IM
         from ..services import leases as L
 
-        log = EventLog(repo, cfg.agent.id or "")
+        # `effective_agent_id`, not `cfg.agent.id or ""` -- the latter falls to the
+        # tree-derived default and reads neither DDFLOW_AGENT nor a declared name. The
+        # identity here decides which items `plan()` counts as "already mine", so with
+        # DDFLOW_AGENT set the handshake reported the connection's OWN claimed work as
+        # someone else's, at the one moment the agent is told what to do next. B88's
+        # sweep fixed two call sites and missed this one.
+        log = EventLog(repo, effective_agent_id(repo, cfg, agent))
         events = log.read_all()
         st = fold(events, strict=False)
         p = plan(st, cfg, agent=log.agent_id)
@@ -2093,7 +2147,7 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
     return v
 
 
-def _instructions(repo: Path) -> str:
+def _instructions(repo: Path, agent: str = "") -> str:
     """What the client injects into the model's context on connect.
 
     **State-aware on purpose.** A fixed blurb describing a workflow the project has not
@@ -2112,7 +2166,7 @@ def _instructions(repo: Path) -> str:
     """
     from ..services import prompts as P
 
-    vars_ = _instruction_vars(repo)
+    vars_ = _instruction_vars(repo, agent)
     overrides: dict[str, str] = {}
     if vars_["adopted"]:
         try:

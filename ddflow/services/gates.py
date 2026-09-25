@@ -530,6 +530,58 @@ def verify(
     return results, ""
 
 
+#: How many untracked files `tree_fingerprint` will hash before giving up on content
+#: and falling back to their names alone. `--exclude-standard` already drops anything
+#: gitignored, so a repository normally has a handful; a run that has just dumped ten
+#: thousand artifacts into an un-ignored directory should not turn every gate into a
+#: full read of them. Configurable because the right number depends on the project --
+#: raise it if your work genuinely spans more new files than this.
+MAX_UNTRACKED_HASHED = 512
+
+
+#: Paths the fingerprint must IGNORE. `.ddflow/` is this tool's own bookkeeping, and
+#: recording a gate's outcome writes an event into it — so including it made the
+#: fingerprint move as a DIRECT RESULT of taking it, and every completion warned that
+#: the tree had changed since the gate ran. The evidence a gate produces is about the
+#: SOURCE; the fact that recording it appended to a log is not a reason to distrust it.
+#:
+#: Expressed as git pathspecs so the exclusion happens inside git rather than by
+#: filtering its output afterwards — a post-filter has to re-implement pathspec
+#: matching, and would drift from what git itself considers inside the directory.
+FINGERPRINT_EXCLUDE: tuple[str, ...] = (":(exclude).ddflow", ":(exclude).ddflow/**")
+
+
+def _untracked_digest(cwd: Path) -> str:
+    """Content ids for untracked files, or their names when there are too many.
+
+    `git hash-object` WITHOUT `-w`: it computes the object ids and writes nothing to
+    the object store, so this stays an observation. Binary content is covered here for
+    free, because hash-object hashes bytes and does not care what they are.
+    """
+    from ..infra import worktree as W
+
+    listed = W.git(
+        cwd, "ls-files", "--others", "--exclude-standard", "--", ".", *FINGERPRINT_EXCLUDE
+    )
+    if not listed.ok or not listed.out.strip():
+        return ""
+    paths = listed.out.splitlines()
+    if len(paths) > MAX_UNTRACKED_HASHED:
+        # Names only. Degraded, and SAID so in the digest rather than silently: a
+        # fingerprint that quietly stopped covering content would make `stale_evidence`
+        # go quiet for the repositories that need it most.
+        return f"names-only:{len(paths)}:" + digest("\n".join(sorted(paths)))
+    hashed = W.git(cwd, "hash-object", *paths)
+    ids = hashed.out.splitlines()
+    # A short or long reply must not be zipped silently: `zip` would truncate to the
+    # shorter list, pairing hashes with the wrong paths and producing a fingerprint
+    # that looks entirely plausible and means nothing. Fall back to names, which is
+    # weaker but honest.
+    if not hashed.ok or len(ids) != len(paths):
+        return digest("\n".join(sorted(paths)))
+    return digest("\n".join(f"{h} {p}" for h, p in zip(ids, paths, strict=True)))
+
+
 def tree_fingerprint(cwd: Path) -> str:
     """What the working tree looked like, committed and uncommitted.
 
@@ -551,11 +603,24 @@ def tree_fingerprint(cwd: Path) -> str:
     not, and it adds no new noise because untracked paths were already in the porcelain
     listing. Cost is proportional to the SIZE OF THE CHANGES, not to the tree.
 
-    **Known limit, stated rather than papered over:** `git diff` renders a binary file
-    as "Binary files ... differ" with no content, so a re-edit of an already-modified
-    binary is still invisible. Source changes are the case this protects and the fix
-    for binaries (`--binary`, base85-encoding whole blobs) costs far more than it buys.
-    Filed as B87.
+    `.ddflow/` is EXCLUDED throughout. Recording a gate outcome appends an event to it,
+    so counting it made the fingerprint move as a direct consequence of taking it, and
+    every completion then warned that the tree had changed since the gate ran. A
+    warning that always fires is one nobody reads — and it would have fired on the
+    ordinary path, not an edge case.
+
+    UNTRACKED files are hashed separately, and that is not an optional extra: `git diff
+    HEAD` never shows them and porcelain shows only `?? path`, so without this a brand
+    new module -- untracked until its first commit, which is the ORDINARY state of
+    agent work -- could be rewritten completely between the gate and the completion
+    with the fingerprint unmoved. `git hash-object` without `-w` computes the ids and
+    writes nothing, so the observer still does not change what it observes.
+
+    **Known limit, stated rather than papered over:** `git diff` renders a TRACKED
+    binary file as "Binary files ... differ" with no content, so a re-edit of an
+    already-modified tracked binary is invisible. Untracked binaries are covered (they
+    are hashed bytewise). The fix for the remaining case -- `--binary`, base85-encoding
+    whole blobs into the digest -- costs far more than it buys here. Filed as B95.
 
     Not `write-tree` or `stash create`: both WRITE, and a function whose job is to
     observe must not change what it observes. Outside a repository it returns ""
@@ -567,11 +632,12 @@ def tree_fingerprint(cwd: Path) -> str:
     head = W.git(cwd, "rev-parse", "HEAD")
     if not head.ok:
         return ""
-    status = W.git(cwd, "status", "--porcelain")
+    status = W.git(cwd, "status", "--porcelain", "--", ".", *FINGERPRINT_EXCLUDE)
     # `HEAD` and not `--cached`: staged and unstaged changes are equally "not what is
     # committed", and a gate cares about the files on disk it just ran against.
-    diff = W.git(cwd, "diff", "HEAD")
+    diff = W.git(cwd, "diff", "HEAD", "--", ".", *FINGERPRINT_EXCLUDE)
     parts = [status.out if status.ok else "", diff.out if diff.ok else ""]
+    parts.append(_untracked_digest(cwd))
     body = "\x00".join(parts)
     dirt = digest(body) if body.strip() else "clean"
     return f"{head.out.strip()[:12]}+{dirt}"

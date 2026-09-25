@@ -663,8 +663,10 @@ def test_an_omitted_field_is_still_left_alone(repo):
     """The over-correction to avoid: treating every absent key as a clear.
 
     A client that sends only the field it is changing must not wipe the others, and one
-    that fills every optional property with "" is why `clearable` is opt-in per tool
-    rather than the global rule.
+    that fills every optional property with "" is why `clearable` WAS opt-in per tool
+    rather than the global rule, back when the argv path needed it. `ddflow_update` now
+    goes through the typed layer, where absent and empty are simply different values;
+    the behaviour this test pins is unchanged.
     """
     run_cli(repo, "init")
     run_cli(repo, "phase", "add", "P1", "--globs", "core/**")

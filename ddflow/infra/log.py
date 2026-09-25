@@ -42,6 +42,7 @@ __all__ = [
     "canonical",
     "default_agent_id",
     "effective_agent_id",
+    "resolve_agent_id",
     "utcnow",
 ]
 
@@ -122,6 +123,30 @@ def default_agent_id(fallback_root: Path | str | None = None) -> str:
     return ident
 
 
+def resolve_agent_id(root: Path | str, cfg: Any = None, declared: str = "") -> tuple[str, str]:
+    """(identity, WHICH LAYER produced it). See :func:`effective_agent_id`.
+
+    The layer is returned rather than inferred, because inferring it by comparing the
+    result against each candidate is wrong whenever two candidates agree: with
+    `DDFLOW_AGENT` unset and no `[agent].id`, the derived name differs from
+    `cfg.agent.id` (`""`), so a value-comparison recorded the source as `env` and
+    `ddflow config --explain` told an operator the environment was responsible for a
+    variable nothing had set. An operator debugging identity is precisely the person
+    who cannot afford that.
+    """
+    if declared:
+        return declared, "explicit"
+    env = os.environ.get("DDFLOW_AGENT", "")
+    if cfg is not None:
+        if env and getattr(cfg, "sources", {}).get("agent.id", "default") == "default":
+            return env, "env"
+        if getattr(getattr(cfg, "agent", None), "id", ""):
+            return cfg.agent.id, "config"
+    elif env:
+        return env, "env"
+    return default_agent_id(root), "derived"
+
+
 def effective_agent_id(root: Path | str, cfg: Any = None, declared: str = "") -> str:
     """The identity a write will actually carry, resolved in ONE place.
 
@@ -141,20 +166,7 @@ def effective_agent_id(root: Path | str, cfg: Any = None, declared: str = "") ->
     encoding, called from both. `cfg` is optional so callers below the config layer can
     still ask.
     """
-    if declared:
-        return declared
-    env = os.environ.get("DDFLOW_AGENT", "")
-    if cfg is not None:
-        # The env var loses to an EXPLICIT `[agent].id`, and wins over the default --
-        # the same order `Ctx` applies, because an operator who wrote the id into their
-        # config meant it more than one inherited from the environment.
-        if env and getattr(cfg, "sources", {}).get("agent.id", "default") == "default":
-            return env
-        if getattr(getattr(cfg, "agent", None), "id", ""):
-            return cfg.agent.id
-    elif env:
-        return env
-    return default_agent_id(root)
+    return resolve_agent_id(root, cfg, declared)[0]
 
 
 #: Transaction depth per (pid, lock path), NOT per EventLog instance.

@@ -34,7 +34,7 @@ from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, fold
 from ..core.schedule import critical_path, plan
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
-from ..infra.log import EventLog, effective_agent_id
+from ..infra.log import EventLog, resolve_agent_id
 from ..infra.store import Store
 from ..services import gates as G
 from ..services import leases as L
@@ -77,10 +77,14 @@ class Ctx:
         # drifted the moment the second path existed: `api._load` built its log with
         # `EventLog(repo, "")`, which reads neither the env var nor the config, so the
         # two surfaces wrote the same connection's events under different identities.
-        resolved = effective_agent_id(self.repo, self.cfg, args.agent or "")
+        resolved, layer = resolve_agent_id(self.repo, self.cfg, args.agent or "")
         if resolved != self.cfg.agent.id:
             self.cfg.agent.id = resolved
-            self.cfg.sources["agent.id"] = "explicit" if args.agent else "env"
+            # The layer that actually won, not a guess from comparing values. With
+            # nothing set anywhere the derived name differs from `cfg.agent.id` (""),
+            # so the old code fired and recorded `env` -- and `config --explain` then
+            # blamed the environment for a variable nobody had exported.
+            self.cfg.sources["agent.id"] = layer
         self.log = EventLog(
             self.repo, self.cfg.agent.id, lock_timeout_s=self.cfg.lease.acquire_timeout_s
         )
@@ -2852,6 +2856,24 @@ def cmd_hooks(a, c: Ctx) -> int:
     return FAIL
 
 
+def _scan_companions(repo: Path, *, probe: bool = True):
+    """Scan, or report why not and return None. ONE guard, used by every caller.
+
+    The registry loader writes a careful sentence naming the file, the id and the bad
+    value; letting its `ValueError` escape renders that sentence as an uncaught
+    exception and makes the exit code an accident rather than a contract. Guarding it
+    per call site meant two of three sites were fixed and `adopt` — documented as safe
+    to re-run — still exited on a traceback, after `init` had already written files.
+    """
+    from ..services import companions as CO
+
+    try:
+        return CO.scan(repo, probe=probe)
+    except ValueError as exc:
+        print(f"{exc}\n  (in .ddflow/companions.toml or .ddflow/config.toml)", file=sys.stderr)
+        return None
+
+
 def cmd_companions(a, c: Ctx) -> int:
     """Which companion MCP servers serve this project's gates, and what is missing.
 
@@ -2862,14 +2884,8 @@ def cmd_companions(a, c: Ctx) -> int:
     """
     from ..services import companions as CO
 
-    try:
-        statuses = CO.scan(c.repo, probe=not getattr(a, "no_probe", False))
-    except ValueError as exc:
-        # The registry loader writes a careful sentence naming the file, the id and the
-        # bad value. Letting it escape renders that sentence as an uncaught exception
-        # instead of an answer, and the exit code becomes an accident rather than a
-        # contract.
-        print(f"{exc}\n  (in .ddflow/companions.toml or .ddflow/config.toml)", file=sys.stderr)
+    statuses = _scan_companions(c.repo, probe=not getattr(a, "no_probe", False))
+    if statuses is None:
         return FAIL
     by_id = {st.companion.id: st for st in statuses}
 
@@ -2996,6 +3012,8 @@ def cmd_companions(a, c: Ctx) -> int:
         else:
             lines.append(f"       not here: {st.detail}")
             lines.append(f"       -> ask the operator, then: {st.companion.install}")
+            if st.companion.note:
+                lines.append(f"          note: {st.companion.note}")
             if st.companion.is_mcp:
                 lines.append(f"          then: ddflow companions add --id {st.companion.id}")
             if st.companion.url:
@@ -3402,14 +3420,15 @@ def cmd_adopt(a, c: Ctx) -> int:
     # in exactly the way this design exists to prevent. Detection only; nothing is
     # installed, because fetching and running code on someone's machine is not a thing
     # a work-queue tool gets to do.
-    from ..services import companions as CO
-
     # `is_gap`, so an installed command-line companion is not reported as "installed
     # here but not wired up" -- there is nothing to wire up, and the command offered
     # below would refuse it. Third of the four sites that each re-derived "goal state";
     # they all ask `Status` now.
+    statuses = _scan_companions(c.repo)
+    if statuses is None:
+        return FAIL
     ready, absent = [], []
-    for st in CO.scan(c.repo):
+    for st in statuses:
         if not st.is_gap:
             continue
         (ready if st.state == "installed" else absent).append(st.companion.id)

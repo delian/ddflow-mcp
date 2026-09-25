@@ -167,7 +167,11 @@ def _mixed(args: tuple[str, str, int]) -> tuple[str, int, int, int]:
                 "params": {"name": "ddflow_next", "arguments": {}},
             }
         )
-        if r and "result" in r:
+        # Same isError-blindness as `_reader` had: an error is returned AS a result
+        # with `isError: true`, so `"result" in r` counts a failed `next` as a success
+        # and the assertion below could only ever see one that HUNG. Fixed in `_reader`
+        # and missed here, five lines away, in the same commit.
+        if r and "result" in r and not r["result"].get("isError"):
             reads += 1
         w = srv.handle(
             {
