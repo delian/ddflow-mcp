@@ -1094,20 +1094,30 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_companions_add": {
         "description": (
-            "Register companion MCP servers that are ALREADY installed into an "
-            "agent's MCP config, merging rather than overwriting what is there. "
-            "Refuses (exit 3) to register one that is not installed, because that "
-            "writes a launch command which fails mid-task, at the moment a gate told "
-            "the agent to reach for it."
+            "WRITES to this repository's agent config. Registers companion MCP "
+            "servers that are ALREADY installed, merging rather than overwriting what "
+            "is there. Refuses (exit 3) to register one that is not installed, because "
+            "that writes a launch command which fails mid-task, at the moment a gate "
+            "told the agent to reach for it. "
+            "Call it with dry_run=true FIRST, show the operator the exact entry it "
+            "reports, and write only once they agree: which servers an agent launches "
+            "is the operator's decision, not yours."
         ),
         "properties": {
             "id": ("string", "Comma-separated ids; default: every installed one.", False),
             "agents": ("string", "Comma-separated agent keys (default: claude).", False),
+            "dry_run": (
+                "boolean",
+                "Report the exact config entry that would be written, and write "
+                "nothing. Use this first, and show the operator the result.",
+                False,
+            ),
         },
         "argv": lambda a: (
             ["--json", "companions", "add"]
             + (["--id", a["id"]] if a.get("id") else [])
             + (["--agents", a["agents"]] if a.get("agents") else [])
+            + (["--dry-run"] if a.get("dry_run") else [])
         ),
     },
     "ddflow_bug_found": {

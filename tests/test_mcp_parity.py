@@ -31,6 +31,13 @@ ALIASES: dict[str, tuple[str, ...]] = {
 #: CLI commands deliberately NOT exposed, each with its reason.
 NOT_EXPOSED: dict[str, str] = {
     "mcp": "starts the MCP server itself; exposing it over MCP would be recursive",
+    "approve": (
+        "clears a HUMAN-approval gate, and the whole point is that the agent cannot. "
+        "A human checkpoint reachable from the MCP surface is not a human checkpoint — "
+        "it is a second `gate record` with a longer name. This exemption is the "
+        "feature, not an oversight, and `test_no_mcp_tool_can_clear_a_human_gate` "
+        "asserts it holds end to end rather than resting on this line."
+    ),
 }
 
 
@@ -80,6 +87,11 @@ def cli_leaves() -> list[tuple[str, ...]]:
 #: Subcommand paths deliberately NOT exposed, each with its reason.
 LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
     ("mcp",): "starts the MCP server itself; exposing it over MCP would be recursive",
+    ("approve",): (
+        "clears a HUMAN-approval gate, and the whole point is that the agent cannot. "
+        "See NOT_EXPOSED for the full reason; the property is asserted end to end by "
+        "test_no_mcp_tool_can_clear_a_human_gate rather than resting on this line."
+    ),
     ("hooks", "status"): "covered by ddflow_hooks, whose action argument selects it",
     ("hooks", "install"): "covered by ddflow_hooks, whose action argument selects it",
     ("hooks", "uninstall"): "covered by ddflow_hooks, whose action argument selects it",

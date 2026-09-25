@@ -706,6 +706,19 @@ def cmd_gate(a, c: Ctx) -> int:
         )
 
     if a.gate_cmd == "run":
+        if gdef.is_human_gate:
+            print(
+                f"gate {a.gate!r} is a HUMAN-APPROVAL gate. It is not something you can "
+                f"run or record — it is where the operator decides whether this work "
+                f"should proceed, before the compute is spent.\n\n"
+                f"{gdef.prompt}\n\n"
+                f"Show them what you are proposing, then ask them to run:\n"
+                f"  ddflow approve {a.id} {a.gate}\n"
+                f"  ddflow approve {a.id} {a.gate} --reject --reason '...'\n\n"
+                f"There is deliberately no MCP tool for this.",
+                file=sys.stderr,
+            )
+            return NOTHING
         if not gdef.is_command_gate:
             print(
                 f"gate {a.gate!r} is an AGENT gate — ddflow cannot perform it.\n\n"
@@ -783,10 +796,39 @@ def cmd_gate(a, c: Ctx) -> int:
             )
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
-            return FAIL
+            # A human gate is a COORDINATION refusal (3), not a failure (1): nothing
+            # went wrong, the caller is simply not the party who can clear it. An agent
+            # branching on exit codes needs to tell "this is broken" from "this is not
+            # yours to do".
+            return REFUSED if (gdef is not None and gdef.is_human_gate) else FAIL
         c.out(f"{a.id}.{a.gate} = {outcome}", {"gate": a.gate, "outcome": outcome})
         return OK
     return FAIL
+
+
+def cmd_approve(a, c: Ctx) -> int:
+    """A person clears, or refuses, a human-approval gate.
+
+    CLI ONLY, on purpose, and `tests/test_mcp_parity.py` records the exemption with its
+    reason. A human checkpoint an agent can satisfy through the MCP surface is not a
+    human checkpoint — it is a second `gate record` with a longer name.
+    """
+    try:
+        line = G.approve(
+            c.log,
+            c.cfg,
+            a.id,
+            a.gate,
+            gates=c.gates,
+            note=a.note or "",
+            reject=bool(a.reject),
+            reason=a.reason or "",
+        )
+    except ValueError as exc:
+        print(str(exc), file=sys.stderr)
+        return FAIL
+    c.out(line, {"id": a.id, "gate": a.gate, "approved": not a.reject, "line": line})
+    return OK
 
 
 def cmd_complete(a, c: Ctx) -> int:
@@ -2953,8 +2995,18 @@ def cmd_companions(a, c: Ctx) -> int:
                 )
             return REFUSED
         agents = _csv(a.agents) or ["claude"]
-        actions = [CO.register(c.repo, by_id[w].companion, ag) for w in wanted for ag in agents]
-        c.out("\n".join(f"  {x}" for x in actions), {"actions": actions})
+        dry = bool(getattr(a, "dry_run", False))
+        actions = [
+            CO.register(c.repo, by_id[w].companion, ag, dry_run=dry)
+            for w in wanted
+            for ag in agents
+        ]
+        head = (
+            "Nothing was written. Show the operator this, and register it only if they agree:\n"
+            if dry
+            else ""
+        )
+        c.out(head + "\n".join(f"  {x}" for x in actions), {"actions": actions, "applied": not dry})
         return OK
 
     pipeline = list(c.cfg.gates.task_pipeline)
@@ -3666,6 +3718,17 @@ def build_parser() -> argparse.ArgumentParser:
     rl.add_argument("--note")
     rl.set_defaults(fn=cmd_release)
 
+    ap = s.add_parser(
+        "approve",
+        help="a PERSON clears (or rejects) a human-approval gate — no MCP equivalent",
+    )
+    ap.add_argument("id")
+    ap.add_argument("gate")
+    ap.add_argument("--note", help="what you looked at, for the record")
+    ap.add_argument("--reject", action="store_true", help="refuse it; --reason required")
+    ap.add_argument("--reason", help="why it was rejected — a 'no' nobody can act on is a stall")
+    ap.set_defaults(fn=cmd_approve)
+
     g = s.add_parser("gate", help="run / record / inspect a gate")
     g_s = g.add_subparsers(dest="gate_cmd", required=True)
     gst = g_s.add_parser("status")
@@ -4085,6 +4148,11 @@ def build_parser() -> argparse.ArgumentParser:
     co_add = co_s.add_parser("add", help="register installed companions in an agent's MCP config")
     co_add.add_argument("--id", default="", help="comma-separated; default: every installed one")
     co_add.add_argument("--agents", default="", help="comma-separated (default: claude)")
+    co_add.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show the exact config entry that would be written, and write nothing",
+    )
     co_add.add_argument("--force", action="store_true", help="register one that is not installed")
     co_add.add_argument("--no-probe", action="store_true", help=argparse.SUPPRESS)
     co.set_defaults(fn=cmd_companions, companions_cmd="list", no_probe=False)

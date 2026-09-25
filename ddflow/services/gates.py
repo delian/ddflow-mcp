@@ -28,10 +28,12 @@ treated as "no problem".
 
 from __future__ import annotations
 
+import getpass
 import hashlib
 import os
 import shlex
 import shutil
+import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -67,9 +69,34 @@ class GateDef:
     #: red — see `verify`.
     mutations: list[dict[str, str]] = field(default_factory=list)
 
+    #: This gate is satisfied by a PERSON, not by the agent and not by a command.
+    #: See :meth:`is_human_gate`.
+    human: bool = False
+
     @property
     def is_command_gate(self) -> bool:
-        return bool(self.command.strip())
+        return bool(self.command.strip()) and not self.human
+
+    @property
+    def is_human_gate(self) -> bool:
+        """A checkpoint only the operator can clear.
+
+        Every other gate here is cleared by the agent — it runs a command, or it asserts
+        it did the thinking. That is right for work whose correctness is checkable after
+        the fact, and wrong for a plan: by the time an agent has implemented the wrong
+        thing, the cost is already paid. A human gate is where the operator says "yes,
+        build that" BEFORE the compute is spent.
+
+        **What this is, precisely.** An audit trail and a speed bump, NOT a security
+        boundary. An agent with shell access can run `ddflow approve` itself, and no
+        amount of design here changes that — the tool does not control the machine.
+        What it does guarantee is that satisfying the gate is (a) impossible through the
+        MCP surface at all, so the ordinary path is closed, and (b) recorded with the OS
+        user and a human flag, so a forged approval is visible in the log rather than
+        indistinguishable from a real one. Claiming more than that would be the exact
+        overclaim this project keeps finding in its own docstrings.
+        """
+        return self.human
 
 
 #: The shipped default pipeline. It is the operator's ten steps, in their order, with
@@ -446,6 +473,16 @@ def verify(
     gdef = gates.get(gate_id)
     if not gdef:
         return [], f"unknown gate {gate_id!r}; known: {', '.join(sorted(gates))}"
+    if gdef.is_human_gate:
+        # Named for what it IS. Calling it an agent gate tells the reader its honesty
+        # rests on the evidence contract, which is the wrong advice: a human gate rests
+        # on a person having looked, and there is no mutation that could demonstrate
+        # that.
+        return [], (
+            f"{gate_id} is a HUMAN-APPROVAL gate — there is no command to mutate, and "
+            f"no test could show that a person's judgement can go the other way. It is "
+            f"cleared by `ddflow approve` and nothing else."
+        )
     if not gdef.is_command_gate:
         return [], (
             f"{gate_id} is an agent gate — it has no command to run, so there is "
@@ -856,6 +893,7 @@ def record(
     reason: str = "",
     evidence: dict[str, Any] | None = None,
     gates: dict[str, GateDef] | None = None,
+    human: bool = False,
 ) -> None:
     """Write a gate outcome to the log, enforcing the evidence contract.
 
@@ -866,6 +904,17 @@ def record(
     if outcome not in GATE_OUTCOMES:
         raise ValueError(f"bad outcome {outcome!r}; expected one of {GATE_OUTCOMES}")
     gdef = (gates or {}).get(gate)
+    # Refused HERE, at the service boundary, not in the CLI branch that happens to be
+    # the usual caller. A check that lives in one surface is a check the other surface
+    # does not have, which is how `ddflow_gate_record` would have cleared a human
+    # checkpoint over MCP while the terminal refused it.
+    if gdef is not None and gdef.is_human_gate and not human:
+        raise ValueError(
+            f"{gate!r} is a human-approval gate: it is cleared by a person, not by an "
+            f"agent recording that it happened. Ask the operator to run "
+            f"`ddflow approve {item_id} {gate}` (or `--reject --reason ...`). "
+            f"There is deliberately no MCP tool for this."
+        )
     if outcome == "skipped":
         if not cfg.gates.allow_skip_with_reason:
             raise ValueError("skipping is disabled ([gates].allow_skip_with_reason)")
@@ -944,3 +993,68 @@ def reviewer_independence(
         f"independent evidence."
         + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
     )
+
+
+def approve(
+    log: EventLog,
+    cfg: Config,
+    item_id: str,
+    gate: str,
+    *,
+    gates: dict[str, GateDef] | None = None,
+    note: str = "",
+    reject: bool = False,
+    reason: str = "",
+) -> str:
+    """A PERSON clears (or refuses) a human gate. Returns the line to print.
+
+    Records the OS user rather than the agent id, and stamps `human: true` on the
+    evidence. Neither makes forgery impossible — an agent with a shell can run this —
+    but both make a forged approval *visible* in the log instead of identical to a real
+    one, which is the difference between a record you can audit and one you cannot.
+
+    A rejection is a first-class outcome, not the absence of an approval: "the operator
+    looked and said no" and "nobody has looked yet" are different states, and an item
+    sitting in the second forever is how a checkpoint becomes a silent stall.
+    """
+    gdef = (gates or {}).get(gate)
+    if gdef is None:
+        raise ValueError(f"no such gate {gate!r}")
+    if not gdef.is_human_gate:
+        raise ValueError(
+            f"{gate!r} is not a human-approval gate, so there is nothing for a person "
+            f"to approve. Set `[gate.{gate}] human = true` in .ddflow/gates.toml if it "
+            f"should be one; otherwise use `ddflow gate record`."
+        )
+    if reject and not reason:
+        raise ValueError("a rejection must carry --reason: 'no' with no reason cannot be acted on")
+
+    try:
+        who = getpass.getuser()
+    except Exception:
+        # Not fatal, and not silently blank: an approval whose approver is unknown is
+        # still a real approval, and saying "unknown" is honest where inventing a name
+        # would not be.
+        who = "unknown-user"
+    ev = {
+        "human": True,
+        "approved_by": who,
+        "host": socket.gethostname().split(".")[0],
+        "note": note,
+    }
+    outcome = "failed" if reject else "passed"
+    record(
+        log,
+        cfg,
+        item_id,
+        gate,
+        outcome,
+        by=who,
+        reason=reason,
+        evidence=ev,
+        gates=gates,
+        human=True,
+    )
+    verb = "REJECTED" if reject else "approved"
+    tail = f" — {reason}" if reason else (f" — {note}" if note else "")
+    return f"{item_id}.{gate} {verb} by {who}{tail}"

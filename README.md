@@ -39,6 +39,7 @@ and an MCP server that are the same implementation.
 - [The task pipeline](#the-task-pipeline)
   - [Proving a gate can fail at all](#proving-a-gate-can-fail-at-all)
 - [The phase pipeline](#the-phase-pipeline)
+- [Human approval: a gate the agent cannot clear](#human-approval-a-gate-the-agent-cannot-clear)
 - [Parallelism and coordination](#parallelism-and-coordination)
 - [Many agents, one server: identity, state and sharing](#many-agents-one-server-identity-state-and-sharing)
   - [Is it stateless?](#is-it-stateless)
@@ -513,7 +514,7 @@ missing — "no data", never collapsed into "no problem".
 
 | | Serves | Why |
 |---|---|---|
-| **roborev** | `standards`, `bug_hunt`, `dedupe` | Cross-file duplication analysis, which is the failure mode of agent-written code specifically: an agent changing replicated logic reliably updates one copy and misses the rest |
+| **roborev** *(cli)* | `standards`, `bug_hunt`, `dedupe` | Cross-file duplication analysis, which is the failure mode of agent-written code specifically: an agent changing replicated logic reliably updates one copy and misses the rest |
 | **codeguide** | `standards` | Checks against a written standard instead of the reviewer's taste |
 | **context7** | `research`, `standards` | A model's memory of a library's API is exactly the kind of claim that is cheap to check and often wrong |
 | **memory** | `rules` | Operational facts about *this machine* — ddflow's own `recall` covers the project's memory, which is a different thing and belongs in the committed log |
@@ -533,6 +534,14 @@ repository's actual manifests, to candidates checked against their primary sourc
 provenance, maintenance, what they execute, what credential they want — and produces
 `[[companion]]` blocks you can read and delete. It proposes; you install. A rejection is
 part of its report, so the next session does not re-research it.
+
+**Registering is previewable.** `ddflow companions add --dry-run` (and
+`ddflow_companions_add` with `dry_run=true`) reports the exact config entry it would
+write and writes nothing — not the file, not even its parent directory. The handshake
+tells an agent to dry-run first and show the operator the actual entry rather than a
+description of it, because registering changes which processes their agent launches.
+The preview is asserted to match what the real write produces; a preview that drifts
+from the write is worse than none, since the operator has now signed off on it.
 
 **ddflow never installs anything itself** — running an install command on someone's
 machine is the operator's decision. What it does instead is *instruct the agent to ask*:
@@ -972,6 +981,60 @@ and paste what it printed.
 
 ---
 
+## Human approval: a gate the agent cannot clear
+
+Every other gate here is satisfied by the agent — it runs a command, or it asserts it
+did the thinking. That is right for work whose correctness is checkable afterwards, and
+wrong for a **plan**: by the time an agent has built the wrong thing, the cost is
+already paid.
+
+A gate marked `human = true` is where the operator says *yes, build that* before the
+compute is spent.
+
+```toml
+# .ddflow/gates.toml
+[gate.plan_approved]
+title  = "Operator approves the plan"
+human  = true
+prompt = "Show the operator what you intend to build, then ask."
+```
+
+```console
+$ ddflow gate run T1 plan_approved
+gate 'plan_approved' is a HUMAN-APPROVAL gate. It is not something you can run or
+record — it is where the operator decides whether this work should proceed.
+  ddflow approve T1 plan_approved
+  ddflow approve T1 plan_approved --reject --reason '...'
+
+$ ddflow gate record T1 plan_approved --outcome passed --evidence "looks fine"
+'plan_approved' is a human-approval gate: it is cleared by a person, not by an agent
+recording that it happened.                                            # exit 3
+
+$ ddflow approve T1 plan_approved --note "read the plan, ship it"
+T1.plan_approved approved by delian — read the plan, ship it
+```
+
+**A rejection is a first-class outcome**, not the absence of an approval: *"the operator
+looked and said no"* and *"nobody has looked yet"* are different states, and an item
+sitting in the second forever is how a checkpoint becomes a silent stall. `--reject`
+requires `--reason`.
+
+**There is deliberately no MCP tool for this**, and `tests/test_mcp_parity.py` records
+the exemption with that reason. A human checkpoint reachable from the MCP surface is not
+a human checkpoint — it is a second `gate record` with a longer name. `gate skip` is
+refused too: *"the operator does not need to approve this"* is not the agent's call.
+
+**What this is, precisely.** An audit trail and a speed bump, **not a security
+boundary.** An agent with shell access can run `ddflow approve` itself, and no design
+here changes that — the tool does not control the machine. What it guarantees is that
+the ordinary path is closed, and that a clearance carries the OS user and a `human`
+flag, so a forged approval is *visible in the log* rather than indistinguishable from a
+real one.
+
+Opt-in: the shipped pipeline has no human gate, and a test keeps it that way.
+
+---
+
 ## Parallelism and coordination
 
 ```console
@@ -1300,6 +1363,8 @@ ddflow gate status <id>         pipeline position + the next gate's instruction
 ddflow gate run <id> <gate>     execute a command gate, record its evidence
 ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model)
 ddflow gate skip <id> <gate>    skip, with a mandatory reason
+ddflow approve <id> <gate>      a PERSON clears a human gate  (no MCP equivalent)
+ddflow approve .. --reject      ...or refuses it, with --reason
 ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 
 ddflow merge <id>               merge from the primary checkout, no checkout

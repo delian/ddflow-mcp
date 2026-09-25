@@ -332,9 +332,7 @@ def test_the_handshake_calls_an_unprobed_companion_UNCHECKED_not_missing(repo):
     # where it proposes.
     text = _instructions(repo)
     assert "[not checked]" in text, text[-900:]
-    assert "[not installed]" not in text, (
-        "an unprobed companion was rendered as known-absent"
-    )
+    assert "[not installed]" not in text, "an unprobed companion was rendered as known-absent"
     # ...and the command is still there to act on.
     assert "Install: `" in text
 
@@ -370,4 +368,66 @@ def test_install_is_a_command_and_caveats_live_in_note(tmp_path):
         )
         assert "#" not in c.install, (
             f"{c.id}'s install carries a trailing comment; put it in `note`"
+        )
+
+
+def test_roborev_is_a_cli_tool_because_it_has_no_mcp_mode(tmp_path):
+    """The shipped registry claimed `roborev mcp`, and that subcommand does not exist.
+
+        $ roborev mcp
+        Error: unknown command "mcp" for "roborev"
+
+    So `ddflow companions add --id roborev` wrote `{"command": "roborev", "args":
+    ["mcp"]}` into the operator's `.mcp.json`, and the agent spawning it got that error
+    instead of a JSON-RPC handshake — the precise failure the `kind` field was added to
+    prevent, in the flagship entry, added by the same change that added the field.
+
+    The `detect` probe is why it survived: `roborev --version` proves the BINARY exists
+    and says nothing about whether the LAUNCH command works. Detection and launch were
+    different code paths and only one of them was ever exercised.
+
+    *Found by the operator asking "is roborev an MCP or a tool or both?" — a question,
+    not a bug report.*
+    """
+    reg = {c.id: c for c in CO.load(tmp_path)}
+    assert reg["roborev"].kind == "cli", (
+        "roborev is registered as an MCP server; `roborev mcp` is not a command"
+    )
+    assert "mcp" not in reg["roborev"].args, reg["roborev"].args
+
+
+def test_no_mcp_companion_launches_a_subcommand_its_probe_never_exercises(tmp_path):
+    """The narrow, sound half of the class — stated as what it is rather than dressed up
+    as a general check.
+
+    When a companion's `detect` invokes the SAME binary as its `command`, the probe can
+    only vouch for the launch if it exercises the same subcommand. `roborev --version`
+    vouching for `roborev mcp` is the shape that shipped.
+
+    It checks the LAST non-flag argument — the thing being launched — not the first.
+    The first is wrong: `codeguide` launches `docker run <image>` and probes with
+    `docker image inspect <image>`, where `run` is docker's subcommand and the IMAGE is
+    what identifies the target. Inspecting that image genuinely implies running it will
+    find it, so demanding the first token match would forbid a correct read-only probe.
+
+    (The first version of this check did exactly that, and its docstring claimed the
+    codeguide carve-out it had not implemented — the same
+    comment-promises-what-the-code-does-not-do shape being checked for elsewhere in
+    this suite. Caught by the check going red on a registry entry that is correct.)
+
+    It stays narrow on purpose, and the general case is not mechanisable: nothing
+    static can tell whether a binary speaks JSON-RPC. The registry header carries that
+    instruction — LAUNCH it before marking it `mcp` — and `ddflow companions --verify`
+    is filed as B113 to do it for real.
+    """
+    for c in CO.load(tmp_path):
+        if not c.is_mcp or not c.detect or c.detect[0] != c.command:
+            continue
+        target = [a for a in c.args if not a.startswith("-")]
+        if not target:
+            continue
+        assert target[-1] in c.detect, (
+            f"{c.id} launches `{c.command} {' '.join(c.args)}` but probes with "
+            f"`{' '.join(c.detect)}` — the probe never exercises {target[-1]!r}, so a "
+            f"passing detection says nothing about whether the launch works"
         )

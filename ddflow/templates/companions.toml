@@ -18,6 +18,13 @@
 #   detect      argv run to decide "is this installed?"; exit 0 = yes.
 #               Keep it cheap and side-effect free: it runs on every `companions` call.
 #
+#               For an `mcp` companion the probe must vouch for the LAUNCH, not merely
+#               for the binary. `roborev --version` passed while `roborev mcp` did not
+#               exist, so detection and launch were different code paths and only one
+#               was exercised. **Before marking anything `kind = "mcp"`, actually launch
+#               `command args` and confirm it speaks JSON-RPC.** There is no static
+#               check for this; `ddflow companions --verify` is filed as B113.
+#
 #               **Never `npx -y`.** The `-y` flag FETCHES AND INSTALLS the package in
 #               order to run it, so a detection probe would download software onto the
 #               operator's machine on every `ddflow companions` and `ddflow adopt` --
@@ -50,11 +57,15 @@ complexity across a file set. The duplication analysis is the highest-value one:
 sees cross-file drift that a per-file review cannot, which is the failure mode of \
 agent-written code specifically — an agent changing replicated logic reliably updates \
 one copy and misses the rest."""
+# A COMMAND-LINE tool: `roborev mcp` does not exist, and registering it as a server
+# wrote a launch entry that failed the moment an agent tried it. The agent shells out —
+# `roborev review <sha>` after a commit, `roborev analyze duplication <files>` on the
+# dedupe cadence — so there is nothing to put in an MCP config.
+kind = "cli"
 detect = ["roborev", "--version"]
 command = "roborev"
-args = ["mcp"]
 install = "cargo install roborev"
-note = "Or see the project README for prebuilt binaries."
+note = "Or see the project README for prebuilt binaries. Pin the review agent per repo in .roborev.toml — the machine-global default may name an agent you do not have, and roborev exits 0 while reporting it cannot review."
 url = "https://github.com/steipete/roborev"
 default = true
 

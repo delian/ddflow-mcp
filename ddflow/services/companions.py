@@ -408,7 +408,7 @@ def _toml(value: object) -> str:
     return json.dumps(str(value))
 
 
-def register(repo: Path, c: Companion, agent: str) -> str:
+def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> str:
     """Add one companion to one agent's MCP config, preserving everything there.
 
     Deliberately the same merge discipline as `adopt._register_mcp`: these files hold
@@ -416,11 +416,37 @@ def register(repo: Path, c: Companion, agent: str) -> str:
     twice. Kept as its own function rather than generalising that one, because that
     one also decides HOW to launch ddflow itself (uvx vs docker vs source checkout),
     which has no meaning for a third-party server.
+
+    ``dry_run`` reports exactly what WOULD be written and touches nothing. The
+    handshake tells an agent to ask the operator before registering anything, and
+    until this existed that instruction had nothing behind it: the agent could only
+    describe the change in its own words, or make it and report afterwards. Now it can
+    show the operator the actual config entry first, which is the difference between a
+    norm and something an operator can act on.
     """
     if agent not in AGENT_TARGETS:
         raise ValueError(f"unknown agent {agent!r}; known: {', '.join(AGENT_TARGETS)}")
     _delta, rel = AGENT_TARGETS[agent]
     path = Path(repo) / rel
+    if dry_run:
+        # Everything the write would do, and NOTHING it would do: no mkdir, no file
+        # creation. A "dry run" that still creates a directory is a dry run that
+        # changed the machine.
+        if rel.endswith(".toml"):
+            text = path.read_text("utf-8") if path.exists() else ""
+            if f"[mcp_servers.{c.id}]" in text:
+                return f"{rel} already registers {c.id}; nothing would change"
+            body = (
+                f"[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\n"
+                f"args = {_toml(list(c.args))}\n"
+            )
+            if c.env:
+                body += f"env = {_toml(dict(c.env))}\n"
+        else:
+            if agent in registered_in(repo, c.id):
+                return f"{rel} already registers {c.id}; nothing would change"
+            body = json.dumps({_json_field(agent): {c.id: c.entry()}}, indent=2)
+        return f"WOULD add to {rel}:\n{body}"
     path.parent.mkdir(parents=True, exist_ok=True)
 
     if rel.endswith(".toml"):

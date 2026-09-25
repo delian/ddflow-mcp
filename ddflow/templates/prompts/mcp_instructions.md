@@ -148,9 +148,12 @@ it serves, and exactly what installing it would run on their machine. Then:
    is already there wastes the operator's attention, and treating "not checked" as
    "missing" is the same mistake this pipeline refuses everywhere else.
 1. **If they agree**, run the install command yourself, then register it IF it is an
-   MCP server: `ddflow_companions_add` wires a server into this project's MCP config
-   once it is present. A `cli` companion is a tool you shell out to — there is nothing
-   to register, and `ddflow_companions_add` will refuse it and say so.
+   MCP server. **`ddflow_companions_add` with `dry_run=true` first** — it reports the
+   exact config entry it would write, and writes nothing. Show the operator THAT, not
+   your description of it, then call it again without `dry_run` once they say yes.
+   Registering changes which processes their agent launches, and that is their decision.
+   A `cli` companion is a tool you shell out to — there is nothing to register, and
+   `ddflow_companions_add` will refuse it and say so.
 2. **If they decline, or do not answer**, carry on — and when you reach a gate that
    companion serves, record it `unavailable` with the reason. Never pass it on your own
    unaided word: a gate with nothing behind it is the failure this pipeline exists to

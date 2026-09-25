@@ -250,7 +250,9 @@ Filed rather than fixed, each with why it is not urgent.
 Structural debt rather than defects. Filed with what it costs today, because the point
 of recording it is to stop the next reading re-deriving it.
 
-- **B35. There is no application layer; the protocol adapter depends on the
+- **B35. ✅ CLOSED 2026-09-25** (commit 87d5fbb: `ddflow/api.py` + typed MCP dispatch;
+  ONE tool migrated, `ARGV_TOOLS_CEILING` ratchets the remaining 62 downward).
+  Original finding: there is no application layer; the protocol adapter depends on the
   presentation layer.** `mcp_server → cli` is the only edge and it is carried by
   **strings**: typed MCP arguments are flattened to argv, re-parsed by argparse, and the
   result is recovered by scraping stdout plus an exit code. The costs are already
@@ -271,7 +273,12 @@ of recording it is to stop the next reading re-deriving it.
   has it when B35 is actually done. *Found by: reading the change surface before
   committing.*
 
-- **B36. `cli.py` is a god module — 3,041 lines.** ~60 command functions, a 430-line
+- **B36. `cli.py` is a god module — 3,041 lines when filed, 4,208 now. STILL OPEN, and
+  moving the wrong way.** Extracting `services/completion.py` (B35/B36) removed policy
+  but the surface kept growing: `approve`, the dry-run plumbing, the human-gate
+  branches and the companions guard all landed here. A number in a title is a fact with
+  an expiry date; this one is recorded rather than quietly corrected, because the drift
+  IS the finding. Original:** ~60 command functions, a 430-line
   parser builder, an embedded starter-TOML string, and real **domain policy**:
   `cmd_complete` IS the completion rule-set (required gates, open descendants,
   `require_outcome`, inert requirements, reviewer independence) and is reachable only
@@ -643,7 +650,8 @@ features worth taking.
   either flakes on a shared runner or is too loose to fail. Wired into CI as its own
   step with `if: always()`.
 
-- **B82. No human-in-the-loop gate. FILED.** Every gate here is agent-driven or
+- **B82. No human-in-the-loop gate. ✅ CLOSED 2026-09-25** — see
+  "§B82 — a gate the agent cannot clear" below for what shipped. Original finding: Every gate here is agent-driven or
   command-driven. `spec-workflow-mcp` gates each phase on an explicit human approval
   with a review UI, and for a plan or a spec that is the right checkpoint — an operator
   may well want to approve before agents burn compute on it. Fits the existing
@@ -661,7 +669,8 @@ features worth taking.
   reintroduces the non-reproducibility the event log exists to remove.
   *From: `dx-zero/mcpn`.*
 
-- **B84. Gate evidence records no diff statistic. FILED.** `spec-workflow-mcp` keeps
+- **B84. Gate evidence records no diff statistic. ✅ CLOSED 2026-09-25** — see
+  "§B84 — gate evidence records how much it was looking at" below. Original finding: `spec-workflow-mcp` keeps
   per-task implementation logs with code statistics. Cheap here — an optional
   files/lines-changed field beside the existing evidence and `tree_sha` — and it makes
   "what did this gate actually review" answerable rather than assumed.
@@ -953,3 +962,234 @@ plausible, meaningless fingerprint. Now length-checked with an honest fallback.
   *From `pimzino/spec-workflow-mcp`, which keeps per-task implementation logs with code
   statistics (R13). The idea adopted; their separate log subsystem declined — this is
   one field beside the evidence that already exists.*
+
+## B82 — a gate the agent cannot clear, 2026-09-25
+
+- **B82. ✅ CLOSED (the gate; the dashboard stays filed).** Every gate in this pipeline
+  was cleared by the agent — a command it ran, or an assertion that it thought. Right
+  for work checkable after the fact; wrong for a plan, where by the time the agent has
+  built the wrong thing the cost is already paid. `human = true` on a gate makes it a
+  checkpoint the operator clears with `ddflow approve`, before the compute is spent.
+
+  **The design property that matters:** a human checkpoint reachable from the MCP
+  surface is not a human checkpoint, it is a second `gate record` with a longer name.
+  So there is no MCP tool, `gate record` and `gate skip` both refuse (exit 3 —
+  coordination, not failure: nothing is broken, the caller is simply not the party who
+  can clear it), and the refusal lives at the SERVICE boundary rather than in the CLI
+  branch that happens to be the usual caller — a check in one surface is a check the
+  other does not have.
+
+  **Scoped honestly.** An audit trail and a speed bump, not a security boundary: an
+  agent with shell access can run `ddflow approve` itself and nothing here prevents
+  that. What is guaranteed is that the ordinary path is closed and that a clearance
+  carries the OS user and a `human` flag, so a forged one is visible rather than
+  identical to a real one. Saying more would be the overclaim this project keeps
+  finding in its own docstrings.
+
+  Rejection is a first-class outcome with a mandatory reason, because "looked and said
+  no" and "nobody has looked" are different states and the second is a silent stall.
+  Opt-in: the shipped pipeline has no human gate and a test keeps it that way.
+
+  **The test for the headline property was vacuous twice before it worked.** First
+  version asserted end-state after looping every gate tool — `ddflow_gate_record`
+  cleared the gate under mutation and `ddflow_gate_skip` then overwrote the outcome
+  with `skipped`, so the final read never saw it. A later write masking an earlier one
+  collapses a whole loop of attempts into one observation. Now asserted after EVERY
+  call, and mutation-verified red.
+
+  Found while fixing it: `gate verify` called a human gate "an agent gate", which
+  carries the wrong advice — an agent gate's honesty rests on the evidence contract,
+  a human gate's rests on a person having looked, and no mutation can demonstrate
+  the latter.
+
+  *From `pimzino/spec-workflow-mcp`, the best idea in either rival server (R13). Their
+  review DASHBOARD is declined for now and stays filed: it is a separate surface with
+  its own security story, and the gate is the part that changes behaviour.*
+
+## B108 — "ask the operator first" gets something behind it, 2026-09-25
+
+- **B108. ✅ CLOSED.** Operator question: *"how will `ddflow companions` work in MCP
+  mode — would it ask the agent to ask the user for permission?"* Answering it honestly
+  exposed an inconsistency.
+
+  What was true: `ddflow_companions` is read-only and installs nothing; installation
+  requires the agent to shell out, which hits the harness's own permission prompt, not
+  ddflow's. `ddflow_companions_add` writes only a repo-local config, merges rather than
+  overwrites, and cannot register something uninstalled (no `--force` over MCP).
+
+  What was NOT true: that the agent asks first. The handshake *instructed* it to, and
+  that instruction had nothing behind it — the agent could describe the change in its
+  own words, or make it and report afterwards. Neither is the operator seeing what will
+  be written. B82 had just been built on the principle that a human checkpoint
+  reachable from the MCP surface is not a human checkpoint; this was the same class at
+  a lower stake, left on prompt-level trust.
+
+  **Operator's call** (asked, three options offered): add `dry_run` rather than removing
+  the tool from the MCP surface — the operation is small, reversible and repo-local, so
+  the agent keeps it and gains a way to make "ask first" actionable. Matches the
+  existing `ddflow_workflow_gate` pattern rather than inventing a concept.
+
+  The dry run creates NOTHING — not the file, not its parent directory; a dry run that
+  mkdirs has changed the machine. A test asserts the preview matches what the real
+  write produces, because a preview that drifts from the write is worse than no preview:
+  the operator has now signed off on it. Mutation-verified: disabling it turns five
+  tests red.
+
+  Also: the tool's description now opens with **WRITES**, per the MCP spec's guidance
+  that clients must treat annotations as untrusted — the safety has to be in text the
+  model actually reads.
+
+## B109–B112 — remote / filesystem-independent operation, 2026-09-25
+
+From the operator's question about running the MCP server remotely or in a container
+without direct filesystem access. Research and verified probes: `docs/RESEARCH.md` R14.
+**Filed, not started** — the capability split is a product decision, not a refactor.
+
+- **B109. A storage seam behind `EventLog` and `tomlcfg`. FILED.** There is no storage
+  abstraction of any kind today (`grep` for `Protocol|ABC|abstractmethod|Backend` across
+  the package returns nothing). Two genuine choke points exist — `infra/log.py` for
+  events, `infra/tomlcfg.py` for TOML — and most services already go through them.
+  Introducing a backend interface there, with the filesystem as the default
+  implementation and an in-memory one for tests, is worth doing **on its own merits**
+  (test isolation, no tmpdir per case) regardless of whether remote ever ships. It does
+  NOT make ddflow remote; see B111 for why.
+
+- **B110. The scattered writers. FILED, blocks B109's usefulness.** Seven modules
+  bypass both choke points for one-off writes — `adopt` (AGENTS.md merges), `enforce`
+  (git hooks), `sessions` (reconstruction output), `companions` (probe cache, MCP config
+  merges), `gates` (gate-script patching), `cli` (`.gitignore`, `.gitattributes`,
+  `config.toml` at init, prompt export) and `views/markdown`. Plus `infra/store.py`,
+  which is a third independent I/O implementation with its own atomic-publish rather
+  than reusing `tomlcfg.atomic_write`'s. A seam that only half the writers respect is a
+  seam that reports the wrong answer about what is portable.
+
+- **B111. The git coupling is the real blocker, and it is not storage. FILED,
+  THEORETICAL.** `cli.py:216` writes `.ddflow/events/*.jsonl merge=union` into
+  `.gitattributes`, so **concurrent-branch safety is delegated to git's own union merge
+  driver**: two agents on two branches append to their own shards and git unions them
+  with no conflict. That is the conflict-resolution strategy, not an implementation
+  detail, and it exists only because the log is a file in the repo. On top of it:
+  `fcntl.flock` is POSIX single-machine (`log.py:197`, `tomlcfg.py:114`); gate and
+  reviewer commands run `shell=True` against a local worktree (`gates.py:776`,
+  `review.py:485`, `review.py:782`); every git call is `git -C <local-path>`. A remote
+  backend would have to REPLACE the merge strategy, not just the storage — and would
+  still leave worktrees, merge and tree-fingerprint evidence needing the real checkout.
+
+- **B112. The honest split, if remote is ever wanted. FILED.** Not a port of the current
+  server — two halves. **Remote-capable:** the queue as pure data (items, dependencies,
+  gates, lessons, decisions, research, recall), no git. **Local-required:** worktrees,
+  merge, tree-fingerprint gate evidence, command gates. That is a shared team queue with
+  local execution agents, which is a coherent and possibly better product, but it is a
+  different one. Build deliberately or not at all.
+
+**Already true, recorded so it is not re-investigated:** "containerised" is supported
+today — `Dockerfile:4` documents `-v "$PWD:/repo"`, `infra/container.py` detects the
+container, relocates worktrees inside the mount and rewrites `localhost` reviewer
+endpoints to `host.docker.internal`, and `worktree.py:341-377` stores worktree paths
+RELATIVE to the repo root so the log stays valid at a different absolute path. What is
+unsupported is specifically *no filesystem at all*, not *not-the-host-machine*.
+
+**DECLINED, with the probe that killed it:** delegating file I/O to the agent over MCP.
+The spec has no primitive for it — `roots/list` hands the server `file://` URIs (the
+protocol's model is server-does-I/O), `sampling` runs completions, and
+`elicitation/create` is restricted to flat objects of primitives and forbidden from
+carrying sensitive data. Beyond the protocol, delegating the EVENT LOG would make a
+dropped agent write into silent data loss in the source of truth and destroy the
+append-only and ordering guarantees. Config alone could be delegated — small, idempotent,
+low-frequency — but config is not what pins the server to the filesystem.
+
+## B113–B114 — roborev was registered as an MCP server it is not, 2026-09-25
+
+- **B113. The flagship companion shipped a launch command that does not exist. ✅
+  CLOSED.** `roborev` was `kind = "mcp"` with `args = ["mcp"]`. Probed:
+
+      $ roborev mcp
+      Error: unknown command "mcp" for "roborev"
+
+  So `ddflow companions add --id roborev` wrote `{"command": "roborev", "args":
+  ["mcp"]}` into the operator's `.mcp.json`, and the agent spawning it got that instead
+  of a handshake — **precisely the failure the `kind` field was added to prevent (B79),
+  in the entry that motivated the registry, added by the same change.** roborev is a
+  command-line tool: the agent shells out to `roborev review <sha>` and `roborev
+  analyze duplication`, which is how this project has used it all session.
+
+  Why it survived: `detect` was `roborev --version`, which proves the BINARY exists and
+  says nothing about whether the LAUNCH works. Detection and launch were different code
+  paths and only one was ever exercised. A narrow ratchet now catches the
+  same-binary-different-subcommand case; the general case is not mechanisable (nothing
+  static can tell whether a binary speaks JSON-RPC), so the registry header carries the
+  instruction to LAUNCH an entry before marking it `mcp`.
+
+  *Found by the operator asking "is roborev an MCP or a tool or both?" — a question,
+  not a bug report. Two of this session's sharpest findings came from questions.*
+
+  Note also: the ratchet's FIRST version keyed on the first non-flag argument and went
+  red on `codeguide`, which is correct (`docker run <image>` probed by `docker image
+  inspect <image>`) — and its docstring claimed a carve-out the code had not
+  implemented. Fifth instance this session of a comment promising what the code does
+  not do, this one self-inflicted and caught by the check firing on a good entry. It
+  keys on the LAST non-flag argument now: the thing being launched, not the runner's
+  subcommand.
+
+- **B114. `ddflow companions --verify` — launch it and check it speaks MCP. FILED.**
+  The sound version of the check above: for each `kind = "mcp"` companion, spawn
+  `command args`, send `initialize`, and require a JSON-RPC response. That is the only
+  thing that actually distinguishes a server from a binary with a plausible name, and
+  it is what would have caught B113 at the moment the entry was written rather than
+  when an operator asked a question. Opt-in and never on the scan path — it spawns
+  processes, and `ddflow companions` is called by the MCP handshake.
+
+## B115–B117 — ddflow creates a worktree the agent is already standing in, 2026-09-25
+
+Operator challenge: *"wouldn't the agent manage worktrees, merge, branches, and we only
+orchestrate them? Why do this ourselves instead of instructing the agent and messing
+with the user's or agent's work?"* Largely correct, and demonstrated.
+
+- **B115. `claim` creates a rival worktree when the caller is already in one. FILED,
+  CONFIRMED.** Probe — the agent's harness has already isolated it, as Claude Code and
+  Cursor both do:
+
+      $ git worktree add ../wtclash-agent -b agent-branch
+      $ ddflow --repo /tmp/wtclash-agent claim T1
+        worktree: /tmp/.ddflow-worktrees/T1
+        branch:   ddflow/T1 (from main)
+        cd there and work.
+
+      $ git worktree list
+      /tmp/wtclash               [main]
+      /tmp/.ddflow-worktrees/T1  [ddflow/T1]     <- ddflow's
+      /tmp/wtclash-agent         [agent-branch]  <- where the agent IS
+
+  Uncommitted work in the agent's tree is stranded and one item now has two branches.
+  ddflow correctly resolves the repo root through `--git-common-dir`, so its STATE is
+  shared — it is only worktree CREATION that collides.
+
+  **Fix: adopt, do not create.** When the caller is in a non-primary worktree, bind the
+  item to that path and branch and record it, rather than making a rival. ddflow still
+  gets what it actually needs (a recorded tree it can find after a crash); the agent
+  stays where its harness put it. An explicit `--worktree <path>` covers the case where
+  the agent wants to name one.
+
+- **B116. Separate what is needed from what is done. FILED.** Reading the claim path,
+  three things are bundled that are not equally justified:
+  **coordination** does not need it (`L.acquire` runs BEFORE the worktree and
+  `--no-worktree` / `worktree.enabled=false` already skip creation with everything else
+  intact); **recording** does need it, but being TOLD satisfies that as well as
+  creating — `recover` needs to know the tree, not to have made it; **creating** is
+  pure convenience and is the colliding part; **merging** genuinely belongs in the tool,
+  because `ddflow merge` merges from the primary WITHOUT a `git checkout` there, and a
+  checkout in the primary disrupts every other agent.
+
+  The justification that survives is determinism plus recoverability, and it justifies
+  recording, not creating: a crashed agent is precisely the one that never reported
+  back, so a purely instruct-and-report design loses exactly the work `recover` exists
+  to find. Adoption keeps the record and drops the collision.
+
+- **B117. Detecting "already in a worktree" is not currently possible from the config
+  alone. FILED, blocks B115.** `worktree.enabled` is a project-wide switch; there is no
+  per-invocation notion of "the caller is already isolated". `infra/worktree.repo_root`
+  resolves a worktree to its primary via `--git-common-dir`, which is what B115 needs to
+  detect the case — but nothing consults it on the claim path. Related: this connects to
+  R14's local-vs-remote split, since adoption moves ddflow one step further from needing
+  to CREATE anything on the filesystem, leaving `merge` as the main remaining git
+  operation it performs itself.

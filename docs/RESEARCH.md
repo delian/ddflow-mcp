@@ -1037,3 +1037,112 @@ been its own git repository since the extraction, so it fell through to the mach
 global `default_agent = codex`, which is not installed here. It reported that and
 **exited 0**, which is the failure mode this project names most often, in the tool whose
 job is to catch it. The config is now pinned in the repository, where a clone gets it.
+
+## R14 — Could the MCP server run remotely, with no direct filesystem access? (2026-09-25)
+
+**Operator question**, four parts: can a user ask what the workflow is and change it per
+project; could the config live in a file the AGENT reads and writes on the server's
+behalf; could the other stores work the same way so the server needs no filesystem; and
+how is persistence implemented at all.
+
+**Budget:** ≤60 min, no GPU. One fan-out audit of every filesystem/process touchpoint,
+its citations re-verified by hand (§Research-rule 7), plus two spec fetches.
+
+### Claim 1 — "MCP has a primitive for asking the client to read or write a file." REFUTED
+
+*Mechanism.* If it existed, the server could stay stateless and delegate all I/O.
+*Falsifier.* The spec's server→client feature list contains no file operation.
+
+Opened `https://modelcontextprotocol.io/specification/2025-06-18/client` and
+`.../client/elicitation`. There are exactly three server→client primitives:
+
+| Method | Purpose |
+|---|---|
+| `roots/list` | Client tells the server which directories it may use. The URI **MUST** be a `file://` URI. |
+| `sampling/createMessage` | Server asks the client to run an LLM completion. |
+| `elicitation/create` | Server asks the **user** for structured input. |
+
+`elicitation` is explicitly unusable as a transport: its `requestedSchema` is *"limited
+to flat objects with primitive properties only"* — no nested structures, no arrays of
+objects — and *"Servers **MUST NOT** request sensitive information."*
+
+**REFUTED**, and `roots` settles the design intent: handing the server `file://` URIs
+means the protocol's model is **server does the I/O, client scopes it**. The inverse is
+not a supported pattern, and building it would be a private convention on tool results.
+
+### Claim 2 — "Delegating the event log to the agent would still be correct." REFUTED, on design
+
+The log is the sole source of truth: append-only, Lamport-ordered, `flock`+`fsync` per
+append. If durability depends on the agent writing back what the server returned, then a
+dropped write is **silent data loss in the source of truth**, the append-only guarantee
+is gone, and the server cannot coordinate concurrent agents because it no longer knows
+what landed. That is a strictly worse form of the prompt-level-trust problem B108 had
+just removed from `companions_add`. **Config is different** — small, idempotent,
+low-frequency, and a lost write is visible on the next read.
+
+### Claim 3 — "The filesystem coupling is concentrated enough to put a backend behind." REFUTED as stated
+
+*Falsifier.* An existing abstraction, or a small number of choke points.
+
+```
+$ grep -rn 'class.*Protocol\|ABC\|abstractmethod\|Backend' ddflow/ --include=*.py
+(no output)
+```
+
+There is **no storage abstraction of any kind**. Two genuine choke points exist —
+`EventLog` (`infra/log.py`) for events and `tomlcfg` (`infra/tomlcfg.py`) for TOML — and
+most services go through them for those two artifacts. But `infra/store.py` is a third,
+independent I/O implementation with its own atomic-publish, and at least seven modules
+(`adopt`, `enforce`, `sessions`, `companions`, `gates`, `cli`, `views/markdown`) call
+`Path.write_text`/`mkdir` directly for one-off writes. **CONFIRMED-partial:** concentrated
+for events and config, scattered for everything else.
+
+### Claim 4 — "Removing filesystem access is the hard part." REFUTED. Git is.
+
+The audit surfaced something that changes the analysis, verified directly:
+
+```
+$ grep -rn 'merge=union' ddflow/
+ddflow/surfaces/cli.py:216:    line = ".ddflow/events/*.jsonl merge=union\n"
+$ cat <repo>/.gitattributes
+.ddflow/events/*.jsonl merge=union
+```
+
+**Concurrent-branch safety is delegated to git's own union merge driver.** Two agents on
+two branches append to their own shards; git unions them on merge with no conflict. That
+is not a filesystem detail a backend can swap out — it is the conflict-resolution
+strategy, and it only exists because the log is a file in the repo.
+
+The rest compounds it. `fcntl.flock` (exactly two files: `log.py:197`,
+`tomlcfg.py:114`) is POSIX single-machine. Gate and reviewer commands run with
+`shell=True` against a local worktree (`gates.py:776`, `review.py:485`, `review.py:782`).
+Every git call is `git -C <local-path>`. So: **remote-with-no-filesystem is not a
+storage-backend problem, it is a "give up the git-integrated half" problem.**
+
+### What already works, and what the honest split is
+
+Docker is real and shipped — `Dockerfile:4` documents `-v "$PWD:/repo"`, and
+`infra/container.py` handles detection, worktree relocation inside the mount, and
+rewriting `localhost` reviewer endpoints to `host.docker.internal`. Worktree paths are
+stored RELATIVE to the repo root (`worktree.py:341-377`) specifically so the log stays
+valid when the repo is at `/repo` instead of its authoring path.
+
+So **"containerised but bind-mounted" is supported today.** "Remote with no filesystem"
+is not, and the useful shape is a split rather than a port:
+
+* **Remote-capable** — the queue as pure data: items, dependencies, gates, lessons,
+  decisions, research, recall. No git.
+* **Local-required** — worktrees, merge, tree-fingerprint gate evidence, command gates.
+
+That is a different product (a shared team queue with local execution agents), not the
+same server reached over a wire. Worth building on purpose or not at all; filed as
+B109–B111 rather than started, because the decision is the operator's.
+
+### Answered, for the record
+
+**Workflow explanation and per-project modification already exist.** `ddflow_workflow`
+returns the live pipeline — every gate in order with its prompt, required/evidence/
+reviewer flags, the phase pipeline, and every knob with its SOURCE (`[default]` vs
+`[file]`), which is what makes "is this ddflow's choice or ours?" answerable.
+`ddflow_help` adds topics. Changing it: `ddflow_workflow_pipeline`,
+`ddflow_workflow_gate`, `ddflow_workflow_drop`, `ddflow_configure` — all with `dry_run`.
