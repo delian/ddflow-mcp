@@ -2883,15 +2883,31 @@ def cmd_companions(a, c: Ctx) -> int:
         # launch fails at the worst moment -- mid-task, as an agent reaches for the
         # tool a gate told it to use. `--force` exists for the case where the operator
         # is about to install it.
-        absent = [w for w in wanted if not by_id[w].installed and not a.force]
-        if absent:
-            print(
-                f"not installed here: {', '.join(absent)}. Registering one would write "
-                f"a launch command that fails mid-task. Install it first "
-                f"({'; '.join(by_id[w].companion.install for w in absent)}), or "
-                f"--force if you are about to.",
-                file=sys.stderr,
-            )
+        # `is False` and `is None` are different refusals. Both block -- registering a
+        # launch command that fails mid-task is the thing to avoid either way -- but
+        # "not installed here" sent to an operator whose probe merely TIMED OUT makes
+        # them install something they already have, and the install line printed
+        # helpfully below then does nothing. Say which one it is.
+        absent = [w for w in wanted if by_id[w].installed is False and not a.force]
+        unknown = [w for w in wanted if by_id[w].installed is None and not a.force]
+        if absent or unknown:
+            if absent:
+                print(
+                    f"not installed here: {', '.join(absent)}. Registering one would "
+                    f"write a launch command that fails mid-task. Install it first "
+                    f"({'; '.join(by_id[w].companion.install for w in absent)}), or "
+                    f"--force if you are about to.",
+                    file=sys.stderr,
+                )
+            if unknown:
+                print(
+                    f"could not tell whether these are installed: "
+                    f"{', '.join(unknown)} — "
+                    + "; ".join(by_id[w].detail for w in unknown)
+                    + ". That is not the same as absent. Re-run, check by hand, or "
+                    "--force if you know it is there.",
+                    file=sys.stderr,
+                )
             return REFUSED
         agents = _csv(a.agents) or ["claude"]
         actions = [CO.register(c.repo, by_id[w].companion, ag) for w in wanted for ag in agents]

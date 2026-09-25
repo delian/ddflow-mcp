@@ -252,3 +252,57 @@ def test_next_and_claim_agree_on_every_item_in_a_mixed_plan(repo):
         )
         if code == OK:
             run_cli(repo, "release", item, agent=f"probe-{item}")
+
+
+# -- and the SURFACE has to be the thing that depends on it -----------------------------
+
+
+def _queue_with_an_inherited_dep(repo):
+    """P2 needs P1. P2.T1 declares NOTHING — that is the whole point."""
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--globs", "p1/**")
+    run_cli(repo, "phase", "add", "P2", "--globs", "p2/**", "--needs", "P1")
+    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
+    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "p2/a.py")
+
+
+def _ready_over_mcp(repo) -> list[str]:
+    """The MCP path, in-process, so a patch applied here actually reaches the code."""
+    from ddflow.surfaces.mcp import _run_cli
+
+    _code, body = _run_cli(repo, ["--json", "next"])
+    return [r["id"] for r in json.loads(body)["ready"]]
+
+
+def test_the_mcp_surface_offers_only_what_the_inherited_rule_allows(repo):
+    _queue_with_an_inherited_dep(repo)
+    assert _ready_over_mcp(repo) == ["P1.T1"], "P2.T1 inherits a dependency on P1"
+
+
+def test_breaking_the_rule_makes_the_MCP_SURFACE_hand_out_blocked_work(repo, monkeypatch):
+    """The demonstration B31 asked for, and the difference it is asking about.
+
+    The unit tests mutation-verify `inherited_deps` and `plan_blocker` directly. The
+    end-to-end scenario asserts the right behaviour but is never itself mutated — so
+    nothing showed that the SURFACE an agent actually drives depends on the rule. A
+    scenario that passes tells you the system works today; it does not tell you the
+    assertion would notice if the rule were removed, and an assertion that cannot
+    notice is the vacuous-pass class.
+
+    So: replace `inherited_deps` with the naive version this project shipped first --
+    an item's OWN needs, ancestors ignored -- and require the MCP surface to start
+    handing out work it must withhold. In-process, because a subprocess would not see
+    the patch and the test would pass for the wrong reason, which is exactly the trap
+    this file's own docstring warns about.
+    """
+    _queue_with_an_inherited_dep(repo)
+    from ddflow.core import schedule
+
+    monkeypatch.setattr(
+        schedule, "inherited_deps", lambda _state, it: [(it.id, d) for d in it.needs]
+    )
+    offered = _ready_over_mcp(repo)
+    assert "P2.T1" in offered, (
+        "the naive rule was restored and the MCP surface STILL withheld P2.T1, so this "
+        f"assertion is not testing the inheritance at all. offered={offered}"
+    )

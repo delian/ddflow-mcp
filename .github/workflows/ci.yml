@@ -1,0 +1,57 @@
+# Continuous checks, on every push and pull request.
+#
+# The `publish` workflow tested before releasing, and it was the ONLY workflow — so
+# nothing ran between tags, and `addopts = "-m 'not slow'"` meant the end-to-end
+# scenarios never ran anywhere automated at all. Those scenarios have found most of
+# this project's real defects: eight that 213 unit tests and four other scenarios
+# missed, four CLI/MCP divergences before `full-lifecycle` passed once. The suite that
+# matters most was the one automation skipped, which is the shape of B33.
+#
+# Two jobs, because they fail for different reasons and you want to know which. `tests`
+# is a couple of minutes; `scenarios` spawns real processes, real git worktrees and real
+# pytest runs inside them, and takes ten.
+name: ci
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor and the current release. A version-specific break in either is a
+        # break for somebody, and `requires-python = ">=3.11"` is a promise.
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Lint
+        run: |
+          uv run --no-project --with ruff ruff check .
+          uv run --no-project --with ruff ruff format --check .
+      - name: Unit and integration tests
+        run: uv run --with pytest --with pytest-timeout python -m pytest tests/ -q --timeout=420
+
+  scenarios:
+    # Separate job, not a step: a scenario failure and a unit failure want different
+    # reading, and putting them in one job means the ten-minute one gates the two-minute
+    # one's feedback.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Configure git
+        # The scenarios create real worktrees and real commits; git refuses without an
+        # identity, and the failure reads as a scenario bug rather than a setup one.
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ddflow ci"
+          git config --global init.defaultBranch main
+      - name: End-to-end scenarios
+        # `-m slow` overrides the `not slow` in addopts (pytest takes the last -m).
+        run: uv run --with pytest --with pytest-timeout python -m pytest tests/test_scenarios.py -m slow -q --timeout=1800

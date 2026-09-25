@@ -22,10 +22,14 @@ item below.
   same item to another agent as ready, with no mention that someone was mid-flight. Both
   behaviours are defensible; deciding them in two modules that never consult each other
   is not. *Found by: roborev architecture (C6).*
+  **✅ CLOSED — the work shipped and this entry was never marked.** `schedule.interrupted` is the one classifier; `leases.scan` calls it (core/schedule.py:305, services/leases.py:380). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 - **B3 — The live-lease dict is computed three times** (`State.active_leases`, inline in
   `plan`, and formerly in `_alternatives`). Route all of them through
   `State.active_leases`. *Found by: roborev architecture (C6).*
+  **✅ CLOSED — the work shipped and this entry was never marked.** every caller goes through `State.active_leases` (6 call sites, none inline). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 ## Performance
 
@@ -41,6 +45,8 @@ item below.
   demonstrates the cheap pattern — a per-shard tail read, O(shards). Add
   `EventLog.head() -> (shards, highest_lamport, total_bytes)` and compare that instead.
   *Found by: roborev architecture (C9).*
+  **✅ CLOSED — the work shipped and this entry was never marked.** `EventLog.head()` answers it in O(shards) (infra/log.py:294, infra/store.py:148). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 ## Declared but unimplemented
 
@@ -65,6 +71,14 @@ item below.
 - **B10 — `phase add` and `task add` argparse blocks are re-typed**, though the
   `record`/`skip` pair right below them is already loop-generated. *(D7)*
 - **B11 — `cli._csv` and `config._coerce`'s list branch are the same expression.** *(D9)*
+  **✅ CLOSED — the work shipped and this entry was never marked.** `_transition` holds the shared body; renew/release/expire call it (services/leases.py:248). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
+  **✅ CLOSED — the work shipped and this entry was never marked.** `_require_item` is the one place that says 'no such item' (surfaces/cli.py:161, 12 call sites). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
+  **✅ CLOSED — the work shipped and this entry was never marked.** `_item_parser` builds both (surfaces/cli.py:3525). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
+  **✅ CLOSED — the work shipped and this entry was never marked.** `_csv` delegates to `config.csv_list` (surfaces/cli.py:135). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 ## Coverage gaps
 
@@ -80,6 +94,8 @@ item below.
 - **B14 — Multi-machine clock skew is reasoned about but unprobed.** The Lamport
   ordering is designed so wall-clock skew cannot reorder history, and lease expiry has a
   `grace_s` knob for it — but no two-machine probe was run. `THEORETICAL`.
+
+  **✅ CLOSED — the work shipped and this entry was never marked.** the cross-family critic ran on every pass since; B57-B61, B76, B77 came from it (docs/RESEARCH.md R10-R12). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
 
 
 ## From mining this project's source repository's lessons corpus (2026-09-24)
@@ -97,6 +113,8 @@ from this list); these are the rest, ranked as it ranked them.
   a non-zero exit, restores. A gate with zero registered mutations is itself a failure.
   *This is the highest-value item on the list: it is the anti-vacuous-pass check applied
   to ddflow's own checks.*
+  **✅ CLOSED — the work shipped and this entry was never marked.** `gates.verify` mutation-verifies a gate, baseline included (services/gates.py:376). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 - **B16 — diff-derived test selection plus a full-suite cadence.** "Choosing which tests
   to run by reasoning about the change is guessing — derive it." And targeted sweeps hide
@@ -151,6 +169,8 @@ from this list); these are the rest, ranked as it ranked them.
 - **B25 — cadence fired-vs-scheduled counter.** "The mechanism you did not measure is the
   one that is not running" — on the source project three wakeups were scheduled and zero
   ever fired, producing a 12-hour stall while an undesignated mechanism did the work.
+  **PARTIAL.** The due-ness computation exists (`cli.py:2451`); what is missing is a fired-vs-scheduled counter, so the cadence's own hit rate still cannot be argued.
+
 
 - **B26 — test-polluter bisect.** Delta-bisect the test file that makes another fail only
   in full-suite order. Generic and high-value, but only once ddflow owns test execution
@@ -166,6 +186,8 @@ Filed rather than fixed, each with why it is not urgent.
   The number is advisory — it sets an expectation, not a decision — and it is currently
   *shorter* than the truth, which is the harmless direction for a figure nobody gates on.
   *Found by: writing the inheritance fix.*
+  **✅ CLOSED — the work shipped and this entry was never marked.** `critical_path` walks `inherited_deps` (core/schedule.py:477). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 - **B28. The parallelism cap counts leases, not worktrees. ✅ CLOSED.** The two knobs
   were combined with `min()`, which is one number pretending to be one statement:
@@ -181,6 +203,8 @@ Filed rather than fixed, each with why it is not urgent.
   `--no-probe` exists, but a session-start hook that called it would feel it. A cached
   result with a short TTL in the gitignored index would fix it. *Found by: the first
   `adopt` run after companions landed.*
+  **✅ CLOSED.** Probe results cache to `.ddflow/local/` (already gitignored, so nothing new to ignore and nothing machine-local ever committed), bounded by a new `[companions] probe_cache_ttl_s` knob, default 300 s. One deliberate asymmetry: a NEGATIVE result caches, an INCONCLUSIVE one never does — "could not tell" is transient, and caching it would make one blip stick for the whole window and report `unknown` about a tool sitting right there. A corrupt cache is a miss, never an error. Four behaviours mutation-verified; the ttl=0 case needed a frozen clock, because unfrozen it passed on clock ordering rather than on the guard.
+
 
 - **B30. `gates.enforce_order` defaults to "warn" and nothing measures how often it
   fires.** If the warning is routine it is noise and the default should move to "off"
@@ -192,18 +216,28 @@ Filed rather than fixed, each with why it is not urgent.
   behaviour end to end but is not itself mutated, so a regression that only manifests
   through the MCP path would be caught by the scenario failing rather than by a
   demonstration that it *can* fail.
+  **✅ CLOSED.** `tests/test_inherited_deps.py` now patches `inherited_deps` back to the naive version — an item's own `needs`, ancestors ignored — and REQUIRES the MCP surface to start handing out blocked work. In-process through `mcp._run_cli`, because a subprocess would not see the patch and the test would pass for the wrong reason, which is the trap that file's own docstring warns about.
+
 
 - **B32. `companions.is_installed` is two-valued.** A probe that times out is reported
   as not-installed with the timeout in the detail, which reads correctly to a human but
   collapses "absent" and "could not tell" for any caller reading the boolean. `lease`
   already solved this shape with a three-valued `salvageable: bool | None`; this should
   follow it rather than invent a second convention.
+  **PARTIAL.** `Status.installed` is already three-valued for *not probed*; what is missing is returning `None` when the probe TIMES OUT (`services/companions.py:131` still returns `False`), which is the case that collapses "absent" into "could not tell".
+
+  **✅ CLOSED.** `is_installed` now returns `None` on a timeout or a failed spawn, and the register path says "could not tell" rather than "not installed here" — which was sending operators to install something they already had. `tests/test_companions.py`, mutation-verified in both directions: a PATH miss must stay `False`, or the unknown state means nothing.
+
 
 - **B33. The `full-lifecycle` scenario is not run by `pytest`.** Neither is any other
   scenario — `demos/` is invoked separately and is not in the publish workflow. The
   scenarios have found most of the real bugs in this project, so the one suite that
   matters most is the one CI does not run. (Ceremony note: they take ~2 minutes and
   spawn processes, so they want their own marker and job, not inclusion in `tests/`.)
+  **PARTIAL.** `tests/test_scenarios.py` and the `slow` marker exist, so the scenarios are reachable by name — but `.github/workflows/publish.yml:32` runs `pytest tests/ -q` under `addopts = "-m 'not slow'"`, so CI still never runs them. The suite that has found most of this project's real bugs is still the one automation skips.
+
+  **✅ CLOSED.** The gap was bigger than the entry said: there was no CI on push or pull request AT ALL, only `publish` on a version tag. Added `.github/workflows/ci.yml` (lint + tests on 3.11 and 3.13, scenarios as their own job) and made a release run the scenarios too. Two ratchets in `tests/test_scenarios.py`, because a test file that exists and a marker that selects it are not the feature — being RUN is: one asserts a workflow actually invokes `-m slow` on the scenario file, the other that something checks ordinary commits and not only tags. The first ratchet passed on a COMMENT mentioning `-m slow` until comments were stripped, which is the vacuous-pass class inside the check written to prevent it.
+
 
 - **B34. `ddflow history` does not exist as one view. ✅ CLOSED.** One
   reverse-chronological timeline over the log, filterable by `--item`, `--kind`
@@ -262,12 +296,16 @@ of recording it is to stop the next reading re-deriving it.
   cProfile at n=800 attributes 74% of `plan()` to 1600 calls into `children`. Roughly
   quadratic, harmless at realistic sizes, and a cheap fix (build `parent → [child]`
   once per fold). Related: every call refolds the whole log.
+  **✅ CLOSED — the work shipped and this entry was never marked.** `State._child_index` is built once per fold (core/model.py:279). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 - **B40. TRUNCATED-completion diagnostics are written three times** in `reviewer.py`
   (openai, anthropic, gemini), and have already drifted: the openai copy names
   `max_chunk_chars` and reports reasoning-token counts, the gemini copy names neither.
   Same class as the four duplications fixed in this pass, just lower blast radius —
   it degrades a message rather than a decision. *Found by: roborev duplication (D6).*
+  **✅ CLOSED — the work shipped and this entry was never marked.** `review._truncated` is the one diagnostic; 4 call sites (services/review.py:533). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
+
 
 ## B41–B51 — the importer against a real 400-day corpus, 2026-09-24 ✅ ALL CLOSED
 

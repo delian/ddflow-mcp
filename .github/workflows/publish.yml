@@ -29,7 +29,16 @@ jobs:
           test "$tag" = "$decl" || { echo "tag $tag != pyproject $decl"; exit 1; }
           test "$tag" = "$srv"  || { echo "tag $tag != server.json $srv"; exit 1; }
       - name: Test before publishing
-        run: uv run --with pytest python -m pytest tests/ -q
+        run: uv run --with pytest --with pytest-timeout python -m pytest tests/ -q --timeout=420
+      - name: Scenarios before publishing
+        # A release is the one moment it is worth the ten minutes. `-m 'not slow'` in
+        # addopts meant the suite that has found most of this project's defects had
+        # never gated a publish.
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ddflow ci"
+          git config --global init.defaultBranch main
+          uv run --with pytest --with pytest-timeout python -m pytest tests/test_scenarios.py -m slow -q --timeout=1800
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
 

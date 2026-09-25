@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -106,13 +107,22 @@ def load(repo: Path) -> list[Companion]:
     return list(out.values())
 
 
-def is_installed(c: Companion) -> tuple[bool, str]:
+def is_installed(c: Companion) -> tuple[bool | None, str]:
     """Probe, read-only, bounded. Returns (installed, how we know).
 
-    A missing executable and a probe that ran and failed are different facts and are
-    reported as such — the same distinction the gate runner makes between a failed
-    check and one that could not run, for the same reason: "could not tell" must never
-    render as "no".
+    THREE values, because there are three answers:
+
+    * `True`  — the probe ran and succeeded.
+    * `False` — a FACT: nothing of that name is on PATH, or the probe ran and said no.
+    * `None`  — could not tell. The probe timed out or could not be spawned, and the
+      companion's presence is exactly as unknown as before we asked.
+
+    The same distinction the gate runner makes between a check that ran and failed and
+    one that could not run, and for the same reason. This docstring has claimed it
+    since the function was written while the code returned `False` for a timeout --
+    which is how an operator gets sent to install something they already have, on a
+    slow machine or a cold `npx` cache. A docstring is not a check; the checks are in
+    `tests/test_companions.py`.
     """
     if not c.detect:
         return False, "no detection probe declared"
@@ -127,8 +137,13 @@ def is_installed(c: Companion) -> tuple[bool, str]:
             timeout=DETECT_TIMEOUT_S,
             check=False,
         )
+    except subprocess.TimeoutExpired:
+        return None, (
+            f"`{' '.join(c.detect)}` did not answer within {DETECT_TIMEOUT_S}s — could "
+            f"not tell. Not the same as absent: re-run, or check it by hand."
+        )
     except (OSError, subprocess.SubprocessError) as exc:
-        return False, f"probe failed to run: {exc}"
+        return None, f"the probe could not be run at all ({exc}) — could not tell"
     if p.returncode != 0:
         return False, f"`{' '.join(c.detect)}` exited {p.returncode}"
     first = (p.stdout or p.stderr).strip().splitlines()
@@ -172,15 +187,75 @@ def registered_in(repo: Path, cid: str) -> list[str]:
     return found
 
 
-def scan(repo: Path, *, probe: bool = True) -> list[Status]:
+def _cache_path(repo: Path) -> Path:
+    # `.ddflow/local/` is already gitignored, which is what a disposable cache wants:
+    # it must never be committed, and losing it must cost nothing but a re-probe.
+    return repo / ".ddflow" / "local" / "companion-probes.json"
+
+
+def _read_cache(repo: Path, ttl_s: int) -> dict[str, tuple[bool, str]]:
+    """Cached probe results still inside the TTL. Unreadable cache = no cache."""
+    if ttl_s <= 0:
+        return {}
+    try:
+        raw = json.loads(_cache_path(repo).read_text("utf-8"))
+        cutoff = time.time() - ttl_s
+        return {
+            cid: (bool(e["installed"]), str(e["detail"]))
+            for cid, e in raw.items()
+            if isinstance(e, dict) and float(e.get("at", 0)) >= cutoff
+        }
+    except (OSError, ValueError, KeyError, TypeError):
+        # A corrupt cache is a cache miss, never an error. It is derived data whose
+        # only job is to be faster than asking again.
+        return {}
+
+
+def _write_cache(repo: Path, fresh: dict[str, tuple[bool, str]]) -> None:
+    path = _cache_path(repo)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        now = time.time()
+        merged = {
+            cid: {"installed": inst, "detail": detail, "at": now}
+            for cid, (inst, detail) in fresh.items()
+        }
+        path.write_text(json.dumps(merged, indent=2), "utf-8")
+    except OSError:
+        pass  # a cache that cannot be written is a cache miss next time; nothing breaks
+
+
+def scan(repo: Path, *, probe: bool = True, ttl_s: int | None = None) -> list[Status]:
     """State of every known companion. ``probe=False`` skips the detection commands.
 
     Without probing the install state is **unknown**, not absent — see `Status.installed`.
+
+    Results are cached for `[companions] probe_cache_ttl_s`. Each probe shells out, and
+    an `npx`-based one takes seconds on a cold cache — fine for `adopt`, which pays it
+    once, and not fine for anything a session start might call. `ttl_s=0` re-probes.
+
+    **An inconclusive result is never cached.** A timeout or a failed spawn says only
+    that we could not tell just now; storing that would make one blip stick for the
+    whole window and report `unknown` about a tool sitting right there.
     """
-    out = []
+    if ttl_s is None:
+        from ..config import Config
+
+        ttl_s = Config.load(repo).companions.probe_cache_ttl_s
+    cached = _read_cache(repo, ttl_s) if probe else {}
+    out, fresh = [], dict(cached)
     for c in load(repo):
-        inst, detail = is_installed(c) if probe else (None, "not probed")
+        if not probe:
+            inst, detail = None, "not probed"
+        elif c.id in cached:
+            inst, detail = cached[c.id]
+        else:
+            inst, detail = is_installed(c)
+            if inst is not None:
+                fresh[c.id] = (inst, detail)
         out.append(Status(c, inst, registered_in(repo, c.id), detail))
+    if probe and ttl_s > 0 and fresh != cached:
+        _write_cache(repo, fresh)
     return out
 
 
