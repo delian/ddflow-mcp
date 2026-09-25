@@ -49,16 +49,16 @@ ddflow = "ddflow.surfaces.cli:main"
 ddflow-mcp = "ddflow.surfaces.mcp:main"
 
 [project.urls]
-Homepage = "https://github.com/OWNER/ddflow"
-Repository = "https://github.com/OWNER/ddflow"
-Issues = "https://github.com/OWNER/ddflow/issues"
+Homepage = "https://github.com/delian/ddflow-mcp"
+Repository = "https://github.com/delian/ddflow-mcp"
+Issues = "https://github.com/delian/ddflow-mcp/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ddflow"]
 
 [tool.hatch.build.targets.sdist]
 include = ["ddflow/", "docs/", "tests/", "demos/", "probes/",
-           "README.md", "server.json"]
+           "README.md", "server.json", "LICENSE"]
 
 # Templates need no force-include: they live under `ddflow/`, and hatchling ships
 # every file in a declared package directory. They were a SIBLING directory until a

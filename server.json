@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.OWNER/ddflow",
+  "name": "io.github.delian/ddflow-mcp",
   "title": "ddflow",
   "description": "Work-queue kernel for AI coding agents: phases and tasks with dependencies, parallel git-worktree isolation, crash recovery, a quality-gate pipeline, and cross-family review. The event log is the source of truth, so the project rebuilds from it alone.",
   "repository": {
-    "url": "https://github.com/OWNER/ddflow",
+    "url": "https://github.com/delian/ddflow-mcp",
     "source": "github"
   },
   "version": "0.1.0",

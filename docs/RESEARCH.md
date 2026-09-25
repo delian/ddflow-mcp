@@ -294,7 +294,7 @@ fails if one creeps in.
 
 **Registry.** `server.json` follows the
 [MCP registry schema](https://modelcontextprotocol.io/registry/quickstart)
-(`io.github.OWNER/ddflow`, PyPI `ddflow-mcp`, `runtimeHint: uvx`), published by
+(`io.github.delian/ddflow-mcp`, PyPI `ddflow-mcp`, `runtimeHint: uvx`), published by
 `.github/workflows/publish.yml` on a version tag via OIDC trusted publishing — no stored
 tokens. The workflow refuses when tag, `pyproject.toml` and `server.json` disagree about
 the version; `test_the_declared_versions_agree` pins the same invariant locally.

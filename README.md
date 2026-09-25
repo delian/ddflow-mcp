@@ -322,7 +322,7 @@ version.
     "run", "-i", "--rm",
     "-v", "${workspaceFolder}:/repo",
     "--add-host=host.docker.internal:host-gateway",
-    "ghcr.io/OWNER/ddflow:latest" ] } } }
+    "ghcr.io/delian/ddflow-mcp:latest" ] } } }
 ```
 
 `ddflow adopt --launch docker` writes exactly that. The image is **107 MB** (Alpine;
@@ -398,7 +398,7 @@ cadences, and the rest of the 58 knobs.
 ### Publishing and registry
 
 `server.json` carries the [MCP registry](https://modelcontextprotocol.io/registry/quickstart)
-manifest (`io.github.OWNER/ddflow`, PyPI package `ddflow-mcp`, `runtimeHint: uvx`),
+manifest (`io.github.delian/ddflow-mcp`, PyPI package `ddflow-mcp`, `runtimeHint: uvx`),
 and `.github/workflows/publish.yml` publishes to PyPI and the registry on a version tag
 using OIDC trusted publishing — no stored tokens. The workflow refuses to publish when
 the tag, `pyproject.toml` and `server.json` disagree about the version, and
