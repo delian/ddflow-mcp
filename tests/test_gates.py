@@ -413,3 +413,49 @@ def test_it_stays_quiet_when_nothing_moved(repo):
     run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed")
     _code, _out, err = run_cli(repo, "complete", "T1")
     assert "different tree" not in err, err
+
+
+# -- how much the gate was looking at ---------------------------------------------------
+
+
+def test_a_command_gate_records_how_much_had_changed(repo):
+    """`tree_sha` answers "which tree" and is opaque. This answers "how big", which is
+    what makes a recorded pass auditable later: a review gate that passed over 4,000
+    changed lines in two minutes is a different claim from one that passed over 12, and
+    without this the log cannot tell them apart."""
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    tracked = repo / "tracked.py"
+    tracked.write_text("a\nb\nc\n")
+    _run_git(repo, "add", "tracked.py")
+    _run_git(repo, "commit", "-m", "add tracked")
+    tracked.write_text("a\nb\nc\nd\ne\n")
+    (repo / "brand_new.py").write_text("x = 1\n")
+
+    _outcome, ev = run_command_gate(GateDef(id="probe", command="true", cwd="repo"), repo)
+    stat = ev["diff_stat"]
+    assert stat["files"] == 1, stat
+    assert stat["insertions"] == 2, stat
+    assert stat["untracked"] == 1, stat
+
+
+def test_the_diff_stat_ignores_ddflows_own_events(repo):
+    """Same exclusion as the fingerprint, for the same reason: a number that grows every
+    time ddflow records an event describes ddflow's bookkeeping, not the work."""
+    from ddflow.services.gates import diff_stat
+
+    before = diff_stat(repo)
+    run_cli(repo, "task", "add", "DS1", "--globs", "ds.py")
+    run_cli(repo, "lesson", "add", "--title", "several more events")
+    assert diff_stat(repo) == before
+
+
+def test_the_diff_stat_keys_always_exist(tmp_path):
+    """Outside a repository it returns zeros rather than raising — but the KEYS are
+    there, so a reader never has to tell "no change" apart from "this field did not
+    exist in the version that wrote the event"."""
+    from ddflow.services.gates import diff_stat
+
+    stat = diff_stat(tmp_path)
+    assert set(stat) == {"files", "insertions", "deletions", "untracked"}
+    assert all(v == 0 for v in stat.values())

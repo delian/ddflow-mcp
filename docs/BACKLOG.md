@@ -931,3 +931,25 @@ applying it.
 Also: `zip(ids, paths)` in the new untracked digest, caught by ruff `B905` — a short
 reply from `hash-object` would have paired hashes with the wrong paths and produced a
 plausible, meaningless fingerprint. Now length-checked with an honest fallback.
+
+## B84 — gate evidence records how much it was looking at, 2026-09-25
+
+- **B84. ✅ CLOSED.** `diff_stat` on every command gate's evidence: files, insertions,
+  deletions, untracked count. `tree_sha` answers "which tree" and is opaque; this
+  answers "how big", which is what makes a recorded pass auditable after the fact — a
+  review gate that passed over 4,000 changed lines in two minutes is a different claim
+  from one that passed over 12, and the log could not tell them apart.
+
+  Deliberately NOT folded into `tree_fingerprint`: a fingerprint answers "is this the
+  same tree", and two different trees can share a line count. Mixing a magnitude into
+  an identity would weaken the identity and make the magnitude unavailable alone.
+
+  Uses the same `.ddflow/` exclusion as the fingerprint, for the same reason (B102) —
+  a number that grows every time ddflow records an event describes ddflow's
+  bookkeeping, not the work. Keys are always present even outside a repository, so a
+  reader never has to tell "no change" apart from "this field did not exist in the
+  version that wrote the event". Mutation-verified.
+
+  *From `pimzino/spec-workflow-mcp`, which keeps per-task implementation logs with code
+  statistics (R13). The idea adopted; their separate log subsystem declined — this is
+  one field beside the evidence that already exists.*

@@ -582,6 +582,55 @@ def _untracked_digest(cwd: Path) -> str:
     return digest("\n".join(f"{h} {p}" for h, p in zip(ids, paths, strict=True)))
 
 
+#: `git diff --numstat` emits three tab-separated fields per changed file:
+#: additions, deletions, path.
+_NUMSTAT_FIELDS = 3
+
+
+def diff_stat(cwd: Path) -> dict[str, int]:
+    """Files and lines changed against HEAD, plus untracked files. Read-only.
+
+    Deliberately NOT part of `tree_fingerprint`: a fingerprint answers "is this the
+    same tree", and two different trees can share a line count. Mixing a human-readable
+    magnitude into an identity would make the identity weaker and the magnitude
+    unavailable on its own.
+
+    Uses the same `.ddflow/` exclusion as the fingerprint, for the same reason: a
+    number that grows every time ddflow records an event describes ddflow's bookkeeping
+    rather than the work.
+
+    Returns zeros rather than raising outside a repository. A gate can legitimately run
+    where git does not reach, and a missing statistic is honest where a fabricated one
+    is not -- but the keys are always present, so a reader never has to distinguish
+    "no change" from "the field did not exist yet".
+    """
+    from ..infra import worktree as W
+
+    out = {"files": 0, "insertions": 0, "deletions": 0, "untracked": 0}
+    if not W.git(cwd, "rev-parse", "HEAD").ok:
+        return out
+    r = W.git(cwd, "diff", "HEAD", "--numstat", "--", ".", *FINGERPRINT_EXCLUDE)
+    if r.ok:
+        for line in r.out.splitlines():
+            # `--numstat` is exactly: additions, deletions, path. A rename emits the
+            # path as `old => new`, which still lands in field three, so splitting on
+            # tab and requiring three fields is correct for every form.
+            parts = line.split("\t")
+            if len(parts) < _NUMSTAT_FIELDS:
+                continue
+            add, rem = parts[0], parts[1]
+            out["files"] += 1
+            # `-` for a binary file, which has no line count. Counted as a changed
+            # FILE with zero lines rather than skipped, so a commit of nothing but
+            # binaries does not report "0 files changed".
+            out["insertions"] += int(add) if add.isdigit() else 0
+            out["deletions"] += int(rem) if rem.isdigit() else 0
+    u = W.git(cwd, "ls-files", "--others", "--exclude-standard", "--", ".", *FINGERPRINT_EXCLUDE)
+    if u.ok and u.out.strip():
+        out["untracked"] = len(u.out.splitlines())
+    return out
+
+
 def tree_fingerprint(cwd: Path) -> str:
     """What the working tree looked like, committed and uncommitted.
 
@@ -725,6 +774,12 @@ def run_command_gate(
         # one agent editing between two gates makes the earlier gate's evidence describe
         # source that no longer exists.
         "tree_sha": tree_fingerprint(cwd),
+        # HOW MUCH this gate was looking at. `tree_sha` answers "which tree" and is
+        # opaque; this answers "how big was the change", which is what makes a recorded
+        # pass auditable after the fact. A review gate that passed over 4,000 changed
+        # lines in two minutes is a different claim from one that passed over 12, and
+        # without this the log cannot tell them apart.
+        "diff_stat": diff_stat(cwd),
     }
     return ("passed" if p.returncode == 0 else "failed"), ev
 
