@@ -1049,8 +1049,29 @@ These are independent — run them in parallel worktrees.
   (blocked) P1.T3: deps — P1.T1 is open; P1.T2 is open
 ```
 
-`ddflow claim <ID>` leases the item and creates its worktree. A second agent is refused,
-and told what to take instead:
+`ddflow claim <ID>` leases the item and binds it to a worktree.
+
+**If you are already in one, it adopts that one.** Agent harnesses — Claude Code, Cursor
+— often isolate the agent themselves. Claiming from inside a linked worktree binds the
+item to *that* tree and branch rather than building a rival and telling you to leave the
+one holding your uncommitted work:
+
+```console
+$ ddflow claim T1            # run from inside the harness's own worktree
+claimed T1 (lease 1800s, renew every 300s)
+  worktree: /work/agent-tree  (adopted — you were already in it)
+  branch:   agent-work
+  Carry on where you are.
+```
+
+ddflow never needed to have *created* the tree — it needs to know *which* tree an item
+is worked in, so `recover` can find stranded work and `merge` knows what to merge. An
+adopted tree is recorded as adopted, not created, so `remove_on_merge` will never delete
+something ddflow did not make. A tree already bound to another open item is refused: two
+items in one tree cannot be merged or recovered separately. `worktree.adopt_existing =
+false` restores the old behaviour; `--no-worktree` skips binding entirely.
+
+A second agent is refused, and told what to take instead:
 
 ```console
 $ ddflow claim P1.T4 --agent gamma

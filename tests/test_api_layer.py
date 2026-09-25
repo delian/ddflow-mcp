@@ -29,7 +29,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 62
+ARGV_TOOLS_CEILING = 61
 
 
 def _typed() -> list[str]:
@@ -212,3 +212,55 @@ def test_the_reason_leads_the_body_so_a_reader_gets_it_first():
 
     body = _outcome_result(O.refused("k", "lease held by beta"))["content"][0]["text"]
     assert body.splitlines()[0] == "lease held by beta", body[:120]
+
+
+# -- B37: one answer, two presentations -------------------------------------------------
+
+
+def test_a_migrated_tool_gives_both_surfaces_the_SAME_data(repo):
+    """The property the typed layer exists for, asserted rather than assumed.
+
+    `cmd_loops` used to build its JSON body and its human paragraph independently — two
+    renderings of one answer, kept in step by hand. That is the shape that printed a
+    coverage gap to humans only, invisible to the agent reading JSON that most needed
+    it. Now both derive from one `Outcome`, and this checks they have not drifted apart
+    again.
+    """
+    import json as _json
+
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "A", "--needs", "B")
+    run_cli(repo, "task", "add", "B", "--needs", "A")  # a real cycle, so findings exist
+
+    _code, cli_out, _err = run_cli(repo, "--json", "loops")
+    from_cli = _json.loads(cli_out)
+    assert from_cli, "no findings at all; this test would prove nothing"
+
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_loops", "arguments": {}},
+        }
+    )
+    text = reply["result"]["content"][0]["text"]
+    from_mcp = _json.loads(text[text.index("{") :])["findings"]
+    assert from_mcp == from_cli, (
+        f"the two surfaces disagree about the same answer:\nCLI: {from_cli}\nMCP: {from_mcp}"
+    )
+
+
+def test_a_migrated_tool_keeps_its_exit_contract(repo):
+    """Migration must not silently renumber exit codes. `loops` returns 1 when there
+    are findings and 2 when there are none — callers branch on that, and "loops found"
+    being a 1 rather than a 0 is a contract this layer inherits rather than redesigns.
+    """
+    run_cli(repo, "init")
+    assert run_cli(repo, "loops")[0] == NOTHING
+
+    run_cli(repo, "task", "add", "A", "--needs", "B")
+    run_cli(repo, "task", "add", "B", "--needs", "A")
+    assert run_cli(repo, "loops")[0] == FAIL

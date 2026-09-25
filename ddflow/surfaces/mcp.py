@@ -614,7 +614,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "there is nothing wrong."
         ),
         "properties": {},
-        "argv": lambda a: ["--json", "loops"],
+        "api": lambda repo, a, agent: _api().loops(repo),
     },
     "ddflow_cleanup": {
         "description": (

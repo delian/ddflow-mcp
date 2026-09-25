@@ -89,6 +89,46 @@ def repo_root(start: Path) -> Path:
     return common.parent
 
 
+def current(start: Path) -> Worktree | None:
+    """The LINKED worktree the caller is standing in, or None if it is the primary.
+
+    `--show-toplevel` is the caller's own tree; `repo_root` is the primary. They are
+    equal in the primary checkout and differ inside a linked worktree, which is the
+    whole discriminator — no name conventions, no path prefixes, nothing that a
+    differently-configured harness could defeat.
+
+    This exists because `claim` used to create a worktree unconditionally, so an agent
+    whose harness had ALREADY isolated it (Claude Code and Cursor both do) was sent to
+    a second tree on a second branch and its uncommitted work was stranded in the
+    first. ddflow does not need to have CREATED a tree; it needs to know WHICH tree an
+    item is being worked in, so `recover` and `merge` can find it. Being told is as
+    good as having made it.
+
+    `base` is left empty: an adopted tree's branch already exists and was not branched
+    by us, so claiming to know what it came from would be a guess. `created` is False,
+    which is what stops `remove_on_merge` deleting a tree ddflow did not make.
+    """
+    top = git(start, "rev-parse", "--show-toplevel")
+    if not top.ok:
+        return None
+    try:
+        primary = repo_root(start)
+    except GitError:
+        return None
+    here = Path(top.out).resolve()
+    if here == primary.resolve():
+        return None
+    head = git(here, "rev-parse", "--abbrev-ref", "HEAD")
+    branch = head.out.strip() if head.ok else ""
+    if branch == "HEAD":
+        # Detached: there is a tree but no branch to merge from later. Reported as no
+        # adoptable worktree rather than adopted with an empty branch, because `merge`
+        # would then have nothing to act on and would fail at the end of the work
+        # instead of at the start.
+        return None
+    return Worktree(item="", path=here, branch=branch, base="", created=False)
+
+
 def safe_name(item_id: str) -> str:
     return re.sub(r"[^A-Za-z0-9._-]", "-", item_id).strip("-") or "item"
 

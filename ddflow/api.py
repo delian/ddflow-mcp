@@ -83,6 +83,41 @@ def completion_verdict(repo: Path, item: str, *, model: str = "") -> O.Outcome:
     )
 
 
+def loops(repo: Path) -> O.Outcome:
+    """Circular references and runtime loops. Reads only.
+
+    The shape B37 is about: ONE description of the result, from which both surfaces
+    derive their view. `cmd_loops` used to build the JSON body and the human paragraph
+    independently — two renderings of one answer, kept in step by hand, which is how
+    `cmd_complete` came to print a coverage gap to humans only.
+
+    Exit stays as it was: 1 when there are findings, 2 when there are none. "Loops
+    found" is a finding rather than a tool failure, but that contract is what callers
+    already branch on and changing it silently would be worse than its imperfection.
+    """
+    from .core import progress as PR
+
+    log = EventLog(repo)
+    events = log.read_all()
+    st = fold(events, strict=False)
+    cfg = Config.load(repo)
+    findings = [f.__dict__ for f in PR.detect(events, st, cfg)]
+    data: dict[str, Any] = {
+        "findings": findings,
+        "events": len(events),
+        "items": len(st.items),
+        "blocking": [f for f in findings if f.get("severity") == "block"],
+        "checked": [
+            "dependency cycles", "repeat claims", "gate flapping",
+            "reopened items", "duplicate work", "stalled queue",
+        ],
+    }
+    if not findings:
+        return O.nothing("loops", "no loops detected", **data)
+    n, b = len(findings), len(data["blocking"])
+    return O.failed("loops", f"{n} finding(s)" + (f", {b} blocking" if b else ""), **data)
+
+
 def update(
     repo: Path,
     item: str,

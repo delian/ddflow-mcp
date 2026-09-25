@@ -63,6 +63,11 @@ class Ctx:
 
     def __init__(self, args: argparse.Namespace) -> None:
         start = Path(args.repo or os.environ.get("DDFLOW_REPO") or Path.cwd())
+        #: WHERE THE CALLER IS, before resolution to the primary. `self.repo` is
+        #: deliberately the primary checkout -- that is what makes every worktree share
+        #: one event log -- but resolving loses the one fact `claim` needs to avoid
+        #: building a rival worktree: whether the caller was already standing in one.
+        self.called_from = start
         try:
             self.repo = W.repo_root(start)
         except W.GitError:
@@ -478,6 +483,29 @@ def cmd_next(a, c: Ctx) -> int:
     return OK
 
 
+def _worktree_held_by(c: Ctx, stored: str, me: str) -> str:
+    """Another OPEN item bound to this same worktree, or "".
+
+    Two items sharing one tree cannot be merged or recovered separately: `merge` would
+    take one item's branch for the other's work, and `recover` could not say whose
+    uncommitted changes it had found. Closed items are ignored -- reusing the tree of
+    finished work is exactly what an agent should be able to do.
+    """
+    from ..core.model import ABANDONED, DONE
+
+    st = c.state()
+    for item in st.items.values():
+        if item.id == me or item.removed or item.state in (DONE, ABANDONED):
+            continue
+        # `item.worktree`, not `item.lease.worktree`: the fold copies the lease's path
+        # onto the item and KEEPS it after the lease is released, which is the point --
+        # a released item whose tree still holds its work is exactly the case that must
+        # not be silently co-opted.
+        if (item.worktree or "") == stored:
+            return item.id
+    return ""
+
+
 def cmd_claim(a, c: Ctx) -> int:
     """Acquire a lease and (optionally) create the worktree. Exit 3 if refused.
 
@@ -513,13 +541,31 @@ def cmd_claim(a, c: Ctx) -> int:
         return REFUSED
     wt = None
     if c.cfg.worktree.enabled and not a.no_worktree:
-        try:
-            wt = W.create(c.repo, c.cfg, a.id)
-            stored = W.store_path(c.repo, wt.path)
+        # ADOPT before creating. An agent whose harness already isolated it (Claude
+        # Code and Cursor both do) was previously sent to a second tree on a second
+        # branch, stranding the uncommitted work in the first and giving one item two
+        # branches. ddflow does not need to have MADE the tree -- it needs to know
+        # which tree the item is being worked in, so `recover` and `merge` can find it.
+        adopted = W.current(c.called_from) if c.cfg.worktree.adopt_existing else None
+        if adopted is not None:
+            stored = W.store_path(c.repo, adopted.path)
+            held = _worktree_held_by(c, stored, a.id)
+            if held:
+                print(
+                    f"this worktree is already bound to {held}, which is still open. "
+                    f"Two items sharing one tree cannot be merged or recovered "
+                    f"separately. Finish {held}, work somewhere else, or "
+                    f"`--no-worktree` to claim without binding a tree.",
+                    file=sys.stderr,
+                )
+                return REFUSED
+            wt = W.Worktree(
+                item=a.id, path=adopted.path, branch=adopted.branch, base="", created=False
+            )
             c.log.append(
-                "worktree.created",
+                "worktree.adopted",
                 a.id,
-                {"path": stored, "branch": wt.branch, "base": wt.base},
+                {"path": stored, "branch": wt.branch, "base": ""},
             )
             L.acquire(
                 c.log,
@@ -530,12 +576,37 @@ def cmd_claim(a, c: Ctx) -> int:
                 globs=_csv(a.globs) or None,
                 force=True,
             )
-        except W.GitError as exc:
-            print(f"lease held, but worktree creation failed: {exc}", file=sys.stderr)
-            return FAIL
+        else:
+            try:
+                wt = W.create(c.repo, c.cfg, a.id)
+                stored = W.store_path(c.repo, wt.path)
+                c.log.append(
+                    "worktree.created",
+                    a.id,
+                    {"path": stored, "branch": wt.branch, "base": wt.base},
+                )
+                L.acquire(
+                    c.log,
+                    c.cfg,
+                    a.id,
+                    worktree=stored,
+                    branch=wt.branch,
+                    globs=_csv(a.globs) or None,
+                    force=True,
+                )
+            except W.GitError as exc:
+                print(f"lease held, but worktree creation failed: {exc}", file=sys.stderr)
+                return FAIL
     c.log.append("item.started", a.id, {})
     msg = f"claimed {a.id} (lease {c.cfg.lease.ttl_s}s, renew every {c.cfg.lease.heartbeat_s}s)"
-    if wt:
+    if wt and not wt.created:
+        # Do NOT say "cd there and work" -- the caller is already there, and telling an
+        # agent to move is what the old behaviour did wrong.
+        msg += (
+            f"\n  worktree: {wt.path}  (adopted — you were already in it)"
+            f"\n  branch:   {wt.branch}\n  Carry on where you are."
+        )
+    elif wt:
         msg += f"\n  worktree: {wt.path}\n  branch:   {wt.branch} (from {wt.base})\n  cd there and work."
     c.out(
         msg,
@@ -1695,31 +1766,38 @@ def cmd_progress(a, c: Ctx) -> int:
 
 
 def cmd_loops(a, c: Ctx) -> int:
-    """Report circular references and runtime loops. Exit 2 when there are none."""
+    """Report circular references and runtime loops. Exit 2 when there are none.
+
+    Renders the SAME `Outcome` the MCP surface returns, rather than computing a second
+    view of the same answer. That is the B37 shape: one description of a result, two
+    presentations derived from it — not two presentations kept in step by hand.
+    """
+    from ..api import loops as _loops
     from ..core import progress as PR
 
-    events = c.log.read_all()
-    st = fold(events, strict=False)
-    findings = PR.detect(events, st, c.cfg)
+    out = _loops(c.repo)
     if c.json:
-        print(json.dumps([f.__dict__ for f in findings], indent=2))
-        return FAIL if findings else NOTHING
-    if not findings:
+        print(json.dumps(out.data["findings"], indent=2))
+        return out.exit
+    if not out.data["findings"]:
         print(
-            f"No loops detected ({len(events)} events, {len(st.items)} items).\n"
-            f"Checked: dependency cycles, repeat claims, gate flapping, reopened "
-            f"items, duplicate work, stalled queue."
+            f"No loops detected ({out.data['events']} events, "
+            f"{out.data['items']} items).\nChecked: "
+            + ", ".join(out.data["checked"])
+            + "."
         )
-        return NOTHING
-    for f in findings:
+        return out.exit
+    # Reconstructed from the dicts the Outcome already carries. Calling `PR.detect`
+    # again here would re-read and re-FOLD the whole log for a second copy of an answer
+    # already in hand -- turning one O(events) pass into two, on the surface whose
+    # entire job is to render what the layer below computed.
+    for f in (PR.LoopFinding(**d) for d in out.data["findings"]):
         print(f"\n{f.render()}")
-    blocking = [f for f in findings if f.severity == "block"]
     print(
-        f"\n{len(findings)} finding(s)"
-        + (f", {len(blocking)} blocking" if blocking else "")
-        + ". Thresholds are [loops] knobs; `ddflow config --explain --filter loops`."
+        f"\n{out.reason}. Thresholds are [loops] knobs; "
+        f"`ddflow config --explain --filter loops`."
     )
-    return FAIL
+    return out.exit
 
 
 def cmd_cleanup(a, c: Ctx) -> int:

@@ -1145,8 +1145,13 @@ Operator challenge: *"wouldn't the agent manage worktrees, merge, branches, and 
 orchestrate them? Why do this ourselves instead of instructing the agent and messing
 with the user's or agent's work?"* Largely correct, and demonstrated.
 
-- **B115. `claim` creates a rival worktree when the caller is already in one. FILED,
-  CONFIRMED.** Probe — the agent's harness has already isolated it, as Claude Code and
+- **B115. `claim` created a rival worktree when the caller was already in one. ✅
+  CLOSED 2026-09-25.** `W.current()` detects it (`--show-toplevel` differs from
+  `repo_root` inside a linked worktree — no name conventions to defeat), `claim` adopts
+  the tree and branch, and the event is `worktree.adopted` so `remove_on_merge` never
+  deletes a tree ddflow did not make. A tree already bound to another OPEN item is
+  refused; a settled item's tree can be reused. Knob: `worktree.adopt_existing`.
+  Mutation-verified. Original finding: Probe — the agent's harness has already isolated it, as Claude Code and
   Cursor both do:
 
       $ git worktree add ../wtclash-agent -b agent-branch
@@ -1185,11 +1190,42 @@ with the user's or agent's work?"* Largely correct, and demonstrated.
   back, so a purely instruct-and-report design loses exactly the work `recover` exists
   to find. Adoption keeps the record and drops the collision.
 
-- **B117. Detecting "already in a worktree" is not currently possible from the config
-  alone. FILED, blocks B115.** `worktree.enabled` is a project-wide switch; there is no
+- **B117. ✅ CLOSED 2026-09-25** by `infra/worktree.current()`, and `Ctx.called_from`
+  keeps the caller's pre-resolution path — `self.repo` is deliberately the primary (that
+  is what makes every worktree share one log) and resolving lost the one fact `claim`
+  needed. Original finding: `worktree.enabled` is a project-wide switch; there is no
   per-invocation notion of "the caller is already isolated". `infra/worktree.repo_root`
   resolves a worktree to its primary via `--git-common-dir`, which is what B115 needs to
   detect the case — but nothing consults it on the claim path. Related: this connects to
   R14's local-vs-remote split, since adoption moves ddflow one step further from needing
   to CREATE anything on the filesystem, leaving `merge` as the main remaining git
   operation it performs itself.
+
+## B36/B37 — the migration starts, 2026-09-25
+
+Not closed. Recorded so the runway is legible rather than rediscovered.
+
+- **B37 pattern established.** `api.loops()` returns one `Outcome`; `cmd_loops` renders
+  the human view FROM it and `ddflow_loops` returns its `data`. Before, each surface
+  computed its own view of the same answer — the shape that printed a coverage gap to
+  humans only, invisible to the agent reading JSON that most needed it.
+  `test_a_migrated_tool_gives_both_surfaces_the_SAME_data` pins it, mutation-verified
+  by making the api's data diverge from what the CLI prints.
+
+  Two things the first migration taught, worth applying to the rest:
+
+  1. **Do not re-detect in the surface.** The first version called `PR.detect` again to
+     get objects with a `render()` method, turning one O(events) fold into two on the
+     layer whose only job is to render what was already computed. `LoopFinding(**d)`
+     reconstructs from the dicts the Outcome already carries.
+  2. **Inherit the exit contract, do not redesign it.** `loops` returns 1 on findings
+     and 2 on none. "Loops found" arguably is not a failure, but callers branch on it
+     and a silent renumbering during a refactor is worse than the imperfection.
+     `test_a_migrated_tool_keeps_its_exit_contract` holds it.
+
+- **B36 remains open and is still moving the wrong way** — `cli.py` was 3,041 lines when
+  filed, 4,208 before this migration. One tool moved; `ARGV_TOOLS_CEILING` is 61, down
+  from 62, and the ratchet only ever allows it to fall. The read-only reporting family
+  (`status`, `doctor`, `progress`, `board`, `rebuild`, `cleanup`) is the natural next
+  batch: no writes, and each already builds a JSON payload an `Outcome` can carry
+  directly.

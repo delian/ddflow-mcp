@@ -84,6 +84,7 @@ class WorktreeConfig:
     remove_on_merge: bool = True
     max_parallel: int = 4
     sync_before_start: bool = True
+    adopt_existing: bool = True
 
 
 _doc(
@@ -120,6 +121,11 @@ _doc(
     "worktree",
     "max_parallel",
     "Ceiling on simultaneously active task worktrees. Guards disk and CPU; the scheduler queues beyond it rather than refusing.",
+)
+_doc(
+    "worktree",
+    "adopt_existing",
+    "When the caller is already inside a linked git worktree, bind the item to THAT tree and branch instead of creating another. Agent harnesses (Claude Code, Cursor) often isolate the agent themselves; without this, claim builds a rival tree and tells the agent to leave the one holding its uncommitted work. Turn off to always create ddflow's own.",
 )
 _doc(
     "worktree",

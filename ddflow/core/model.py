@@ -823,6 +823,12 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},
     "worktree.created": _h_worktree_created,
+    # An ADOPTED tree folds identically to a created one -- the item is bound to a
+    # path and a branch either way, and everything downstream (recover, merge, the
+    # stale-evidence fingerprint) needs exactly that. The two kinds stay distinct in
+    # the LOG because `remove_on_merge` must not delete a tree ddflow did not make,
+    # and because "who created this" is a question the history should answer.
+    "worktree.adopted": _h_worktree_created,
     "worktree.merged": _h_worktree_merged,
     "worktree.removed": _h_worktree_removed,
     "bug.found": _h_bug_found,
