@@ -1175,7 +1175,14 @@ with the user's or agent's work?"* Largely correct, and demonstrated.
   stays where its harness put it. An explicit `--worktree <path>` covers the case where
   the agent wants to name one.
 
-- **B116. Separate what is needed from what is done. FILED.** Reading the claim path,
+- **B116. ✅ CLOSED 2026-09-25 as analysis, acted on in B115.** The conclusion, kept
+  because it is the reasoning behind the design rather than a task: coordination does
+  NOT need ddflow to manage worktrees (`L.acquire` runs before any tree exists);
+  RECORDING does, and being told satisfies it as well as creating; CREATING was pure
+  convenience and the colliding part, now replaced by adoption; MERGING genuinely
+  belongs in the tool, because `ddflow merge` merges into the primary without a
+  `git checkout` there and a checkout in the primary disrupts every other agent.
+  Original framing: Reading the claim path,
   three things are bundled that are not equally justified:
   **coordination** does not need it (`L.acquire` runs BEFORE the worktree and
   `--no-worktree` / `worktree.enabled=false` already skip creation with everything else
