@@ -36,8 +36,6 @@ import traceback
 from pathlib import Path
 from typing import Any
 
-from ..surfaces.cli import main as cli_main
-
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "ddflow", "version": "0.1.0", "title": "ddflow work-queue kernel"}
 
@@ -1631,6 +1629,13 @@ def _run_cli(repo: Path, argv: list[str], agent: str = "") -> tuple[int, str]:
     out, err = io.StringIO(), io.StringIO()
     real_out, real_err = sys.stdout, sys.stderr
     sys.stdout, sys.stderr = out, err
+    # Imported HERE, not at module scope. `cli` imports this module for the help
+    # inventory and this module imports `cli` to run it -- a cycle held apart only by
+    # both edges being function-local, which nothing checked until
+    # `test_no_module_level_import_cycles`. The edge disappears entirely when the last
+    # tool leaves the argv path: `_run_cli` is the only thing that needs `cli_main`.
+    from .cli import main as cli_main
+
     # `--agent` BEFORE the subcommand: it is a top-level flag, and argparse puts a
     # top-level flag appearing after the subcommand name into the subparser, where it
     # does not exist. An identity silently dropped is worse than one never set -- the

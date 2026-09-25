@@ -70,8 +70,14 @@ def _modules() -> list[Path]:
 def _imported_layers(path: Path) -> set[tuple[str, int]]:
     """Layers this module imports, with the line each import is on."""
     tree = ast.parse(path.read_text("utf-8"), str(path))
-    here = _layer(path)
-    depth_of_pkg = 1 if here == "config" else 2  # `.` vs `..` reaches ddflow/
+    # How many dots reach `ddflow/` FROM THIS MODULE. A top-level module needs one, a
+    # module in `surfaces/` needs two, one in `surfaces/commands/` needs three. This was
+    # hardcoded to 2 for everything but `config.py`, so the first nested package made
+    # `from ..context import Ctx` — a same-layer import, two dots, reaching
+    # `ddflow.surfaces` — resolve as if it named the layer `context`, and the check
+    # reported a violation that was not one. A path-derived depth cannot drift as the
+    # tree grows.
+    depth_of_pkg = len(path.relative_to(PKG).parts)
     out: set[tuple[str, int]] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom) and node.level:
@@ -79,6 +85,12 @@ def _imported_layers(path: Path) -> set[tuple[str, int]]:
             mod = node.module or ""
             if node.level == depth_of_pkg and mod:
                 out.add((mod.split(".")[0], node.lineno))
+            elif node.level < depth_of_pkg:
+                # Shallower than the package root: a sibling or parent WITHIN this
+                # layer (e.g. `..context` from `surfaces/commands/`). Same layer by
+                # construction, and `test_no_module_level_import_cycles` is what
+                # governs those.
+                continue
             elif node.level == depth_of_pkg and not mod:
                 for alias in node.names:
                     out.add((alias.name.split(".")[0], node.lineno))
@@ -291,3 +303,57 @@ def test_the_recordable_gate_outcomes_are_exactly_the_five(repo):
 
     assert set(GATE_OUTCOMES) == {"passed", "failed", "unavailable", "partial", "skipped"}
     assert "started" not in GATE_OUTCOMES
+
+
+def test_no_module_level_import_cycles():
+    """No two modules may import each other at MODULE scope, anywhere in the package.
+
+    The layer check above deliberately permits same-layer imports (`there != here`), so
+    a cycle between two modules in one layer was invisible to it. `surfaces/cli.py` and
+    `surfaces/mcp.py` were exactly that: `cli` reaches for the tool registry to build
+    its help inventory, `mcp` reached for `cli_main` to run a tool, and the pair was
+    held apart only by ONE of the two edges happening to be function-local. Nothing
+    checked that, so the property was a convention rather than a guarantee — and a
+    convention that survives only while nobody tidies an import.
+
+    Function-local imports are not cycles for this purpose: they bind at call time, so
+    neither module can fail to load because of the other. They are still worth
+    minimising, which is what `ARGV_TOOLS_CEILING` does from the other direction — the
+    `mcp -> cli` edge disappears entirely when the last tool leaves the argv path.
+    """
+    import ast as _ast
+    from collections import defaultdict
+
+    graph: dict[str, set[str]] = defaultdict(set)
+    for path in _modules():
+        mod = ".".join(path.relative_to(PKG).with_suffix("").parts)
+        mod = mod.removesuffix(".__init__")
+        tree = _ast.parse(path.read_text("utf-8"))
+        for node in tree.body:  # MODULE SCOPE ONLY — not a full walk
+            if isinstance(node, _ast.ImportFrom) and node.module is not None:
+                target = node.module
+                if node.level:  # relative: resolve against this module's package
+                    base = mod.rsplit(".", node.level - 1)[0] if node.level > 1 else mod
+                    parent = base.rsplit(".", 1)[0] if "." in base else ""
+                    target = f"{parent}.{node.module}".lstrip(".")
+                graph[mod].add(target.removeprefix("ddflow."))
+            elif isinstance(node, _ast.Import):
+                for alias in node.names:
+                    if alias.name.startswith("ddflow."):
+                        graph[mod].add(alias.name.removeprefix("ddflow."))
+
+    known = {
+        ".".join(p.relative_to(PKG).with_suffix("").parts).removesuffix(".__init__")
+        for p in _modules()
+    }
+    cycles = sorted(
+        f"{a} <-> {b}"
+        for a, deps in graph.items()
+        for b in deps
+        if b in known and b != a and a in graph.get(b, ())
+    )
+    assert not cycles, (
+        "module-level import cycles:\n  "
+        + "\n  ".join(cycles)
+        + "\nMake one edge function-local, or move what they share to a lower layer."
+    )

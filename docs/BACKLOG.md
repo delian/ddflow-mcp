@@ -1313,3 +1313,45 @@ the agent to run the command it would then refuse.
 
 Mutation-verified: reverting the two behavioural guards (the item check and the config
 refusal) turns three of the new tests red.
+
+## B38 + B36 slices, 2026-09-25
+
+- **B38. Latent `cli ↔ mcp` cycle. ✅ CLOSED.** `mcp.py` imported `cli_main` at MODULE
+  level while `cli.py` imported `TOOLS` function-locally, so the pair was held apart by
+  one of the two edges happening to be lazy — a convention, not a guarantee, and one
+  that dies the first time somebody tidies imports. `cli_main` is now imported inside
+  `_run_cli`, which is the only thing that needs it; the edge disappears entirely when
+  the last tool leaves the argv path.
+
+  **The check that would have caught it did not exist, and could not have.** The layer
+  test permits same-layer imports by construction (`there != here`), so a cycle between
+  two modules in one layer was invisible to it. `test_no_module_level_import_cycles`
+  builds the module-scope import graph across the package and forbids any 2-cycle.
+  Function-local imports are deliberately not counted: they bind at call time, so
+  neither module can fail to load because of the other.
+
+  Mutation-verified — and the FIRST mutation did not bite, correctly: adding one
+  module-level edge is not a cycle, and only mutating both turned it red.
+
+- **B36. Two slices, 4,314 → 3,940 lines.** Not closed.
+  * `surfaces/context.py` (177) — `Ctx`, the exit-code vocabulary, and the five small
+    shared helpers. Extracted FIRST because it is what makes the rest possible: a
+    command module reaching back to `cli` for `Ctx` would recreate the very cycle B38
+    just forbade, and `cli.py` grew partly because there was nowhere else for this
+    to live.
+  * `surfaces/commands/config.py` (266) — the TOML machinery, `_write_config`,
+    `_config_set` and `_workflow_problems`. Four call sites (`cmd_config`, and
+    `workflow pipeline|gate|drop`, which are edits to the same file wearing a friendlier
+    name) were reaching into a 4,300-line module for a private helper.
+
+  **The split exposed a real bug in the layering test.** `depth_of_pkg` was hardcoded to
+  2, so the first nested package made `from ..context import Ctx` — a same-layer import,
+  two dots, reaching `ddflow.surfaces` — resolve as though it named a layer called
+  `context`, and the check reported a violation that was not one. Now derived from the
+  path, so it cannot drift as the tree grows. Mutation-verified that a genuine
+  `services -> surfaces` violation still fails.
+
+  Remaining families, in rough order of self-containedness: decisions (`_decision_*`,
+  ~180 lines), workflow (`_workflow_*` + `_render_workflow`, ~290), gates
+  (`_gate_verify`, `_gates_ahead_of`), import/verify, then `build_parser` (554) once
+  the commands it references live elsewhere.
