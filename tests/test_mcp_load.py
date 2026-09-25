@@ -134,12 +134,15 @@ def _reader(args: tuple[str, int]) -> tuple[int, int]:
                 "params": {"name": "ddflow_status", "arguments": {}},
             }
         )
-        if reply and "result" in reply:
+        # `"result" in reply` is true for an isError reply too, so counting that way
+        # could only ever see a read that HUNG -- never one that failed. The assertion
+        # `ok == total` then held while every read errored.
+        if reply and "result" in reply and not reply["result"].get("isError"):
             ok += 1
     return ok, count
 
 
-def _mixed(args: tuple[str, str, int]) -> tuple[str, int, int]:
+def _mixed(args: tuple[str, str, int]) -> tuple[str, int, int, int]:
     """Read-modify-write interleaved with other agents doing the same — the shape that
     loses updates when a check-then-act is not inside the transaction."""
     repo_s, agent, count = args
@@ -154,7 +157,7 @@ def _mixed(args: tuple[str, str, int]) -> tuple[str, int, int]:
             "params": {"name": "ddflow_identify", "arguments": {"agent": agent}},
         }
     )
-    reads = writes = 0
+    reads = writes = failed = 0
     for i in range(count):
         r = srv.handle(
             {
@@ -173,13 +176,22 @@ def _mixed(args: tuple[str, str, int]) -> tuple[str, int, int]:
                 "method": "tools/call",
                 "params": {
                     "name": "ddflow_lesson_add",
-                    "arguments": {"text": f"{agent} observed {i}", "tags": "load"},
+                    # `title` is the required field, not `text`. The first version of
+                    # this worker passed `text` and every call failed with "missing
+                    # required argument(s): title" -- and the test PASSED, because it
+                    # compared the workers' own success count (0) against the lessons
+                    # in the log (0) and called that "nothing was lost". A load test
+                    # that exercises nothing is the vacuous-pass class wearing a
+                    # stopwatch.
+                    "arguments": {"title": f"{agent} observed {i}", "tags": "load"},
                 },
             }
         )
         if w and not w.get("result", {}).get("isError"):
             writes += 1
-    return agent, reads, writes
+        else:
+            failed += 1
+    return agent, reads, writes, failed
 
 
 def _pool_map(fn, items, timeout_s: float):
@@ -212,9 +224,7 @@ def test_many_agents_write_through_MCP_without_deadlock_or_loss(repo):
     """
     run_cli(repo, "init")
     jobs = [(str(repo), f"agent-{i:02d}", LOAD_CALLS) for i in range(LOAD_AGENTS)]
-    t0 = time.monotonic()
     results = _pool_map(_writer, jobs, LOAD_TIMEOUT_S)
-    elapsed = time.monotonic() - t0
 
     failures = {a: f for a, _ok, f, _s in results if f}
     assert not failures, f"calls returned errors under load: {failures}"
@@ -227,11 +237,19 @@ def test_many_agents_write_through_MCP_without_deadlock_or_loss(repo):
         f"is a lost append; a duplicate id means two agents collided on one."
     )
 
-    per_call = elapsed / expected
-    assert per_call < WRITE_LATENCY_BUDGET_S, (
-        f"{per_call:.3f}s per write through the MCP surface under "
-        f"{LOAD_AGENTS}-way contention, budget {WRITE_LATENCY_BUDGET_S}s "
-        f"(override with DDFLOW_WRITE_LATENCY_BUDGET_S)"
+    # Measured from each WORKER's own elapsed time, not from wall clock divided by all
+    # calls. The latter was ~12x smaller than the per-write latency it was labelled as,
+    # and -- worse -- it could not fail: `_pool_map` aborts the run at LOAD_TIMEOUT_S,
+    # so `elapsed / (12 * 15)` was bounded above by 240/180 = 1.33s, already under the
+    # 2.0s default and far under the 6.0s the CI step sets. The budget was decoration
+    # and the CI override was dead, while a genuinely slow-but-not-wedged runner was
+    # reported with the message "that is the deadlock signature".
+    slowest = max(secs / LOAD_CALLS for _a, _ok, _f, secs in results)
+    assert slowest < WRITE_LATENCY_BUDGET_S, (
+        f"slowest agent averaged {slowest:.3f}s per write through the MCP surface "
+        f"under {LOAD_AGENTS}-way contention, budget {WRITE_LATENCY_BUDGET_S}s "
+        f"(override with DDFLOW_WRITE_LATENCY_BUDGET_S). This is SLOWNESS, not a "
+        f"deadlock — the deadlock bound is LOAD_TIMEOUT_S and it was not reached."
     )
 
 
@@ -288,13 +306,9 @@ def test_readers_are_not_blocked_by_writers(repo):
     jobs = [(str(repo), f"w-{i}", LOAD_CALLS) for i in range(LOAD_AGENTS // 2)]
     jobs += [(str(repo), LOAD_CALLS)] * (LOAD_AGENTS // 2)  # readers
 
-    def _dispatch(job):  # pragma: no cover - runs in a child process
-        return _writer(job) if len(job) == 3 else _reader(job)
-
-    # `spawn` cannot pickle a closure, so run the two pools in sequence-of-starts
-    # rather than one heterogeneous map: the overlap that matters is writers running
-    # WHILE readers do, which a single pool over both job kinds gives us for free only
-    # if the worker is importable. Keep it simple and explicit instead.
+    # Two `map_async` calls on ONE pool, started before either is awaited, so the
+    # readers really are running while the writers are. (`spawn` cannot pickle a
+    # closure, so a single heterogeneous map over both job shapes is not available.)
     ctx = mp.get_context("spawn")
     with ctx.Pool(processes=LOAD_AGENTS) as pool:
         writers = pool.map_async(_writer, [j for j in jobs if len(j) == 3])
@@ -319,13 +333,21 @@ def test_a_read_modify_write_loop_under_contention_loses_nothing(repo):
         run_cli(repo, "task", "add", f"T{i}", "--globs", f"t{i}.py")
 
     n = max(2, LOAD_AGENTS // 3)
-    jobs = [(str(repo), f"mix-{i}", 5) for i in range(n)]
+    per = 5
+    jobs = [(str(repo), f"mix-{i}", per) for i in range(n)]
     results = _pool_map(_mixed, jobs, LOAD_TIMEOUT_S)
 
-    expected = sum(w for _a, _r, w in results)
+    # Assert the calls SUCCEEDED before asserting their effects survived. Deriving
+    # `expected` from the workers' own success counts and comparing it to the log makes
+    # the all-failed case read as a pass: 0 written, 0 survived, "nothing was lost".
+    failures = {a: f for a, _r, _w, f in results if f}
+    assert not failures, f"writes failed under contention: {failures}"
+    assert sum(w for _a, _r, w, _f in results) == n * per, "a worker wrote fewer than asked"
+    assert all(r == per for _a, r, _w, _f in results), "a `next` call failed under contention"
+
     st = fold(EventLog(repo).read_all(), strict=False)
-    assert len(st.lessons) == expected, (
-        f"{expected} lessons were written and {len(st.lessons)} survived — a "
+    assert len(st.lessons) == n * per, (
+        f"{n * per} lessons were written and {len(st.lessons)} survived — a "
         f"read-modify-write under contention lost an append"
     )
 

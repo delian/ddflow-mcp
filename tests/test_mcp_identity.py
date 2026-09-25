@@ -206,3 +206,85 @@ def test_a_malformed_clientInfo_does_not_break_the_handshake(repo):
     )
     assert reply is not None and "result" in reply
     assert srv.client_info == {}
+
+
+# -- the four layers, and the two paths that have to agree on them ---------------------
+
+
+def test_both_dispatch_paths_honour_DDFLOW_AGENT_on_an_UNDECLARED_connection(repo, monkeypatch):
+    """The split the first version of this feature shipped.
+
+    Identity was threaded through both paths only for a DECLARED name. Undeclared, the
+    argv path went through `cli.Ctx`, which resolves `--agent` → `DDFLOW_AGENT` →
+    `[agent].id` → tree; the typed path called `EventLog(repo, "")`, which falls
+    straight to the tree-derived default and reads neither the env var nor the config.
+
+    So with `DDFLOW_AGENT` set — which the demo harnesses do — `ddflow_claim` wrote as
+    `alpha` and `ddflow_update` wrote as the directory name, on the same connection,
+    into different shards. Two encodings of one precedence, which is the
+    duplicate-then-drift shape; there is now one, in `infra.log.effective_agent_id`.
+
+    *Found by roborev on 031313a, CONFIRMED, reproduced before this test was written.*
+    """
+    monkeypatch.setenv("DDFLOW_AGENT", "alpha")
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+
+    srv = Server(repo)  # deliberately NOT identified
+    _call(srv, "ddflow_claim", id="T1")  # argv path
+    _call(srv, "ddflow_update", id="T1", title="renamed")  # typed path
+
+    by_kind = {
+        e.kind: e.agent
+        for e in EventLog(repo).read_all()
+        if e.kind in ("lease.acquired", "task.updated")
+    }
+    assert by_kind.get("lease.acquired") == "alpha", by_kind
+    assert by_kind.get("task.updated") == "alpha", (
+        f"the typed path ignored DDFLOW_AGENT and wrote as "
+        f"{by_kind.get('task.updated')!r}: {by_kind}"
+    )
+
+
+def test_identify_reports_the_identity_actually_in_force_not_the_tree_name(repo, monkeypatch):
+    """The tool whose job is to make identity visible must not misreport it.
+
+    With `DDFLOW_AGENT=alpha` it answered with the tree-derived name — so an agent
+    checking who it was got a different answer from the one its own writes carried.
+    """
+    monkeypatch.setenv("DDFLOW_AGENT", "alpha")
+    run_cli(repo, "init")
+    out = _text(_call(Server(repo), "ddflow_identify"))
+    assert "alpha" in out, out
+
+
+def test_identify_names_WHERE_the_default_came_from(repo, monkeypatch):
+    """ "You are alpha because something set DDFLOW_AGENT" and "you are alpha because
+    that is this directory's name" call for different reactions — the second is a guess
+    every sibling in the tree makes identically."""
+    run_cli(repo, "init")
+    monkeypatch.setenv("DDFLOW_AGENT", "alpha")
+    assert "DDFLOW_AGENT" in _text(_call(Server(repo), "ddflow_identify"))
+    monkeypatch.delenv("DDFLOW_AGENT")
+    out = _text(_call(Server(repo), "ddflow_identify"))
+    assert "working tree" in out
+    assert "several" in out, "the tree-derived case does not warn about siblings"
+
+
+def test_a_declared_name_still_beats_the_environment(repo, monkeypatch):
+    """Innermost wins, as the README promises. An env var set by a harness must not
+    override an agent that has said who it is."""
+    monkeypatch.setenv("DDFLOW_AGENT", "alpha")
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    srv = Server(repo)
+    _call(srv, "ddflow_identify", agent="declared-one")
+    _call(srv, "ddflow_claim", id="T1")
+    _call(srv, "ddflow_update", id="T1", title="x")
+    # Only what THIS CONNECTION wrote. The `task add` above is a separate CLI process
+    # that legitimately ran as `alpha`, and sweeping it in would make the assertion
+    # about the fixture rather than about precedence.
+    agents = {
+        e.agent for e in EventLog(repo).read_all() if e.kind in ("lease.acquired", "task.updated")
+    }
+    assert agents == {"declared-one"}, agents

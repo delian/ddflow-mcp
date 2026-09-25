@@ -534,12 +534,32 @@ def tree_fingerprint(cwd: Path) -> str:
     """What the working tree looked like, committed and uncommitted.
 
     `HEAD` alone is not enough -- the interesting state during a gate run is almost
-    always dirty -- so this is the commit plus a digest of `git status --porcelain`,
-    which moves when a tracked file is edited, staged, or an untracked one appears.
+    always dirty -- so this is the commit, plus the CONTENT of the tracked changes,
+    plus the LIST of everything else git reports.
 
-    Not `write-tree`: that needs a clean index and would WRITE, and a function whose
-    job is to observe must not change what it observes. Outside a repository it returns
-    "" rather than raising, because a gate can legitimately run somewhere git does not
+    Porcelain alone was not enough either, and that was a real bug. `git status
+    --porcelain` is two status letters and a path: no content, no size, no mtime. So
+    once a file was modified, every further edit to that same file produced
+    byte-identical output and the digest did not move. That is not an edge case, it is
+    the normal one -- at gate time the agent has been editing all along, so the tree is
+    already dirty when the fingerprint is taken and the clean->dirty transition has
+    already happened. `stale_evidence`'s own documented scenario ("run the tests, edit
+    one more thing, complete") was therefore the case it could not see, and a gate that
+    passed on superseded source read as fresh evidence.
+
+    So `git diff HEAD` goes in as well: content-sensitive for tracked files, staged or
+    not, and it adds no new noise because untracked paths were already in the porcelain
+    listing. Cost is proportional to the SIZE OF THE CHANGES, not to the tree.
+
+    **Known limit, stated rather than papered over:** `git diff` renders a binary file
+    as "Binary files ... differ" with no content, so a re-edit of an already-modified
+    binary is still invisible. Source changes are the case this protects and the fix
+    for binaries (`--binary`, base85-encoding whole blobs) costs far more than it buys.
+    Filed as B87.
+
+    Not `write-tree` or `stash create`: both WRITE, and a function whose job is to
+    observe must not change what it observes. Outside a repository it returns ""
+    rather than raising, because a gate can legitimately run somewhere git does not
     reach, and a missing fingerprint is honest where a fabricated one is not.
     """
     from ..infra import worktree as W
@@ -548,7 +568,12 @@ def tree_fingerprint(cwd: Path) -> str:
     if not head.ok:
         return ""
     status = W.git(cwd, "status", "--porcelain")
-    dirt = digest(status.out) if status.ok and status.out.strip() else "clean"
+    # `HEAD` and not `--cached`: staged and unstaged changes are equally "not what is
+    # committed", and a gate cares about the files on disk it just ran against.
+    diff = W.git(cwd, "diff", "HEAD")
+    parts = [status.out if status.ok else "", diff.out if diff.ok else ""]
+    body = "\x00".join(parts)
+    dirt = digest(body) if body.strip() else "clean"
     return f"{head.out.strip()[:12]}+{dirt}"
 
 

@@ -1004,3 +1004,36 @@ gate evidence (B84).
 the claims above were re-checked against the raw sources before being written down, and
 the one thing it could not establish (mcpn's actual MCP tool names, as opposed to its
 workflow names) is recorded here as unestablished rather than filled in.
+
+### R13 addendum — what review did to these claims (2026-09-25)
+
+Recorded because two of the three claims above were weaker than they read, and the
+correction is the useful part.
+
+**Claim 1 was right about the defect and wrong about the fix being complete.** The entry
+quoted `log.py:96` — *"`DDFLOW_AGENT` overrides both"* — as authority. roborev checked
+the code rather than the docstring: `default_agent_id` reads neither the env var nor
+`[agent].id`, so that sentence was already false when it was written, and the fix built
+on it inherited the error. Identity reached the argv path and not the typed one, and
+`ddflow_identify` itself reported the wrong answer. **A docstring quoted as evidence is
+not evidence** — the same lesson as `is_installed` promising three-valued detection
+while returning `False` for a timeout, and it recurred here inside the commit that cited
+it. Fixed in B88 by resolving the precedence once, in one function, called from both.
+
+**Claim 3 ("concurrent agents can deadlock or lose appends" — REFUTED under test) rested
+partly on a test that exercised nothing.** The read-modify-write arm derived its expected
+count from the workers' own success counts, so zero successes compared equal to zero
+survivors and reported "nothing was lost". Asserting failures were zero turned it red at
+once: every write in that arm had been failing on a wrong argument name. The product
+behaviour was fine — re-verified once the worker was fixed — but the REFUTED label was
+supported by less evidence than it appeared to be. The claim stands; the evidence for it
+is now real.
+
+**Claim 2 (fold cost) survived review unchallenged**, and the measured table above is
+unchanged.
+
+**On reviewer availability.** roborev needed a repo-local `.roborev.toml` — ddflow has
+been its own git repository since the extraction, so it fell through to the machine's
+global `default_agent = codex`, which is not installed here. It reported that and
+**exited 0**, which is the failure mode this project names most often, in the tool whose
+job is to catch it. The config is now pinned in the repository, where a clone gets it.

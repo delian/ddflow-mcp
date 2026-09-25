@@ -57,6 +57,12 @@ class Template:
     text: str
     source: str  # "config" | "project" | "builtin"
     path: Path | None = None
+    #: "template" (machinery: the review prompt, the gate instruction, the MCP
+    #: handshake) or "command" (a workflow an operator invokes). Both are
+    #: operator-editable text with the same override precedence, and they are used for
+    #: entirely different things -- a flat list of eleven names invites
+    #: `prompts show mcp_instructions` in the expectation of a workflow.
+    kind: str = "template"
 
 
 #: Workflow commands, surfaced over MCP as PROMPTS -- which is what a client turns into
@@ -139,11 +145,11 @@ def resolve_command(name: str, repo: Path | None = None) -> Template:
     if repo:
         local = Path(repo) / ".ddflow" / "prompts" / "commands" / f"{name}.md"
         if local.is_file():
-            return Template(name, local.read_text("utf-8"), "project", local)
+            return Template(name, local.read_text("utf-8"), "project", local, "command")
     path = command_dir() / f"{name}.md"
     if not path.is_file():
         raise TemplateError(f"shipped command {name}.md is missing from the package")
-    return Template(name, path.read_text("utf-8"), "builtin", path)
+    return Template(name, path.read_text("utf-8"), "builtin", path, "command")
 
 
 def resolve(
@@ -248,4 +254,32 @@ def _render_stdlib(text: str, vars: dict[str, Any]) -> str:
 
 
 def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) -> list[Template]:
-    return [resolve(n, repo, overrides) for n in TEMPLATE_NAMES]
+    """BOTH registries.
+
+    This walked `TEMPLATE_NAMES` only, so `ddflow prompts list` printed five templates
+    and none of the six workflow commands -- which the MCP surface has served through
+    `prompts/list` all along. Half the prompt library was reachable from an agent and
+    invisible from a terminal, which is where an operator goes to edit one.
+    """
+    out = [resolve(n, repo, overrides) for n in TEMPLATE_NAMES]
+    out += [resolve_command(n, repo) for n in COMMANDS]
+    return out
+
+
+def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] | None = None):
+    """A template or a command, whichever this name is.
+
+    The surfaces should not have to know which registry a name lives in before they can
+    look it up -- that knowledge is exactly what leaked out as `unknown template
+    'research-companions'`, a message that listed the five templates to someone who had
+    typed a real command name correctly.
+    """
+    if name in TEMPLATE_NAMES:
+        return resolve(name, repo, overrides)
+    if name in COMMANDS:
+        return resolve_command(name, repo)
+    raise TemplateError(
+        f"unknown prompt {name!r}.\n"
+        f"  templates: {', '.join(TEMPLATE_NAMES)}\n"
+        f"  commands:  {', '.join(sorted(COMMANDS))}"
+    )

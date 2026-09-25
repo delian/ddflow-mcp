@@ -28,7 +28,7 @@ and an MCP server that are the same implementation.
   - [Extending it by writing text, not code](#extending-it-by-writing-text-not-code)
   - [Publishing and registry](#publishing-and-registry)
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
-  - [Companion MCP servers](#companion-mcp-servers)
+  - [Companion tools](#companion-tools)
 - [Adopting a project that already has history](#adopting-a-project-that-already-has-history)
   - [Verifying an import, at any time](#verifying-an-import-at-any-time)
 - [The model: phases, tasks, dependencies, globs](#the-model-phases-tasks-dependencies-globs)
@@ -474,7 +474,7 @@ there is.
 > truncated. That case is reported as `TRUNCATED` with the remedy named, never as an
 > empty completion and never as a clean review.
 
-### Companion MCP servers
+### Companion tools
 
 ddflow imposes the order and demands the evidence. It does not *perform* the judgement
 inside most of its gates: `standards` wants an automated standards review, `research`
@@ -1044,9 +1044,11 @@ server; they are cheap, and the isolation is the point.
 **One project shared by many agents is the supported case** — and the one that needs no
 special setup beyond declaring identity:
 
-- **Writes never contend.** Each agent appends to its **own log shard**, so parallel
-  writers do not queue behind one file. A short exclusive lock is taken only to allocate
-  the next Lamport clock value.
+- **Writes never conflict**, and they never block readers. Each agent appends to its
+  **own log shard**, so there is no shared file to overwrite and no merge conflict to
+  resolve. Writers *do* serialise briefly: one repo-wide lock is held across the clock
+  allocation, the append and its `fsync`. Short, but not nothing — per-agent shards
+  remove *file* contention, not lock contention.
 - **Reads take no lock at all**, so a read-heavy agent cannot be starved by a write-heavy
   one, and a reader can never block a writer.
 - **File ownership is coordinated by `globs`.** `claim` refuses an item whose writes

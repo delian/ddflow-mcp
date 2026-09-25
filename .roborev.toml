@@ -1,0 +1,42 @@
+# roborev, for THIS repository.
+#
+# ddflow is its own git repository. Without this file roborev resolves no repo-local
+# config and falls back to the machine-global `default_agent`, which on the machine
+# this was found on is `codex` — not installed. The failure was:
+#
+#     Error: review failed: no review agent available
+#            (preferred: "codex", backups: )
+#
+# and roborev exited **0** while saying it. A reviewer that cannot run, reporting
+# success, is the vacuous-pass class at the level of a whole reviewer: the commit is
+# recorded as reviewed and nothing looked at it. So the agent is pinned here, in the
+# repository, rather than left to whatever the host machine happens to default to.
+#
+# roborev is SAME-family as the author and does not satisfy the different-family
+# rubber-duck requirement. It is a complement: in this project's history it and the
+# cross-family critic repeatedly produced disjoint findings.
+
+# Pinned, not inherited. See above.
+agent = 'claude-code'
+model = ''
+backup_agent = ''
+backup_model = ''
+
+review_guidelines = '''This repo (ddflow) is a work-queue kernel and MCP server for AI coding agents. It is event-sourced: an append-only JSONL log is the sole source of truth and everything else is a deterministic projection. Always state whether a finding is CONFIRMED (you traced or reproduced it) or THEORETICAL.
+
+Prioritise the bug classes this project has actually shipped and then found, in rough order of how often they were real:
+
+1. Vacuous pass — a check that cannot fail. A gate satisfied by an assertion with no evidence; `all()` over an empty collection; a test that passes with the feature disabled; a tool that exits 0 while reporting it could not run. This is the defining class here: "unavailable" must NEVER render as "success", and "nobody looked" must never render as "no".
+2. Three-valued collapse — a tri-state (yes / no / could-not-tell) flattened into a boolean. Timeouts and spawn failures reported as absence; a probe that never ran cached as a negative result.
+3. Silent-knob-drop — a config field accepted and never read, or dropped one layer down. Also a knob whose value is validated but discarded.
+4. Duplicate-then-drift — the same quantity or logic defined twice, one shadowing the other. A dead fallback branch nothing executes, which therefore cannot be caught drifting. A top-level name defined twice in one module.
+5. Metadata-key-vs-field — provenance carried as prose in a free-text body instead of a structured field, forcing a regex to recover it.
+6. Projection drops a field — an event handler that silently discards keys the writer recorded, so the fold loses data the log still has.
+7. Unreachable state used as a criterion — judging something by a status it can never attain (e.g. asking whether a command-line tool is "registered" as an MCP server).
+8. Exit-code semantics — this project's vocabulary is 0 healthy, 1 failure, 2 could-not-run/nothing, 3 coordination refused. Collapsing 2 into 0 is a bug, always.
+9. Concurrency — `fcntl.flock` is per open-file-description, so a second lock on one file in one process deadlocks against itself. Check-then-act outside a transaction. A lock held across an O(all-events) read. Process-global state (`sys.stdout`) swapped per call in something that may become reentrant.
+10. Identity and attribution — anything that assumes one agent per process, per tree, or per connection. Several agents sharing a derived identity is a correctness bug, not a cosmetic one: reviewer independence is a comparison of agent against author.
+11. Torn-tail resume — half-written state on restart; a non-atomic write with a fixed temp filename.
+12. CLI/MCP divergence — the two surfaces are meant to be parity-tested. A capability on one and not the other, or the same operation encoded differently on each.
+
+Also flag, specifically: a docstring that promises behaviour the code does not implement (this project has shipped that twice), and any source change that arrives without a runnable regression test demonstrating the defect.'''

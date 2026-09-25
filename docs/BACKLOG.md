@@ -667,12 +667,25 @@ features worth taking.
   "what did this gate actually review" answerable rather than assumed.
   *From: `pimzino/spec-workflow-mcp`.*
 
-- **B85. `prompts list` on the CLI omits the command templates. FILED.** The MCP
-  surface serves them through `prompts/list` from `P.COMMANDS`; the CLI's `list_all`
-  walks `TEMPLATE_NAMES` only, so `ddflow prompts list` shows five templates and none
-  of the six commands. A divergence in the direction the parity test does not look —
-  it checks that every CLI command is on MCP, not the reverse. *Found while adding
-  `research-companions`, which was invisible on the CLI.*
+- **B85. Half the prompt library was invisible from the CLI. ✅ CLOSED.** The MCP
+  surface serves both registries through `prompts/list`; the CLI's `list_all` walked
+  `TEMPLATE_NAMES` only. So `ddflow prompts list` showed five templates and none of the
+  six workflow commands, `prompts show <command>` answered `unknown template` while
+  listing five names that did not include the one you correctly typed, and `eject` —
+  the documented way to customise a prompt — could not copy out a command at all.
+
+  A divergence in the direction nothing looks: `test_mcp_parity` asks whether every CLI
+  command is on MCP, which is what matters for an agent. The reverse matters for the
+  operator, and without a check a capability can sit on one surface indefinitely.
+
+  Caught by writing `ddflow prompts show research-companions` into the README one
+  commit earlier and then running it — the doc was written from what the tool *should*
+  do. `list_all` now returns both, `resolve_any` resolves either, `eject` writes a
+  command into `prompts/commands/` where resolution actually looks (beside the
+  templates would have produced an override the operator edits and the tool never
+  reads), and a ratchet asserts everything reachable over MCP is reachable from the
+  CLI. Nine of the twelve new tests were red before the fix. A further test asserts the
+  README never names a prompt that does not resolve.
 
 - **B86. No compaction on the state-reading path. FILED, not urgent.** Every
   state-reading call re-folds the whole log. Measured 2026-09-25: linear, converging on
@@ -681,3 +694,112 @@ features worth taking.
   projection; the scheduling and status path does not. Filed with the numbers so the
   decision to act is made against a measurement rather than a worry. *Supersedes the
   vaguer B6.*
+
+## B87–B95 — what the two reviewers found on B79–B81, 2026-09-25
+
+Both reviewers ran on this round after a setup fix each: roborev had no repo-local
+`.roborev.toml` in this repository (it is its own git repo since the extraction) and so
+fell through to the machine-global `default_agent = codex`, which is not installed —
+**and it exited 0 while reporting that it could not review**, which is the vacuous-pass
+class at the level of a whole reviewer. The cross-family critic's first run was killed
+at a 900s budget and its second was invoked with a wrong flag; the third completed.
+
+Nine findings, all either fixed here or filed below. Two of them were in code shipped
+one commit earlier, and two were in the tests written to catch exactly their class.
+
+- **B87. `tree_fingerprint` could not see a re-edit of an already-dirty file. ✅ CLOSED.**
+  `git status --porcelain` is two status letters and a path — no content — so once a
+  file was modified, every further edit produced byte-identical output and the digest
+  did not move. Not an edge case: at gate time the tree is ALREADY dirty, so
+  `stale_evidence`'s own documented scenario ("run the tests, edit one more thing,
+  complete") was the case it could not detect, and a gate that passed on superseded
+  source read as fresh evidence. The existing test passed by adding an UNTRACKED file,
+  which moves the path list — it proved the case that already worked. `git diff HEAD`
+  now goes into the digest. **Known limit, documented not papered over:** `git diff`
+  renders a binary file as "Binary files differ", so a re-edited binary is still
+  invisible; `--binary` costs far more than it buys. *Cross-family critic, CONFIRMED.*
+
+- **B88. The typed and argv paths resolved DIFFERENT identities. ✅ CLOSED.** B80
+  threaded identity through both paths only for a DECLARED name. Undeclared, the argv
+  path went through `cli.Ctx` (which resolves `--agent` → `DDFLOW_AGENT` → `[agent].id`
+  → tree) while the typed path called `EventLog(repo, "")`, which reads neither the env
+  var nor the config. With `DDFLOW_AGENT=alpha` — which the demo harnesses set —
+  `ddflow_claim` wrote as `alpha` and `ddflow_update` wrote as the directory name, on
+  one connection, into different shards. `ddflow_identify` reported the tree name too,
+  so the tool whose job is to make identity visible misreported it. Two encodings of
+  one precedence; there is now one, `infra.log.effective_agent_id`, called from both.
+  *roborev, CONFIRMED, reproduced before fixing.*
+
+- **B89. The `registered`-is-unreachable class survived at two more sites. ✅ CLOSED.**
+  B79 fixed `gate_coverage` and the `gaps` list and left the handshake payload and
+  `cmd_adopt` re-deriving "goal state" themselves. So `optmem` was in
+  `missing_companions` on every connection and the instructions told the agent — as
+  "something to DO" — to run `ddflow_companions_add` on it, which now refuses; and
+  `adopt` printed "installed here but not wired up" with a command that cannot act.
+  Four sites, one predicate: `Status.usable` / `Status.is_gap`. The repo-wide sweep the
+  rules ask for was done for two of three call sites and reported as complete.
+  *roborev, CONFIRMED ×2.*
+
+- **B90. Detection probes INSTALLED software. ✅ CLOSED.** `npx -y` fetches and installs
+  the package in order to run it, and three shipped entries detected that way — so
+  `ddflow companions`, which the MCP handshake and `adopt` both call, downloaded
+  packages onto the operator's machine. That breaks this module's first stated rule.
+  It also destroys the answer: the probe stops meaning "is this installed here" and
+  starts meaning "can npm reach the registry", which cannot say no on any networked
+  machine, so the companion counted toward its gates everywhere — an always-yes
+  detector. Now `npx --no-install`, with a ratchet over the whole registry. `context7`
+  and `memory` had the same shape and predate this work; the class was swept, not the
+  new entry alone. *roborev, CONFIRMED.*
+
+- **B91. Two of the new load assertions could not fail. ✅ CLOSED.** (a) The write
+  latency budget: `elapsed / (12 × 15)` is bounded above by `LOAD_TIMEOUT_S / 180 =
+  1.33s`, already under the 2.0s default and far under the 6.0s the new CI step sets —
+  so the budget was decoration, the CI override was dead, and a slow-but-not-wedged
+  runner would have been reported with the message "that is the deadlock signature".
+  Now measured per worker. (b) `_reader` counted `"result" in reply`, which is true for
+  an `isError` reply, so it could only ever see a read that HUNG. *roborev, CONFIRMED
+  by arithmetic.*
+
+- **B92. The read-modify-write load test proved nothing, and hid a broken test. ✅
+  CLOSED.** `expected` came from the workers' own success counts, so the all-failed case
+  read as a pass: 0 written, 0 survived, "nothing was lost". Asserting failures are zero
+  turned it red immediately — **every `ddflow_lesson_add` in it had been failing**, with
+  "missing required argument(s): title", because the worker passed `text`. The product
+  was fine; the test had never exercised it. Mutation-verified both ways.
+  *roborev, CONFIRMED — and the real defect was worse than the report.*
+
+- **B93. A malformed companion registry silently deleted a whole handshake section. ✅
+  CLOSED.** `_instructions` wraps the scan in `except Exception: pass`, so one typo in
+  `.ddflow/companions.toml` removed the companions and gate-gap block entirely —
+  "nobody could look" rendering as "no gaps", inside the report whose purpose is to
+  expose exactly that. Now a `setup_todo` line naming the cause. `cmd_companions` also
+  let the loader's `ValueError` escape instead of printing the sentence it carefully
+  writes. **The first version of this test passed on unrelated template prose** and was
+  rewritten to assert the specific signal. *roborev, CONFIRMED.*
+
+- **B94. Stale docs and a dead parameter from the previous commit. ✅ CLOSED.** Removing
+  `ddflow_update`'s argv lambda left `_opt(..., clearable=True)` with no caller — the
+  dead-fallback shape that commit cited as its own reason for the removal. Gone, with
+  its docstring. Also: a README claim that "writes never contend… a short exclusive lock
+  is taken only to allocate the next Lamport value", which is not what `EventLog.append`
+  does (the lock spans the clock read, the write and the `fsync`); two README headings
+  and the `companions.py` docstring still saying "Companion MCP servers"; "ships the
+  four" when there are six; and `help/parallel.md` — the page about several agents at
+  once, served as an MCP resource — never mentioning `ddflow_identify`.
+  *roborev, mixed CONFIRMED/doc-drift.*
+
+- **B95. `tree_fingerprint` is blind to a re-edited BINARY file. FILED, THEORETICAL.**
+  `git diff` emits "Binary files … differ" with no content, so the B87 fix does not
+  cover binaries. No probe ships because no gate in any pipeline here tests a binary
+  artifact, so the defect has no reachable consequence today. The fix (`--binary`,
+  base85-encoding whole blobs into a digest) would make every gate run proportional to
+  the size of the changed binaries. Recorded so it is a known limit rather than an
+  assumption. *Noted while fixing B87.*
+
+**Refuted from this round.** The critic raised `tests/test_layering.py:271`'s
+`isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)` as a Python
+3.9 `TypeError`, labelled THEORETICAL and explicitly unverifiable from the file it was
+shown. `pyproject.toml` declares `requires-python = ">=3.11"` and CI runs 3.11 and 3.13,
+so the trigger does not exist. Recorded as refuted rather than dropped — it is a
+correctly-reasoned finding about a premise that happens to be false, which is what
+`THEORETICAL` is for.

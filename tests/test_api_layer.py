@@ -116,12 +116,12 @@ def test_clearing_a_field_is_distinguishable_from_not_touching_it(repo):
 def test_clearing_a_field_over_mcp_works_on_whichever_path_is_live(repo):
     """A behavioural regression test, and deliberately NOT evidence about the layer.
 
-    Clearing works on the argv path too — that is what `_opt(clearable=True)` is for,
-    and it does its job. B35's complaint is that the workaround has to exist, not that
-    the behaviour is broken. So this stays green under a mutation that disables the
-    typed path, which is correct: `test_the_dispatcher_actually_uses_the_typed_path` is
-    the one that speaks to the architecture, and this one guards the user-visible
-    behaviour on whichever path is carrying it.
+    Clearing used to work on the argv path too, via an `_opt(clearable=True)` flag that
+    existed solely to rebuild the absent-vs-empty distinction argv erased. That flag has
+    since been removed along with its last caller, so today this exercises the typed
+    path — but the test is still written as a BEHAVIOURAL guard rather than as evidence
+    about the layer. `test_the_dispatcher_actually_uses_the_typed_path` is the one that
+    speaks to the architecture; this one says only that clearing a field works.
     """
     from ddflow.surfaces.mcp import Server
 

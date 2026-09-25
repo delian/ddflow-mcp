@@ -41,6 +41,7 @@ __all__ = [
     "EventLog",
     "canonical",
     "default_agent_id",
+    "effective_agent_id",
     "utcnow",
 ]
 
@@ -119,6 +120,41 @@ def default_agent_id(fallback_root: Path | str | None = None) -> str:
     ident = f"{host}-{name}"
     _AGENT_ID_CACHE[key] = ident
     return ident
+
+
+def effective_agent_id(root: Path | str, cfg: Any = None, declared: str = "") -> str:
+    """The identity a write will actually carry, resolved in ONE place.
+
+    There are four layers -- an explicit declaration (`--agent`, or `ddflow_identify`
+    on an MCP connection), `DDFLOW_AGENT`, `[agent].id` in config, and the tree-derived
+    default -- and until this function existed, only `cli.Ctx.__init__` knew all four.
+
+    The typed MCP path did not go through `Ctx`. It called `EventLog(repo, "")`, which
+    falls straight to `default_agent_id()` and reads neither the env var nor the
+    config. So with `DDFLOW_AGENT=alpha` set -- which the demo harnesses do --
+    `ddflow_claim` wrote as `alpha` down the argv path while `ddflow_update` wrote as
+    the tree name down the typed one, into a different shard, on the same connection.
+    `ddflow_identify` with no argument reported the tree name too, so the one tool whose
+    job is to make identity visible misreported it.
+
+    Two encodings of one precedence is the duplicate-then-drift shape; the fix is one
+    encoding, called from both. `cfg` is optional so callers below the config layer can
+    still ask.
+    """
+    if declared:
+        return declared
+    env = os.environ.get("DDFLOW_AGENT", "")
+    if cfg is not None:
+        # The env var loses to an EXPLICIT `[agent].id`, and wins over the default --
+        # the same order `Ctx` applies, because an operator who wrote the id into their
+        # config meant it more than one inherited from the environment.
+        if env and getattr(cfg, "sources", {}).get("agent.id", "default") == "default":
+            return env
+        if getattr(getattr(cfg, "agent", None), "id", ""):
+            return cfg.agent.id
+    elif env:
+        return env
+    return default_agent_id(root)
 
 
 #: Transaction depth per (pid, lock path), NOT per EventLog instance.

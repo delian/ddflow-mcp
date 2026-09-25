@@ -34,7 +34,7 @@ from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, fold
 from ..core.schedule import critical_path, plan
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
-from ..infra.log import EventLog
+from ..infra.log import EventLog, effective_agent_id
 from ..infra.store import Store
 from ..services import gates as G
 from ..services import leases as L
@@ -73,12 +73,14 @@ class Ctx:
         # is not possible. It was documented before it was read -- and a dead env var
         # in a published manifest is worse than an undocumented one, because operators
         # set it and nothing happens.
-        env_agent = os.environ.get("DDFLOW_AGENT", "")
-        if args.agent:
-            self.cfg.agent.id = args.agent
-        elif env_agent and self.cfg.sources.get("agent.id", "default") == "default":
-            self.cfg.agent.id = env_agent
-            self.cfg.sources["agent.id"] = "env"
+        # One encoding of the precedence, shared with the typed MCP path. Two copies
+        # drifted the moment the second path existed: `api._load` built its log with
+        # `EventLog(repo, "")`, which reads neither the env var nor the config, so the
+        # two surfaces wrote the same connection's events under different identities.
+        resolved = effective_agent_id(self.repo, self.cfg, args.agent or "")
+        if resolved != self.cfg.agent.id:
+            self.cfg.agent.id = resolved
+            self.cfg.sources["agent.id"] = "explicit" if args.agent else "env"
         self.log = EventLog(
             self.repo, self.cfg.agent.id, lock_timeout_s=self.cfg.lease.acquire_timeout_s
         )
@@ -2727,6 +2729,7 @@ def cmd_prompts(a, c: Ctx) -> int:
                     [
                         {
                             "name": t.name,
+                            "kind": t.kind,
                             "source": t.source,
                             "path": str(t.path),
                             "chars": len(t.text),
@@ -2737,35 +2740,61 @@ def cmd_prompts(a, c: Ctx) -> int:
                 )
             )
             return OK
-        for t in rows:
-            print(f"  {t.name:<24} [{t.source:<7}] {t.path}")
+        # Grouped, because the two kinds are used for entirely different things: a
+        # template is machinery (the review prompt, the gate instruction, the MCP
+        # handshake) and a command is a workflow an operator invokes. A flat list of
+        # eleven names invites `prompts show mcp_instructions` expecting a workflow.
+        for title, kind in (("Templates", "template"), ("Workflow commands", "command")):
+            members = [t for t in rows if t.kind == kind]
+            if not members:
+                continue
+            print(f"{title}:")
+            for t in members:
+                print(f"  {t.name:<24} [{t.source:<7}] {t.path}")
+            print()
         print(
-            "\nEdit any of them with `ddflow prompts eject <name>`, which copies the "
-            "shipped default into .ddflow/prompts/ where it takes precedence."
+            "Edit any of them with `ddflow prompts eject <name>`, which copies the "
+            "shipped default into .ddflow/prompts/ where it takes precedence.\n"
+            "Read one with `ddflow prompts show <name>`."
         )
         return OK
     if a.prompts_cmd == "show":
         try:
-            print(P.resolve(a.name, c.repo, ov).text)
+            # `resolve_any`, not `resolve`: a caller should not have to know which of
+            # the two registries a name lives in before it can be read. Knowing was
+            # what leaked out as "unknown template 'research-companions'" -- a message
+            # that listed the five templates to someone who had typed a real command
+            # name correctly.
+            print(P.resolve_any(a.name, c.repo, ov).text)
         except P.TemplateError as exc:
             print(str(exc), file=sys.stderr)
             return FAIL
         return OK
     if a.prompts_cmd == "eject":
-        names = [a.name] if a.name else list(P.TEMPLATE_NAMES)
+        # With no name, everything -- BOTH registries. Writing only the templates is
+        # the silent half of the bug this branch just fixed: `eject` is the documented
+        # way to customise a prompt, so covering half the library means the documented
+        # way to edit a workflow command did not exist.
+        names = [a.name] if a.name else [*P.TEMPLATE_NAMES, *P.COMMANDS]
         out = c.repo / ".ddflow" / "prompts"
         out.mkdir(parents=True, exist_ok=True)
+        (out / "commands").mkdir(parents=True, exist_ok=True)
         written = []
         for n in names:
             try:
-                t = P.resolve(n, None, {})  # the SHIPPED default, not the override
+                t = P.resolve_any(n, None, {})  # the SHIPPED default, not the override
             except P.TemplateError as exc:
                 print(str(exc), file=sys.stderr)
                 return FAIL
-            dst = out / f"{n}.md"
+            # A command must land in `prompts/commands/`, which is where
+            # `resolve_command` looks. Writing it beside the templates would produce a
+            # file the operator edits and the tool never reads -- an override that
+            # silently does nothing, which is worse than refusing to eject it.
+            dst = (out / "commands" / f"{n}.md") if t.kind == "command" else (out / f"{n}.md")
             if dst.exists() and not a.force:
                 print(f"  skipped {dst} (exists; --force to overwrite)")
                 continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
             dst.write_text(t.text, "utf-8")
             written.append(str(dst))
         c.out(
@@ -2833,14 +2862,22 @@ def cmd_companions(a, c: Ctx) -> int:
     """
     from ..services import companions as CO
 
-    statuses = CO.scan(c.repo, probe=not getattr(a, "no_probe", False))
+    try:
+        statuses = CO.scan(c.repo, probe=not getattr(a, "no_probe", False))
+    except ValueError as exc:
+        # The registry loader writes a careful sentence naming the file, the id and the
+        # bad value. Letting it escape renders that sentence as an uncaught exception
+        # instead of an answer, and the exit code becomes an accident rather than a
+        # contract.
+        print(f"{exc}\n  (in .ddflow/companions.toml or .ddflow/config.toml)", file=sys.stderr)
+        return FAIL
     by_id = {st.companion.id: st for st in statuses}
 
     if a.companions_cmd == "add":
         wanted = _csv(a.id) or [
             st.companion.id
             for st in statuses
-            if st.companion.default and st.installed and st.companion.is_mcp
+            if st.companion.default and st.installed and st.companion.is_mcp  # servers only
         ]
         unknown = [w for w in wanted if w not in by_id]
         if unknown:
@@ -2929,13 +2966,7 @@ def cmd_companions(a, c: Ctx) -> int:
     # register. Judging one by it would make `companions` exit 2 forever the moment a
     # cli entry joined the registry, which trains the reader to ignore the exit code.
     # For those, INSTALLED is the goal state.
-    gaps = [
-        st
-        for st in statuses
-        if st.companion.default
-        and st.state != "registered"
-        and not (not st.companion.is_mcp and st.installed is True)
-    ]
+    gaps = [st for st in statuses if st.is_gap]
     if c.json:
         print(json.dumps(payload, indent=2))
         return NOTHING if gaps else OK
@@ -3373,9 +3404,13 @@ def cmd_adopt(a, c: Ctx) -> int:
     # a work-queue tool gets to do.
     from ..services import companions as CO
 
+    # `is_gap`, so an installed command-line companion is not reported as "installed
+    # here but not wired up" -- there is nothing to wire up, and the command offered
+    # below would refuse it. Third of the four sites that each re-derived "goal state";
+    # they all ask `Status` now.
     ready, absent = [], []
     for st in CO.scan(c.repo):
-        if not st.companion.default or st.state == "registered":
+        if not st.is_gap:
             continue
         (ready if st.state == "installed" else absent).append(st.companion.id)
     tail = ""

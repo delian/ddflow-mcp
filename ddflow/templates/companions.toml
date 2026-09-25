@@ -17,6 +17,16 @@
 #   why         what it buys you, in the terms the gate is phrased in
 #   detect      argv run to decide "is this installed?"; exit 0 = yes.
 #               Keep it cheap and side-effect free: it runs on every `companions` call.
+#
+#               **Never `npx -y`.** The `-y` flag FETCHES AND INSTALLS the package in
+#               order to run it, so a detection probe would download software onto the
+#               operator's machine on every `ddflow companions` and `ddflow adopt` --
+#               breaking this module's first rule, and turning the answer from "is it
+#               installed here" into "can npm reach the registry", which cannot say no
+#               on any networked machine. Use `npx --no-install`, which runs it only if
+#               it is already present. (That still contacts the registry to resolve an
+#               ABSENT package, so it is not offline -- but it installs nothing, and a
+#               negative stays a real negative.)
 #   command/args/env   how the agent should launch it (written into the MCP config)
 #   install     the command a human runs to get it, quoted verbatim in the report
 #   url         where to read about it before installing something on your machine
@@ -64,7 +74,7 @@ why = """Fetches up-to-date API documentation for the libraries a task touches. 
 `research` gate asks for a falsifiable claim probed against reality; a model's memory \
 of a library's API is exactly the kind of claim that is cheap to check and often \
 wrong."""
-detect = ["npx", "-y", "@upstash/context7-mcp", "--help"]
+detect = ["npx", "--no-install", "@upstash/context7-mcp", "--help"]
 command = "npx"
 args = ["-y", "@upstash/context7-mcp"]
 install = "npx -y @upstash/context7-mcp   # no install needed; npx fetches it"
@@ -80,7 +90,7 @@ rediscover and belong in no document. ddflow's own `recall` covers decisions, \
 lessons, research, bugs and past prompts — which is the project's memory. This covers \
 the other kind: what this environment does, which is not the same thing and does not \
 belong in a committed log."""
-detect = ["npx", "-y", "@modelcontextprotocol/server-memory", "--help"]
+detect = ["npx", "--no-install", "@modelcontextprotocol/server-memory", "--help"]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-memory"]
 install = "npx -y @modelcontextprotocol/server-memory"
@@ -92,7 +102,11 @@ id = "sequential"
 title = "Structured step-by-step reasoning"
 gates = ["research", "rubber_duck", "bug_hunt"]
 why = """Gives the agent an explicit scratchpad for multi-step reasoning it can revise: a thought can be marked a revision of an earlier one, or branch into an alternative line, instead of being appended to a transcript that only grows. That maps onto the three gates that are REASONING rather than tool-running. `research` asks for a falsifiable claim and the probe that would kill it -- which is a chain whose middle steps get retracted, and a linear transcript records the retraction as one more assertion. `bug_hunt` and `rubber_duck` want the hypothesis that was considered and DISCARDED to stay visible, because the recurring failure here is an agent converging early on a plausible-wrong cause and never recording what it ruled out."""
-detect = ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking", "--help"]
+# `--help` is not actually supported by this server: it starts, reads EOF from the
+# closed stdin the probe gives it, and exits 0. That is still a usable signal -- "npx
+# could start it from what is already here" -- but it is worth knowing that a pass
+# means "it ran", not "it understood the flag".
+detect = ["npx", "--no-install", "@modelcontextprotocol/server-sequential-thinking", "--help"]
 command = "npx"
 args = ["-y", "@modelcontextprotocol/server-sequential-thinking"]
 install = "npx -y @modelcontextprotocol/server-sequential-thinking   # npx fetches it"

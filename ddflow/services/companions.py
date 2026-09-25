@@ -1,4 +1,4 @@
-"""Companion MCP servers — detect what is missing, say what it costs, register it.
+"""Companion tools — detect what is missing, say what it costs, register what can be.
 
 ddflow imposes an order and demands evidence. It does not *perform* the judgement
 inside most of its gates: `standards` wants an automated standards review, `research`
@@ -18,9 +18,15 @@ Two rules shape this file:
   execute it; fetching and running code on someone's machine because a config file
   named it is not a thing a work-queue tool gets to do. Detection is read-only, the
   report is advice, and `companions add` writes config for servers already present.
-* **The registry is data.** `templates/companions.toml` ships the four ddflow knows
-  about; `.ddflow/companions.toml` overrides and extends it. Adding a fifth is a TOML
-  block, not a patch to this module.
+* **The registry is data.** `templates/companions.toml` ships the ones ddflow knows
+  about; `.ddflow/companions.toml` overrides and extends it. Adding another is a TOML
+  block, not a patch to this module. (It said "the four" until there were six — a count
+  in prose is a fact with an expiry date.)
+
+* **A companion is not necessarily a server.** `kind = "cli"` is a tool the agent shells
+  out to, recommended and detected like any other and never written into an MCP config,
+  because a launch entry for something that speaks no JSON-RPC fails at the first gate
+  that reaches for it.
 """
 
 from __future__ import annotations
@@ -116,6 +122,32 @@ class Status:
         if self.installed is None:
             return "unknown"
         return "installed" if self.installed else "missing"
+
+    @property
+    def usable(self) -> bool:
+        """Can an agent actually reach this tool right now?
+
+        ONE definition, because "goal state" differs by kind and re-deriving it per
+        call site is how three of four sites got it wrong:
+
+        * an **mcp** companion is usable once an agent is configured to LAUNCH it.
+          Installed but unregistered is one command away, and is not usable yet.
+        * a **cli** companion is usable once it is INSTALLED. `registered` is a state
+          it cannot reach, so judging it by that reports its gate as unserved while the
+          tool sits on the PATH, and tells the operator to run a command that refuses.
+
+        Neither counts on `installed is None`: a probe that could not run leaves the
+        tool exactly as unknown as before we asked.
+        """
+        if self.companion.is_mcp:
+            return bool(self.registered_in)
+        return self.installed is True
+
+    @property
+    def is_gap(self) -> bool:
+        """A DEFAULT companion that is not usable — the thing worth telling someone
+        about. Opt-in companions are absent on purpose and are not gaps."""
+        return self.companion.default and not self.usable
 
 
 def load(repo: Path) -> list[Companion]:
@@ -385,8 +417,7 @@ def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> di
     """
     cover: dict[str, list[str]] = {g: [] for g in pipeline}
     for st in statuses:
-        usable = st.state == "registered" if st.companion.is_mcp else st.installed is True
-        if not usable:
+        if not st.usable:
             continue
         for g in st.companion.gates:
             if g in cover:

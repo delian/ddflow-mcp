@@ -12,6 +12,15 @@ from ddflow.services import gates as G
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 
+def _run_git(repo, *args) -> None:
+    """Commit inside the fixture repo, so a test can create a TRACKED file — the
+    fingerprint treats tracked and untracked changes differently, and the difference is
+    the whole point of the two tests below."""
+    import subprocess
+
+    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+
 @pytest.fixture
 def gd(repo, cfg):
     return G.load_gates(repo, cfg)
@@ -191,6 +200,91 @@ def test_the_tree_sha_changes_when_the_tree_does(repo):
     (repo / "new_file.py").write_text("x = 1\n")
     after = run_command_gate(g, repo)[1]["tree_sha"]
     assert before != after, "an untracked file appeared and the fingerprint did not move"
+
+
+def test_the_tree_sha_changes_when_an_ALREADY_DIRTY_file_is_edited_again(repo):
+    """The case the fingerprint was written for, and the one it could not see.
+
+    `git status --porcelain` is two status letters and a path. No content, no size, no
+    mtime. So once a file is modified, every FURTHER edit to that same file produces
+    byte-identical porcelain and the digest does not move.
+
+    That is not an edge case here, it is the normal one. At gate time the agent has
+    been editing all along, so the tree is ALREADY dirty when the gate records its
+    fingerprint — the clean→dirty transition happened before the gate ran. The
+    follow-up edit is then most often to a file that is already modified, which is
+    precisely `stale_evidence`'s own documented scenario: "run the tests, edit one more
+    thing, complete".
+
+    The sibling test above passes by adding an UNTRACKED file, which changes the path
+    LIST and so moves the digest for a reason unrelated to content. It proved the case
+    that already worked.
+
+    *Found by the cross-family critic on 87d5fbb, CONFIRMED, then reproduced here:
+    two writes to one tracked file produced one fingerprint.*
+    """
+    from ddflow.services.gates import GateDef, run_command_gate, tree_fingerprint
+
+    tracked = repo / "tracked.py"
+    tracked.write_text("original\n")
+    _run_git(repo, "add", "tracked.py")
+    _run_git(repo, "commit", "-m", "add tracked")
+
+    # Dirty it FIRST — this is the state a gate actually runs in.
+    tracked.write_text("original\nwork in progress\n")
+    g = GateDef(id="probe", command="true", cwd="repo")
+    before = run_command_gate(g, repo)[1]["tree_sha"]
+
+    # ...and now "edit one more thing", in the same already-modified file.
+    tracked.write_text("original\nwork in progress\nsomething else entirely\n")
+    after = run_command_gate(g, repo)[1]["tree_sha"]
+
+    assert before != after, (
+        "an already-modified file was edited again and the fingerprint did not move, "
+        "so a gate that passed on the old content reads as fresh evidence"
+    )
+    # and directly, without the gate machinery in between
+    assert tree_fingerprint(repo) == after
+
+
+def test_stale_evidence_reports_a_same_file_re_edit(repo):
+    """The consequence, at the level an operator sees.
+
+    A fingerprint that cannot move is only a bug because something depends on it. This
+    is that something: `stale_evidence` returned [] for a gate whose source had since
+    changed, so `complete` printed no warning and a stale pass was indistinguishable
+    from a pass about the shipped code.
+    """
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services.gates import stale_evidence
+
+    run_cli(repo, "init")
+    # A COMMAND gate: `unit_tests` ships as an agent gate, and `gate run` on one
+    # records no tree_sha at all -- so a version of this test that skipped this setup
+    # would have asserted against an empty evidence dict and passed for the wrong
+    # reason once the fix landed.
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "true"\ncwd = "repo"\n'
+    )
+    run_cli(repo, "task", "add", "T1", "--globs", "tracked.py")
+    tracked = repo / "tracked.py"
+    tracked.write_text("original\n")
+    _run_git(repo, "add", "tracked.py")
+    _run_git(repo, "commit", "-m", "add tracked")
+    tracked.write_text("original\nwip\n")  # dirty BEFORE the gate, as is normal
+
+    assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == OK
+    st = fold(EventLog(repo).read_all(), strict=False)
+    cfg = Config.load(repo)
+    assert stale_evidence(st, cfg, "T1", repo) == [], "reported stale before anything changed"
+
+    tracked.write_text("original\nwip\nand more\n")
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert "unit_tests" in stale_evidence(st, cfg, "T1", repo), (
+        "the file the gate tested was edited after it passed and nothing said so"
+    )
 
 
 def test_an_unchanged_tree_keeps_the_same_sha(repo):

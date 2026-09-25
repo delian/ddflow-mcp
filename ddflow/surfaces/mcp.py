@@ -1497,25 +1497,21 @@ TOOLS: dict[str, dict[str, Any]] = {
 }
 
 
-def _opt(
-    flag: str, args: dict[str, Any], key: str | None = None, *, clearable: bool = False
-) -> list[str]:
+def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:
     """Build `--flag value`, or nothing when the caller did not supply one.
 
-    ``clearable`` distinguishes **"not supplied"** from **"supplied as empty"**, which
-    this conflated. An empty string was treated as absent, so over MCP a dependency
-    could be added and never removed: `ddflow_update(id="X", needs="")` silently did
-    nothing, while `ddflow update X --needs ""` cleared it. Breaking a dependency
-    cycle is exactly the operation that needs this, and it is the one the loop detector
-    tells you to perform.
+    There used to be a ``clearable`` parameter here, distinguishing "not supplied" from
+    "supplied as empty" — a distinction argv erases and this had to rebuild, because
+    over MCP `ddflow_update(id="X", needs="")` silently did nothing while
+    `ddflow update X --needs ""` cleared the field. `ddflow_update` was its only caller,
+    and that tool now goes through the typed `api` path, where `None` and `[]` are
+    simply different values and no flag is needed.
 
-    Off by default, and deliberately so: a client that fills every optional property
-    with `""` would otherwise wipe fields it never meant to touch. Only `ddflow_update`
-    — whose entire job is to change fields — passes it.
+    So it went, rather than staying as a parameter nothing passes: a branch no test can
+    execute cannot be caught drifting, which is the reason its last caller was removed
+    in the first place.
     """
     k = key or flag.lstrip("-").replace("-", "_")
-    if clearable and k in args and args[k] is not None:
-        return [flag, str(args[k])]
     v = args.get(k)
     return [flag, str(v)] if v not in (None, "", []) else []
 
@@ -1579,12 +1575,30 @@ def _outcome_result(out: Any) -> dict[str, Any]:
 _VALID_AGENT = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
-def _default_agent(repo: Path) -> str:
-    """The identity a connection gets when it declares none — reported, not hidden, so
-    an agent can SEE that it shares one with its siblings."""
-    from ..infra.log import default_agent_id
+def _default_agent(repo: Path) -> tuple[str, str]:
+    """(identity, where it came from) for a connection that declared none.
 
-    return default_agent_id(repo)
+    The SOURCE matters as much as the name. "you are `alpha`, from DDFLOW_AGENT" and
+    "you are `alpha`, because that is this directory's name" call for different
+    reactions: the first was set deliberately by whatever spawned you, the second is a
+    guess that every sibling in this tree will make identically.
+    """
+    from ..config import Config
+    from ..infra.log import effective_agent_id
+
+    # The EFFECTIVE default, not the tree-derived one. Reporting the tree name while
+    # `DDFLOW_AGENT` was set made `ddflow_identify` misreport the single thing it
+    # exists to make visible.
+    try:
+        cfg = Config.load(repo)
+    except Exception:
+        cfg = None
+    who = effective_agent_id(repo, cfg)
+    if os.environ.get("DDFLOW_AGENT", "") == who and who:
+        return who, "DDFLOW_AGENT"
+    if cfg is not None and getattr(cfg.agent, "id", "") == who and who:
+        return who, "[agent].id in config"
+    return who, "derived from the working tree"
 
 
 def _run_cli(repo: Path, argv: list[str], agent: str = "") -> tuple[int, str]:
@@ -1747,14 +1761,24 @@ class Server:
                         ),
                     )
                 self.agent = want
-                who = want or _default_agent(self.repo)
+                if want:
+                    detail = "declared on this connection"
+                else:
+                    want_who, detail = _default_agent(self.repo)
+                    who = want_who
+                    detail = f"not declared; {detail}"
+                who = want or who
+                note = ""
+                if not want and detail.endswith("working tree"):
+                    note = (
+                        " Every agent in this tree derives the SAME name, so if you are "
+                        "one of several here, declare one."
+                    )
                 return _ok(
                     mid,
                     _text(
-                        f"identified as {who!r}"
-                        + ("" if want else " (tree-derived default; not declared)")
-                        + ". Claims, gate outcomes and reviews on this connection are "
-                        "attributed to it."
+                        f"identified as {who!r} ({detail}). Claims, gate outcomes and "
+                        f"reviews on this connection are attributed to it.{note}"
                     ),
                 )
             if "api" in spec:
@@ -1998,6 +2022,11 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
                 "install": st.companion.install,
                 "url": st.companion.url,
                 "default": st.companion.default,
+                # The CLI JSON payload carries this; omitting it here meant the
+                # template could not tell a server from a command-line tool even if it
+                # wanted to -- the same CLI/MCP divergence, inside the fix for it.
+                "kind": st.companion.kind,
+                "usable": st.usable,
             }
             for st in statuses
         ]
@@ -2006,19 +2035,32 @@ def _instruction_vars(repo: Path) -> dict[str, Any]:
         # on the machine is a config edit, while installing one runs an install
         # command. Reporting them as one list made the instruction vague where it
         # most needed to be specific.
-        v["missing_companions"] = [
-            c for c in v["companions"] if c["default"] and c["state"] != "registered"
-        ]
+        # `is_gap`, not `state != "registered"`. An installed `cli` companion can never
+        # be "registered", so the old test put it in this list on every connection and
+        # the template told the agent -- as "something to DO" -- to register it. The
+        # agent obeys and gets a refusal, having been instructed by the server itself.
+        v["missing_companions"] = [c for c in v["companions"] if not c["usable"] and c["default"]]
         v["unregistered_companions"] = [
-            c for c in v["missing_companions"] if c["state"] == "installed"
+            c for c in v["missing_companions"] if c["state"] == "installed" and c["kind"] == "mcp"
         ]
         v["uninstalled_companions"] = [
             c for c in v["missing_companions"] if c["state"] == "missing"
         ]
         cover = CO.gate_coverage(repo, statuses, v["task_pipeline"])
         v["gate_gaps"] = [g for g, ids in cover.items() if not ids]
-    except Exception:
-        pass
+    except Exception as exc:
+        # NOT `pass`. A broad catch here is right -- a malformed registry must not stop
+        # the handshake, and an agent with no instructions is worse than one with
+        # partial ones -- but swallowing it silently deleted the entire companions and
+        # gate-gap section, so "nobody could look" rendered as "no gaps". That is the
+        # unavailable-as-success class, inside the report whose whole purpose is to
+        # expose it.
+        v["setup_todo"].append(
+            f"The companion registry could not be read, so this handshake says nothing "
+            f"about which gates have a tool behind them: {exc}. Fix "
+            f".ddflow/companions.toml (or `ddflow companions`, which prints the same "
+            f"error) — until then, treat every gate as unserved rather than served."
+        )
     try:
         from ..core import progress as PR
         from ..core.model import fold

@@ -2,6 +2,18 @@
 
 Every agent works in its own git worktree, and the queue is what stops them colliding.
 
+**First, say who you are.** Identity is what attributes every claim, gate outcome and
+review, and unasked it is derived from the WORKING TREE — so several agents or subagents
+sharing one tree all resolve to the same name, their work merges into one identity, and
+a review gate compares an agent with itself and passes. Nothing errors.
+
+    ddflow_identify(agent="reviewer-2")   over MCP: declares it for the connection
+    ddflow --agent reviewer-2 ...         one CLI invocation
+    DDFLOW_AGENT=reviewer-2               a harness that spawns agents
+
+Innermost wins. One agent per worktree needs none of this; several in one tree need it,
+and there is no signal that would let ddflow work it out for them.
+
     ddflow claim <id>              lease + worktree; exit 3 = refused, with the reason
     ddflow claim <id> --no-worktree   for work that edits nothing
 

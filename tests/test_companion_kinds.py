@@ -213,3 +213,92 @@ def test_every_shipped_companion_has_an_install_line_and_a_url(tmp_path):
     for c in CO.load(tmp_path):
         assert c.install.strip(), f"{c.id} has no install command"
         assert c.url.startswith("http"), f"{c.id} has no URL to read before installing"
+
+
+# -- detection must not be an installer ------------------------------------------------
+
+
+def test_no_detection_probe_installs_anything(tmp_path):
+    """`npx -y` FETCHES AND INSTALLS the package in order to run it.
+
+    As a detect probe that means `ddflow companions` — which the MCP handshake calls,
+    and `adopt` calls, and a session start can call — downloads software onto the
+    operator's machine. The module's first stated rule is that nothing is installed
+    automatically, and three shipped entries broke it.
+
+    It also destroys the ANSWER. With `-y` the probe stops meaning "is this installed
+    here" and starts meaning "can npm reach the registry" — a question that cannot be
+    answered no on any networked machine, so the companion counts toward its gates'
+    coverage everywhere. An always-yes detector is the vacuous-pass class.
+
+    *Found by roborev on 031313a, CONFIRMED. `context7` and `memory` had the same shape
+    and predate this change; the class is swept, not just the new entry.*
+    """
+    for c in CO.load(tmp_path):
+        assert "-y" not in c.detect, (
+            f"companion {c.id!r} detects with `npx -y`, which installs the package. "
+            f"Use `npx --no-install`."
+        )
+        assert "--yes" not in c.detect, f"companion {c.id!r} detects with `npx --yes`"
+        for installer in ("install", "add", "pull", "get"):
+            assert installer not in c.detect, (
+                f"companion {c.id!r} has {installer!r} in its detect probe, which runs "
+                f"on every `ddflow companions` call"
+            )
+
+
+def test_an_unreadable_registry_is_an_ERROR_not_an_empty_report(repo):
+    """The closed-vocabulary check raises, and the CLI must not answer with a traceback.
+
+    Worse was the handshake: `_instructions` wraps the scan in `except Exception: pass`,
+    so one typo in `.ddflow/companions.toml` silently deleted the entire companions and
+    gate-gap section — "nobody could look" rendering as "no gaps", inside the report
+    whose whole purpose is to expose exactly that.
+    """
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "companions.toml").write_text(
+        '[[companion]]\nid = "typo"\nkind = "MCP"\ncommand = "x"\n'
+    )
+    code, _out, err = run_cli(repo, "companions")
+    assert code == FAIL, f"an unreadable registry did not fail: {code}"
+    assert "kind" in err and "typo" in err, err
+    assert "Traceback" not in err, "answered with a traceback instead of the message"
+
+
+def test_the_handshake_says_the_registry_is_unreadable_rather_than_going_quiet(repo):
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "companions.toml").write_text(
+        '[[companion]]\nid = "typo"\nkind = "MCP"\ncommand = "x"\n'
+    )
+    # Asserted against the SPECIFIC signal, not against the word "companion" appearing
+    # somewhere in six thousand characters of standing instructions. The first version
+    # of this test matched the unrelated `research-companions` paragraph and passed
+    # while the section it was about was silently absent -- the exact failure it exists
+    # to catch, in the test that catches it.
+    from ddflow.surfaces.mcp import _instruction_vars, _instructions
+
+    todo = " ".join(_instruction_vars(repo).get("setup_todo", []))
+    assert "companion registry could not be read" in todo.lower(), (
+        f"the handshake went quiet about an unreadable registry; setup_todo was: {todo!r}"
+    )
+    assert "typo" in todo or "MCP" in todo, "reported the failure without naming the cause"
+    assert _instructions(repo), "the handshake itself must still render"
+
+
+def test_the_handshake_never_tells_an_agent_to_register_a_cli_tool(repo):
+    """`missing_companions` judged by `registered`, which a cli companion cannot reach,
+    so `optmem` was in it on every connection — and the template presents that list as
+    "something to DO", instructing the agent to run `ddflow_companions_add`. The agent
+    obeys the server's own instructions and gets a refusal."""
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "companions.toml").write_text(
+        '[[companion]]\nid = "clitool"\nkind = "cli"\ncommand = "true"\n'
+        'detect = ["true"]\ninstall = "brew install clitool"\ndefault = true\n'
+    )
+    from ddflow.surfaces.mcp import _instruction_vars
+
+    v = _instruction_vars(repo)
+    unregisterable = [c["id"] for c in v.get("unregistered_companions", []) if c["kind"] != "mcp"]
+    assert not unregisterable, (
+        f"{unregisterable} are offered for registration and cannot be registered"
+    )
