@@ -428,3 +428,39 @@ The rest of roborev's consolidation list (C2–C10: table-spec-driven inserts, a
 is pre-existing structural debt in files this change did not own. It is subsumed by B35
 and deliberately not started here: ~215 lines across five modules is a refactor that
 wants its own commit and its own review, not a tail-end of an import change.
+
+## B65–B68 — roborev 772, on the import commit itself ✅ ALL CLOSED
+
+Reviewed `6721d6f4` after it landed, as the cadence requires. Four findings, three of
+them defects, all probed before a line changed and all mutation-verified. Follow-up
+commit, per §roborev.
+
+- **B65 (the substantive one). Re-importing after a new journal entry silently
+  overwrote the earlier ones in the recall index.** Journal and memory entries land as
+  notes in two fixed sessions, numbered by a fresh `enumerate` on every run;
+  `_h_session_started` MERGES rather than replaces, so a second import appended notes
+  0,1,2 beside the first run's 0,1,2. The index keys on `(session, 10_000 + seq)`, so
+  each new note replaced an earlier one — and `prompts_fts` then held two rows under one
+  doc id, so a query matching the OLD text resolved to the surviving row and returned
+  text that did not contain the query terms. This is the incremental path the module
+  advertises. Fixed where the number should always have come from: `_h_session_note`
+  now assigns `seq = len(sess.notes)`, exactly as `_h_session_prompt` already did, and
+  the caller's value is ignored.
+
+- **B66. `id_from_source` was true even when `_unique` REJECTED the declared id.** Two
+  files carrying the same `**142.1**` — the case `_unique` exists for — produced a
+  derived slug recorded as source-read, which then voted in `_adopt_child_prefix`: the
+  circular vote that function's docstring forbids. It disagrees in the first component,
+  the common prefix empties, and the phase silently keeps its prose slug. The phase
+  branch already guarded this; the task branch did not.
+
+- **B67. `critical_path`'s cycle guard walked a different graph from `longest()`.** The
+  memo is unsound on a cyclic graph and the guard exists to refuse rather than return a
+  wrong number — but it read direct `needs` while `longest()` now walks INHERITED ones,
+  so a cycle existing only in the inherited graph passed straight through. `find_cycles`
+  now takes an `edges` callable and the caller passes the graph it will traverse.
+
+- **B68. Docstring drift in the function that changed.** `stale()` still claimed to
+  compare "(schema, event count, last lamport)" after it stopped reading the event
+  count at all. A reader debugging a missing rebuild would look for a mismatch the code
+  does not check.

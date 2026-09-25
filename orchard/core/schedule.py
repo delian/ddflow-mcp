@@ -22,6 +22,7 @@ losing their work. The asymmetry is not close, so the comparison errs toward "ye
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
@@ -85,14 +86,23 @@ def conflicts(mine: list[str], theirs: list[str]) -> list[tuple[str, str]]:
     return [(a, b) for a in mine for b in theirs if globs_overlap(a, b)]
 
 
-def find_cycles(items: dict[str, Item]) -> list[list[str]]:
+def find_cycles(
+    items: dict[str, Item], edges: Callable[[Item], list[str]] | None = None
+) -> list[list[str]]:
     """Every dependency cycle, each reported once, starting at its smallest id.
 
     Iterative DFS. Recursion depth here is the length of the dependency chain, which is
     operator-authored and therefore unbounded by anything the code controls; a plan with
     a thousand-deep chain would raise RecursionError inside the health check that exists
     to diagnose bad plans.
+
+    `edges` says which graph to walk, and a caller must pass the one it will walk
+    itself. `critical_path` traverses INHERITED dependencies while this defaulted to
+    direct `needs`, so a cycle existing only in the inherited graph passed the guard and
+    the memoised longest-path returned a confidently wrong number -- the exact outcome
+    the guard exists to refuse.
     """
+    edge = edges or (lambda it: list(it.needs))
     WHITE, GREY, BLACK = 0, 1, 2
     colour: dict[str, int] = {}
     found: list[list[str]] = []
@@ -100,7 +110,7 @@ def find_cycles(items: dict[str, Item]) -> list[list[str]]:
     for root in sorted(items):
         if colour.get(root, WHITE) != WHITE:
             continue
-        stack: list[tuple[str, list[str]]] = [(root, list(items[root].needs))]
+        stack: list[tuple[str, list[str]]] = [(root, edge(items[root]))]
         path: list[str] = [root]
         colour[root] = GREY
         while stack:
@@ -120,7 +130,7 @@ def find_cycles(items: dict[str, Item]) -> list[list[str]]:
             elif c == WHITE:
                 colour[dep] = GREY
                 path.append(dep)
-                stack.append((dep, list(items[dep].needs)))
+                stack.append((dep, edge(items[dep])))
     uniq = {tuple(c): c for c in found}
     return sorted(uniq.values())
 
@@ -448,7 +458,7 @@ def critical_path(state: State, phase: str = "") -> list[str]:
     # keyed on the node alone, so a truncated sub-path can be cached and returned where
     # it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
     # than return a confidently wrong number.
-    if find_cycles(items):
+    if find_cycles(items, edges=lambda it: [d for _owner, d in inherited_deps(state, it)]):
         return []
     memo: dict[str, list[str]] = {}
 

@@ -698,7 +698,17 @@ def _h_session_note(st: State, ev: Event) -> None:
         "text": ev.data.get("text", ""),
         "item": ev.data.get("item", ""),
     }
-    for key in ("seq", "ident", "source"):
+    # `seq` is assigned HERE, positionally, exactly as `_h_session_prompt` does -- the
+    # caller's number is ignored. `apply_import` numbers from a fresh `enumerate` on
+    # every run and writes into two fixed session ids, and `_h_session_started` merges
+    # rather than replaces, so an incremental re-import appended notes 0,1,2 beside the
+    # first run's 0,1,2. The index keys on `(session, 10_000 + seq)`, so each new note
+    # silently overwrote an earlier one -- and `prompts_fts` then held two rows under
+    # one doc id, so a query matching the OLD text resolved to the surviving row and
+    # returned text not containing the query terms. One authority for the number.
+    sess = _session(st, ev)
+    note["seq"] = len(sess.notes)
+    for key in ("ident", "source"):
         if ev.data.get(key) not in (None, ""):
             note[key] = ev.data[key]
     # When the note records something that happened BEFORE it was written down -- an
@@ -706,7 +716,7 @@ def _h_session_note(st: State, ev: Event) -> None:
     # Orchard learned it, `origin_at` is when it was true.
     if ev.data.get("at"):
         note["origin_at"] = ev.data["at"]
-    _session(st, ev).notes.append(note)
+    sess.notes.append(note)
 
 
 def _h_session_ended(st: State, ev: Event) -> None:

@@ -418,3 +418,85 @@ def test_merge_refuses_an_item_that_was_removed_from_the_queue(repo):
     code, out, err = run_cli(repo, "merge", "T1")
     assert code == FAIL, f"it merged work the operator dropped:\n{out}"
     assert "removed from the queue" in err, err
+
+
+# -- roborev 772, on the import commit -------------------------------------------------
+
+
+def test_re_importing_after_a_new_journal_entry_keeps_the_OLD_ones_recallable(repo):
+    """The advertised incremental path, losing data in the index.
+
+    Journal and memory entries land as notes in two fixed sessions, numbered by a fresh
+    `enumerate` on every run. The session handler MERGES, so a second import appends
+    notes numbered 0,1,2… beside the first run's 0,1,2… — and the index primary key is
+    `(session, 10_000 + seq)`, so each new note silently overwrites an earlier one.
+    Worse for search: `prompts_fts` then holds two rows under one doc id, so a query
+    matching the OLD text resolves to the surviving row and returns text that does not
+    contain the query terms.
+    """
+    (repo / "docs" / "log").mkdir(parents=True)
+    log_md = repo / "docs" / "log" / "2026-04.md"
+    log_md.write_text("# 2026-04\n\n## Zebra alpha, the first entry (2026-04-01)\n\nfirst\n")
+    run_cli(repo, "init")
+    assert run_cli(repo, "import", "--apply")[0] == OK
+
+    log_md.write_text(log_md.read_text() + "\n## Quagga beta, added later (2026-04-09)\n\nsecond\n")
+    assert run_cli(repo, "import", "--apply")[0] == OK
+
+    _code, out, _ = run_cli(repo, "recall", "zebra alpha first entry", "--max-chars", "20000")
+    assert "Zebra alpha" in out, f"the first entry was overwritten by the second:\n{out}"
+    _code, out2, _ = run_cli(repo, "recall", "quagga beta added later", "--max-chars", "20000")
+    assert "Quagga beta" in out2, f"the new entry never arrived:\n{out2}"
+
+
+def test_a_declared_id_that_was_already_taken_does_not_vote_as_if_it_had_been_used(repo):
+    """`id_from_source` recorded "this id came from the source" even when `_unique`
+    REJECTED it and handed back a derived slug.
+
+    The phase branch guards exactly this (`declared == phase_ident`); the task branch
+    did not. The result is the circular vote `_adopt_child_prefix` exists to avoid: a
+    derived id disagrees in its first component, the common prefix comes out empty, and
+    the phase silently keeps its prose slug.
+    """
+    (repo / "docs" / "todo" / "open").mkdir(parents=True)
+    (repo / "docs" / "todo" / "open" / "a.md").write_text(
+        "## Session ALPHA\n\n- [ ] **142.1** — original\n- [ ] **142.2** — original two\n"
+    )
+    (repo / "docs" / "todo" / "open" / "b.md").write_text(
+        "## Session BETA\n\n- [ ] **142.1** — a duplicate id in another file\n"
+    )
+    from orchard.services import importer as IM
+
+    found, _empty = IM.scan_todos(repo)
+    dup = next(f for f in found if f.kind == "task" and f.source.startswith("docs/todo/open/b.md"))
+    assert dup.ident != "142.1", "the id was taken; this one must have been renamed"
+    assert dup.extra["id_from_source"] is False, (
+        f"{dup.ident!r} was DERIVED, but it is recorded as having come from the source, "
+        f"so it votes in the phase-prefix inference it must not influence"
+    )
+
+
+def test_the_critical_path_cycle_guard_covers_the_graph_it_actually_walks(repo):
+    """The memo in `longest()` is unsound on a cyclic graph, and the guard knows it.
+
+    But the guard built its graph from direct `needs` while `longest()` now walks
+    INHERITED ones — so a cycle that exists only in the inherited graph slips past, the
+    node-keyed memo caches a truncated path, and the function returns a confidently
+    wrong number instead of the refusal its docstring promises.
+    """
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--globs", "p1/**", "--needs", "P2.T1")
+    run_cli(repo, "phase", "add", "P2", "--globs", "p2/**", "--needs", "P1.T1")
+    run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "p1/a.py")
+    run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--globs", "p2/a.py")
+
+    from orchard.core.model import fold
+    from orchard.core.schedule import critical_path
+    from orchard.infra.log import EventLog
+
+    st = fold(EventLog(repo, "agent-test").read_all(), strict=False)
+    assert critical_path(st) == [], (
+        "P1.T1 inherits a dependency on P2.T1 and P2.T1 inherits one on P1.T1 — that "
+        "is a cycle in the graph this walks, and a memoised longest-path over it is "
+        "wrong rather than merely late"
+    )

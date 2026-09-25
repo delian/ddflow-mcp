@@ -127,8 +127,12 @@ class Store:
         con.execute("insert or replace into meta values('schema', ?)", (str(SCHEMA),))
 
     def stale(self, log: EventLog) -> bool:
-        """Is the index behind the log? Compared by (schema, event count, last lamport)
-        — three cheap numbers, any of which changing means re-derive."""
+        """Is the index behind the log? Compared by (schema, shard count, byte total,
+        last lamport) — four cheap numbers, any of which changing means re-derive.
+
+        Bytes and shards, not an event count: two agents can append concurrently, so
+        the highest Lamport can stay put while a second agent's shard grows.
+        """
         if not self.path.exists():
             return True
         try:

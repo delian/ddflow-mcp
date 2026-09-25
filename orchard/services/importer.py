@@ -421,13 +421,25 @@ def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
                         extra={"id_from_heading": bool(declared) and declared == phase_ident},
                     )
                 )
+            chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(body, 20)}", taken)
             anchor = Found(
                 kind="task",
-                ident=_unique(ident, f"{phase_ident or 'T'}.{_slug(body, 20)}", taken),
+                ident=chosen,
                 title=body[:120],
                 source=f"{rel}:{n}",
                 done=done,
-                extra={"phase": phase_ident, "id_from_source": bool(ident)},
+                extra={
+                    "phase": phase_ident,
+                    # Whether the id was READ or DERIVED, and `_unique` decides that --
+                    # a declared id that was already taken (two files carrying the same
+                    # `**142.1**`, which `_unique` exists for) comes back as a slug.
+                    # Recording it as source-read let it vote in `_adopt_child_prefix`,
+                    # which is the circular vote that function's docstring forbids: it
+                    # disagrees in the first component, empties the common prefix, and
+                    # the phase silently keeps its prose slug. The phase branch above
+                    # already guards this with `declared == phase_ident`.
+                    "id_from_source": bool(ident) and chosen == ident,
+                },
             )
             found.append(anchor)
         if len(found) == before:

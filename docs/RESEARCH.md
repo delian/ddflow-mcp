@@ -785,15 +785,23 @@ non-trivial change, on the argument that they find different things. Measured on
 | Reviewer | Family | Findings that survived a probe | Overlap with the others |
 |---|---|---|---|
 | Own double-check | — | 4 (dead `outcome.py`, duplicate glob reads, an over-permissive date regex, the offer counting 3 of 7 sources) | 0 |
-| roborev (`analyze duplication`) | same | 2 (`cmd_merge` bypassing `_require_item`; the three-copy section scanner) | 0 |
+| roborev (`analyze duplication`, then `review <sha>`) | same | 5 (`cmd_merge` bypassing `_require_item`; the three-copy section scanner; the incremental-reimport note overwrite; `id_from_source` after a rejected id; the critical-path cycle guard) | 0 |
 | Cross-family critic | different | 8 (`head()`'s two-pass fingerprint; the `rebuild` fingerprint ordering; `gate verify` certifying an already-red gate; its two-channel return; the silent primary-checkout fallback; the incremental-import false alarm; the cross-file annotation leak; the underscore stripped from ids) + 3 refuted by probe | 0 |
 
-**Zero overlap across fourteen findings.** The two labelled `THEORETICAL` by the critic
+**Zero overlap across seventeen findings.** The two labelled `THEORETICAL` by the critic
 were the two worth acting on — one was a real defect (`head()`), one was refuted by a
 five-line AST probe and left behind a ratchet. The reviewer that found the most
 consequential bug — `orchard merge` landing work the operator had explicitly dropped —
 found it while looking for something else entirely, which is the standing argument for
 running the duplication pass even when nothing feels duplicated.
+
+**The post-commit `roborev review <sha>` earned its place too**, and is the cheapest
+reviewer here: run on the landed commit it found three more defects in ~4 minutes,
+including the only one in this whole pass that loses user data on the module's own
+advertised path — re-importing after a new journal entry silently overwrote the
+previously imported notes in the search index, because the note numbering came from the
+caller instead of from the fold. Reviewing the COMMIT, not the dirty tree, is what let
+it see the two fixed session ids and the merge-not-replace handler together.
 
 The critic's `CONFIRMED`/`THEORETICAL` labels were again not a ranking of importance.
 Six of its eight real findings were labelled `THEORETICAL`, and every one of them was a
