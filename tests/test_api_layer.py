@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 14
+ARGV_TOOLS_CEILING = 11
 
 
 def _typed() -> list[str]:
@@ -253,6 +253,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_history": (["history"], {}),
     "ddflow_lesson_search": (["lesson", "search", "x"], {"query": "x"}),
     "ddflow_recall": (["recall", "x"], {"query": "x"}),
+    "ddflow_reviewers_list": (["reviewers", "list"], {}),
     "ddflow_gate_verify": (
         ["gate", "verify", "T1", "unit_tests"],
         {"id": "T1", "gate": "unit_tests"},
@@ -274,6 +275,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
 #: markdown board as "no JSON body".
 TEXT_BODIED = {
     "ddflow_brief",
+    "ddflow_reviewers_list",
     "ddflow_doctor",
     "ddflow_gate_status",
     "ddflow_board",
@@ -310,6 +312,8 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_session_prompt",
     "ddflow_session_note",
     "ddflow_session_end",
+    "ddflow_review",
+    "ddflow_reviewers_detect",
 }
 
 
@@ -1291,3 +1295,142 @@ def test_history_is_ordered_by_lamport_clock_not_wall_time(repo):
         f"newest-first by Lamport should put e2 before e1; got {order}. Sorting by `ts` "
         f"reverses them, and that is precisely the skewed-clock case."
     )
+
+
+# -- an unavailable reviewer is never a passed review --------------------------------------
+
+
+def _gate_outcome(repo, item, gate):
+    """The recorded OUTCOME string. `gates[<id>]` is the whole record — outcome, when, by
+    whom — and comparing the dict to a string passes an assertion that reads correctly."""
+    _code, shown, _ = run_cli(repo, "--json", "show", item)
+    return (json.loads(shown)["gates"].get(gate) or {}).get("outcome", "")
+
+
+def test_no_reviewer_configured_records_UNAVAILABLE_not_a_pass(repo):
+    """The vacuous-pass class at the level of a whole reviewer.
+
+    A project with no reviewer must not look like a project whose reviewer approved. And
+    the outcome has to be RECORDED: an unrecorded UNAVAILABLE is indistinguishable from a
+    gate nobody ran, which is how "we reviewed it" becomes true on paper.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+
+    out = api.run_review(repo, gate="critic", item="T1", intent="add a guard")
+    assert out.exit == NOTHING, out
+    assert out.data["outcome"] == "unavailable", out.data
+    assert "NOT a pass" in out.reason, out.reason
+    assert _gate_outcome(repo, "T1", "critic") == "unavailable", (
+        "the gate was left with no outcome at all, which reads as 'not run yet'"
+    )
+
+
+def _stub_reviewer(repo):
+    """A reviewer pointing at a closed port. Unreachable is a case, not a broken test."""
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text() + '\n[[reviewer]]\nname = "stub"\nbase_url = "http://127.0.0.1:1"\n'
+        'model = "stub/model"\nfamily = "stub"\ngates = ["critic"]\n'
+    )
+
+
+def test_an_unreachable_reviewer_records_UNAVAILABLE_not_a_pass(repo):
+    """The commonest way a review silently does not happen.
+
+    A configured endpoint that does not answer is exactly the case that looks like
+    success from a distance: the gate ran, nothing was reported, nothing failed. Exit 2
+    and a recorded `unavailable` is what keeps it distinguishable from approval.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    _stub_reviewer(repo)
+    (repo / "a.py").write_text("x = 1\n")  # something to review
+
+    out = api.run_review(repo, gate="critic", item="T1", intent="add a guard")
+    assert out.exit == NOTHING, out
+    assert out.data["outcome"] == "unavailable", out.data
+    assert _gate_outcome(repo, "T1", "critic") == "unavailable"
+
+
+def test_an_empty_diff_records_UNAVAILABLE_not_a_pass(repo):
+    """A reviewer handed nothing reports nothing, and reporting nothing is not approval.
+
+    The shape the whole review stack is built against: the model dutifully reviews an
+    empty diff and returns no findings, which every downstream reader treats as a clean
+    bill of health.
+    """
+    import subprocess
+
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    _stub_reviewer(repo)
+    # Commit EVERYTHING, including what `init` wrote, so the diff is genuinely empty and
+    # the run stops before it ever reaches the endpoint.
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "all"], check=True)
+
+    out = api.run_review(repo, gate="critic", item="T1", intent="add a guard")
+    assert out.exit == NOTHING, out
+    assert out.data["outcome"] == "unavailable", out.data
+    assert "Empty diff" in out.reason, out.reason
+    assert _gate_outcome(repo, "T1", "critic") == "unavailable"
+
+
+def test_review_without_an_intent_is_refused(repo):
+    """ "The reviewer flags where the diff and the stated intent disagree, so without it
+    there is nothing to disagree with."
+
+    Exit 1, not 2: this is a caller error with a remedy, not an unavailable resource.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text() + '\n[[reviewer]]\nname = "stub"\nbase_url = "http://127.0.0.1:1"\n'
+        'model = "stub/model"\nfamily = "stub"\ngates = ["critic"]\n'
+    )
+    (repo / "a.py").write_text("x = 1\n")
+
+    out = api.run_review(repo, gate="critic", intent="")
+    assert out.exit == FAIL, out
+    assert "--intent is required" in out.reason
+
+
+def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
+    """The outcome table, asserted as a table.
+
+    `R.ERROR` — the reviewer raised — is a separate status from `R.UNAVAILABLE`, and
+    mapping it to `"passed"` left every test green: the unreachable-endpoint case goes
+    through UNAVAILABLE, so nothing reached the ERROR arm. Inducing a genuine ERROR means
+    breaking the review service from a test, which would pin its internals; asserting the
+    MAPPING is the honest alternative, and it is the thing that must not drift.
+
+    Only REVIEWED may produce `passed`, and only when it found nothing.
+    """
+    import inspect
+
+    from ddflow.api import review as A
+    from ddflow.services import review as R
+
+    src = inspect.getsource(A.review)
+    table = src[src.index("outcome = {") : src.index("}[best.status]")]
+    for status in ("PARTIAL", "UNAVAILABLE", "ERROR"):
+        arm = table[table.index(f"R.{status}:") : table.index("\n", table.index(f"R.{status}:"))]
+        assert '"passed"' not in arm, f"R.{status} maps to a pass: {arm.strip()}"
+    assert 'R.REVIEWED: ("failed" if best.findings else "passed")' in table, table
+
+    # And the exit codes: only a real review with no findings is success.
+    exits = src[src.index("exit_code = {") : src.index("]\n", src.index("exit_code = {"))]
+    assert "R.UNAVAILABLE: O.NOTHING" in exits, exits
+    assert "R.ERROR: O.FAIL" in exits, exits
+    assert "R.PARTIAL: O.REFUSED" in exits, exits
+    # A status nobody mapped would KeyError at runtime, on the failing path.
+    assert {"REVIEWED", "PARTIAL", "UNAVAILABLE", "ERROR"} <= set(dir(R))

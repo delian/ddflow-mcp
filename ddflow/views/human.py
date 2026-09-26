@@ -69,3 +69,42 @@ def doctor(out) -> str:
     lines.append("")
     lines.append("Healthy." if not d["problems"] else f"{len(d['problems'])} problem(s).")
     return "\n".join(lines)
+
+
+@renders("reviewers.list")
+def reviewers_list(out) -> str:
+    """Every reviewer, and the warning that decides whether `complete` will work.
+
+    The unclassified note is not cosmetic: a reviewer with no known family cannot satisfy
+    `[agent].reviewer_family_must_differ`, so completion refuses with a reason that reads
+    as though it is about the review rather than about a missing `family = "..."` line.
+    """
+    d = out.data
+    lines = [
+        f"  {r['name']:<22} {r['family'] or '?':<12} gates={','.join(r['gates'])} "
+        f"{'' if r['enabled'] else '(disabled) '}{r['base_url']} [{r['model']}]"
+        for r in d["reviewers"]
+    ]
+    if d["unclassified"]:
+        lines += [
+            "",
+            f"  {', '.join(d['unclassified'])} have no known family (shown as '?'), so they cannot",
+            '  satisfy [agent].reviewer_family_must_differ. Set `family = "..."` on each',
+            "  in .ddflow/config.toml, or add the model name to [agent].families.",
+        ]
+    return "\n".join(lines)
+
+
+@renders("reviewers.detect")
+def reviewers_detect(out) -> str:
+    d = out.data
+    lines = [
+        f"  {r['url']}  [{r['label']}]\n      model  {r['model']}\n      family {r['family']}"
+        for r in d["found"]
+    ]
+    if d["written"]:
+        lines.append(f"\nappended {d['count']} reviewer block(s) to {d['written']}")
+    else:
+        lines.append("\nAdd to .ddflow/config.toml (or re-run with --write):")
+        lines.append(d["blocks"])
+    return "\n".join(lines)

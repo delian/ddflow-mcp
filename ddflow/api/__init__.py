@@ -94,6 +94,13 @@ from .reporting import (
     show,
     status,
 )
+
+# `run_review`, not `review`: a name re-exported here SHADOWS the submodule of the same
+# name, so `from ddflow.api import review` would bind the function and every
+# `review.reviewers_list` would raise `'function' object has no attribute`. Caught by
+# `test_no_reexport_shadows_a_submodule`, which exists because of this line.
+from .review import review as run_review
+from .review import reviewers_detect, reviewers_list
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -101,29 +108,20 @@ from .workflow import pipeline as workflow_pipeline
 from .workflow import show as workflow_show
 
 __all__ = [
-    "ResearchFinding",
-    "bug_fixed",
-    "bug_found",
-    "history",
-    "lesson_add",
-    "lesson_search",
-    "recall",
-    "research_add",
-    "session_end",
-    "session_note",
-    "session_prompt",
-    "session_start",
     "DEFAULT_CHECK_RECOVERY",
     "DEFAULT_NEXT_KIND",
     "DEFAULT_PRIORITY",
     "DEFAULT_RENDER_DIR",
     "GateEvidence",
+    "ResearchFinding",
     "WorkflowGateEdit",
     "_load",
     "abandon",
     "block",
     "board",
     "brief",
+    "bug_fixed",
+    "bug_found",
     "claim",
     "complete",
     "completion_verdict",
@@ -139,17 +137,29 @@ __all__ = [
     "gate_status",
     "gate_verify",
     "heartbeat",
+    "history",
+    "lesson_add",
+    "lesson_search",
     "loops",
     "merge_item",
     "next_item",
     "phase_add",
     "progress",
     "rebuild",
+    "recall",
     "recover",
     "release_item",
     "remove_item",
     "render",
     "replay",
+    "research_add",
+    "reviewers_detect",
+    "reviewers_list",
+    "run_review",
+    "session_end",
+    "session_note",
+    "session_prompt",
+    "session_start",
     "show",
     "split",
     "status",

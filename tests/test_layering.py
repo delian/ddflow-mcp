@@ -495,3 +495,32 @@ def test_every_relative_import_names_a_module_that_exists():
                 f"{node.module or ''} import ...` resolves to {dotted!r}, which does not exist"
             )
     assert not problems, "relative imports that resolve to nothing:\n  " + "\n  ".join(problems)
+
+
+def test_no_reexport_shadows_a_submodule():
+    """`api/__init__.py` re-exports names for convenience. A re-export whose NAME equals a
+    submodule's silently replaces it.
+
+    `from .review import review` bound the function to `ddflow.api.review`, so
+    `from ddflow.api import review` no longer gave the module and every
+    `review.reviewers_list(...)` raised `'function' object has no attribute
+    'reviewers_list'`. It failed at CALL time, in one command, long after import.
+
+    Mechanical because the collision is invisible by eye: both names are correct and the
+    file reads as if it works.
+    """
+    import ast
+
+    api_dir = PKG / "api"
+    submodules = {p.stem for p in api_dir.glob("*.py") if p.stem not in ("__init__", "_base")}
+    tree = ast.parse((api_dir / "__init__.py").read_text("utf-8"))
+    bound: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            bound |= {(alias.asname or alias.name) for alias in node.names}
+    clash = sorted(bound & submodules)
+    assert not clash, (
+        f"api/__init__.py binds {clash}, which are also submodule names — so "
+        f"`from ddflow.api import {clash[0]}` gives the re-export, not the module. "
+        f"Rename the re-export (e.g. `review` -> `run_review`)."
+    )

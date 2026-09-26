@@ -46,6 +46,8 @@ def test_the_registry_is_reachable_by_kind():
 #: The smallest data each registered kind needs. A new renderer must add a row, which is
 #: the point: a renderer nobody can call with anything is untested by construction.
 _MINIMAL: dict[str, dict] = {
+    "reviewers.list": {"reviewers": [], "unclassified": []},
+    "reviewers.detect": {"found": [], "written": "", "blocks": "", "count": 0},
     "doctor": {
         "problems": [],
         "notes": [],

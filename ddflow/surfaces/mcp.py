@@ -1361,12 +1361,20 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "write": ("boolean", "Append the discovered reviewers to the config.", False)
         },
-        "argv": lambda a: ["reviewers", "detect"] + (["--write"] if a.get("write") else []),
+        "api": lambda repo, a, agent: _api().reviewers_detect(
+            repo, write=bool(a.get("write")), agent=agent
+        ),
+        "payload": "text",
+        "text": True,
+        "kind": "reviewers.detect",
     },
     "ddflow_reviewers_list": {
         "description": "Show the configured reviewers, their families and which gates they serve.",
         "properties": {},
-        "argv": lambda a: ["reviewers", "list"],
+        "api": lambda repo, a, agent: _api().reviewers_list(repo, agent=agent),
+        "payload": "text",
+        "text": True,
+        "kind": "reviewers.list",
     },
     "ddflow_review": {
         "description": (
@@ -1389,14 +1397,20 @@ TOOLS: dict[str, dict[str, Any]] = {
             "base": ("string", "Ref to diff against (default: the item's base branch).", False),
             "context": ("string", "Extra context to hand the reviewer.", False),
         },
-        "argv": lambda a: [
-            "review",
-            a["id"],
-            *_opt("--gate", a),
-            *_opt("--intent", a),
-            *_opt("--base", a),
-            *_opt("--context", a),
-        ],
+        "api": lambda repo, a, agent: _api().run_review(
+            repo,
+            gate=a.get("gate") or "critic",
+            item=a.get("id", "") or "",
+            intent=a.get("intent", "") or "",
+            context=a.get("context", "") or "",
+            base=a.get("base", "") or "",
+            agent=agent,
+        ),
+        # The TRANSCRIPT the run produced — findings already formatted with their
+        # severities, which is what this tool has always returned.
+        "payload": "text",
+        "text": True,
+        "kind": "review",
     },
     "ddflow_show": {
         "description": (
