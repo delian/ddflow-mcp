@@ -1648,3 +1648,72 @@ the reason this is a gap rather than a hole:
   Probe that it is real: `api.gate_record(...)` out of order returns
   `data["warning"]` non-empty and `data["ahead"] == ["implement", ...]`, while
   `out.body(("gate", "outcome"))` — the MCP body — contains neither.
+
+## B36/B37 — eleven slices, 2026-09-26
+
+**B36: cli.py 3,998 -> 1,462.** Below the 3,041 it was filed at (peak 4,314). 556 of what
+remains is `build_parser`, which has a documented exemption; the rest is `init`, `approve`,
+`progress`, `loops`, `item_update` and the starter TOML.
+
+**B37: 56 of 64 tools typed. ARGV_TOOLS_CEILING 60 -> 7.** NOT closed.
+
+Seven tools remain, all in the configure/adopt family and all low-policy:
+`ddflow_companions`, `ddflow_companions_add`, `ddflow_configure`, `ddflow_help`,
+`ddflow_hooks`, `ddflow_prompts`, `ddflow_setup`. `cmd_companions` (205 lines) and
+`cmd_prompts` (90) are the substantial two; `configure`, `help`, `hooks` and `setup` are
+thin. `ddflow_identify` is a third dispatch kind and is not counted.
+
+**The pattern, for whoever finishes it.** Each slice: extract the family to
+`api/<family>.py` AND migrate its tools in ONE pass, so each function is touched once.
+Then `surfaces/commands/<family>.py` renders the `Outcome`. Then the tool spec gets `api`
++ `payload`, a `MIGRATED_WIRE_SHAPES` row, and the ceiling drops. Then mutate every rule
+the slice moved and confirm each mutation goes red.
+
+Mechanisms added along the way, all of which the remaining seven will need:
+
+* `Outcome.body(payload)` — ONE definition of the wire body, shared by `--json` and the
+  MCP tool. `""` is the whole `data`, a string is one key, a tuple is a projection. Keys
+  starting with `_` never cross the wire (a prose view needs the objects the operation
+  already built; recomputing them means folding the log twice).
+* `"text": True` + `"kind"` on a spec — the body is a DOCUMENT, not JSON. Ten tools are
+  prose and their argv form carried no `--json`; encoding them as JSON during migration
+  would hand every consumer a quoted string with `\n` in it. Both `text` and `payload` may
+  be predicates on the arguments (`render` is a document with `--show`, a file list
+  without).
+* `views/human.py` — the renderer registry `core/outcome.py` had described in prose for
+  months without either it or its `tests/test_views.py` existing. Scoped to the three kinds
+  whose rendering had nowhere else to live.
+* `wants_called_from` — `claim` needs to know WHERE the caller is standing, not just which
+  repo, because adoption turns on it.
+* Named records for fields that travel together: `decisions.Draft`, `gates.Evidence`,
+  `workflow.GateEdit`, `knowledge.Finding`. Each replaces 11-15 loose keyword arguments
+  that were also spelled out in argparse and in the MCP input schema.
+* Defaults as named api constants imported by the parser — see B161.
+
+**69 mutations verified. Suite 796 -> 1051.**
+
+- **B161. Migrating a command off argparse drops any default that lived only in the
+  parser.** ✅ CLOSED, and worth its own entry because it is the class, not an incident.
+  Four in one session: `next --kind` `"task"` -> `""` (so `ddflow_next` returned an EMPTY
+  queue), `--priority` `100` -> `0`, `brief --check-recovery` `True` -> `False`,
+  `render --out` `"docs/ddflow"` -> `""`. Only the first changed the body in the fixture's
+  state, so only the first was caught; the rest were found by sweeping every non-trivial
+  `default=` in `build_parser` against its api counterpart. Each default now has one home.
+  The first ratchet for this was VACUOUS — it compared the parser to the constant the
+  parser imports — and three of four mutations survived it;
+  `test_each_default_VALUE_is_the_one_the_behaviour_needs` is the one that bites.
+
+- **B162. Four "reachable over MCP" tests asserted the DISPATCH MECHANISM.** ✅ CLOSED.
+  `test_every_workflow_command_is_reachable_over_mcp`,
+  `test_the_command_is_reachable_over_mcp` (import), `test_it_is_reachable_over_mcp`
+  (import --verify) and `test_the_prose_list_only_describes_tools_that_exist` all read
+  `spec["argv"]`, so each broke with `KeyError: 'argv'` on migration having never verified
+  that the tool produces an answer. All four now CALL the tool, and each asserts something
+  the argv version did not.
+
+- **B163. The `cli.py` C901 exemption was suppressing the measurement for ~45 functions.**
+  FILED, partly addressed. Written for `build_parser`, it applies per FILE, so
+  `_render_workflow` (17 branches), `cmd_status` (16) and `cmd_reviewers` (18) had been
+  over the limit invisibly — each flagged the moment it moved out. The three are split.
+  The remaining question is whether `build_parser` should get a `# noqa` on itself instead
+  of a file-wide ignore; that is a one-line change and a separate decision.
