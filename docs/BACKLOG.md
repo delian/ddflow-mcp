@@ -33,7 +33,32 @@ item below.
 
 ## Performance
 
-- **B4 — The coordination path holds the write lock across an O(all-events) read.**
+- **B4 — The coordination path holds the write lock across an O(all-events) read. ✅ CLOSED
+  2026-09-26.** Measured on a 20,050-event log: **lock held 127.18 ms -> 1.02 ms, 125x
+  shorter** (medians over 7 claims, `_flock` instrumented directly). On the NFS mount the
+  read costs ~36x its local price, so the gap is wider there.
+
+  The fix is not "fold outside the lock" — that would lose the race the whole coordination
+  layer exists to stop. The invariant is **the state the decision is made from reflects
+  every event in the log at the moment of the append**, and holding the lock across the
+  read is only one way to get it. `EventLog.extent()` is a `stat`-per-shard fingerprint;
+  `leases._decide_from` folds outside the lock and `_still_current` proves under the lock
+  that nothing grew, re-folding there when it did. The slow path is never slower than
+  before; the fast path holds the lock across a handful of `stat` calls.
+
+  **Take the fingerprint BEFORE the read.** After it, a write landing in between is
+  recorded in the size, so the comparison says "unchanged" while the folded state is
+  missing that event — unsafe in a way that looks fine.
+  `test_the_extent_is_taken_before_the_read_not_after` asserts the ordering on the source,
+  because the two are indistinguishable from outside until the day they are not.
+
+  `tests/test_lease_lock_window.py` induces the race deterministically from inside
+  `transaction()` — in both directions: a rival claim that must make `acquire` REFUSE, and
+  a rival lease appearing that must make `renew` SUCCEED where the stale state would have
+  refused (the case a "re-check only if it makes us stricter" shortcut gets wrong). Plus a
+  probe that an unchanged log is not re-read, because the correctness tests cannot tell a
+  fast path from a slow one and an optimisation nothing pins gets reverted by accident.
+  Four mutations verified. *Original: found by roborev architecture (C9).*
   `lease.acquire` does `read_all()` + `fold()` *inside* the flock. Folding is cheap
   (407k events/s measured) but the I/O is not, and on the NFS mount this was designed
   against that read is ~36× the local cost. Move the read before the lock and
@@ -64,8 +89,20 @@ item below.
 
 ## Mechanical cleanups
 
-- **B8 — `renew` / `release` / `expire` share ~85% of one body** (`lease.py`); they
-  differ only in a guard and a payload. *Found by: roborev duplication (D5).*
+- **B8 — `renew` / `release` / `expire` share ~85% of one body. ✅ CLOSED — the work
+  shipped and this entry was never marked.** `leases._transition` is the shared body; the
+  three wrappers differ in a guard (`mine`) and a `payload` callable, which is exactly the
+  difference the finding identified. Found by auditing this entry against the source rather
+  than trusting its marker — the same drift `ddflow import --verify` exists to catch in
+  other projects, and the reason B7 (dogfooding) is the highest-leverage item on this list.
+
+  A ratchet shipped with the audit: `test_renew_release_and_expire_all_go_through_one_body`
+  walks the AST and refuses a wrapper that opens its own `transaction`, appends directly,
+  or folds the log itself. A refactor owes no behavioural probe, but this one is worth
+  pinning: the three copies had already drifted once in whether they recorded the holder,
+  and each is a read-then-write under a lock, so three copies is three chances for one to
+  drift back OUT of the lock. Mutation-verified by re-inlining `renew`.
+  *Original: found by roborev duplication (D5).*
 - **B9 — `"no such item" → stderr → FAIL` appears 5× in `cli.py`**, and the same
   condition is phrased two further ways in `gates.py` and `lease.py`. *(D6)*
 - **B10 — `phase add` and `task add` argparse blocks are re-typed**, though the

@@ -100,6 +100,35 @@ def _renew_in_place(
     return existing
 
 
+def _decide_from(log: EventLog) -> tuple[State, dict[str, int]]:
+    """Fold the log OUTSIDE the append lock, with the extent it was folded at.
+
+    Returns the state and the fingerprint to re-check once the lock is held. Paired with
+    `_still_current`; see it for why this is safe.
+    """
+    before = log.extent()
+    return fold(log.read_all(), strict=False), before
+
+
+def _still_current(log: EventLog, state: State, before: dict[str, int]) -> State:
+    """The state to DECIDE from, now that the lock is held.
+
+    The invariant that matters is not "the fold happened inside the lock" — it is "the
+    state the decision is made from reflects every event in the log at the moment of the
+    append". Holding the lock across the read is one way to get that. Proving the log did
+    not grow is another, and it holds the lock for a handful of `stat` calls instead of a
+    full read of every shard.
+
+    If anything DID grow, this re-folds inside the lock, which is exactly the old
+    behaviour. So the slow path is never slower than before and the fast path — the
+    overwhelmingly common one, since contention here is measured far below the point where
+    it matters — skips the big read while under the lock.
+    """
+    if log.extent() == before:
+        return state
+    return fold(log.read_all(), strict=False)
+
+
 def acquire(
     log: EventLog,
     cfg: Config,
@@ -114,13 +143,17 @@ def acquire(
 ) -> Lease:
     """Claim an item. Raises ``LeaseError`` (never steals) if someone live holds it.
 
-    The whole body runs under one lock, so the read that decides and the write that
-    claims cannot be separated by another agent's claim.
+    The read that decides and the write that claims cannot be separated by another
+    agent's claim. That used to be achieved by folding the whole log INSIDE the lock;
+    it is now achieved by folding outside and proving, under the lock, that the log did
+    not grow — see `_still_current`. Same guarantee, and the lock is held across `stat`
+    calls rather than across a read of every shard.
     """
     holder = holder or log.agent_id
     now = time.time()
+    snapshot, before = _decide_from(log)
     with log.transaction():
-        state = fold(log.read_all(), strict=False)
+        state = _still_current(log, snapshot, before)
         it = state.items.get(item_id)
         if it is None:
             raise LeaseError(f"no such item {item_id!r}", item=item_id)
@@ -262,12 +295,15 @@ def _transition(
     read-then-write under a lock is three chances for one of them to drift out of the
     lock — and the copies had already drifted in whether they recorded the holder.
 
-    The fold must stay INSIDE the transaction: the whole point is that the read which
-    decides and the write which acts cannot be separated by another agent's append.
+    The read which decides and the write which acts must not be separated by another
+    agent's append. That is held by `_still_current` rather than by folding inside the
+    lock: the fold happens outside, and under the lock the log is PROVED not to have
+    grown. Where it has, it is re-folded there, which is the old behaviour exactly.
     """
     holder = holder or log.agent_id
+    snapshot, before = _decide_from(log)
     with log.transaction():
-        state = fold(log.read_all(), strict=False)
+        state = _still_current(log, snapshot, before)
         it = state.items.get(item_id)
         if not it or not it.lease:
             return False

@@ -245,6 +245,37 @@ class EventLog:
             return []
         return sorted(self.dir.glob("*.jsonl"))
 
+    def extent(self) -> dict[str, int]:
+        """A cheap fingerprint of how much log there IS: shard name -> size in bytes.
+
+        `os.stat` per shard, no reads. Exists so a caller can fold the log OUTSIDE the
+        append lock and then, inside it, PROVE that nothing was appended in between —
+        which is the difference between holding the lock across an O(all-events) read and
+        holding it across a handful of `stat` calls. On the NFS mount this package was
+        designed against, that read is ~36x its local cost.
+
+        **Take this BEFORE the read, never after.** After is unsafe in a way that looks
+        fine: a write landing between the read and the fingerprint is recorded in the
+        size, so the later comparison says "unchanged" while the folded state is missing
+        that event. Before, the same write makes the sizes differ and the caller falls
+        back to re-reading — conservative, and conservative is the only safe direction
+        here.
+
+        Sizes rather than mtimes: mtime granularity is one second on some filesystems,
+        and two appends inside one second are exactly the case this has to catch. A new
+        shard appearing (another agent's first write) changes the KEY set, so that is
+        caught too.
+        """
+        out: dict[str, int] = {}
+        for path in self.shards():
+            try:
+                out[path.name] = path.stat().st_size
+            except OSError:
+                # Vanished between the glob and the stat. Recording it as absent makes
+                # the comparison differ, which sends the caller down the safe path.
+                continue
+        return out
+
     # -- transactions ---------------------------------------------------------------
     @contextlib.contextmanager
     def transaction(self) -> Iterator[EventLog]:
