@@ -309,15 +309,18 @@ def test_the_recordable_gate_outcomes_are_exactly_the_five(repo):
 #: reason. **This set may only ever shrink.** An entry is a latent cycle: it loads today
 #: and becomes a hard `ImportError` the moment somebody makes the other edge eager.
 #:
-#: `core.model` <-> `core.events`: `model` needs `Event` eagerly (it is in every
-#: signature), and `events` derives its kind vocabulary from `model.HANDLERS` — a dict of
-#: handler functions that cannot move without moving the handlers. `events.py:40` records
-#: the lazy import and why. Fixing it means moving validation out of `events` into a
-#: third module; filed as B127 rather than done here, because `core/` is the one layer
-#: whose purity the rest of the suite depends on.
-KNOWN_LATENT_CYCLES: set[tuple[str, str]] = {
-    ("core.model", "core.events"),
-}
+#: **EMPTY, as of B127.** It held `core.model` <-> `core.events`: `model` needs `Event`
+#: eagerly (it is in every signature) and `events` derived the kind vocabulary from
+#: `model.HANDLERS` through a lazy import. The entry proposed a third module both could
+#: import; that turned out to be unnecessary. `_kinds()` had exactly ONE consumer —
+#: `infra/log.py`'s append-time check — and `infra` may import `core`, so moving the
+#: derivation to `model.known_kinds()`, beside the handlers it derives from, removed the
+#: pair instead of balancing it.
+#:
+#: Keep the set and the check. An empty allowlist is the strongest state this ratchet has
+#: and deleting the machinery because it currently has nothing to say is how the next
+#: latent cycle arrives unremarked.
+KNOWN_LATENT_CYCLES: set[tuple[str, str]] = set()
 
 
 def _dotted(path: Path) -> str:

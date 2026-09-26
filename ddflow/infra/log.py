@@ -28,10 +28,10 @@ from ..core.events import (
     TAIL_MAX_BYTES,
     TAIL_WINDOW_BYTES,
     Event,
-    _kinds,
     canonical,
     utcnow,
 )
+from ..core.model import known_kinds
 from . import proc as P
 
 __all__ = [
@@ -317,7 +317,7 @@ class EventLog:
         ``observed`` lets a caller declare events it has seen but not folded, so the
         Lamport clock advances past them even when the caller read a filtered view.
         """
-        if kind not in _kinds():
+        if kind not in known_kinds():
             raise ValueError(
                 f"unknown event kind {kind!r}; add a handler to model.HANDLERS deliberately"
             )

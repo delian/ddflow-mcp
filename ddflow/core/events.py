@@ -31,18 +31,16 @@ TAIL_WINDOW_BYTES = 4096
 TAIL_MAX_BYTES = 65536
 
 
-def _kinds() -> frozenset[str]:
-    """The event vocabulary, DERIVED from ``model.HANDLERS``.
-
-    Declaring it here as well would make the vocabulary and its interpretation two
-    lists that nothing forces to agree -- a kind could be declared and never handled
-    (folding silently to "nothing happened"), or handled and never declared (rejected
-    at append time). Imported lazily because ``model`` imports this module.
-    """
-    from .model import HANDLERS
-
-    return frozenset(HANDLERS)
-
+#: The event VOCABULARY is not declared here. It is derived from `model.HANDLERS` by
+#: `model.known_kinds()`, because a kind nothing interprets must not be appendable and a
+#: kind nothing declares must not fold silently to "nothing happened" — one list, in the
+#: module that owns the handlers.
+#:
+#: `_kinds()` used to live here and import `model` lazily, which made `events` and `model`
+#: a MUTUALLY importing pair: `model` imports `Event` eagerly (it is in every signature),
+#: `events` imported `HANDLERS` inside a function. One eager edge in a mutual pair loads
+#: today and becomes an ImportError at startup the moment somebody makes the other eager.
+#: Moving the derivation to `model` removes the pair rather than balancing it (B127).
 
 #: Kinds that carry operator intent and must survive every compaction, because they
 #: are the input to `ddflow replay` — the from-scratch reconstruction path.

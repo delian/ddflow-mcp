@@ -860,6 +860,24 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
 }
 
 
+def known_kinds() -> frozenset[str]:
+    """The event vocabulary, DERIVED from `HANDLERS`.
+
+    Declaring it separately would make the vocabulary and its interpretation two lists that
+    nothing forces to agree — a kind could be declared and never handled (folding silently
+    to "nothing happened"), or handled and never declared (rejected at append time).
+
+    Lives HERE, next to the handlers it derives from, rather than in `events`. It was in
+    `events` with a lazy `from .model import HANDLERS`, which made the two a mutually
+    importing pair held apart by one deferred import; `model` imports `Event` eagerly
+    because it is in every signature, so one eager edge already existed and a second would
+    have been an ImportError at startup. Its only consumer is `infra/log.py`'s append-time
+    check, and `infra` may import `core` — so the derivation moves to the owner of the
+    data and the cycle is gone rather than balanced (B127).
+    """
+    return frozenset(HANDLERS)
+
+
 def fold(events: list[Event], *, strict: bool = True) -> State:
     """Replay events into state. Pure; no I/O; deterministic.
 

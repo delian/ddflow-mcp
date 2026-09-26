@@ -1443,7 +1443,31 @@ refusal) turns three of the new tests red.
 
 ## B127 — the `core.model` <-> `core.events` latent cycle, 2026-09-26
 
-- **B127. FILED.** `core/model.py` imports `Event` eagerly (it is in every signature);
+- **B127. ✅ CLOSED 2026-09-26. `KNOWN_LATENT_CYCLES` is now EMPTY.** The vocabulary
+  derivation moved to `model.known_kinds()`, beside the `HANDLERS` it derives from, so
+  `events` no longer imports `model` at all and the pair is gone rather than balanced.
+
+  **The entry's proposed fix — a third module both import — turned out to be
+  unnecessary.** `_kinds()` had exactly ONE consumer, `infra/log.py`'s append-time check,
+  and `infra` may import `core`. So the derivation belongs with the data it derives from
+  and the consumer reaches it directly. Worth recording because the filed plan was more
+  work than the problem needed, and the reason was visible only by asking who actually
+  called it.
+
+  Mutation-verified twice, and the two mutations prove different things:
+
+  * Making the other edge EAGER reproduces exactly what the entry predicted —
+    `ImportError: cannot import name 'Event' from partially initialized module`. That is
+    Python failing, not the ratchet, and it confirms the cycle was real.
+  * Re-adding a LAZY edge back to `model` recreates the latent state: it imports fine, and
+    `test_no_mutually_importing_pair_has_a_module_level_edge` fails anyway. That is the
+    ratchet doing the job the first mutation cannot show.
+
+  The allowlist and its check are KEPT at empty. An empty allowlist is the strongest state
+  this ratchet has, and deleting the machinery because it currently has nothing to say is
+  how the next latent cycle arrives unremarked.
+
+  Original: `core/model.py` imports `Event` eagerly (it is in every signature);
   `core/events.py` derives its kind vocabulary from `model.HANDLERS` and imports it
   lazily, with `events.py:40` recording why. One eager edge in a mutual pair: it loads
   today, and becomes an `ImportError` at startup the moment somebody makes the other
