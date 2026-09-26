@@ -46,7 +46,7 @@ from .decisions import (
     decision_supersede,
 )
 from .items import update
-from .reporting import loops, progress
+from .reporting import loops, progress, rebuild, recover, show, status
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -65,6 +65,10 @@ __all__ = [
     "decision_supersede",
     "loops",
     "progress",
+    "rebuild",
+    "recover",
+    "show",
+    "status",
     "update",
     "workflow_drop",
     "workflow_gate",

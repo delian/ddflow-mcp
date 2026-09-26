@@ -581,12 +581,10 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "recover",
-            *_opt("--item", a),
-            *(["--apply"] if a.get("apply") else []),
-        ],
+        "api": lambda repo, a, agent: _api().recover(
+            repo, item=a.get("item", "") or "", apply=bool(a.get("apply")), agent=agent
+        ),
+        "payload": "found",
     },
     "ddflow_board": {
         "description": "The whole work queue as a readable board, with the critical path.",
@@ -680,7 +678,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             "status of this project?' and 'what has been completed?'."
         ),
         "properties": {},
-        "argv": lambda a: ["--json", "status"],
+        "api": lambda repo, a, agent: _api().status(repo, agent=agent),
+        # The whole object. `_render` is stripped by `Outcome.body`.
+        "payload": "",
     },
     "ddflow_identify": {
         "description": (
@@ -862,7 +862,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "disposable cache; this is never a data-loss operation."
         ),
         "properties": {},
-        "argv": lambda a: ["--json", "rebuild"],
+        "api": lambda repo, a, agent: _api().rebuild(repo, agent=agent),
+        "payload": ("events", "items"),
     },
     "ddflow_history": {
         "description": (
@@ -1383,7 +1384,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "before calling ddflow_complete."
         ),
         "properties": {"id": ("string", "Item id.", True)},
-        "argv": lambda a: ["--json", "show", a["id"]],
+        "api": lambda repo, a, agent: _api().show(repo, a["id"], agent=agent),
+        "payload": "item",
     },
     "ddflow_update": {
         "description": (

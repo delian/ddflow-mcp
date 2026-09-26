@@ -20,20 +20,9 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
+from ..core.plain import plain as _plain
 from ..services.configwrite import _write_config
 from ._base import _load
-
-
-def _plain(obj: Any) -> Any:
-    from dataclasses import asdict, is_dataclass
-
-    if is_dataclass(obj) and not isinstance(obj, type):
-        return {k: _plain(v) for k, v in asdict(obj).items()}
-    if isinstance(obj, dict):
-        return {k: _plain(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_plain(v) for v in obj]
-    return obj
 
 
 def _view(repo: Path):

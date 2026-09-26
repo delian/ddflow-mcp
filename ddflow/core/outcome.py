@@ -81,7 +81,16 @@ class Outcome:
         the projection rule is how they would come apart.
         """
         if not payload:
-            return self.data
+            # `_`-prefixed keys are for the LOCAL renderer and never cross the wire.
+            #
+            # A prose view frequently needs the objects the operation already built —
+            # `status` wants `completed_at` to sort by and the blocked ids, `show` wants
+            # the gate-status object's `render()`. Recomputing them in the surface means
+            # folding the log twice for one answer, which is the thing this layer exists
+            # to stop; carrying them in `data` means they would be serialised to every
+            # MCP caller as unreadable repr strings. One naming rule settles it, in the
+            # one place that decides what a body is.
+            return {k: v for k, v in self.data.items() if not k.startswith("_")}
         if isinstance(payload, str):
             return self.data[payload]
         # `.get`, not `[...]`. A projection has to produce the SAME SHAPE on every exit

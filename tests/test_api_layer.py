@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 51
+ARGV_TOOLS_CEILING = 47
 
 
 def _typed() -> list[str]:
@@ -237,6 +237,10 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_decision_show": (["decision", "show", "D1"], {"id": "D1"}),
     "ddflow_decision_applicable": (["decision", "applicable", "T1"], {"id": "T1"}),
     "ddflow_workflow": (["workflow"], {}),
+    "ddflow_status": (["status"], {}),
+    "ddflow_rebuild": (["rebuild"], {}),
+    "ddflow_show": (["show", "T1"], {"id": "T1"}),
+    "ddflow_recover": (["recover"], {}),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
@@ -566,3 +570,112 @@ def test_an_incoherent_workflow_is_REPORTED_as_incoherent(repo):
     assert out.exit == FAIL, "an incoherent workflow reported success"
     assert out.data["coherent"] is False, out.data
     assert out.data["findings"], "no finding explains what is wrong"
+
+
+def test_render_only_data_never_reaches_the_wire():
+    """`_`-prefixed keys are for the local prose renderer.
+
+    The alternative to carrying them is folding the log a second time in the surface,
+    which is precisely the duplication this layer removes — `cmd_status` needs the
+    completed-task OBJECTS to sort by `completed_at`, not a list of dicts. Carrying them
+    without a rule would serialise live dataclasses to every MCP caller as repr strings.
+    """
+    out = O.ok("status", tasks={"total": 3}, _render={"objects": object()})
+    assert out.body() == {"tasks": {"total": 3}}, out.body()
+    assert "_render" in out.data, "the renderer still needs it"
+
+
+# -- correctness, which a parity test cannot reach ---------------------------------------
+#
+# `test_a_migrated_tool_reproduces_its_CLI_json_exactly` compares the two surfaces, and
+# after migration BOTH read the same `api` function — so a wrong answer is identically
+# wrong on both sides and the comparison passes. Mutation testing made this concrete:
+# forcing `status`'s completed count to 0, dropping `show`'s path resolution and
+# reporting an empty `recover` as success all left the whole suite green.
+#
+# The rule that follows: every migrated operation needs a wire-shape row AND at least one
+# probe of what it actually answers. The first stops a refactor changing the contract; only
+# the second stops it changing the truth.
+
+
+def test_status_counts_what_actually_happened(repo):
+    """The numbers, not their agreement across surfaces."""
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--title", "P")
+    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--phase", "P1", "--globs", "b.py")
+
+    before = api.status(repo)
+    assert before.data["tasks"] == {
+        "total": 2,
+        "done": 0,
+        "running": 0,
+        "ready": 2,
+        "blocked": 0,
+    }, before.data["tasks"]
+
+    run_cli(repo, "claim", "T1")
+    claimed = api.status(repo)
+    assert claimed.data["tasks"]["running"] == 1, claimed.data["tasks"]
+    assert [x["id"] for x in claimed.data["in_flight"]] == ["T1"], claimed.data["in_flight"]
+
+    run_cli(repo, "abandon", "T1", "--reason", "enough")
+    after = api.status(repo)
+    assert after.data["tasks"]["running"] == 0, after.data["tasks"]
+
+
+def test_status_counts_a_completed_task_as_done(repo):
+    """Separate from the above because completion needs the gates satisfied, and the
+    count being right is the single number a reader trusts most."""
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1")
+    # `--force`, deliberately. Completion has a rule-set of its own — required gates,
+    # evidence, reviewer independence — and `tests/test_completion_policy.py` is where
+    # that belongs. This probe asks only whether `status` COUNTS a completed task, so it
+    # takes the documented override rather than reproducing ten gate recordings whose
+    # requirements would then be pinned here by accident.
+    code, _out, err = run_cli(repo, "complete", "T1", "--force")
+    assert code == OK, err
+
+    out = api.status(repo)
+    assert out.data["tasks"]["done"] == 1, out.data["tasks"]
+    assert [t["id"] for t in out.data["completed_tasks"]] == ["T1"], out.data["completed_tasks"]
+
+
+def test_show_returns_a_worktree_path_the_caller_can_use(repo):
+    """Storage portable, interface usable.
+
+    The log stores worktree paths RELATIVE to the repo root, which is what makes a
+    committed log true on every checkout. A caller handed ".ddflow-worktrees/T1" has to
+    know what it is relative to, and resolves it against its own cwd — which for an agent
+    is frequently not the repo root.
+    """
+    import os
+
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1")
+
+    wt = api.show(repo, "T1").data["item"]["worktree"]
+    assert wt, "the claimed item has no worktree at all"
+    assert os.path.isabs(wt), f"{wt!r} is relative; a caller cannot cd to it"
+
+
+def test_nothing_to_recover_is_exit_2_not_success(repo):
+    """ "No data" is reported as itself. A clean repo and a repo whose sweep failed must
+    not look the same to a caller that only reads the exit code."""
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    out = api.recover(repo)
+    assert out.exit == NOTHING, out
+    assert out.data["count"] == 0
+    assert "Nothing to recover" in out.reason

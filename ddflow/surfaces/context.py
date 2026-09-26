@@ -18,13 +18,13 @@ import argparse
 import json
 import os
 import sys
-from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
 from ..core.ids import auto_id
 from ..core.model import fold
+from ..core.plain import plain
 from ..infra import worktree as W
 from ..infra.log import EventLog, resolve_agent_id
 from ..infra.store import Store
@@ -122,14 +122,9 @@ def _resolved(c: Ctx, obj: Any) -> Any:
     return out
 
 
-def _plain(obj: Any) -> Any:
-    if is_dataclass(obj) and not isinstance(obj, type):
-        return {k: _plain(v) for k, v in asdict(obj).items()}
-    if isinstance(obj, dict):
-        return {k: _plain(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_plain(v) for v in obj]
-    return obj
+#: Re-exported. The recursive converter lives in `core/plain.py` — the api layer needs
+#: it too and cannot import a surface, and three copies was two too many.
+_plain = plain
 
 
 def _csv(v: str | None) -> list[str]:

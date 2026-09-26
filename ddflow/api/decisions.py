@@ -19,22 +19,9 @@ from typing import Any
 from ..config import Config, csv_list
 from ..core import outcome as O
 from ..core.ids import auto_id
+from ..core.plain import plain as _plain
 from ..infra.store import Store
 from ._base import _load
-
-
-def _plain(obj: Any) -> Any:
-    """Dataclass -> dict, recursively. `surfaces.context._plain` does the same thing for
-    the CLI; this layer cannot import a surface, and the wire shape is defined here."""
-    from dataclasses import asdict, is_dataclass
-
-    if is_dataclass(obj) and not isinstance(obj, type):
-        return {k: _plain(v) for k, v in asdict(obj).items()}
-    if isinstance(obj, dict):
-        return {k: _plain(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_plain(v) for v in obj]
-    return obj
 
 
 def _store(repo: Path, log, cfg: Config) -> Store:

@@ -24,6 +24,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..config import Config
 from ..infra import proc as P
@@ -440,3 +441,26 @@ def is_merged(repo: Path, branch: str, base: str) -> bool:
     """
     r = git(repo, "rev-list", "--count", f"{base}..{branch}")
     return r.ok and r.out.strip() == "0"
+
+
+def absolutise(repo: Path, data: Any) -> Any:
+    """Plain-data view with worktree paths resolved to absolute.
+
+    Storage portable, interface usable. The LOG stores worktree paths relative to the
+    repo root, which is what makes a committed log true on every checkout; a CALLER needs
+    a path it can `cd` to. The conversion happens at the boundary, and it happens HERE
+    rather than in `surfaces/context.py` because the api layer hands the same objects to
+    the same callers and cannot import a surface to do it.
+    """
+    if not isinstance(data, dict):
+        return data
+    out = dict(data)
+    for key in ("worktree", "path"):
+        val = out.get(key)
+        if isinstance(val, str) and val and not os.path.isabs(val):
+            out[key] = str(load_path(repo, val))
+    if isinstance(out.get("lease"), dict):
+        lv = out["lease"].get("worktree")
+        if isinstance(lv, str) and lv and not os.path.isabs(lv):
+            out["lease"] = {**out["lease"], "worktree": str(load_path(repo, lv))}
+    return out

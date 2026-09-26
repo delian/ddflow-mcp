@@ -1569,3 +1569,60 @@ rather than `.split()`, which had been hiding whitespace divergence.
   aarch64, exactly the two platforms the docker job builds. Probed by building the
   image and importing it: `jinja2 in image: 3.1.6`. The Dockerfile comment now says so
   and names the `apk add gcc musl-dev` remedy if it ever stops being true.
+
+## B158–B159 — surviving a compaction, 2026-09-26
+
+Operator question: can ddflow instruct the agent to LOG its planning, research, workflow
+execution, spec/build work, architecture instructions, bugs, repeatable patterns and
+corrections — and then RE-instruct it, so the way of working is not lost when the context
+window fills or the session is compacted?
+
+**The recording half already exists.** Eight tools cover every category named:
+`ddflow_phase_add`/`task_add` (planning), `ddflow_research_add` (research, with a
+CONFIRMED/REFUTED/THEORETICAL verdict it refuses to omit), `ddflow_decision_add`
+(architecture instructions received), `ddflow_gate_run`/`gate_record` (execution),
+`ddflow_bug_found`/`bug_fixed` (bugs), `ddflow_lesson_add` (repeatable patterns and
+corrections), `ddflow_session_note`/`session_start`/`session_end` (the narrative).
+
+**Three channels already survive a compaction**, and are worth naming because they are
+the reason this is a gap rather than a hole:
+
+1. `ddflow_setup` writes an **AGENTS.md** section, a **CLAUDE.md** pointer and each
+   agent's NATIVE rules surface (`services/adopt.py`) — Cursor project rules outrank
+   AGENTS.md, so both are written. The client re-reads its own rules file after a
+   compaction, so this is the primary durable channel and it works today.
+2. The **commit hook** (`services/enforce.py`) refuses a commit with no item trailer and
+   says what to add. Enforcement at the moment of the act needs no context at all.
+3. `ddflow_help <topic>` — eleven topics. PULL-based: the agent has to think to ask.
+
+- **B158. Nothing PUSHES the rules after `initialize`.** `_instructions()` is delivered
+  exactly once, at handshake. After a compaction the model may retain none of it, and
+  MCP has no server→client context-injection primitive — the three that exist are
+  `roots/list`, `sampling/createMessage` and `elicitation/create`, none of which injects
+  anything. The one reliable channel is therefore a **footer on tool results**: an agent
+  driving ddflow calls tools continuously, so that is the only place the server is
+  guaranteed to be heard again.
+
+  Design constraint that makes this hard to do WELL, and the reason it is not a
+  three-line change: this repo already learned that **a standing banner is one readers
+  learn to skip, and then they skip the one that mattered**
+  (`test_the_handshake_stays_quiet_once_the_import_is_finished`). A fixed blurb appended
+  to 64 tools would be trained-out within a session and would cost tokens on every call.
+  So the footer must be (a) **cadenced** — every N calls or N minutes, held in the
+  `Server` object, which is per-connection state that already exists; (b) **stateful** —
+  naming the next concrete obligation rather than restating the rules; (c)
+  **config-gated**, off or cheap by default.
+
+- **B159. ddflow can see which recording obligations were SKIPPED, and never says so.**
+  This is what would make B158's footer worth reading. The log knows that a task
+  completed with no lesson, no decision and no research entry; that a bug was found and
+  never marked fixed; that a phase shipped with no session note. That is the same shape
+  as the import-verify follow-through block: compute the cheap half from the folded
+  state, and speak only when there is something specific to say. A footer that says
+  "T4 completed 20 minutes ago and recorded no lesson — `ddflow_lesson_add`" is not a
+  banner, and cannot be trained out by repetition because it stops appearing once acted
+  on.
+
+  Both are worth doing together: B158 without B159 is a banner, and B159 without B158
+  has nowhere to appear. Sequenced after the B36/B37 migration, because the footer has
+  to be assembled from `Outcome`s and 51 tools still return scraped stdout.

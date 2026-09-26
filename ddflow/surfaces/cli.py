@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +39,7 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
     _write_config,
 )
 from .commands.decisions import cmd_decision
+from .commands.reporting import cmd_rebuild, cmd_recover, cmd_show, cmd_status
 from .commands.workflow import cmd_workflow
 from .context import (
     _MIN_SPLIT_PARTS,
@@ -55,7 +55,6 @@ from .context import (
     _csv,
     _plain,
     _require_item,
-    _resolved,
 )
 
 
@@ -1215,113 +1214,6 @@ def cmd_recall(a, c: Ctx) -> int:
     return OK
 
 
-def cmd_status(a, c: Ctx) -> int:
-    """One answer to "what is the state of this project?".
-
-    Written for a human asking in a chat window, which is a different question from
-    any of the machine views: it wants the shape of the thing, not a table.
-    """
-    from ..core import progress as PR
-
-    events = c.log.read_all()
-    st = fold(events, strict=False)
-    tracked = PR.work(events, st)
-    loops = PR.detect(events, st, c.cfg)
-    p = plan(st, c.cfg, agent=c.log.agent_id)
-    rec = L.scan(c.log, c.cfg, c.repo)
-
-    phases = st.phases()
-    tasks = st.tasks()
-    done = [t for t in tasks if t.state == "done"]
-    running = [t for t in tasks if t.state == "running"]
-    blocked = [b for b in p.blocked if b.reason == "deps"]
-    hours = sum(w.total_seconds for w in tracked.values()) / 3600
-    commits = sum(len(w.commits) for w in tracked.values())
-
-    if c.json:
-        print(
-            json.dumps(
-                {
-                    "phases": {
-                        "total": len(phases),
-                        "done": sum(1 for x in phases if x.state == "done"),
-                    },
-                    "tasks": {
-                        "total": len(tasks),
-                        "done": len(done),
-                        "running": len(running),
-                        "ready": len(p.ready),
-                        "blocked": len(blocked),
-                    },
-                    "completed_tasks": [
-                        {"id": t.id, "title": t.title, "sha": t.merged_sha} for t in done
-                    ],
-                    "in_flight": [
-                        {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
-                        for t in running
-                    ],
-                    "ready_now": [{"id": t.id, "title": t.title} for t in p.ready],
-                    "agent_hours": round(hours, 2),
-                    "commits": commits,
-                    "decisions": len([d for d in st.decisions.values() if d.live]),
-                    "lessons": len(st.lessons),
-                    "open_bugs": len([b for b in st.bugs.values() if b.open]),
-                    "loops": [f.__dict__ for f in loops],
-                    "recoverable": [_plain(r) for r in rec if r.salvageable],
-                },
-                indent=2,
-                default=str,
-            )
-        )
-        return OK
-
-    print(f"# {c.repo.name}\n")
-    print(
-        f"{len(done)}/{len(tasks)} tasks complete across {len(phases)} phase(s); "
-        f"{hours:.1f} agent-hours, {commits} commit(s).\n"
-    )
-    if done:
-        print("Completed:")
-        for t in sorted(done, key=lambda x: x.completed_at)[-12:]:
-            print(
-                f"  [x] {t.id:<12} {t.title}" + (f"  ({t.merged_sha[:8]})" if t.merged_sha else "")
-            )
-    if running:
-        print("\nIn flight:")
-        for t in running:
-            print(f"  [~] {t.id:<12} {t.title}" + (f"  — {t.lease.holder}" if t.lease else ""))
-    if p.ready:
-        print("\nReady to start:")
-        for t in p.ready[:8]:
-            print(f"  [ ] {t.id:<12} {t.title}")
-    if blocked:
-        print(f"\nBlocked on dependencies: {', '.join(b.item for b in blocked[:8])}")
-    extras = []
-    if st.decisions:
-        extras.append(
-            f"{len([d for d in st.decisions.values() if d.live])} architectural decision(s)"
-        )
-    if st.lessons:
-        extras.append(f"{len(st.lessons)} lesson(s)")
-    open_bugs = [b for b in st.bugs.values() if b.open]
-    if open_bugs:
-        extras.append(f"{len(open_bugs)} OPEN bug(s)")
-    if extras:
-        print("\nRecorded: " + " · ".join(extras))
-    if rec:
-        salv = [r for r in rec if r.salvageable]
-        print(
-            f"\n⚠ {len(rec)} recoverable situation(s)"
-            + (f", {len(salv)} may contain unsaved work" if salv else "")
-            + " — `ddflow recover`"
-        )
-    if loops:
-        print(f"\n⚠ {len(loops)} loop finding(s) — `ddflow loops`")
-    if not loops and not rec:
-        print("\nNothing looping, nothing to recover.")
-    return OK
-
-
 def cmd_research(a, c: Ctx) -> int:
     rid = a.id or _auto_id("R", a.question, a.claim or "")
     if a.verdict not in ("CONFIRMED", "REFUTED", "THEORETICAL"):
@@ -1426,28 +1318,6 @@ def cmd_replay(a, c: Ctx) -> int:
         c.out("wrote:\n" + "\n".join(f"  {f}" for f in files), {"files": [str(f) for f in files]})
         return OK
     print(session.render_reconstruction(st, steps, project=c.repo.name))
-    return OK
-
-
-def cmd_recover(a, c: Ctx) -> int:
-    found = L.sweep(c.log, c.cfg, c.repo, apply=a.apply)
-    found = [r for r in found if not a.item or r.item == a.item]
-    if c.json:
-        print(json.dumps([_resolved(c, r) for r in found], indent=2, default=str))
-        return OK if found else NOTHING
-    if not found:
-        print("Nothing to recover — no expired leases, no orphan worktrees.")
-        return NOTHING
-    salv = [r for r in found if r.salvageable]
-    print(f"{len(found)} recoverable situation(s); {len(salv)} may contain work:\n")
-    for r in found:
-        flag = "!! " if r.salvageable else "   "
-        print(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")
-        if r.worktree:
-            print(f"     worktree {r.worktree}")
-        print(f"     {r.advice}\n")
-    if salv:
-        print("Worktrees marked !! are NOT touched automatically. Inspect, salvage, then release.")
     return OK
 
 
@@ -1662,17 +1532,6 @@ def cmd_doctor(a, c: Ctx) -> int:
     return FAIL if problems else OK
 
 
-def cmd_rebuild(a, c: Ctx) -> int:
-    t0 = time.time()
-    st = c.store.rebuild(c.log)
-    c.out(
-        f"rebuilt index from {st.event_count} events in {time.time() - t0:.2f}s "
-        f"({len(st.items)} items, {len(st.lessons)} lessons)",
-        {"events": st.event_count, "items": len(st.items)},
-    )
-    return OK
-
-
 #: `render --show <name>` targets, and the function that produces each.
 #:
 #: `--show` exists so the MCP `resources/read` handler can serve these through the CLI
@@ -1713,29 +1572,6 @@ def cmd_render(a, c: Ctx) -> int:
 
 def cmd_board(a, c: Ctx) -> int:
     print(render.board(c.state(), c.cfg, phase=a.phase or ""))
-    return OK
-
-
-def cmd_show(a, c: Ctx) -> int:
-    st = c.state()
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-    if c.json:
-        print(json.dumps(_resolved(c, it), indent=2, default=str))
-        return OK
-    print(f"{it.id} [{it.kind}] {it.title}\n  state {it.state}")
-    if it.needs:
-        print(f"  needs {', '.join(it.needs)}")
-    if it.globs:
-        print(f"  globs {', '.join(it.globs)}")
-    if it.lease:
-        print(f"  lease {it.lease.holder} ({it.lease.remaining_s(time.time()):.0f}s left)")
-    if it.worktree:
-        print(f"  worktree {W.load_path(c.repo, it.worktree)} [{it.branch}]")
-    if it.body:
-        print(f"\n{it.body}\n")
-    print(G.status(st, c.cfg, a.id).render())
     return OK
 
 
