@@ -1697,7 +1697,44 @@ the reason this is a gap rather than a hole:
   has nowhere to appear. Sequenced after the B36/B37 migration, because the footer has
   to be assembled from `Outcome`s and 51 tools still return scraped stdout.
 
-- **B160. The out-of-order warning reaches humans only.** FILED, pre-existing, found
+- **B160. The out-of-order warning reaches humans only. ✅ CLOSED 2026-09-26.**
+  `warning` joins `ddflow_gate_record`'s payload projection, `null` when the recording was
+  in order so the shape is stable and a consumer branches on truth rather than presence.
+  Probed both ways; mutation-verified by removing the key again.
+
+  **And re-running the demos, as this entry required, found a much larger regression of
+  mine.** `scripts`-level unit tests were green at 1,071 while THREE of six demo scenarios
+  were broken — because the B37 migration made `_outcome_result` PREPEND the Outcome's
+  reason to the JSON body, and `demos/harness.py::jtool` does `json.loads(content[0].text)`,
+  which then fails at character 0. Every migrated tool whose outcome is exit 2 or 3 was
+  affected, which on a fresh project is most of the read-only ones.
+
+  Two failures of mine, both worth naming:
+
+  1. **The wire-shape test skipped past it.** It located the first `{` or `[` before
+     parsing, so a prose preamble was invisible to the check written to catch wire-shape
+     changes. Its own docstring warns about exactly this ("validated the contents while
+     accommodating the exact shape change it was written to prevent") and it had the
+     accommodation anyway. Now block 0 is parsed directly, with no index-to-first-brace.
+  2. **I did not run the scenarios, eleven times.** They are NOT unautomated:
+     `tests/test_scenarios.py` wraps them, `-m slow` selects them, CI runs them. Every one
+     of my eleven `pytest tests/ -q` runs printed **"21 deselected"** — that was the
+     scenarios saying they had not run, in every output I read. A skipped reviewer is the
+     vacuous-pass class, and this was a skipped reviewer eleven times.
+
+  **The fix:** the reason is its own content block, never a prefix. `content[0]` is the
+  structured body and parses on its own; the reason is `content[1]`; `_meta.exit` carries
+  the code. Both readers are served — a machine indexes block 0, a model is shown every
+  block. `demos/harness.py` gained the matching split: `tool()` joins ALL blocks (a prose
+  assertion wants the whole result) and `jtool()` parses block 0 only.
+
+  Demos restored to **6/6, 219 assertions** — the baseline figure — from 3/6 and 105.
+
+  **The rule this earns: a commit touching a surface runs `-m slow` before it ships.** The
+  unit suite cannot see a wire-shape change that only shows up when a real client parses
+  the result, which is precisely what the scenarios are for.
+
+  Original: FILED, pre-existing, found
   while migrating the gate family (B36/B37). Recording a gate out of order under
   `enforce_order = "warn"` prints `NOTE: <gate> comes after <earlier> …` to **stderr**,
   and `_run_cli` captured stdout — so an agent driving over MCP has never seen it. It

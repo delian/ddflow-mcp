@@ -220,7 +220,18 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             agent=agent,
         ),
-        "payload": ("gate", "outcome"),
+        "payload": ("gate", "outcome", "warning"),
+        # B160: `warning` carries the out-of-order NOTE. It printed to stderr only, and
+        # `_run_cli` captured stdout — so an agent recording `rubber_duck` before
+        # `implement` was told NOTHING, and the only trace was a `gate.out_of_order`
+        # event nobody reads back. Third occurrence of the class whose comment still
+        # sits in `cmd_complete`: "it used to print only in human mode, so an agent
+        # driving over MCP was never told that a gate had not run."
+        #
+        # This ADDS a key to a body consumers already parse, which is why it is its own
+        # change rather than part of the migration: a migration removes a duplicated
+        # rendering, it does not redefine contracts. `null` when the recording was in
+        # order, so the shape is stable and a consumer can branch on it.
     },
     "ddflow_gate_verify": {
         "description": (
@@ -1669,9 +1680,25 @@ def _outcome_result(
         return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
 
     body = json.dumps(out.body(payload_key), indent=2, default=str)
+    result = _text(body, error=(out.exit == 1), meta={"exit": out.exit})
     if out.reason:
-        body = f"{out.reason}\n\n{body}"
-    return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
+        # A SECOND content block, never a prefix. The reason used to be prepended to the
+        # JSON, which reads well and breaks every machine consumer: `json.loads` on
+        # `content[0].text` fails at character 0. `demos/harness.py::jtool` does exactly
+        # that, and three of the six demo scenarios broke silently during the B37
+        # migration — for every tool whose outcome is exit 2 or 3, which is most of the
+        # read-only ones on a fresh project.
+        #
+        # The wire-shape test did not catch it because it skipped to the first `{` or `[`
+        # before parsing. Its own docstring warns about precisely that kind of
+        # accommodation ("validated the contents while accommodating the exact shape
+        # change it was written to prevent") and it had one anyway.
+        #
+        # Both readers are served: a machine indexes `content[0]`, and a model is shown
+        # every block, so the reason still reaches the thing that has to act on it.
+        # `_meta.exit` carries the code either way.
+        result["content"].append({"type": "text", "text": out.reason})
+    return result
 
 
 #: What a declared agent name may contain. It becomes a log SHARD FILENAME, so a name

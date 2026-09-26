@@ -212,20 +212,35 @@ class McpClient:
             raise Fail(f"MCP server closed the stream. stderr:\n{err}")
         return json.loads(line)
 
-    def tool(self, name: str, **args) -> tuple[str, int]:
-        """Returns (text, exit_code). Exit 2/3 are RESULTS, not errors."""
+    def _result(self, name: str, args: dict) -> dict:
         r = self.call("tools/call", {"name": name, "arguments": args})
         if "error" in r:
             raise Fail(f"{name} -> JSON-RPC error {r['error']}")
-        res = r["result"]
-        return res["content"][0]["text"], res.get("_meta", {}).get("exit", 0)
+        return r["result"]
+
+    def tool(self, name: str, **args) -> tuple[str, int]:
+        """Returns (ALL the text, exit_code). Exit 2/3 are RESULTS, not errors.
+
+        Every content block, joined. A tool result may carry more than one: the structured
+        body is block 0 and a refusal's REASON is its own block, because prepending the
+        reason to the JSON made `json.loads` fail at character 0 for every machine
+        consumer. Returning only the first block here would hide exactly the sentence a
+        prose assertion is looking for — which is how three of these scenarios came to
+        assert on `{"holder": null}`.
+        """
+        res = self._result(name, args)
+        text = "\n\n".join(c.get("text", "") for c in res["content"])
+        return text, res.get("_meta", {}).get("exit", 0)
 
     def jtool(self, name: str, **args) -> object:
-        text, _code = self.tool(name, **args)
+        """The STRUCTURED body: block 0, parsed. Never the joined text — a reason block
+        appended to it is prose and would not parse."""
+        res = self._result(name, args)
+        first = res["content"][0].get("text", "") if res["content"] else ""
         try:
-            return json.loads(text)
+            return json.loads(first)
         except json.JSONDecodeError as exc:
-            raise Fail(f"{name} did not return JSON: {exc}\n{text[:400]}") from exc
+            raise Fail(f"{name} did not return JSON: {exc}\n{first[:400]}") from exc
 
     def initialize(self) -> dict:
         r = self.call(

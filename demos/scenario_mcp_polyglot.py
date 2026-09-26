@@ -114,7 +114,9 @@ def run(sc: Scenario) -> None:
 
         sc.step("Ask MCP what to do next, and claim it")
         nxt, code = mcp.tool("ddflow_next", phase="P1")
-        data = json.loads(nxt)
+        # `jtool` for the structured body: `next` at exit 2 carries its reason as a second
+        # content block, so the joined text this keeps for the failure message is not JSON.
+        data = mcp.jtool("ddflow_next", phase="P1")
         sc.check(
             "MCP offers exactly the unblocked task",
             [r["id"] for r in data["ready"]] == ["P1.T1"],
@@ -125,7 +127,7 @@ def run(sc: Scenario) -> None:
             "ddflow_claim", id="P1.T1", globs="src/slugify.js,test/slugify.test.js"
         )
         sc.check("the claim succeeded over MCP", code == 0, claim)
-        wt = Path(json.loads(claim)["worktree"])
+        wt = Path(mcp.jtool("ddflow_show", id="P1.T1")["worktree"])
         sc.check("a real git worktree was created", (wt / ".git").exists())
 
         sc.step("Write real JavaScript in the worktree")
@@ -219,13 +221,15 @@ def run(sc: Scenario) -> None:
             mcp_board.strip() == cli_board.strip(),
             f"MCP {len(mcp_board)}B vs CLI {len(cli_board)}B",
         )
-        mcp_next, _ = mcp.tool("ddflow_next", phase="P1")
         # exit 2 here is correct (T1 is claimed, T2 is blocked); the
         # check is that BOTH surfaces say the same thing, not what it is.
+        # `jtool`, not `tool`: at exit 2 the reason is its own content block, so the
+        # joined text `tool` returns is deliberately not JSON.
+        mcp_next = mcp.jtool("ddflow_next", phase="P1")
         cli_next = sc.ddflow("--json", "next", "--phase", "P1", expect=None)[1]
         sc.check(
             "the MCP and CLI schedulers agree exactly",
-            json.loads(mcp_next)["blocked"] == json.loads(cli_next)["blocked"],
+            mcp_next["blocked"] == json.loads(cli_next)["blocked"],
         )
         sc.note(
             "MCP is a second door onto one implementation. These two checks are "

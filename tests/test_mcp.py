@@ -127,7 +127,16 @@ def test_a_refused_claim_reaches_the_model_as_content(proj):
     )
     res = r[0]["result"]
     assert res["_meta"]["exit"] == 3
-    assert "held by" in res["content"][0]["text"]
+    # Across ALL content blocks, which is what "reaches the model as content" means. The
+    # reason is its own block rather than a prefix on the JSON, because prepending it made
+    # `json.loads(content[0].text)` fail at character 0 for every machine consumer — three
+    # demo scenarios broke on exactly that.
+    blocks = [c["text"] for c in res["content"]]
+    assert any("held by" in text for text in blocks), blocks
+    # And the structured half is still the FIRST block, parseable on its own.
+    import json as _json
+
+    assert isinstance(_json.loads(blocks[0]), dict), blocks[0]
 
 
 def test_unknown_tool_is_an_error_result_listing_alternatives(proj):

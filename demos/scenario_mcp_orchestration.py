@@ -716,7 +716,9 @@ def run(sc: Scenario) -> None:
         alpha.tool("ddflow_task_add", id="X.B", phase="PX", needs="X.A", globs="x/b")
         alpha.tool("ddflow_task_add", id="X.C", phase="PX", needs="X.B", globs="x/c")
         loops, lcode = alpha.tool("ddflow_loops")
-        found = json.loads(loops)
+        # `jtool`: `loops` exits 1 when it finds something, so its reason is a second
+        # content block and the joined text is not JSON.
+        found = alpha.jtool("ddflow_loops")
         cyc = [f for f in found if f["kind"] == "dependency_cycle"]
         sc.check("the cycle is detected", cyc, loops[:300])
         sc.check(

@@ -330,7 +330,11 @@ def test_every_workflow_command_is_reachable_over_mcp(repo):
         "ddflow_workflow_pipeline", {"which": "task", "gates": "unit_tests", "dry_run": True}
     )
     assert broken["isError"] is True, broken
-    assert "incoherent" in broken["content"][0]["text"], broken
+    # Across ALL blocks: the reason is its own content block, not a prefix on the JSON,
+    # because prepending it made `json.loads(content[0].text)` fail at character 0 for
+    # every machine consumer. Block 0 stays parseable.
+    assert any("incoherent" in c["text"] for c in broken["content"]), broken
+    assert _json.loads(broken["content"][0]["text"])["applied"] is False, broken
 
     # A refusal must still carry the PROJECTED SHAPE. `Outcome.body` used to index the
     # keys, so an outcome that had less to say raised KeyError inside the dispatcher and
@@ -344,8 +348,9 @@ def test_every_workflow_command_is_reachable_over_mcp(repo):
         ("ddflow_workflow_gate", {"id": "nothing-to-change-here"}),
     ):
         answered = call(name, arguments)
-        text = answered["content"][0]["text"]
-        body = _json.loads(text[text.index("{") :])
+        # Block 0 IS the JSON, with no prose to skip past — that is the property the
+        # two-block shape gives, and indexing to the first `{` would hide its loss.
+        body = _json.loads(answered["content"][0]["text"])
         assert "applied" in body, f"{name} dropped `applied` from a refusal: {body}"
         assert body["applied"] is False, f"{name} reported a refusal as applied: {body}"
 

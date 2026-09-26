@@ -208,11 +208,31 @@ def test_a_refusal_is_not_an_error_on_the_typed_path():
     assert _outcome_result(O.failed("k", "broke"))["isError"] is True
 
 
-def test_the_reason_leads_the_body_so_a_reader_gets_it_first():
+def test_the_reason_is_its_OWN_content_block_never_a_prefix():
+    """It used to be prepended to the JSON. That reads well and breaks every machine
+    consumer: `json.loads(content[0].text)` fails at character 0.
+
+    `demos/harness.py::jtool` does exactly that, and three of six demo scenarios broke
+    silently during the B37 migration — for every tool whose outcome is exit 2 or 3, which
+    on a fresh project is most of the read-only ones. The wire-shape comparison missed it
+    because it skipped to the first `{` before parsing, which is the accommodation its own
+    docstring warns about.
+
+    Both readers are served by two blocks: a machine indexes `content[0]`, a model is shown
+    all of them.
+    """
+    import json as _json
+
     from ddflow.surfaces.mcp import _outcome_result
 
-    body = _outcome_result(O.refused("k", "lease held by beta"))["content"][0]["text"]
-    assert body.splitlines()[0] == "lease held by beta", body[:120]
+    out = _outcome_result(O.refused("k", "lease held by beta", rows=[]))
+    assert _json.loads(out["content"][0]["text"]) == {"rows": []}, out["content"][0]["text"]
+    assert out["content"][1]["text"] == "lease held by beta", out["content"]
+    assert out["_meta"]["exit"] == REFUSED
+
+    # No reason, no second block — an empty one would be a block consumers must skip.
+    quiet = _outcome_result(O.ok("k", rows=[1]))
+    assert len(quiet["content"]) == 1, quiet["content"]
 
 
 # -- B37: one answer, two presentations -------------------------------------------------
@@ -809,9 +829,10 @@ def test_a_document_body_is_not_prefixed_with_the_reason():
     assert body == "the report\n2 problem(s).", body
     assert body.count("2 problem(s)") == 1, body
 
-    # JSON bodies keep the reason first, unchanged.
-    j = _outcome_result(O.failed("k", "broke", rows=[]), "rows")["content"][0]["text"]
-    assert j.splitlines()[0] == "broke", j
+    # A JSON body stays parseable at `content[0]`; its reason is the second block.
+    failed_json = _outcome_result(O.failed("k", "broke", rows=[]), "rows")
+    assert failed_json["content"][0]["text"] == "[]", failed_json["content"]
+    assert failed_json["content"][1]["text"] == "broke", failed_json["content"]
 
 
 def test_an_EMPTY_document_falls_back_to_the_reason():
@@ -1495,3 +1516,52 @@ def test_a_max_tasks_flag_overrides_the_config_knob(repo):
     tasks = [f for f in by_flag.data["found"] if f["kind"] == "task"]
     assert len(tasks) == 3, f"the flag did not override the knob: {len(tasks)} tasks"
     assert not any("REFUSING" in n for n in by_flag.data["notes"]), by_flag.data["notes"]
+
+
+def test_the_out_of_order_warning_reaches_the_AGENT_too(repo):
+    """B160. It printed to stderr only, and `_run_cli` captured stdout.
+
+    So an agent recording `rubber_duck` before `implement` was told NOTHING, and the only
+    trace was a `gate.out_of_order` event nobody reads back. Third occurrence of the class
+    whose comment still sits in `cmd_complete`: "it used to print only in human mode, so an
+    agent driving over MCP was never told that a gate had not run."
+
+    Adding a key to a body consumers parse is why this is its own change rather than part
+    of the B37 migration. `null` when the recording was in order, so the shape is stable
+    and a consumer can branch on it rather than on presence.
+    """
+    import json as _json
+
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    pipeline = _pipeline(repo)
+    first, later = pipeline[0], pipeline[-2]
+
+    def record(gate):
+        reply = Server(repo).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "ddflow_gate_record",
+                    "arguments": {"id": "T1", "gate": gate, "outcome": "passed", "evidence": "ok"},
+                },
+            }
+        )["result"]
+        text = reply["content"][0]["text"]
+        return _json.loads(text[text.index("{") :])
+
+    out_of_order = record(later)
+    assert "warning" in out_of_order, f"the agent still cannot see it: {out_of_order}"
+    assert out_of_order["warning"], out_of_order
+    assert first in out_of_order["warning"], out_of_order["warning"]
+    assert "enforce_order" in out_of_order["warning"], out_of_order["warning"]
+
+    # In order: the key is still THERE, and null. A consumer branching on presence rather
+    # than on truth is the reason projections are shape-stable.
+    in_order = record(first)
+    assert "warning" in in_order, in_order
+    assert not in_order["warning"], in_order
