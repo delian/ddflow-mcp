@@ -753,25 +753,27 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "decision",
-            "add",
-            *_opt("--id", a),
-            "--title",
-            a.get("title", ""),
-            "--decision",
-            a.get("decision", ""),
-            *_opt("--context", a),
-            *_opt("--consequences", a),
-            *_opt("--alternatives", a),
-            *_opt("--globs", a),
-            *_opt("--by", a),
-            *_opt("--supersedes", a),
-            *_opt("--item", a),
-            *_opt("--tags", a) + _opt("--sources", a),
-            *_opt("--status", a),
-        ],
+        "api": lambda repo, a, agent: _api().decision_add(
+            repo,
+            _api().decisions.Draft(
+                title=a.get("title", ""),
+                decision=a.get("decision", ""),
+                id=a.get("id", "") or "",
+                context=a.get("context", "") or "",
+                consequences=a.get("consequences", "") or "",
+                alternatives=a.get("alternatives", "") or "",
+                globs=a.get("globs", "") or "",
+                tags=a.get("tags", "") or "",
+                sources=a.get("sources", "") or "",
+                status=a.get("status", "") or "accepted",
+                by=a.get("by", "") or "",
+                item=a.get("item", "") or "",
+                supersedes=a.get("supersedes", "") or "",
+            ),
+            agent=agent,
+        ),
+        # `{"id": "..."}` — what `ddflow decision add --json` has always printed.
+        "payload": ("id",),
     },
     "ddflow_decision_list": {
         "description": (
@@ -780,7 +782,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "because how the architecture got here is what a rebuild needs."
         ),
         "properties": {"all": ("boolean", "Include superseded decisions.", False)},
-        "argv": lambda a: ["--json", "decision", "list", *(["--all"] if a.get("all") else [])],
+        "api": lambda repo, a, agent: _api().decision_list(repo, all=bool(a.get("all"))),
+        "payload": "rows",
     },
     "ddflow_decision_applicable": {
         "description": (
@@ -790,7 +793,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "project-wide decisions too."
         ),
         "properties": {"id": ("string", "Item id.", True)},
-        "argv": lambda a: ["--json", "decision", "applicable", a["id"]],
+        "api": lambda repo, a, agent: _api().decision_applicable(repo, a["id"]),
+        "payload": ("applicable", "project_wide"),
     },
     "ddflow_decision_supersede": {
         "description": (
@@ -803,15 +807,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "by": ("string", "The decision that replaces it.", True),
             "reason": ("string", "Why it changed.", False),
         },
-        "argv": lambda a: [
-            "--json",
-            "decision",
-            "supersede",
-            a["id"],
-            "--by",
-            a.get("by", ""),
-            *_opt("--reason", a),
-        ],
+        "api": lambda repo, a, agent: _api().decision_supersede(
+            repo, a["id"], by=a.get("by", "") or "", reason=a.get("reason", "") or "", agent=agent
+        ),
+        "payload": ("id", "by"),
     },
     "ddflow_replay": {
         "description": (
@@ -1195,7 +1194,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "especially before proposing something it already considered."
         ),
         "properties": {"id": ("string", "Decision id.", True)},
-        "argv": lambda a: ["--json", "decision", "show", a["id"]],
+        "api": lambda repo, a, agent: _api().decision_show(repo, a["id"]),
+        "payload": "decision",
     },
     "ddflow_prompts": {
         "description": (
@@ -1567,7 +1567,7 @@ def _list_or_none(args: dict[str, Any], key: str) -> list[str] | None:
     return csv_list(args[key]) if isinstance(args[key], str) else list(args[key])
 
 
-def _outcome_result(out: Any, payload_key: str = "") -> dict[str, Any]:
+def _outcome_result(out: Any, payload_key: str | tuple[str, ...] = "") -> dict[str, Any]:
     """An `Outcome` as an MCP tool result: JSON body, `isError` only for a real failure.
 
     Exit 2 ("nothing to do") and 3 ("coordination refused") are RESULTS the model must
@@ -1582,8 +1582,10 @@ def _outcome_result(out: Any, payload_key: str = "") -> dict[str, Any]:
     # two demo scenarios did. B37 exists to remove a duplicated rendering, not to
     # redefine contracts, and a migration that changes the wire format is worse than no
     # migration: the duplication was at least honest about what it returned.
-    data = out.data.get(payload_key) if payload_key else out.data
-    body = json.dumps(data, indent=2, default=str)
+    # `Outcome.body` is the ONE implementation of that projection, shared with the
+    # CLI's `--json` -- which is the point, since the property being preserved is that
+    # the two are byte-identical.
+    body = json.dumps(out.body(payload_key), indent=2, default=str)
     if out.reason:
         body = f"{out.reason}\n\n{body}"
     return _text(body, error=(out.exit == 1), meta={"exit": out.exit})

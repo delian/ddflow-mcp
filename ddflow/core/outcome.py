@@ -60,6 +60,32 @@ class Outcome:
     #: because a caller checking "did this work" should not have to know the kind.
     reason: str = ""
 
+    def body(self, payload: str | tuple[str, ...] = "") -> Any:
+        """The WIRE body: what `--json` prints and what the MCP tool returns.
+
+        `data` carries everything either surface might want — counts for a human
+        summary, flags for a warning, the rows themselves. The body a caller has always
+        received is usually a SUBSET of that, and migrating an operation to this layer
+        must not redefine it: `ddflow_loops` silently went from a JSON array to an
+        object and broke two demo scenarios before this was pinned.
+
+        So the tool declares which part is the body, and both surfaces ask the Outcome
+        for it rather than each assembling its own:
+
+            ""                  the whole `data` dict
+            "rows"              that key's value — an array stays an array
+            ("id", "by")        a projection, for bodies that are a small object
+
+        One implementation, because the CLI's `--json` and the MCP body being
+        byte-identical is the property `MIGRATED_WIRE_SHAPES` checks, and two copies of
+        the projection rule is how they would come apart.
+        """
+        if not payload:
+            return self.data
+        if isinstance(payload, str):
+            return self.data[payload]
+        return {k: self.data[k] for k in payload}
+
     @property
     def ok(self) -> bool:
         return self.exit == OK

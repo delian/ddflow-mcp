@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 60
+ARGV_TOOLS_CEILING = 55
 
 
 def _typed() -> list[str]:
@@ -223,9 +223,34 @@ def test_the_reason_leads_the_body_so_a_reader_gets_it_first():
 #: consumers depend on, and B37 exists to remove a duplicated rendering, not to redefine
 #: contracts -- `ddflow_loops` silently went from a JSON array to an object and broke two
 #: demo scenarios before this existed.
-MIGRATED_WIRE_SHAPES: dict[str, list[str]] = {
-    "ddflow_loops": ["loops"],
-    "ddflow_progress": ["progress"],
+#: tool -> (the CLI argv whose `--json` body it must reproduce, the MCP arguments).
+#:
+#: Both halves are needed because the two surfaces take their input differently: the
+#: CLI puts an id in argv, the MCP call puts it in `arguments`. The first version of
+#: this map carried argv only and called every tool with `{}`, which silently made any
+#: tool REQUIRING an argument fail with "missing required argument" instead of
+#: comparing anything — a shape test that never reached the shape.
+MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
+    "ddflow_loops": (["loops"], {}),
+    "ddflow_progress": (["progress"], {}),
+    "ddflow_decision_list": (["decision", "list"], {}),
+    "ddflow_decision_show": (["decision", "show", "D1"], {"id": "D1"}),
+    "ddflow_decision_applicable": (["decision", "applicable", "T1"], {"id": "T1"}),
+}
+
+#: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
+#: invoking them twice is not the same as invoking them once.
+#:
+#: They WRITE. The second call sees the state the first produced, and where the id is
+#: auto-generated it is content-addressed with a nanosecond stamp, so the two bodies
+#: differ by construction. Listing them here — rather than letting them fall out of the
+#: map unnoticed — is what keeps `test_every_typed_tool_has_a_wire_shape_row` honest:
+#: an unlisted tool is a missing contract, and a listed one is a deliberate exemption
+#: with a reason. Each still needs its own behavioural test.
+WRITES_NOT_COMPARABLE = {
+    "ddflow_update",
+    "ddflow_decision_add",
+    "ddflow_decision_supersede",
 }
 
 
@@ -247,8 +272,25 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "a.py")
     run_cli(repo, "task", "add", "A", "--needs", "B")
     run_cli(repo, "task", "add", "B", "--needs", "A")  # a cycle, so findings exist
+    # A decision with an EXPLICIT id, governing T1's globs, so the decision tools have
+    # something to return. An auto id would be content-addressed and unrepeatable, and
+    # a comparison of two empty bodies passes without proving anything.
+    run_cli(
+        repo,
+        "decision",
+        "add",
+        "--id",
+        "D1",
+        "--title",
+        "D",
+        "--decision",
+        "use the typed layer",
+        "--globs",
+        "a.py",
+    )
 
-    _code, cli_out, _err = run_cli(repo, "--json", *MIGRATED_WIRE_SHAPES[tool])
+    argv, arguments = MIGRATED_WIRE_SHAPES[tool]
+    _code, cli_out, _err = run_cli(repo, "--json", *argv)
     from_cli = _json.loads(cli_out)
 
     reply = Server(repo).handle(
@@ -256,7 +298,7 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
             "jsonrpc": "2.0",
             "id": 1,
             "method": "tools/call",
-            "params": {"name": tool, "arguments": {}},
+            "params": {"name": tool, "arguments": arguments},
         }
     )
     text = reply["result"]["content"][0]["text"]
@@ -275,9 +317,7 @@ def test_every_typed_tool_has_a_wire_shape_row():
     """A migration without a row is a migration nothing checks. The map is the ratchet:
     `ARGV_TOOLS_CEILING` counts what is left, this covers what has moved."""
     typed = {n for n, s in TOOLS.items() if "api" in s}
-    # `ddflow_update` writes and has no `--json` read to compare against; it is covered
-    # by `test_the_dispatcher_actually_uses_the_typed_path` instead.
-    unchecked = typed - set(MIGRATED_WIRE_SHAPES) - {"ddflow_update"}
+    unchecked = typed - set(MIGRATED_WIRE_SHAPES) - WRITES_NOT_COMPARABLE
     assert not unchecked, (
         f"migrated with no wire-shape row: {sorted(unchecked)}. Add one to "
         f"MIGRATED_WIRE_SHAPES so the contract is checked."
@@ -337,3 +377,121 @@ def test_a_migrated_tool_keeps_its_exit_contract(repo):
     run_cli(repo, "task", "add", "A", "--needs", "B")
     run_cli(repo, "task", "add", "B", "--needs", "A")
     assert run_cli(repo, "loops")[0] == FAIL
+
+
+# -- the write tools, which the shape comparison cannot reach ---------------------------
+
+
+def test_recording_a_decision_over_mcp_records_it(repo):
+    """`ddflow_decision_add` on the typed path, end to end.
+
+    It is exempt from `MIGRATED_WIRE_SHAPES` because running it twice records two
+    decisions with different ids — so the contract is checked by asserting what it DID,
+    which is the thing a consumer actually depends on.
+    """
+    import json as _json
+
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_decision_add",
+                "arguments": {
+                    "title": "Use pluggy",
+                    "decision": "every stage is a Step",
+                    "globs": "ddflow/steps/*",
+                },
+            },
+        }
+    )
+    assert reply["result"]["isError"] is False, reply
+    text = reply["result"]["content"][0]["text"]
+    body = _json.loads(text[text.index("{") :])
+    assert set(body) == {"id"}, f"the wire body was {body}, not {{'id': ...}}"
+
+    _code, out, _ = run_cli(repo, "--json", "decision", "list")
+    rows = _json.loads(out)
+    assert [r["id"] for r in rows] == [body["id"]], "the decision was not recorded"
+    assert rows[0]["globs"] == ["ddflow/steps/*"], "globs were dropped on the way through"
+
+
+def test_a_decision_with_no_globs_warns_on_BOTH_surfaces(repo):
+    """The bug class this layer exists for.
+
+    A decision with no globs cannot be surfaced automatically to an agent working the
+    code it governs — it will only ever be found by someone already looking. That
+    warning was computed inside the human branch of `_decision_add`, so the agent
+    driving over MCP, which is always JSON, was never told. It is now a field on the
+    Outcome and both surfaces read it.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    without = api.decision_add(repo, api.decisions.Draft(title="t", decision="d"))
+    with_globs = api.decision_add(repo, api.decisions.Draft(title="t", decision="d", globs="x.py"))
+    assert without.data["ungoverned"] is True
+    assert with_globs.data["ungoverned"] is False
+
+
+def test_superseding_over_mcp_refuses_without_a_replacement(repo):
+    """A decision is never simply deleted. The refusal is the behaviour."""
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "decision", "add", "--id", "D1", "--title", "t", "--decision", "d")
+    assert api.decision_supersede(repo, "D1", by="").exit == FAIL
+    assert api.decision_supersede(repo, "NOPE", by="D2").exit == FAIL
+    assert api.decision_supersede(repo, "D1", by="D2").exit == OK
+
+
+def test_a_decision_must_say_what_was_DECIDED(repo):
+    """The refusal that gives the record its value, probed for the first time.
+
+    `_decision_add` has always refused a record with no `--decision`: notes about what
+    was *discussed* are indistinguishable from a decision, and the next agent cannot
+    act on them. Nothing tested it — mutating the guard to `if False and ...` left the
+    entire decisions suite green, which is how a deliberate refusal quietly becomes
+    optional. Found by mutation-testing the B37 migration of this family.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    refused = api.decision_add(repo, api.decisions.Draft(title="we talked about caching"))
+    assert refused.exit == FAIL, refused
+    assert "what was DECIDED" in refused.reason
+
+    _code, out, _ = run_cli(repo, "--json", "decision", "list")
+    assert json.loads(out) == [], "a refused decision was recorded anyway"
+
+    accepted = api.decision_add(
+        repo, api.decisions.Draft(title="caching", decision="cache on the fingerprint")
+    )
+    assert accepted.exit == OK, accepted
+
+
+def test_superseded_decisions_are_hidden_but_COUNTED(repo):
+    """ "3 superseded, --all to include them" needs the number to be real.
+
+    `decision list` shows only what is in force, which is right — but a reader who is
+    not told that anything was hidden cannot know to ask. The count is on the Outcome so
+    both surfaces have it; mutating it to a constant `0` also left the suite green.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "decision", "add", "--id", "D1", "--title", "old", "--decision", "a")
+    run_cli(repo, "decision", "add", "--id", "D2", "--title", "new", "--decision", "b")
+    run_cli(repo, "decision", "supersede", "D1", "--by", "D2")
+
+    live = api.decision_list(repo)
+    assert [r["id"] for r in live.data["rows"]] == ["D2"]
+    assert live.data["hidden"] == 1, "the superseded decision was hidden AND uncounted"
+
+    every = api.decision_list(repo, all=True)
+    assert {r["id"] for r in every.data["rows"]} == {"D1", "D2"}
+    assert every.data["hidden"] == 0, "--all hides nothing, so it must count nothing"

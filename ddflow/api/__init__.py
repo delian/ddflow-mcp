@@ -1,0 +1,63 @@
+"""The application layer: one typed entry point per operation, for both surfaces.
+
+`surfaces/mcp.py` reached `surfaces/cli.py` — a protocol adapter depending on a
+presentation layer — and the edge was carried by **strings**. Typed MCP arguments were
+flattened to argv, re-parsed by argparse, and the result recovered by scraping stdout
+plus an exit code. Two costs are visible in the code itself:
+
+* `mcp._opt(..., clearable=True)` exists only to rebuild the "absent vs empty"
+  distinction argv erased. `ddflow_update(id="X", needs="")` silently did nothing while
+  `ddflow update X --needs ""` cleared the field — and breaking a dependency cycle is
+  exactly the operation that needs it, and the one the loop detector tells you to do.
+  In a typed call `None` and `""` are simply different values and no helper is needed.
+* `mcp._run_cli` swaps process-global `sys.stdout`/`sys.stderr` for every call. That is
+  not reentrant: it forecloses concurrency in a server for a tool whose entire purpose
+  is parallel agents.
+
+Parity was held by ratchets where types would hold it structurally, and those ratchets
+catch a *missing* flag, never a *changed encoding*.
+
+**Migration, not a rewrite.** Each operation here is one a surface used to implement
+inline. A tool with an `api` entry is dispatched through this module; the rest still go
+through argv, and `tests/test_mcp_parity.py` counts the remainder and refuses to let it
+grow. A big-bang port of ~60 commands would be one unreviewable change against a suite
+that cannot tell which half broke.
+
+Every function takes plain values and returns an `Outcome` — one description of a
+result, from which both the machine view (`data`) and the human view are derived. It is
+never both surfaces describing the same thing independently, which is the shape that
+produced the bug still commented in `cmd_complete`: a coverage gap printed in human
+mode only, invisible to the agent reading JSON that most needed it.
+"""
+
+from __future__ import annotations
+
+# Re-exported so `api.progress(...)` keeps working after the split. The surfaces reach
+# this layer through the PACKAGE (`_api().progress`), never through a family module, so
+# moving an operation between families is not a breaking change.
+from ._base import _load
+from .completion import completion_verdict
+from .decisions import (
+    decision_add,
+    decision_applicable,
+    decision_list,
+    decision_search,
+    decision_show,
+    decision_supersede,
+)
+from .items import update
+from .reporting import loops, progress
+
+__all__ = [
+    "_load",
+    "completion_verdict",
+    "decision_add",
+    "decision_applicable",
+    "decision_list",
+    "decision_search",
+    "decision_show",
+    "decision_supersede",
+    "loops",
+    "progress",
+    "update",
+]

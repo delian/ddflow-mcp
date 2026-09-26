@@ -15,16 +15,15 @@ belongs in `api/`.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import sys
-import time
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.ids import auto_id
 from ..core.model import fold
 from ..infra import worktree as W
 from ..infra.log import EventLog, resolve_agent_id
@@ -140,20 +139,10 @@ def _csv(v: str | None) -> list[str]:
     return csv_list(v)
 
 
-def _auto_id(prefix: str, *parts: str) -> str:
-    """A collision-free auto id.
-
-    Second-resolution timestamps (`f"L{int(time.time())}"`) collide whenever two items
-    are created in the same second -- which a script, a loop, or an agent recording two
-    lessons from one bug hunt does routinely. The collision is SILENT: the second record
-    overwrites the first in the fold, so the entry simply disappears. Measured: 7
-    lessons added in one second, 2 survived.
-
-    Content-addressed instead, so the id is stable for identical content and distinct
-    for anything else, with a microsecond stamp to separate genuine duplicates.
-    """
-    seed = "|".join(parts) + f"|{time.time_ns()}"
-    return prefix + hashlib.blake2b(seed.encode("utf-8"), digest_size=5).hexdigest()
+#: Re-exported, not reimplemented. The `api` layer needs the same generator and may
+#: not import a surface to get it, so the function moved down to `core/ids.py` and this
+#: name stays for the command modules that already call it.
+_auto_id = auto_id
 
 
 # -- commands --------------------------------------------------------------------------
