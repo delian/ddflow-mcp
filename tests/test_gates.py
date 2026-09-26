@@ -434,8 +434,13 @@ def test_a_command_gate_records_how_much_had_changed(repo):
 
     _outcome, ev = run_command_gate(GateDef(id="probe", command="true", cwd="repo"), repo)
     stat = ev["diff_stat"]
-    assert stat["files"] == 1, stat
-    assert stat["insertions"] == 2, stat
+    # `files` and `insertions` count TRACKED changes plus UNTRACKED files: 2 added lines
+    # in `tracked.py`, plus `brand_new.py` at 1 line. An earlier version expected
+    # `files == 1` / `insertions == 2`, i.e. untracked content excluded — which made a
+    # task consisting entirely of new files report zero insertions while the fingerprint
+    # hashed exactly those bytes.
+    assert stat["files"] == 2, stat
+    assert stat["insertions"] == 3, stat
     assert stat["untracked"] == 1, stat
 
 
@@ -459,3 +464,81 @@ def test_the_diff_stat_keys_always_exist(tmp_path):
     stat = diff_stat(tmp_path)
     assert set(stat) == {"files", "insertions", "deletions", "untracked"}
     assert all(v == 0 for v in stat.values())
+
+
+def test_an_AGENT_gate_records_which_tree_and_how_much_too(repo):
+    """The case the whole rationale was about, and the one it missed.
+
+    `tree_sha` and `diff_stat` were added to `run_command_gate` only — so they never
+    reached `rubber_duck`, `critic` or `standards`, which are agent gates recorded
+    through `gate record`. The motivating sentence was "a REVIEW gate that passed over
+    4,000 changed lines is a different claim from one that passed over 12", and a review
+    gate was exactly what did not get it.
+
+    *roborev on ccb340a, CONFIRMED.*
+    """
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    (repo / "a.py").write_text("a\nb\nc\nd\n")
+    run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "rubber_duck",
+        "--outcome",
+        "passed",
+        "--evidence",
+        "reviewed",
+        "--model",
+        "gemini",
+    )
+
+    ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["rubber_duck"].evidence
+    assert ev.get("tree_sha"), f"no tree_sha on an agent gate: {sorted(ev)}"
+    assert ev.get("diff_stat"), f"no diff_stat on an agent gate: {sorted(ev)}"
+    assert ev["diff_stat"]["insertions"] > 0, ev["diff_stat"]
+
+
+def test_a_SKIP_records_no_magnitude(repo):
+    """Nothing was reviewed, so a line count would imply an inspection that did not
+    happen — the same overclaim the field exists to prevent, pointing the other way."""
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "gate", "skip", "T1", "rubber_duck", "--reason", "no code changed")
+    ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["rubber_duck"].evidence
+    assert "diff_stat" not in ev, ev
+
+
+def test_the_magnitude_counts_untracked_lines(repo):
+    """`git diff HEAD --numstat` never reports untracked content, so a task that is
+    entirely NEW FILES — the ordinary shape of a new module — showed 0 insertions while
+    `tree_fingerprint` deliberately hashed exactly those bytes. Two halves of the same
+    evidence disagreeing about whether the work exists."""
+    from ddflow.services.gates import diff_stat
+
+    (repo / "brand_new.py").write_text("one\ntwo\nthree\n")
+    stat = diff_stat(repo)
+    assert stat["untracked"] == 1, stat
+    assert stat["insertions"] >= 3, f"untracked lines were not counted: {stat}"
+
+
+def test_the_magnitude_works_before_the_first_commit(repo, tmp_path):
+    """The no-HEAD early return discarded the untracked count, which needs no commit. So
+    `git init` + scaffold + run the test gate reported every field zero — the one run
+    where everything is new reported the smallest possible change."""
+    import subprocess
+
+    from ddflow.services.gates import diff_stat
+
+    fresh = tmp_path / "fresh"
+    fresh.mkdir()
+    subprocess.run(["git", "init", "-q", str(fresh)], check=True)
+    (fresh / "new.py").write_text("a\nb\nc\n")
+    stat = diff_stat(fresh)
+    assert stat["untracked"] == 1, stat
+    assert stat["insertions"] == 3, stat

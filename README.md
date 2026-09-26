@@ -501,10 +501,10 @@ Companion tools
        gates: standards
        installed (…) but no agent is configured to launch it.
        -> ddflow companions add --id codeguide
-  [ ] codeguide  Language and framework coding standards
-       gates: standards
-       not here: codeguide-mcp is not on PATH
-       -> npm install -g codeguide-mcp
+  [ ] sequential Structured step-by-step reasoning
+       gates: research, rubber_duck, bug_hunt
+       not here: `npx --no-install @modelcontextprotocol/server-sequential-thinking` exited 1
+       -> ask the operator, then: npx -y @modelcontextprotocol/server-sequential-thinking
 
 Gates in this project's task pipeline with no companion behind them:
   rules, implement, rubber_duck, critic, unit_tests, bug_hunt, dedupe, merge
@@ -891,8 +891,9 @@ linter reporting problems. Fixed, with a mutation-verified regression test.)
 **Evidence or it did not happen.** Gates in `gates.evidence_required` reject a bare pass;
 they want the command, its exit code and its output digest.
 
-**And evidence says WHICH tree and HOW MUCH.** Every command gate records a
-`tree_sha` — a fingerprint of the working tree it ran against, covering committed
+**And evidence says WHICH tree and HOW MUCH.** Every gate that produces an OUTCOME —
+command gates, and agent gates recorded with `gate record` — carries a
+`tree_sha`: a fingerprint of the working tree it ran against, covering committed
 state, uncommitted changes to tracked files, *and* the content of untracked ones (a new
 module is untracked until its first commit, which is the ordinary state of agent work).
 ddflow's own `.ddflow/` is excluded, or recording a gate's outcome would invalidate the
@@ -900,11 +901,15 @@ gate that just recorded it. If the tree moves afterwards, `complete` warns that 
 describes source nobody is shipping — a warning, not a block, because refusing on a
 comment-sized change is how a check gets switched off.
 
-Beside it, `diff_stat` records files, insertions, deletions and untracked count. The
-fingerprint answers *which* tree and is opaque; this answers *how big*, and that is what
-makes a pass auditable later — a review gate that passed over 4,000 changed lines in
-two minutes is a different claim from one that passed over 12, and without it the log
-cannot tell them apart.
+Beside it, `diff_stat` records files, insertions, deletions and untracked count —
+including the *lines* in untracked files, because a new module is untracked until its
+first commit and a task that is entirely new files would otherwise report zero
+insertions. The fingerprint answers *which* tree and is opaque; this answers *how big*,
+and that is what makes a pass auditable later — a review gate that passed over 4,000
+changed lines in two minutes is a different claim from one that passed over 12.
+
+Neither is recorded for a **skip** (nothing was reviewed, so a magnitude would imply an
+inspection that did not happen) nor for an `unavailable` gate that never ran.
 
 Hashing untracked content is capped by `MAX_UNTRACKED_HASHED` (512). Above it the
 fingerprint falls back to file *names* and says so inside the digest, because a check

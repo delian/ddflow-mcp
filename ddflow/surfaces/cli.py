@@ -421,6 +421,12 @@ def cmd_claim(a, c: Ctx) -> int:
             stored = W.store_path(c.repo, adopted.path)
             held = _worktree_held_by(c, stored, a.id)
             if held:
+                # RELEASE the lease before refusing. `L.acquire` ran before this
+                # check, so returning here left the item leased by an agent that was
+                # told it could not have it -- the refusal created exactly the stuck
+                # claim that `recover` exists to clean up, and the caller had no way to
+                # know it needed cleaning.
+                L.release(c.log, a.id, note="claim refused: worktree conflict")
                 print(
                     f"this worktree is already bound to {held}, which is still open. "
                     f"Two items sharing one tree cannot be merged or recovered "
@@ -730,6 +736,19 @@ def cmd_gate(a, c: Ctx) -> int:
             ev["output_digest"] = G.digest(txt)
             ev["output_bytes"] = len(txt)
             ev["tail"] = txt[-2000:]
+        # WHICH tree and HOW MUCH, for AGENT gates too. These were added to
+        # `run_command_gate` only, so they never reached the gates the rationale was
+        # written about: "a review gate that passed over 4,000 changed lines in two
+        # minutes is a different claim from one that passed over 12" -- and `rubber_duck`,
+        # `critic` and `standards` are all agent gates recorded through this branch. The
+        # feature missed its own motivating case.
+        #
+        # Not for a SKIP: nothing was reviewed, so a magnitude would imply an inspection
+        # that did not happen.
+        if a.gate_cmd == "record":
+            wt = (W.load_path(c.repo, it.worktree) if it.worktree else None) or c.repo
+            ev.setdefault("tree_sha", G.tree_fingerprint(wt))
+            ev.setdefault("diff_stat", G.diff_stat(wt))
         try:
             G.record(
                 c.log,
@@ -996,7 +1015,17 @@ def cmd_merge(a, c: Ctx) -> int:
         evidence={"sha": sha, "branch": wt.branch},
         gates=c.gates,
     )
-    if c.cfg.worktree.remove_on_merge and not a.keep:
+    # NEVER remove an ADOPTED tree. ddflow did not create it; the agent's harness did,
+    # and it may still be working in it. Deleting it takes uncommitted work with it —
+    # a worse failure than the rival-worktree problem adoption was written to fix, and
+    # one the adoption commit claimed to prevent while recording nothing the fold could
+    # act on.
+    if it.adopted:
+        print(
+            f"  worktree {wt.path} kept: adopted, not created by ddflow.",
+            file=sys.stderr,
+        )
+    elif c.cfg.worktree.remove_on_merge and not a.keep:
         rr = W.remove(c.repo, c.cfg, wt)
         if rr.ok:
             c.log.append("worktree.removed", a.id, {"path": str(wt.path)})
@@ -2729,17 +2758,35 @@ def cmd_companions(a, c: Ctx) -> int:
             return REFUSED
         agents = _csv(a.agents) or ["claude"]
         dry = bool(getattr(a, "dry_run", False))
-        actions = [
+        results = [
             CO.register(c.repo, by_id[w].companion, ag, dry_run=dry)
             for w in wanted
             for ag in agents
         ]
+        actions = [msg for _st, msg in results]
+        # A REFUSAL is not a success. `register` used to return only the message, so an
+        # unparseable `.mcp.json` printed "SKIPPED ... not valid JSON", reported
+        # `applied: true` and exited 0 -- nothing written, surface saying otherwise.
+        refused = [msg for st, msg in results if st == "refused"]
+        wrote = [msg for st, msg in results if st == "written"]
         head = (
             "Nothing was written. Show the operator this, and register it only if they agree:\n"
             if dry
             else ""
         )
-        c.out(head + "\n".join(f"  {x}" for x in actions), {"actions": actions, "applied": not dry})
+        c.out(
+            head + "\n".join(f"  {x}" for x in actions),
+            {
+                "actions": actions,
+                # What actually happened, per entry -- not one flag asserting it all
+                # worked. `applied` is true only when something was really written.
+                "applied": bool(wrote) and not dry,
+                "written": len(wrote),
+                "refused": refused,
+            },
+        )
+        if refused:
+            return FAIL
         return OK
 
     pipeline = list(c.cfg.gates.task_pipeline)

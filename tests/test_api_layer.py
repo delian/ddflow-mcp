@@ -247,7 +247,13 @@ def test_a_migrated_tool_gives_both_surfaces_the_SAME_data(repo):
         }
     )
     text = reply["result"]["content"][0]["text"]
-    from_mcp = _json.loads(text[text.index("{") :])["findings"]
+    # Parsed WITHOUT reaching into a key. The first version indexed `["findings"]`, which
+    # validated the contents while missing that the top-level SHAPE had changed from an
+    # array to an object -- the exact break it was written to prevent, hidden by the
+    # test's own accommodation of it.
+    start = min((i for i in (text.find("["), text.find("{")) if i != -1), default=-1)
+    from_mcp = _json.loads(text[start:])
+    assert isinstance(from_mcp, list), f"the MCP body is no longer an array: {text[:200]}"
     assert from_mcp == from_cli, (
         f"the two surfaces disagree about the same answer:\nCLI: {from_cli}\nMCP: {from_mcp}"
     )

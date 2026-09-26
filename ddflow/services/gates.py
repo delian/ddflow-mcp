@@ -596,6 +596,20 @@ MAX_UNTRACKED_HASHED = 512
 FINGERPRINT_EXCLUDE: tuple[str, ...] = (":(exclude).ddflow", ":(exclude).ddflow/**")
 
 
+def _untracked_paths(cwd: Path) -> list[str]:
+    """Untracked, non-ignored paths, excluding ddflow's own state. ONE spelling.
+
+    `git ls-files --others --exclude-standard -- . *FINGERPRINT_EXCLUDE` was written out
+    twice in this module and run twice per gate. Two copies of an argv list is two
+    chances for one of them to forget the exclusion, which is exactly how `.ddflow/`
+    crept into a fingerprint and made every completion warn that the tree had moved.
+    """
+    from ..infra import worktree as W
+
+    r = W.git(cwd, "ls-files", "--others", "--exclude-standard", "--", ".", *FINGERPRINT_EXCLUDE)
+    return r.out.splitlines() if r.ok and r.out.strip() else []
+
+
 def _untracked_digest(cwd: Path) -> str:
     """Content ids for untracked files, or their names when there are too many.
 
@@ -605,12 +619,9 @@ def _untracked_digest(cwd: Path) -> str:
     """
     from ..infra import worktree as W
 
-    listed = W.git(
-        cwd, "ls-files", "--others", "--exclude-standard", "--", ".", *FINGERPRINT_EXCLUDE
-    )
-    if not listed.ok or not listed.out.strip():
+    paths = _untracked_paths(cwd)
+    if not paths:
         return ""
-    paths = listed.out.splitlines()
     if len(paths) > MAX_UNTRACKED_HASHED:
         # Names only. Degraded, and SAID so in the digest rather than silently: a
         # fingerprint that quietly stopped covering content would make `stale_evidence`
@@ -652,6 +663,28 @@ def diff_stat(cwd: Path) -> dict[str, int]:
     from ..infra import worktree as W
 
     out = {"files": 0, "insertions": 0, "deletions": 0, "untracked": 0}
+    # Untracked FIRST, and outside the HEAD guard: it needs no commit. A repository
+    # before its first commit -- `git init`, scaffold a module, run the test gate -- used
+    # to report every field zero, so the one gate run where everything is new reported
+    # the smallest possible change.
+    untracked = _untracked_paths(cwd)
+    out["untracked"] = len(untracked)
+    # ...and their LINES count toward the magnitude. `git diff HEAD --numstat` never
+    # reports untracked content, so a task that is entirely new files -- the ordinary
+    # shape of a new module -- showed 0 insertions while `tree_fingerprint` deliberately
+    # hashes exactly those bytes. The two halves of the same evidence disagreed about
+    # whether the work existed.
+    if len(untracked) <= MAX_UNTRACKED_HASHED:
+        for rel in untracked:
+            try:
+                blob = (Path(cwd) / rel).read_bytes()
+            except OSError:
+                continue
+            if b"\0" in blob[:8000]:
+                out["files"] += 1  # binary: a changed file with no line count
+                continue
+            out["insertions"] += blob.count(b"\n") + (0 if blob.endswith(b"\n") or not blob else 1)
+            out["files"] += 1
     if not W.git(cwd, "rev-parse", "HEAD").ok:
         return out
     r = W.git(cwd, "diff", "HEAD", "--numstat", "--", ".", *FINGERPRINT_EXCLUDE)

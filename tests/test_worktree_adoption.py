@@ -196,3 +196,102 @@ def test_the_detector_says_no_in_the_primary(repo):
     from ddflow.infra.worktree import current
 
     assert current(repo) is None
+
+
+# -- what roborev found: the safety claim, the surface, and the lease ------------------
+
+
+def test_merge_does_NOT_delete_an_adopted_worktree(repo):
+    """The claim the adoption commit made in three places and never implemented.
+
+    `worktree.adopted` folded through the SAME handler as `worktree.created`, so the one
+    bit that mattered — whether ddflow made the tree — was discarded. `remove_on_merge`
+    then deleted the agent's own worktree, taking any uncommitted work with it. The
+    in-memory `created=False` flag could never have protected it: `merge` runs in a later
+    process with only the fold to consult.
+
+    *roborev on f0cd7ec, HIGH, CONFIRMED — probed and reproduced before fixing.*
+    """
+    run_cli(repo, "init")
+    agent_tree = _agent_worktree(repo)
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(agent_tree, "claim", "T1")
+    assert _item(repo).adopted is True, "the fold did not record the adoption"
+
+    (agent_tree / "a.py").write_text("work\n")
+    _git(agent_tree, "add", "a.py")
+    _git(agent_tree, "commit", "-m", "the agent's work")
+
+    code, _out, err = run_cli(agent_tree, "merge", "T1")
+    assert code == OK, err
+    assert agent_tree.is_dir(), "merge deleted the tree the harness created"
+    assert "kept" in err.lower(), err
+
+
+def test_merge_still_removes_a_worktree_ddflow_CREATED(repo):
+    """The other half: `remove_on_merge` must keep working for our own trees, or the
+    fix trades a data-loss bug for a disk-filling one."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1")
+    tree = Path(_item(repo).worktree)
+    resolved = tree if tree.is_absolute() else repo / tree
+    (resolved / "a.py").write_text("work\n")
+    _git(resolved, "add", "a.py")
+    _git(resolved, "commit", "-m", "work")
+
+    assert _item(repo).adopted is False
+    code, _out, err = run_cli(repo, "merge", "T1")
+    assert code == OK, err
+    assert not resolved.is_dir(), "a ddflow-created worktree was left behind"
+
+
+def test_adoption_works_over_the_MCP_surface(repo):
+    """The surface the feature was written FOR. `ddflow mcp` resolved its repo to the
+    primary at startup and discarded the caller's location, so `W.current()` always saw
+    the primary and adoption never fired — a CLI-only feature aimed at harnesses that
+    drive MCP.
+
+    *roborev on f0cd7ec, CONFIRMED.*
+    """
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    agent_tree = _agent_worktree(repo)
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+
+    before = len(_worktrees(repo))
+    srv = Server(repo, called_from=agent_tree)
+    srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_claim", "arguments": {"id": "T1"}},
+        }
+    )
+    assert len(_worktrees(repo)) == before, "a rival worktree was created over MCP"
+    it = _item(repo)
+    assert it.adopted is True, "MCP claim did not adopt"
+    assert "agent-tree" in it.worktree, it.worktree
+
+
+def test_a_refused_claim_does_not_leave_the_lease_behind(repo):
+    """The refusal ran AFTER `L.acquire` and returned without releasing, so a claim the
+    tool said no to left the item leased — manufacturing exactly the stuck claim
+    `recover` exists to clean up, with nothing to tell the caller it needed cleaning.
+
+    *roborev on f0cd7ec, CONFIRMED.*
+    """
+    run_cli(repo, "init")
+    agent_tree = _agent_worktree(repo)
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    run_cli(agent_tree, "claim", "T1")
+
+    code, _out, _err = run_cli(agent_tree, "claim", "T2")
+    assert code == REFUSED
+    t2 = _item(repo, "T2")
+    assert not (t2.lease and t2.lease.holder), (
+        f"the refused claim left T2 leased by {t2.lease.holder!r}"
+    )

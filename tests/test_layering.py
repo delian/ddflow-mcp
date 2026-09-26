@@ -305,55 +305,131 @@ def test_the_recordable_gate_outcomes_are_exactly_the_five(repo):
     assert "started" not in GATE_OUTCOMES
 
 
-def test_no_module_level_import_cycles():
-    """No two modules may import each other at MODULE scope, anywhere in the package.
+#: Mutual import pairs with an eager edge that are KNOWN and accepted, each with the
+#: reason. **This set may only ever shrink.** An entry is a latent cycle: it loads today
+#: and becomes a hard `ImportError` the moment somebody makes the other edge eager.
+#:
+#: `core.model` <-> `core.events`: `model` needs `Event` eagerly (it is in every
+#: signature), and `events` derives its kind vocabulary from `model.HANDLERS` — a dict of
+#: handler functions that cannot move without moving the handlers. `events.py:40` records
+#: the lazy import and why. Fixing it means moving validation out of `events` into a
+#: third module; filed as B127 rather than done here, because `core/` is the one layer
+#: whose purity the rest of the suite depends on.
+KNOWN_LATENT_CYCLES: set[tuple[str, str]] = {
+    ("core.model", "core.events"),
+}
 
-    The layer check above deliberately permits same-layer imports (`there != here`), so
-    a cycle between two modules in one layer was invisible to it. `surfaces/cli.py` and
-    `surfaces/mcp.py` were exactly that: `cli` reaches for the tool registry to build
-    its help inventory, `mcp` reached for `cli_main` to run a tool, and the pair was
-    held apart only by ONE of the two edges happening to be function-local. Nothing
-    checked that, so the property was a convention rather than a guarantee — and a
-    convention that survives only while nobody tidies an import.
 
-    Function-local imports are not cycles for this purpose: they bind at call time, so
-    neither module can fail to load because of the other. They are still worth
-    minimising, which is what `ARGV_TOOLS_CEILING` does from the other direction — the
-    `mcp -> cli` edge disappears entirely when the last tool leaves the argv path.
+def _dotted(path: Path) -> str:
+    """The module's dotted name relative to the package, `__init__` collapsed away."""
+    mod = ".".join(path.relative_to(PKG).with_suffix("").parts)
+    return mod.removesuffix(".__init__")
+
+
+def _edges(path: Path) -> tuple[set[str], set[str]]:
+    """(module-scope imports, ALL imports) of other modules in this package.
+
+    Relative imports are resolved against the module's own package. A PACKAGE
+    (`__init__.py`) is its own package, so `from .x` there means `pkg.x`, not
+    `parent.x` — an earlier version subtracted a level for those and would have
+    recorded a wrong edge for the first `__init__` that gained a re-export, either
+    missing a real cycle or inventing one.
     """
     import ast as _ast
-    from collections import defaultdict
 
-    graph: dict[str, set[str]] = defaultdict(set)
-    for path in _modules():
-        mod = ".".join(path.relative_to(PKG).with_suffix("").parts)
-        mod = mod.removesuffix(".__init__")
-        tree = _ast.parse(path.read_text("utf-8"))
-        for node in tree.body:  # MODULE SCOPE ONLY — not a full walk
-            if isinstance(node, _ast.ImportFrom) and node.module is not None:
-                target = node.module
-                if node.level:  # relative: resolve against this module's package
-                    base = mod.rsplit(".", node.level - 1)[0] if node.level > 1 else mod
-                    parent = base.rsplit(".", 1)[0] if "." in base else ""
-                    target = f"{parent}.{node.module}".lstrip(".")
-                graph[mod].add(target.removeprefix("ddflow."))
-            elif isinstance(node, _ast.Import):
-                for alias in node.names:
-                    if alias.name.startswith("ddflow."):
-                        graph[mod].add(alias.name.removeprefix("ddflow."))
+    mod = _dotted(path)
+    pkg = mod if path.name == "__init__.py" else (mod.rsplit(".", 1)[0] if "." in mod else "")
+    tree = _ast.parse(path.read_text("utf-8"))
+    top = {id(n) for n in tree.body}
 
-    known = {
-        ".".join(p.relative_to(PKG).with_suffix("").parts).removesuffix(".__init__")
-        for p in _modules()
-    }
-    cycles = sorted(
-        f"{a} <-> {b}"
-        for a, deps in graph.items()
-        for b in deps
-        if b in known and b != a and a in graph.get(b, ())
+    at_module, everywhere = set(), set()
+    for node in _ast.walk(tree):
+        targets: set[str] = set()
+        if isinstance(node, _ast.ImportFrom):
+            base = pkg
+            for _ in range(max(node.level - 1, 0)):
+                base = base.rsplit(".", 1)[0] if "." in base else ""
+            if node.level == 0:
+                if not (node.module or "").startswith("ddflow"):
+                    continue
+                targets.add((node.module or "").removeprefix("ddflow."))
+            else:
+                targets.add(f"{base}.{node.module}".strip(".") if node.module else base)
+        elif isinstance(node, _ast.Import):
+            targets |= {
+                a.name.removeprefix("ddflow.") for a in node.names if a.name.startswith("ddflow.")
+            }
+        for t in targets - {"", mod}:
+            everywhere.add(t)
+            if id(node) in top:
+                at_module.add(t)
+    return at_module, everywhere
+
+
+def test_no_mutually_importing_pair_has_a_module_level_edge():
+    """Two modules that import each other must BOTH do it lazily, or not at all.
+
+    The first version of this check looked for a module-level 2-cycle, and the operator's
+    cross-family reviewer showed it could not detect the state it was written for. The
+    pre-fix `cli`/`mcp` pair had ONE module-level edge (`mcp -> cli`) and one lazy one, so
+    reverting the fix left the suite GREEN — I had even observed that the half-mutation
+    did not bite and reasoned it away as the check behaving correctly. It was not: the
+    thing at risk was precisely that half-state returning.
+
+    One module-level edge in a mutual pair loads fine TODAY. It is a latent cycle: the
+    moment somebody makes the other edge eager — a tidy-up, an IDE import-organiser —
+    it becomes a hard `ImportError` at startup with no test to catch the change. So the
+    invariant is about the PAIR, not about two eager edges meeting.
+    """
+    scanned = {_dotted(p): _edges(p) for p in _modules()}
+    known = set(scanned)
+    stale = sorted(p for pair in KNOWN_LATENT_CYCLES for p in pair if p not in known)
+    assert not stale, f"allowlisted pairs naming modules that no longer exist: {stale}"
+    bad = []
+    for mod, (at_module, everywhere) in sorted(scanned.items()):
+        for other in sorted(everywhere & known):
+            back = scanned[other][1]
+            if mod not in back:
+                continue  # not mutual; plain layering governs it
+            if (mod, other) in KNOWN_LATENT_CYCLES:
+                continue
+            if other in at_module:
+                bad.append(f"{mod} imports {other} at MODULE level, and {other} imports {mod}")
+    assert not bad, (
+        "latent import cycle — a mutual pair with an eager edge:\n  "
+        + "\n  ".join(bad)
+        + "\nMake BOTH edges function-local, or move what they share to a lower layer."
     )
-    assert not cycles, (
-        "module-level import cycles:\n  "
-        + "\n  ".join(cycles)
-        + "\nMake one edge function-local, or move what they share to a lower layer."
+
+
+def test_the_cycle_detector_resolves_a_PACKAGE_relative_import_correctly(tmp_path):
+    """A package is its own package: `from .x` in `a/b/__init__.py` means `a.b.x`.
+
+    An earlier resolver subtracted a level for `__init__.py`, so that import resolved to
+    `a.x` — no `__init__` under `ddflow/` has a module-scope import today, so the graph
+    was unaffected, but the first package re-export would have recorded a wrong edge and
+    either missed a real cycle or invented one. A detector that is wrong only about code
+    nobody has written yet is still wrong, and silently.
+
+    Checked by calling `_edges` itself rather than reimplementing the scan, which is how
+    the sibling `test_the_detector_can_fail` manages to exercise none of this.
+
+    *roborev via kilo (DeepSeek/Qwen) on f90daaf, THEORETICAL and correct.*
+    """
+    pkg = tmp_path / "ddflow" / "surfaces" / "commands"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("from .config import _write_config\n")
+    (pkg / "config.py").write_text("x = 1\n")
+
+    import tests.test_layering as TL
+
+    real_pkg, TL.PKG = TL.PKG, tmp_path / "ddflow"
+    try:
+        at_module, everywhere = TL._edges(pkg / "__init__.py")
+    finally:
+        TL.PKG = real_pkg
+
+    assert "surfaces.commands.config" in at_module, at_module
+    assert "surfaces.config" not in everywhere, (
+        f"a package's `from .x` resolved one level too high: {everywhere}"
     )

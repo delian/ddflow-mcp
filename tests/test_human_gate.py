@@ -389,3 +389,62 @@ def test_gate_verify_on_a_human_gate_is_a_refusal_not_a_failure(repo):
     _setup(repo)
     code, _out, _err = run_cli(repo, "gate", "verify", "T1", "plan_approved")
     assert code == REFUSED, f"expected a coordination refusal, got {code}"
+
+
+def _human_gate_repo(repo) -> None:
+    """A human gate declared in CONFIG, which is the configuration `load_gates`
+    recommends and therefore the one the bypasses had to be checked against."""
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--append-toml", '[gate.plan_approved]\nhuman = true\nprompt = "p"')
+    run_cli(repo, "workflow", "pipeline", "task", "plan_approved,implement,merge")
+
+
+def test_workflow_drop_cannot_remove_a_human_gate(repo):
+    """Refusing the FLAG was not enough. `workflow drop plan_approved` took the
+    checkpoint out of the pipeline entirely, exit 0 — the operator's approval step
+    deleted without `human` ever being touched.
+
+    *roborev on 0674a33, CONFIRMED.*
+    """
+    _human_gate_repo(repo)
+    code, out, err = run_cli(repo, "workflow", "drop", "plan_approved")
+    assert code != OK, f"a human gate was dropped from the pipeline: {out}"
+    assert "human-approval gate" in (out + err)
+
+
+def test_setting_a_pipeline_that_omits_a_human_gate_is_refused(repo):
+    """The same deletion by omission, which is why the check lives on the RESULT at the
+    choke point rather than in the `drop` branch: a guard in one branch is a guard the
+    other branch does not have."""
+    _human_gate_repo(repo)
+    code, out, err = run_cli(repo, "workflow", "pipeline", "task", "implement,merge")
+    assert code != OK, f"a human gate was omitted out of existence: {out}"
+    assert "human-approval gate" in (out + err)
+
+
+def test_a_pipeline_edit_that_KEEPS_the_human_gate_still_works(repo):
+    """The guard must not freeze the pipeline. Reordering or adding around the
+    checkpoint is ordinary work."""
+    _human_gate_repo(repo)
+    code, _out, err = run_cli(
+        repo, "workflow", "pipeline", "task", "plan_approved,implement,unit_tests,merge"
+    )
+    assert code == OK, err
+
+
+def test_whitespace_and_quoting_cannot_walk_past_the_human_flag_guard(repo):
+    """`_toml_upsert` strips the key's segments, so `" gate.x.human"` and
+    `gate.x."human"` reach the same TOML key as the bare form. The guard matched the raw
+    string, so both missed it.
+
+    *roborev on 0674a33, CONFIRMED gap / THEORETICAL exploit.*
+    """
+    _human_gate_repo(repo)
+    for variant in (
+        " gate.plan_approved.human",
+        "gate.plan_approved.human ",
+        'gate.plan_approved."human"',
+    ):
+        code, out, err = run_cli(repo, "config", "--set", variant, "false")
+        assert code != OK, f"{variant!r} was accepted"
+        assert "refusing" in (out + err).lower(), (variant, out, err)

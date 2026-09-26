@@ -208,7 +208,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             "gate that cannot fail is worse than no gate: it reports success on every "
             "change and everyone downstream reads that as evidence. Exit 1 means the "
             "gate did NOT catch its mutation — or that nobody has registered one, "
-            "which is the same problem earlier.\n\n"
+            "which is the same problem earlier. Exit 3 on a HUMAN-approval gate: there "
+            "is no command to mutate and no test could show that a person's judgement "
+            "can go the other way, so nothing is broken and nothing is proven.\n\n"
             "A mutation whose `old` text is absent or ambiguous is a FAILURE, not a "
             "skip: the edit never happened, so the gate ran on pristine source and "
             "passing proves the opposite of what it claims."
@@ -613,6 +615,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {},
         "api": lambda repo, a, agent: _api().loops(repo),
+        # The pre-migration body was the findings ARRAY. Preserved exactly.
+        "payload": "findings",
     },
     "ddflow_cleanup": {
         "description": (
@@ -1561,7 +1565,7 @@ def _list_or_none(args: dict[str, Any], key: str) -> list[str] | None:
     return csv_list(args[key]) if isinstance(args[key], str) else list(args[key])
 
 
-def _outcome_result(out: Any) -> dict[str, Any]:
+def _outcome_result(out: Any, payload_key: str = "") -> dict[str, Any]:
     """An `Outcome` as an MCP tool result: JSON body, `isError` only for a real failure.
 
     Exit 2 ("nothing to do") and 3 ("coordination refused") are RESULTS the model must
@@ -1570,7 +1574,14 @@ def _outcome_result(out: Any) -> dict[str, Any]:
     actionable part, which is what the spec means by feedback a model can self-correct
     from.
     """
-    body = json.dumps(out.data, indent=2, default=str)
+    # `payload_key` preserves a tool's EXISTING wire shape across migration. Moving
+    # `ddflow_loops` to the typed path silently changed its body from a JSON array of
+    # findings to an object wrapping them, breaking every consumer that iterated it --
+    # two demo scenarios did. B37 exists to remove a duplicated rendering, not to
+    # redefine contracts, and a migration that changes the wire format is worse than no
+    # migration: the duplication was at least honest about what it returned.
+    data = out.data.get(payload_key) if payload_key else out.data
+    body = json.dumps(data, indent=2, default=str)
     if out.reason:
         body = f"{out.reason}\n\n{body}"
     return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
@@ -1619,7 +1630,9 @@ def _default_agent(repo: Path) -> tuple[str, str]:
     }[layer]
 
 
-def _run_cli(repo: Path, argv: list[str], agent: str = "") -> tuple[int, str]:
+def _run_cli(
+    repo: Path, argv: list[str], agent: str = "", called_from: Path | None = None
+) -> tuple[int, str]:
     """Invoke the CLI in-process, capturing both streams.
 
     In-process rather than subprocess: it is ~40x faster per call, and it guarantees
@@ -1640,7 +1653,12 @@ def _run_cli(repo: Path, argv: list[str], agent: str = "") -> tuple[int, str]:
     # top-level flag appearing after the subcommand name into the subparser, where it
     # does not exist. An identity silently dropped is worse than one never set -- the
     # events would be attributed to the process default and look entirely plausible.
-    head = ["--repo", str(repo)] + (["--agent", agent] if agent else [])
+    # `--repo` gets the CALLER's location, not the resolved primary. `Ctx` resolves the
+    # primary itself for the log and config, and keeps the unresolved path for the one
+    # decision that needs it. Passing the primary here is what made adoption a CLI-only
+    # feature.
+    where = called_from or repo
+    head = ["--repo", str(where)] + (["--agent", agent] if agent else [])
     try:
         code = cli_main([*head, *argv])
     except SystemExit as exc:
@@ -1677,8 +1695,14 @@ class Server:
     `agent` argument on the individual call. Explicit beats derived, innermost wins.
     """
 
-    def __init__(self, repo: Path, agent: str = "") -> None:
+    def __init__(self, repo: Path, agent: str = "", *, called_from: Path | None = None) -> None:
         self.repo = Path(repo)
+        #: WHERE THE CALLER IS, unresolved. `self.repo` is the primary checkout -- that
+        #: is what makes every worktree share one event log -- and resolving to it threw
+        #: away the fact `claim` needs: whether the caller was already inside a worktree.
+        #: Worktree ADOPTION was therefore unreachable from MCP, which is the surface the
+        #: harnesses it was written for (Claude Code, Cursor) actually drive.
+        self.called_from = Path(called_from) if called_from else self.repo
         self.protocol = SUPPORTED_PROTOCOLS[0]
         #: Declared identity for this connection; empty means "use the process
         #: default", which is the backward-compatible single-agent behaviour.
@@ -1811,13 +1835,13 @@ class Server:
                     result = spec["api"](self.repo, args, self.agent)
                 except (KeyError, TypeError, ValueError) as exc:
                     return _ok(mid, _text(f"bad arguments: {exc}", error=True))
-                return _ok(mid, _outcome_result(result))
+                return _ok(mid, _outcome_result(result, spec.get("payload", "")))
 
             try:
                 argv = spec["argv"](args)
             except (KeyError, TypeError) as exc:
                 return _ok(mid, _text(f"bad arguments: {exc}", error=True))
-            code, body = _run_cli(self.repo, argv, self.agent)
+            code, body = _run_cli(self.repo, argv, self.agent, self.called_from)
             # Exit 2 ("nothing to do") and 3 ("coordination refused") are RESULTS, not
             # errors: the model must read and act on them. Only 1 is a genuine failure.
             return _ok(mid, _text(body or f"(exit {code})", error=(code == 1), meta={"exit": code}))
@@ -2234,13 +2258,13 @@ def _text(body: str, *, error: bool = False, meta: dict | None = None) -> dict[s
     return res
 
 
-def serve(repo: Path, stdin=None, stdout=None) -> None:
+def serve(repo: Path, stdin=None, stdout=None, *, called_from: Path | None = None) -> None:
     """Newline-delimited JSON-RPC over stdio, until EOF.
 
     Nothing may be written to stdout except protocol frames — a stray print corrupts
     the stream and the client sees a hung server. Diagnostics go to stderr.
     """
-    srv = Server(repo)
+    srv = Server(repo, called_from=called_from)
     inp = stdin or sys.stdin
     outp = stdout or sys.stdout
     for raw in inp:
@@ -2302,7 +2326,13 @@ def main(argv: list[str] | None = None) -> int:
         # say so in a way the model can read and relay, which is far more useful than
         # a server that refuses to start and shows the client only "exited 1".
         repo = start.resolve()
-    serve(repo)
+    # `start` is passed ON, not discarded. It is the caller's ACTUAL location -- the
+    # worktree an agent harness spawned this server in -- and `repo` is deliberately the
+    # primary so every worktree shares one event log. Resolving and forgetting meant
+    # `claim` over MCP never saw that the caller was already isolated, so worktree
+    # ADOPTION was unreachable from the one surface the harnesses it was written for
+    # actually drive.
+    serve(repo, called_from=start)
     return 0
 
 

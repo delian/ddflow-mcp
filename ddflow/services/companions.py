@@ -408,7 +408,7 @@ def _toml(value: object) -> str:
     return json.dumps(str(value))
 
 
-def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> str:
+def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> tuple[str, str]:
     """Add one companion to one agent's MCP config, preserving everything there.
 
     Deliberately the same merge discipline as `adopt._register_mcp`: these files hold
@@ -416,6 +416,13 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     twice. Kept as its own function rather than generalising that one, because that
     one also decides HOW to launch ddflow itself (uvx vs docker vs source checkout),
     which has no meaning for a third-party server.
+
+    Returns ``(status, message)`` with status one of ``written`` / ``unchanged`` /
+    ``refused``. It used to return the message ALONE, so a caller could not tell a write
+    from a refusal: an unparseable `.mcp.json` produced
+    ``"SKIPPED ...: it is not valid JSON"``, and `cmd_companions` printed that, reported
+    ``applied: true`` and exited 0. Nothing was written and the surface said it had
+    been — bug class #1 in this repo's own guidelines.
 
     ``dry_run`` reports exactly what WOULD be written and touches nothing. The
     handshake tells an agent to ask the operator before registering anything, and
@@ -437,7 +444,7 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     if rel.endswith(".toml"):
         text = path.read_text("utf-8") if path.exists() else ""
         if f"[mcp_servers.{c.id}]" in text:
-            return f"{rel} already registers {c.id}" + ("; nothing would change" if dry_run else "")
+            return "unchanged", f"{rel} already registers {c.id}"
         block = (
             f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
         )
@@ -445,10 +452,15 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
             block += f"env = {_toml(dict(c.env))}\n"
         new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
         if dry_run:
-            return f"WOULD add to {rel}:\n{block.lstrip()}"
+            # The block as it will be APPENDED, minus the leading blank line that only
+            # separates it from what is above. `test_the_preview_matches_the_write_for_a
+            # _TOML_target_too` asserts this text appears verbatim in the written file,
+            # which is the guarantee that matters; showing the whole merged file here
+            # would bury one added stanza in the operator's entire config.
+            return "written", f"WOULD add to {rel}:\n{block.lstrip()}"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_text, "utf-8")
-        return f"registered {c.id} in {rel}"
+        return "written", f"registered {c.id} in {rel}"
 
     data: dict = {}
     if path.exists():
@@ -457,18 +469,25 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         except json.JSONDecodeError:
             # Checked BEFORE the dry run reports, so a preview never promises a write
             # that the real call would decline.
-            return f"SKIPPED {rel}: it is not valid JSON; add {c.id} by hand"
-    if agent in registered_in(repo, c.id):
-        return f"{rel} already registers {c.id}" + ("; nothing would change" if dry_run else "")
-    data.setdefault(_json_field(agent), {})[c.id] = c.entry()
+            return "refused", f"SKIPPED {rel}: it is not valid JSON; add {c.id} by hand"
+    field = _json_field(agent)
+    want = c.entry()
+    if data.get(field, {}).get(c.id) == want:
+        # IDENTICAL, not merely present. The previous version returned early whenever the
+        # id existed at all, which lost the refresh the unconditional assignment used to
+        # give: an entry whose command had changed in the registry stayed stale forever,
+        # and re-running `companions add` -- the obvious remedy -- reported success and
+        # did nothing.
+        return "unchanged", f"{rel} already registers {c.id} with the same launch command"
+    data.setdefault(field, {})[c.id] = want
     if dry_run:
         # The MERGED result, not a lone entry: the write merges into a file holding the
         # operator's other servers, and a preview showing only the addition misleads in
         # the one way that matters.
-        return f"WOULD add to {rel}:\n{json.dumps(data, indent=2)}"
+        return "written", f"WOULD add to {rel}:\n{json.dumps(data, indent=2)}"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
-    return f"registered {c.id} in {rel}"
+    return "written", f"registered {c.id} in {rel}"
 
 
 def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> dict[str, list[str]]:

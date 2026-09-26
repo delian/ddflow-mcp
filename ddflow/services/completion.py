@@ -96,9 +96,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # omitted with no trace. An explicit `gate skip --reason` is still an outcome, so
     # the escape hatch is the auditable one rather than the invisible one.
     if cfg.gates.require_outcome and s.silent:
-        from . import gates as _G
-
-        gdefs = _G.load_gates(repo, cfg)
+        gdefs = G.load_gates(repo, cfg)
         human = [g for g in s.silent if g in gdefs and gdefs[g].is_human_gate]
         other = [g for g in s.silent if g not in human]
         if other:

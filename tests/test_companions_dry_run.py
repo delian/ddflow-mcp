@@ -92,8 +92,8 @@ def test_a_dry_run_says_so_when_nothing_would_change(repo):
     _setup(repo)
     run_cli(repo, "companions", "add", "--id", "fake")
     _code, out, _err = run_cli(repo, "companions", "add", "--id", "fake", "--dry-run")
-    assert "nothing would change" in out, out
-    assert "WOULD add" not in out
+    assert "already registers" in out, out
+    assert "WOULD add" not in out, out
 
 
 def test_the_dry_run_preserves_an_existing_config_in_the_preview(repo):
@@ -186,3 +186,60 @@ def test_the_dry_run_reaches_the_tool_over_real_json_rpc(repo):
     # `"applied"` is in every --json payload, so the old `or` clause could not fail.
     assert "WOULD add" in text, text
     assert not (repo / ".mcp.json").exists(), "a dry run over MCP wrote the config"
+
+
+# -- what roborev found on the unification -------------------------------------------
+
+
+def test_a_refusal_is_not_reported_as_success(repo):
+    """`register` returned only a MESSAGE, so the caller could not tell a write from a
+    refusal. An unparseable `.mcp.json` printed "SKIPPED … not valid JSON", reported
+    `applied: true` and exited 0 — nothing written, surface saying otherwise. Bug class
+    #1 in this repo's own review guidelines, in the command that writes config.
+
+    *roborev on 0674a33, CONFIRMED.*
+    """
+    _setup(repo)
+    (repo / ".mcp.json").write_text("{ not json")
+    code, out, err = run_cli(repo, "companions", "add", "--id", "fake")
+    assert code == FAIL, f"a refusal exited {code}"
+    assert "not valid JSON" in (out + err)
+
+    code, out, _err = run_cli(repo, "--json", "companions", "add", "--id", "fake")
+    payload = json.loads(out)
+    assert payload["applied"] is False, payload
+    assert payload["refused"], payload
+
+
+def test_re_registering_REFRESHES_a_changed_launch_command(repo):
+    """The regression the unification introduced. The JSON branch used to assign the
+    entry unconditionally, so re-running `companions add` refreshed a stale one. Hoisting
+    the already-registered check turned that into a no-op: an entry whose command had
+    changed in the registry stayed stale forever, and the obvious remedy reported success
+    and did nothing.
+
+    *roborev on 0674a33, CONFIRMED regression.*
+    """
+    _setup(repo)
+    run_cli(repo, "companions", "add", "--id", "fake")
+    assert json.loads((repo / ".mcp.json").read_text())["mcpServers"]["fake"]["args"] == ["--serve"]
+
+    # the registry changes -- a new upstream launch command
+    (repo / ".ddflow" / "companions.toml").write_text(
+        REGISTRY.replace('args = ["--serve"]', 'args = ["--serve", "--v2"]')
+    )
+    code, _out, err = run_cli(repo, "companions", "add", "--id", "fake")
+    assert code == OK, err
+    got = json.loads((repo / ".mcp.json").read_text())["mcpServers"]["fake"]["args"]
+    assert got == ["--serve", "--v2"], f"a stale entry was not refreshed: {got}"
+
+
+def test_an_identical_entry_is_reported_as_unchanged_not_written(repo):
+    """The other half: re-running with nothing to change must not claim a write."""
+    _setup(repo)
+    run_cli(repo, "companions", "add", "--id", "fake")
+    code, out, _err = run_cli(repo, "--json", "companions", "add", "--id", "fake")
+    assert code == OK
+    payload = json.loads(out)
+    assert payload["written"] == 0, payload
+    assert payload["applied"] is False, payload

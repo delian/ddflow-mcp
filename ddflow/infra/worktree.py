@@ -105,8 +105,14 @@ def current(start: Path) -> Worktree | None:
     good as having made it.
 
     `base` is left empty: an adopted tree's branch already exists and was not branched
-    by us, so claiming to know what it came from would be a guess. `created` is False,
-    which is what stops `remove_on_merge` deleting a tree ddflow did not make.
+    by us, so claiming to know what it came from would be a guess.
+
+    `created` is False, and that flag alone is NOT what protects the tree. It lives on
+    an in-memory `Worktree` that never crosses a process boundary, while
+    `remove_on_merge` runs from a later invocation with only the fold to consult — so an
+    earlier version of this docstring asserted a safety property that did not exist and
+    `merge` deleted the agent's own tree. What protects it is `Item.adopted`, set by the
+    `worktree.adopted` handler and checked in `cmd_merge`.
     """
     top = git(start, "rev-parse", "--show-toplevel")
     if not top.ok:

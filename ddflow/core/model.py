@@ -117,6 +117,13 @@ class Item:
     gates: dict[str, GateRecord] = field(default_factory=dict)
     worktree: str = ""
     branch: str = ""
+    #: True when the worktree was ADOPTED -- the agent's harness created it and ddflow
+    #: merely bound the item to it. `merge` must NOT delete one: it is not ours, and the
+    #: harness may still be working in it. Recorded on the ITEM because `remove_on_merge`
+    #: runs long after the claim, in another process, with only the fold to go on -- the
+    #: `created=False` flag on the in-memory `Worktree` never survived that gap, so the
+    #: safety property the adoption commit claimed was never actually implemented.
+    adopted: bool = False
     merged_sha: str = ""
     blocked_reason: str = ""
     created_at: str = ""
@@ -593,6 +600,11 @@ def _h_worktree_created(st: State, ev: Event) -> None:
     it.branch = ev.data.get("branch", "")
 
 
+def _h_worktree_adopted(st: State, ev: Event) -> None:
+    _h_worktree_created(st, ev)
+    _item(st, ev, ev.data.get("kind", "task")).adopted = True
+
+
 def _h_worktree_merged(st: State, ev: Event) -> None:
     _item(st, ev, ev.data.get("kind", "task")).merged_sha = ev.data.get("sha", "")
 
@@ -823,12 +835,13 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},
     "worktree.created": _h_worktree_created,
-    # An ADOPTED tree folds identically to a created one -- the item is bound to a
-    # path and a branch either way, and everything downstream (recover, merge, the
-    # stale-evidence fingerprint) needs exactly that. The two kinds stay distinct in
-    # the LOG because `remove_on_merge` must not delete a tree ddflow did not make,
-    # and because "who created this" is a question the history should answer.
-    "worktree.adopted": _h_worktree_created,
+    # NOT the same handler. The two kinds were folded identically on the reasoning that
+    # "the item is bound to a path and a branch either way" -- which threw away the one
+    # bit that matters: whether ddflow made the tree. `remove_on_merge` then deleted the
+    # agent's own worktree, the failure the adoption commit called worse than the one it
+    # was fixing and claimed to prevent. A distinction kept only in the LOG is a
+    # distinction the projection cannot act on.
+    "worktree.adopted": _h_worktree_adopted,
     "worktree.merged": _h_worktree_merged,
     "worktree.removed": _h_worktree_removed,
     "bug.found": _h_bug_found,

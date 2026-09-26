@@ -1323,15 +1323,25 @@ refusal) turns three of the new tests red.
   `_run_cli`, which is the only thing that needs it; the edge disappears entirely when
   the last tool leaves the argv path.
 
-  **The check that would have caught it did not exist, and could not have.** The layer
-  test permits same-layer imports by construction (`there != here`), so a cycle between
-  two modules in one layer was invisible to it. `test_no_module_level_import_cycles`
-  builds the module-scope import graph across the package and forbids any 2-cycle.
-  Function-local imports are deliberately not counted: they bind at call time, so
-  neither module can fail to load because of the other.
+  **The first check written for this was decoration, and the commit said otherwise.**
+  It looked for a module-level 2-cycle. The pre-fix state had ONE eager edge
+  (`mcp -> cli`) and one lazy one, so reverting the fix left the suite green — the exact
+  "somebody tidies an import" event the commit body was about. Worse: the half-mutation
+  was OBSERVED not to bite and reasoned away as the check behaving correctly, which made
+  the claim that it installed a guarantee an overclaim rather than a property.
 
-  Mutation-verified — and the FIRST mutation did not bite, correctly: adding one
-  module-level edge is not a cycle, and only mutating both turned it red.
+  Replaced by `test_no_mutually_importing_pair_has_a_module_level_edge`, which guards the
+  thing at risk: any pair that imports each other — counting lazy edges — must have NO
+  eager edge. One eager edge in a mutual pair loads fine today and is a latent cycle;
+  making the other edge eager turns it into an `ImportError` at startup. Mutation-verified
+  in all three directions: pre-fix state RED, both-eager RED, current state GREEN.
+
+  It found a real latent cycle on its first run: `core.model` <-> `core.events`, with
+  `events.py:40` already documenting the lazy import. Allowlisted with its reason in a
+  set that may only shrink; the structural fix is B127.
+
+  *Found by roborev via kilo, backed by the LAN DeepSeek/Qwen endpoints — the first
+  cross-family roborev review this project has had.*
 
 - **B36. Two slices, 4,314 → 3,940 lines.** Not closed.
   * `surfaces/context.py` (177) — `Ctx`, the exit-code vocabulary, and the five small
@@ -1355,3 +1365,91 @@ refusal) turns three of the new tests red.
   ~180 lines), workflow (`_workflow_*` + `_render_workflow`, ~290), gates
   (`_gate_verify`, `_gates_ahead_of`), import/verify, then `build_parser` (554) once
   the commands it references live elsewhere.
+
+## B127 — the `core.model` <-> `core.events` latent cycle, 2026-09-26
+
+- **B127. FILED.** `core/model.py` imports `Event` eagerly (it is in every signature);
+  `core/events.py` derives its kind vocabulary from `model.HANDLERS` and imports it
+  lazily, with `events.py:40` recording why. One eager edge in a mutual pair: it loads
+  today, and becomes an `ImportError` at startup the moment somebody makes the other
+  edge eager.
+
+  Found by `test_no_mutually_importing_pair_has_a_module_level_edge` on its first run —
+  which is the best evidence available that the rewritten check is not decoration.
+
+  The fix is not a lazy-import shuffle: `HANDLERS` is a dict of handler functions and
+  cannot move without moving the handlers, so validation has to come OUT of `events`
+  into a third module that both import. Allowlisted rather than done, because `core/` is
+  the one layer whose purity the rest of the suite leans on and this deserves its own
+  change rather than a corner of a refactor commit.
+
+## B128–B147 — clearing three review rounds, 2026-09-26
+
+Twenty findings across roborev jobs 800 (B84), 801 (B115 + the first migration) and 802
+(the human gate / dry-run / roborev-kind commit), plus four from the cross-family critic.
+All fixed, each probed and mutation-verified. **Two were HIGH, and both were the same
+shape: a feature aimed at a case it did not cover, with a confident claim written around
+it before it was implemented.**
+
+- **B128. `merge` deleted the adopted worktree. ✅ CLOSED. HIGH.** `worktree.adopted`
+  folded through the SAME handler as `worktree.created`, discarding the one bit that
+  mattered. Probed: the agent's tree, created by its harness, deleted by `merge` with
+  whatever was uncommitted in it.
+
+  The claim was unimplementable as designed, not merely unimplemented: `created=False`
+  lived on an in-memory `Worktree` and `remove_on_merge` runs in a LATER PROCESS with
+  only the fold to consult. `Item.adopted` carries it now. The commit message, the
+  README and `worktree.py:109` all asserted the property first.
+
+- **B129. Adoption was unreachable from MCP. ✅ CLOSED. HIGH.** `ddflow mcp` resolved
+  `repo = repo_root(start)` and DISCARDED `start`, so `Ctx.called_from` was always the
+  primary and `W.current()` always returned None. B115 was motivated by Claude Code and
+  Cursor — both of which drive it over MCP — so the feature did not work where it was
+  aimed. `called_from` now threads `serve` -> `Server` -> `_run_cli`.
+
+- **B130. A refused claim leaked the lease. ✅ CLOSED.** The worktree-conflict refusal
+  returned exit 3 AFTER `L.acquire`, never releasing — manufacturing exactly the stuck
+  claim `recover` exists to clean up, with nothing telling the caller it needed cleaning.
+
+- **B131. The migration changed a wire contract. ✅ CLOSED. HIGH-adjacent.** Moving
+  `ddflow_loops` to the typed path changed its MCP body from a JSON ARRAY to an OBJECT.
+  Two demo scenarios iterate it. B37 exists to remove a duplicated rendering, not to
+  redefine contracts. New `payload` key names which part of the `Outcome` is the body,
+  and **this is now the template for the other 61 migrations** — every one has an
+  existing `--json` shape consumers depend on.
+
+  The test that should have caught it indexed `["findings"]` on the MCP side, so it
+  validated the contents while accommodating the exact shape change. Fifth test of this
+  session that passed by reaching into the thing that had gone wrong.
+
+- **B132–B136 (job 800, B84).** `diff_stat` never reached the AGENT gates its rationale
+  was about — "a REVIEW gate that passed over 4,000 changed lines" — because it was
+  added to `run_command_gate` only, and `rubber_duck`/`critic`/`standards` record through
+  `gate record`. Untracked LINES were uncounted, so a task of entirely new files reported
+  zero insertions while `tree_fingerprint` hashed exactly those bytes. The no-HEAD early
+  return discarded the untracked count, which needs no commit, so a pre-first-commit
+  repository reported every field zero. The `ls-files` argv was spelled twice — two
+  chances to forget the exclusion that caused B102. README claimed "every command gate
+  records a `tree_sha`", false for five `unavailable` early returns. A skip now records
+  no magnitude: nothing was reviewed, so a line count would imply an inspection that did
+  not happen.
+
+- **B137–B142 (job 802).** `ddflow_workflow_drop` removed a human gate outright and
+  `workflow pipeline` did it by omission — the flag guard closed neither, so the checkpoint
+  was deletable without `human` ever being touched. Guarded on the RESULT at the choke
+  point, because a guard in one branch is a guard the other branch does not have. The
+  flag guard itself matched a raw string, so `" gate.x.human"` and `gate.x."human"`
+  walked past it. `register` returned only a MESSAGE, so an unparseable `.mcp.json`
+  printed "SKIPPED" and reported `applied: true` with exit 0 — bug class #1, in the
+  command that writes config. The unification also lost the refresh an unconditional
+  assignment used to give, so a stale entry could never be updated. README listed
+  `codeguide` twice in mutually exclusive states.
+
+- **B143–B147 (the cross-family critic).** `_value_span` counted `[`/`{` inside QUOTED
+  STRINGS, so `command = "sed 's/\\[//g'"` made the span run to EOF and re-editing that
+  key **silently deleted every later key and section**. Probed: `['command',
+  'timeout_s', 'title']` became `['command']`, exit 0, and the truncation is valid TOML
+  so every downstream check passed. Also: `_workflow_problems` swallowed every exception
+  and returned the empty set, so "the check could not run" read as "no problems".
+
+Suite: 790 passed, 21 deselected (was 770).

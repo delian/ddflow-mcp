@@ -85,6 +85,44 @@ def _toml_lines(text: str) -> list[tuple[str, bool]]:
     return out
 
 
+def _outside_quotes(raw: str) -> str:
+    """`raw` with quoted strings and the trailing comment removed.
+
+    The bracket counter above must not see a `[` that is part of a VALUE. It used to:
+    `body.count("[")` on `command = "sed \'s/\\[//g\'"` started the depth at 1, no
+    later line ever brought it back to 0 (a `[section]` header contributes +1 then -1),
+    and `_value_span` returned `len(lines)` — so replacing that key replaced everything
+    from it to END OF FILE. Sibling keys and whole later sections were deleted, the
+    result was still valid TOML, `Config.check` passed, the workflow diff was empty,
+    and the write succeeded with exit 0.
+
+    Probed: a `[gate.lint]` with `command = "sed \'s/\\[//g\'"` plus `timeout_s` and
+    `title`. Re-setting `command` left `['command']` and dropped the other two, silently.
+
+    Gate commands are arbitrary operator shell strings, so `sed \'s/\\[//g\'`,
+    `cut -d\'[\' -f1` and `grep -F \'[\'` are all ordinary things to find in one. A
+    comment marker inside a quoted string is the same hazard in the other direction,
+    which is why the `#` split happens HERE rather than before the quote scan.
+    """
+    out, quote, esc = [], "", False
+    for ch in raw:
+        if quote:
+            if esc:
+                esc = False
+            elif ch == "\\" and quote != "'":
+                esc = True  # literal (single-quoted) TOML strings have no escapes
+            elif ch == quote:
+                quote = ""
+            continue
+        if ch in "\"'":
+            quote = ch
+            continue
+        if ch == "#":
+            break  # a comment, now that we know we are not inside a string
+        out.append(ch)
+    return "".join(out)
+
+
 def _value_span(lines: list[tuple[str, bool]], start: int) -> int:
     """The index one past the end of the value beginning at `lines[start]`.
 
@@ -97,7 +135,7 @@ def _value_span(lines: list[tuple[str, bool]], start: int) -> int:
     depth = 0
     for i in range(start, len(lines)):
         raw, inside = lines[i]
-        body = "" if inside else raw.split("#", 1)[0]
+        body = "" if inside else _outside_quotes(raw)
         depth += body.count("[") + body.count("{") - body.count("]") - body.count("}")
         open_string = i + 1 < len(lines) and lines[i + 1][1]
         if depth <= 0 and not open_string:
@@ -179,6 +217,38 @@ def _workflow_problems(repo: Path, text: str) -> set[str]:
         return set()
 
 
+#: `gate.<id>.human` — three segments minimum. Named so the guard's shape is legible
+#: rather than a bare `3` in a boolean chain.
+_GATE_KEY_PARTS = 3
+
+
+def _guarded_human_gates(repo: Path, text: str) -> set[str]:
+    """Human gates that a given config TEXT places in a pipeline. Never raises.
+
+    Used to refuse an edit that would REMOVE one. Blocking `gate.<id>.human` was not
+    enough: `workflow drop plan_approved` took the checkpoint out of the pipeline
+    entirely, exit 0, and `workflow pipeline task <list-without-it>` does the same by
+    omission. Whether the operator's approval step exists is the operator's decision, and
+    the flag and the pipeline membership are two ways of saying it.
+    """
+    import tomllib
+
+    from ...services.gates import load_gates
+
+    try:
+        data = tomllib.loads(text)
+        cfg = Config()
+        cfg._apply(data, "file")
+        gates = load_gates(repo, cfg)
+        for gid, spec in (data.get("gate") or {}).items():
+            if gid in gates and isinstance(spec, dict) and "human" in spec:
+                gates[gid].human = bool(spec["human"])
+        in_pipeline = set(cfg.gates.task_pipeline) | set(cfg.gates.phase_pipeline)
+        return {g for g in in_pipeline if g in gates and gates[g].is_human_gate}
+    except Exception:
+        return set()
+
+
 def _write_config(
     repo: Path, pairs: list[tuple[str, str]], *, dry_run: bool = False, check_workflow: bool = True
 ) -> tuple[str, str]:
@@ -208,7 +278,20 @@ def _write_config(
     # gate with no shell involved, which made the docstring claim that the ordinary
     # path is closed simply untrue. Declaring the gate in `.ddflow/gates.toml` is the
     # supported way, and that file is not writable from any tool.
-    blocked = [k for k, _v in pairs if k.startswith("gate.") and k.endswith(".human")]
+    # Normalised, so whitespace and quoting cannot walk past the guard: `_toml_upsert`
+    # strips the segments, so `" gate.x.human"` and `gate.x."human"` reach the same TOML
+    # key as the bare form and must be refused the same way.
+    def _key_parts(k: str) -> list[str]:
+        return [seg.strip().strip("\"'") for seg in k.split(".")]
+
+    blocked = [
+        k
+        for k, _v in pairs
+        if (pp := _key_parts(k))
+        and len(pp) >= _GATE_KEY_PARTS
+        and pp[0] == "gate"
+        and pp[-1] == "human"
+    ]
     if blocked:
         return (
             f"refusing to edit {', '.join(blocked)}: whether a gate is a human "
@@ -223,6 +306,7 @@ def _write_config(
     with TC.locked(path):
         text = path.read_text("utf-8") if path.exists() else ""
         before = _workflow_problems(repo, text) if check_workflow else set()
+        human_before = _guarded_human_gates(repo, text)
         for dotted, value in pairs:
             if "." not in dotted:
                 return f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command", text
@@ -231,6 +315,21 @@ def _write_config(
             Config.check(tomllib.loads(text))
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"that edit would break the config: {exc}", text
+        # Refusing the FLAG was not enough. `workflow drop <human-gate>` took the
+        # checkpoint out of the pipeline, exit 0, and `workflow pipeline task <list
+        # without it>` does the same by omission — two ways to delete the operator's
+        # approval step without ever touching `human`. Checked on the RESULT, at the
+        # choke point, because a guard in one branch is a guard the other branch does
+        # not have, which is how the first version of this shipped.
+        removed = sorted(human_before - _guarded_human_gates(repo, text))
+        if removed:
+            return (
+                f"that edit would remove the human-approval gate(s) "
+                f"{', '.join(removed)} from the pipeline. Whether the operator's "
+                f"approval step exists is not a configurable preference — edit "
+                f".ddflow/gates.toml, which no tool writes.",
+                text,
+            )
         if check_workflow:
             introduced = sorted(_workflow_problems(repo, text) - before)
             if introduced:
