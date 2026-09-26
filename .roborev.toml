@@ -12,14 +12,29 @@
 # recorded as reviewed and nothing looked at it. So the agent is pinned here, in the
 # repository, rather than left to whatever the host machine happens to default to.
 #
-# roborev is SAME-family as the author and does not satisfy the different-family
-# rubber-duck requirement. It is a complement: in this project's history it and the
-# cross-family critic repeatedly produced disjoint findings.
+# Family, 2026-09-26: roborev WAS same-family (it ran `claude-code`) and therefore did
+# not satisfy the different-family rubber-duck requirement on its own. It now runs
+# `kilo` against the LAN DeepSeek/Qwen hosts, so it is cross-family — see the `agent`
+# note below. It remains a COMPLEMENT to `scripts/critic_review.py` rather than a
+# replacement: in this project's history the two repeatedly produced disjoint findings,
+# and they read the diff through different harnesses.
 
 # Pinned, not inherited. See above.
-agent = 'claude-code'
+#
+# CROSS-FAMILY, 2026-09-26, at operator direction ("use the .8 qwen and the deepseek as
+# critics and for the roborev"). roborev drives CLI AGENTS, not OpenAI endpoints — its
+# whole agent list is claude-code / codex / gemini / kilo / … — so the LAN vLLM hosts
+# are reached THROUGH `kilo`, which is configured with openai-compatible providers for
+# both of them (`~/.config/kilo/kilo.jsonc`, machine-local; see docs/rules/tooling.md).
+#
+# `kilo` is primary precisely because it is a DIFFERENT pretraining family from the
+# author (DeepSeek on 10.220.230.242, Qwen on 10.220.230.8), which is the property
+# CLAUDE.local.md §rubber-duck 1 selects a reviewer for. `claude-code` stays as the
+# backup: same-family, so it does NOT satisfy that requirement on its own, but a
+# same-family review is worth more than none when the LAN hosts are down.
+agent = 'kilo'
 model = ''
-backup_agent = ''
+backup_agent = 'claude-code'
 backup_model = ''
 
 review_guidelines = '''This repo (ddflow) is a work-queue kernel and MCP server for AI coding agents. It is event-sourced: an append-only JSONL log is the sole source of truth and everything else is a deterministic projection. Always state whether a finding is CONFIRMED (you traced or reproduced it) or THEORETICAL.
