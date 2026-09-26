@@ -466,22 +466,19 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: (
-            [
-                "--json",
-                "lesson",
-                "add",
-                *_opt("--id", a),
-                "--title",
-                a.get("title", ""),
-                *_opt("--rule", a),
-                *_opt("--why", a),
-                *_opt("--how", a),
-                *_opt("--tags", a),
-                *_opt("--seen-in", a, "seen_in"),
-                *_opt("--supersedes", a),
-            ]
+        "api": lambda repo, a, agent: _api().lesson_add(
+            repo,
+            title=a.get("title", "") or "",
+            rule=a.get("rule", "") or "",
+            why=a.get("why", "") or "",
+            how=a.get("how", "") or "",
+            tags=a.get("tags", "") or "",
+            seen_in=a.get("seen_in", "") or "",
+            supersedes=a.get("supersedes", "") or "",
+            id=a.get("id", "") or "",
+            agent=agent,
         ),
+        "payload": ("id",),
     },
     "ddflow_lesson_search": {
         "description": (
@@ -492,10 +489,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "query": ("string", "What you are about to do, in words.", True),
             "limit": ("integer", "Max results (default 5).", False),
         },
-        "argv": lambda a: (
-            ["--json", "lesson", "search", a.get("query", "")]
-            + (["--limit", str(a["limit"])] if a.get("limit") else [])
+        "api": lambda repo, a, agent: _api().lesson_search(
+            repo, a.get("query", "") or "", limit=a.get("limit"), agent=agent
         ),
+        "payload": "hits",
     },
     "ddflow_research_add": {
         "description": (
@@ -526,25 +523,24 @@ TOOLS: dict[str, dict[str, Any]] = {
             "budget": ("string", "What you allowed yourself, e.g. '30 min, no GPU'.", False),
             "item": ("string", "The task this research is for.", False),
         },
-        "argv": lambda a: (
-            [
-                "--json",
-                "research",
-                *_opt("--id", a),
-                "--question",
-                a.get("question", ""),
-                "--verdict",
-                a.get("verdict", "THEORETICAL"),
-                *_opt("--claim", a),
-                *_opt("--falsifier", a),
-                *_opt("--probe", a),
-                *_opt("--probe-output", a, "probe_output"),
-                *_opt("--sources", a),
-                *_opt("--mechanism", a),
-                *_opt("--budget", a),
-                *_opt("--item", a),
-            ]
+        "api": lambda repo, a, agent: _api().research_add(
+            repo,
+            _api().ResearchFinding(
+                question=a.get("question", "") or "",
+                verdict=a.get("verdict", "THEORETICAL") or "THEORETICAL",
+                claim=a.get("claim", "") or "",
+                mechanism=a.get("mechanism", "") or "",
+                falsifier=a.get("falsifier", "") or "",
+                probe=a.get("probe", "") or "",
+                probe_output=a.get("probe_output", "") or "",
+                sources=a.get("sources", "") or "",
+                budget=a.get("budget", "") or "",
+                item=a.get("item", "") or "",
+                id=a.get("id", "") or "",
+            ),
+            agent=agent,
         ),
+        "payload": ("id", "verdict"),
     },
     "ddflow_bug_fixed": {
         "description": (
@@ -564,19 +560,16 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "lesson": ("string", "Id of an EXISTING lesson this bug belongs to.", False),
         },
-        "argv": lambda a: (
-            [
-                "--json",
-                "bug",
-                "fixed",
-                a["id"],
-                "--regression-test",
-                a.get("regression_test", ""),
-                *_opt("--lesson-title", a, "lesson_title"),
-                *_opt("--lesson-rule", a, "lesson_rule"),
-                *_opt("--lesson", a),
-            ]
+        "api": lambda repo, a, agent: _api().bug_fixed(
+            repo,
+            a["id"],
+            regression_test=a.get("regression_test", "") or "",
+            lesson=a.get("lesson", "") or "",
+            lesson_title=a.get("lesson_title", "") or "",
+            lesson_rule=a.get("lesson_rule", "") or "",
+            agent=agent,
         ),
+        "payload": ("id",),
     },
     "ddflow_recover": {
         "description": (
@@ -680,14 +673,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "recall",
-            a.get("query", ""),
-            *(["--limit", str(a["limit"])] if a.get("limit") else []),
-            *_opt("--sources", a),
-            *(["--max-chars", str(a["max_chars"])] if a.get("max_chars") else []),
-        ],
+        "api": lambda repo, a, agent: _api().recall(
+            repo,
+            a.get("query", "") or "",
+            sources=a.get("sources", "") or "",
+            limit=int(a.get("limit") or 3),
+            max_chars=int(a.get("max_chars") or 4000),
+            agent=agent,
+        ),
+        "payload": "results",
     },
     "ddflow_status": {
         "description": (
@@ -914,13 +908,15 @@ TOOLS: dict[str, dict[str, Any]] = {
             "since": ("string", "ISO timestamp lower bound.", False),
             "limit": ("integer", "Most recent N entries (default 40).", False),
         },
-        "argv": lambda a: (
-            ["--json", "history"]
-            + (["--item", a["item"]] if a.get("item") else [])
-            + (["--kind", a["kind"]] if a.get("kind") else [])
-            + (["--since", a["since"]] if a.get("since") else [])
-            + (["--limit", str(a["limit"])] if a.get("limit") else [])
+        "api": lambda repo, a, agent: _api().history(
+            repo,
+            item=a.get("item", "") or "",
+            kind=a.get("kind", "") or "",
+            since=a.get("since", "") or "",
+            limit=int(a.get("limit") or 40),
+            agent=agent,
         ),
+        "payload": ("total", "shown", "events"),
     },
     "ddflow_import": {
         "description": (
@@ -1173,15 +1169,14 @@ TOOLS: dict[str, dict[str, Any]] = {
             "summary": ("string", "What is wrong, in one line.", True),
             "item": ("string", "The task it was found in or affects.", False),
         },
-        "argv": lambda a: [
-            "--json",
-            "bug",
-            "found",
-            *_opt("--id", a),
-            "--summary",
-            a.get("summary", ""),
-            *_opt("--item", a),
-        ],
+        "api": lambda repo, a, agent: _api().bug_found(
+            repo,
+            summary=a.get("summary", "") or "",
+            item=a.get("item", "") or "",
+            id=a.get("id", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id",),
     },
     "ddflow_session_note": {
         "description": (
@@ -1195,15 +1190,14 @@ TOOLS: dict[str, dict[str, Any]] = {
             "text": ("string", "The note.", True),
             "item": ("string", "Item it concerns.", False),
         },
-        "argv": lambda a: [
-            "--json",
-            "session",
-            "note",
-            a.get("session", ""),
-            "--text",
-            a.get("text", ""),
-            *_opt("--item", a),
-        ],
+        "api": lambda repo, a, agent: _api().session_note(
+            repo,
+            a.get("session", "") or "",
+            a.get("text", "") or "",
+            item=a.get("item", "") or "",
+            agent=agent,
+        ),
+        "payload": ("session",),
     },
     "ddflow_session_end": {
         "description": (
@@ -1215,13 +1209,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "session": ("string", "Session id.", True),
             "summary": ("string", "What this session achieved.", False),
         },
-        "argv": lambda a: [
-            "--json",
-            "session",
-            "end",
-            a.get("session", ""),
-            *_opt("--summary", a),
-        ],
+        "api": lambda repo, a, agent: _api().session_end(
+            repo, a.get("session", "") or "", summary=a.get("summary", "") or "", agent=agent
+        ),
+        "payload": ("session",),
     },
     "ddflow_decision_show": {
         "description": (
@@ -1301,17 +1292,14 @@ TOOLS: dict[str, dict[str, Any]] = {
             "text": ("string", "The prompt, verbatim.", True),
             "item": ("string", "Item it concerns.", False),
         },
-        "argv": lambda a: (
-            [
-                "--json",
-                "session",
-                "prompt",
-                a.get("session", ""),
-                "--text",
-                a.get("text", ""),
-                *_opt("--item", a),
-            ]
+        "api": lambda repo, a, agent: _api().session_prompt(
+            repo,
+            a.get("session", "") or "",
+            a.get("text", "") or "",
+            item=a.get("item", "") or "",
+            agent=agent,
         ),
+        "payload": ("redactions",),
     },
     "ddflow_setup": {
         "description": (
@@ -1549,7 +1537,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "model": ("string", "Your model id.", False),
             "tool": ("string", "Your harness, e.g. 'claude-code'.", False),
         },
-        "argv": lambda a: ["--json", "session", "start", *_opt("--model", a), *_opt("--tool", a)],
+        "api": lambda repo, a, agent: _api().session_start(
+            repo, model=a.get("model", "") or "", tool=a.get("tool", "") or "", agent=agent
+        ),
+        "payload": ("session",),
     },
 }
 

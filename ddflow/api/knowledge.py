@@ -1,0 +1,349 @@
+"""What the project remembers: lessons, research, bugs, sessions, and the history.
+
+Three refusals here are the reason this family is policy rather than plumbing, and each
+exists because the record is worthless without it:
+
+* **A research verdict must be CONFIRMED, REFUTED or THEORETICAL**, and the first two
+  need a probe. A verdict with no probe behind it is an opinion, and a note with no
+  verdict is a literature summary.
+* **A bug may not be closed without naming the regression test** that would catch it
+  again — write the test, watch it FAIL against the unfixed code, then close.
+* **Recall is a prompt to CHECK, not a verdict.** That sentence ships in the output
+  because the failure mode is an agent treating a three-week-old prompt as binding.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from ..config import csv_list
+from ..core import outcome as O
+from ..core.ids import auto_id
+from ._base import _load
+
+VERDICTS = ("CONFIRMED", "REFUTED", "THEORETICAL")
+
+
+def _store(repo, log, cfg):
+    from ..infra.store import Store
+
+    s = Store(repo, cfg)
+    s.ensure(log)
+    return s
+
+
+def lesson_add(
+    repo: Path,
+    *,
+    title: str,
+    rule: str = "",
+    why: str = "",
+    how: str = "",
+    tags: str = "",
+    seen_in: str = "",
+    supersedes: str = "",
+    id: str = "",
+    agent: str = "",
+) -> O.Outcome:
+    """Record a transferable rule — the pattern, not the incident."""
+    log, _cfg, _st = _load(repo, agent)
+    lid = id or auto_id("L", title, rule)
+    log.append(
+        "lesson.recorded",
+        lid,
+        {
+            "title": title,
+            "rule": rule,
+            "why": why,
+            "how": how,
+            "tags": csv_list(tags),
+            "seen_in": csv_list(seen_in),
+            "supersedes": csv_list(supersedes),
+        },
+    )
+    return O.ok("lesson.recorded", id=lid)
+
+
+def lesson_search(
+    repo: Path, query: str, *, limit: int | None = None, agent: str = ""
+) -> O.Outcome:
+    log, cfg, _st = _load(repo, agent)
+    hits = _store(repo, log, cfg).search(
+        "lessons", query, limit if limit is not None else cfg.lessons.max_results
+    )
+    data: dict[str, Any] = {
+        "hits": hits,
+        "count": len(hits),
+        "query": query,
+        "snippet_chars": cfg.lessons.snippet_chars,
+    }
+    if not hits:
+        return O.nothing("lesson.search", "no matching lessons", **data)
+    return O.ok("lesson.search", **data)
+
+
+def recall(
+    repo: Path,
+    query: str,
+    *,
+    sources: str = "",
+    limit: int = 3,
+    max_chars: int = 4000,
+    agent: str = "",
+) -> O.Outcome:
+    """ "Have we been here before?" — one query across everything the project remembers.
+
+    Searches architectural decisions, lessons, research verdicts, past bugs, similar
+    tasks and the operator's own earlier prompts, and labels each hit by WHAT KIND of
+    thing it is — because "should this change what I do" has a different answer for a
+    binding decision, a transferable lesson and a prompt from three weeks ago.
+
+    Exists so an operator does not have to say the same thing twice and an agent does not
+    have to learn the same thing twice. Both failures are invisible in the moment and
+    obvious in the log.
+    """
+    from ..infra.store import RECALL_SOURCES, summarise_row
+
+    log, cfg, _st = _load(repo, agent)
+    store = _store(repo, log, cfg)
+    want = csv_list(sources) or [t for t, _, _ in RECALL_SOURCES]
+    lowered = [w.lower() for w in want]
+    results: dict[str, list[dict]] = {}
+    for table, label, _why in RECALL_SOURCES:
+        if table not in want and label.lower() not in lowered:
+            continue
+        try:
+            hits = store.search(table, query, limit)
+        except Exception:
+            # One unreadable source must not take the whole recall down: the value is in
+            # the union, and "the lessons table is corrupt" is not a reason to withhold
+            # the decisions.
+            hits = []
+        if hits:
+            results[table] = hits
+
+    labels = {table: label for table, label, _ in RECALL_SOURCES}
+    wire = {
+        table: [
+            {
+                "id": r.get("id"),
+                "kind": labels[table],
+                "headline": summarise_row(table, r)[0],
+                "body": summarise_row(table, r)[1],
+                "raw": r,
+            }
+            for r in rows
+        ]
+        for table, rows in results.items()
+    }
+    data: dict[str, Any] = {
+        "results": wire,
+        "query": query,
+        "searched": [t for t, _, _ in RECALL_SOURCES],
+        "max_chars": max_chars,
+        "_render": {"results": results, "sources": RECALL_SOURCES},
+    }
+    if not results:
+        return O.nothing(
+            "recall",
+            f"Nothing recalled for {query!r}.\n"
+            f"Searched: {', '.join(t for t, _, _ in RECALL_SOURCES)}.",
+            **data,
+        )
+    return O.ok("recall", **data)
+
+
+@dataclass
+class Finding:
+    """One research result, named once.
+
+    Eleven fields that travel together — argparse flags, MCP input properties, event
+    payload. The same reason `decisions.Draft` and `gates.Evidence` exist: a field added
+    to one of those three lists is a field the other two silently drop.
+    """
+
+    question: str
+    verdict: str
+    claim: str = ""
+    mechanism: str = ""
+    falsifier: str = ""
+    probe: str = ""
+    probe_output: str = ""
+    sources: str = ""
+    budget: str = ""
+    item: str = ""
+    id: str = ""
+
+
+def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
+    """Record a research finding, with the verdict it earned.
+
+    Both refusals are the rule that makes the record worth keeping: a note with no
+    verdict is a literature summary, and a CONFIRMED with no probe is an opinion wearing
+    a label.
+    """
+    if finding.verdict not in VERDICTS:
+        return O.failed(
+            "research.recorded",
+            "verdict must be CONFIRMED, REFUTED or THEORETICAL. A note with no verdict "
+            "is a literature summary, not research.",
+        )
+    if finding.verdict in ("CONFIRMED", "REFUTED") and not (finding.probe or finding.probe_output):
+        return O.failed(
+            "research.recorded",
+            f"{finding.verdict} requires a --probe (and ideally --probe-output): a "
+            f"verdict with no probe behind it is an opinion. Use THEORETICAL and say why "
+            f"no probe was possible.",
+        )
+    log, _cfg, _st = _load(repo, agent)
+    rid = finding.id or auto_id("R", finding.question, finding.claim)
+    log.append(
+        "research.recorded",
+        rid,
+        {
+            "question": finding.question,
+            "claim": finding.claim,
+            "mechanism": finding.mechanism,
+            "falsifier": finding.falsifier,
+            "probe": finding.probe,
+            "probe_output": finding.probe_output,
+            "verdict": finding.verdict,
+            "sources": csv_list(finding.sources),
+            "budget": finding.budget,
+            "item": finding.item,
+        },
+    )
+    return O.ok("research.recorded", id=rid, verdict=finding.verdict)
+
+
+def bug_found(
+    repo: Path, *, summary: str, item: str = "", id: str = "", agent: str = ""
+) -> O.Outcome:
+    log, _cfg, _st = _load(repo, agent)
+    bid = id or auto_id("B", summary, item)
+    log.append("bug.found", bid, {"item": item, "summary": summary})
+    return O.ok("bug.found", id=bid)
+
+
+def bug_fixed(
+    repo: Path,
+    item: str,
+    *,
+    regression_test: str = "",
+    lesson: str = "",
+    lesson_title: str = "",
+    lesson_rule: str = "",
+    agent: str = "",
+) -> O.Outcome:
+    """Close a bug. Refuses without the test that would catch it again."""
+    log, cfg, _st = _load(repo, agent)
+    if not regression_test and cfg.lessons.require_regression_test:
+        return O.failed(
+            "bug.fixed",
+            "a bug may not be closed without --regression-test naming the test that "
+            "would catch it again. Write the test, watch it FAIL against the unfixed "
+            "code, then close.",
+            id=item,
+        )
+    log.append("bug.fixed", item, {"regression_test": regression_test, "lesson": lesson})
+    captured = ""
+    if cfg.lessons.auto_capture_on_bug and lesson_title:
+        captured = f"L-{item}"
+        log.append(
+            "lesson.recorded",
+            captured,
+            {
+                "title": lesson_title,
+                "rule": lesson_rule,
+                "seen_in": [item],
+                "tags": ["bug"],
+            },
+        )
+    return O.ok("bug.fixed", id=item, regression_test=regression_test, lesson_captured=captured)
+
+
+def session_start(repo: Path, *, model: str = "", tool: str = "", agent: str = "") -> O.Outcome:
+    from ..services import sessions as S
+
+    log, cfg, _st = _load(repo, agent)
+    return O.ok("session.started", session=S.start(log, cfg, model=model, agent_tool=tool))
+
+
+def session_prompt(
+    repo: Path, session: str, text: str, *, item: str = "", agent: str = ""
+) -> O.Outcome:
+    """Record the operator's own words, with credentials redacted before they touch disk."""
+    from ..services import sessions as S
+
+    log, cfg, _st = _load(repo, agent)
+    return O.ok(
+        "session.prompt", redactions=S.prompt(log, cfg, session, text, item=item), session=session
+    )
+
+
+def session_note(
+    repo: Path, session: str, text: str, *, item: str = "", agent: str = ""
+) -> O.Outcome:
+    from ..services import sessions as S
+
+    log, cfg, _st = _load(repo, agent)
+    S.note(log, cfg, session, text, item=item)
+    return O.ok("session.note", session=session)
+
+
+def session_end(repo: Path, session: str, *, summary: str = "", agent: str = "") -> O.Outcome:
+    from ..services import sessions as S
+
+    log, _cfg, _st = _load(repo, agent)
+    S.end(log, session, summary=summary)
+    return O.ok("session.ended", session=session)
+
+
+def history(
+    repo: Path,
+    *,
+    item: str = "",
+    kind: str = "",
+    since: str = "",
+    limit: int = 40,
+    agent: str = "",
+) -> O.Outcome:
+    """One reverse-chronological timeline of everything that happened.
+
+    Ordered by `(lamport, agent, id)` like everything else — NOT by wall-clock timestamp.
+    Two agents on two machines have two clocks, and sorting a merged history by `ts` would
+    interleave them wrongly while looking perfectly plausible.
+    """
+    log, _cfg, _st = _load(repo, agent)
+    events = log.read_all()
+    if item:
+        events = [e for e in events if e.subject == item]
+    if kind:
+        wanted = set(csv_list(kind))
+        events = [e for e in events if e.kind in wanted or e.kind.split(".")[0] in wanted]
+    if since:
+        events = [e for e in events if e.ts >= since]
+    events = sorted(events, key=lambda e: (e.lamport, e.agent, e.id), reverse=True)
+    shown = events[:limit]
+    data: dict[str, Any] = {
+        "total": len(events),
+        "shown": len(shown),
+        "events": [
+            {
+                "id": e.id,
+                "at": e.ts,
+                "lamport": e.lamport,
+                "agent": e.agent,
+                "kind": e.kind,
+                "subject": e.subject,
+                "data": e.data,
+            }
+            for e in shown
+        ],
+        "_render": {"events": shown, "total": len(events)},
+    }
+    if not shown:
+        return O.nothing("history", "Nothing in the history matches.", **data)
+    return O.ok("history", **data)

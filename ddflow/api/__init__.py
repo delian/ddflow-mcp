@@ -51,6 +51,22 @@ from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
 from .items import DEFAULT_PRIORITY, phase_add, split, task_add, update
+from .knowledge import (
+    Finding as ResearchFinding,
+)
+from .knowledge import (
+    bug_fixed,
+    bug_found,
+    history,
+    lesson_add,
+    lesson_search,
+    recall,
+    research_add,
+    session_end,
+    session_note,
+    session_prompt,
+    session_start,
+)
 from .lifecycle import (
     DEFAULT_CHECK_RECOVERY,
     DEFAULT_NEXT_KIND,
@@ -85,6 +101,18 @@ from .workflow import pipeline as workflow_pipeline
 from .workflow import show as workflow_show
 
 __all__ = [
+    "ResearchFinding",
+    "bug_fixed",
+    "bug_found",
+    "history",
+    "lesson_add",
+    "lesson_search",
+    "recall",
+    "research_add",
+    "session_end",
+    "session_note",
+    "session_prompt",
+    "session_start",
     "DEFAULT_CHECK_RECOVERY",
     "DEFAULT_NEXT_KIND",
     "DEFAULT_PRIORITY",

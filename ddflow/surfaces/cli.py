@@ -33,7 +33,6 @@ from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as G
 from ..services import leases as L
-from ..services import sessions as session
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
     _workflow_problems,
@@ -41,6 +40,14 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
 )
 from .commands.decisions import cmd_decision
 from .commands.gates import cmd_gate
+from .commands.knowledge import (
+    cmd_bug,
+    cmd_history,
+    cmd_lesson,
+    cmd_recall,
+    cmd_research,
+    cmd_session,
+)
 from .commands.lifecycle import (
     cmd_abandon,
     cmd_block,
@@ -72,7 +79,6 @@ from .context import (
     REFUSED,
     UNAVAILABLE_EXIT,
     Ctx,
-    _auto_id,
     _csv,
     _plain,
     _require_item,
@@ -200,214 +206,6 @@ def cmd_approve(a, c: Ctx) -> int:
         return FAIL
     c.out(line, {"id": a.id, "gate": a.gate, "approved": not a.reject, "line": line})
     return OK
-
-
-def cmd_lesson(a, c: Ctx) -> int:
-    if a.lesson_cmd == "add":
-        lid = a.id or _auto_id("L", a.title, a.rule or "")
-        c.log.append(
-            "lesson.recorded",
-            lid,
-            {
-                "title": a.title,
-                "rule": a.rule or "",
-                "why": a.why or "",
-                "how": a.how or "",
-                "tags": _csv(a.tags),
-                "seen_in": _csv(a.seen_in),
-                "supersedes": _csv(a.supersedes),
-            },
-        )
-        c.out(f"lesson {lid} recorded", {"id": lid})
-        return OK
-    if a.lesson_cmd == "search":
-        c.store.ensure(c.log)
-        hits = c.store.search(
-            "lessons", a.query, a.limit if a.limit is not None else c.cfg.lessons.max_results
-        )
-        if c.json:
-            print(json.dumps(hits, indent=2, default=str))
-            return OK if hits else NOTHING
-        if not hits:
-            print("no matching lessons")
-            return NOTHING
-        for h in hits:
-            print(f"- {h['title']}\n    {(h.get('rule') or '')[: c.cfg.lessons.snippet_chars]}")
-        return OK
-    return FAIL
-
-
-def cmd_recall(a, c: Ctx) -> int:
-    """ "Have we been here before?" — one query across everything the project remembers.
-
-    Searches architectural decisions, lessons, research verdicts, past bugs, similar
-    tasks and the operator's own earlier prompts, and returns them ranked and labelled
-    by what kind of thing each is — because the answer to "should this change what I
-    do" is different for a binding decision, a transferable lesson and a prompt from
-    three weeks ago.
-
-    This exists so an operator does not have to say the same thing twice and an agent
-    does not have to learn the same thing twice. Both failures are invisible in the
-    moment and obvious in the log.
-    """
-    from ..infra.store import RECALL_SOURCES, summarise_row
-
-    c.store.ensure(c.log)
-    want = _csv(a.sources) or [t for t, _, _ in RECALL_SOURCES]
-    results: dict[str, list[dict]] = {}
-    for table, label, _why in RECALL_SOURCES:
-        if table not in want and label.lower() not in [w.lower() for w in want]:
-            continue
-        try:
-            hits = c.store.search(table, a.query, a.limit)
-        except Exception:
-            hits = []
-        if hits:
-            results[table] = hits
-
-    if c.json:
-        labels = {table: label for table, label, _ in RECALL_SOURCES}
-        print(
-            json.dumps(
-                {
-                    table: [
-                        {
-                            "id": r.get("id"),
-                            "kind": labels[table],
-                            "headline": summarise_row(table, r)[0],
-                            "body": summarise_row(table, r)[1],
-                            "raw": r,
-                        }
-                        for r in rows
-                    ]
-                    for table, rows in results.items()
-                },
-                indent=2,
-                default=str,
-            )
-        )
-        return OK if results else NOTHING
-
-    if not results:
-        print(
-            f"Nothing recalled for {a.query!r}.\n"
-            f"Searched: {', '.join(t for t, _, _ in RECALL_SOURCES)}."
-        )
-        return NOTHING
-
-    budget = a.max_chars
-    used = 0
-    for table, label, why in RECALL_SOURCES:
-        rows = results.get(table)
-        if not rows:
-            continue
-        header = f"\n## {label}  — {why}\n"
-        print(header, end="")
-        used += len(header)
-        for r in rows:
-            head, body = summarise_row(table, r)
-            block = f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
-            if used + len(block) > budget:
-                print(f"      … truncated at {budget} chars (--max-chars to raise)")
-                return OK
-            print(block, end="")
-            used += len(block)
-    print(
-        "\nRecall is a prompt to CHECK, not a verdict. A decision above is binding "
-        "unless the operator says otherwise; a lesson is advice; a past prompt is "
-        "context."
-    )
-    return OK
-
-
-def cmd_research(a, c: Ctx) -> int:
-    rid = a.id or _auto_id("R", a.question, a.claim or "")
-    if a.verdict not in ("CONFIRMED", "REFUTED", "THEORETICAL"):
-        print(
-            "verdict must be CONFIRMED, REFUTED or THEORETICAL. A note with no "
-            "verdict is a literature summary, not research.",
-            file=sys.stderr,
-        )
-        return FAIL
-    if a.verdict in ("CONFIRMED", "REFUTED") and not (a.probe or a.probe_output):
-        print(
-            f"{a.verdict} requires a --probe (and ideally --probe-output): a verdict "
-            f"with no probe behind it is an opinion. Use THEORETICAL and say why no "
-            f"probe was possible.",
-            file=sys.stderr,
-        )
-        return FAIL
-    c.log.append(
-        "research.recorded",
-        rid,
-        {
-            "question": a.question,
-            "claim": a.claim or "",
-            "mechanism": a.mechanism or "",
-            "falsifier": a.falsifier or "",
-            "probe": a.probe or "",
-            "probe_output": a.probe_output or "",
-            "verdict": a.verdict,
-            "sources": _csv(a.sources),
-            "budget": a.budget or "",
-            "item": a.item or "",
-        },
-    )
-    c.out(f"research {rid} recorded ({a.verdict})", {"id": rid, "verdict": a.verdict})
-    return OK
-
-
-def cmd_bug(a, c: Ctx) -> int:
-    if a.bug_cmd == "found":
-        bid = a.id or _auto_id("B", a.summary, a.item or "")
-        c.log.append("bug.found", bid, {"item": a.item or "", "summary": a.summary})
-        c.out(f"bug {bid} recorded", {"id": bid})
-        return OK
-    if not a.regression_test and c.cfg.lessons.require_regression_test:
-        print(
-            "a bug may not be closed without --regression-test naming the test that "
-            "would catch it again. Write the test, watch it FAIL against the "
-            "unfixed code, then close.",
-            file=sys.stderr,
-        )
-        return FAIL
-    c.log.append(
-        "bug.fixed", a.id, {"regression_test": a.regression_test or "", "lesson": a.lesson or ""}
-    )
-    if c.cfg.lessons.auto_capture_on_bug and a.lesson_title:
-        c.log.append(
-            "lesson.recorded",
-            f"L-{a.id}",
-            {
-                "title": a.lesson_title,
-                "rule": a.lesson_rule or "",
-                "seen_in": [a.id],
-                "tags": ["bug"],
-            },
-        )
-    c.out(f"bug {a.id} closed (regression: {a.regression_test})", {"id": a.id})
-    return OK
-
-
-def cmd_session(a, c: Ctx) -> int:
-    if a.session_cmd == "start":
-        sid = session.start(c.log, c.cfg, model=a.model or "", agent_tool=a.tool or "")
-        c.out(sid, {"session": sid})
-        return OK
-    if a.session_cmd == "prompt":
-        text = a.text if a.text is not None else sys.stdin.read()
-        n = session.prompt(c.log, c.cfg, a.session, text, item=a.item or "")
-        c.out(f"recorded ({n} redaction(s))", {"redactions": n})
-        return OK
-    if a.session_cmd == "note":
-        session.note(c.log, c.cfg, a.session, a.text or sys.stdin.read(), item=a.item or "")
-        c.out("noted", {})
-        return OK
-    if a.session_cmd == "end":
-        session.end(c.log, a.session, summary=a.summary or "")
-        c.out("ended", {})
-        return OK
-    return FAIL
 
 
 def cmd_progress(a, c: Ctx) -> int:
@@ -1257,121 +1055,6 @@ def cmd_companions(a, c: Ctx) -> int:
 #: How each event kind reads in a timeline. Absent kinds fall back to the kind name,
 #: which is honest — a new event type shows up as itself rather than being silently
 #: dropped from the history, which is the failure `replay` had with decisions.
-_HISTORY_VERBS: dict[str, str] = {
-    "phase.added": "phase added",
-    "task.added": "task added",
-    "task.updated": "updated",
-    "task.removed": "removed from the queue",
-    "phase.removed": "removed from the queue",
-    "item.blocked": "blocked",
-    "item.abandoned": "abandoned",
-    "item.completed": "completed",
-    "lease.acquired": "claimed",
-    "lease.renewed": "heartbeat",
-    "lease.released": "released",
-    "lease.expired": "lease EXPIRED",
-    "gate.recorded": "gate",
-    "worktree.created": "worktree created",
-    "worktree.removed": "worktree removed",
-    "merge.performed": "merged",
-    "session.started": "session opened",
-    "session.prompt": "operator said",
-    "session.note": "noted",
-    "session.ended": "session closed",
-    "lesson.recorded": "lesson",
-    "decision.recorded": "DECISION",
-    "decision.superseded": "decision superseded",
-    "research.recorded": "research",
-    "bug.found": "BUG found",
-    "bug.fixed": "bug fixed",
-    "cadence.ran": "cadence ran",
-}
-
-
-def _history_line(ev) -> str:
-    """One event, as a line someone can read."""
-    verb = _HISTORY_VERBS.get(ev.kind, ev.kind)
-    d = ev.data or {}
-    detail = (
-        d.get("title")
-        or d.get("text")
-        or d.get("summary")
-        or d.get("question")
-        or d.get("reason")
-        or d.get("note")
-        or ""
-    )
-    if ev.kind == "gate.recorded":
-        detail = f"{d.get('gate', '?')} = {d.get('outcome', '?')}"
-    elif ev.kind == "lease.acquired":
-        detail = f"by {d.get('holder', '?')}"
-    elif ev.kind == "item.completed" and d.get("sha"):
-        detail = f"as {d['sha'][:8]}"
-    detail = " ".join(str(detail).split())[:88]
-    return f"  {ev.ts[:16].replace('T', ' ')}  {ev.subject:<22.22s} {verb:<22s} {detail}"
-
-
-def cmd_history(a, c: Ctx) -> int:
-    """One reverse-chronological timeline of everything that happened.
-
-    `status`, `progress`, `replay` and `recall` each answer part of "what has happened
-    here", and an operator asking that question had to know which to run. This is the
-    plain answer: the log, newest first, filterable.
-
-    Ordered by `(lamport, agent, id)` like everything else — NOT by wall-clock
-    timestamp. Two agents on two machines have two clocks, and sorting a merged history
-    by `ts` would interleave them wrongly while looking perfectly plausible.
-    """
-    events = c.log.read_all()
-    if a.item:
-        events = [e for e in events if e.subject == a.item]
-    if a.kind:
-        wanted = set(_csv(a.kind))
-        events = [e for e in events if e.kind in wanted or e.kind.split(".")[0] in wanted]
-    if a.since:
-        events = [e for e in events if e.ts >= a.since]
-    events = sorted(events, key=lambda e: (e.lamport, e.agent, e.id), reverse=True)
-    shown = events[: a.limit]
-
-    if c.json:
-        print(
-            json.dumps(
-                {
-                    "total": len(events),
-                    "shown": len(shown),
-                    "events": [
-                        {
-                            "id": e.id,
-                            "at": e.ts,
-                            "lamport": e.lamport,
-                            "agent": e.agent,
-                            "kind": e.kind,
-                            "subject": e.subject,
-                            "data": e.data,
-                        }
-                        for e in shown
-                    ],
-                },
-                indent=2,
-                default=str,
-            )
-        )
-        return OK if shown else NOTHING
-    if not shown:
-        print("Nothing in the history matches.")
-        return NOTHING
-    print(f"{len(events)} event(s); newest {len(shown)} first:\n")
-    for e in shown:
-        print(_history_line(e))
-    if len(events) > len(shown):
-        print(f"\n  ... {len(events) - len(shown)} older. --limit to see more.")
-    print(
-        "\n  Ordered by Lamport clock, not wall time: two agents have two clocks, and "
-        "\n  sorting a merged history by timestamp interleaves them wrongly."
-    )
-    return OK
-
-
 def _help_topics() -> list[str]:
     """The topic names, read from the one place that defines them.
 

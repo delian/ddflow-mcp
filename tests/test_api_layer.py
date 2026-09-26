@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 25
+ARGV_TOOLS_CEILING = 14
 
 
 def _typed() -> list[str]:
@@ -250,6 +250,9 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_gate_status": (["gate", "status", "T1"], {"id": "T1"}),
     "ddflow_next": (["next"], {}),
     "ddflow_brief": (["brief"], {}),
+    "ddflow_history": (["history"], {}),
+    "ddflow_lesson_search": (["lesson", "search", "x"], {"query": "x"}),
+    "ddflow_recall": (["recall", "x"], {"query": "x"}),
     "ddflow_gate_verify": (
         ["gate", "verify", "T1", "unit_tests"],
         {"id": "T1", "gate": "unit_tests"},
@@ -299,6 +302,14 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_remove",
     "ddflow_block",
     "ddflow_merge",
+    "ddflow_lesson_add",
+    "ddflow_research_add",
+    "ddflow_bug_found",
+    "ddflow_bug_fixed",
+    "ddflow_session_start",
+    "ddflow_session_prompt",
+    "ddflow_session_note",
+    "ddflow_session_end",
 }
 
 
@@ -1129,3 +1140,154 @@ def test_each_default_VALUE_is_the_one_the_behaviour_needs(repo):
     out = api.render(repo)
     assert out.data["files"], "render wrote nothing"
     assert all("docs/ddflow" in f for f in out.data["files"]), out.data["files"]
+
+
+# -- the rules about rigour, which were never themselves verified --------------------------
+#
+# Every refusal in `api/knowledge.py` survived mutation: the verdict vocabulary, the
+# CONFIRMED-needs-a-probe rule, the bug-needs-a-regression-test rule, recall's per-source
+# isolation and history's Lamport ordering. Five rules the project enforces on its users
+# and had never once enforced on itself.
+
+
+def test_a_research_note_must_carry_a_real_verdict(repo):
+    """ "A note with no verdict is a literature summary, not research."""
+    from ddflow import api
+
+    run_cli(repo, "init")
+    for bad in ("", "MAYBE", "confirmed", "TRUE"):
+        out = api.research_add(repo, api.ResearchFinding(question="does X help?", verdict=bad))
+        assert out.exit == FAIL, f"{bad!r} was accepted as a verdict"
+        assert "CONFIRMED, REFUTED or THEORETICAL" in out.reason
+
+
+def test_a_CONFIRMED_verdict_requires_the_probe_that_confirmed_it(repo):
+    """ "A verdict with no probe behind it is an opinion."
+
+    The rule about probes, which had no probe. THEORETICAL is the honest label when none
+    was possible, and it is accepted without one — that asymmetry IS the rule.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    for verdict in ("CONFIRMED", "REFUTED"):
+        bare = api.research_add(repo, api.ResearchFinding(question="q", verdict=verdict))
+        assert bare.exit == FAIL, f"{verdict} accepted with no probe"
+        assert "opinion" in bare.reason
+
+        with_probe = api.research_add(
+            repo,
+            api.ResearchFinding(question="q", verdict=verdict, probe="pytest -k thing"),
+        )
+        assert with_probe.exit == OK, with_probe
+
+    theoretical = api.research_add(repo, api.ResearchFinding(question="q", verdict="THEORETICAL"))
+    assert theoretical.exit == OK, "THEORETICAL is how you record what you could not probe"
+
+
+def test_a_bug_cannot_be_closed_without_a_regression_test(repo):
+    """The rule about regression tests, which had no regression test.
+
+    "Write the test, watch it FAIL against the unfixed code, then close." Nothing
+    enforced it on this project's own bug records until now.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    found = api.bug_found(repo, summary="the fold drops seq")
+    bug = found.data["id"]
+
+    bare = api.bug_fixed(repo, bug)
+    assert bare.exit == FAIL, bare
+    assert "regression-test" in bare.reason
+
+    _code, shown, _ = run_cli(repo, "--json", "status")
+    assert json.loads(shown)["open_bugs"] == 1, "a refused close marked the bug fixed"
+
+    closed = api.bug_fixed(repo, bug, regression_test="tests/test_events.py::test_seq")
+    assert closed.exit == OK, closed
+    _code, shown, _ = run_cli(repo, "--json", "status")
+    assert json.loads(shown)["open_bugs"] == 0
+
+
+def test_one_unreadable_source_does_not_take_the_whole_recall_down(repo):
+    """The value of recall is the UNION.
+
+    "The lessons table is corrupt" is not a reason to withhold the decisions — and an
+    agent that gets nothing back concludes the project remembers nothing, which is the
+    opposite of true.
+    """
+    from ddflow import api
+    from ddflow.infra import store as store_mod
+
+    run_cli(repo, "init")
+    run_cli(
+        repo,
+        "decision",
+        "add",
+        "--id",
+        "D1",
+        "--title",
+        "use pluggy",
+        "--decision",
+        "every stage is a Step",
+    )
+    run_cli(repo, "lesson", "add", "--title", "pluggy first", "--rule", "register steps")
+
+    real = store_mod.Store.search
+
+    def flaky(self, table, query, limit):
+        if table == "lessons":
+            raise RuntimeError("this table is corrupt")
+        return real(self, table, query, limit)
+
+    store_mod.Store.search = flaky
+    try:
+        out = api.recall(repo, "pluggy")
+    finally:
+        store_mod.Store.search = real
+
+    assert out.exit == OK, "one bad source took the whole recall down"
+    assert "decisions" in out.data["results"], out.data["results"].keys()
+    assert "lessons" not in out.data["results"]
+
+
+def test_history_is_ordered_by_lamport_clock_not_wall_time(repo):
+    """ "Two agents have two clocks, and sorting a merged history by timestamp interleaves
+    them wrongly while looking perfectly plausible."
+
+    Built by writing a shard whose wall-clock timestamps run BACKWARDS against its Lamport
+    clock — which is exactly what a second machine with a skewed clock produces.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    shard = (repo / ".ddflow" / "events") / "other-agent.jsonl"
+    rows = [
+        {
+            "id": "e1",
+            "ts": "2026-09-26T12:00:00",
+            "lamport": 900,
+            "agent": "beta",
+            "kind": "item.blocked",
+            "subject": "T9",
+            "data": {"reason": "first by lamport"},
+        },
+        {
+            "id": "e2",
+            "ts": "2026-09-26T09:00:00",
+            "lamport": 901,
+            "agent": "beta",
+            "kind": "item.blocked",
+            "subject": "T9",
+            "data": {"reason": "second by lamport"},
+        },
+    ]
+    shard.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+    out = api.history(repo, item="T9")
+    order = [e["data"]["reason"] for e in out.data["events"]]
+    assert order == ["second by lamport", "first by lamport"], (
+        f"newest-first by Lamport should put e2 before e1; got {order}. Sorting by `ts` "
+        f"reverses them, and that is precisely the skewed-clock case."
+    )
