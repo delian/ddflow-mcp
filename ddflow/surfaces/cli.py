@@ -24,15 +24,16 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from ..api import items as A_ITEMS
+from ..api import lifecycle as A_LIFECYCLE
+from ..api import reporting as A_REPORTING
 from ..config import Config
-from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, fold
-from ..core.schedule import critical_path, plan
+from ..core.model import GATE_OUTCOMES, fold
 from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ..services import gates as G
 from ..services import leases as L
 from ..services import sessions as session
-from ..views import markdown as render
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
     _workflow_problems,
@@ -40,6 +41,18 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
 )
 from .commands.decisions import cmd_decision
 from .commands.gates import cmd_gate
+from .commands.lifecycle import (
+    cmd_abandon,
+    cmd_block,
+    cmd_brief,
+    cmd_claim,
+    cmd_complete,
+    cmd_heartbeat,
+    cmd_merge,
+    cmd_next,
+    cmd_release,
+    cmd_remove,
+)
 from .commands.queue import cmd_phase_add, cmd_split, cmd_task_add
 from .commands.reporting import (
     cmd_board,
@@ -54,8 +67,6 @@ from .commands.reporting import (
 from .commands.workflow import cmd_workflow
 from .context import (
     FAIL,
-    GIT_REFUSED,
-    MAX_LISTED_FILES,
     NOTHING,
     OK,
     REFUSED,
@@ -158,208 +169,6 @@ def cmd_item_update(a, c: Ctx) -> int:
     return OK
 
 
-def cmd_next(a, c: Ctx) -> int:
-    """Offer the next actionable item(s). Exit 2 when nothing is actionable."""
-    st = c.state()
-    p = plan(st, c.cfg, kind=a.kind, phase=a.phase or "", agent=c.cfg.agent.id or c.log.agent_id)
-    if c.json:
-        print(
-            json.dumps(
-                _plain(
-                    {
-                        "ready": [_plain(i) for i in p.ready],
-                        "blocked": [_plain(b) for b in p.blocked],
-                        "running": [i.id for i in p.running],
-                        "cycles": p.cycles,
-                        "interrupted": p.interrupted,
-                        "critical_path": critical_path(st, a.phase or ""),
-                    }
-                ),
-                indent=2,
-                default=str,
-            )
-        )
-        return OK if p.ready else NOTHING
-    if p.cycles:
-        print("DEPENDENCY CYCLE(S) — nothing can be scheduled inside them:", file=sys.stderr)
-        for cyc in p.cycles:
-            print("  " + " -> ".join(cyc), file=sys.stderr)
-    # Offered, but never silently: an item RUNNING with nobody on it may have a
-    # worktree full of work, and starting it from scratch loses that.
-    for note in p.interrupted:
-        print(f"INTERRUPTED: {note}", file=sys.stderr)
-    if not p.ready:
-        print(f"Nothing actionable ({p.summary()}).")
-        for b in p.blocked[:10]:
-            print(f"  {b.item}: {b.reason} — {b.detail}")
-        return NOTHING
-    print(f"Ready ({p.summary()}):")
-    for it in p.ready:
-        print(f"  {it.id}  {it.title}")
-        if it.globs:
-            print(f"      writes: {', '.join(it.globs)}")
-    if len(p.ready) > 1:
-        print("\nThese are independent — run them in parallel worktrees.")
-    for b in p.blocked[:6]:
-        print(f"  (blocked) {b.item}: {b.reason} — {b.detail}")
-    return OK
-
-
-def _worktree_held_by(c: Ctx, stored: str, me: str) -> str:
-    """Another OPEN item bound to this same worktree, or "".
-
-    Two items sharing one tree cannot be merged or recovered separately: `merge` would
-    take one item's branch for the other's work, and `recover` could not say whose
-    uncommitted changes it had found. Closed items are ignored -- reusing the tree of
-    finished work is exactly what an agent should be able to do.
-    """
-    from ..core.model import DONE
-
-    st = c.state()
-    for item in st.items.values():
-        if item.id == me or item.removed or item.state in (DONE, ABANDONED):
-            continue
-        # `item.worktree`, not `item.lease.worktree`: the fold copies the lease's path
-        # onto the item and KEEPS it after the lease is released, which is the point --
-        # a released item whose tree still holds its work is exactly the case that must
-        # not be silently co-opted.
-        if (item.worktree or "") == stored:
-            return item.id
-    return ""
-
-
-def cmd_claim(a, c: Ctx) -> int:
-    """Acquire a lease and (optionally) create the worktree. Exit 3 if refused.
-
-    Refuses an item that is already looping when `[loops].on_detect = "block"`. That
-    refusal is the only thing that actually stops an agent spinning: a warning in a
-    report is read by a human later, while a refused claim is read by the agent now.
-    """
-    from ..core import progress as PR
-
-    events = c.log.read_all()
-    st_now = fold(events, strict=False)
-    looping = [
-        f for f in PR.detect(events, st_now, c.cfg) if f.item == a.id and f.severity == "block"
-    ]
-    if looping and not a.force:
-        print(f"refusing to claim {a.id}: it is already looping.", file=sys.stderr)
-        for f in looping:
-            print(f"  {f.render()}", file=sys.stderr)
-        print(
-            "\nRe-claiming it would continue the loop. Change the task, abandon it, "
-            "or --force if you have fixed the underlying cause.",
-            file=sys.stderr,
-        )
-        return REFUSED
-    try:
-        lz = L.acquire(
-            c.log, c.cfg, a.id, globs=_csv(a.globs) or None, note=a.note or "", force=a.force
-        )
-    except L.LeaseError as exc:
-        print(str(exc), file=sys.stderr)
-        if exc.alternatives:
-            print("\nYou could take instead: " + ", ".join(exc.alternatives), file=sys.stderr)
-        return REFUSED
-    wt = None
-    if c.cfg.worktree.enabled and not a.no_worktree:
-        # ADOPT before creating. An agent whose harness already isolated it (Claude
-        # Code and Cursor both do) was previously sent to a second tree on a second
-        # branch, stranding the uncommitted work in the first and giving one item two
-        # branches. ddflow does not need to have MADE the tree -- it needs to know
-        # which tree the item is being worked in, so `recover` and `merge` can find it.
-        adopted = W.current(c.called_from) if c.cfg.worktree.adopt_existing else None
-        if adopted is not None:
-            stored = W.store_path(c.repo, adopted.path)
-            held = _worktree_held_by(c, stored, a.id)
-            if held:
-                # RELEASE the lease before refusing. `L.acquire` ran before this
-                # check, so returning here left the item leased by an agent that was
-                # told it could not have it -- the refusal created exactly the stuck
-                # claim that `recover` exists to clean up, and the caller had no way to
-                # know it needed cleaning.
-                L.release(c.log, a.id, note="claim refused: worktree conflict")
-                print(
-                    f"this worktree is already bound to {held}, which is still open. "
-                    f"Two items sharing one tree cannot be merged or recovered "
-                    f"separately. Finish {held}, work somewhere else, or "
-                    f"`--no-worktree` to claim without binding a tree.",
-                    file=sys.stderr,
-                )
-                return REFUSED
-            wt = W.Worktree(
-                item=a.id, path=adopted.path, branch=adopted.branch, base="", created=False
-            )
-            c.log.append(
-                "worktree.adopted",
-                a.id,
-                {"path": stored, "branch": wt.branch, "base": ""},
-            )
-            L.acquire(
-                c.log,
-                c.cfg,
-                a.id,
-                worktree=stored,
-                branch=wt.branch,
-                globs=_csv(a.globs) or None,
-                force=True,
-            )
-        else:
-            try:
-                wt = W.create(c.repo, c.cfg, a.id)
-                stored = W.store_path(c.repo, wt.path)
-                c.log.append(
-                    "worktree.created",
-                    a.id,
-                    {"path": stored, "branch": wt.branch, "base": wt.base},
-                )
-                L.acquire(
-                    c.log,
-                    c.cfg,
-                    a.id,
-                    worktree=stored,
-                    branch=wt.branch,
-                    globs=_csv(a.globs) or None,
-                    force=True,
-                )
-            except W.GitError as exc:
-                print(f"lease held, but worktree creation failed: {exc}", file=sys.stderr)
-                return FAIL
-    c.log.append("item.started", a.id, {})
-    msg = f"claimed {a.id} (lease {c.cfg.lease.ttl_s}s, renew every {c.cfg.lease.heartbeat_s}s)"
-    if wt and not wt.created:
-        # Do NOT say "cd there and work" -- the caller is already there, and telling an
-        # agent to move is what the old behaviour did wrong.
-        msg += (
-            f"\n  worktree: {wt.path}  (adopted — you were already in it)"
-            f"\n  branch:   {wt.branch}\n  Carry on where you are."
-        )
-    elif wt:
-        msg += f"\n  worktree: {wt.path}\n  branch:   {wt.branch} (from {wt.base})\n  cd there and work."
-    c.out(
-        msg,
-        {
-            "item": a.id,
-            "holder": lz.holder,
-            "worktree": str(wt.path) if wt else "",
-            "branch": wt.branch if wt else "",
-        },
-    )
-    return OK
-
-
-def cmd_heartbeat(a, c: Ctx) -> int:
-    ok = L.renew(c.log, a.id)
-    c.out(f"{'renewed' if ok else 'no lease held'} {a.id}", {"renewed": ok})
-    return OK if ok else NOTHING
-
-
-def cmd_release(a, c: Ctx) -> int:
-    ok = L.release(c.log, a.id, note=a.note or "")
-    c.out(f"{'released' if ok else 'no lease on'} {a.id}", {"released": ok})
-    return OK if ok else NOTHING
-
-
 def cmd_approve(a, c: Ctx) -> int:
     """A person clears, or refuses, a human-approval gate.
 
@@ -390,295 +199,6 @@ def cmd_approve(a, c: Ctx) -> int:
         print(str(exc), file=sys.stderr)
         return FAIL
     c.out(line, {"id": a.id, "gate": a.gate, "approved": not a.reject, "line": line})
-    return OK
-
-
-def cmd_complete(a, c: Ctx) -> int:
-    """Finish an item, refusing on an incomplete pipeline unless forced.
-
-    The rule-set itself lives in `services.completion` — it is domain policy, and
-    policy reachable only through `main(argv)` can only be tested by driving a
-    subprocess. This function does what a surface should: ask, render, exit.
-    """
-    from ..services import completion as CM
-
-    st = c.state()
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-
-    v = CM.verdict(st, c.cfg, a.id, repo=c.repo, model=a.model or "")
-    for warning in v.warnings:
-        print(f"NOTE: {warning}", file=sys.stderr)
-
-    if not v.may_complete and not a.force:
-        print(
-            f"cannot complete {a.id} — {len(v.blockers)} unmet condition(s):",
-            file=sys.stderr,
-        )
-        for b in v.blockers:
-            print(f"  - {b}", file=sys.stderr)
-        print(
-            f"\n`ddflow gate status {a.id}` shows the pipeline. --force overrides, "
-            f"and the override is recorded.",
-            file=sys.stderr,
-        )
-        return REFUSED
-
-    if v.coverage_note and not c.json:
-        print(f"NOTE: {v.coverage_note}")
-
-    forced = bool(v.blockers and a.force)
-    c.log.append(
-        "item.completed",
-        a.id,
-        {
-            "sha": a.sha or "",
-            "kind": it.kind,
-            "forced": forced,
-            "overridden": v.blockers if a.force else [],
-        },
-    )
-    L.release(c.log, a.id, note="completed")
-    c.out(
-        f"{a.id} completed"
-        + (f" as {a.sha}" if a.sha else "")
-        + (f" [FORCED over {len(v.blockers)} unmet condition(s)]" if v.blockers else ""),
-        {
-            "id": a.id,
-            "sha": a.sha or "",
-            "independence": v.independence,
-            "forced": forced,
-            # Both surfaces, always. This used to print only in human mode, so an agent
-            # over MCP -- which is always JSON -- completed the item and was never told
-            # a gate had not run: the one fact most worth surfacing, invisible on
-            # precisely the surface that needed it.
-            "coverage_gaps": v.coverage_gaps,
-            "note": v.coverage_note,
-        },
-    )
-    return OK
-
-
-def cmd_abandon(a, c: Ctx) -> int:
-    """Stop work on an item without completing it, with a recorded reason.
-
-    Distinct from `block`: a blocked item is waiting for something and will resume,
-    an abandoned one will not. The phase completion check treats only `done` and
-    `abandoned` as settled, so an item you decided against stops holding its phase open
-    — which it otherwise does forever, since nothing else can ever finish it.
-    """
-    st = c.state()
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-    if it.state == DONE and not a.force:
-        print(
-            f"{a.id} is already done; abandoning it would rewrite finished history. "
-            f"--force if you really mean it.",
-            file=sys.stderr,
-        )
-        return REFUSED
-    c.log.append("item.abandoned", a.id, {"reason": a.reason, "kind": it.kind})
-    if it.lease:
-        L.release(c.log, a.id, note=f"abandoned: {a.reason}")
-    c.out(f"{a.id} abandoned: {a.reason}", {"id": a.id, "reason": a.reason})
-    return OK
-
-
-def cmd_remove(a, c: Ctx) -> int:
-    """Take an item out of the queue entirely.
-
-    The event log is append-only, so this RECORDS a removal rather than deleting
-    anything: the item and everything that happened to it stay in the history and in
-    `ddflow replay`, which is what keeps the record honest about work that was
-    planned and then dropped.
-    """
-    st = c.state()
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-    # Any item with work beneath it, not just a phase. The `kind == "phase"` guard
-    # predates sub-tasks: removing a task umbrella left its children live but
-    # unreachable, because `State.tasks(phase)` walks `descendants()` and `children()`
-    # skips a removed node — so the phase view reported "nothing actionable" while two
-    # open tasks sat under the hole.
-    kids = [t.id for t in st.open_descendants(a.id)]
-    if kids and not a.force:
-        print(
-            f"{a.id} still has {len(kids)} task(s): {', '.join(kids[:8])}.\n"
-            f"Remove them first, or --force to orphan them.",
-            file=sys.stderr,
-        )
-        return REFUSED
-    dependents = [o.id for o in st.items.values() if not o.removed and a.id in o.needs]
-    if dependents and not a.force:
-        print(
-            f"{', '.join(dependents)} depend"
-            f"{'s' if len(dependents) == 1 else ''} on {a.id}. Removing it would "
-            f"leave them blocked on something that no longer exists "
-            f"(unknown dependencies are treated as unmet, deliberately).\n"
-            f"Update them first, or --force.",
-            file=sys.stderr,
-        )
-        return REFUSED
-    if it.lease:
-        L.release(c.log, a.id, note="removed from the queue")
-    c.log.append(
-        "phase.removed" if it.kind == "phase" else "task.removed", a.id, {"reason": a.reason or ""}
-    )
-    c.out(f"{a.id} removed from the queue", {"id": a.id})
-    return OK
-
-
-def cmd_block(a, c: Ctx) -> int:
-    """Park an item on something outside the queue — a vendor, an operator decision.
-
-    The existence check is not ceremony. `fold`'s `_h_state` reaches items through
-    `_item()`, which CREATES one when the id is unknown, so this was the only mutating
-    command where a typo'd id materialised a titleless phantom task — which the
-    scheduler then offered to an agent as the next thing to do.
-    """
-    st = c.state()
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-    c.log.append("item.blocked", a.id, {"reason": a.reason})
-    c.out(f"{a.id} blocked: {a.reason}", {"id": a.id})
-    return OK
-
-
-def cmd_merge(a, c: Ctx) -> int:
-    st = c.state()
-    # Through `_require_item`, like every other mutating command. This was the one that
-    # was not: `.get()` finds a removed item, because removal is a FLAG on an item that
-    # still folds, so `ddflow merge` landed the branch of work the operator had
-    # explicitly dropped from the queue and reported "merged" -- the most consequential
-    # action in the package, taken on the item least likely to be wanted.
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-    if not it.worktree:
-        print(f"{a.id} has no worktree to merge", file=sys.stderr)
-        return NOTHING
-    wt = W.Worktree(
-        item=a.id,
-        path=W.load_path(c.repo, it.worktree),
-        branch=it.branch,
-        base=c.cfg.worktree.base_ref or W.default_branch(c.repo),
-    )
-    d = W.dirty(wt)
-    if d and not a.allow_dirty:
-        # Listed, not just counted: half the time these are build artefacts the project
-        # forgot to gitignore, and half the time they are a source file the agent never
-        # `git add`-ed -- which would be silently dropped from the merge. The operator
-        # can only tell which by seeing the names.
-        print(
-            f"{len(d)} uncommitted file(s) in {wt.path} would NOT be included in the merge:",
-            file=sys.stderr,
-        )
-        for entry in d[:MAX_LISTED_FILES]:
-            print(f"  {entry}", file=sys.stderr)
-        if len(d) > MAX_LISTED_FILES:
-            print(f"  ... and {len(d) - MAX_LISTED_FILES} more", file=sys.stderr)
-        print(
-            "\nCommit them, add them to .gitignore if they are build output, or pass "
-            "--allow-dirty to merge without them.",
-            file=sys.stderr,
-        )
-        return REFUSED
-    sha = W.head_sha(wt.path)
-    r = W.merge(c.repo, c.cfg, wt, message=a.message or f"merge {a.id}: {it.title}")
-    if not r.ok:
-        print(r.err or r.out, file=sys.stderr)
-        return REFUSED if r.code == GIT_REFUSED else FAIL
-    c.log.append("worktree.merged", a.id, {"sha": sha, "branch": wt.branch})
-    G.record(
-        c.log,
-        c.cfg,
-        a.id,
-        "merge",
-        "passed",
-        evidence={"sha": sha, "branch": wt.branch},
-        gates=c.gates,
-    )
-    # NEVER remove an ADOPTED tree. ddflow did not create it; the agent's harness did,
-    # and it may still be working in it. Deleting it takes uncommitted work with it —
-    # a worse failure than the rival-worktree problem adoption was written to fix, and
-    # one the adoption commit claimed to prevent while recording nothing the fold could
-    # act on.
-    if it.adopted:
-        print(
-            f"  worktree {wt.path} kept: adopted, not created by ddflow.",
-            file=sys.stderr,
-        )
-    elif c.cfg.worktree.remove_on_merge and not a.keep:
-        rr = W.remove(c.repo, c.cfg, wt)
-        if rr.ok:
-            c.log.append("worktree.removed", a.id, {"path": str(wt.path)})
-        else:
-            print(rr.err, file=sys.stderr)
-    c.out(f"merged {a.id} ({sha[:8]}) into {wt.base}", {"id": a.id, "sha": sha})
-    return OK
-
-
-def cmd_brief(a, c: Ctx) -> int:
-    st = c.store.ensure(c.log)
-    p = plan(st, c.cfg, phase=a.phase or "", agent=c.cfg.agent.id or c.log.agent_id)
-    item = a.item or ""
-    if not item and p.ready:
-        item = p.ready[0].id
-    q = ""
-    if item and item in st.items:
-        it = st.items[item]
-        q = f"{it.title} {it.body} {' '.join(it.tags)}"
-    lessons = c.store.search("lessons", q, c.cfg.session.brief_lesson_count) if q else []
-    rules = ""
-    for cand in ("AGENTS.md", "CLAUDE.md", ".ddflow/RULES.md"):
-        p_ = c.repo / cand
-        if p_.is_file():
-            rules = f"See `{cand}` (loaded separately by your agent)."
-            break
-    rec = L.scan(c.log, c.cfg, c.repo) if a.check_recovery else []
-    # Decisions governing THIS item's files, matched by glob rather than by search:
-    # the whole point is that they reach the agent without its having to suspect they
-    # exist.
-    from ..core.schedule import conflicts
-
-    decisions = []
-    if item and item in st.items:
-        target = st.items[item]
-        decisions = [
-            d
-            for d in st.decisions.values()
-            if d.live and d.globs and conflicts(target.globs, d.globs)
-        ]
-        decisions += [d for d in st.decisions.values() if d.live and not d.globs]
-    text = render.brief(
-        st,
-        c.cfg,
-        p,
-        repo=c.repo,
-        item=item,
-        lessons=lessons,
-        rules=rules,
-        recovery=[r for r in rec if r.salvageable],
-        decisions=decisions,
-    )
-    if c.json:
-        print(
-            json.dumps(
-                {
-                    "brief": text,
-                    "item": item,
-                    "ready": [i.id for i in p.ready],
-                    "approx_tokens": len(text) // 4,
-                },
-                indent=2,
-            )
-        )
-    else:
-        print(text)
     return OK
 
 
@@ -2297,7 +1817,7 @@ def build_parser() -> argparse.ArgumentParser:
         add.add_argument("--globs")
         add.add_argument("--tags")
         add.add_argument("--body")
-        add.add_argument("--priority", type=int, default=100)
+        add.add_argument("--priority", type=int, default=A_ITEMS.DEFAULT_PRIORITY)
         add.set_defaults(fn=fn)
         return add
 
@@ -2333,7 +1853,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     nx = s.add_parser("next", help="what may start now (exit 2 = nothing actionable)")
     nx.add_argument("--phase", default="")
-    nx.add_argument("--kind", default="task", choices=["task", "phase"])
+    nx.add_argument("--kind", default=A_LIFECYCLE.DEFAULT_NEXT_KIND, choices=["task", "phase"])
     nx.set_defaults(fn=cmd_next)
 
     cl = s.add_parser("claim", help="lease an item + create its worktree (exit 3 = refused)")
@@ -2426,7 +1946,9 @@ def build_parser() -> argparse.ArgumentParser:
     br = s.add_parser("brief", help="budgeted session-start pack")
     br.add_argument("--item", default="")
     br.add_argument("--phase", default="")
-    br.add_argument("--check-recovery", action="store_true", default=True)
+    br.add_argument(
+        "--check-recovery", action="store_true", default=A_LIFECYCLE.DEFAULT_CHECK_RECOVERY
+    )
     br.set_defaults(fn=cmd_brief)
 
     ls = s.add_parser("lesson")
@@ -2586,7 +2108,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_parser("rebuild", help="re-derive the index from the log").set_defaults(fn=cmd_rebuild)
 
     rn = s.add_parser("render", help="regenerate the human-readable views")
-    rn.add_argument("--out", default="docs/ddflow")
+    rn.add_argument("--out", default=A_REPORTING.DEFAULT_RENDER_DIR)
     rn.add_argument(
         "--show",
         default="",

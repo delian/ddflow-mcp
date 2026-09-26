@@ -50,8 +50,23 @@ from .gates import record as gate_record
 from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
-from .items import phase_add, split, task_add, update
+from .items import DEFAULT_PRIORITY, phase_add, split, task_add, update
+from .lifecycle import (
+    DEFAULT_CHECK_RECOVERY,
+    DEFAULT_NEXT_KIND,
+    abandon,
+    block,
+    brief,
+    claim,
+    complete,
+    heartbeat,
+)
+from .lifecycle import merge as merge_item
+from .lifecycle import next_ as next_item
+from .lifecycle import release as release_item
+from .lifecycle import remove as remove_item
 from .reporting import (
+    DEFAULT_RENDER_DIR,
     board,
     doctor,
     loops,
@@ -70,10 +85,19 @@ from .workflow import pipeline as workflow_pipeline
 from .workflow import show as workflow_show
 
 __all__ = [
+    "DEFAULT_CHECK_RECOVERY",
+    "DEFAULT_NEXT_KIND",
+    "DEFAULT_PRIORITY",
+    "DEFAULT_RENDER_DIR",
     "GateEvidence",
     "WorkflowGateEdit",
     "_load",
+    "abandon",
+    "block",
     "board",
+    "brief",
+    "claim",
+    "complete",
     "completion_verdict",
     "decision_add",
     "decision_applicable",
@@ -86,11 +110,16 @@ __all__ = [
     "gate_run",
     "gate_status",
     "gate_verify",
+    "heartbeat",
     "loops",
+    "merge_item",
+    "next_item",
     "phase_add",
     "progress",
     "rebuild",
     "recover",
+    "release_item",
+    "remove_item",
     "render",
     "replay",
     "show",

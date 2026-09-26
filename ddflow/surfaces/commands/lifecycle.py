@@ -1,0 +1,203 @@
+"""`next`, `claim`, `complete`, `merge` and friends — the human surface for
+`api.lifecycle`.
+
+Nothing here decides anything. The four rules that make this path safe — a refused claim
+releases its lease, adopt before creating, never remove an adopted tree, merge goes through
+the existence check — are in `api/lifecycle.py`, which is what makes them testable without
+an argparse Namespace.
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+
+from ...api import lifecycle as A
+from ..context import MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
+
+
+def _refused(out) -> int:
+    print(out.reason, file=sys.stderr)
+    return out.exit
+
+
+def cmd_next(a, c: Ctx) -> int:
+    """Offer the next actionable item(s). Exit 2 when nothing is actionable."""
+    out = A.next_(c.repo, kind=a.kind, phase=a.phase or "", agent=c.cfg.agent.id)
+    if c.json:
+        print(json.dumps(out.body(), indent=2, default=str))
+        return out.exit
+    p = out.data["_render"]["plan"]
+    if p.cycles:
+        print("DEPENDENCY CYCLE(S) — nothing can be scheduled inside them:", file=sys.stderr)
+        for cyc in p.cycles:
+            print("  " + " -> ".join(cyc), file=sys.stderr)
+    # Offered, but never silently: an item RUNNING with nobody on it may have a worktree
+    # full of work, and starting it from scratch loses that.
+    for note in p.interrupted:
+        print(f"INTERRUPTED: {note}", file=sys.stderr)
+    if not p.ready:
+        print(out.reason)
+        for b in p.blocked[:10]:
+            print(f"  {b.item}: {b.reason} — {b.detail}")
+        return NOTHING
+    print(f"Ready ({p.summary()}):")
+    for it in p.ready:
+        print(f"  {it.id}  {it.title}")
+        if it.globs:
+            print(f"      writes: {', '.join(it.globs)}")
+    if len(p.ready) > 1:
+        print("\nThese are independent — run them in parallel worktrees.")
+    for b in p.blocked[:6]:
+        print(f"  (blocked) {b.item}: {b.reason} — {b.detail}")
+    return OK
+
+
+def cmd_claim(a, c: Ctx) -> int:
+    out = A.claim(
+        c.repo,
+        a.id,
+        globs=a.globs or "",
+        note=a.note or "",
+        force=a.force,
+        no_worktree=a.no_worktree,
+        # WHERE THE CALLER IS, not the resolved primary. Adoption depends on whether the
+        # caller was already standing in a worktree, and resolving to the repo root loses
+        # exactly that fact.
+        called_from=c.called_from,
+        agent=c.cfg.agent.id,
+    )
+    if out.exit != OK:
+        return _refused(out)
+    d = out.data
+    msg = f"claimed {a.id} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+    if d["worktree"] and d["adopted"]:
+        # Do NOT say "cd there and work" -- the caller is already there, and telling an
+        # agent to move is what the old behaviour did wrong.
+        msg += (
+            f"\n  worktree: {d['worktree']}  (adopted — you were already in it)"
+            f"\n  branch:   {d['branch']}\n  Carry on where you are."
+        )
+    elif d["worktree"]:
+        msg += (
+            f"\n  worktree: {d['worktree']}\n  branch:   {d['branch']} (from {d['base']})"
+            f"\n  cd there and work."
+        )
+    c.out(msg, out.body(("item", "holder", "worktree", "branch")))
+    return OK
+
+
+def cmd_heartbeat(a, c: Ctx) -> int:
+    out = A.heartbeat(c.repo, a.id, agent=c.cfg.agent.id)
+    c.out(
+        f"{'renewed' if out.data['renewed'] else 'no lease held'} {a.id}",
+        out.body(("renewed",)),
+    )
+    return out.exit
+
+
+def cmd_release(a, c: Ctx) -> int:
+    out = A.release(c.repo, a.id, note=a.note or "", agent=c.cfg.agent.id)
+    c.out(
+        f"{'released' if out.data['released'] else 'no lease on'} {a.id}",
+        out.body(("released",)),
+    )
+    return out.exit
+
+
+def cmd_complete(a, c: Ctx) -> int:
+    out = A.complete(
+        c.repo, a.id, sha=a.sha or "", force=a.force, model=a.model or "", agent=c.cfg.agent.id
+    )
+    for warning in out.data.get("warnings", []):
+        print(f"NOTE: {warning}", file=sys.stderr)
+    if out.exit != OK:
+        return _refused(out)
+    if out.data["note"] and not c.json:
+        print(f"NOTE: {out.data['note']}")
+    blockers = out.data["blockers"]
+    c.out(
+        f"{a.id} completed"
+        + (f" as {a.sha}" if a.sha else "")
+        + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else ""),
+        out.body(("id", "sha", "independence", "forced", "coverage_gaps", "note")),
+    )
+    return OK
+
+
+def cmd_abandon(a, c: Ctx) -> int:
+    out = A.abandon(c.repo, a.id, reason=a.reason, force=a.force, agent=c.cfg.agent.id)
+    if out.exit != OK:
+        return _refused(out)
+    c.out(f"{a.id} abandoned: {a.reason}", out.body(("id", "reason")))
+    return OK
+
+
+def cmd_remove(a, c: Ctx) -> int:
+    out = A.remove(c.repo, a.id, reason=a.reason or "", force=a.force, agent=c.cfg.agent.id)
+    if out.exit != OK:
+        return _refused(out)
+    c.out(f"{a.id} removed from the queue", out.body(("id",)))
+    return OK
+
+
+def cmd_block(a, c: Ctx) -> int:
+    out = A.block(c.repo, a.id, reason=a.reason, agent=c.cfg.agent.id)
+    if out.exit != OK:
+        return _refused(out)
+    c.out(f"{a.id} blocked: {a.reason}", out.body(("id",)))
+    return OK
+
+
+def cmd_merge(a, c: Ctx) -> int:
+    out = A.merge(
+        c.repo,
+        a.id,
+        message=a.message or "",
+        allow_dirty=a.allow_dirty,
+        keep=a.keep,
+        agent=c.cfg.agent.id,
+    )
+    if out.exit == REFUSED and out.data.get("dirty"):
+        # The NAMES, truncated here rather than in the api: how many to show is a
+        # presentation decision, and a caller reading JSON wants all of them.
+        dirty = out.data["dirty"]
+        print(
+            f"{len(dirty)} uncommitted file(s) in {out.data['path']} would NOT be "
+            f"included in the merge:",
+            file=sys.stderr,
+        )
+        for entry in dirty[:MAX_LISTED_FILES]:
+            print(f"  {entry}", file=sys.stderr)
+        if len(dirty) > MAX_LISTED_FILES:
+            print(f"  ... and {len(dirty) - MAX_LISTED_FILES} more", file=sys.stderr)
+        print(
+            "\nCommit them, add them to .gitignore if they are build output, or pass "
+            "--allow-dirty to merge without them.",
+            file=sys.stderr,
+        )
+        return REFUSED
+    if out.exit != OK:
+        return _refused(out)
+    if out.data["kept_reason"]:
+        print(f"  {out.data['kept_reason']}", file=sys.stderr)
+    c.out(
+        f"merged {a.id} ({out.data['sha'][:8]}) into {out.data['base']}",
+        out.body(("id", "sha")),
+    )
+    return OK
+
+
+def cmd_brief(a, c: Ctx) -> int:
+    out = A.brief(
+        c.repo,
+        item=a.item or "",
+        phase=a.phase or "",
+        check_recovery=a.check_recovery,
+        agent=c.cfg.agent.id,
+    )
+    if c.json:
+        print(json.dumps(out.body(("brief", "item", "ready", "approx_tokens")), indent=2))
+    else:
+        print(out.data["text"])
+    return OK

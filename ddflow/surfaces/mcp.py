@@ -62,12 +62,17 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "brief",
-            *_opt("--item", a),
-            *_opt("--phase", a),
-            *(["--check-recovery"] if a.get("check_recovery") else []),
-        ],
+        "api": lambda repo, a, agent: _api().brief(
+            repo,
+            item=a.get("item", "") or "",
+            phase=a.get("phase", "") or "",
+            check_recovery=bool(a.get("check_recovery", _api().DEFAULT_CHECK_RECOVERY)),
+            agent=agent,
+        ),
+        # PROSE: the budgeted reading pack is text to read.
+        "payload": "text",
+        "text": True,
+        "kind": "brief",
     },
     "ddflow_next": {
         "description": (
@@ -84,7 +89,13 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "kind": ("string", "'task' (default) or 'phase'.", False),
         },
-        "argv": lambda a: ["--json", "next", *_opt("--phase", a), *_opt("--kind", a)],
+        "api": lambda repo, a, agent: _api().next_item(
+            repo,
+            kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
+            phase=a.get("phase", "") or "",
+            agent=agent,
+        ),
+        "payload": "",
     },
     "ddflow_claim": {
         "description": (
@@ -112,15 +123,21 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "claim",
+        "api": lambda repo, a, agent, called_from=None: _api().claim(
+            repo,
             a["id"],
-            *_opt("--globs", a),
-            *_opt("--note", a),
-            *(["--no-worktree"] if a.get("no_worktree") else []),
-            *(["--force"] if a.get("force") else []),
-        ],
+            globs=a.get("globs", "") or "",
+            note=a.get("note", "") or "",
+            force=bool(a.get("force")),
+            no_worktree=bool(a.get("no_worktree")),
+            called_from=called_from,
+            agent=agent,
+        ),
+        "payload": ("item", "holder", "worktree", "branch"),
+        # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
+        # which repo: adoption turns on whether the caller was already standing in a
+        # worktree. The dispatcher passes it only to tools that ask.
+        "wants_called_from": True,
     },
     "ddflow_heartbeat": {
         "description": (
@@ -128,7 +145,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "or the lease expires and another agent may take the item."
         ),
         "properties": {"id": ("string", "Item id.", True)},
-        "argv": lambda a: ["--json", "heartbeat", a["id"]],
+        "api": lambda repo, a, agent: _api().heartbeat(repo, a["id"], agent=agent),
+        "payload": ("renewed",),
     },
     "ddflow_gate_status": {
         "description": (
@@ -271,14 +289,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "complete",
+        "api": lambda repo, a, agent: _api().complete(
+            repo,
             a["id"],
-            *_opt("--sha", a),
-            *_opt("--model", a),
-            *(["--force"] if a.get("force") else []),
-        ],
+            sha=a.get("sha", "") or "",
+            force=bool(a.get("force")),
+            model=a.get("model", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id", "sha", "independence", "forced", "coverage_gaps", "note"),
     },
     "ddflow_merge": {
         "description": (
@@ -297,14 +316,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "merge",
+        "api": lambda repo, a, agent: _api().merge_item(
+            repo,
             a["id"],
-            *_opt("--message", a),
-            *(["--keep"] if a.get("keep") else []),
-            *(["--allow-dirty"] if a.get("allow_dirty") else []),
-        ],
+            message=a.get("message", "") or "",
+            allow_dirty=bool(a.get("allow_dirty")),
+            keep=bool(a.get("keep")),
+            agent=agent,
+        ),
+        "payload": ("id", "sha"),
     },
     "ddflow_phase_add": {
         "description": (
@@ -336,7 +356,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             globs=a.get("globs", "") or "",
             body=a.get("body", "") or "",
             tags=a.get("tags", "") or "",
-            priority=int(a.get("priority") or 0),
+            priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
             agent=agent,
         ),
         "payload": ("id",),
@@ -410,7 +430,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             globs=a.get("globs", "") or "",
             body=a.get("body", "") or "",
             tags=a.get("tags", "") or "",
-            priority=int(a.get("priority") or 0),
+            priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
             agent=agent,
         ),
         "payload": ("id",),
@@ -852,7 +872,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
         },
         "api": lambda repo, a, agent: _api().render(
-            repo, show=a.get("show", "") or "", out_dir=a.get("out", "") or "", agent=agent
+            repo,
+            show=a.get("show", "") or "",
+            out_dir=a.get("out") or _api().DEFAULT_RENDER_DIR,
+            agent=agent,
         ),
         # Two shapes, both pre-existing: `--show` returned the DOCUMENT and without it
         # the answer was the list of files written. A predicate, because which one it
@@ -1460,14 +1483,10 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "abandon",
-            a["id"],
-            "--reason",
-            a.get("reason", ""),
-            *(["--force"] if a.get("force") else []),
-        ],
+        "api": lambda repo, a, agent: _api().abandon(
+            repo, a["id"], reason=a.get("reason", "") or "", force=bool(a.get("force")), agent=agent
+        ),
+        "payload": ("id", "reason"),
     },
     "ddflow_remove": {
         "description": (
@@ -1487,13 +1506,10 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "remove",
-            a["id"],
-            *_opt("--reason", a),
-            *(["--force"] if a.get("force") else []),
-        ],
+        "api": lambda repo, a, agent: _api().remove_item(
+            repo, a["id"], reason=a.get("reason", "") or "", force=bool(a.get("force")), agent=agent
+        ),
+        "payload": ("id",),
     },
     "ddflow_release": {
         "description": (
@@ -1506,7 +1522,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id.", True),
             "note": ("string", "Why you are releasing it.", False),
         },
-        "argv": lambda a: ["--json", "release", a["id"], *_opt("--note", a)],
+        "api": lambda repo, a, agent: _api().release_item(
+            repo, a["id"], note=a.get("note", "") or "", agent=agent
+        ),
+        "payload": ("released",),
     },
     "ddflow_block": {
         "description": (
@@ -1519,7 +1538,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id.", True),
             "reason": ("string", "What it is waiting on.", True),
         },
-        "argv": lambda a: ["--json", "block", a["id"], "--reason", a.get("reason", "")],
+        "api": lambda repo, a, agent: _api().block(
+            repo, a["id"], reason=a.get("reason", "") or "", agent=agent
+        ),
+        "payload": ("id",),
     },
     "ddflow_session_start": {
         "description": "Open a session for provenance logging. Returns the session id.",
@@ -1885,7 +1907,18 @@ class Server:
                 )
             if "api" in spec:
                 try:
-                    result = spec["api"](self.repo, args, self.agent)
+                    # `called_from` only where the tool asks for it. `claim` is the one
+                    # operation whose behaviour depends on WHERE the caller is standing
+                    # rather than which repo it is in: an agent whose harness already put
+                    # it in a worktree should have that tree ADOPTED, and resolving to the
+                    # primary loses the only fact that says so. `main()` computed it and
+                    # discarded it, which is why adoption was unreachable from MCP.
+                    if spec.get("wants_called_from"):
+                        result = spec["api"](
+                            self.repo, args, self.agent, called_from=self.called_from
+                        )
+                    else:
+                        result = spec["api"](self.repo, args, self.agent)
                 except (KeyError, TypeError, ValueError) as exc:
                     return _ok(mid, _text(f"bad arguments: {exc}", error=True))
                 # `text` may be a bool or a predicate on the arguments: `render`

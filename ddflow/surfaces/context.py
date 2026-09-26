@@ -41,10 +41,9 @@ UNAVAILABLE_EXIT = NOTHING
 #: operator has to make -- without burying the remedy underneath them.
 MAX_LISTED_FILES = 10
 
-#: `worktree.merge`/`remove` return this to mean "refused on a precondition" as opposed
-#: to "git failed". It maps to the CLI's REFUSED, and naming it keeps the two exit
-#: vocabularies from being silently conflated.
-GIT_REFUSED = 2
+#: Re-exported from `infra/worktree.py`, which is where the functions that RETURN it
+#: live. The api layer needs the same constant and may not import a surface.
+GIT_REFUSED = W.GIT_REFUSED
 
 
 class Ctx:

@@ -443,6 +443,13 @@ def is_merged(repo: Path, branch: str, base: str) -> bool:
     return r.ok and r.out.strip() == "0"
 
 
+#: What `merge` and `remove` return to mean "refused on a precondition" as opposed to
+#: "git failed". It maps to the surfaces' REFUSED (3), and naming it here — beside the
+#: functions that return it — keeps the two exit vocabularies from being silently
+#: conflated by whoever reads only one of them.
+GIT_REFUSED = 2
+
+
 def absolutise(repo: Path, data: Any) -> Any:
     """Plain-data view with worktree paths resolved to absolute.
 

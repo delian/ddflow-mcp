@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 35
+ARGV_TOOLS_CEILING = 25
 
 
 def _typed() -> list[str]:
@@ -248,6 +248,8 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_replay": (["replay"], {}),
     "ddflow_render": (["render", "--show", "board"], {"show": "board"}),
     "ddflow_gate_status": (["gate", "status", "T1"], {"id": "T1"}),
+    "ddflow_next": (["next"], {}),
+    "ddflow_brief": (["brief"], {}),
     "ddflow_gate_verify": (
         ["gate", "verify", "T1", "unit_tests"],
         {"id": "T1", "gate": "unit_tests"},
@@ -268,6 +270,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
 #: them as JSON is what the first version of the comparison did, and it reported a
 #: markdown board as "no JSON body".
 TEXT_BODIED = {
+    "ddflow_brief",
     "ddflow_doctor",
     "ddflow_gate_status",
     "ddflow_board",
@@ -288,6 +291,14 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_phase_add",
     "ddflow_task_add",
     "ddflow_split",
+    "ddflow_claim",
+    "ddflow_heartbeat",
+    "ddflow_release",
+    "ddflow_complete",
+    "ddflow_abandon",
+    "ddflow_remove",
+    "ddflow_block",
+    "ddflow_merge",
 }
 
 
@@ -1013,3 +1024,108 @@ def test_a_task_cannot_be_added_under_a_parent_that_does_not_exist(repo):
 
     _code, rows, _ = run_cli(repo, "--json", "progress")
     assert "T1" not in rows, "the task was added under a parent that does not exist"
+
+
+# -- defaults live in ONE place -----------------------------------------------------------
+
+#: (subcommand path, argparse dest) -> the api constant that must equal it.
+#:
+#: Every row here is a bug that shipped. Migrating a command to the typed layer moves the
+#: call OFF argparse, so any default that lived only in the parser is silently replaced by
+#: whatever the new signature happens to say — and a falsy literal is the natural thing to
+#: write. Four were dropped in one session:
+#:
+#:   next --kind            "task"          -> ""      `ddflow_next` returned an EMPTY queue
+#:   phase/task --priority  100             -> 0       everything over MCP filed at top priority
+#:   brief --check-recovery True            -> False   crashed work no longer surfaced
+#:   render --out           "docs/ddflow"   -> ""      views written to the repo root
+#:
+#: Only the first was caught by the wire-shape comparison, because only it changed the body
+#: in the fixture's state. The other three are invisible to a comparison of two surfaces
+#: that now share the same wrong default — which is the same lesson as "parity is not
+#: correctness", one layer down.
+DEFAULT_SOURCES: list[tuple[tuple[str, ...], str, str]] = [
+    (("next",), "kind", "DEFAULT_NEXT_KIND"),
+    (("phase", "add"), "priority", "DEFAULT_PRIORITY"),
+    (("task", "add"), "priority", "DEFAULT_PRIORITY"),
+    (("brief",), "check_recovery", "DEFAULT_CHECK_RECOVERY"),
+    (("render",), "out", "DEFAULT_RENDER_DIR"),
+]
+
+
+@pytest.mark.parametrize(("path", "dest", "constant"), DEFAULT_SOURCES)
+def test_the_parser_and_the_api_agree_on_every_default(path, dest, constant):
+    import argparse as _argparse
+
+    from ddflow import api
+    from ddflow.surfaces.cli import build_parser
+
+    node = build_parser()
+    for part in path:
+        sub = next(a for a in node._actions if isinstance(a, _argparse._SubParsersAction))
+        assert part in sub.choices, f"no subcommand {part!r}"
+        node = sub.choices[part]
+    found = {a.dest: a.default for a in node._actions}
+    assert dest in found, f"{'/'.join(path)} has no --{dest.replace('_', '-')}"
+    assert found[dest] == getattr(api, constant), (
+        f"{'/'.join(path)} --{dest.replace('_', '-')} defaults to {found[dest]!r} but "
+        f"api.{constant} is {getattr(api, constant)!r}. The default must have ONE home, "
+        f"or the typed path and the argv path disagree without anything saying so."
+    )
+
+
+def test_every_api_default_constant_is_actually_used_by_a_signature():
+    """A constant the functions do not use is documentation, not a default."""
+    import inspect
+
+    from ddflow import api
+
+    pairs = [
+        (api.next_item, "kind", api.DEFAULT_NEXT_KIND),
+        (api.phase_add, "priority", api.DEFAULT_PRIORITY),
+        (api.task_add, "priority", api.DEFAULT_PRIORITY),
+        (api.brief, "check_recovery", api.DEFAULT_CHECK_RECOVERY),
+        (api.render, "out_dir", api.DEFAULT_RENDER_DIR),
+    ]
+    for fn, param, want in pairs:
+        got = inspect.signature(fn).parameters[param].default
+        assert got == want, f"api.{fn.__name__}({param}=...) defaults to {got!r}, not {want!r}"
+
+
+def test_each_default_VALUE_is_the_one_the_behaviour_needs(repo):
+    """The defaults, asserted by what they DO.
+
+    `test_the_parser_and_the_api_agree_on_every_default` is deliberately kept above, but
+    it is weak and this test exists because mutation testing proved it: once the parser
+    imports the constant, changing the constant changes BOTH sides and they still agree.
+    A ratchet that cannot fail is the vacuous-pass class wearing a badge, and the only
+    honest guard on a default's VALUE is the behaviour that depends on it.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+
+    # `--kind` -> "task". A phase is an umbrella; "work on P1" is not an instruction.
+    run_cli(repo, "phase", "add", "P1", "--title", "P")
+    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "a.py")
+    offered = api.next_item(repo)
+    assert [i["id"] for i in offered.data["ready"]] == ["T1"], (
+        f"the default kind no longer offers tasks: {offered.data['ready']}"
+    )
+
+    # `--priority` -> the MIDDLE of the range, so later work can be pushed either way.
+    # At 0 every item created over MCP would outrank everything filed from the CLI.
+    _code, shown, _ = run_cli(repo, "--json", "show", "T1")
+    assert json.loads(shown)["priority"] == 100, "a task no longer defaults to mid-priority"
+
+    # `--check-recovery` -> True. The moment an agent most needs to know a previous agent
+    # crashed is the moment it is about to start work.
+    import inspect
+
+    assert inspect.signature(api.brief).parameters["check_recovery"].default is True
+
+    # `--out` -> docs/ddflow, not the repo root. Writing generated views over the top of
+    # a project is not a default anyone would choose deliberately.
+    out = api.render(repo)
+    assert out.data["files"], "render wrote nothing"
+    assert all("docs/ddflow" in f for f in out.data["files"]), out.data["files"]

@@ -328,8 +328,13 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
 #: module whose whole premise is "one implementation, two doors".
 _RENDERABLE = ("lessons", "research", "board")
 
+#: Where `render` writes its views when no directory is given.
+DEFAULT_RENDER_DIR = "docs/ddflow"
 
-def render(repo: Path, *, show: str = "", out_dir: str = "", agent: str = "") -> O.Outcome:
+
+def render(
+    repo: Path, *, show: str = "", out_dir: str = DEFAULT_RENDER_DIR, agent: str = ""
+) -> O.Outcome:
     """One named view as a document, or every view written to disk.
 
     Two shapes by design, and both are pre-existing contracts: `--show` returns the

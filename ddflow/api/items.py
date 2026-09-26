@@ -62,6 +62,14 @@ def update(
 #: Splitting into one piece is a rename, not a split.
 MIN_SPLIT_PARTS = 2
 
+#: Where an item sits when nobody says otherwise. The MIDDLE of the range, so a later
+#: item can be pushed either way without renumbering anything.
+#:
+#: Declared here and imported by the parser, not written twice. Duplicated, it became
+#: 100 in argparse and 0 in this layer — so every phase and task created over MCP was
+#: filed at the TOP priority while the CLI filed them in the middle, and nothing said so.
+DEFAULT_PRIORITY = 100
+
 
 def phase_add(
     repo: Path,
@@ -72,7 +80,7 @@ def phase_add(
     globs: str = "",
     body: str = "",
     tags: str = "",
-    priority: int = 0,
+    priority: int = DEFAULT_PRIORITY,
     agent: str = "",
 ) -> O.Outcome:
     """Add a phase — an umbrella that completes when its tasks do."""
@@ -102,7 +110,7 @@ def task_add(
     globs: str = "",
     body: str = "",
     tags: str = "",
-    priority: int = 0,
+    priority: int = DEFAULT_PRIORITY,
     agent: str = "",
 ) -> O.Outcome:
     """Add a task. Its parent may be a phase OR another task (making it a sub-task).
