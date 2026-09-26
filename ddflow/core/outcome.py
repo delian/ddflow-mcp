@@ -110,12 +110,39 @@ class Outcome:
         return self.ok
 
 
+#: Field names the Outcome takes itself. An operation whose WIRE shape includes one of
+#: these cannot spread `**data` into a helper: `gate verify` and `decision supersede` both
+#: carry a `reason` on the wire, meaning different things from the Outcome's `reason`.
+#:
+#: WHERE THIS IS CAUGHT DIFFERS, and it is worth knowing which message you will get.
+#: `failed`, `refused` and `nothing` declare `reason` as a parameter, so PYTHON rejects
+#: the duplicate first -- "failed() got multiple values for argument 'reason'", which is
+#: true and says nothing about the remedy. `_check` cannot run before that and does not
+#: try. It covers `ok()`, which has no such parameter and would otherwise swallow a
+#: `reason=` into `data` silently, and `exit`/`kind` wherever they are not positional.
+#:
+#: Either way the remedy is the same: build the Outcome directly.
+_RESERVED = ("kind", "reason", "exit")
+
+
+def _check(fn: str, data: dict[str, Any]) -> None:
+    clash = [k for k in _RESERVED if k in data]
+    if clash:
+        raise TypeError(
+            f"{fn}() cannot take {clash} as wire fields: they are the Outcome's own. "
+            f"Build it directly — `O.Outcome(kind=..., data=data, exit=..., reason=...)` "
+            f"— so the wire field and the Outcome's field stay separate."
+        )
+
+
 def ok(kind: str, **data: Any) -> Outcome:
+    _check("ok", data)
     return Outcome(kind=kind, data=data)
 
 
 def nothing(kind: str, reason: str = "", **data: Any) -> Outcome:
     """Nothing to do. NOT a failure, and never rendered as success."""
+    _check("nothing", data)
     return Outcome(kind=kind, data=data, exit=NOTHING, reason=reason)
 
 
@@ -126,8 +153,10 @@ def refused(kind: str, reason: str, **data: Any) -> Outcome:
     waiting, re-ordering, or satisfying the condition, and an agent that cannot tell the
     two apart retries the wrong one.
     """
+    _check("refused", data)
     return Outcome(kind=kind, data=data, exit=REFUSED, reason=reason)
 
 
 def failed(kind: str, reason: str, **data: Any) -> Outcome:
+    _check("failed", data)
     return Outcome(kind=kind, data=data, exit=FAIL, reason=reason)

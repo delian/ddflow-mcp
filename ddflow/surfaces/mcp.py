@@ -137,7 +137,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "gap, never a pass."
         ),
         "properties": {"id": ("string", "Item id.", True)},
-        "argv": lambda a: ["gate", "status", a["id"]],
+        "api": lambda repo, a, agent: _api().gate_status(repo, a["id"], agent=agent),
+        # PROSE: the body carries the next gate's INSTRUCTION, which is the half an
+        # agent acts on. `--json` gives the structured pipeline instead.
+        "payload": "text",
+        "text": True,
+        "kind": "gate.status",
     },
     "ddflow_gate_run": {
         "description": (
@@ -149,7 +154,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id.", True),
             "gate": ("string", "Gate id, e.g. unit_tests.", True),
         },
-        "argv": lambda a: ["--json", "gate", "run", a["id"], a["gate"]],
+        "api": lambda repo, a, agent: _api().gate_run(repo, a["id"], a["gate"], agent=agent),
+        "payload": ("gate", "outcome", "evidence"),
     },
     "ddflow_gate_record": {
         "description": (
@@ -181,23 +187,22 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: (
-            [
-                "--json",
-                "gate",
-                "record",
-                a["id"],
-                a["gate"],
-                "--outcome",
-                a.get("outcome", "passed"),
-                *_opt("--reason", a),
-                *_opt("--evidence", a),
-                *_opt("--model", a),
-                *_opt("--command", a),
-                *_opt("--exit-code", a, "exit_code"),
-                *_opt("--output-file", a, "output_file"),
-            ]
+        "api": lambda repo, a, agent: _api().gate_record(
+            repo,
+            a["id"],
+            a["gate"],
+            outcome=a.get("outcome", "passed") or "passed",
+            reason=a.get("reason", "") or "",
+            evidence=_api().GateEvidence(
+                note=a.get("evidence", "") or "",
+                command=a.get("command", "") or "",
+                exit_code=a.get("exit_code"),
+                model=a.get("model", "") or "",
+                output_file=a.get("output_file", "") or "",
+            ),
+            agent=agent,
         ),
+        "payload": ("gate", "outcome"),
     },
     "ddflow_gate_verify": {
         "description": (
@@ -219,7 +224,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item whose worktree to mutate in.", True),
             "gate": ("string", "Gate id. Must be a command gate.", True),
         },
-        "argv": lambda a: ["--json", "gate", "verify", a["id"], a["gate"]],
+        "api": lambda repo, a, agent: _api().gate_verify(repo, a["id"], a["gate"], agent=agent),
+        "payload": ("gate", "reason", "results", "verified"),
     },
     "ddflow_gate_skip": {
         "description": (
@@ -241,15 +247,10 @@ TOOLS: dict[str, dict[str, Any]] = {
                 True,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "gate",
-            "skip",
-            a["id"],
-            a["gate"],
-            "--reason",
-            a.get("reason", ""),
-        ],
+        "api": lambda repo, a, agent: _api().gate_record(
+            repo, a["id"], a["gate"], skip=True, reason=a.get("reason", "") or "", agent=agent
+        ),
+        "payload": ("gate", "outcome"),
     },
     "ddflow_complete": {
         "description": (

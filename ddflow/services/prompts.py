@@ -152,6 +152,23 @@ def resolve_command(name: str, repo: Path | None = None) -> Template:
     return Template(name, path.read_text("utf-8"), "builtin", path, "command")
 
 
+def overrides_from(cfg) -> dict[str, str]:
+    """`[prompts]` as the override map `resolve` takes.
+
+    Was `_prompt_overrides(c)` in `surfaces/cli.py`, taking a whole `Ctx` to read one
+    config section — so the api layer could not resolve a template with the operator's
+    overrides honoured without reaching up into a surface. Three call sites, one of which
+    is the gate instruction an agent is handed.
+    """
+    from dataclasses import fields
+
+    return {
+        f.name: getattr(cfg.prompts, f.name)
+        for f in fields(cfg.prompts)
+        if getattr(cfg.prompts, f.name)
+    }
+
+
 def resolve(
     name: str, repo: Path | None = None, overrides: dict[str, str] | None = None
 ) -> Template:

@@ -119,7 +119,9 @@ def decision_supersede(
             id=item,
         )
     log.append("decision.superseded", item, {"by": by, "reason": reason})
-    return O.ok("decision.superseded", id=item, by=by, reason=reason)
+    # Built directly: `reason` is a WIRE field here (why the decision was replaced) and
+    # also the Outcome's own, and the helpers refuse to guess which one you meant.
+    return O.Outcome(kind="decision.superseded", data={"id": item, "by": by, "reason": reason})
 
 
 def decision_show(repo: Path, item: str) -> O.Outcome:

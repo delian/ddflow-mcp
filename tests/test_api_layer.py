@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 43
+ARGV_TOOLS_CEILING = 38
 
 
 def _typed() -> list[str]:
@@ -247,6 +247,11 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_board": (["board"], {}),
     "ddflow_replay": (["replay"], {}),
     "ddflow_render": (["render", "--show", "board"], {"show": "board"}),
+    "ddflow_gate_status": (["gate", "status", "T1"], {"id": "T1"}),
+    "ddflow_gate_verify": (
+        ["gate", "verify", "T1", "unit_tests"],
+        {"id": "T1", "gate": "unit_tests"},
+    ),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
@@ -264,6 +269,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
 #: markdown board as "no JSON body".
 TEXT_BODIED = {
     "ddflow_doctor",
+    "ddflow_gate_status",
     "ddflow_board",
     "ddflow_replay",
     "ddflow_render",
@@ -276,6 +282,9 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_workflow_drop",
     "ddflow_decision_add",
     "ddflow_decision_supersede",
+    "ddflow_gate_run",
+    "ddflow_gate_record",
+    "ddflow_gate_skip",
 }
 
 
@@ -816,3 +825,141 @@ def test_doctor_calls_a_broken_workflow_a_PROBLEM_not_a_note(repo):
         f"filed as a note, so `doctor` exits 0: {out.data['notes']}"
     )
     assert "PROBLEM:" in out.data["text"], out.data["text"][:300]
+
+
+def test_a_wire_field_that_shadows_the_Outcome_is_rejected(repo):
+    """`gate verify` and `decision supersede` both carry a `reason` ON THE WIRE, meaning
+    something different from the Outcome's `reason`. Spreading `**data` into a helper
+    conflates them.
+
+    The two are caught in different places and this asserts both, because the messages
+    differ and the first one is the confusing one: `failed()` declares `reason` as a
+    parameter so Python rejects the duplicate before any check of ours can run, while
+    `ok()` has no such parameter and would otherwise swallow `reason=` into `data`
+    silently — which is the worse failure, since nothing would raise at all.
+    """
+    with pytest.raises(TypeError, match="multiple values for argument 'reason'"):
+        O.failed("k", "the outcome's reason", reason="the wire's reason")
+
+    with pytest.raises(TypeError, match="cannot take"):
+        O.ok("k", reason="the wire's reason")
+    with pytest.raises(TypeError, match="Build it directly"):
+        O.ok("k", exit=0)
+
+    # The documented escape hatch, which both real cases now use.
+    out = O.Outcome(kind="k", data={"reason": "on the wire"}, exit=O.FAIL, reason="the outcome's")
+    assert out.data["reason"] == "on the wire"
+    assert out.reason == "the outcome's"
+    assert out.body() == {"reason": "on the wire"}
+
+
+# -- the gate pipeline's policy, which nothing probed -------------------------------------
+
+
+def _pipeline(repo):
+    from ddflow import api
+
+    return api.workflow_show(repo).data["task_pipeline"]
+
+
+def test_enforce_order_block_actually_blocks(repo):
+    """The order in the pipeline is not decoration.
+
+    A rubber-duck review recorded before `implement` reviewed an empty diff; a `merge`
+    recorded before `unit_tests` merged something nobody tested. `block` is the policy
+    that says so — and disabling it left the entire suite green, so for as long as it has
+    existed nothing has demonstrated that it refuses anything.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    pipeline = _pipeline(repo)
+    assert len(pipeline) > 2, pipeline
+    later = pipeline[-2]
+
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[gates]\nenforce_order = "block"\n')
+
+    out = api.gate_record(repo, "T1", later, outcome="passed", evidence=api.GateEvidence(note="x"))
+    assert out.exit == REFUSED, out
+    assert pipeline[0] in out.reason, out.reason
+    assert out.data["ahead"], out.data
+
+    _code, shown, _ = run_cli(repo, "--json", "show", "T1")
+    assert not json.loads(shown)["gates"].get(later), "refused and recorded anyway"
+
+
+def test_recording_out_of_order_under_warn_records_the_violation(repo):
+    """ "Whether `warn` should become `block` is a judgement about how often this fires,
+    and for as long as it only ever printed, that judgement had no evidence behind it."
+
+    That is the comment on the event. Nothing checked the event was written, so the
+    evidence it exists to gather was never actually gathered.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    pipeline = _pipeline(repo)
+    later = pipeline[-2]
+
+    out = api.gate_record(repo, "T1", later, outcome="passed", evidence=api.GateEvidence(note="x"))
+    assert out.exit == OK, out  # `warn` is the default: recorded, not refused
+
+    shard = next((repo / ".ddflow" / "events").glob("*.jsonl"))
+    kinds = [json.loads(ln)["kind"] for ln in shard.read_text().splitlines() if ln.strip()]
+    assert "gate.out_of_order" in kinds, f"the violation was not recorded: {sorted(set(kinds))}"
+
+
+def test_running_an_AGENT_gate_refuses_and_hands_over_the_instruction(repo):
+    """ddflow cannot perform an agent gate, and must not pretend to have tried.
+
+    Exit 2 with the gate's prompt — not a command gate's empty run, which would record an
+    outcome for work nobody did.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    pipeline = _pipeline(repo)
+    agent_gate = next(
+        g
+        for g in pipeline
+        if not api.workflow_show(repo).data["gates"][pipeline.index(g)]["command"]
+    )
+
+    out = api.gate_run(repo, "T1", agent_gate)
+    assert out.exit == NOTHING, out
+    assert "AGENT gate" in out.reason, out.reason
+    assert "gate record" in out.reason, "it does not say how to record the result"
+    assert out.data["outcome"] == "", out.data
+
+    _code, shown, _ = run_cli(repo, "--json", "show", "T1")
+    assert not json.loads(shown)["gates"].get(agent_gate), "it recorded an outcome anyway"
+
+
+def test_verification_with_no_results_is_never_a_pass():
+    """`all([])` is True, and that is the whole hazard.
+
+    `results` is empty on every pre-flight failure — unknown gate, agent gate, no
+    registered mutations, no green baseline — so scoring on `results` alone turns each of
+    those into "this gate can fail". Asserted on the SCORING RULE rather than end to end,
+    because every reachable pre-flight failure also sets `reason`, which means the
+    `bool(results)` clause is defence in depth and cannot be reached through the CLI. A
+    guard that cannot be reached is exactly the kind that gets deleted as redundant.
+    """
+    from ddflow.api import gates as G
+
+    def verified(results, reason):
+        return bool(results) and not reason and all(r for r in results)
+
+    assert verified([], "") is False, "an empty verification scored as a pass"
+    assert verified([True], "") is True
+    assert verified([True], "no green baseline") is False
+    assert verified([False], "") is False
+    # And the rule under test is the one the module actually uses.
+    src = (Path(G.__file__)).read_text()
+    assert '"verified": bool(results) and not reason and all(r.ok for r in results)' in src, (
+        "the scoring rule changed; this test is now checking a copy of it"
+    )

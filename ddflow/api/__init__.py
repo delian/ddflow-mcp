@@ -45,6 +45,11 @@ from .decisions import (
     decision_show,
     decision_supersede,
 )
+from .gates import Evidence as GateEvidence
+from .gates import record as gate_record
+from .gates import run as gate_run
+from .gates import status as gate_status
+from .gates import verify as gate_verify
 from .items import update
 from .reporting import (
     board,
@@ -65,6 +70,7 @@ from .workflow import pipeline as workflow_pipeline
 from .workflow import show as workflow_show
 
 __all__ = [
+    "GateEvidence",
     "WorkflowGateEdit",
     "_load",
     "board",
@@ -76,6 +82,10 @@ __all__ = [
     "decision_show",
     "decision_supersede",
     "doctor",
+    "gate_record",
+    "gate_run",
+    "gate_status",
+    "gate_verify",
     "loops",
     "progress",
     "rebuild",

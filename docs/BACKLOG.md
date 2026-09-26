@@ -1626,3 +1626,25 @@ the reason this is a gap rather than a hole:
   Both are worth doing together: B158 without B159 is a banner, and B159 without B158
   has nowhere to appear. Sequenced after the B36/B37 migration, because the footer has
   to be assembled from `Outcome`s and 51 tools still return scraped stdout.
+
+- **B160. The out-of-order warning reaches humans only.** FILED, pre-existing, found
+  while migrating the gate family (B36/B37). Recording a gate out of order under
+  `enforce_order = "warn"` prints `NOTE: <gate> comes after <earlier> …` to **stderr**,
+  and `_run_cli` captured stdout — so an agent driving over MCP has never seen it. It
+  recorded `rubber_duck` before `implement`, was told nothing, and the only trace is a
+  `gate.out_of_order` event nobody reads back.
+
+  This is the coverage-gap-visible-to-humans-only class, and it is the exact bug whose
+  comment still sits in `cmd_complete`: *"it used to print only in human mode, so an
+  agent driving over MCP was never told that a gate had not run."* Third occurrence.
+
+  The fix is one line — add `warning` to `ddflow_gate_record`'s payload projection, which
+  the api now carries on the Outcome — and it is NOT taken here because it changes the
+  wire shape of `ddflow gate record --json` by adding a key, and B37's rule is that a
+  migration removes a duplicated rendering and does not redefine contracts. Do it as its
+  own change, with the demo scenarios re-run, so that if a consumer breaks it is
+  attributable.
+
+  Probe that it is real: `api.gate_record(...)` out of order returns
+  `data["warning"]` non-empty and `data["ahead"] == ["implement", ...]`, while
+  `out.body(("gate", "outcome"))` — the MCP body — contains neither.
