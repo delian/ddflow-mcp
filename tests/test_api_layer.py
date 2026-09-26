@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 47
+ARGV_TOOLS_CEILING = 43
 
 
 def _typed() -> list[str]:
@@ -241,6 +241,12 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_rebuild": (["rebuild"], {}),
     "ddflow_show": (["show", "T1"], {"id": "T1"}),
     "ddflow_recover": (["recover"], {}),
+    # Text-bodied: their CLI form has no `--json` either, so the comparison is
+    # document against document.
+    "ddflow_doctor": (["doctor"], {}),
+    "ddflow_board": (["board"], {}),
+    "ddflow_replay": (["replay"], {}),
+    "ddflow_render": (["render", "--show", "board"], {"show": "board"}),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
@@ -252,6 +258,17 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
 #: map unnoticed — is what keeps `test_every_typed_tool_has_a_wire_shape_row` honest:
 #: an unlisted tool is a missing contract, and a listed one is a deliberate exemption
 #: with a reason. Each still needs its own behavioural test.
+#: Migrated tools whose body is a DOCUMENT rather than JSON, on both surfaces and before
+#: the migration too — their argv form carries no `--json`. Compared text-to-text; parsing
+#: them as JSON is what the first version of the comparison did, and it reported a
+#: markdown board as "no JSON body".
+TEXT_BODIED = {
+    "ddflow_doctor",
+    "ddflow_board",
+    "ddflow_replay",
+    "ddflow_render",
+}
+
 WRITES_NOT_COMPARABLE = {
     "ddflow_update",
     "ddflow_workflow_pipeline",
@@ -298,8 +315,12 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     )
 
     argv, arguments = MIGRATED_WIRE_SHAPES[tool]
-    _code, cli_out, _err = run_cli(repo, "--json", *argv)
-    from_cli = _json.loads(cli_out)
+    # `--json` is passed for the JSON tools only. A text-bodied tool ignores it today,
+    # but passing it would encode "these are the same kind of thing" into the check that
+    # exists to tell them apart.
+    head = [] if tool in TEXT_BODIED else ["--json"]
+    _code, cli_out, _err = run_cli(repo, *head, *argv)
+    from_cli = None if tool in TEXT_BODIED else _json.loads(cli_out)
 
     reply = Server(repo).handle(
         {
@@ -310,8 +331,20 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
         }
     )
     text = reply["result"]["content"][0]["text"]
+
+    if tool in TEXT_BODIED:
+        # Document against document. `run_cli` strips nothing, so the only permitted
+        # difference is the trailing newline `print` adds.
+        assert text.rstrip("\n") == cli_out.rstrip("\n"), (
+            f"{tool}: the two surfaces render different documents\n"
+            f"CLI: {cli_out[:300]!r}\nMCP: {text[:300]!r}"
+        )
+        assert text.strip(), f"{tool} returned an empty document"
+        return
+
+    from_mcp_text = text
     start = min((i for i in (text.find("["), text.find("{")) if i != -1), default=-1)
-    assert start != -1, f"{tool} returned no JSON body: {text[:200]}"
+    assert start != -1, f"{tool} returned no JSON body: {from_mcp_text[:200]}"
     from_mcp = _json.loads(text[start:])
 
     assert type(from_mcp) is type(from_cli), (
@@ -679,3 +712,107 @@ def test_nothing_to_recover_is_exit_2_not_success(repo):
     assert out.exit == NOTHING, out
     assert out.data["count"] == 0
     assert "Nothing to recover" in out.reason
+
+
+def test_every_text_bodied_tool_actually_returns_a_STRING(repo):
+    """A text tool whose payload names a non-string is a TypeError on a live connection.
+
+    This replaced a check that every text-bodied tool's kind had a renderer in
+    `views/human.py` — which was the wrong invariant: `board` and `render` produce their
+    documents in `views/markdown.py` and `replay` in `services/sessions.py`, all of which
+    are already below both surfaces. WHERE the text is rendered does not matter; that the
+    declared payload holds a rendered string does.
+    """
+    from ddflow.surfaces.mcp import TOOLS, Server
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    srv = Server(repo)
+
+    checked = 0
+    for name in sorted(TEXT_BODIED):
+        spec = TOOLS[name]
+        assert "api" in spec, f"{name} is listed as text-bodied but is not migrated"
+        _argv, arguments = MIGRATED_WIRE_SHAPES[name]
+        reply = srv.handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+        )
+        body = reply["result"]["content"][0]["text"]
+        assert body.strip(), f"{name} returned an empty document"
+        # Not JSON. A tool that silently started returning `{"text": "..."}` would still
+        # be a string here, and this is the assertion that says which one it is.
+        assert not body.lstrip().startswith(("{", "[")), (
+            f"{name} declares a text body but returned what looks like JSON: {body[:120]!r}"
+        )
+        checked += 1
+    assert checked == len(TEXT_BODIED)
+
+
+def test_a_document_body_is_not_prefixed_with_the_reason():
+    """`doctor` ends with "2 problem(s)."; leading with "2 problem(s)" says it twice.
+
+    The string path returned the report ALONE, so prefixing is also a wire change. A
+    document's renderer decides its own lead — that is what distinguishes it from a JSON
+    body, where the reason leading the text is exactly what a reader wants first.
+    """
+    from ddflow.surfaces.mcp import _outcome_result
+
+    failed = O.failed("doctor", "2 problem(s)", text="the report\n2 problem(s).")
+    body = _outcome_result(failed, "text", as_text=True)["content"][0]["text"]
+    assert body == "the report\n2 problem(s).", body
+    assert body.count("2 problem(s)") == 1, body
+
+    # JSON bodies keep the reason first, unchanged.
+    j = _outcome_result(O.failed("k", "broke", rows=[]), "rows")["content"][0]["text"]
+    assert j.splitlines()[0] == "broke", j
+
+
+def test_an_EMPTY_document_falls_back_to_the_reason():
+    """Returning nothing for a failed call is the unavailable-as-success class with no
+    text to hide behind: the caller sees a blank body and an exit code it may not read."""
+    from ddflow.surfaces.mcp import _outcome_result
+
+    out = _outcome_result(O.failed("render", "unknown view 'nope'", text=""), "text", as_text=True)
+    assert out["content"][0]["text"] == "unknown view 'nope'"
+    assert out["isError"] is True
+
+
+def test_a_text_tool_whose_payload_is_not_a_string_fails_loudly():
+    """A misdeclared payload would otherwise ship a `repr` of a list to the client as if
+    it were prose."""
+    from ddflow.surfaces.mcp import _outcome_result
+
+    with pytest.raises(TypeError, match="declared `text`"):
+        _outcome_result(O.ok("board", text=["not", "a", "string"]), "text", as_text=True)
+
+
+def test_doctor_calls_a_broken_workflow_a_PROBLEM_not_a_note(repo):
+    """The problem/note split IS doctor's value, and it decides the exit code.
+
+    A pipeline naming a gate that has no definition is the one config error that is both
+    silent and permanent: every item entering the pipeline blocks on an outcome that can
+    never be recorded. Filed as a note it becomes exit 0 — advice, in a report an operator
+    runs precisely to be told whether anything is wrong. Mutating the classification to
+    "always a note" left the whole suite green.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    healthy = api.doctor(repo)
+    assert healthy.exit == OK, f"a fresh project is not healthy: {healthy.data['problems']}"
+
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[gates]\ntask_pipeline = ["ghost_gate"]\n')
+
+    out = api.doctor(repo)
+    assert out.exit == FAIL, "an undefined gate in the pipeline reported as healthy"
+    assert any("ghost_gate" in p for p in out.data["problems"]), out.data
+    assert not any("ghost_gate" in n for n in out.data["notes"]), (
+        f"filed as a note, so `doctor` exits 0: {out.data['notes']}"
+    )
+    assert "PROBLEM:" in out.data["text"], out.data["text"][:300]

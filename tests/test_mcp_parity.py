@@ -318,28 +318,24 @@ PROSE_TOOLS: dict[str, str] = {
     "ddflow_review": "reviewer findings, already formatted with their severities",
     "ddflow_reviewers_list": "a table, plus the warning about unclassified reviewers",
     "ddflow_reviewers_detect": "a probe report naming each endpoint and what answered",
+    # Prose for SOME arguments: `--show <view>` returns the rendered document, while
+    # `render` alone returns the list of files it wrote. Both are pre-existing contracts.
+    #
+    # It was missing from this list before the migration, and not because anyone decided
+    # it should be: the check built ONE stub argument dict, that stub had no `show` key,
+    # so it only ever saw the JSON branch. A tool whose shape depends on its arguments was
+    # judged on the arguments the test happened to pass.
+    "ddflow_render": "with --show it returns the rendered view itself, to read or commit",
 }
 
 
 def test_every_tool_is_explicitly_json_or_explicitly_prose():
-    stub = {
-        "id": "X",
-        "gate": "g",
-        "session": "s",
-        "text": "t",
-        "query": "q",
-        "title": "T",
-        "decision": "d",
-        "summary": "s",
-        "into": "a=1,b=2",
-        "question": "q",
-        "verdict": "CONFIRMED",
-        "reason": "r",
-        "outcome": "passed",
-        "phase": "P",
-        "which": "task",
-        "gates": "implement,merge",
-    }
+    """Prose is a DECISION, recorded with its reason, never an accident.
+
+    The stub argument dict this used to build is gone with the argv inspection it fed:
+    `_returns_prose` reads the declaration instead, which is both cheaper and the thing
+    that stayed true when ten tools changed dispatch mechanism.
+    """
     undeclared = []
     for name, spec in sorted(TOOLS.items()):
         # Only the string path can be ambiguous about this. A tool on the typed path
@@ -347,10 +343,9 @@ def test_every_tool_is_explicitly_json_or_explicitly_prose():
         # `identify` tool mutates the connection and returns a sentence -- neither has
         # an argv to inspect, and asking "does its argv say --json" of them would be a
         # KeyError dressed up as a parity finding.
-        if "argv" not in spec:
+        if "identify" in spec:
             continue
-        argv = spec["argv"](stub)
-        if "--json" in argv or name in PROSE_TOOLS:
+        if not _returns_prose(name) or name in PROSE_TOOLS:
             continue
         undeclared.append(name)
     assert not undeclared, (
@@ -360,11 +355,29 @@ def test_every_tool_is_explicitly_json_or_explicitly_prose():
     )
 
 
+def _returns_prose(name: str) -> bool:
+    """Whether a tool's body is a DOCUMENT, whichever way it is dispatched.
+
+    Two mechanisms express the same fact now: a string-path tool omits `--json` from its
+    argv, and a typed tool declares `text`. This test asserted the first only, so a prose
+    tool became invisible to it the moment it migrated — with a `KeyError: 'argv'`, which
+    at least failed loudly. Asking the question once, here, is what keeps the allowlist
+    meaningful across the migration rather than only before it.
+    """
+    spec = TOOLS[name]
+    if "argv" in spec:
+        return "--json" not in spec["argv"]({"id": "X", "gate": "g"})
+    wants_text = spec.get("text", False)
+    if callable(wants_text):
+        # A tool that is prose for SOME arguments — `render --show` returns a document,
+        # `render` alone returns a file list. Prose is a shape it has.
+        return True
+    return bool(wants_text)
+
+
 def test_the_prose_list_only_describes_tools_that_exist():
     stale = [n for n in PROSE_TOOLS if n not in TOOLS]
     assert not stale, f"PROSE_TOOLS names tools that are gone: {stale}"
     for name, reason in PROSE_TOOLS.items():
         assert len(reason) > 20, f"{name}: the reason has to say something"
-        assert "--json" not in TOOLS[name]["argv"]({"id": "X", "gate": "g"}), (
-            f"{name} now emits JSON; drop it from PROSE_TOOLS"
-        )
+        assert _returns_prose(name), f"{name} now emits JSON; drop it from PROSE_TOOLS"

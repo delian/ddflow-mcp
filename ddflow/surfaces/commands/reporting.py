@@ -161,3 +161,50 @@ def cmd_rebuild(a, c: Ctx) -> int:
         out.body(("events", "items")),
     )
     return out.exit
+
+
+def cmd_doctor(a, c: Ctx) -> int:
+    """Everything wrong with this project, and everything worth knowing.
+
+    The prose comes from `views/human.py`, not from here: the MCP tool returns the same
+    report as its body, so a renderer in this module would mean one surface reaching into
+    the other. `--json` gets the lists.
+    """
+    out = A.doctor(c.repo, agent=c.cfg.agent.id)
+    if c.json:
+        print(json.dumps(out.body(("problems", "notes", "events", "items")), indent=2))
+        return out.exit
+    print(out.data["text"])
+    return out.exit
+
+
+def cmd_board(a, c: Ctx) -> int:
+    print(A.board(c.repo, phase=a.phase or "", agent=c.cfg.agent.id).data["text"])
+    return OK
+
+
+def cmd_render(a, c: Ctx) -> int:
+    out = A.render(
+        c.repo, show=getattr(a, "show", "") or "", out_dir=a.out or "", agent=c.cfg.agent.id
+    )
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
+    if out.data["show"]:
+        print(out.data["text"])
+        return OK
+    c.out("\n".join(out.data["files"]), out.body(("files",)))
+    return OK
+
+
+def cmd_replay(a, c: Ctx) -> int:
+    out = A.replay(c.repo, out_dir=a.out or "", verify=a.verify, agent=c.cfg.agent.id)
+    for p in out.data["problems"]:
+        print(f"  ! {p}", file=sys.stderr)
+    if out.data["problems"]:
+        print(f"{len(out.data['problems'])} recorded commit(s) no longer resolve.", file=sys.stderr)
+    if out.data["files"]:
+        c.out(out.data["text"], out.body(("files",)))
+        return OK
+    print(out.data["text"])
+    return OK

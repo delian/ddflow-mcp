@@ -46,7 +46,18 @@ from .decisions import (
     decision_supersede,
 )
 from .items import update
-from .reporting import loops, progress, rebuild, recover, show, status
+from .reporting import (
+    board,
+    doctor,
+    loops,
+    progress,
+    rebuild,
+    recover,
+    render,
+    replay,
+    show,
+    status,
+)
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -56,6 +67,7 @@ from .workflow import show as workflow_show
 __all__ = [
     "WorkflowGateEdit",
     "_load",
+    "board",
     "completion_verdict",
     "decision_add",
     "decision_applicable",
@@ -63,10 +75,13 @@ __all__ = [
     "decision_search",
     "decision_show",
     "decision_supersede",
+    "doctor",
     "loops",
     "progress",
     "rebuild",
     "recover",
+    "render",
+    "replay",
     "show",
     "status",
     "update",

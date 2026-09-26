@@ -39,7 +39,16 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
     _write_config,
 )
 from .commands.decisions import cmd_decision
-from .commands.reporting import cmd_rebuild, cmd_recover, cmd_show, cmd_status
+from .commands.reporting import (
+    cmd_board,
+    cmd_doctor,
+    cmd_rebuild,
+    cmd_recover,
+    cmd_render,
+    cmd_replay,
+    cmd_show,
+    cmd_status,
+)
 from .commands.workflow import cmd_workflow
 from .context import (
     _MIN_SPLIT_PARTS,
@@ -1304,23 +1313,6 @@ def cmd_session(a, c: Ctx) -> int:
     return FAIL
 
 
-def cmd_replay(a, c: Ctx) -> int:
-    st = c.state()
-    steps = session.replay(c.log.read_all())
-    if a.verify:
-        problems = session.verify(st, c.repo, c.cfg)
-        for p in problems:
-            print(f"  ! {p}", file=sys.stderr)
-        if problems:
-            print(f"{len(problems)} recorded commit(s) no longer resolve.", file=sys.stderr)
-    if a.out:
-        files = session.bundle(st, steps, Path(a.out), c.cfg, project=c.repo.name)
-        c.out("wrote:\n" + "\n".join(f"  {f}" for f in files), {"files": [str(f) for f in files]})
-        return OK
-    print(session.render_reconstruction(st, steps, project=c.repo.name))
-    return OK
-
-
 def cmd_progress(a, c: Ctx) -> int:
     """What work has actually been done, aggregated from the log."""
     from ..api import progress as _progress
@@ -1448,130 +1440,6 @@ def cmd_cleanup(a, c: Ctx) -> int:
     for line in done:
         print(f"  {line}")
     c.out(f"\n{len(done)} action(s) performed.", {"performed": done})
-    return OK
-
-
-def cmd_doctor(a, c: Ctx) -> int:
-    problems: list[str] = []
-    notes: list[str] = []
-    problems += c.log.verify()
-    if not (c.repo / ".ddflow").exists():
-        problems.append("no .ddflow directory — run `ddflow init`")
-    if c.store.stale(c.log):
-        notes.append("index is stale; it rebuilds automatically on next read")
-    st = c.state()
-    p = plan(st, c.cfg, agent=c.log.agent_id)
-    for cyc in p.cycles:
-        problems.append("dependency cycle: " + " -> ".join(cyc))
-    for it in st.items.values():
-        for dep in it.needs:
-            if dep not in st.items:
-                problems.append(f"{it.id} needs unknown item {dep!r}")
-    # The workflow's own coherence. A pipeline naming a gate that has no definition is
-    # the one config error that is both silent and permanent -- every item entering the
-    # pipeline blocks on an outcome that can never be recorded -- so it belongs in the
-    # command an operator runs when something is wrong, not only in `ddflow workflow`.
-    from ..services import workflow as WF
-
-    for f in WF.check(c.cfg, c.gates):
-        # `f.subject: f.detail`, not `f.render()` -- doctor prefixes its own severity,
-        # and "PROBLEM: [problem] ..." reads like a bug in the tool reporting the bug.
-        (problems if f.level == WF.PROBLEM else notes).append(f"{f.subject}: {f.detail}")
-
-    from ..core import progress as PR
-    from ..infra import container as CT
-
-    # The reviewer endpoints are fetched HERE and handed down: `infra.container` must
-    # not reach up into `services.review` to get them.
-    try:
-        from ..services.review import load_reviewers
-
-        urls = [(r.name, r.base_url) for r in load_reviewers(c.repo) if r.enabled]
-    except Exception:
-        urls = []
-    notes.extend(CT.warnings(c.repo, c.cfg, urls))
-    for f in PR.detect(c.log.read_all(), st, c.cfg):
-        (problems if f.severity == "block" else notes).append(f.render())
-    rec = L.scan(c.log, c.cfg, c.repo)
-    for r in rec:
-        (problems if r.salvageable else notes).append(f"{r.kind}: {r.item} — {r.advice}")
-    ghosts = [
-        w.get("worktree", "")
-        for w in W.list_worktrees(c.repo)
-        if c.cfg.worktree.branch_prefix.rstrip("/") in w.get("branch", "")
-    ]
-    known = {str(W.load_path(c.repo, it.worktree)) for it in st.items.values() if it.worktree}
-    for g in ghosts:
-        if g and g not in known:
-            notes.append(f"worktree {g} exists but no item claims it")
-    if c.json:
-        print(
-            json.dumps(
-                {
-                    "problems": problems,
-                    "notes": notes,
-                    "events": st.event_count,
-                    "items": len(st.items),
-                },
-                indent=2,
-            )
-        )
-        return FAIL if problems else OK
-    print(
-        f"events {st.event_count} · items {len(st.items)} · agent {c.log.agent_id} · repo {c.repo}"
-    )
-    print(
-        f"index: {'stale (auto-rebuilds)' if c.store.stale(c.log) else 'current'} · "
-        f"fts5: {'yes' if c.store.fts else 'no (LIKE fallback)'}"
-    )
-    for n in notes:
-        print(f"  note: {n}")
-    for pr in problems:
-        print(f"  PROBLEM: {pr}")
-    print("\nHealthy." if not problems else f"\n{len(problems)} problem(s).")
-    return FAIL if problems else OK
-
-
-#: `render --show <name>` targets, and the function that produces each.
-#:
-#: `--show` exists so the MCP `resources/read` handler can serve these through the CLI
-#: like everything else. It used to fold the log itself — a second data path in a
-#: module whose whole premise is "one implementation, two doors", re-wiring EventLog
-#: and fold without the config and agent resolution `Ctx` does.
-_RENDERABLE = {
-    "lessons": render.lessons_md,
-    "research": render.research_md,
-    "board": render.board,
-}
-
-
-def cmd_render(a, c: Ctx) -> int:
-    show = getattr(a, "show", "")
-    if show:
-        fn = _RENDERABLE.get(show)
-        if fn is None:
-            print(
-                f"unknown view {show!r}; known: {', '.join(sorted(_RENDERABLE))}",
-                file=sys.stderr,
-            )
-            return FAIL
-        st = c.state()
-        # `board` takes the config; the two markdown views do not. Inspected rather
-        # than try/except'd, because a TypeError raised INSIDE a renderer would
-        # otherwise be caught and retried with the wrong arity.
-        import inspect
-
-        params = inspect.signature(fn).parameters
-        print(fn(st, c.cfg) if len(params) > 1 else fn(st))
-        return OK
-    st = c.store.ensure(c.log)
-    files = render.write_views(c.repo, st, c.cfg, subdir=a.out)
-    c.out("\n".join(str(f) for f in files), {"files": [str(f) for f in files]})
-    return OK
-
-
-def cmd_board(a, c: Ctx) -> int:
-    print(render.board(c.state(), c.cfg, phase=a.phase or ""))
     return OK
 
 

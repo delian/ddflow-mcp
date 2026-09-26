@@ -589,7 +589,12 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_board": {
         "description": "The whole work queue as a readable board, with the critical path.",
         "properties": {"phase": ("string", "Restrict to one phase.", False)},
-        "argv": lambda a: ["board", *_opt("--phase", a)],
+        "api": lambda repo, a, agent: _api().board(
+            repo, phase=a.get("phase", "") or "", agent=agent
+        ),
+        "payload": "text",
+        "text": True,
+        "kind": "board",
     },
     "ddflow_progress": {
         "description": (
@@ -830,11 +835,12 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "replay",
-            *_opt("--out", a),
-            *(["--verify"] if a.get("verify") else []),
-        ],
+        "api": lambda repo, a, agent: _api().replay(
+            repo, out_dir=a.get("out", "") or "", verify=bool(a.get("verify")), agent=agent
+        ),
+        "payload": "text",
+        "text": True,
+        "kind": "replay",
     },
     "ddflow_render": {
         "description": (
@@ -850,11 +856,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: (
-            ["render", "--show", a["show"]]
-            if a.get("show")
-            else ["--json", "render", *_opt("--out", a)]
+        "api": lambda repo, a, agent: _api().render(
+            repo, show=a.get("show", "") or "", out_dir=a.get("out", "") or "", agent=agent
         ),
+        # Two shapes, both pre-existing: `--show` returned the DOCUMENT and without it
+        # the answer was the list of files written. A predicate, because which one it
+        # is cannot be known until the call.
+        "payload": lambda a: "text" if a.get("show") else ("files",),
+        "text": lambda a: bool(a.get("show")),
+        "kind": "render",
     },
     "ddflow_rebuild": {
         "description": (
@@ -1241,7 +1251,13 @@ TOOLS: dict[str, dict[str, Any]] = {
             "unknown dependencies, orphaned worktrees, stale index."
         ),
         "properties": {},
-        "argv": lambda a: ["doctor"],
+        "api": lambda repo, a, agent: _api().doctor(repo, agent=agent),
+        # PROSE, as it has always been: a list of problems with advice attached is
+        # what an operator and an agent both want, and `views/human.py` renders it once
+        # for both.
+        "payload": "text",
+        "text": True,
+        "kind": "doctor",
     },
     "ddflow_cadence": {
         "description": (
@@ -1577,7 +1593,9 @@ def _list_or_none(args: dict[str, Any], key: str) -> list[str] | None:
     return csv_list(args[key]) if isinstance(args[key], str) else list(args[key])
 
 
-def _outcome_result(out: Any, payload_key: str | tuple[str, ...] = "") -> dict[str, Any]:
+def _outcome_result(
+    out: Any, payload_key: str | tuple[str, ...] = "", *, as_text: bool = False
+) -> dict[str, Any]:
     """An `Outcome` as an MCP tool result: JSON body, `isError` only for a real failure.
 
     Exit 2 ("nothing to do") and 3 ("coordination refused") are RESULTS the model must
@@ -1595,6 +1613,32 @@ def _outcome_result(out: Any, payload_key: str | tuple[str, ...] = "") -> dict[s
     # `Outcome.body` is the ONE implementation of that projection, shared with the
     # CLI's `--json` -- which is the point, since the property being preserved is that
     # the two are byte-identical.
+    #
+    # `as_text` covers the tools whose body is PROSE and always has been: `board` is
+    # markdown, `doctor` is a report an operator reads, `replay` is a reconstruction
+    # document. Their argv form carries no `--json`, so the string path returned the
+    # human rendering -- and JSON-encoding it during migration would hand every existing
+    # consumer one quoted string with `\n` in it instead of the document they parse.
+    # The rendering itself lives in `views/`, below both surfaces, so this is a choice of
+    # ENCODING here and not a second renderer.
+    if as_text:
+        body = out.body(payload_key)
+        if not isinstance(body, str):
+            raise TypeError(
+                f"{out.kind}: declared `text` but its body is a {type(body).__name__}. "
+                f"A text tool's payload must name a rendered string."
+            )
+        # The reason is NOT prepended to a document. `doctor` ends with "2 problem(s)."
+        # and the string path returned the report alone, so prefixing it both duplicates
+        # the summary and changes a body consumers already parse. A document's renderer
+        # decides its own lead; that is what makes it a document.
+        #
+        # Unless it is EMPTY — then the reason is all there is, and returning nothing for
+        # a failed call is the unavailable-as-success class with no text to hide behind.
+        if not body.strip() and out.reason:
+            body = out.reason
+        return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
+
     body = json.dumps(out.body(payload_key), indent=2, default=str)
     if out.reason:
         body = f"{out.reason}\n\n{body}"
@@ -1849,7 +1893,20 @@ class Server:
                     result = spec["api"](self.repo, args, self.agent)
                 except (KeyError, TypeError, ValueError) as exc:
                     return _ok(mid, _text(f"bad arguments: {exc}", error=True))
-                return _ok(mid, _outcome_result(result, spec.get("payload", "")))
+                # `text` may be a bool or a predicate on the arguments: `render`
+                # returns a document with `--show` and a file list without it, and which
+                # it is cannot be known until the call.
+                # Both may be a value or a predicate on the arguments: `render` returns
+                # a document with `--show` and a file list without it, and which it is
+                # cannot be known until the call. Resolved together so the two can never
+                # disagree -- a text encoding over a tuple payload is a TypeError.
+                wants_text = spec.get("text", False)
+                payload = spec.get("payload", "")
+                if callable(wants_text):
+                    wants_text = wants_text(args)
+                if callable(payload):
+                    payload = payload(args)
+                return _ok(mid, _outcome_result(result, payload, as_text=bool(wants_text)))
 
             try:
                 argv = spec["argv"](args)

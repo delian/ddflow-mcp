@@ -220,3 +220,174 @@ def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "")
             "recover", "Nothing to recover — no expired leases, no orphan worktrees.", **data
         )
     return O.ok("recover", **data)
+
+
+def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
+    """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
+
+    Gathers from six sources — the log's own integrity, the dependency graph, the
+    workflow's coherence, container reachability, the loop detector and the lease sweep —
+    and splits each finding into a PROBLEM (something is broken) or a NOTE (something you
+    should know). The split is the whole value: a report where a stale index reads the
+    same as a dependency cycle is a report nobody acts on.
+
+    The body is PROSE on both surfaces, rendered by `views/human.py`, because a list of
+    problems with advice attached is what an operator and an agent both want.
+    """
+    from ..core import progress as PR
+    from ..core.schedule import plan
+    from ..infra import container as CT
+    from ..infra import worktree as W
+    from ..infra.store import Store
+    from ..services import leases as L
+    from ..services import workflow as WF
+    from ..services.gates import load_gates
+    from ..views import human
+
+    log, cfg, st = _load(repo, agent)
+    store = Store(repo, cfg)
+    problems: list[str] = list(log.verify())
+    notes: list[str] = []
+    if not (repo / ".ddflow").exists():
+        problems.append("no .ddflow directory — run `ddflow init`")
+    if store.stale(log):
+        notes.append("index is stale; it rebuilds automatically on next read")
+
+    p = plan(st, cfg, agent=log.agent_id)
+    problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
+    for it in st.items.values():
+        problems += [
+            f"{it.id} needs unknown item {dep!r}" for dep in it.needs if dep not in st.items
+        ]
+
+    # The workflow's own coherence. A pipeline naming a gate that has no definition is the
+    # one config error that is both silent and permanent -- every item entering the
+    # pipeline blocks on an outcome that can never be recorded -- so it belongs in the
+    # command an operator runs when something is wrong, not only in `ddflow workflow`.
+    for f in WF.check(cfg, load_gates(repo, cfg)):
+        # `f.subject: f.detail`, not `f.render()` -- doctor prefixes its own severity, and
+        # "PROBLEM: [problem] ..." reads like a bug in the tool reporting the bug.
+        (problems if f.level == WF.PROBLEM else notes).append(f"{f.subject}: {f.detail}")
+
+    # The reviewer endpoints are fetched HERE and handed down: `infra.container` must not
+    # reach up into `services.review` to get them.
+    try:
+        from ..services.review import load_reviewers
+
+        urls = [(r.name, r.base_url) for r in load_reviewers(repo) if r.enabled]
+    except Exception:
+        urls = []
+    notes.extend(CT.warnings(repo, cfg, urls))
+
+    for f in PR.detect(log.read_all(), st, cfg):
+        (problems if f.severity == "block" else notes).append(f.render())
+    for r in L.scan(log, cfg, repo):
+        (problems if r.salvageable else notes).append(f"{r.kind}: {r.item} — {r.advice}")
+
+    known = {str(W.load_path(repo, it.worktree)) for it in st.items.values() if it.worktree}
+    for w in W.list_worktrees(repo):
+        path = w.get("worktree", "")
+        if (
+            path
+            and cfg.worktree.branch_prefix.rstrip("/") in w.get("branch", "")
+            and path not in known
+        ):
+            notes.append(f"worktree {path} exists but no item claims it")
+
+    data: dict[str, Any] = {
+        "problems": problems,
+        "notes": notes,
+        "events": st.event_count,
+        "items": len(st.items),
+        "agent": log.agent_id,
+        "repo": str(repo),
+        "index_stale": store.stale(log),
+        "fts": bool(store.fts),
+    }
+    out = (
+        O.failed("doctor", f"{len(problems)} problem(s)", **data)
+        if problems
+        else O.ok("doctor", **data)
+    )
+    out.data["text"] = human.render(out)
+    return out
+
+
+def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
+    """The queue as a markdown board. The body is the document, on both surfaces."""
+    from ..views import markdown as render_md
+
+    _log, cfg, st = _load(repo, agent)
+    return O.ok("board", text=render_md.board(st, cfg, phase=phase), phase=phase)
+
+
+#: `render --show <name>` targets, and the function that produces each.
+#:
+#: `--show` exists so the MCP `resources/read` handler can serve these through one code
+#: path like everything else. It used to fold the log itself -- a second data path in a
+#: module whose whole premise is "one implementation, two doors".
+_RENDERABLE = ("lessons", "research", "board")
+
+
+def render(repo: Path, *, show: str = "", out_dir: str = "", agent: str = "") -> O.Outcome:
+    """One named view as a document, or every view written to disk.
+
+    Two shapes by design, and both are pre-existing contracts: `--show` returns the
+    document, and without it the answer is the list of files written.
+    """
+    from ..views import markdown as render_md
+
+    log, cfg, st = _load(repo, agent)
+    if show:
+        if show not in _RENDERABLE:
+            return O.failed(
+                "render",
+                f"unknown view {show!r}; known: {', '.join(sorted(_RENDERABLE))}",
+                show=show,
+                text="",
+                files=[],
+            )
+        fn = {
+            "lessons": render_md.lessons_md,
+            "research": render_md.research_md,
+            "board": render_md.board,
+        }[show]
+        # `board` takes the config; the two markdown views do not. INSPECTED rather than
+        # try/except'd, because a TypeError raised inside a renderer would otherwise be
+        # caught and retried with the wrong arity.
+        import inspect
+
+        text = fn(st, cfg) if len(inspect.signature(fn).parameters) > 1 else fn(st)
+        return O.ok("render", show=show, text=text, files=[])
+
+    from ..infra.store import Store
+
+    files = render_md.write_views(repo, Store(repo, cfg).ensure(log), cfg, subdir=out_dir)
+    return O.ok("render", show="", text="", files=[str(f) for f in files])
+
+
+def replay(repo: Path, *, out_dir: str = "", verify: bool = False, agent: str = "") -> O.Outcome:
+    """Reconstruct the project's history from the log alone.
+
+    `verify` re-resolves every recorded commit: a sha that no longer resolves means the
+    reconstruction describes work that is not in the tree, which is the one way this
+    document can be confidently wrong.
+    """
+    from ..services import sessions as session
+
+    log, cfg, st = _load(repo, agent)
+    steps = session.replay(log.read_all())
+    problems = session.verify(st, repo, cfg) if verify else []
+    if out_dir:
+        files = session.bundle(st, steps, Path(out_dir), cfg, project=repo.name)
+        text = "wrote:\n" + "\n".join(f"  {f}" for f in files)
+        return O.ok(
+            "replay", text=text, files=[str(f) for f in files], problems=problems, verified=verify
+        )
+    return O.ok(
+        "replay",
+        text=session.render_reconstruction(st, steps, project=repo.name),
+        files=[],
+        problems=problems,
+        verified=verify,
+    )
