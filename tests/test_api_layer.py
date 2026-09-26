@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 11
+ARGV_TOOLS_CEILING = 7
 
 
 def _typed() -> list[str]:
@@ -254,6 +254,9 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_lesson_search": (["lesson", "search", "x"], {"query": "x"}),
     "ddflow_recall": (["recall", "x"], {"query": "x"}),
     "ddflow_reviewers_list": (["reviewers", "list"], {}),
+    "ddflow_cleanup": (["cleanup"], {}),
+    "ddflow_cadence": (["cadence"], {}),
+    "ddflow_import_verify": (["import", "--verify"], {}),
     "ddflow_gate_verify": (
         ["gate", "verify", "T1", "unit_tests"],
         {"id": "T1", "gate": "unit_tests"},
@@ -314,6 +317,7 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_session_end",
     "ddflow_review",
     "ddflow_reviewers_detect",
+    "ddflow_import",
 }
 
 
@@ -1434,3 +1438,60 @@ def test_no_reviewer_status_maps_to_a_PASS_except_a_real_review():
     assert "R.PARTIAL: O.REFUSED" in exits, exits
     # A status nobody mapped would KeyError at runtime, on the failing path.
     assert {"REVIEWED", "PARTIAL", "UNAVAILABLE", "ERROR"} <= set(dir(R))
+
+
+def test_cleanup_without_apply_destroys_nothing(repo):
+    """`cleanup` is a REPORT unless asked. Nothing probed that.
+
+    Removing the `if apply:` guard made every bare `ddflow cleanup` — and every
+    `ddflow_cleanup` call with no arguments — delete worktrees and branches, and the suite
+    stayed green. This is the most destructive default in the package and it was one
+    `if` away from being on.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1")
+    _code, shown, _ = run_cli(repo, "--json", "show", "T1")
+    tree = Path(json.loads(shown)["worktree"])
+    assert tree.exists(), "the fixture produced no worktree, so this proves nothing"
+
+    out = api.cleanup(repo)
+    assert out.data["applied"] is False, out.data
+    assert out.data["performed"] == [], f"a report performed actions: {out.data['performed']}"
+    assert tree.exists(), "cleanup deleted a worktree without --apply"
+
+
+def test_a_max_tasks_flag_overrides_the_config_knob(repo):
+    """ "0 means no flag given", so an operator who set `[importer] max_tasks` is not
+    silently overruled by an argparse default that looks like a choice and is not one.
+
+    `max_tasks` is a GUARD RAIL, not a "take the first N": over the cap the plan withholds
+    the tasks AND their phases and says why, because an import writes events into a log
+    that is committed to git and five thousand of them is not recoverable by anything
+    short of editing history. The first version of this test assumed a truncating cap and
+    failed — the documented behaviour is a refusal.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "todo.md").write_text(
+        "## Phase one\n\n" + "".join(f"- [ ] task number {i}\n" for i in range(1, 4))
+    )
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + "\n[importer]\nmax_tasks = 2\n")
+
+    # The KNOB applies when no flag is given: 3 tasks over a cap of 2 is a refusal.
+    by_knob = api.import_project(repo)
+    assert not [f for f in by_knob.data["found"] if f["kind"] == "task"], (
+        "the config knob was ignored — tasks were proposed over the cap"
+    )
+    assert any("REFUSING" in n for n in by_knob.data["notes"]), by_knob.data["notes"]
+
+    # The FLAG wins when one is given.
+    by_flag = api.import_project(repo, max_tasks=5)
+    tasks = [f for f in by_flag.data["found"] if f["kind"] == "task"]
+    assert len(tasks) == 3, f"the flag did not override the knob: {len(tasks)} tasks"
+    assert not any("REFUSING" in n for n in by_flag.data["notes"]), by_flag.data["notes"]

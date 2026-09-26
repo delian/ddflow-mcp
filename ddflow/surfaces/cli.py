@@ -60,6 +60,7 @@ from .commands.lifecycle import (
     cmd_release,
     cmd_remove,
 )
+from .commands.operations import cmd_cadence, cmd_cleanup, cmd_import
 from .commands.queue import cmd_phase_add, cmd_split, cmd_task_add
 from .commands.reporting import (
     cmd_board,
@@ -80,7 +81,6 @@ from .context import (
     REFUSED,
     Ctx,
     _csv,
-    _plain,
     _require_item,
 )
 
@@ -296,48 +296,6 @@ def cmd_loops(a, c: Ctx) -> int:
     return out.exit
 
 
-def cmd_cleanup(a, c: Ctx) -> int:
-    """Classify every ddflow worktree and branch; with --apply, land the safe ones."""
-    from ..services import cleanup as CL
-
-    st = c.store.ensure(c.log)
-    plan = CL.survey(c.repo, c.cfg, st)
-    if c.json and not a.apply:
-        print(
-            json.dumps(
-                {
-                    "trees": [_plain(t) for t in plan.trees],
-                    "stale_branches": [_plain(t) for t in plan.stale_branches],
-                },
-                indent=2,
-                default=str,
-            )
-        )
-        return OK if (plan.trees or plan.stale_branches) else NOTHING
-    if not plan.trees and not plan.stale_branches:
-        print("Nothing to clean up: no ddflow worktrees or branches remain.")
-        return NOTHING
-    for t in plan.trees + plan.stale_branches:
-        print("  " + t.render())
-    if plan.needs_human:
-        print(
-            f"\n{len(plan.needs_human)} tree(s) hold UNCOMMITTED work and are never "
-            f"touched automatically. Inspect each before deciding."
-        )
-    if not a.apply:
-        actionable = plan.actionable
-        print(
-            f"\n{len(actionable)} safe action(s) available. Re-run with --apply to "
-            f"perform them; dirty trees are excluded whatever you pass."
-        )
-        return OK
-    done = CL.apply(c.repo, c.cfg, plan)
-    for line in done:
-        print(f"  {line}")
-    c.out(f"\n{len(done)} action(s) performed.", {"performed": done})
-    return OK
-
-
 def cmd_config(a, c: Ctx) -> int:
     if a.set:
         return _config_set(a, c)
@@ -386,55 +344,6 @@ def cmd_config(a, c: Ctx) -> int:
         if a.explain and d:
             for line in _wrap(d, 76):
                 print(f"    {line}")
-    return OK
-
-
-def cmd_cadence(a, c: Ctx) -> int:
-    """Which periodic passes are due? Derived from the log, so there is no state file."""
-    st = c.state()
-    done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
-    done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
-    due = []
-    for name, every, unit, count in (
-        ("integration_tests", c.cfg.cadence.integration_tests_every_tasks, "tasks", done_tasks),
-        ("dedupe_sweep", c.cfg.cadence.dedupe_sweep_every_tasks, "tasks", done_tasks),
-        (
-            "architecture_review",
-            c.cfg.cadence.architecture_review_every_phases,
-            "phases",
-            done_phases,
-        ),
-        ("mutation_tests", c.cfg.cadence.mutation_tests_every_phases, "phases", done_phases),
-        ("lessons_pass", c.cfg.cadence.lessons_pass_every_phases, "phases", done_phases),
-    ):
-        runs = st.cadences.get(name, [])
-        at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
-        since = count - at_last
-        if every > 0 and since >= every:
-            due.append({"cadence": name, "since": since, "every": every, "unit": unit})
-    due += _lessons_cadence(st, c.cfg)
-    if a.ran:
-        if a.ran == "lessons_compression":
-            live = [x for x in st.lessons.values() if not x.superseded_by]
-            result = json.dumps(
-                {"bytes": sum(len(x.text().encode("utf-8")) for x in live), "entries": len(live)}
-            )
-        else:
-            result = str(
-                done_tasks if a.ran in ("integration_tests", "dedupe_sweep") else done_phases
-            )
-        c.log.append("cadence.ran", a.ran, {"result": result, "evidence": {"note": a.note or ""}})
-        c.out(f"recorded cadence run: {a.ran}", {"cadence": a.ran})
-        return OK
-    if c.json:
-        print(json.dumps(due, indent=2))
-        return OK if due else NOTHING
-    if not due:
-        print(f"No cadence due ({done_tasks} tasks, {done_phases} phases completed).")
-        return NOTHING
-    for d in due:
-        print(f"DUE: {d['cadence']} — {d['since']} {d['unit']} since last (every {d['every']})")
-    print("\nRecord one with: ddflow cadence --ran <name>")
     return OK
 
 
@@ -841,200 +750,6 @@ def cmd_help(a, c: Ctx) -> int:
     return OK
 
 
-def _import_verify(c: Ctx, st) -> int:
-    """`ddflow import --verify` — status, still-true, and did-anyone-finish-it.
-
-    Three exit codes because there are three answers and collapsing them loses the one
-    that matters: `2` is "nothing was ever imported", which is not a failure and not a
-    pass; `1` is "imported, and here is what a human still has to decide"; `0` is
-    "imported and consistent".
-    """
-    from ..services import importer as IM
-
-    r = IM.verify_import(c.repo, st)
-    findings = r.findings
-    payload = {
-        "imported": r.imported,
-        "total": r.total,
-        "first_at": r.first_at,
-        "last_at": r.last_at,
-        "findings": findings,
-        "tasks_without_globs": r.no_globs,
-        "shipped_with_open_tasks": r.shipped_drift,
-        "vanished_sources": [{"item": i, "source": src} for i, src in r.vanished],
-        "empty_sources": r.empty_sources,
-        "unstructured_provenance": r.unstructured,
-        "branches_without_globs": r.no_globs_branches,
-        # Separate from `verified` on purpose. "Nothing was imported" and "the import
-        # is in good order" are different answers, and a single boolean collapses them
-        # into the vacuous one: `verified: true` with `imported: {}` reads as checked-
-        # and-fine to anything that does not also read the exit code -- and over MCP
-        # exit 2 is not an error, so `_meta` is the only place the truth was.
-        "imported_anything": bool(r.total or r.unstructured),
-        "new_since_import": [
-            {"kind": f.kind, "id": f.ident, "title": f.title, "source": f.source} for f in r.drift
-        ],
-        "notes": r.notes,
-        "verified": bool(r.total) and not findings,
-    }
-    if c.json:
-        print(json.dumps(payload, indent=2, default=str))
-        return NOTHING if not r.total and not r.unstructured else (FAIL if findings else OK)
-
-    if not r.total and not r.unstructured:
-        print("Nothing in this queue was imported.")
-        for n in r.notes:
-            print(f"  {n}")
-        return NOTHING
-
-    when = f" between {r.first_at[:10]} and {r.last_at[:10]}" if r.first_at else ""
-    lines = [f"Imported{when}:", ""]
-    lines += [f"  {n:>6} {kind}(s)" for kind, n in sorted(r.imported.items())]
-    if r.unstructured:
-        lines.append(f"  {len(r.unstructured):>6} with prose-only provenance (older import)")
-    lines.append("")
-    if findings:
-        lines.append("Left to decide or fix:")
-        lines += [f"  - {f}" for f in findings]
-    else:
-        lines.append("Consistent: the queue matches the sources, and every imported")
-        lines.append("task declares what it writes.")
-    lines.append("")
-    lines += [f"  {n}" for n in r.notes]
-    lines.append("")
-    lines.append(
-        "`ddflow import` (no flags) shows what a re-run would add; the "
-        "/import-existing-project prompt walks through the half that needs an operator."
-    )
-    print("\n".join(lines))
-    return FAIL if findings else OK
-
-
-def cmd_import(a, c: Ctx) -> int:
-    """Propose what an existing project already has, so the queue starts where it is.
-
-    Reads and reports by default; `--apply` writes. A project adopting ddflow on day
-    400 has four hundred days of work, and a queue that starts empty tells an agent
-    "nothing is in flight" about a repository with three branches in flight.
-
-    Exit 2 when there is nothing to propose — "no data" reported as itself.
-    """
-    from ..services import importer as IM
-
-    st = c.state()
-    if a.verify:
-        # `--include-done` and `--max-tasks` shape an IMPORT. Reading past them here
-        # would be the silent-knob-drop shape, standing next to a flag that is loudly
-        # refused two lines down.
-        shaping = [
-            f for f, on in (("--include-done", a.include_done), ("--max-tasks", a.max_tasks)) if on
-        ]
-        if shaping:
-            print(
-                f"--verify reports on the import that happened; {', '.join(shaping)} "
-                f"shape(s) one that has not. Run them separately.",
-                file=sys.stderr,
-            )
-            return FAIL
-        if a.apply:
-            # Refused rather than resolved. `--verify` READS and `--apply` WRITES, and
-            # picking one silently is how an operator who asked to import ends up
-            # having only looked -- or worse, the other way round.
-            print(
-                "--verify and --apply ask for different things: one reports on the "
-                "import that happened, the other performs one. Run them separately.",
-                file=sys.stderr,
-            )
-            return FAIL
-        return _import_verify(c, st)
-    # The flag overrides the knob; 0 means 'no flag given', so an operator who set
-    # [importer] max_tasks in the config is not silently overruled by an argparse
-    # default that looks like a choice and is not one.
-    plan = IM.plan_import(
-        c.repo,
-        st,
-        include_done=a.include_done,
-        max_tasks=a.max_tasks or c.cfg.importer.max_tasks,
-    )
-    payload = {
-        "summary": plan.summary(),
-        "found": [
-            {
-                "kind": f.kind,
-                "id": f.ident,
-                "title": f.title,
-                "source": f.source,
-                "done": f.done,
-                "needs": f.needs,
-                "globs": f.globs,
-            }
-            for f in plan.found
-        ],
-        "skipped_existing": plan.skipped_existing,
-        "empty_sources": plan.empty_sources,
-        "notes": plan.notes,
-        "applied": False,
-    }
-
-    if a.apply and plan.found:
-        counts = IM.apply_import(c.repo, c.log, plan)
-        payload["applied"] = True
-        payload["written"] = counts
-        c.out(
-            "Imported: "
-            + ", ".join(f"{v} {k}" for k, v in sorted(counts.items()))
-            + "\n  Every item records where it came from. Review with `ddflow board`, "
-            "then give each task its globs — an item with no declared globs is one the "
-            "conflict detector cannot protect.",
-            payload,
-        )
-        return OK
-
-    if c.json:
-        print(json.dumps(payload, indent=2, default=str))
-        return OK if plan.found else NOTHING
-
-    if not plan.found:
-        print("Nothing to import.")
-        for n in plan.notes:
-            print(f"  {n}")
-        return NOTHING
-
-    lines = ["What this project already has (nothing written yet):", ""]
-    preview = c.cfg.importer.preview_rows
-    for kind in IM.KINDS:
-        rows = plan.by_kind(kind)
-        if not rows:
-            continue
-        lines.append(f"  {len(rows)} {kind}(s):")
-        for f in rows[:preview]:
-            mark = "[x]" if f.done else "[ ]"
-            lines.append(f"    {mark} {f.ident:<28s} {f.title[:52]:<52s} {f.source}")
-        if len(rows) > preview:
-            lines.append(f"    ... and {len(rows) - preview} more")
-        lines.append("")
-    if plan.skipped_existing:
-        lines.append(
-            f"  {len(plan.skipped_existing)} already in the queue, left alone "
-            f"(this command is safe to re-run)."
-        )
-        lines.append("")
-    for n in plan.notes:
-        lines.append(f"  NOTE: {n}")
-    lines += [
-        "",
-        "  `ddflow import --apply` writes these. Before you do:",
-        "    - the headings became phases and the checkboxes tasks, which is a GUESS;",
-        "    - no task has globs unless the file declared them, and a task with no",
-        "      globs is one two agents can collide on;",
-        "    - dependencies are only what the file said.",
-        "  The `/import-existing-project` workflow walks an agent through fixing those",
-        "  WITH the operator, which is the half this command cannot do.",
-    ]
-    print("\n".join(lines))
-    return OK
-
-
 def cmd_adopt(a, c: Ctx) -> int:
     from ..services.adopt import AGENT_TARGETS, adopt
 
@@ -1091,55 +806,6 @@ def cmd_adopt(a, c: Ctx) -> int:
         },
     )
     return OK
-
-
-def _lessons_cadence(st, cfg) -> list[dict[str, Any]]:
-    """Is a lessons-compression pass due?
-
-    Measured as GROWTH since the last recorded pass, not as an absolute size. An
-    absolute threshold fires forever once crossed -- including immediately after a pass
-    that just correctly compressed the corpus -- which trains everyone to ignore it.
-    Growth goes quiet when the work is done, which is the only behaviour that keeps a
-    cadence trigger credible.
-
-    Both halves must clear: total bytes AND bytes-per-entry. Dividing by entry count
-    alone would fire on a MERGE (fewer entries, same bytes => per-entry rises), i.e. on
-    exactly the action the cadence exists to produce.
-    """
-    live = [x for x in st.lessons.values() if not x.superseded_by]
-    if len(live) < cfg.lessons.cadence_min_entries:
-        return []
-    runs = st.cadences.get("lessons_compression", [])
-    now_bytes = sum(len(x.text().encode("utf-8")) for x in live)
-    now_per = now_bytes / max(1, len(live))
-    if not runs:
-        return [
-            {
-                "cadence": "lessons_compression",
-                "since": len(live),
-                "every": 0,
-                "unit": "entries (no baseline recorded yet)",
-            }
-        ]
-    try:
-        was = json.loads(runs[-1].get("result") or "{}")
-        was_bytes, was_entries = float(was["bytes"]), int(was["entries"])
-    except (ValueError, KeyError, TypeError):
-        return []
-    was_per = was_bytes / max(1, was_entries)
-    grow_bytes = (now_bytes - was_bytes) / max(1.0, was_bytes) * 100
-    grow_per = (now_per - was_per) / max(1e-9, was_per) * 100
-    thresh = cfg.lessons.cadence_growth_pct
-    if grow_bytes >= thresh and grow_per >= thresh:
-        return [
-            {
-                "cadence": "lessons_compression",
-                "since": round(grow_per, 1),
-                "every": thresh,
-                "unit": f"% growth per entry (total +{grow_bytes:.1f}%)",
-            }
-        ]
-    return []
 
 
 def cmd_mcp(a, c: Ctx) -> int:

@@ -254,8 +254,45 @@ def test_the_workflow_prompt_ships_and_covers_the_judgement_half(repo):
 
 
 def test_the_command_is_reachable_over_mcp(repo):
-    from ddflow.surfaces.mcp import TOOLS
+    """Reachability, by CALLING it — and checking that `apply` actually applies.
+
+    This asserted `"--apply" in argv`, which checks the dispatch mechanism rather than
+    the behaviour: it broke the moment the tool moved to the typed path, having never
+    verified that `apply=True` writes anything. `include_done` is checked the same way,
+    by its effect on what comes back.
+    """
+    import json as _json
+
+    from ddflow.surfaces.mcp import TOOLS, Server
 
     assert "ddflow_import" in TOOLS
-    argv = TOOLS["ddflow_import"]["argv"]({"apply": True, "include_done": True})
-    assert "--apply" in argv and "--include-done" in argv, argv
+    run_cli(repo, "init")
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "todo.md").write_text(
+        "## Phase one\n\n- [ ] build the thing\n- [x] already done\n"
+    )
+
+    def call(arguments):
+        reply = Server(repo).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "ddflow_import", "arguments": arguments},
+            }
+        )["result"]
+        text = reply["content"][0]["text"]
+        return reply, _json.loads(text[text.index("{") :])
+
+    _reply, preview = call({})
+    assert preview["applied"] is False, "a bare call wrote something"
+    assert any(f["title"] == "build the thing" for f in preview["found"]), preview["found"]
+    assert not any(f["done"] for f in preview["found"]), "done items appeared without the flag"
+
+    _reply, with_done = call({"include_done": True})
+    assert any(f["done"] for f in with_done["found"]), "include_done changed nothing"
+
+    _reply, applied = call({"apply": True})
+    assert applied["applied"] is True, applied
+    _code, rows, _ = run_cli(repo, "--json", "progress")
+    assert "build the thing" in rows or _json.loads(rows), "apply wrote nothing to the queue"

@@ -248,10 +248,36 @@ def test_verify_and_apply_together_are_refused_rather_than_resolved(repo):
 
 
 def test_it_is_reachable_over_mcp(repo):
-    from ddflow.surfaces.mcp import TOOLS
+    """Reachability by calling it, and the exit code is the point.
+
+    `2` is "nothing was ever imported" — not a failure and not a pass. Over MCP exit 2 is
+    not an error, so `isError` alone cannot tell them apart and `_meta.exit` is where the
+    distinction lives. The old assertion compared an argv list and said nothing about
+    either.
+    """
+    import json as _json
+
+    from ddflow.surfaces.mcp import TOOLS, Server
 
     assert "ddflow_import_verify" in TOOLS, sorted(TOOLS)
-    assert TOOLS["ddflow_import_verify"]["argv"]({}) == ["--json", "import", "--verify"]
+    run_cli(repo, "init")
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_import_verify", "arguments": {}},
+        }
+    )["result"]
+    assert reply["isError"] is False, "nothing-imported is not an error"
+    assert reply["_meta"]["exit"] == 2, reply["_meta"]
+    text = reply["content"][0]["text"]
+    body = _json.loads(text[text.index("{") :])
+    assert body["imported_anything"] is False, body
+    assert body["verified"] is False, (
+        "`verified: true` with nothing imported reads as checked-and-fine to anything "
+        "that does not also read the exit code"
+    )
 
 
 # -- the handshake follows through -----------------------------------------------------

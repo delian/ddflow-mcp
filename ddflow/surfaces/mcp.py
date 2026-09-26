@@ -642,7 +642,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "nowhere else."
         ),
         "properties": {"apply": ("boolean", "Perform the safe actions.", False)},
-        "argv": lambda a: ["cleanup", *(["--apply"] if a.get("apply") else ["--json"])],
+        "api": lambda repo, a, agent: _api().cleanup(repo, apply=bool(a.get("apply")), agent=agent),
+        "payload": ("trees", "stale_branches"),
     },
     "ddflow_recall": {
         "description": (
@@ -947,12 +948,14 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: (
-            ["--json", "import"]
-            + (["--apply"] if a.get("apply") else [])
-            + (["--include-done"] if a.get("include_done") else [])
-            + (["--max-tasks", str(a["max_tasks"])] if a.get("max_tasks") else [])
+        "api": lambda repo, a, agent: _api().import_project(
+            repo,
+            apply=bool(a.get("apply")),
+            include_done=bool(a.get("include_done")),
+            max_tasks=int(a.get("max_tasks") or 0),
+            agent=agent,
         ),
+        "payload": "",
     },
     "ddflow_workflow": {
         "description": (
@@ -1108,7 +1111,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "globs, cycles — so run that too."
         ),
         "properties": {},
-        "argv": lambda a: ["--json", "import", "--verify"],
+        "api": lambda repo, a, agent: _api().import_verify(repo, agent=agent),
+        "payload": "",
     },
     "ddflow_companions": {
         "description": (
@@ -1279,7 +1283,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "ran": ("string", "Record that this cadence just ran.", False),
             "note": ("string", "What the pass did, recorded with it.", False),
         },
-        "argv": lambda a: ["--json", "cadence", *_opt("--ran", a), *_opt("--note", a)],
+        "api": lambda repo, a, agent: _api().cadence(
+            repo, ran=a.get("ran", "") or "", note=a.get("note", "") or "", agent=agent
+        ),
+        "payload": "due",
     },
     "ddflow_session_prompt": {
         "description": (

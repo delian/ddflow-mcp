@@ -81,6 +81,7 @@ from .lifecycle import merge as merge_item
 from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
+from .operations import cadence, cleanup, import_project, import_verify
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -122,7 +123,9 @@ __all__ = [
     "brief",
     "bug_fixed",
     "bug_found",
+    "cadence",
     "claim",
+    "cleanup",
     "complete",
     "completion_verdict",
     "decision_add",
@@ -138,6 +141,8 @@ __all__ = [
     "gate_verify",
     "heartbeat",
     "history",
+    "import_project",
+    "import_verify",
     "lesson_add",
     "lesson_search",
     "loops",
