@@ -328,20 +328,18 @@ TOOLS: dict[str, dict[str, Any]] = {
             "tags": ("string", "Comma-separated tags.", False),
             "priority": ("integer", "Lower is offered first (default 100).", False),
         },
-        "argv": lambda a: (
-            [
-                "--json",
-                "phase",
-                "add",
-                a["id"],
-                *_opt("--title", a),
-                *_opt("--needs", a),
-                *_opt("--globs", a),
-                *_opt("--body", a),
-                *_opt("--tags", a),
-                *_opt("--priority", a),
-            ]
+        "api": lambda repo, a, agent: _api().phase_add(
+            repo,
+            a["id"],
+            title=a.get("title", "") or "",
+            needs=a.get("needs", "") or "",
+            globs=a.get("globs", "") or "",
+            body=a.get("body", "") or "",
+            tags=a.get("tags", "") or "",
+            priority=int(a.get("priority") or 0),
+            agent=agent,
         ),
+        "payload": ("id",),
     },
     "ddflow_split": {
         "description": (
@@ -365,19 +363,18 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: [
-            "--json",
-            "split",
+        "api": lambda repo, a, agent: _api().split(
+            repo,
             a["id"],
-            *[
-                arg
-                for spec in str(a.get("into", "")).split(",")
-                if spec.strip()
-                for arg in ("--into", spec.strip())
-            ],
-            *_opt("--globs", a),
-            *_opt("--needs", a),
-        ],
+            # The MCP argument is ONE comma-separated string; the CLI takes repeated
+            # `--into`. Split here rather than in the api, so the api keeps the shape
+            # that cannot lose a spec containing a comma in its title.
+            into=[x.strip() for x in str(a.get("into", "")).split(",") if x.strip()],
+            globs=a.get("globs", "") or "",
+            needs=a.get("needs", "") or "",
+            agent=agent,
+        ),
+        "payload": ("item", "created"),
     },
     "ddflow_task_add": {
         "description": (
@@ -404,22 +401,19 @@ TOOLS: dict[str, dict[str, Any]] = {
             "tags": ("string", "Comma-separated tags.", False),
             "priority": ("integer", "Lower is offered first (default 100).", False),
         },
-        "argv": lambda a: (
-            [
-                "--json",
-                "task",
-                "add",
-                a["id"],
-                "--phase",
-                a.get("parent") or a.get("phase", ""),
-                *_opt("--title", a),
-                *_opt("--needs", a),
-                *_opt("--globs", a),
-                *_opt("--body", a),
-                *_opt("--tags", a),
-                *_opt("--priority", a),
-            ]
+        "api": lambda repo, a, agent: _api().task_add(
+            repo,
+            a["id"],
+            title=a.get("title", "") or "",
+            parent=a.get("parent") or a.get("phase", "") or "",
+            needs=a.get("needs", "") or "",
+            globs=a.get("globs", "") or "",
+            body=a.get("body", "") or "",
+            tags=a.get("tags", "") or "",
+            priority=int(a.get("priority") or 0),
+            agent=agent,
         ),
+        "payload": ("id",),
     },
     "ddflow_lesson_add": {
         "description": (

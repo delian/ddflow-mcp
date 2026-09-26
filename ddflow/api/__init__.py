@@ -50,7 +50,7 @@ from .gates import record as gate_record
 from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
-from .items import update
+from .items import phase_add, split, task_add, update
 from .reporting import (
     board,
     doctor,
@@ -87,13 +87,16 @@ __all__ = [
     "gate_status",
     "gate_verify",
     "loops",
+    "phase_add",
     "progress",
     "rebuild",
     "recover",
     "render",
     "replay",
     "show",
+    "split",
     "status",
+    "task_add",
     "update",
     "workflow_drop",
     "workflow_gate",

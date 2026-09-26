@@ -40,6 +40,7 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
 )
 from .commands.decisions import cmd_decision
 from .commands.gates import cmd_gate
+from .commands.queue import cmd_phase_add, cmd_split, cmd_task_add
 from .commands.reporting import (
     cmd_board,
     cmd_doctor,
@@ -52,7 +53,6 @@ from .commands.reporting import (
 )
 from .commands.workflow import cmd_workflow
 from .context import (
-    _MIN_SPLIT_PARTS,
     FAIL,
     GIT_REFUSED,
     MAX_LISTED_FILES,
@@ -136,165 +136,6 @@ def cmd_init(a, c: Ctx) -> int:
     return OK
 
 
-def cmd_phase_add(a, c: Ctx) -> int:
-    c.log.append(
-        "phase.added",
-        a.id,
-        {
-            "title": a.title,
-            "needs": _csv(a.needs),
-            "globs": _csv(a.globs),
-            "body": a.body or "",
-            "tags": _csv(a.tags),
-            "priority": a.priority,
-        },
-    )
-    c.out(f"phase {a.id} added", {"id": a.id})
-    return OK
-
-
-def cmd_task_add(a, c: Ctx) -> int:
-    """Add a task. Its parent may be a phase OR another task (making it a sub-task).
-
-    Tasks can be added at ANY time, including while their parent is being worked: a
-    task that turns out to contain two things is the normal case, not an exception, and
-    a queue that cannot absorb that discovery pushes the work into someone's head.
-    """
-    st = c.state()
-    parent = a.parent or a.phase
-    if parent and parent not in st.items:
-        print(
-            f"no such parent {parent!r}. Add the phase or task first.",
-            file=sys.stderr,
-        )
-        return FAIL
-    a.phase = parent
-    c.log.append(
-        "task.added",
-        a.id,
-        {
-            "parent": a.phase,
-            "title": a.title,
-            "needs": _csv(a.needs),
-            "globs": _csv(a.globs),
-            "body": a.body or "",
-            "tags": _csv(a.tags),
-            "priority": a.priority,
-        },
-    )
-    # Giving a task its first child turns it into an umbrella, and an umbrella is not
-    # the thing being worked — its children are. Holding its lease from here would put
-    # a live claim on globs that overlap every child's, so a SECOND agent could not
-    # take one, and recovery would point at a worktree where nothing more will happen.
-    # `split` already released for exactly this reason; adding a sub-task by hand is
-    # the same transition by a different route, and it did not.
-    parent_item = st.items.get(parent) if parent else None
-    released = ""
-    if parent_item and parent_item.kind == "task" and parent_item.lease:
-        L.release(c.log, parent, note=f"became an umbrella when {a.id} was added")
-        released = (
-            f"\n  {parent} is now an umbrella, so its lease was released: the work is "
-            f"in its sub-tasks, and holding it would block them."
-        )
-    c.out(f"task {a.id} added to {a.phase or '(no phase)'}{released}", {"id": a.id})
-    return OK
-
-
-def cmd_split(a, c: Ctx) -> int:
-    """Split an item into sub-tasks, in place, without losing its history.
-
-    For the commonest discovery there is: a task turns out to be two things. The
-    original stays put and becomes an umbrella — it keeps its id, its lease history and
-    anything already recorded against it, and it completes when its children do. Its
-    declared globs are inherited by every child that does not declare its own, so the
-    conflict detector keeps working while the split is half-finished.
-
-    The alternative — closing the task and opening two new ones — loses the thread
-    between the work that was planned and the work that happened, which is exactly
-    what `ddflow replay` needs to reconstruct the project.
-    """
-    st = c.state()
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-    if it.state in (DONE, ABANDONED):
-        print(
-            f"{a.id} is already {it.state}; splitting finished work would reopen it. "
-            f"Add new tasks instead.",
-            file=sys.stderr,
-        )
-        return REFUSED
-    specs = [x for x in (a.into or []) if x.strip()]
-    if len(specs) < _MIN_SPLIT_PARTS:
-        print(
-            "--into must be given at least twice: splitting into one piece is not a "
-            "split, it is a rename (`ddflow update <id> --title ...`).",
-            file=sys.stderr,
-        )
-        return FAIL
-
-    # Resolve and validate EVERY child before appending anything. The loop used to
-    # validate and append in one pass, so a collision on the second `--into` exited
-    # non-zero having already written the first: the parent became an umbrella nobody
-    # asked for, un-claimable because it now had a child and un-completable because
-    # that child was open. It also never compared the specs to each other, so
-    # `--into X=one --into X=two` appended two `task.added` events for one id, `fold`
-    # merged them, and the split reported two children while producing one whose title
-    # was silently the second spec's.
-    planned: list[tuple[str, str]] = []
-    for i, spec in enumerate(specs, 1):
-        sub_id, _, title = spec.partition("=")
-        sub_id = sub_id.strip() or f"{a.id}.{i}"
-        if sub_id in st.items:
-            print(f"{sub_id} already exists; choose another id", file=sys.stderr)
-            return FAIL
-        if sub_id in [p_id for p_id, _ in planned]:
-            print(f"{sub_id} given twice in one split; each part needs its own id", file=sys.stderr)
-            return FAIL
-        if sub_id == a.id:
-            print(f"{sub_id} cannot be its own sub-task", file=sys.stderr)
-            return FAIL
-        planned.append((sub_id, title.strip() or f"{it.title} (part {i})"))
-
-    created = []
-    for i, (sub_id, title) in enumerate(planned, 1):
-        c.log.append(
-            "task.added",
-            sub_id,
-            {
-                "parent": a.id,
-                "title": title,
-                # Inherit the parent's globs unless the child declares its own: while the
-                # split is half-done the children are the only things being worked, and a
-                # child with no declared globs is a child the conflict detector cannot
-                # protect.
-                "globs": _csv(a.globs) or list(it.globs),
-                "needs": _csv(a.needs) if i == 1 else [],
-                "priority": it.priority,
-            },
-        )
-        created.append(sub_id)
-
-    if it.lease:
-        # The umbrella is no longer the thing being worked; holding its lease would
-        # block its own children on a glob conflict with itself.
-        L.release(c.log, a.id, note=f"split into {', '.join(created)}")
-    c.log.append(
-        "task.updated",
-        a.id,
-        {"body": (it.body + "\n\n" if it.body else "") + f"Split into: {', '.join(created)}."},
-    )
-    c.out(
-        f"{a.id} split into {len(created)} sub-task(s): {', '.join(created)}\n"
-        f"  It keeps its id and history, and now completes when they do.\n"
-        f"  Give each its own --globs with `ddflow update <id> --globs ...` if they "
-        f"write different files — they inherited {a.id}'s, so they cannot run in "
-        f"parallel until they differ.",
-        {"item": a.id, "created": created},
-    )
-    return OK
-
-
 def cmd_item_update(a, c: Ctx) -> int:
     st = c.state()
     it = _require_item(c, a.id, st)
@@ -372,7 +213,7 @@ def _worktree_held_by(c: Ctx, stored: str, me: str) -> str:
     uncommitted changes it had found. Closed items are ignored -- reusing the tree of
     finished work is exactly what an agent should be able to do.
     """
-    from ..core.model import ABANDONED, DONE
+    from ..core.model import DONE
 
     st = c.state()
     for item in st.items.values():

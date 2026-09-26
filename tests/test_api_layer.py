@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 38
+ARGV_TOOLS_CEILING = 35
 
 
 def _typed() -> list[str]:
@@ -285,6 +285,9 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_gate_run",
     "ddflow_gate_record",
     "ddflow_gate_skip",
+    "ddflow_phase_add",
+    "ddflow_task_add",
+    "ddflow_split",
 }
 
 
@@ -963,3 +966,50 @@ def test_verification_with_no_results_is_never_a_pass():
     assert '"verified": bool(results) and not reason and all(r.ok for r in results)' in src, (
         "the scoring rule changed; this test is now checking a copy of it"
     )
+
+
+def test_one_split_cannot_name_the_same_child_twice(repo):
+    """The bug this guard was written for, finally probed.
+
+    Its comment describes what happened: `--into X=one --into X=two` appended two
+    `task.added` events for one id, `fold` MERGED them, and the split reported two
+    children while producing one whose title was silently the second spec's. The guard
+    was added; nothing ever checked it, so disabling it left the suite green.
+
+    Also asserts the refusal is TOTAL. The same comment records why: validating and
+    appending in one pass meant a collision on the second `--into` exited non-zero having
+    already written the first, leaving the parent an umbrella nobody asked for —
+    un-claimable because it now had a child, un-completable because that child was open.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py", "--title", "two things")
+
+    out = api.split(repo, "T1", into=["T1.a=one", "T1.a=two"])
+    assert out.exit == FAIL, out
+    assert "given twice" in out.reason, out.reason
+    assert out.data["created"] == [], out.data
+
+    _code, shown, _ = run_cli(repo, "--json", "show", "T1")
+    body = json.loads(shown)
+    assert "Split into" not in (body["body"] or ""), "a refused split recorded itself"
+    _code, board, _ = run_cli(repo, "--json", "progress")
+    assert "T1.a" not in board, "a refused split created a child anyway"
+
+
+def test_a_task_cannot_be_added_under_a_parent_that_does_not_exist(repo):
+    """A dangling parent is a queue that misrepresents the project.
+
+    The child is unreachable from any phase, `plan()` cannot order it against work it
+    should follow, and the only thing that notices is `doctor` — after the fact.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    out = api.task_add(repo, "T1", title="orphan", parent="P-NOT-REAL")
+    assert out.exit == FAIL, out
+    assert "no such parent" in out.reason, out.reason
+
+    _code, rows, _ = run_cli(repo, "--json", "progress")
+    assert "T1" not in rows, "the task was added under a parent that does not exist"
