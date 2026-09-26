@@ -433,3 +433,65 @@ def test_the_cycle_detector_resolves_a_PACKAGE_relative_import_correctly(tmp_pat
     assert "surfaces.config" not in everywhere, (
         f"a package's `from .x` resolved one level too high: {everywhere}"
     )
+
+
+# -- relative imports resolve, including the ones inside functions ----------------------
+
+
+def test_every_relative_import_names_a_module_that_exists():
+    """A `from ..x import y` that resolves to nothing, found without running it.
+
+    This is the failure mode of MOVING a module, and it bit twice in one session while
+    splitting `cli.py`: code lifted from `ddflow/api.py` to `ddflow/api/reporting.py`
+    kept `from .core import progress`, which used to mean `ddflow.core` and now means
+    `ddflow.api.core`; code lifted from `surfaces/commands/config.py` to
+    `services/configwrite.py` kept `from ...services import workflow`, which walked one
+    level above the package.
+
+    What makes it worth a ratchet rather than a lesson is WHEN it fails. Both were
+    FUNCTION-LOCAL imports — the house style, used to keep the module import graph flat
+    — so neither broke at import time. They broke when that one function ran, which for
+    `configwrite` was a config write, so the failure arrived as "'plan_approved' is in
+    neither pipeline" twenty minutes later. A static resolution of every relative import
+    costs milliseconds and names the file and line.
+
+    Deliberately checks EXISTENCE, not importability: importing every module to find out
+    would execute them, and the point is to be cheaper and safer than that.
+    """
+    problems: list[str] = []
+    for path in _modules():
+        tree = ast.parse(path.read_text("utf-8"), str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not node.level:
+                continue
+            # `level` dots up from the module's own package. One dot = this package.
+            here = path.relative_to(PKG.parent).parts[:-1]  # ("ddflow", "api")
+            if node.level - 1 > len(here):
+                problems.append(
+                    f"{path.relative_to(PKG)}:{node.lineno}: {'.' * node.level} escapes the package"
+                )
+                continue
+            base = here[: len(here) - (node.level - 1)]
+            target = (*base, *(node.module.split(".") if node.module else ()))
+            root = PKG.parent
+            as_pkg = root.joinpath(*target) / "__init__.py"
+            as_mod = root.joinpath(*target).with_suffix(".py")
+            if as_pkg.is_file() or as_mod.is_file():
+                continue
+            # `from ..x import y` where `x` is a package and `y` is a module in it.
+            if node.names and all(
+                (
+                    root.joinpath(*target, n.name).with_suffix(".py").is_file()
+                    or (root.joinpath(*target, n.name) / "__init__.py").is_file()
+                )
+                for n in node.names
+            ):
+                continue
+            # Or `y` is simply a NAME in module `..x` — which only holds if `..x` exists,
+            # and it did not, or one of the two branches above would have matched.
+            dotted = ".".join(target)
+            problems.append(
+                f"{path.relative_to(PKG)}:{node.lineno}: `from {'.' * node.level}"
+                f"{node.module or ''} import ...` resolves to {dotted!r}, which does not exist"
+            )
+    assert not problems, "relative imports that resolve to nothing:\n  " + "\n  ".join(problems)

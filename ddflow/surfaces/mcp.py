@@ -945,7 +945,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "that reaches it forever. Read-only."
         ),
         "properties": {},
-        "argv": lambda a: ["--json", "workflow"],
+        "api": lambda repo, a, agent: _api().workflow_show(repo),
+        # The whole `data`: `ddflow workflow --json` has always emitted one object
+        # with every section in it, and callers read `coherent` and `findings`.
+        "payload": "",
     },
     "ddflow_workflow_pipeline": {
         "description": (
@@ -964,10 +967,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "gates": ("string", "Comma-separated gate ids, in the order they run.", True),
             "dry_run": ("boolean", "Report the change and write nothing.", False),
         },
-        "argv": lambda a: (
-            ["--json", "workflow", "pipeline", a["which"], a["gates"]]
-            + (["--dry-run"] if a.get("dry_run") else [])
+        "api": lambda repo, a, agent: _api().workflow_pipeline(
+            repo, a["which"], a["gates"], dry_run=bool(a.get("dry_run"))
         ),
+        "payload": ("key", "gates", "applied"),
     },
     "ddflow_workflow_gate": {
         "description": (
@@ -1000,20 +1003,24 @@ TOOLS: dict[str, dict[str, Any]] = {
             "required": ("boolean", "An item cannot complete without it.", False),
             "dry_run": ("boolean", "Report the change and write nothing.", False),
         },
-        "argv": lambda a: (
-            ["--json", "workflow", "gate", a["id"]]
-            + _opt("--command", a)
-            + _opt("--prompt", a)
-            + _opt("--title", a)
-            + _opt("--cwd", a)
-            + _opt("--reviewer", a)
-            + (["--timeout", str(a["timeout"])] if a.get("timeout") else [])
-            + _opt("--applies-to", a, "applies_to")
-            + _opt("--into", a)
-            + _opt("--after", a)
-            + (["--required"] if a.get("required") else [])
-            + (["--dry-run"] if a.get("dry_run") else [])
+        "api": lambda repo, a, agent: _api().workflow_gate(
+            repo,
+            _api().WorkflowGateEdit(
+                id=a["id"],
+                command=a.get("command", "") or "",
+                prompt=a.get("prompt", "") or "",
+                cwd=a.get("cwd", "") or "",
+                reviewer=a.get("reviewer", "") or "",
+                title=a.get("title", "") or "",
+                timeout=int(a.get("timeout") or 0),
+                applies_to=a.get("applies_to", "") or "",
+                into=a.get("into", "") or "",
+                after=a.get("after", "") or "",
+                required=bool(a.get("required")),
+            ),
+            dry_run=bool(a.get("dry_run")),
         ),
+        "payload": ("gate", "changed", "applied"),
     },
     "ddflow_workflow_drop": {
         "description": (
@@ -1028,9 +1035,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "The gate id to remove from the pipelines.", True),
             "dry_run": ("boolean", "Report the change and write nothing.", False),
         },
-        "argv": lambda a: (
-            ["--json", "workflow", "drop", a["id"]] + (["--dry-run"] if a.get("dry_run") else [])
+        "api": lambda repo, a, agent: _api().workflow_drop(
+            repo, a["id"], dry_run=bool(a.get("dry_run"))
         ),
+        "payload": ("gate", "removed_from", "applied"),
     },
     "ddflow_help": {
         "description": (

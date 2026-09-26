@@ -263,7 +263,18 @@ def test_a_rejected_edit_never_leaves_the_config_empty(repo):
 
 
 def test_every_workflow_command_is_reachable_over_mcp(repo):
-    from ddflow.surfaces.mcp import TOOLS
+    """Reachability, asserted by CALLING each tool rather than by reading its argv.
+
+    This used to assert `TOOLS["ddflow_workflow"]["argv"]({}) == ["--json", "workflow"]`
+    and that `--required`/`--dry-run`/`--into` appeared in a flattened argv list. That
+    checks the DISPATCH MECHANISM, not reachability: it broke the moment these tools
+    moved to the typed path, having never once verified that any of them produces an
+    answer. Invoking them does, and it cannot be invalidated by a refactor that keeps
+    the behaviour.
+    """
+    import json as _json
+
+    from ddflow.surfaces.mcp import TOOLS, Server
 
     for tool in (
         "ddflow_workflow",
@@ -272,11 +283,71 @@ def test_every_workflow_command_is_reachable_over_mcp(repo):
         "ddflow_workflow_drop",
     ):
         assert tool in TOOLS, sorted(t for t in TOOLS if "workflow" in t)
-    assert TOOLS["ddflow_workflow"]["argv"]({}) == ["--json", "workflow"]
-    argv = TOOLS["ddflow_workflow_gate"]["argv"](
-        {"id": "lint", "command": "x", "into": "task", "required": True, "dry_run": True}
+
+    run_cli(repo, "init")
+    srv = Server(repo)
+
+    def call(name, arguments):
+        reply = srv.handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+        )
+        return reply["result"]
+
+    shown = call("ddflow_workflow", {})
+    assert shown["isError"] is False, shown
+    assert "task_pipeline" in shown["content"][0]["text"], shown["content"][0]["text"][:200]
+
+    # `dry_run` throughout: this asserts the tools ANSWER, and a reachability test that
+    # rewrites the project's gate configuration to prove it has done more than asked.
+    made = call(
+        "ddflow_workflow_gate",
+        {"id": "lint", "command": "true", "into": "task", "required": True, "dry_run": True},
     )
-    assert "--required" in argv and "--dry-run" in argv and "--into" in argv, argv
+    assert made["isError"] is False, made
+    body = _json.loads(made["content"][0]["text"])
+    assert body["applied"] is False, "dry_run must not apply"
+    assert "gates.task_pipeline" in body["changed"], body
+    assert "gates.required" in body["changed"], body
+
+    # Setting the pipeline to what it already is: a no-op that must be ACCEPTED, which
+    # is the narrowest possible happy path and does not depend on the default gate set.
+    current = _json.loads(shown["content"][0]["text"])["task_pipeline"]
+    piped = call(
+        "ddflow_workflow_pipeline",
+        {"which": "task", "gates": ",".join(current), "dry_run": True},
+    )
+    assert piped["isError"] is False, piped
+    assert _json.loads(piped["content"][0]["text"])["gates"] == current
+
+    # And an edit that would leave the workflow incoherent is REFUSED, before writing.
+    # `exit` 1 with a reason is the answer here, not a crash and not a silent success.
+    broken = call(
+        "ddflow_workflow_pipeline", {"which": "task", "gates": "unit_tests", "dry_run": True}
+    )
+    assert broken["isError"] is True, broken
+    assert "incoherent" in broken["content"][0]["text"], broken
+
+    # A refusal must still carry the PROJECTED SHAPE. `Outcome.body` used to index the
+    # keys, so an outcome that had less to say raised KeyError inside the dispatcher and
+    # the caller got a crash instead of the refusal it needed to read.
+    for name, arguments in (
+        ("ddflow_workflow_drop", {"id": "no-such-gate-at-all"}),
+        # An UNDEFINED gate, which reaches the api and is refused there. `gates: ""` is
+        # rejected by schema validation as a missing argument before it ever gets that
+        # far, so it would test the schema rather than the projection.
+        ("ddflow_workflow_pipeline", {"which": "task", "gates": "no-such-gate"}),
+        ("ddflow_workflow_gate", {"id": "nothing-to-change-here"}),
+    ):
+        answered = call(name, arguments)
+        text = answered["content"][0]["text"]
+        body = _json.loads(text[text.index("{") :])
+        assert "applied" in body, f"{name} dropped `applied` from a refusal: {body}"
+        assert body["applied"] is False, f"{name} reported a refusal as applied: {body}"
 
 
 def test_the_mutating_tools_tell_the_agent_to_ask_first(repo):

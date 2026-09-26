@@ -47,8 +47,14 @@ from .decisions import (
 )
 from .items import update
 from .reporting import loops, progress
+from .workflow import GateEdit as WorkflowGateEdit
+from .workflow import drop as workflow_drop
+from .workflow import gate as workflow_gate
+from .workflow import pipeline as workflow_pipeline
+from .workflow import show as workflow_show
 
 __all__ = [
+    "WorkflowGateEdit",
     "_load",
     "completion_verdict",
     "decision_add",
@@ -60,4 +66,8 @@ __all__ = [
     "loops",
     "progress",
     "update",
+    "workflow_drop",
+    "workflow_gate",
+    "workflow_pipeline",
+    "workflow_show",
 ]

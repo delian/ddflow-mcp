@@ -28,7 +28,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
-from ddflow.surfaces.commands.config import _outside_quotes, _value_span
+from ddflow.services.configwrite import _outside_quotes, _value_span
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 

@@ -84,7 +84,14 @@ class Outcome:
             return self.data
         if isinstance(payload, str):
             return self.data[payload]
-        return {k: self.data[k] for k in payload}
+        # `.get`, not `[...]`. A projection has to produce the SAME SHAPE on every exit
+        # code: an operation that refuses often has less to say than one that succeeded,
+        # and `workflow drop` on a gate that is in no pipeline returns `nothing` with no
+        # `applied` key at all. Indexing turned that refusal into a KeyError inside the
+        # tool dispatcher -- so the caller got a crash where the whole point was to
+        # deliver "there was nothing to drop". A stable shape with an explicit `null` is
+        # what a consumer can branch on.
+        return {k: self.data.get(k) for k in payload}
 
     @property
     def ok(self) -> bool:

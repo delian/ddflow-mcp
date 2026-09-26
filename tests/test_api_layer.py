@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 55
+ARGV_TOOLS_CEILING = 51
 
 
 def _typed() -> list[str]:
@@ -236,6 +236,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_decision_list": (["decision", "list"], {}),
     "ddflow_decision_show": (["decision", "show", "D1"], {"id": "D1"}),
     "ddflow_decision_applicable": (["decision", "applicable", "T1"], {"id": "T1"}),
+    "ddflow_workflow": (["workflow"], {}),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
@@ -249,6 +250,9 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
 #: with a reason. Each still needs its own behavioural test.
 WRITES_NOT_COMPARABLE = {
     "ddflow_update",
+    "ddflow_workflow_pipeline",
+    "ddflow_workflow_gate",
+    "ddflow_workflow_drop",
     "ddflow_decision_add",
     "ddflow_decision_supersede",
 }
@@ -495,3 +499,70 @@ def test_superseded_decisions_are_hidden_but_COUNTED(repo):
     every = api.decision_list(repo, all=True)
     assert {r["id"] for r in every.data["rows"]} == {"D1", "D2"}
     assert every.data["hidden"] == 0, "--all hides nothing, so it must count nothing"
+
+
+# -- the projection must survive every exit code ----------------------------------------
+
+
+def test_a_projection_has_the_same_SHAPE_whatever_the_outcome():
+    """`Outcome.body(("a", "b"))` on an outcome that only carries `a`.
+
+    This indexed the keys, so an operation with less to say produced a KeyError inside
+    the MCP dispatcher and the caller got a crash where the point was to deliver the
+    refusal. `workflow drop` on a gate in no pipeline is exactly that outcome.
+
+    A consumer branches on the shape; an explicit `null` is branchable and a missing key
+    is not. Probed at the unit level because the two guards for it — this, and every api
+    function carrying its projected keys on every path — are redundant by design, so
+    neither is observable through the other.
+    """
+    partial = O.nothing("k", "nothing to do", gate="g")
+    assert partial.body(("gate", "removed_from", "applied")) == {
+        "gate": "g",
+        "removed_from": None,
+        "applied": None,
+    }
+    assert O.failed("k", "broke").body(("a",)) == {"a": None}
+    # A single-key payload still indexes: that key IS the body, and inventing a `null`
+    # body would turn "the operation has no rows" into "the operation returned nothing".
+    assert O.ok("k", rows=[]).body("rows") == []
+
+
+def test_setting_a_pipeline_names_the_undefined_gate_and_guesses_the_intent(repo):
+    """Refused BEFORE the write, with the near-miss named.
+
+    `services/configwrite` also refuses an incoherent pipeline, so this check is
+    defence-in-depth — which is why it needs its own probe: disabling it left every test
+    green because the second guard caught the write anyway, with a worse message. The
+    message is the point. An unknown id in a pipeline blocks every item that enters it
+    forever, and "did you mean 'unit_tests'?" is the difference between a typo found now
+    and a queue that stops moving tomorrow.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    out = api.workflow_pipeline(repo, "task", "unit_testz", dry_run=True)
+    assert out.exit == FAIL, out
+    assert out.data["unknown"] == ["unit_testz"], out.data
+    assert "did you mean 'unit_tests'?" in out.reason, out.reason
+    assert out.data["applied"] is False
+
+
+def test_an_incoherent_workflow_is_REPORTED_as_incoherent(repo):
+    """`coherent` is the one field a caller uses to decide whether to trust the rest.
+
+    Written straight into `config.toml` rather than through the writer, because the
+    writer refuses incoherent edits — which means the only way a project GETS an
+    incoherent workflow is by editing the file, and so the only way to test the report
+    is the same way.
+    """
+    from ddflow import api
+
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[gates]\ntask_pipeline = ["ghost_gate"]\n')
+
+    out = api.workflow_show(repo)
+    assert out.exit == FAIL, "an incoherent workflow reported success"
+    assert out.data["coherent"] is False, out.data
+    assert out.data["findings"], "no finding explains what is wrong"
