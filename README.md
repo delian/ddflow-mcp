@@ -39,6 +39,7 @@ the same implementation, so neither drifts from the other.
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
+| **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts show <name>` | `prompts/list` · `prompts/get` |
 | **ask the tool to explain itself** | `ddflow help [topic]` | `ddflow_help` |
 
 Every read command takes `--json`. Every exit code means the same thing everywhere:
@@ -409,6 +410,52 @@ ddflow prompts list              # where each template currently comes from
 ddflow prompts eject             # copy the shipped ones into .ddflow/prompts/
 $EDITOR .ddflow/prompts/review_system.md
 ```
+
+**Adding a mode of your own: `[[macro]]`.** Overriding a shipped workflow needs no code,
+and neither does adding one. A macro is a named, parameterised prompt — "enter debugger
+mode" — that appears everywhere the shipped workflows do: `prompts/list` and `prompts/get`
+over MCP, which is what a client turns into a slash command, and `ddflow prompts list|show`
+in a terminal.
+
+```toml
+# .ddflow/config.toml   (or .ddflow/macros.toml, if you prefer to split it out)
+[[macro]]
+name = "debugger"
+title = "Enter debugger mode"
+description = "Reproduce first, then bisect. No fix without a failing probe."
+params = ["symptom"]                                  # required, not optional
+tools  = ["ddflow_bug_found", "ddflow_gate_run", "ddflow_bug_fixed"]
+prompt = """
+You are debugging: {{ symptom }}
+
+Reproduce it before you theorise. Paste the command and its output.
+"""
+```
+
+Use `prompt_file = "docs/modes/debugger.md"` instead for anything long enough that TOML
+quoting gets in the way.
+
+**When to reach for a macro rather than a gate.** A gate is a step every item passes
+through, recorded against that item and blocking its completion. A macro is a MODE an
+operator enters, belonging to no item and recorded nowhere — "audit this release", "handle
+this incident". If the thing should hold up a task until it is done, it is a gate; if it is
+a way of working you want to name and re-enter, it is a macro. Putting a mode in the
+pipeline makes every task wait for something that was never about that task.
+
+**`tools` is declarative, not a sandbox.** It is rendered into the prompt as the ordered
+set the mode expects, so the agent is told what the mode is for and the next reader can
+tell what it was supposed to do. It does **not** restrict what the agent may call — MCP has
+no mechanism for that, and claiming a security property this cannot honour would be worse
+than not having it. This is the deliberate departure from
+[`dx-zero/mcpn`](https://github.com/dx-zero/mcpn), whose `toolMode: situational` lets the
+model pick freely from a bound set with no recorded ordering: a session you cannot replay
+is a session you cannot review, which is the property the event log exists to give you.
+
+Three things a macro refuses, because each alternative fails quietly: a **missing
+parameter** (a prompt with a hole in it reads as a complete instruction), a **name that
+belongs to a shipped command** (silent shadowing leaves you editing a block that does
+nothing), and **both `prompt` and `prompt_file`** (two sources for one body means one is
+dead and looks live).
 
 **Including the one the agent actually reads first.** `mcp_instructions.md` is the block
 an MCP client injects into the model's context on connect — the workflow, the reporting

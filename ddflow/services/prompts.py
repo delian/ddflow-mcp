@@ -133,15 +133,63 @@ def command_dir() -> Path:
     return builtin_dir() / "commands"
 
 
+def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str]]]:
+    """Operator-defined `[[macro]]` blocks, in the same shape as `COMMANDS`.
+
+    So every surface that lists workflow commands lists macros too, without knowing which
+    registry a name came from. A macro that had to be asked for separately is a macro an
+    agent never finds.
+    """
+    if repo is None:
+        return {}
+    from .macros import MacroError, load_macros
+
+    try:
+        macros = load_macros(repo)
+    except (MacroError, ValueError, OSError):
+        # A malformed macro must not take `prompts/list` down with it: the shipped
+        # commands are still there, and `ddflow prompts show <name>` reports the error
+        # when the operator asks for that one. Losing the whole list to one bad block is
+        # how a feature becomes something people switch off.
+        return {}
+    return {name: (m.title or name, m.description, list(m.params)) for name, m in macros.items()}
+
+
+def all_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str]]]:
+    """Shipped workflow commands plus the project's macros.
+
+    Shipped ones win a name collision, and `services.macros` refuses the collision at the
+    source too — silent shadowing is the class that once had `api.review` bind a function
+    over its own submodule.
+    """
+    return {**COMMANDS, **macro_commands(repo)}
+
+
 def resolve_command(name: str, repo: Path | None = None) -> Template:
     """A workflow command template, project override first.
 
     Same precedence as any other template: ``.ddflow/prompts/commands/<name>.md``
     beats the shipped default, so a project can rewrite a whole workflow without
     touching code -- which is the point of shipping them as text.
+
+    Falls through to `[[macro]]` blocks, so an operator-defined mode resolves by the same
+    call every surface already makes.
     """
+    from .macros import load_macros
+
     if name not in COMMANDS:
-        raise TemplateError(f"unknown command {name!r}. Known: {', '.join(sorted(COMMANDS))}")
+        macro = (load_macros(repo) if repo else {}).get(name)
+        if macro is not None:
+            # A macro's body is its own; there is no shipped default to fall back to, and
+            # its `source` says `config` so `ddflow prompts list` shows where it came from.
+            from .macros import MacroError
+
+            try:
+                return Template(name, macro.body(Path(repo)), "config", None, "command")
+            except MacroError as exc:
+                raise TemplateError(str(exc)) from exc
+        known = sorted({*COMMANDS, *(load_macros(repo) if repo else {})})
+        raise TemplateError(f"unknown command {name!r}. Known: {', '.join(known)}")
     if repo:
         local = Path(repo) / ".ddflow" / "prompts" / "commands" / f"{name}.md"
         if local.is_file():
@@ -403,7 +451,7 @@ def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) 
     invisible from a terminal, which is where an operator goes to edit one.
     """
     out = [resolve(n, repo, overrides) for n in TEMPLATE_NAMES]
-    out += [resolve_command(n, repo) for n in COMMANDS]
+    out += [resolve_command(n, repo) for n in all_commands(repo)]
     return out
 
 
@@ -417,10 +465,10 @@ def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] |
     """
     if name in TEMPLATE_NAMES:
         return resolve(name, repo, overrides)
-    if name in COMMANDS:
+    if name in all_commands(repo):
         return resolve_command(name, repo)
     raise TemplateError(
         f"unknown prompt {name!r}.\n"
         f"  templates: {', '.join(TEMPLATE_NAMES)}\n"
-        f"  commands:  {', '.join(sorted(COMMANDS))}"
+        f"  commands:  {', '.join(sorted(all_commands(repo)))}"
     )

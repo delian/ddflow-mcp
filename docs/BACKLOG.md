@@ -701,7 +701,40 @@ features worth taking.
   read-only projection of queue state to review against. The dashboard is the large
   part and is separable from the gate. *From: `pimzino/spec-workflow-mcp`.*
 
-- **B83. No ad-hoc prompt macros. FILED.** `dx-zero/mcpn` defines named workflows in
+- **B83. No ad-hoc prompt macros. ✅ CLOSED 2026-09-26** — `[[macro]]` in
+  `.ddflow/config.toml` (or `.ddflow/macros.toml`), read by `services/macros.py`, surfaced
+  by `prompts/list` + `prompts/get` over MCP and by `ddflow prompts list|show`.
+
+  **The gap was narrower than the entry implies, and that is what made it worth doing.**
+  Template resolution, project-override precedence and `{{param}}` injection all already
+  existed — a project could already rewrite any shipped workflow by dropping a file in
+  `.ddflow/prompts/commands/`. What it could not do was add a NEW one, because `COMMANDS`
+  is a Python dict: a mode specific to one project needed a code change in ddflow. So the
+  implementation is a loader, a merge into `all_commands(repo)`, and one entry in
+  `Config._FOREIGN_TABLES` — not a second prompt system.
+
+  **`tools` is declarative and says so.** Rendered into the prompt as the ordered set the
+  mode expects; it restricts nothing. MCP has no mechanism to restrict what a client may
+  call, so implying a sandbox would be a security claim this cannot honour —
+  `test_the_tool_list_is_declarative_not_a_permission_boundary` asserts an unlisted tool is
+  still callable, precisely where somebody would otherwise assume otherwise. That is the
+  deliberate departure from mcpn's `toolMode: situational`, per the original entry.
+
+  Three refusals, each because the alternative fails quietly: a missing parameter (a prompt
+  with a hole in it reads as a complete instruction), a name belonging to a shipped command
+  (silent shadowing leaves the operator editing a block that does nothing — the class that
+  had `api.review` bind a function over its own submodule), and both `prompt` and
+  `prompt_file` (two sources for one body means one is dead and looks live). A malformed
+  block does NOT take `prompts/list` down: the shipped commands are still listed and asking
+  for the broken one by name reports the error, because losing the whole list to one bad
+  block is how a feature gets switched off.
+
+  README documents when to reach for a macro rather than a GATE, which is the distinction
+  an operator will actually get wrong: a gate is a step every item passes through and
+  blocks completion on; a macro belongs to no item and is recorded nowhere. Putting a mode
+  in the pipeline makes every task wait for something that was never about that task.
+
+  Eight mutations verified. Original entry, and what not to copy, follows. Original: `dx-zero/mcpn` defines named workflows in
   YAML — a system prompt plus a bound subset of tools plus `{{param}}` injection —
   invoked as "enter debugger mode". That is a genuinely different axis from the gate
   pipeline: operator-triggered modes that do not belong in the queue at all. `ddflow

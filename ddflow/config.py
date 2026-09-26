@@ -700,7 +700,7 @@ class Config:
     #: their own file: putting a `[[companion]]` block in the obvious place made the
     #: whole config unreadable. The list and the readers must stay in step, and
     #: `tests/test_roborev_findings.py` asserts they do.
-    _FOREIGN_TABLES = frozenset({"gate", "reviewer", "companion"})
+    _FOREIGN_TABLES = frozenset({"gate", "reviewer", "companion", "macro"})
 
     def _apply(self, data: dict[str, Any], source: str) -> None:
         for sec, values in data.items():

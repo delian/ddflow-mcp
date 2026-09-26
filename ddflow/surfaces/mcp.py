@@ -2027,7 +2027,10 @@ class Server:
                                 for arg in args
                             ],
                         }
-                        for name, (title, desc, args) in sorted(P.COMMANDS.items())
+                        # `all_commands`, not `COMMANDS`: operator-defined `[[macro]]`
+                        # blocks are listed beside the shipped workflows, because a mode
+                        # that has to be asked for by name is a mode nobody finds.
+                        for name, (title, desc, args) in sorted(P.all_commands(self.repo).items())
                     ]
                 },
             )
@@ -2037,23 +2040,52 @@ class Server:
             params = msg.get("params") or {}
             name = params.get("name", "")
             args = params.get("arguments") or {}
+            known = P.all_commands(self.repo)
+            if name not in known:
+                return _err(
+                    mid,
+                    -32602,
+                    f"unknown prompt {name!r}. Known: {', '.join(sorted(known))}",
+                )
             try:
-                tmpl = P.resolve_command(name, self.repo)
-                # Every declared argument is bound, empty when absent: the renderer is
-                # strict about undefined names, and a command that raises because the
-                # operator omitted an optional argument is a command nobody uses twice.
-                declared = dict.fromkeys(P.COMMANDS[name][2], "")
-                text = P.render(tmpl, **{**declared, **args, "test_gates": _test_gates(self.repo)})
-            except P.TemplateError as exc:
+                if name in P.COMMANDS:
+                    tmpl = P.resolve_command(name, self.repo)
+                    # Every declared argument is bound, empty when absent: the renderer is
+                    # strict about undefined names, and a command that raises because the
+                    # operator omitted an optional argument is a command nobody uses twice.
+                    declared = dict.fromkeys(P.COMMANDS[name][2], "")
+                    text = P.render(
+                        tmpl, **{**declared, **args, "test_gates": _test_gates(self.repo)}
+                    )
+                else:
+                    # A MACRO. Its declared params are REQUIRED, unlike a shipped
+                    # command's optional `scope`: an operator who declares a parameter is
+                    # saying the mode does not make sense without it, and a prompt rendered
+                    # with a hole in it reads as a complete instruction.
+                    from ..services import macros as M
+
+                    text = M.render(
+                        M.load_macros(self.repo)[name],
+                        self.repo,
+                        {k: str(v) for k, v in args.items()},
+                    )
+            except (P.TemplateError, _macro_error()) as exc:
                 return _err(mid, -32602, str(exc))
             return _ok(
                 mid,
                 {
-                    "description": P.COMMANDS[name][1],
+                    "description": known[name][1],
                     "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
                 },
             )
         return _err(mid, -32601, f"method not found: {method}")
+
+
+def _macro_error() -> type[Exception]:
+    """`macros.MacroError`, fetched lazily so the tool table does not drag the service in."""
+    from ..services.macros import MacroError
+
+    return MacroError
 
 
 def _test_gates(repo: Path) -> list[str]:
