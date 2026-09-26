@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -60,9 +61,27 @@ def test_the_wheel_declares_both_entry_points(wheel):
     assert "ddflow-mcp = ddflow.surfaces.mcp:main" in entry
 
 
-def test_the_package_has_no_runtime_dependencies(wheel):
-    """Zero dependencies is the property that makes this installable everywhere an
-    agent runs, including sandboxes with no reachable package index."""
+#: Every runtime dependency, by distribution name. An ALLOWLIST, not a count.
+#:
+#: This was `assert not requires` — zero dependencies, the property that makes ddflow
+#: installable in sandboxes with no reachable package index. That is still the design,
+#: and Jinja2 is the one deliberate exception: prompts ARE Jinja templates, and for as
+#: long as it was undeclared the package shipped a second, untested renderer that every
+#: user ran and no developer did. 0.1.1's MCP handshake was broken for every unadopted
+#: repository as a result (docs/BACKLOG.md B150-B154).
+#:
+#: Kept as a ratchet rather than deleted, because the original point stands: a
+#: dependency must be a decision somebody made, not something that crept in with an
+#: import. Adding a name here should feel like this comment.
+ALLOWED_RUNTIME_DEPS = {"jinja2"}
+
+
+def test_the_package_declares_only_the_dependencies_we_chose(wheel):
+    """No dependency arrives by accident.
+
+    Asserts on the built WHEEL's metadata rather than on pyproject.toml, because that
+    is what a user actually installs and the two have disagreed before.
+    """
     meta = (
         zipfile.ZipFile(wheel)
         .read(next(n for n in zipfile.ZipFile(wheel).namelist() if n.endswith("METADATA")))
@@ -71,7 +90,43 @@ def test_the_package_has_no_runtime_dependencies(wheel):
     requires = [
         ln for ln in meta.splitlines() if ln.startswith("Requires-Dist:") and "extra ==" not in ln
     ]
-    assert not requires, f"a runtime dependency crept in: {requires}"
+    # `Requires-Dist: jinja2>=3.1.6` -> `jinja2`. Normalised the way PyPI does, so
+    # `Jinja2` and `jinja2` are one name rather than two.
+    names = {
+        re.split(r"[<>=!~;\[\s]", ln.split(":", 1)[1].strip(), maxsplit=1)[0]
+        .lower()
+        .replace("_", "-")
+        for ln in requires
+    }
+    unexpected = names - ALLOWED_RUNTIME_DEPS
+    assert not unexpected, (
+        f"undeclared runtime dependency: {sorted(unexpected)}. Every dependency is a "
+        f"decision — add it to ALLOWED_RUNTIME_DEPS with the reason, or remove the import."
+    )
+
+
+def test_the_declared_dependency_is_actually_installed_by_the_wheel(wheel, tmp_path):
+    """The reason the dependency exists, proven rather than assumed.
+
+    Jinja2 is declared so that the engine the templates are WRITTEN for is the engine
+    that RUNS. A declaration nothing checks is how the two came apart in the first
+    place: `python -m pytest` used the developer's ambient Jinja2 and `uv run pytest`
+    used the fallback, on the same commit, with different results.
+    """
+    venv = tmp_path / "depvenv"
+    subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True, timeout=300)
+    subprocess.run(
+        [str(venv / "bin" / "pip"), "-q", "install", str(wheel)], check=True, timeout=600
+    )
+    got = subprocess.run(
+        [str(venv / "bin" / "python"), "-c", "import jinja2; print(jinja2.__version__)"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert got.returncode == 0, (
+        f"installing the wheel did not bring Jinja2 with it: {got.stderr.strip()}"
+    )
 
 
 def test_installed_adopt_works_end_to_end(wheel, tmp_path):

@@ -54,7 +54,7 @@ echo "  $VERSION — pyproject, server.json and every OCI tag agree"
 
 # ---------------------------------------------------------------- 2. the suite
 say "tests"
-uv run --with pytest --with pytest-timeout python -m pytest tests/ -q --timeout=420 \
+uv run pytest tests/ -q --timeout=420 \
   || die "the suite is red; a release is not the time to find out"
 
 # ---------------------------------------------------------------- 3. the wheel
@@ -90,9 +90,18 @@ echo "  built $IMAGE_GH:$VERSION ($((SIZE / 1024 / 1024)) MB)"
 # A built image that cannot answer `initialize` is a broken release every marketplace
 # will happily offer. This is the one check that separates "it compiled" from "it works".
 say "image speaks MCP"
+# Against a THROWAWAY repo, not "$PWD". Mounting the source checkout looks tidier and
+# is wrong twice: this repository may itself be a linked git worktree, whose `.git` is a
+# FILE pointing at a gitdir outside the mount -- the container then reports "fatal: not
+# a git repository" and the release dies for a reason that has nothing to do with the
+# image. It also means the smoke test runs against a repo that is already adopted,
+# which is not the state a new user is in.
+SMOKE=$(mktemp -d)
+git init -q "$SMOKE"
 printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
-  | docker run -i --rm -v "$PWD:/repo" "$IMAGE_GH:$VERSION" 2>/dev/null \
-  | grep -q '"serverInfo"' || die "the image does not answer initialize"
+  | docker run -i --rm -v "$SMOKE:/repo" "$IMAGE_GH:$VERSION" 2>/dev/null \
+  | grep -q '"serverInfo"' || { rm -rf "$SMOKE"; die "the image does not answer initialize"; }
+rm -rf "$SMOKE"
 echo "  answers initialize over stdio"
 
 if [ "$PUBLISH" -eq 0 ]; then

@@ -2,4 +2,15 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .ddflow/index.db*
-uv.lock
+
+# `uv.lock` is COMMITTED, deliberately, and used to be listed here.
+#
+# It does not affect users: `uvx ddflow-mcp` and `pip install ddflow-mcp` resolve from
+# the published metadata and never read this file. It affects CI and contributors,
+# which is exactly where it matters — every workflow runs `uv run pytest`, and without
+# a lock that resolves whatever is newest on the day. "Green yesterday, red today, same
+# commit" is not a failure anyone can debug from the diff.
+#
+# The dependency it pins is also the one this project has already been bitten by: for
+# as long as Jinja2 was undeclared, the suite ran a different template engine depending
+# on whose interpreter it was (docs/BACKLOG.md B154).

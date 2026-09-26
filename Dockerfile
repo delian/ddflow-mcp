@@ -3,9 +3,16 @@
 #
 #   docker run -i --rm -v "$PWD:/repo" ghcr.io/delian/ddflow-mcp
 #
-# Alpine because ddflow is pure standard library — there is no compiled dependency to
-# worry musl about — and the result is an order of magnitude smaller than a Debian base,
-# which matters when an MCP client pulls it on first use.
+# Alpine because the result is an order of magnitude smaller than a Debian base, which
+# matters when an MCP client pulls it on first use.
+#
+# ddflow has one dependency, Jinja2, which pulls MarkupSafe — and MarkupSafe carries a C
+# extension, so musl is no longer irrelevant here the way it was when this was pure
+# standard library. It still needs no compiler: MarkupSafe publishes `musllinux_1_2`
+# wheels for x86_64 and aarch64, which are exactly the two platforms the `docker` job
+# builds. If that ever stops being true the build fails loudly at `pip install` rather
+# than producing a broken image, and the fix is `apk add --virtual .build gcc musl-dev`
+# around the install.
 FROM python:3.13-alpine
 
 # git is not optional: it IS half of what ddflow does. `su-exec` is a 10 KB setuid

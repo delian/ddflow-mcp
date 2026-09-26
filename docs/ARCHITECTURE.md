@@ -214,7 +214,14 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `surfaces/mcp.py` | MCP stdio server |
 | `config.py` | documented knobs, TOML + env, and the one family map |
 
-No third-party dependency.
+One third-party dependency: **Jinja2**, for the prompt templates. It was zero until
+0.1.2 — `services/prompts.py` carries a standard-library fallback renderer so a stripped
+deployment still starts, and for as long as Jinja2 was undeclared that fallback was what
+CI and users actually ran while developers' ambient interpreters used the other one. Two
+engines, one of them untested, is how 0.1.1 shipped a handshake that rendered correctly
+for its authors and not for a new user. Declaring the dependency makes the language the
+templates are written in the language that is installed; the fallback remains as a
+tested, loud degraded path.
 
 **`infra/proc.py` is 50 lines and exists for one reason.** ddflow runs as an MCP server
 over **stdio**: the JSON-RPC session is this process's stdin and stdout.

@@ -1989,6 +1989,15 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         "missing_companions": [],
         "unregistered_companions": [],
         "uninstalled_companions": [],
+        # Seeded here, with every sibling, because the block that computes these sits
+        # AFTER the `if not adopted: return v` below -- so an unadopted repository got
+        # a variable set the template could not render, and the whole handshake became
+        # "ddflow's instruction template could not be loaded". The template guards the
+        # use (`{% if adopted %}`), but a guard is only as good as the engine's
+        # willingness to short-circuit, and one of the two did not. Defaults do not
+        # depend on which branch ran.
+        "unchecked_companions": [],
+        "actionable_companions": [],
         "gate_gaps": [],
         "recoverable": 0,
         "ready": 0,

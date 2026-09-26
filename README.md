@@ -8,7 +8,8 @@ dependent ones wait. Every task passes a quality pipeline whose gates cannot be 
 assertion. If an agent crashes, its work is found rather than lost. If everything except
 the log is destroyed, the project's decision history rebuilds from the log alone.
 
-**No dependencies beyond `python3` and `git`.** Works with Claude Code, Gemini CLI,
+**One dependency beyond `python3` and `git`** (Jinja2, for the prompt templates; see
+[Extending it by writing text, not code](#extending-it-by-writing-text-not-code)). Works with Claude Code, Gemini CLI,
 Codex, Copilot, Kilo/Cline, a CI job, a Makefile, or a human at a terminal — over a CLI
 and an MCP server that are the same implementation.
 
@@ -426,12 +427,24 @@ skip. A broken override **says so in the instruction block itself** instead of f
 back to the default: this is the one surface where nobody would ever notice their edit
 was not live.
 
-Templates render with **Jinja2 when it is installed, and a strict standard-library
-renderer otherwise** — ddflow cannot require Jinja without losing zero-dependency
-installability, but a project that already has it gets the full language. The shipped
-templates use the subset both engines agree on, and a test renders each one through
-both and asserts the output matches, so a project that installs Jinja2 never silently
-gets different prompts from one that does not.
+Templates render with **Jinja2**, which is ddflow's one runtime dependency, and with a
+strict standard-library renderer when it is absent — a stripped deployment with no
+reachable package index still starts. The shipped templates use the subset both engines
+agree on, and `tests/test_template_engines.py` walks the template REGISTRY, rendering
+every entry through both engines and asserting the outputs are byte-identical.
+
+That test is iterated rather than hand-listed for a reason. Its predecessor named three
+templates in a dict, `mcp_instructions.md` was never added, and in 0.1.1 the largest and
+most important template rendered correctly under Jinja2 and failed under the fallback —
+so the entire MCP handshake for an *unadopted* repository, the first thing a new user
+ever sees, degraded to `ddflow's instruction template could not be loaded`. Jinja2 was
+not a declared dependency at the time, so developers had it and the project venv did
+not: `python -m pytest` was green and `uv run pytest` was red on the same commit.
+
+The fallback now **raises** on any construct it does not implement rather than copying
+it through. The old regex engine emitted what it could not parse, so a condition as
+ordinary as `{% if a or b %}` — which its single-name pattern never matched — reached
+the client as literal template source.
 
 Both renderers are **strict about undefined variables**: a prompt silently missing the
 diff it was supposed to carry is the vacuous review in template form — the model

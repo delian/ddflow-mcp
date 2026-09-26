@@ -32,15 +32,31 @@ classifiers = [
     "Topic :: Software Development :: Quality Assurance",
 ]
 
-# DELIBERATELY EMPTY. ddflow runs on the standard library plus `git`, which is the
-# property that makes it installable everywhere an agent runs -- including sandboxes
-# with no package index reachable at runtime, CI images, and the inside of another
-# tool's ephemeral container. The MCP stdio transport is newline-delimited JSON-RPC and
-# is implemented here rather than taken as a dependency; see docs/ARCHITECTURE.md.
-dependencies = []
-
-[project.optional-dependencies]
-dev = ["pytest>=8", "ruff>=0.6"]
+# ONE dependency, and the reason it is here is a bug, not a convenience.
+#
+# This list was empty on purpose: the standard library plus `git` is what makes ddflow
+# installable everywhere an agent runs -- sandboxes with no reachable package index, CI
+# images, the inside of another tool's ephemeral container. The MCP stdio transport is
+# newline-delimited JSON-RPC and is implemented here rather than taken as a dependency;
+# see docs/ARCHITECTURE.md. That property is still real and still worth having.
+#
+# What it cost: prompts are Jinja2 templates, and `services/prompts.py` carries a
+# fallback renderer for when Jinja2 is absent. Two engines, one of them untested,
+# because every developer's ambient interpreter had Jinja2 and the project venv did
+# not -- so `python -m pytest` was green and `uv run pytest` was red on the same
+# commit. 0.1.1 shipped a handshake that rendered correctly for the people who wrote it
+# and, for every unadopted repository, produced:
+#
+#     ddflow's instruction template could not be loaded: template variable
+#     'actionable_companions' is not defined
+#
+# Declaring it makes the language the templates are written in the language that is
+# actually installed. The fallback stays — it is what a stripped deployment falls back
+# to — but it is now a tested, LOUD degraded path rather than an invisible second
+# implementation. `tests/test_template_engines.py` runs the suite through both.
+dependencies = [
+    "jinja2>=3.1.6",
+]
 
 [project.scripts]
 # Two entry points on purpose. `ddflow` is the human/CI surface; `ddflow-mcp` is what
@@ -75,3 +91,20 @@ include = ["ddflow/", "docs/", "tests/", "demos/", "probes/",
 # test nobody runs.
 markers = ["slow: end-to-end scenarios; minutes, not seconds"]
 addopts = "-m 'not slow'"
+
+# The dev toolchain, declared ONCE and here rather than as a `[project.optional-
+# dependencies]` extra, because `uv run` and `uv sync` install this group by default
+# and an extra has to be asked for. That difference is the whole point: every CI job
+# and `scripts/release.sh` used to reach for `uv run --with pytest --with
+# pytest-timeout`, which is an ad-hoc install of an undeclared, unpinned, unlocked
+# tool at the moment of use -- a second dependency list that no lockfile covers and
+# nothing keeps in step with this one.
+#
+# `uv add --dev <pkg>`, never `uv pip install`: the first writes this block AND
+# `uv.lock`, so a fresh clone reproduces the versions the suite last passed on.
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-timeout>=2.4.0",
+    "ruff>=0.16.9",
+]

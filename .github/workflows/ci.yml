@@ -32,10 +32,10 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - name: Lint
         run: |
-          uv run --no-project --with ruff ruff check .
-          uv run --no-project --with ruff ruff format --check .
+          uv run ruff check .
+          uv run ruff format --check .
       - name: Unit and integration tests
-        run: uv run --with pytest --with pytest-timeout python -m pytest tests/ -q --timeout=420
+        run: uv run pytest tests/ -q --timeout=420
 
   quality:
     # Fast gates, separate from `tests` so a lint failure and a behaviour failure are
@@ -49,8 +49,8 @@ jobs:
 
       - name: Lint and format
         run: |
-          uv run --no-project --with ruff ruff check .
-          uv run --no-project --with ruff ruff format --check .
+          uv run ruff check .
+          uv run ruff format --check .
 
       - name: Build — the wheel must exist, install, run, and carry its templates
         # `uv build` succeeding proves the metadata parses. It does NOT prove the console
@@ -127,7 +127,7 @@ jobs:
           git config --global init.defaultBranch main
       - name: End-to-end scenarios
         # `-m slow` overrides the `not slow` in addopts (pytest takes the last -m).
-        run: uv run --with pytest --with pytest-timeout python -m pytest tests/test_scenarios.py -m slow -q --timeout=1800
+        run: uv run pytest tests/test_scenarios.py -m slow -q --timeout=1800
 
       - name: Concurrency and load
         # Separate step, and it runs even if the scenarios failed: a deadlock under
@@ -142,4 +142,4 @@ jobs:
         env:
           DDFLOW_WRITE_LATENCY_BUDGET_S: "6.0"
           DDFLOW_GROWTH_TOLERANCE: "8.0"
-        run: uv run --with pytest --with pytest-timeout python -m pytest tests/test_mcp_load.py -m slow -q --timeout=1800
+        run: uv run pytest tests/test_mcp_load.py -m slow -q --timeout=1800

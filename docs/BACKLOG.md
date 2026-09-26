@@ -1480,3 +1480,92 @@ Suite: 790 passed, 21 deselected (was 770).
   handshake test covers it — but the newer version is where `elicitation` url mode and
   the MRTR pattern live, so B148 is blocked on this. Adding a version string is not the
   work; confirming the server actually honours what that version REQUIRES is.
+
+## B150–B154 — the 0.1.1 handshake break, 2026-09-26
+
+Found by `scripts/release.sh`, which ran the suite through `uv run` and went red on a
+tree that `python -m pytest` called green. All five ✅ CLOSED in one commit; recorded
+because the mechanism is more interesting than any of the individual fixes.
+
+**The observable failure.** Every *unadopted* repository — a first-time user connecting
+ddflow to their IDE, which is the single most important path this server has — received
+this as its MCP handshake instructions:
+
+    ddflow's instruction template could not be loaded: template variable
+    'actionable_companions' is not defined.
+
+Not a degraded hint. The entire adoption offer, replaced by an error about the server's
+own internals.
+
+- **B150. The fallback template engine evaluated branches Jinja never enters. ✅ CLOSED.**
+  `_render_stdlib` resolved blocks innermost-first by repeated `re.sub`, which has no
+  notion of an enclosing scope. `mcp_instructions.md` has
+  `{% if adopted %}…{% for c in actionable_companions %}…{% endif %}`; on the unadopted
+  path the loop was substituted *before* the false `{% if %}` could delete it, and the
+  name it read is defined only on the branch not taken. Fixed by parsing to a TREE — a
+  branch not walked cannot raise. The regex design was the common cause of B150–B152,
+  so it was replaced rather than patched three times.
+
+- **B151. `{# comments #}` were not stripped at all. ✅ CLOSED.** The template's own
+  34-line header — variable documentation, editing instructions — was emitted verbatim
+  into the model's context, describing states the project was not in.
+
+- **B152. Any condition that was not a bare name was copied through as source.
+  ✅ CLOSED.** The `{% if %}` pattern matched one identifier, so
+  `{% if imported_no_globs or imported_shipped_drift %}` matched nothing and the tag,
+  its body and its orphaned `{% endif %}` reached the client as literal template text.
+  The engine now raises on anything it cannot implement: **a fallback that cannot do
+  something must say so**, because the alternative is delivering `{% endif %}` to an
+  agent as if it were an instruction.
+
+- **B153. `_instruction_vars` returned early with a half-populated contract.
+  ✅ CLOSED.** `if not adopted: return v` sits *above* the block that defines
+  `actionable_companions` and `unchecked_companions`, so which variables exist depended
+  on which branch ran. Seeded in the defaults dict with their siblings. This is the
+  same silent-projection-drop class as `_h_state` and `_h_session_note`, in a different
+  layer: a partial path that leaves a contract incomplete instead of empty.
+
+- **B154. Jinja2 was undeclared, so nobody ran the engine that shipped. ✅ CLOSED.**
+  The root cause of all four above staying invisible. `dependencies = []` was a
+  deliberate property, but prompts are Jinja2 templates, so the package carried a
+  second engine and *tested only the one developers happened to have ambiently*:
+  `python -m pytest` green, `uv run pytest` red, same commit. `uv add jinja2` makes the
+  language the templates are written in the language that is installed. The fallback
+  stays for stripped deployments and is now exercised on every run —
+  `tests/test_template_engines.py` parametrises the whole file over both engines.
+
+**Why the existing parity test did not catch it.** One existed:
+`test_stdlib_renderer_matches_jinja_on_the_shipped_templates`. It named three templates
+in a hand-written dict, and `mcp_instructions.md` — the largest, the only one the server
+sends unprompted — was never added. An allowlist that must be edited to stay honest is
+one that stops being honest. The replacement walks `P.list_all()`, so a template cannot
+be added without being covered, and compares OUTCOMES (same text, or the same refusal)
+rather than `.split()`, which had been hiding whitespace divergence.
+
+- **B155. `docker` published without the suite ever running. ✅ CLOSED.** Found while
+  checking what 0.1.1 would have shipped. `publish.yml`'s `pypi` job ran the tests
+  inline before uploading, so PyPI was protected; `docker` declared `needs: gate` —
+  version-changed, nothing more — and pushed `:latest` to Docker Hub and ghcr.io
+  regardless. A half-published release is worse than a failed one: `:latest` is on
+  somebody's disk before anyone notices. Extracted a `verify` job that runs the suite
+  and the slow scenarios once, with both `pypi` and `docker` depending on it. The two
+  inline copies of "run the tests" were also how one of them came to be missing.
+
+- **B156. The image smoke test mounted the source checkout. ✅ CLOSED.** Both
+  `scripts/release.sh` and `publish.yml`'s docker job piped an `initialize` request into
+  `docker run -v "$PWD:/repo"`. Found by running it: this repository's `.git` is a FILE
+  (a linked worktree pointing at a gitdir outside the mount), so the container answered
+  `fatal: not a git repository` and the check would have failed the release for a reason
+  with nothing to do with the image. It is also the wrong state to test — the question
+  a smoke test asks is whether a NEW user's repository gets a handshake, and the source
+  tree is not one. Both now `mktemp -d` + `git init` a scratch repo. Verified against a
+  locally built image: `fatal: not a git repository` on `$PWD`, a full `serverInfo`
+  reply on a fresh one.
+
+- **B157. Alpine's "no compiled dependency" rationale went stale with B154.** Not a
+  bug — recorded so the next person does not have to re-derive it. Jinja2 pulls
+  MarkupSafe, which has a C extension, so musl now matters where it did not. It still
+  needs no compiler: MarkupSafe publishes `musllinux_1_2` wheels for x86_64 and
+  aarch64, exactly the two platforms the docker job builds. Probed by building the
+  image and importing it: `jinja2 in image: 3.1.6`. The Dockerfile comment now says so
+  and names the `apk add gcc musl-dev` remedy if it ever stops being true.

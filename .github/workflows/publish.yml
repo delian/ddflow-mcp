@@ -93,8 +93,37 @@ jobs:
           fi
           echo "$v is not on PyPI yet"
 
-  pypi:
+  # ---------------------------------------------------------------- prove it works, ONCE
+  verify:
+    # Extracted from `pypi`, where it used to live as two inline steps. The bug that
+    # earned it its own job: `docker` declared `needs: gate` only, so a push whose
+    # suite was RED still pushed `:latest` to Docker Hub and ghcr.io while PyPI
+    # correctly refused. A release that is half-published is worse than one that fails
+    # -- `:latest` is on somebody's disk by the time anyone notices, and it cannot be
+    # taken back.
+    #
+    # One job, and everything that publishes depends on it. Two copies of "run the
+    # tests" is how one of them came to be missing in the first place.
     needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v5
+      - name: Test before publishing
+        run: uv run pytest tests/ -q --timeout=420
+      - name: Scenarios before publishing
+        # A release is the one moment it is worth the ten minutes. `-m 'not slow'` in
+        # addopts meant the suite that has found most of this project's defects had
+        # never gated a publish.
+        run: |
+          git config --global user.email "ci@example.com"
+          git config --global user.name "ddflow ci"
+          git config --global init.defaultBranch main
+          uv run pytest tests/test_scenarios.py -m slow -q --timeout=1800
+
+  pypi:
+    needs: [gate, verify]
     if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: release
@@ -128,22 +157,11 @@ jobs:
           if bad:
               sys.exit(f"OCI identifiers not tagged {want}: {bad}")
           PY
-      - name: Test before publishing
-        run: uv run --with pytest --with pytest-timeout python -m pytest tests/ -q --timeout=420
-      - name: Scenarios before publishing
-        # A release is the one moment it is worth the ten minutes. `-m 'not slow'` in
-        # addopts meant the suite that has found most of this project's defects had
-        # never gated a publish.
-        run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "ddflow ci"
-          git config --global init.defaultBranch main
-          uv run --with pytest --with pytest-timeout python -m pytest tests/test_scenarios.py -m slow -q --timeout=1800
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   docker:
-    needs: gate
+    needs: [gate, verify]
     if: needs.gate.outputs.publish == 'true'
     # Both registries, one build. `delian/ddflow-mcp` on Docker Hub is what the README
     # documents; `ghcr.io` needs no account beyond the repo's own and is what CI can
@@ -191,8 +209,12 @@ jobs:
         # marketplace will happily offer. Cheap to check, and the one check that
         # distinguishes "it compiled" from "it works".
         run: |
+          # A scratch repo, not "$PWD" -- the same reason as scripts/release.sh: the
+          # state to smoke-test is the one a NEW user is in, and mounting the source
+          # checkout makes the test depend on how that checkout happens to be laid out.
+          smoke=$(mktemp -d); git init -q "$smoke"
           printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
-            | docker run -i --rm -v "$PWD:/repo" ghcr.io/delian/ddflow-mcp:${{ needs.gate.outputs.version }} \
+            | docker run -i --rm -v "$smoke:/repo" ghcr.io/delian/ddflow-mcp:${{ needs.gate.outputs.version }} \
             | tee /dev/stderr | grep -q '"serverInfo"'
 
   mcp-registry:
