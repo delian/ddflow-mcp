@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 from conftest import run_cli
 
 from ddflow import api
@@ -29,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 61
+ARGV_TOOLS_CEILING = 60
 
 
 def _typed() -> list[str]:
@@ -215,6 +216,72 @@ def test_the_reason_leads_the_body_so_a_reader_gets_it_first():
 
 
 # -- B37: one answer, two presentations -------------------------------------------------
+
+
+#: MCP tool -> the CLI argv whose `--json` output it must reproduce EXACTLY.
+#: Every migration adds a row. The point is that a tool's wire shape is a CONTRACT its
+#: consumers depend on, and B37 exists to remove a duplicated rendering, not to redefine
+#: contracts -- `ddflow_loops` silently went from a JSON array to an object and broke two
+#: demo scenarios before this existed.
+MIGRATED_WIRE_SHAPES: dict[str, list[str]] = {
+    "ddflow_loops": ["loops"],
+    "ddflow_progress": ["progress"],
+}
+
+
+@pytest.mark.parametrize("tool", sorted(MIGRATED_WIRE_SHAPES))
+def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
+    """One test for every migration, present and future.
+
+    Compares the two payloads WITHOUT indexing into either. The bespoke version of this
+    reached for `["findings"]` on the MCP side, which validated the contents while
+    accommodating the exact shape change it was written to prevent -- so the
+    generalisation is not tidiness, it is the thing that makes the check honest.
+    """
+    import json as _json
+
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--title", "P")
+    run_cli(repo, "task", "add", "T1", "--phase", "P1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "A", "--needs", "B")
+    run_cli(repo, "task", "add", "B", "--needs", "A")  # a cycle, so findings exist
+
+    _code, cli_out, _err = run_cli(repo, "--json", *MIGRATED_WIRE_SHAPES[tool])
+    from_cli = _json.loads(cli_out)
+
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": {}},
+        }
+    )
+    text = reply["result"]["content"][0]["text"]
+    start = min((i for i in (text.find("["), text.find("{")) if i != -1), default=-1)
+    assert start != -1, f"{tool} returned no JSON body: {text[:200]}"
+    from_mcp = _json.loads(text[start:])
+
+    assert type(from_mcp) is type(from_cli), (
+        f"{tool}: the MCP body is a {type(from_mcp).__name__} and the CLI's is a "
+        f"{type(from_cli).__name__} — a migration changed the wire shape"
+    )
+    assert from_mcp == from_cli, f"{tool}: the surfaces disagree\nCLI: {from_cli}\nMCP: {from_mcp}"
+
+
+def test_every_typed_tool_has_a_wire_shape_row():
+    """A migration without a row is a migration nothing checks. The map is the ratchet:
+    `ARGV_TOOLS_CEILING` counts what is left, this covers what has moved."""
+    typed = {n for n, s in TOOLS.items() if "api" in s}
+    # `ddflow_update` writes and has no `--json` read to compare against; it is covered
+    # by `test_the_dispatcher_actually_uses_the_typed_path` instead.
+    unchecked = typed - set(MIGRATED_WIRE_SHAPES) - {"ddflow_update"}
+    assert not unchecked, (
+        f"migrated with no wire-shape row: {sorted(unchecked)}. Add one to "
+        f"MIGRATED_WIRE_SHAPES so the contract is checked."
+    )
 
 
 def test_a_migrated_tool_gives_both_surfaces_the_SAME_data(repo):

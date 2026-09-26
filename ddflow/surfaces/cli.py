@@ -1635,32 +1635,42 @@ def cmd_recover(a, c: Ctx) -> int:
 
 def cmd_progress(a, c: Ctx) -> int:
     """What work has actually been done, aggregated from the log."""
+    from ..api import progress as _progress
     from ..core import progress as PR
 
-    events = c.log.read_all()
-    st = fold(events, strict=False)
-    tracked = PR.work(events, st)
-    rows = [r for r in tracked.values() if not a.id or r.item == a.id]
-    if a.id and not rows:
-        print(f"no such item {a.id!r}", file=sys.stderr)
+    out = _progress(c.repo, a.id or "")
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
         return FAIL
-    rows.sort(key=lambda r: (-r.total_seconds, r.item))
-
     if c.json:
-        print(json.dumps([r.summary() for r in rows], indent=2, default=str))
+        # The ROW ARRAY, unchanged. `ddflow progress --json` has always emitted a list
+        # and callers index it; the Outcome carries more, and the `payload` entry on the
+        # MCP tool keeps that surface identical too.
+        print(json.dumps(out.data["rows"], indent=2, default=str))
         return OK
-    if not rows:
+
+    rows_d = out.data["rows"]
+    if not rows_d:
         print("No work recorded yet.")
         return NOTHING
+    # The TABLE renders from the wire rows -- no second fold. `summary()` carries every
+    # column: counts for attempts/commits, seconds held, the holder list.
     print(f"{'item':<14} {'state':<10} {'att':>3} {'held':>9} {'gates':>5} {'commits':>7}  holders")
-    for r in rows:
-        held = f"{r.total_seconds / 60:.1f}m" if r.total_seconds else "-"
+    for d in rows_d:
+        secs = d["held_seconds"]
+        held = f"{secs / 60:.1f}m" if secs else "-"
         print(
-            f"{r.item:<14} {r.state:<10} {len(r.attempts):>3} {held:>9} "
-            f"{r.gate_runs:>5} {len(r.commits):>7}  "
-            f"{', '.join(sorted(set(r.holders))) or '-'}"
+            f"{d['item']:<14} {d['state']:<10} {d['attempts']:>3} {held:>9} "
+            f"{d['gate_runs']:>5} {d['commits']:>7}  "
+            f"{', '.join(sorted(set(d['holders']))) or '-'}"
         )
-    if a.id and rows:
+    if a.id:
+        # The ONLY path that folds again, and only for one item. The per-attempt detail
+        # (who held it, how it ended, gates passed and failed) is richer than the wire
+        # summary, which flattens `attempts` to a count -- so this needs the objects and
+        # the table above does not. Scoped to `--id` rather than paid on every call.
+        events = c.log.read_all()
+        rows = [r for r in PR.work(events, fold(events, strict=False)).values() if r.item == a.id]
         r = rows[0]
         print(f"\n{r.item} — {r.title}")
         for i, att in enumerate(r.attempts, 1):
@@ -1671,10 +1681,10 @@ def cmd_progress(a, c: Ctx) -> int:
             )
         for gate, outcomes in sorted(r.gate_outcomes.items()):
             print(f"  gate {gate:<14} {' -> '.join(outcomes)}")
-    total = sum(r.total_seconds for r in rows)
+    total = sum(d["held_seconds"] for d in rows_d)
     print(
-        f"\n{len(rows)} item(s) · {total / 3600:.1f} agent-hours recorded · "
-        f"{sum(len(r.commits) for r in rows)} commit(s)"
+        f"\n{len(rows_d)} item(s) · {total / 3600:.1f} agent-hours recorded · "
+        f"{sum(d['commits'] for d in rows_d)} commit(s)"
     )
     return OK
 

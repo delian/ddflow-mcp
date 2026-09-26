@@ -151,11 +151,84 @@ def test_the_declared_versions_agree():
         f"version drift: pyproject={proj} server.json={srv['version']} "
         f"SERVER_INFO={SERVER_INFO['version']}"
     )
-    assert srv["packages"][0]["version"] == proj
-    assert (
-        srv["packages"][0]["identifier"]
-        == tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["name"]
+    pypi = [k for k in srv["packages"] if k["registryType"] == "pypi"]
+    assert len(pypi) == 1, f"expected exactly one pypi package, got {len(pypi)}"
+    assert pypi[0]["version"] == proj
+    assert pypi[0]["identifier"] == proj_name()
+
+    # EVERY OCI identifier's tag must be the version. One left behind while `version`
+    # moved on publishes a manifest pointing at the PREVIOUS image — discoverable in an
+    # IDE marketplace, installable, and the wrong build. The release workflow and
+    # `scripts/release.sh` check the same thing; this is the copy that runs on every
+    # ordinary test run, which is the one that catches it before a tag exists.
+    stale = [
+        k["identifier"]
+        for k in srv["packages"]
+        if k["registryType"] == "oci" and not k["identifier"].endswith(f":{proj}")
+    ]
+    assert not stale, f"OCI identifiers not tagged {proj}: {stale}"
+
+
+def proj_name() -> str:
+    return tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["name"]
+
+
+def test_the_manifest_offers_a_way_to_run_it_without_python():
+    """The reason the OCI packages exist: an operator with no Python toolchain must be
+    able to install this from a marketplace, not just from PyPI.
+
+    Both registries are named because they serve different people — Docker Hub is what
+    the README documents, ghcr.io needs no account beyond the repository's own.
+    """
+    srv = json.loads((ROOT / "server.json").read_text())
+    oci = {k["identifier"].split("/")[0] for k in srv["packages"] if k["registryType"] == "oci"}
+    assert {"docker.io", "ghcr.io"} <= oci, f"missing an OCI registry: {sorted(oci)}"
+    for k in srv["packages"]:
+        assert k["transport"]["type"] == "stdio", k
+
+
+def test_the_manifest_does_not_describe_behaviour_the_code_does_not_have():
+    """`server.json` is PUBLISHED — it is what a marketplace shows people, so a stale
+    claim in it is a stale claim in front of every prospective user.
+
+    It said `DDFLOW_AGENT` "defaults to host-pid", which `default_agent_id`'s own
+    docstring records as the OLD behaviour, removed because `claim` and the commit hook
+    seconds later resolved to different agents. Checked against the real default rather
+    than against a remembered one.
+    """
+    sys.path.insert(0, str(ROOT))
+    from ddflow.infra.log import default_agent_id
+
+    srv = json.loads((ROOT / "server.json").read_text())
+    described = {
+        e["name"]: e["description"]
+        for k in srv["packages"]
+        for e in k.get("environmentVariables", [])
+    }
+    assert "DDFLOW_AGENT" in described and "DDFLOW_REPO" in described, sorted(described)
+
+    actual = default_agent_id(ROOT)
+    assert "-" in actual, actual
+    assert "pid" not in described["DDFLOW_AGENT"].lower(), (
+        "the manifest still describes the host-pid default, which was removed as a bug: "
+        + described["DDFLOW_AGENT"]
     )
+    # It must also say the thing that actually matters about it.
+    assert "worktree" in described["DDFLOW_AGENT"].lower(), described["DDFLOW_AGENT"]
+
+
+def test_the_release_script_is_dry_by_default():
+    """A release script that publishes when run with no arguments is a release script
+    someone will run to see what it does."""
+    src = (ROOT / "scripts" / "release.sh").read_text()
+    assert "PUBLISH=0" in src, "the default is not dry"
+    assert "--publish" in src
+    # The irreversible calls must all sit behind the flag.
+    after = src[src.index('if [ "$PUBLISH" -eq 0 ]') :]
+    before = src[: src.index('if [ "$PUBLISH" -eq 0 ]')]
+    for irreversible in ("uv publish", "docker push", "mcp-publisher publish"):
+        assert irreversible not in before, f"{irreversible!r} runs before the dry-run exit"
+        assert irreversible in after, f"{irreversible!r} is not in the publish path at all"
 
 
 # -- the spawn contract: a module path a move can silently invalidate ------------------

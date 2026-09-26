@@ -37,6 +37,75 @@ jobs:
       - name: Unit and integration tests
         run: uv run --with pytest --with pytest-timeout python -m pytest tests/ -q --timeout=420
 
+  quality:
+    # Fast gates, separate from `tests` so a lint failure and a behaviour failure are
+    # distinguishable at a glance. Nothing here needs the suite to have passed.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # gitleaks needs history to scan it
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Lint and format
+        run: |
+          uv run --no-project --with ruff ruff check .
+          uv run --no-project --with ruff ruff format --check .
+
+      - name: Build — the wheel must exist, install, run, and carry its templates
+        # `uv build` succeeding proves the metadata parses. It does NOT prove the console
+        # script resolves or that the shipped templates made it in, and a wheel missing
+        # its templates fails at the first `ddflow help` — on a user's machine.
+        run: |
+          uv build
+          uv venv /tmp/probe
+          uv pip install --python /tmp/probe/bin/python dist/*.whl
+          /tmp/probe/bin/python -m ddflow --version
+          /tmp/probe/bin/python -c 'from ddflow.infra.paths import templates_dir; import sys; d=templates_dir(); m=[n for n in ("companions.toml","prompts") if not (d/n).exists()]; sys.exit(f"missing package data: {m}" if m else 0)'
+
+      - name: Secrets — nothing credential-shaped may enter history
+        # This project has already shipped a live API key in a committed config once.
+        # A secret in git is a leaked secret: rotating is the only remedy, so the check
+        # that matters is the one that runs before the push, every time.
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Static security scan
+        # `bandit` over the package only. Tests are excluded deliberately: they use
+        # `subprocess` and temporary paths constantly and by design, and a scanner that
+        # cries wolf on every fixture is a scanner nobody reads.
+        run: uv run --no-project --with bandit bandit -q -r ddflow/ -ll
+
+      - name: Dependency audit
+        # ddflow has NO runtime dependencies, which is the point — this asserts that
+        # stays true and audits the dev ones. A tree with nothing in it is the cheapest
+        # supply chain to secure.
+        run: |
+          uv run --no-project --with pip-audit pip-audit --strict --progress-spinner off -r <(
+            uv export --no-hashes --no-emit-project 2>/dev/null || true
+          ) || echo "::warning::pip-audit reported findings — see log"
+          uv run --no-project python - <<'PY'
+          import tomllib, sys
+          deps = tomllib.load(open("pyproject.toml", "rb"))["project"].get("dependencies", [])
+          sys.exit(f"runtime dependencies appeared: {deps}" if deps else 0)
+          PY
+
+  codeql:
+    # GitHub's own analysis. Separate job because it is slow and its findings land in the
+    # Security tab rather than in a log nobody re-reads.
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          queries: security-and-quality
+      - uses: github/codeql-action/analyze@v3
+
   scenarios:
     # Separate job, not a step: a scenario failure and a unit failure want different
     # reading, and putting them in one job means the ten-minute one gates the two-minute
@@ -49,8 +118,8 @@ jobs:
         # The scenarios create real worktrees and real commits; git refuses without an
         # identity, and the failure reads as a scenario bug rather than a setup one.
         run: |
-          git config --global user.email "ci@example.com"
-          git config --global user.name "ddflow ci"
+          git config --global user.email "delian.delchev@gmail.com"
+          git config --global user.name "Delian Delchev"
           git config --global init.defaultBranch main
       - name: End-to-end scenarios
         # `-m slow` overrides the `not slow` in addopts (pytest takes the last -m).

@@ -14,19 +14,60 @@ and an MCP server that are the same implementation.
 
 ---
 
+## How do I…?
+
+Every row is a command you can run in a terminal and a tool an agent can call over MCP —
+the same implementation, so neither drifts from the other.
+
+| I want to… | CLI | MCP tool |
+|---|---|---|
+| **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
+| **change the workflow** | `ddflow workflow pipeline task …` · `workflow gate <id> …` · `workflow drop <id>` | `ddflow_workflow_pipeline` · `_gate` · `_drop` |
+| **change any setting** | `ddflow config --explain` · `--set <key> <value>` | `ddflow_configure` |
+| **add a phase / a task** | `ddflow phase add P1 --title …` · `ddflow task add P1.T1 --phase P1 --globs 'src/**'` | `ddflow_phase_add` · `ddflow_task_add` |
+| **get a plan into the queue** | see [From plan mode to the queue](#from-plan-mode-to-the-queue) | same |
+| **know what to work on** | `ddflow next` | `ddflow_next` |
+| **start a task** | `ddflow claim <id>` → work → `ddflow gate …` → `ddflow merge` → `ddflow complete` | `ddflow_claim`, `ddflow_gate_*`, `ddflow_merge`, `ddflow_complete` |
+| **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
+| **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
+| **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research` · `ddflow_bug_*` |
+| **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
+| **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
+| **read the engineering log** | `ddflow history` | `ddflow_history` |
+| **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
+| **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
+| **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
+| **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
+| **ask the tool to explain itself** | `ddflow help [topic]` | `ddflow_help` |
+
+Every read command takes `--json`. Every exit code means the same thing everywhere:
+`0` healthy · `1` real failure · `2` could not run / nothing to do · `3` coordination
+refused. `2` is never collapsed into `0` — *"nothing is ready"* and *"everything is
+fine"* are different facts, and an agent that cannot tell them apart invents work.
+
+---
+
 ## Table of contents
 
+- [How do I…?](#how-do-i)
 - [Help: what it can do, and the workflow](#help-what-it-can-do-and-the-workflow)
+- [Wiring it into your agent](#wiring-it-into-your-agent)
+- [From plan mode to the queue](#from-plan-mode-to-the-queue)
+- [When a companion is missing](#when-a-companion-is-missing)
+- [What is automated, and what is not](#what-is-automated-and-what-is-not)
 - [Two ways to drive it](#two-ways-to-drive-it)
   - [Standalone: a terminal, a Makefile, CI](#standalone-a-terminal-a-makefile-ci)
   - [As an MCP server](#as-an-mcp-server)
   - [What goes in AGENTS.md / CLAUDE.md](#what-goes-in-agentsmd--claudemd)
 - [The workflow, and changing it](#the-workflow-and-changing-it)
+- [The rules, and where each came from](#the-rules-and-where-each-came-from)
 - [Why it is built this way](#why-it-is-built-this-way)
 - [Install into any project](#install-into-any-project)
   - [Docker — for operators with no Python toolchain](#docker--for-operators-with-no-python-toolchain)
   - [Extending it by writing text, not code](#extending-it-by-writing-text-not-code)
   - [Publishing and registry](#publishing-and-registry)
+  - [Cutting a release](#cutting-a-release)
+  - [What CI checks](#what-ci-checks)
   - [Any LLM as a reviewer — local, remote, SaaS, or a CLI](#any-llm-as-a-reviewer--local-remote-saas-or-a-cli)
   - [Companion tools](#companion-tools)
 - [Adopting a project that already has history](#adopting-a-project-that-already-has-history)
@@ -403,12 +444,115 @@ cadences, and the rest of the 58 knobs.
 
 ### Publishing and registry
 
-`server.json` carries the [MCP registry](https://modelcontextprotocol.io/registry/quickstart)
-manifest (`io.github.delian/ddflow-mcp`, PyPI package `ddflow-mcp`, `runtimeHint: uvx`),
-and `.github/workflows/publish.yml` publishes to PyPI and the registry on a version tag
-using OIDC trusted publishing — no stored tokens. The workflow refuses to publish when
-the tag, `pyproject.toml` and `server.json` disagree about the version, and
-`tests/test_packaging.py` pins the same invariant locally.
+**Nobody should have to paste JSON into an IDE to use this.** `server.json` is the
+[MCP registry](https://modelcontextprotocol.io/registry/quickstart) manifest
+(`io.github.delian/ddflow-mcp`), and publishing it is what makes ddflow findable in the
+VS Code and Cursor marketplaces rather than something you configure by hand. It offers
+three ways to run the same server, so a client picks whichever it supports:
+
+| Package | Identifier | For |
+|---|---|---|
+| `pypi` | `ddflow-mcp`, `runtimeHint: uvx` | Anything with `uv` — no clone, no install step |
+| `oci` | `docker.io/delian/ddflow-mcp:<version>` | Operators with no Python toolchain |
+| `oci` | `ghcr.io/delian/ddflow-mcp:<version>` | The same image, no Docker Hub account needed |
+
+The image is built for `amd64` and `arm64`, because an Apple-silicon operator running it
+under emulation pays that cost on every tool call, and tool calls are all this server
+does.
+
+**How CI authenticates — four mechanisms, one stored secret:**
+
+| Target | Mechanism | Stored secret? | Setup |
+|---|---|---|---|
+| PyPI | OIDC trusted publishing (`id-token: write`) | No | Add a trusted publisher on PyPI, once |
+| ghcr.io | `GITHUB_TOKEN`, injected per run, expires with the job | No | none |
+| Docker Hub | `DOCKERHUB_USERNAME` + `DOCKERHUB_TOKEN` | **Yes** | Create an access token, add both secrets |
+| MCP registry | GitHub OIDC — proves control of the account that owns the `io.github.delian/*` namespace | No | none |
+| tag + release | `GITHUB_TOKEN` (`contents: write`) | No | none |
+
+**Docker Hub is the only one that needs a long-lived credential**, because it has no OIDC
+equivalent. Use an access token scoped to this repository, never an account password. If
+that is one secret too many, delete the Docker Hub login and its two tags — ghcr.io alone
+satisfies the OCI entries a marketplace needs, and `server.json` lists both so a client
+picks whichever resolves.
+
+`environment: release` on the publishing jobs is a control worth knowing about: point it
+at a GitHub environment with required reviewers and every release waits for a human,
+with no change to the workflow.
+
+**Order matters and the workflow encodes it.** `mcp-publisher` validates that every
+package named in the manifest exists, so the registry step runs *after* both PyPI and
+Docker — publishing the manifest first would advertise a version nobody can fetch.
+
+Four things gate a release, and each exists because the failure it catches is public and
+irreversible:
+
+* the tag, `pyproject.toml`, `server.json`'s version **and every OCI identifier's tag**
+  must agree — a `:0.1.0` left behind while `version` moved on publishes a manifest
+  pointing at the previous image, installable and wrong;
+* the full suite, plus the slow end-to-end scenarios, which `-m 'not slow'` otherwise
+  excludes from every ordinary run;
+* the wheel must **install into a clean venv and run**, and carry its templates —
+  `uv build` succeeding proves the metadata parses, not that `ddflow help` works;
+* the image must answer `initialize` over stdio. A built image that cannot is a broken
+  release every marketplace will happily offer.
+
+### Cutting a release
+
+```console
+$ scripts/bump.sh patch          # 0.1.0 -> 0.1.1, in all FIVE places that declare it
+$ scripts/release.sh             # build + verify everything locally; publishes nothing
+$ git commit -am 'release 0.1.1' && git push origin main
+```
+
+That push is the whole release. CI publishes PyPI, Docker Hub, ghcr.io and the MCP
+registry, then creates `v0.1.1` and a GitHub release — **last**, and only once every
+publish succeeded, because a tag pointing at a half-release is worse than no tag: it
+looks authoritative.
+
+**The version bump is the release decision, and it is deliberate on purpose.** A push to
+main publishes exactly when that number changes. Publishing on *every* push is arithmetic
+that does not work — PyPI refuses to re-upload a version, so the second push fails and
+every one after it — and deriving a unique version per commit instead would mean an
+irreversible release for a README typo. So one reviewable line in a diff decides, and
+everything after it is automatic. `workflow_dispatch` with `force: true` is there for the
+case where you need to republish deliberately.
+
+The version lives in five places — `pyproject.toml`, `server.json`'s version, its
+per-package version, the tag inside every OCI identifier, and `SERVER_INFO`, which is
+what the server tells every client it is. `scripts/bump.sh` moves all five and then
+re-reads them to check it did; `tests/test_packaging.py` fails if they ever drift. (That
+test caught the bump script missing `SERVER_INFO` on its first run.)
+
+**`scripts/release.sh` runs all of that locally and publishes nothing.** It is dry by
+default, needs no credentials, and exists because a tag is not reversible: PyPI refuses a
+re-upload, `:latest` is on someone's disk before you notice, and a registry manifest is
+what an IDE offers people. If it fails on your laptop, the tag was going to fail an hour
+later in public. `--publish` is the escape hatch for when CI is unavailable, and it makes
+you type the version to confirm.
+
+### What CI checks
+
+`.github/workflows/ci.yml` runs on every push and pull request, in four jobs that fail
+for different reasons so you can tell at a glance which:
+
+| Job | Checks |
+|---|---|
+| **quality** | `ruff check` + `format --check`; the wheel **installs into a clean venv, runs, and carries its templates**; `gitleaks` over full history; `bandit` over the package; a dependency audit that also asserts the runtime dependency list is still *empty* |
+| **tests** | The suite on Python 3.11 and 3.13 — the floor and the current release, because a version-specific break is a break for somebody |
+| **codeql** | GitHub's `security-and-quality` queries, landing in the Security tab rather than a log |
+| **scenarios** | The slow end-to-end runs, and the concurrency/load suite, each as its own step with `if: always()` |
+
+Two of those exist because of specific failures. The wheel check is there because `uv
+build` succeeding proves the metadata parses, not that `ddflow help` works — a wheel
+missing its templates fails on the user's machine. And **`gitleaks` is there because this
+project has already committed a live API key**: a secret in git is a leaked secret,
+rotation is the only remedy, so the check that matters is the one that runs before every
+push.
+
+`bandit` deliberately skips `tests/`, which use `subprocess` and temporary paths
+constantly and by design. A scanner that cries wolf on every fixture is a scanner nobody
+reads.
 
 ### Any LLM as a reviewer — local, remote, SaaS, or a CLI
 
@@ -572,6 +716,123 @@ command = "my-linter"
 args    = ["mcp"]
 install = "cargo install my-linter"
 ```
+
+## Wiring it into your agent
+
+`ddflow adopt --agents claude,cursor,codex` writes everything below. This table is what
+it writes, so you can check it or do it by hand.
+
+| Agent | MCP config it writes | Rules file it writes |
+|---|---|---|
+| **Claude Code** | `.mcp.json` | `AGENTS.md` |
+| **Cursor** | `.cursor/mcp.json` | `.cursor/rules/ddflow.mdc` *(plus `AGENTS.md`)* |
+| **Codex CLI** | `.codex/config.toml` | `AGENTS.md` |
+| **Gemini CLI** | `.gemini/settings.json` | `AGENTS.md` |
+| **GitHub Copilot** | `.vscode/mcp.json` | `AGENTS.md` |
+| **Kilo / Cline** | `.kilo/kilo.json` | `AGENTS.md` |
+
+Cursor gets its own rules file because **its precedence puts project rules above
+`AGENTS.md`** — writing only `AGENTS.md` there would be writing to a file the agent
+outranks. `adopt` merges into these files rather than overwriting: they hold your other
+servers and your other rules, and a tool that stomps them is a tool you run once.
+
+The MCP entry is one line in any of them:
+
+```json
+{ "mcpServers": { "ddflow": { "command": "uvx", "args": ["ddflow-mcp"] } } }
+```
+
+`uvx` fetches and runs it in an ephemeral environment on first use — no clone, no
+`PYTHONPATH`, no install step to forget. Prefer Docker? `docker run -i --rm -v
+"$PWD:/repo" ghcr.io/delian/ddflow-mcp`, which needs the repo bind-mounted because ddflow
+operates on your actual git checkout.
+
+**Standalone, with no MCP at all**, is a first-class mode rather than a fallback. Add to
+`AGENTS.md` / `CLAUDE.md`:
+
+```markdown
+This project's work is a queue managed by ddflow. Before doing anything, run
+`ddflow brief`. Claim before you edit (`ddflow claim <id>`), satisfy every gate
+(`ddflow gate status <id>`), then `ddflow merge` and `ddflow complete`.
+Never pass a gate you did not perform — record `unavailable` with the reason instead.
+```
+
+That is the whole integration. An agent with nothing but a shell can drive the entire
+workflow, which is why MCP is a convenience layer here and never a requirement.
+
+---
+
+## From plan mode to the queue
+
+Agents plan well and forget reliably. A plan that lives in a chat transcript is gone at
+the next session; a plan in the queue survives, fans out to parallel agents, and carries
+its own gates.
+
+Tell the agent, at the end of planning:
+
+```
+Put that plan in ddflow before you build any of it. One phase for the whole plan, one
+task per independently-shippable step. Declare each task's globs — the files it will
+write — and its needs, the tasks that must finish first. Then show me `ddflow next`.
+```
+
+What the agent does with that:
+
+```console
+$ ddflow phase add P3 --title "Rate limiting"
+$ ddflow task add P3.T1 --phase P3 --globs 'limiter/**'      --title "token bucket"
+$ ddflow task add P3.T2 --phase P3 --globs 'api/middleware/**' \
+      --needs P3.T1 --title "wire it into the request path"
+$ ddflow task add P3.T3 --phase P3 --globs 'docs/**' --needs P3.T2 --title "document it"
+$ ddflow next
+Ready (1 ready, 0 running, 2 blocked):
+  P3.T1  token bucket
+      writes: limiter/**
+  (blocked) P3.T2: deps — P3.T1 is open
+  (blocked) P3.T3: deps — P3.T2 is open
+```
+
+**The two fields that do the work are `--globs` and `--needs`.** Globs are how two agents
+are stopped from editing the same file: `claim` refuses an item whose writes overlap one
+already held, and names what to take instead. Needs are how ordering is enforced without
+anyone remembering it. A plan whose tasks declare neither is a list, not a queue — it
+will *look* parallel and then two agents will fight over one file.
+
+`ddflow split <id> --into a,b,c` exists for when a task turns out to be three, which is
+the normal case rather than a failure of planning.
+
+---
+
+## When a companion is missing
+
+ddflow imposes the order and demands the evidence. It does not *perform* the judgement
+inside most gates — that is what the companion tools are for. So the honest question is
+what happens when one is absent, and the answer is deliberately never "the gate passes".
+
+| Companion | Serves | If it is missing |
+|---|---|---|
+| **roborev** *(cli)* | `standards`, `bug_hunt`, `dedupe` | Record the gate `unavailable` with the reason. A second opinion is missing and the log says so. |
+| **codeguide** | `standards` | The standards gate falls back to the reviewer's taste. Still recordable — but say which it was. |
+| **context7** | `research`, `standards` | Claims about a library's API rest on the model's memory, which is exactly the claim that is cheap to check and often wrong. |
+| **sequential-thinking** | `research`, `rubber_duck`, `bug_hunt` | A retracted hypothesis becomes one more assertion in a linear transcript, and what you ruled out disappears. |
+| **OptMem** *(cli)* | `rules` | `ddflow recall` still covers the project's memory — decisions, lessons, research, bugs. What is lost is memory of *this machine*. |
+
+**The rule, and it is enforced:** a gate whose tool could not run is recorded
+`unavailable` with the reason, never `passed`. `ddflow complete` reports those as a
+**coverage gap** on the completion event, so a finished item never silently implies that
+a check happened. Set `[gates].unavailable_is_failure = true` and a gap blocks completion
+outright.
+
+`ddflow companions` reports four states, and the difference between the last two is the
+whole point: **registered**, **installed but not wired up** (one command away),
+**missing** (with the install command and the URL), and **not checked** — because the
+MCP handshake does not probe, and *"nobody looked"* must never render as *"not there"*.
+
+**ddflow never installs anything.** Detection is read-only and the report is advice.
+`ddflow companions add --dry-run` shows the exact config entry it *would* write, so an
+agent can show you the change before making it.
+
+---
 
 ## Adopting a project that already has history
 
@@ -1465,6 +1726,52 @@ lease.ttl_s = 1800   [default]
 Resolution: dataclass defaults → `.ddflow/config.toml` → `DDFLOW_<SECTION>_<KNOB>` env.
 An unknown knob is an **error**, never a silent drop. A test asserts every knob carries
 documentation, so the reference cannot rot.
+
+---
+
+## What is automated, and what is not
+
+The honest split, because a tool that claims to automate judgement is lying about the
+part that matters.
+
+**Automated — happens without anyone remembering it:**
+
+* **The handshake briefs the agent.** On connect, the MCP server injects the live state:
+  the pipeline every task must pass, work recoverable after a crash, what is ready, which
+  companions are missing, and what to do about each. It is a template
+  (`ddflow prompts eject mcp_instructions`), so the workflow is text you edit, not code
+  you fork.
+* **Gates are enforced, not suggested.** `ddflow complete` refuses on a required gate
+  that has not passed, on open sub-tasks, on a silent gate under `require_outcome`, on a
+  requirement no pipeline runs, and on a reviewer from the author's own family. Refusals
+  list *every* unmet condition, not the first — an agent that cannot see how many more
+  are coming reaches for `--force`.
+* **Conflicts are refused at claim time**, by glob overlap, with an alternative named.
+* **Dependencies gate readiness.** `ddflow next` withholds a task whose `needs` are open
+  and says which.
+* **Gate evidence records which tree and how much** — a working-tree fingerprint plus
+  files/lines changed — so a pass names what it passed on. If the tree moves afterwards,
+  `complete` warns that the evidence describes source nobody is shipping.
+* **Crash recovery**: `ddflow recover` finds worktrees whose lease expired, so an
+  interrupted agent's work is found rather than lost.
+* **Cadences** (`ddflow cadence`) tell you which periodic passes are due — bug hunts,
+  dedupe, lesson compression — from the log rather than a calendar.
+* **A commit hook** (`ddflow hooks install`) can refuse an unclaimed edit outright.
+
+**Not automated, on purpose:**
+
+* **Installing anything.** Detection is read-only; the report is advice.
+* **The judgement inside an agent gate.** ddflow records that you claim to have hunted
+  bugs; it cannot check that you did. What it *can* do — and does — is make silence
+  visible: a gate never run and never skipped blocks completion, so the failure mode is
+  a refusal rather than a quiet omission.
+* **Deciding whether a plan is right.** That is what a `human = true` gate is for.
+* **Pushing, releasing, or anything outward-facing.**
+
+The design assumption is that an agent's *honesty* cannot be verified, so the system is
+built to make an unverifiable claim expensive to make and easy to see: evidence
+contracts, mutation-verified gates, coverage gaps recorded on completion, and an exit
+code that distinguishes "could not" from "did not need to".
 
 ---
 

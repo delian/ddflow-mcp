@@ -1,17 +1,101 @@
 # Publish to PyPI and register in the official MCP registry, on a version tag.
 #
-# Both steps use OIDC trusted publishing rather than a stored token: a long-lived
-# secret in a repository is the credential most likely to leak, and neither registry
-# requires one any more.
+# HOW THIS AUTHENTICATES, per target — four mechanisms, and only one stored secret.
+#
+#   PyPI          OIDC trusted publishing. `id-token: write` mints a short-lived token
+#                 PyPI verifies against this repo's identity. Needs a one-time trusted
+#                 publisher configured on PyPI (project, owner, repo, workflow file,
+#                 environment `release`). No token stored here.
+#   ghcr.io       `secrets.GITHUB_TOKEN`, which Actions injects for every run, scoped to
+#                 this repository and expiring with the job. Needs `packages: write`.
+#   Docker Hub    `secrets.DOCKERHUB_USERNAME` + `secrets.DOCKERHUB_TOKEN`. **The one
+#                 exception**: Docker Hub has no OIDC equivalent, so this is a real
+#                 long-lived credential you must create and store. Use an access token
+#                 scoped to Read/Write on this repository, never an account password —
+#                 and an earlier version of this header claimed no registry needed a
+#                 stored secret, which stopped being true the moment this job was added.
+#   MCP registry  `mcp-publisher login github-oidc`. GitHub OIDC proves control of the
+#                 `delian` account, which is what entitles this server to the
+#                 `io.github.delian/*` namespace declared in server.json. No token.
+#   tag/release   `secrets.GITHUB_TOKEN` with `contents: write`.
+#
+# `environment: release` on the jobs that publish is a deliberate control: point it at a
+# GitHub environment with required reviewers and a release waits for a human, without
+# any change here. If Docker Hub is one credential too many, delete that login step and
+# the two `docker.io/...` tags — ghcr.io alone still satisfies the OCI entries an IDE
+# marketplace needs, and server.json lists both so a client picks whichever resolves.
 name: publish
 
 on:
   push:
-    tags: ["v*"]
+    branches: ["main"]         # publishes when the declared version CHANGES (see `gate`)
+    tags: ["v*"]               # or immediately, on an explicit tag
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Publish the current version even if it did not change in this push"
+        type: boolean
+        default: false
 
 jobs:
+  # ---------------------------------------------------------------- what to publish, if anything
+  gate:
+    # A push to main publishes ONLY when the declared version moved. That is not
+    # timidity, it is arithmetic: PyPI refuses to re-upload a version, so "publish every
+    # push" fails on the second one and every one after. Deriving a unique version per
+    # commit instead would mean a release for every README typo, each irreversible.
+    #
+    # So the version bump IS the release decision, made in a reviewable diff, and
+    # everything after it is automatic — including the tag, which this workflow creates
+    # so tags track releases rather than depending on anybody remembering to push one.
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2        # enough to diff this push against its parent
+      - id: decide
+        run: |
+          set -eu
+          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "tag push — publishing $version"; exit 0
+          fi
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "forced — publishing $version"; exit 0
+          fi
+
+          prev=$(git show 'HEAD^:pyproject.toml' 2>/dev/null                  | grep -m1 '^version = ' | cut -d'"' -f2 || echo "")
+          if [ "$version" = "$prev" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "version unchanged ($version) — nothing to publish."
+            echo "Bump it with scripts/bump.sh to cut a release."
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "version moved ${prev:-none} -> $version — publishing"
+          fi
+      - name: Refuse to republish a version that already exists
+        # The check that turns a confusing 400 from PyPI into a sentence. A version bumped
+        # to one already released is a mistake made in the diff, and this is where it is
+        # cheapest to say so.
+        if: steps.decide.outputs.publish == 'true'
+        run: |
+          v='${{ steps.decide.outputs.version }}'
+          if curl -fsSL "https://pypi.org/pypi/ddflow-mcp/$v/json" >/dev/null 2>&1; then
+            echo "::error::ddflow-mcp $v is already on PyPI. Bump the version."
+            exit 1
+          fi
+          echo "$v is not on PyPI yet"
+
   pypi:
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -23,11 +107,27 @@ jobs:
         run: |
           # A tag that disagrees with pyproject.toml publishes a version nobody can
           # reproduce from the tree. Fail loudly rather than shipping the mismatch.
-          tag="${GITHUB_REF_NAME#v}"
+          # On a tag push this is the tag; on a main push the gate already told us the
+          # version, and comparing "main" against pyproject would fail for the wrong reason.
+          tag="${{ needs.gate.outputs.version }}"
           decl=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
-          srv=$(grep -m1 '"version"' server.json | cut -d'"' -f4)
+          srv=$(python -c 'import json;print(json.load(open("server.json"))["version"])')
           test "$tag" = "$decl" || { echo "tag $tag != pyproject $decl"; exit 1; }
           test "$tag" = "$srv"  || { echo "tag $tag != server.json $srv"; exit 1; }
+          # Every OCI identifier carries the version as its TAG. A `:0.1.0` left behind
+          # while `version` moved on would publish a manifest pointing at the previous
+          # image -- discoverable, installable, and the wrong build.
+          python - "$tag" <<'PY'
+          import json, sys
+          want = sys.argv[1]
+          bad = [
+              p["identifier"]
+              for p in json.load(open("server.json"))["packages"]
+              if p.get("registryType") == "oci" and not p["identifier"].endswith(f":{want}")
+          ]
+          if bad:
+              sys.exit(f"OCI identifiers not tagged {want}: {bad}")
+          PY
       - name: Test before publishing
         run: uv run --with pytest --with pytest-timeout python -m pytest tests/ -q --timeout=420
       - name: Scenarios before publishing
@@ -42,8 +142,66 @@ jobs:
       - run: uv build
       - uses: pypa/gh-action-pypi-publish@release/v1
 
+  docker:
+    needs: gate
+    if: needs.gate.outputs.publish == 'true'
+    # Both registries, one build. `delian/ddflow-mcp` on Docker Hub is what the README
+    # documents; `ghcr.io` needs no account beyond the repo's own and is what CI can
+    # push with nothing stored. The image is minimal on purpose -- alpine + git + the
+    # package, no toolchain -- because it exists for operators who have no Python and
+    # should not have to acquire one.
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      packages: write          # ghcr.io, via the workflow's own GITHUB_TOKEN
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # arm64 as well as amd64: an operator on an Apple-silicon laptop running this
+          # under emulation pays a startup cost on every tool call, and tool calls are
+          # what this server does.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            docker.io/delian/ddflow-mcp:${{ needs.gate.outputs.version }}
+            docker.io/delian/ddflow-mcp:latest
+            ghcr.io/delian/ddflow-mcp:${{ needs.gate.outputs.version }}
+            ghcr.io/delian/ddflow-mcp:latest
+          provenance: true
+          sbom: true
+      - name: Smoke-test the pushed image over real JSON-RPC
+        # A built image that cannot answer `initialize` is a broken release that every
+        # marketplace will happily offer. Cheap to check, and the one check that
+        # distinguishes "it compiled" from "it works".
+        run: |
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}' \
+            | docker run -i --rm -v "$PWD:/repo" ghcr.io/delian/ddflow-mcp:${{ needs.gate.outputs.version }} \
+            | tee /dev/stderr | grep -q '"serverInfo"'
+
   mcp-registry:
-    needs: pypi
+    # AFTER docker as well as pypi: `mcp-publisher` validates that every package named
+    # in server.json actually exists, so publishing the manifest before the image is
+    # pushed fails -- and publishing it before PyPI would advertise a version uvx cannot
+    # fetch.
+    needs: [gate, pypi, docker]
+    if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     permissions:
       id-token: write          # OIDC auth to the MCP registry via GitHub identity
@@ -57,3 +215,32 @@ jobs:
         run: |
           mcp-publisher login github-oidc
           mcp-publisher publish
+
+  # ---------------------------------------------------------------- record what shipped
+  tag:
+    # LAST, and only once everything actually published. A tag is the project's claim
+    # that a version exists everywhere it should; creating it before the pushes succeed
+    # would make that claim false, and a tag pointing at a half-release is worse than no
+    # tag because it looks authoritative.
+    needs: [gate, pypi, docker, mcp-registry]
+    if: needs.gate.outputs.publish == 'true' && github.ref_type != 'tag'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag and release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: ${{ needs.gate.outputs.version }}
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v$V" -m "ddflow-mcp $V
+
+          Published to PyPI, docker.io/delian/ddflow-mcp, ghcr.io/delian/ddflow-mcp
+          and the MCP registry by .github/workflows/publish.yml."
+          git push origin "v$V"
+          gh release create "v$V" --generate-notes --verify-tag \
+            --title "ddflow-mcp $V" || echo "::warning::tag pushed; release creation failed"

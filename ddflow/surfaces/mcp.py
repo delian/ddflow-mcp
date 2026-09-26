@@ -601,7 +601,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             "full gate history including the outcomes that were not passes."
         ),
         "properties": {"id": ("string", "One item, with its per-attempt detail.", False)},
-        "argv": lambda a: ["--json", "progress", *([a["id"]] if a.get("id") else [])],
+        "api": lambda repo, a, agent: _api().progress(repo, a.get("id", "") or ""),
+        # The pre-migration body was the ROW ARRAY. Preserved exactly.
+        "payload": "rows",
     },
     "ddflow_loops": {
         "description": (

@@ -122,6 +122,33 @@ def loops(repo: Path) -> O.Outcome:
     return O.failed("loops", f"{n} finding(s)" + (f", {b} blocking" if b else ""), **data)
 
 
+def progress(repo: Path, item: str = "") -> O.Outcome:
+    """What work has actually been done, aggregated from the log. Reads only.
+
+    The wire body is the ROW ARRAY, exactly as `ddflow progress --json` emits it — see
+    `MIGRATED_WIRE_SHAPES`. The extra keys here are for the human renderer and for
+    callers that want the count without walking the list; the `payload` entry on the
+    tool keeps the MCP body unchanged.
+    """
+    from .core import progress as PR
+
+    log = EventLog(repo)
+    events = log.read_all()
+    st = fold(events, strict=False)
+    rows = [r for r in PR.work(events, st).values() if not item or r.item == item]
+    rows.sort(key=lambda r: (-r.total_seconds, r.item))
+    data: dict[str, Any] = {
+        "rows": [r.summary() for r in rows],
+        "count": len(rows),
+        "item": item,
+    }
+    if item and not rows:
+        return O.failed("progress", f"no such item {item!r}", **data)
+    if not rows:
+        return O.nothing("progress", "no work recorded yet", **data)
+    return O.ok("progress", **data)
+
+
 def update(
     repo: Path,
     item: str,

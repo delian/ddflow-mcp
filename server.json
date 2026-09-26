@@ -15,7 +15,9 @@
       "identifier": "ddflow-mcp",
       "version": "0.1.0",
       "runtimeHint": "uvx",
-      "transport": { "type": "stdio" },
+      "transport": {
+        "type": "stdio"
+      },
       "environmentVariables": [
         {
           "name": "DDFLOW_REPO",
@@ -25,7 +27,51 @@
         },
         {
           "name": "DDFLOW_AGENT",
-          "description": "Stable identity for this agent process. Shards the event log so concurrent agents never write the same file. Defaults to host-pid.",
+          "description": "Stable identity for this agent. Shards the event log so concurrent agents never write the same file. Defaults to host plus the git worktree's name, so every process in one worktree agrees and two parallel agents differ. A harness running SEVERAL agents inside one worktree must set this, or their work merges into a single identity.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "docker.io/delian/ddflow-mcp:0.1.0",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DDFLOW_REPO",
+          "description": "Repository root ddflow manages. Defaults to the client's working directory, resolved to the primary checkout even when called from inside a git worktree.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "DDFLOW_AGENT",
+          "description": "Stable identity for this agent. Shards the event log so concurrent agents never write the same file. Defaults to host plus the git worktree's name, so every process in one worktree agrees and two parallel agents differ. A harness running SEVERAL agents inside one worktree must set this, or their work merges into a single identity.",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "ghcr.io/delian/ddflow-mcp:0.1.0",
+      "version": "0.1.0",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "DDFLOW_REPO",
+          "description": "Repository root ddflow manages. Defaults to the client's working directory, resolved to the primary checkout even when called from inside a git worktree.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "DDFLOW_AGENT",
+          "description": "Stable identity for this agent. Shards the event log so concurrent agents never write the same file. Defaults to host plus the git worktree's name, so every process in one worktree agrees and two parallel agents differ. A harness running SEVERAL agents inside one worktree must set this, or their work merges into a single identity.",
           "isRequired": false,
           "isSecret": false
         }

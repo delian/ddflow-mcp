@@ -1,7 +1,7 @@
 # ddflow as a container: for operators who have Docker and would rather not install a
 # Python toolchain. Works identically on Linux, macOS and Windows.
 #
-#   docker run -i --rm -v "$PWD:/repo" ghcr.io/OWNER/ddflow
+#   docker run -i --rm -v "$PWD:/repo" ghcr.io/delian/ddflow-mcp
 #
 # Alpine because ddflow is pure standard library — there is no compiled dependency to
 # worry musl about — and the result is an order of magnitude smaller than a Debian base,
@@ -33,5 +33,5 @@ CMD ["ddflow-mcp"]
 
 LABEL org.opencontainers.image.title="ddflow" \
       org.opencontainers.image.description="Work-queue kernel for AI coding agents (MCP server + CLI)" \
-      org.opencontainers.image.source="https://github.com/OWNER/ddflow" \
+      org.opencontainers.image.source="https://github.com/delian/ddflow-mcp" \
       org.opencontainers.image.licenses="MIT"
