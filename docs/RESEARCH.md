@@ -1146,3 +1146,33 @@ reviewer flags, the phase pipeline, and every knob with its SOURCE (`[default]` 
 `[file]`), which is what makes "is this ddflow's choice or ours?" answerable.
 `ddflow_help` adds topics. Changing it: `ddflow_workflow_pipeline`,
 `ddflow_workflow_gate`, `ddflow_workflow_drop`, `ddflow_configure` — all with `dry_run`.
+
+### R14 addendum 2 — re-checked against the 2026-07-28 spec via context7 (2026-09-26)
+
+R14's central claim was made against `2025-06-18`. Re-queried through the context7 MCP
+(`/websites/modelcontextprotocol_io_specification_2026-07-28`), which is what that
+companion is for: the `research` gate asks for a falsifiable claim probed against
+reality, and a model's memory of a protocol version is exactly the claim that is cheap to
+check and often wrong.
+
+**The claim HOLDS.** The newer spec still defines exactly three server→client primitives —
+`roots/list`, `sampling/createMessage`, `elicitation/create` — and still no file-I/O
+primitive. So "delegating reads and writes to the agent is not a supported pattern" is
+true of current documentation, not only of the snapshot originally read. First claim this
+session that survived re-checking unchanged.
+
+**Two things that are new, and were not in the 2025-06-18 reading:**
+
+* `elicitation/create` gained a **`mode`** parameter: `"form"` or **`"url"`**, the latter
+  "for out-of-band interaction". Previously form-only, restricted to flat objects of
+  primitives. Filed as B148, because it is a plausible mechanism for the human-approval
+  gate and needs evaluating rather than assuming — the property to preserve is that no
+  MCP tool RECORDS a human outcome, and an out-of-band approval might or might not.
+* An **`InputRequiredResult`** / MRTR pattern, permitted only for `prompts/get`,
+  `resources/read` and `tools/call`.
+
+Also observed: `2026-07-28` carries `_meta.io.modelcontextprotocol/clientInfo` on each
+tool call rather than only at the handshake. This does NOT revisit B80 — `clientInfo` is
+still the harness, so every subagent of one harness reports the same string, which is the
+exact collapse `ddflow_identify` exists to prevent. Recorded so nobody reads the per-call
+availability as a solution to it.

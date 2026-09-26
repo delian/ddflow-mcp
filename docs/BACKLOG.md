@@ -1453,3 +1453,25 @@ it before it was implemented.**
   and returned the empty set, so "the check could not run" read as "no problems".
 
 Suite: 790 passed, 21 deselected (was 770).
+
+## B148–B149 — from re-checking the MCP spec through context7, 2026-09-26
+
+- **B148. Evaluate `elicitation/create` `mode: "url"` for the human-approval gate.
+  FILED.** New in `2026-07-28` (R14 addendum 2): the server may elicit information
+  out-of-band rather than through a form restricted to flat primitives. B82 currently
+  tells the agent to ask the operator to run `ddflow approve`, which works and is
+  honest, but it means the approval happens in a different place from the work.
+
+  **The property that must survive any change here:** no MCP tool records a human
+  outcome. An out-of-band elicitation is initiated BY the server and answered by the
+  user, which may preserve that — or may not, if the client relays it as a tool result
+  the agent can forge. Probe before adopting: the first question is whether the response
+  is attributable to the person or merely to the connection. Declining is a fine
+  outcome and belongs in RESEARCH.md if so.
+
+- **B149. The server does not negotiate `2026-07-28`. FILED, low.**
+  `SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")`, so a client on the
+  newer spec gets a fallback rather than a match. Not broken — negotiation works and the
+  handshake test covers it — but the newer version is where `elicitation` url mode and
+  the MRTR pattern live, so B148 is blocked on this. Adding a version string is not the
+  work; confirming the server actually honours what that version REQUIRES is.
