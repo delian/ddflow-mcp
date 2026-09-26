@@ -273,8 +273,10 @@ of recording it is to stop the next reading re-deriving it.
   has it when B35 is actually done. *Found by: reading the change surface before
   committing.*
 
-- **B36. `cli.py` is a god module — 3,041 lines when filed, 4,208 now. STILL OPEN, and
-  moving the wrong way.** Extracting `services/completion.py` (B35/B36) removed policy
+- **B36. `cli.py` is a god module. STILL OPEN — tracked in "§B38 + B36 slices" below,
+  which carries the live line count; this entry is the original finding only, kept for
+  its history and NOT a second open item.** Filed at 3,041 lines, peaked at 4,314, and
+  the peak is the finding: it grew while being tracked as a known problem.** Extracting `services/completion.py` (B35/B36) removed policy
   but the surface kept growing: `approve`, the dry-run plumbing, the human-gate
   branches and the companions guard all landed here. A number in a title is a fact with
   an expiry date; this one is recorded rather than quietly corrected, because the drift
@@ -292,7 +294,10 @@ of recording it is to stop the next reading re-deriving it.
   one function, and the comment is still there: *"it used to print only in human mode,
   so an agent driving over MCP was never told that a gate had not run."*
 
-- **B38. Latent circular dependency `cli ↔ mcp_server`,** held apart only by a
+- **B38. ✅ CLOSED 2026-09-25** (commit f90daaf) — `cli_main` is function-local, and
+  `test_no_mutually_importing_pair_has_a_module_level_edge` forbids the shape. See
+  "§B38 + B36 slices" below. Original finding: latent circular dependency
+  `cli ↔ mcp_server`, held apart only by a
   function-local import. Hoisting it to module level reproduces:
   `ImportError: cannot import name 'main' from partially initialized module
   'ddflow.cli'`. Harmless today; it is a tell for B35.
