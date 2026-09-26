@@ -1,0 +1,47 @@
+# gitleaks configuration. The CI job that uses it is in `.github/workflows/ci.yml`.
+#
+# WHY THIS FILE EXISTS. ddflow redacts credentials out of session prompts before they
+# touch the log — `services/sessions.py`, tested by
+# `tests/test_store_and_session.py::test_secrets_are_redacted_before_touching_disk` and
+# the parametrised cases in `tests/test_critic_findings.py`. A test that proves a
+# `ghp_…` token gets redacted has to CONTAIN a `ghp_…` token, so the repository holds
+# credential-shaped strings on purpose, and a scanner with no configuration reports
+# every one of them.
+#
+# That matters more than the noise. A secret scanner whose first run is red on its own
+# test fixtures is a scanner people learn to skip, and the next finding — the real one —
+# arrives in a list they have stopped reading. This project has already committed a live
+# API key once; the whole value of the check is that a hit means something.
+#
+# So the allowlist names the FIXTURE VALUES, one at a time, rather than excluding
+# `tests/`. Excluding the directory would hide a real key pasted into a test file, which
+# is a normal way for one to arrive — somebody reproduces a bug with their own token.
+# Every entry below is a documented example value or obvious filler, and a new one has to
+# be added deliberately, which is the point.
+
+[extend]
+useDefault = true
+
+[[rules]]
+  # A placeholder so `[extend]` above is not the only table; gitleaks requires at least
+  # one rule or extend block to parse, and this one can never match.
+  id = "ddflow-never-matches"
+  description = "Inert. See the header: configuration lives in [allowlist]."
+  regex = '''\$\^ddflow-inert-never-matches\$'''
+
+[allowlist]
+  description = "Fixture credentials for ddflow's own redaction tests"
+  # Named values, not paths. Each is either a documented vendor example or plainly filler.
+  regexes = [
+    # AWS's own documentation example key. Appears in every AWS tutorial ever written.
+    '''AKIAIOSFODNN7EXAMPLE''',
+    # Sequential-alphabet filler: the string itself is the proof it is not real.
+    '''ghp_abcdefghijklmnopqrst''',
+    '''sk-abcdefghijklmnop1234''',
+    '''abcdefghijklmnopqrstuvwxyz123456''',
+    '''xoxb-1234567890-abcdef''',
+    # A joke from xkcd 936, used as the "password:" case.
+    '''hunter2hunter2''',
+  ]
+  # The context7 key that leaked into the PARENT repository is deliberately NOT listed.
+  # It does not appear in ddflow's history, and if it ever does, this scan must fire.
