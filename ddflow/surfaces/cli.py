@@ -42,6 +42,7 @@ from .commands.knowledge import (
     cmd_bug,
     cmd_history,
     cmd_lesson,
+    cmd_memory,
     cmd_recall,
     cmd_research,
     cmd_session,
@@ -423,6 +424,25 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     br.set_defaults(fn=cmd_brief)
 
+    me = s.add_parser(
+        "memory", help="operational facts about this machine/repo, shown at session start"
+    )
+    me_s = me.add_subparsers(dest="memory_cmd", required=True)
+    ma = me_s.add_parser("add", help="remember one fact (refused over [memory] max_chars)")
+    ma.add_argument("text")
+    ma.add_argument("--tags", default="")
+    ma.add_argument("--id", default="", help="re-record (correct) an existing memory")
+    ma.set_defaults(fn=cmd_memory)
+    ml = me_s.add_parser("list", help="live memories, newest first (exit 2 = none)")
+    ml.add_argument("--query", default="", help="rank by relevance instead of recency")
+    ml.add_argument("--limit", type=int, default=0)
+    ml.add_argument("--all", action="store_true", help="include forgotten memories")
+    ml.set_defaults(fn=cmd_memory)
+    mf = me_s.add_parser("forget", help="stop believing a memory; kept, with the reason")
+    mf.add_argument("id")
+    mf.add_argument("--reason", required=True)
+    mf.set_defaults(fn=cmd_memory)
+
     ls = s.add_parser("lesson")
     ls_s = ls.add_subparsers(dest="lesson_cmd", required=True)
     la = ls_s.add_parser("add")
@@ -469,7 +489,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rc.add_argument(
         "--sources",
         default="",
-        help="comma-separated subset: decisions,lessons,research,bugs,items,prompts",
+        help="comma-separated subset: decisions,lessons,memories,research,bugs,items,prompts",
     )
     rc.add_argument("--max-chars", type=int, default=4000)
     rc.set_defaults(fn=cmd_recall)

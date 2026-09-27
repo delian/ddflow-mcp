@@ -33,6 +33,8 @@ HISTORY_VERBS: dict[str, str] = {
     "decision.recorded": "DECISION",
     "decision.superseded": "decision superseded",
     "research.recorded": "research",
+    "memory.recorded": "remembered",
+    "memory.forgotten": "forgot",
     "bug.found": "BUG found",
     "bug.fixed": "bug fixed",
     "cadence.ran": "cadence ran",

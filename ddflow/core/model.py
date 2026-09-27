@@ -191,6 +191,38 @@ class Lesson:
 
 
 @dataclass
+class Memory:
+    """One operational fact, true of THIS machine, repository or working state.
+
+    Not a lesson (a transferable rule), not a journal entry (what happened), not a
+    decision (how the software is built): "this box has 8 H200s", "use `-n 16`, never
+    `-n auto`", "that reviewer can exit 0 having degenerated". Short by construction
+    (`[memory] max_chars`), surfaced at every session start by `brief`, and never
+    deleted -- a fact that stopped being true is FORGOTTEN with a reason, which is itself
+    worth knowing the next time somebody believes it.
+
+    The shape of the OptMem store the source projects kept beside their repository,
+    moved into the log so it is shared by every worktree the moment it is written and
+    travels with the code.
+    """
+
+    id: str
+    text: str = ""
+    tags: list[str] = field(default_factory=list)
+    at: str = ""
+    #: When it became true, if that is not when it was written down (an import).
+    origin_at: str = ""
+    by: str = ""
+    source: str = ""
+    #: Why it is no longer believed; "" while live.
+    forgotten: str = ""
+
+    @property
+    def live(self) -> bool:
+        return not self.forgotten
+
+
+@dataclass
 class Decision:
     """An architectural decision, in the log rather than in someone's memory.
 
@@ -281,6 +313,7 @@ class State:
     lessons: dict[str, Lesson] = field(default_factory=dict)
     research: dict[str, ResearchNote] = field(default_factory=dict)
     decisions: dict[str, Decision] = field(default_factory=dict)
+    memories: dict[str, Memory] = field(default_factory=dict)
     sessions: dict[str, Session] = field(default_factory=dict)
     cadences: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     #: gate id -> how many times recording it fired the pipeline-order check, and how
@@ -761,6 +794,29 @@ def _h_research(st: State, ev: Event) -> None:
     )
 
 
+def _h_memory(st: State, ev: Event) -> None:
+    """Merge, never replace -- a re-record that omits a field keeps the old one, and a
+    re-record of a forgotten memory brings it back, which is what re-recording it means."""
+    d = ev.data
+    prev = st.memories.get(ev.subject)
+    st.memories[ev.subject] = Memory(
+        id=ev.subject,
+        text=d.get("text", "") or (prev.text if prev else ""),
+        tags=list(d.get("tags", prev.tags if prev else [])),
+        at=prev.at if prev and prev.at else ev.ts,
+        origin_at=d.get("origin_at", "") or (prev.origin_at if prev else ""),
+        by=prev.by if prev and prev.by else ev.agent,
+        source=d.get("source", "") or (prev.source if prev else ""),
+        forgotten="",
+    )
+
+
+def _h_memory_forgotten(st: State, ev: Event) -> None:
+    m = st.memories.get(ev.subject)
+    if m is not None:
+        m.forgotten = ev.data.get("reason", "") or "forgotten"
+
+
 def _session(st: State, ev: Event) -> Session:
     return st.sessions.setdefault(ev.subject, Session(id=ev.subject, agent=ev.agent))
 
@@ -880,6 +936,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "research.recorded": _h_research,
     "decision.recorded": _h_decision,
     "decision.superseded": _h_decision_superseded,
+    "memory.recorded": _h_memory,
+    "memory.forgotten": _h_memory_forgotten,
     "session.started": _h_session_started,
     "session.prompt": _h_session_prompt,
     "session.note": _h_session_note,

@@ -273,6 +273,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_history": (["history"], {}),
     "ddflow_lesson_search": (["lesson", "search", "x"], {"query": "x"}),
     "ddflow_lesson_verify": (["lesson", "verify"], {}),
+    "ddflow_memory_list": (["memory", "list"], {}),
     "ddflow_recall": (["recall", "x"], {"query": "x"}),
     "ddflow_reviewers_list": (["reviewers", "list"], {}),
     "ddflow_cleanup": (["cleanup"], {}),
@@ -321,6 +322,9 @@ WRITES_NOT_COMPARABLE = {
     # Releases held work: a second call finds nothing blocked and exits 2. Its behaviour
     # is pinned by tests/test_import_fidelity.py.
     "ddflow_unblock",
+    # Each call records a new memory under a content-addressed id / forgets one.
+    "ddflow_memory_add",
+    "ddflow_memory_forget",
     "ddflow_setup",
     "ddflow_workflow_pipeline",
     "ddflow_workflow_gate",

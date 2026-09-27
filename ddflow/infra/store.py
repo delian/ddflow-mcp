@@ -35,7 +35,7 @@ from ..config import Config
 from ..core.model import State, fold
 from ..infra.log import EventLog
 
-SCHEMA = 6
+SCHEMA = 7
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -105,6 +105,9 @@ class Store:
             role text default 'prompt',
             primary key(session, seq));
         create table if not exists cadences(name text, at text, by text, result text);
+        create table if not exists memories(
+            id text primary key, text text, tags text, at text, origin_at text,
+            by text, source text);
         """)
         if self.fts:
             con.executescript("""
@@ -123,6 +126,8 @@ class Store:
                 id unindexed, summary, lesson, tokenize='porter unicode61');
             create virtual table if not exists items_fts using fts5(
                 id unindexed, title, body, tags, tokenize='porter unicode61');
+            create virtual table if not exists memories_fts using fts5(
+                id unindexed, text, tags, tokenize='porter unicode61');
             """)
         con.execute("insert or replace into meta values('schema', ?)", (str(SCHEMA),))
 
@@ -260,6 +265,7 @@ class Store:
                         (rn.id, rn.question, rn.claim, rn.probe, rn.verdict),
                     )
             _insert_decisions(con, state, self.fts)
+            _insert_memories(con, state, self.fts)
             _insert_bugs(con, state, self.fts)
             _insert_sessions(con, state, self.fts)
             for name, runs in state.cadences.items():
@@ -316,6 +322,7 @@ class Store:
             "bugs": ("summary", "lesson"),
             "prompts": ("text",),
             "items": ("title", "body"),
+            "memories": ("text", "tags"),
         }[table]
         with closing(self.connect()) as con:
             self.init(con)
@@ -397,6 +404,7 @@ def _fts_query(text: str) -> str:
 RECALL_SOURCES: tuple[tuple[str, str, str], ...] = (
     ("decisions", "DECISION", "binding — follow it unless the operator says otherwise"),
     ("lessons", "LESSON", "learned the hard way here"),
+    ("memories", "MEMORY", "an operational fact about this machine or repository"),
     ("research", "RESEARCH", "already investigated; check the verdict before redoing it"),
     ("bugs", "BUG", "this has broken before"),
     ("items", "TASK", "similar work already planned or done"),
@@ -424,6 +432,9 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
         return f"{row.get('summary', '')}  [{state}]", (row.get("lesson") or "")[:width]
     if table == "items":
         return f"{row.get('id', '')} — {row.get('title', '')}", (row.get("body") or "")[:width]
+    if table == "memories":
+        when = (row.get("origin_at") or row.get("at") or "")[:10]
+        return f"{when} {row.get('id', '')}".strip(), (row.get("text") or "")[:width]
     if table == "prompts":
         text = (row.get("text") or "").strip().replace("\n", " ")
         # A note is the AGENT's record of the work — a dead end, a surprise, why it
@@ -432,6 +443,21 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
         who = "the agent noted:" if row.get("role") == "note" else "operator asked:"
         return f"{row.get('at', '')[:10]} {who}", text[:width]
     return row.get("id", ""), ""
+
+
+def _insert_memories(con, state, fts: bool) -> None:
+    """LIVE memories only. A forgotten one stays in the log and in `memory list --all`,
+    but recall exists to change what an agent does next, and a fact the project has
+    stopped believing must not be offered as one."""
+    for m in state.memories.values():
+        if not m.live:
+            continue
+        con.execute(
+            "insert or replace into memories values(?,?,?,?,?,?,?)",
+            (m.id, m.text, json.dumps(m.tags), m.at, m.origin_at, m.by, m.source),
+        )
+        if fts:
+            con.execute("insert into memories_fts values(?,?,?)", (m.id, m.text, " ".join(m.tags)))
 
 
 def _insert_sessions(con, state, fts: bool) -> None:

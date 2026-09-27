@@ -715,7 +715,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "'HAVE WE BEEN HERE BEFORE?' — one search across everything this project "
             "remembers: architectural decisions, lessons learned, research verdicts, "
-            "past bugs, similar tasks, and the operator's own earlier prompts.\n\n"
+            "operational memories, past bugs, similar tasks, and the operator's own "
+            "earlier prompts.\n\n"
             "CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK. It exists so the operator "
             "does not have to say the same thing twice and you do not have to learn "
             "the same thing twice. Results are labelled by kind, because a binding "
@@ -735,7 +736,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "sources": (
                 "string",
-                "Comma-separated subset: decisions,lessons,research,bugs,"
+                "Comma-separated subset: decisions,lessons,memories,research,bugs,"
                 "items,prompts. Default: all.",
                 False,
             ),
@@ -1658,6 +1659,70 @@ TOOLS: dict[str, dict[str, Any]] = {
             "reason": ("string", "What it is waiting on.", True),
         },
         "api": lambda repo, a, agent: _api().block(
+            repo, a["id"], reason=a.get("reason", "") or "", agent=agent
+        ),
+        "payload": ("id",),
+    },
+    "ddflow_memory_add": {
+        "description": (
+            "Remember ONE operational fact about this machine, repository or working "
+            "state -- 'this box has 8 H200s, usually idle', 'use -n 16, never -n auto', "
+            "'the critic can exit 0 having degenerated; grep for STATUS:'. Shown at the "
+            "top of every ddflow_brief and searchable by ddflow_recall, in every worktree "
+            "at once. Not for rules (ddflow_lesson_add), what happened (ddflow_session_note) "
+            "or how the software is built (ddflow_decision_add). Never put a secret here: "
+            "the log is committed. Refused over [memory] max_chars (default 280)."
+        ),
+        "properties": {
+            "text": ("string", "The fact, in one or two sentences.", True),
+            "tags": ("string", "Comma-separated tags, e.g. 'gpu,machine'.", False),
+            "id": (
+                "string",
+                "Re-record an existing memory under its id -- how a fact is CORRECTED. "
+                "Omit for a new one.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().memory_add(
+            repo,
+            a.get("text", "") or "",
+            tags=a.get("tags", "") or "",
+            id=a.get("id", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id", "replaced"),
+    },
+    "ddflow_memory_list": {
+        "description": (
+            "The project's operational memories, newest first -- or ranked against "
+            "`query`. What an agent must know before touching anything on this machine; "
+            "read them at session start if ddflow_brief truncated the list."
+        ),
+        "properties": {
+            "query": ("string", "Rank by relevance to this instead of by recency.", False),
+            "limit": ("integer", "At most this many (default: all).", False),
+            "all": ("boolean", "Include forgotten memories, with why they were forgotten.", False),
+        },
+        "api": lambda repo, a, agent: _api().memory_list(
+            repo,
+            query=a.get("query", "") or "",
+            limit=int(a.get("limit") or 0),
+            include_forgotten=bool(a.get("all")),
+            agent=agent,
+        ),
+        "payload": ("memories", "total_live"),
+    },
+    "ddflow_memory_forget": {
+        "description": (
+            "Stop believing a memory that is no longer true. It is kept, with the reason: "
+            "'we thought X until Y' is what stops the next agent re-learning X. Correct a "
+            "fact instead with ddflow_memory_add and its id."
+        ),
+        "properties": {
+            "id": ("string", "Memory id.", True),
+            "reason": ("string", "Why it is no longer true.", True),
+        },
+        "api": lambda repo, a, agent: _api().memory_forget(
             repo, a["id"], reason=a.get("reason", "") or "", agent=agent
         ),
         "payload": ("id",),

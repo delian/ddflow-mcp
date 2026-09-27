@@ -67,7 +67,10 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("Gates and review", ("gate", "review", "reviewers")),
     ("Landing it", ("merge", "cleanup")),
-    ("What the project remembers", ("recall", "lesson", "decision", "research", "bug", "session")),
+    (
+        "What the project remembers",
+        ("recall", "memory", "lesson", "decision", "research", "bug", "session"),
+    ),
     ("Looking at it", ("board", "show", "status", "brief", "progress", "render", "history")),
     ("When something is wrong", ("doctor", "recover", "loops", "rebuild", "replay", "cadence")),
     ("Help", ("help",)),

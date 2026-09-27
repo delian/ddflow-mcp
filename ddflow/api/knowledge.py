@@ -438,3 +438,101 @@ def history(
     if not shown:
         return O.nothing("history", "Nothing in the history matches.", **data)
     return O.ok("history", **data)
+
+
+# -- operational memory ------------------------------------------------------------------
+
+
+def memory_add(
+    repo: Path, text: str, *, tags: str = "", id: str = "", agent: str = ""
+) -> O.Outcome:
+    """Remember one operational fact about this machine, repository or working state.
+
+    Refused over `[memory] max_chars`, not truncated: a memory cut mid-sentence says
+    something its author did not, and the refusal tells them to write a lesson or a
+    journal note instead -- which is what a paragraph is.
+    """
+    log, cfg, st = _load(repo, agent)
+    text = " ".join((text or "").split())
+    if not text:
+        return O.failed("memory.recorded", "a memory needs text", id="")
+    limit = cfg.memory.max_chars
+    if len(text) > limit:
+        return O.failed(
+            "memory.recorded",
+            f"{len(text)} characters is over [memory] max_chars ({limit}). A memory is ONE "
+            f"operational fact; a rule belongs in `lesson add`, what happened in "
+            f"`session note`.",
+            id="",
+        )
+    mid = id or auto_id("M", text)
+    log.append("memory.recorded", mid, {"text": text, "tags": csv_list(tags)})
+    replaced = bool(id) and id in st.memories
+    return O.ok("memory.recorded", id=mid, replaced=replaced)
+
+
+def _memory_row(m) -> dict[str, Any]:
+    return {
+        "id": m.id,
+        "text": m.text,
+        "tags": m.tags,
+        "at": m.origin_at or m.at,
+        "by": m.by,
+        "source": m.source,
+        "forgotten": m.forgotten,
+    }
+
+
+def memory_list(
+    repo: Path,
+    *,
+    query: str = "",
+    limit: int = 0,
+    include_forgotten: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """Live memories, newest first; `query` ranks them instead; `include_forgotten` adds
+    the ones the project stopped believing.
+
+    Newest first because memory is operational state, and the latest word on "which
+    GPUs are free" is the one that matters.
+    """
+    log, cfg, st = _load(repo, agent)
+    if query:
+        store = _store(repo, log, cfg)
+        ids = [r["id"] for r in store.search("memories", query, limit or 20)]
+        rows = [st.memories[i] for i in ids if i in st.memories]
+    else:
+        rows = sorted(
+            (m for m in st.memories.values() if include_forgotten or m.live),
+            key=lambda m: (m.origin_at or m.at, m.at),
+            reverse=True,
+        )
+        if limit:
+            rows = rows[:limit]
+    data = {
+        "memories": [_memory_row(m) for m in rows],
+        "total_live": sum(1 for m in st.memories.values() if m.live),
+    }
+    if not rows:
+        return O.nothing(
+            "memory.list", "no memories" + (f" match {query!r}" if query else ""), **data
+        )
+    return O.ok("memory.list", **data)
+
+
+def memory_forget(repo: Path, id: str, *, reason: str = "", agent: str = "") -> O.Outcome:
+    """Stop believing a memory. It is kept, with the reason -- "we thought X until Y" is
+    what stops the next agent re-learning X."""
+    log, _cfg, st = _load(repo, agent)
+    if not reason.strip():
+        return O.failed(
+            "memory.forgotten", "--reason is required: why is it no longer true?", id=id
+        )
+    m = st.memories.get(id)
+    if m is None:
+        return O.failed("memory.forgotten", f"no such memory {id!r}", id=id)
+    if not m.live:
+        return O.nothing("memory.forgotten", f"{id} is already forgotten: {m.forgotten}", id=id)
+    log.append("memory.forgotten", id, {"reason": reason.strip()})
+    return O.ok("memory.forgotten", id=id)

@@ -379,6 +379,26 @@ _doc(
 
 
 @dataclass
+class MemoryConfig:
+    """Operational memory: short facts about this machine and repository, `[memory]`."""
+
+    max_chars: int = 280
+    brief_items: int = 12
+
+
+_doc(
+    "memory",
+    "max_chars",
+    "Longest memory `ddflow memory add` accepts. A memory is ONE operational fact ('this box has 8 H200s'); something longer is a lesson or a journal entry, and a store of paragraphs is one nobody reads at session start. 280 is the OptMem record width the source projects used.",
+)
+_doc(
+    "memory",
+    "brief_items",
+    "How many live memories `ddflow brief` shows, newest first. They are what an agent must know before touching anything on this machine, so they sit near the top of the brief; the rest are one `ddflow memory list` or `recall` away. 0 leaves them out of the brief.",
+)
+
+
+@dataclass
 class ImportConfig:
     """Adopting ddflow on a project that already has history: `[importer]`.
 
@@ -769,6 +789,7 @@ class Config:
     session: SessionConfig = field(default_factory=SessionConfig)
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     importer: ImportConfig = field(default_factory=ImportConfig)
+    memory: MemoryConfig = field(default_factory=MemoryConfig)
     companions: CompanionsConfig = field(default_factory=CompanionsConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)

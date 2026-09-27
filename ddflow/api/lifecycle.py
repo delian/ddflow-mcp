@@ -525,6 +525,11 @@ def brief(
         ]
         decisions += [d for d in st.decisions.values() if d.live and not d.globs]
 
+    live = sorted(
+        (m for m in st.memories.values() if m.live),
+        key=lambda m: (m.origin_at or m.at, m.at),
+        reverse=True,
+    )
     text = render_md.brief(
         st,
         cfg,
@@ -535,6 +540,7 @@ def brief(
         rules=rules,
         recovery=[r for r in recovery if r.salvageable],
         decisions=decisions,
+        memories=live,
     )
     return O.ok(
         "brief",

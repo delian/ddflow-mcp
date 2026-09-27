@@ -63,6 +63,37 @@ def cmd_lesson(a, c: Ctx) -> int:
     return FAIL
 
 
+def cmd_memory(a, c: Ctx) -> int:
+    if a.memory_cmd == "add":
+        out = A.memory_add(
+            c.repo, a.text, tags=a.tags or "", id=a.id or "", agent=c.requested_agent
+        )
+        msg = out.reason if out.exit else f"remembered {out.data['id']}"
+        c.out(msg, out.body(("id", "replaced")))
+        return out.exit
+    if a.memory_cmd == "forget":
+        out = A.memory_forget(c.repo, a.id, reason=a.reason, agent=c.requested_agent)
+        c.out(out.reason if out.exit else f"forgot {a.id}", out.body(("id",)))
+        return out.exit
+    out = A.memory_list(
+        c.repo,
+        query=a.query or "",
+        limit=a.limit or 0,
+        include_forgotten=a.all,
+        agent=c.requested_agent,
+    )
+    if c.json:
+        print(json.dumps(out.body(("memories", "total_live")), indent=2, default=str))
+        return out.exit
+    if out.exit == NOTHING:
+        print(out.reason)
+        return NOTHING
+    for m in out.data["memories"]:
+        gone = f"  [FORGOTTEN: {m['forgotten']}]" if m["forgotten"] else ""
+        print(f"{m['id']}  {m['at'][:10]}  {m['text']}{gone}")
+    return OK
+
+
 def cmd_recall(a, c: Ctx) -> int:
     """One query across everything the project remembers, printed under a budget."""
     from ...infra.store import summarise_row

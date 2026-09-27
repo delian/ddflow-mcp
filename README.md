@@ -499,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 83 knobs.
+cadences, and the rest of the 85 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1238,13 +1238,31 @@ ddflow recall "how should durations be represented"
 ```
 
 One search across **everything the project remembers**: architectural decisions,
-lessons, research verdicts, past bugs, similar tasks, and the operator's own earlier
-prompts. Results are labelled by kind, because a binding decision, a transferable lesson
+lessons, operational memories, research verdicts, past bugs, similar tasks, and the
+operator's own earlier prompts. Results are labelled by kind, because a binding decision, a transferable lesson
 and a prompt from three weeks ago should change what you do in different ways.
 
 It exists so the operator does not have to say the same thing twice and the agent does
 not have to learn the same thing twice. Both failures are invisible in the moment and
 obvious in the log.
+
+## Operational memory
+
+```sh
+ddflow memory add "8x H200 on this box; check nvidia-smi before a GPU test" --tags gpu
+ddflow memory list                       # newest first; --query to rank, --all for forgotten
+ddflow memory forget M-0003 --reason "the box was upgraded"
+```
+
+One **fact** about this machine, repository or working state — not a rule (`lesson`),
+not what happened (`session note`), not how the software is built (`decision`). Capped
+at `[memory] max_chars` (280) and refused, not truncated, when longer. The newest
+`[memory] brief_items` appear in every `ddflow brief`, right after the binding decisions,
+and `recall` searches them — the job an OptMem store beside the repository used to do,
+now in the log, so every worktree sees a memory the moment it is written. A memory that
+stopped being true is **forgotten with a reason**, never deleted: "we thought X until Y"
+is what stops the next agent re-learning X. An OptMem `LOG.txt` imports as memories
+dated when they became true. The log is committed: never put a secret in one.
 
 ## Status, progress, and loops
 
@@ -2128,7 +2146,7 @@ declared once and persists — see
 
 ## Configuration
 
-83 knobs across 15 sections, every one documented in place:
+85 knobs across 16 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

@@ -384,8 +384,10 @@ def _sections(text: str, level: int = 0) -> list[tuple[str, str, int]]:
 #: the confident-wrong answer this module exists to avoid.
 NOTE_SESSIONS: tuple[tuple[str, str, str], ...] = (
     ("journal", "s-imported-journal", "journal entr(ies)"),
-    ("memory", "s-imported-memory", "cross-session memor(ies)"),
 )
+#: Where memories imported by a version before `memory.recorded` existed landed. Still
+#: counted by `import --verify`, so upgrading does not make an import look undone.
+LEGACY_MEMORY_SESSION = "s-imported-memory"
 
 #: Every kind a scanner can produce, in the order a human wants to read them. ONE list:
 #: the CLI preview had its own and listed five of them, so a repository whose history is
@@ -1686,6 +1688,15 @@ def _scan_queue(state, r: VerifyReport) -> tuple[list[str], dict[str, list[str]]
         if n:
             r.imported[kind] = n
     _note_sources(state, r, paths)
+    imported_memories = [m for m in getattr(state, "memories", {}).values() if m.source]
+    legacy = getattr(state, "sessions", {}).get(LEGACY_MEMORY_SESSION)
+    legacy_notes = [n for n in (legacy.notes if legacy else []) if n.get("source")]
+    if imported_memories or legacy_notes:
+        r.imported["memory"] = len(imported_memories) + len(legacy_notes)
+    for m in imported_memories:
+        rel = m.source.split(":", 1)[0]
+        if rel:
+            paths.setdefault(rel, []).append(m.id)
     _memory_sources(state, paths)
     return ats, paths
 
@@ -1799,6 +1810,46 @@ def verify_import(
     return r
 
 
+def _apply_state(log: EventLog, f: Found, bump: Callable[[str], None]) -> None:
+    """The state an imported task lands in, beyond `task.added`: done, closed or held.
+
+    Each carries its SOURCE in the reason -- ddflow does not invent completion, and a
+    held item that cannot say why it is held is one nobody can decide to release.
+    """
+    if f.done:
+        log.append(
+            "item.completed",
+            f.ident,
+            {"kind": "task", "imported": True, "evidence": f"ticked in {f.source}"},
+        )
+        bump("task_done")
+    elif f.extra.get("disposition") == "closed":
+        log.append(
+            "item.abandoned",
+            f.ident,
+            {
+                "kind": "task",
+                "imported": True,
+                "reason": f"{f.extra.get('disposition_why', 'closed')} in {f.source}",
+            },
+        )
+        bump("task_closed")
+    elif f.extra.get("disposition") == "hold":
+        log.append(
+            "item.blocked",
+            f.ident,
+            {
+                "kind": "task",
+                "imported": True,
+                "reason": (
+                    f"{f.extra.get('disposition_why', 'held')} in {f.source}. "
+                    f"`ddflow unblock {f.ident}` when it becomes work."
+                ),
+            },
+        )
+        bump("task_held")
+
+
 def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
     """Write the proposal to the log. Called only after someone has looked at it.
 
@@ -1835,38 +1886,7 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
             },
         )
         bump("task")
-        if f.done:
-            log.append(
-                "item.completed",
-                f.ident,
-                {"kind": "task", "imported": True, "evidence": f"ticked in {f.source}"},
-            )
-            bump("task_done")
-        elif f.extra.get("disposition") == "closed":
-            log.append(
-                "item.abandoned",
-                f.ident,
-                {
-                    "kind": "task",
-                    "imported": True,
-                    "reason": f"{f.extra.get('disposition_why', 'closed')} in {f.source}",
-                },
-            )
-            bump("task_closed")
-        elif f.extra.get("disposition") == "hold":
-            log.append(
-                "item.blocked",
-                f.ident,
-                {
-                    "kind": "task",
-                    "imported": True,
-                    "reason": (
-                        f"{f.extra.get('disposition_why', 'held')} in {f.source}. "
-                        f"`ddflow unblock {f.ident}` when it becomes work."
-                    ),
-                },
-            )
-            bump("task_held")
+        _apply_state(log, f, bump)
     for f in plan.by_kind("lesson"):
         data: dict[str, Any] = {
             "title": f.title,
@@ -1922,6 +1942,21 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
             sid,
             {"summary": f"Imported {len(entries)} {what} from this project."},
         )
+    # OptMem records are operational MEMORIES -- the thing `brief` shows first and
+    # `recall` searches -- not journal notes. Their store numbered them, so the id is
+    # the store's (`M-0041`) and a re-import skips what is already remembered.
+    for f in plan.by_kind("memory"):
+        log.append(
+            "memory.recorded",
+            f.ident,
+            {
+                "text": f.body[:4000],
+                "origin_at": f.extra.get("at", ""),
+                "source": f.source,
+                "tags": ["imported"],
+            },
+        )
+        bump("memory")
     for f in plan.by_kind("research"):
         log.append(
             "research.recorded",

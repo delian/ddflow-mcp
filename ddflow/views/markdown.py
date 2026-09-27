@@ -373,6 +373,23 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
             out.append(f"  - rejected: {d.alternatives[:160]}")
 
 
+def _brief_memories(out: list[str], memories: list) -> None:
+    """Operational facts about this machine and repository, newest first.
+
+    After the binding decisions and before the advice: a memory is what the source
+    projects' agents were required to read FIRST every session ("this box has 8 H200s",
+    "a uniform-zero eval usually means a sidecar 404"), and it costs the next agent a day
+    to re-learn one. Said to be partial when it is, so a truncated list is not read as
+    the whole store.
+    """
+    if not memories:
+        return
+    out += ["", "## Operational memory", "", "_Facts about this machine and repository._", ""]
+    for m in memories:
+        when = (m.origin_at or m.at)[:10]
+        out.append(f"- {m.text}  `[{m.id}{' ' + when if when else ''}]`")
+
+
 def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict]) -> None:
     if not lessons:
         return
@@ -399,6 +416,7 @@ def brief(
     rules: str = "",
     recovery: list | None = None,
     decisions: list | None = None,
+    memories: list | None = None,
 ) -> str:
     """The session-start pack, under ``session.brief_max_tokens``.
 
@@ -413,6 +431,14 @@ def brief(
         _brief_current(out, state, cfg, item, repo)
     _brief_ready(out, plan)
     _brief_decisions(out, decisions or [])
+    # `memories` is every LIVE one, newest first; how many to show is this view's call.
+    shown = (memories or [])[: cfg.memory.brief_items]
+    _brief_memories(out, shown)
+    if shown and len(memories or []) > len(shown):
+        out.append(
+            f"- _{len(memories or []) - len(shown)} more: `ddflow memory list`, or "
+            f"`ddflow recall <topic>`._"
+        )
     if rules:
         out += ["", "## Project rules", "", rules.strip()]
     _brief_lessons(out, cfg, lessons or [])
