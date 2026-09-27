@@ -1189,8 +1189,9 @@ def scan_optmem(repo: Path, globs: tuple[str, ...] = OPTMEM_GLOBS) -> tuple[list
     code, none of it is in the journal, and an agent that loses it re-discovers each
     fact the expensive way.
 
-    Imported as session notes, like journal entries, for the same reason: a memory is a
-    record of something that was true, not a rule and not a task. Records are NOT
+    Imported as operational MEMORIES (`memory.recorded`, see `apply_import`) under the
+    store's own id (`M-0041`) and dated when each became true -- the thing `brief` shows
+    first and `recall` searches. Not a rule and not a task. Records are NOT
     parsed for structure beyond `#n date text` — the body is deliberately free-form and
     inventing a schema for it would drop the half that did not fit.
     """

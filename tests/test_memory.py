@@ -141,3 +141,24 @@ def test_an_optmem_store_imports_as_MEMORIES_with_the_date_they_became_true(repo
     assert code == NOTHING, "a second import re-remembered the same facts"
     code, out, _ = run_cli(repo, "--json", "import", "--verify")
     assert json.loads(out)["imported"].get("memory") == 2
+
+
+def test_all_includes_forgotten_memories_with_or_without_a_query(repo):
+    """roborev 825: the index holds live memories only, so `--query X --all` silently
+    dropped the forgotten ones -- 'was this ever a fact?' answered 'no'."""
+    run_cli(repo, "init")
+    run_cli(repo, "memory", "add", "sidecar 404 means vllm restarted", "--id", "M-old")
+    run_cli(repo, "memory", "forget", "M-old", "--reason", "fixed upstream")
+    run_cli(repo, "memory", "add", "sidecar logs live under vllm-logs/")
+    for extra in ((), ("--query", "sidecar")):
+        _c, out, _e = run_cli(repo, "--json", "memory", "list", "--all", *extra)
+        ids = {m["id"] for m in json.loads(out)["memories"]}
+        assert "M-old" in ids, f"forgotten memory missing with {extra or 'no query'}"
+
+
+def test_a_query_returns_every_match_not_the_first_twenty(repo):
+    run_cli(repo, "init")
+    for i in range(23):
+        run_cli(repo, "memory", "add", f"gpu fact number {i}", "--id", f"M-{i}")
+    _c, out, _e = run_cli(repo, "--json", "memory", "list", "--query", "gpu")
+    assert len(json.loads(out)["memories"]) == 23

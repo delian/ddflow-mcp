@@ -500,8 +500,19 @@ def memory_list(
     log, cfg, st = _load(repo, agent)
     if query:
         store = _store(repo, log, cfg)
-        ids = [r["id"] for r in store.search("memories", query, limit or 20)]
+        # `limit` defaults to ALL here as on the other path; a silent cap of 20 returned
+        # a truncated answer presented as complete (roborev 825).
+        ids = [r["id"] for r in store.search("memories", query, limit or max(1, len(st.memories)))]
         rows = [st.memories[i] for i in ids if i in st.memories]
+        if include_forgotten:
+            # The index holds LIVE memories only, so a forgotten one must be matched
+            # here -- or `--all` means nothing whenever `--query` is given (roborev 825).
+            terms = [t.lower() for t in query.split() if t]
+            rows += [
+                m
+                for m in st.memories.values()
+                if not m.live and any(t in m.text.lower() for t in terms)
+            ]
     else:
         rows = sorted(
             (m for m in st.memories.values() if include_forgotten or m.live),
