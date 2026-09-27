@@ -222,8 +222,14 @@ def cmd_hooks(a, c: Ctx) -> int:
         c.repo,
         action=a.hooks_cmd or "status",
         force=bool(getattr(a, "force", False)),
+        claude=bool(getattr(a, "claude", False)),
         agent=c.requested_agent,
     )
+    if a.hooks_cmd == "session-start":
+        # Claude Code puts this STDOUT into the session's context. Always exit 0: a hook
+        # that fails at session start blocks nothing useful.
+        print(out.data["message"])
+        return OK
     if a.hooks_cmd == "check-commit":
         # The MESSAGE is the product here, and it goes to stderr because a commit hook's
         # output is diagnostics, not data.
@@ -233,7 +239,7 @@ def cmd_hooks(a, c: Ctx) -> int:
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
-    c.out(out.data["message"], out.body(("installed", "policy")))
+    c.out(out.data["message"], out.body(("installed", "policy", "session_hook")))
     return out.exit
 
 

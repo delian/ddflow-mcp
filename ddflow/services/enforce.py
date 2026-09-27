@@ -73,17 +73,29 @@ def _invocation() -> str:
     source checkout -- a hook that fails is indistinguishable from a hook that refuses,
     so the commit was blocked for entirely the wrong reason.
     """
+    return f'{command_line("hooks check-commit", exec_=True)} "$@"'
+
+
+def command_line(args: str, *, exec_: bool = False) -> str:
+    """A shell line running `ddflow <args>` from an environment that has none of ours.
+
+    Shared by the git hook and the Claude Code SessionStart hook: both run with the
+    caller's environment rather than the agent's, and both must reach THIS ddflow.
+    """
     import shutil
 
+    run = "exec " if exec_ else ""
     script = shutil.which("ddflow")
     if script and not _running_from_source():
-        return f'exec "{script}" hooks check-commit "$@"'
+        return f'{run}"{script}" {args}'
     from ..infra.paths import package_parent
 
     pkg_parent = str(package_parent())
+    # The environment prefix goes BEFORE `exec`: `exec VAR=x cmd` runs a command
+    # literally named `VAR=x`.
     return (
         f'PYTHONPATH="{pkg_parent}${{PYTHONPATH:+:$PYTHONPATH}}" '
-        f'exec "{sys.executable}" -m ddflow hooks check-commit "$@"'
+        f'{run}"{sys.executable}" -m ddflow {args}'
     )
 
 

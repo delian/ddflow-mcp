@@ -841,7 +841,9 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     pre.add_argument("--force", action="store_true")
     pre.set_defaults(fn=cmd_prompts)
 
-    hk = s.add_parser("hooks", help="install/inspect the enforcement git hook")
+    hk = s.add_parser(
+        "hooks", help="install/inspect the enforcement git hook and the Claude Code session hook"
+    )
     hk_s = hk.add_subparsers(dest="hooks_cmd", required=True)
     hki = hk_s.add_parser("install")
     hki.add_argument(
@@ -849,10 +851,21 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         action="store_true",
         help="replace an existing pre-commit hook ddflow does not manage",
     )
+    _claude_help = (
+        "the Claude Code SessionStart hook in .claude/settings.json instead of the git "
+        "hook; other hooks there are left exactly as they are"
+    )
+    hki.add_argument("--claude", action="store_true", help=_claude_help)
     hki.set_defaults(fn=cmd_hooks)
-    hk_s.add_parser("uninstall").set_defaults(fn=cmd_hooks)
+    hku = hk_s.add_parser("uninstall")
+    hku.add_argument("--claude", action="store_true", help=_claude_help)
+    hku.set_defaults(fn=cmd_hooks)
     hk_s.add_parser("status").set_defaults(fn=cmd_hooks)
     hk_s.add_parser("check-commit", help="(invoked by the hook)").set_defaults(fn=cmd_hooks)
+    hk_s.add_parser(
+        "session-start",
+        help="(invoked by the Claude Code SessionStart hook) print the brief; always exit 0",
+    ).set_defaults(fn=cmd_hooks)
 
     s.add_parser("mcp", help="run the MCP stdio server over this repository").set_defaults(
         fn=cmd_mcp

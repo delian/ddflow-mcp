@@ -287,11 +287,95 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     return out
 
 
-def hooks(repo: Path, *, action: str = "status", force: bool = False, agent: str = "") -> O.Outcome:
-    """The commit hook: install, uninstall, status, or run the check itself."""
+#: Rulebooks whose change between a worktree and its base means the agent is working to
+#: rules that are no longer the project's.
+_RULEBOOKS = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/config.toml")
+
+
+def _worktree_drift(repo: Path, here: Path) -> str:
+    """A warning when `here` is a worktree behind the base branch, else "".
+
+    INFORMS, never refuses: this runs at session start, where the only useful thing is
+    to say so. The source project's `check_worktree_sync.py --hook` did the same job; a
+    rulebook changed on the base branch since this tree forked is the case that bit it.
+    """
+    from ..infra import worktree as W
+
+    # Any checkout, the primary included: a primary left on a stale branch is working
+    # to old rules just the same.
+    top = W.git(here, "rev-parse", "--show-toplevel")
+    if not top.ok:
+        return ""
+    base = W.default_branch(repo)
+    n = W.git(here, "rev-list", "--count", f"HEAD..{base}")
+    if not n.ok or not n.out.isdigit() or int(n.out) == 0:
+        return ""
+    changed = W.git(here, "diff", "--name-only", f"HEAD...{base}", "--", *_RULEBOOKS)
+    rules = [p for p in changed.out.splitlines() if p] if changed.ok else []
+    msg = f"This worktree is {n.out} commit(s) behind `{base}`: `git merge {base}` before starting."
+    if rules:
+        msg += f" The rules changed there: {', '.join(rules)} -- re-read them after merging."
+    return msg
+
+
+def _session_start(repo: Path, agent: str) -> O.Outcome:
+    """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
+
+    A hook that fails at session start blocks nothing useful and teaches the operator to
+    remove it. Every failure becomes one line of text saying what to run instead.
+    """
+    from .lifecycle import brief
+
+    parts = ["# ddflow session start", ""]
+    try:
+        drift = _worktree_drift(repo, Path.cwd())
+        if drift:
+            parts += [f"**{drift}**", ""]
+    except Exception as exc:
+        parts += [f"_(worktree drift check failed: {exc})_", ""]
+    try:
+        out = brief(repo, check_recovery=True, agent=agent)
+        parts.append(out.data.get("text", "") or out.reason)
+    except Exception as exc:
+        parts.append(f"ddflow could not build the brief ({exc}). Run `ddflow doctor`.")
+    parts += [
+        "",
+        "_Use the ddflow MCP tools for the queue. A subagent passes `as_agent` on every "
+        "call; `ddflow_memory_add` records a fact about this machine for the next session._",
+    ]
+    return O.ok("hooks", message="\n".join(parts), installed=True, policy="")
+
+
+def hooks(
+    repo: Path,
+    *,
+    action: str = "status",
+    force: bool = False,
+    claude: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """The commit hook: install, uninstall, status, or run the check itself.
+
+    `claude=True` installs or removes the Claude Code SessionStart hook instead
+    (`services.claudehooks`); `session-start` is what that hook runs.
+    """
+    from ..services import claudehooks as CH
     from ..services import enforce as E
 
+    if action == "session-start":
+        return _session_start(repo, agent)
     _log, cfg, _st = _load(repo, agent)
+    if claude and action in ("install", "uninstall"):
+        try:
+            if action == "install":
+                msg = CH.install(repo, E.command_line(CH.MARKER))
+            else:
+                msg = CH.uninstall(repo)
+        except CH.SettingsError as exc:
+            return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
+        return O.ok(
+            "hooks", message=msg, installed=E.installed(repo), session_hook=CH.installed(repo)
+        )
     if action == "install":
         msg = E.install(repo, force=force)
         if msg.startswith("REFUSED"):
@@ -335,11 +419,14 @@ def hooks(repo: Path, *, action: str = "status", force: bool = False, agent: str
             "\n\nNOTE: the policy is 'block' but NO HOOK IS INSTALLED, so nothing enforces "
             "it. Run `ddflow hooks install`."
         )
+    session = CH.installed(repo)
     message = (
         f"pre-commit hook: {'installed' if on else 'NOT installed'}\n"
-        f"policy [enforce].commit_without_lease = {mode!r}{note}"
+        f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
+        f"Claude Code SessionStart hook: {'installed' if session else 'not installed'}"
+        + ("" if session else " (`ddflow hooks install --claude` puts the brief in every session)")
     )
-    data = {"installed": on, "policy": mode, "message": message}
+    data = {"installed": on, "policy": mode, "session_hook": session, "message": message}
     if on or mode == "off":
         return O.ok("hooks", **data)
     return O.nothing("hooks", message, **data)

@@ -2192,6 +2192,12 @@ part that matters.
 * **A commit hook** (`ddflow hooks install`) can refuse an unclaimed edit outright,
   and refuses a staged `ddflow render` view that the log no longer regenerates
   byte-for-byte — hand-edited, or stale (`[enforce] generated_views`).
+* **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
+  crashed work to recover, ready items, binding decisions, operational memory — into
+  every session, including after a context compaction, whether or not the agent
+  remembers to ask. In a worktree behind its base branch it says so, and names the
+  rulebooks that changed there. It is added beside the project's own hooks in
+  `.claude/settings.json`, removed alone, and always exits 0.
 
 **Not automated, on purpose:**
 

@@ -1340,14 +1340,28 @@ TOOLS: dict[str, dict[str, Any]] = {
             "is installed AND whether the policy actually blocks, since a block policy "
             "with no hook installed enforces nothing."
         ),
-        "properties": {"action": ("string", "status (default), install, uninstall.", False)},
+        "properties": {
+            "action": ("string", "status (default), install, uninstall.", False),
+            "claude": (
+                "boolean",
+                "Install/uninstall the Claude Code SessionStart hook in "
+                ".claude/settings.json instead of the git hook: every session, including "
+                "after a context compaction, then starts with the ddflow brief and the "
+                "operational memory whether or not the agent remembers to ask. Other "
+                "hooks in that file are left exactly as they are.",
+                False,
+            ),
+        },
         "api": lambda repo, a, agent: _api().hooks(
-            repo, action=a.get("action", "status") or "status", agent=agent
+            repo,
+            action=a.get("action", "status") or "status",
+            claude=bool(a.get("claude")),
+            agent=agent,
         ),
         # The two FACTS. `message` is the prose rendering of them and stays OUT of the
         # JSON body: `hooks status --json` has always emitted exactly these two, and
         # adding a key is a wire change this migration does not get to make.
-        "payload": ("installed", "policy"),
+        "payload": ("installed", "policy", "session_hook"),
     },
     "ddflow_doctor": {
         "description": (

@@ -105,6 +105,10 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "covered by ddflow_recall, which searches decisions along with everything "
         "else the project remembers — one search beats five"
     ),
+    ("hooks", "session-start"): (
+        "invoked BY the Claude Code SessionStart hook to put the brief into a new "
+        "session; over MCP that is ddflow_brief"
+    ),
     ("hooks", "check-commit"): (
         "invoked BY the installed git hook, inside the commit that is being checked; "
         "it is not something an agent calls"
