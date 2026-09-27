@@ -71,7 +71,10 @@ real. On `7216f5e` (job 817) it found two CONFIRMED defects the adversarial suba
 missed, both fixed in the commit after it: the view check compared the STAGED view with
 the log ON DISK (a view ahead of its committed log passed), and `adopt` printed "adopted"
 and exited 0 after SKIPPING an MCP registration — the wrote-nothing-reported-success class,
-reintroduced by the very commit that fixed it for Kilo.
+reintroduced by the very commit that fixed it for Kilo. On THAT fix (`43c2034`, job 818) it
+found three more, fixed after it: the staged-log probe ignored git's exit status (a failed
+`git` read as "clean"), `--exclude-standard` hid a partially ignored shard, and the refusal
+had no MCP parity test.
 
 ## 3. What was finished in the previous session
 

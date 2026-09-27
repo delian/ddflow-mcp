@@ -332,3 +332,25 @@ def test_a_config_holding_a_non_object_is_skipped_not_crashed_or_clobbered(repo,
     assert "ddflow adopted for" not in out, out
     # ...while the rest of the adoption still happened.
     assert (repo / "AGENTS.md").is_file() and (repo / ".ddflow" / "config.toml").is_file()
+
+
+def test_a_refused_adoption_fails_over_mcp_too(repo):
+    """CLI/MCP parity for the refusal contract (roborev on 43c2034): the CLI test alone
+    would not catch the MCP tool reporting a skipped registration as success."""
+    from ddflow.surfaces.mcp import Server
+
+    cfg = repo / ".kilo" / "kilo.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('{"mcp": null}')
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_setup", "arguments": {"agents": "kilo"}},
+        }
+    )
+    result = reply["result"]
+    assert result.get("isError") is True, result
+    assert result.get("_meta", {}).get("exit") == 1, result
+    assert "SKIPPED" in result["content"][0]["text"], result

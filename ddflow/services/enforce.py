@@ -375,17 +375,38 @@ def _rel(repo: Path, path: Path) -> str:
 
 
 def _unstaged_under(repo: Path, d: Path) -> list[str]:
-    """Paths under ``d`` whose working copy differs from the index: modified-but-not-
-    staged, or untracked and not ignored. A log directory a project chose to gitignore
-    reports nothing, and the check then compares against the working log as before."""
+    """Paths under ``d`` whose working copy is not what the commit will record:
+    modified-but-not-staged, or not in the index at all.
+
+    Two cases, decided by whether ANY shard is tracked. If none is, the project does not
+    commit its log, no view can be checked against a committed one, and nothing is
+    reported -- the check compares against the working log as before. If one is, EVERY
+    file there that is not in the index counts, ignored or not: a project ignoring only
+    some shards would otherwise render a view from an ignored shard, commit it beside a
+    log that lacks it, and pass (roborev on 43c2034).
+
+    A git failure is REPORTED as a path, never read as "nothing unstaged": an empty
+    stdout from a command that failed is not evidence of a clean log, and returning []
+    would silently reopen the exact false pass this exists to close (roborev on 43c2034).
+    """
     rel = _rel(repo, d)
-    out: list[str] = []
-    for argv in (["diff", "--name-only"], ["ls-files", "--others", "--exclude-standard"]):
+
+    def git(*argv: str) -> list[str] | None:
         r = P.run(
             ["git", "-C", str(repo), *argv, "--", rel], capture_output=True, text=True, timeout=60
         )
-        out += [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
-    return sorted(set(out))
+        if r.returncode != 0:
+            return None
+        return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+
+    tracked = git("ls-files")
+    modified = git("diff", "--name-only")
+    untracked = git("ls-files", "--others")  # ignored ones included, deliberately
+    if tracked is None or modified is None or untracked is None:
+        return [f"{rel} (git could not report its state -- refusing rather than guessing)"]
+    if not tracked:
+        return []
+    return sorted(set(modified + untracked))
 
 
 def _lf(data: bytes) -> bytes:

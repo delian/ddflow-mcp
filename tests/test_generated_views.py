@@ -226,3 +226,27 @@ def test_a_crlf_view_is_still_checked_not_skipped(adopted):
     _git(adopted, "config", "core.autocrlf", "false")
     r = _commit(adopted, VIEW)
     assert r.returncode != 0, "a hand-edited CRLF view was committed unchecked"
+
+
+def test_a_view_rendered_from_an_ignored_shard_is_refused(adopted):
+    """roborev on 43c2034: `--exclude-standard` hid an IGNORED shard from the staged-log
+    probe while `read_all` still read it. A project ignoring only some shards could commit
+    a view describing events its committed log lacks."""
+    (adopted / ".gitignore").write_text(".ddflow/events/ghost.jsonl\n")
+    _git(adopted, "add", ".gitignore")
+    _git(adopted, "commit", "-qm", "ignore one shard", "--no-verify")
+    run_cli(adopted, "task", "add", "P1.T9", "--phase", "P1", "--globs", "x", agent="ghost")
+    assert (adopted / ".ddflow" / "events" / "ghost.jsonl").is_file()
+    assert run_cli(adopted, "render")[0] == 0
+    r = _commit(adopted, VIEW)
+    assert r.returncode != 0, "a view ahead of its committed log passed via an ignored shard"
+
+
+def test_a_git_failure_is_reported_never_read_as_a_clean_log(tmp_path):
+    """roborev on 43c2034: the probe ignored git's exit status, so a failed `git` (a
+    locked or corrupt index) returned empty stdout, read as "nothing unstaged", and
+    reopened the false pass. Planted with a directory that is not a repository."""
+    from ddflow.services.enforce import _unstaged_under
+
+    got = _unstaged_under(tmp_path, tmp_path / ".ddflow" / "events")
+    assert got and "could not report" in got[0], got
