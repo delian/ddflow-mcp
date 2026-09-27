@@ -86,6 +86,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [The phase pipeline](#the-phase-pipeline)
 - [Human approval: a gate the agent cannot clear](#human-approval-a-gate-the-agent-cannot-clear)
 - [Parallelism and coordination](#parallelism-and-coordination)
+- [Gitflow, pull requests and version tags](#gitflow-pull-requests-and-version-tags)
 - [Many agents, one server: identity, state and sharing](#many-agents-one-server-identity-state-and-sharing)
   - [Is it stateless?](#is-it-stateless)
   - [Who is calling?](#who-is-calling)
@@ -499,7 +500,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 75 knobs.
+cadences, and the rest of the 96 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1496,6 +1497,72 @@ floor — adding a fifth agent to a phase whose runtime is a four-deep chain buy
 
 ---
 
+## Gitflow, pull requests and version tags
+
+Two independent axes in `[flow]`, because teams combine them freely:
+
+| | `integration = "merge"` (default) | `integration = "pr"` |
+|---|---|---|
+| **`model = "trunk"`** (default) | ddflow as it always was | GitHub flow / GitLab flow |
+| **`model = "gitflow"`** | gitflow, merged locally | gitflow behind approvals |
+
+**The agent's loop does not change.** `next` → `claim` → work → gates → `merge`. What
+`merge` *means* changes with the repository's policy:
+
+* **`merge` in PR mode pushes the branch and opens (or updates) a pull/merge request**,
+  then releases the lease and parks the item in **REVIEW**. The agent is free at once and
+  takes the next task — nobody waits for a human. It refuses to open a request for work
+  whose own pipeline is unfinished: a reviewer's time is the scarce resource, and a
+  refusal after the merge could no longer stop anything.
+* **`pr sync`** turns what reviewers did back into queue state. `next` runs it for you
+  while anything is in review (`sync_on_next`):
+
+  | the forge says | ddflow does |
+  |---|---|
+  | merged | passes the `merge` gate on the forge's evidence (URL, merge sha), completes the item, retargets anything stacked on it, removes its tree |
+  | changes requested | returns the item to the queue **with the review text** (bodies and line comments); `brief` leads with it; a re-claim resumes the same tree and a re-`merge` updates the same request |
+  | closed | parks it for a person — a "no" is not something to retry |
+  | approved, checks green | merges it (`pr_merge = "on_approval"`, pinned to the approved head) |
+
+* **Stacking keeps work moving through review.** While `T1` waits in review, a task that
+  needs it may start **on top of `T1`'s branch** (`stack = true`); its request targets
+  `T1`'s branch and is retargeted to the real base when `T1` merges. ddflow never merges
+  a stacked request first — that would land it unreviewed inside `T1`'s merge. A task
+  depending on two unmerged branches waits: one branch cannot sit on two.
+* **Who presses merge** is `pr_merge`: `on_approval` (default — a person's approval is
+  still required, and branch protection still applies), `auto` (ask the forge to
+  auto-merge when its own rules are met), or `human`.
+
+**Gitflow.** Tasks fork from `develop` as `feature/` or `bugfix/` branches (by tag); a
+task tagged `hotfix` forks from production and lands on production **and** develop.
+Merges never switch a checkout: a target that is not checked out is merged in a throwaway
+worktree, and one checked out in someone else's tree is refused.
+
+**Versions.** `version show` reads the highest `v1.2.3` tag reachable from the release
+branch and computes the next version from Conventional Commits (`feat` → minor, `fix` →
+patch, `!`/`BREAKING CHANGE` → major; below 1.0.0 a breaking change bumps minor) and from
+the tags of items finished since (`breaking`, `feature`, `bug`, `hotfix`). `version cut`
+tags it — annotated, with generated release notes. Under gitflow it cuts `release/X` from
+develop, merges it into production, tags it and merges the tag back into develop; in PR
+mode it opens the release request instead, and `pr sync` tags the merge commit once a
+person merges it and opens the back-merge request.
+
+ddflow holds no token: it drives `gh` or `glab`, logged in as the operator, so every
+permission question is answered by the forge. A forge that cannot be reached is exit 2 —
+"could not ask" is never reported as "nothing changed".
+
+```toml
+[flow]
+model = "gitflow"          # or "trunk"
+integration = "pr"         # or "merge"
+pr_merge = "on_approval"   # or "auto" | "human"
+pr_reviewers = ["alice"]
+```
+
+The research behind this is [RESEARCH R16](docs/RESEARCH.md).
+
+---
+
 ## Many agents, one server: identity, state and sharing
 
 Several agents and subagents sharing one queue is the case this tool is for. Here is
@@ -2044,6 +2111,11 @@ ddflow approve .. --reject      ...or refuses it, with --reason
 ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 
 ddflow merge <id>               merge from the primary checkout, no checkout
+                                ([flow].integration=pr: push + open/update a PR instead)
+ddflow pr sync [--item]         what reviewers did: complete / reopen / park / merge (2 = forge unreachable)
+ddflow pr status               every item's request, from the log (no forge call)
+ddflow version show            current and next version, why, release notes (2 = nothing new)
+ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)
 ddflow block <id> --reason ..   mark blocked
 
@@ -2094,7 +2166,7 @@ declared once and persists — see
 
 ## Configuration
 
-75 knobs across 15 sections, every one documented in place:
+96 knobs across 16 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

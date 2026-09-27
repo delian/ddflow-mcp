@@ -63,7 +63,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Shaping the work", ("phase", "task", "split", "update", "remove", "import")),
     ("Doing the work", ("next", "claim", "heartbeat", "release", "complete", "block", "abandon")),
     ("Gates and review", ("gate", "review", "reviewers")),
-    ("Landing it", ("merge", "cleanup")),
+    ("Landing it", ("merge", "pr", "version", "cleanup")),
     ("What the project remembers", ("recall", "lesson", "decision", "research", "bug", "session")),
     ("Looking at it", ("board", "show", "status", "brief", "progress", "render", "history")),
     ("When something is wrong", ("doctor", "recover", "loops", "rebuild", "replay", "cadence")),

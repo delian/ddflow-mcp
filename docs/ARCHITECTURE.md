@@ -194,8 +194,10 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `core/model.py` | domain types and `fold` — pure, no I/O |
 | `core/schedule.py` | readiness, inherited dependencies, glob conflicts, cycles |
 | `core/progress.py` | work aggregation and the six loop detectors |
+| `core/flow.py` | branching model (trunk / gitflow), merge targets, stacking, SemVer and Conventional Commits — pure |
 | `infra/log.py` | the append-only log: `flock`, `fsync`, per-agent shards |
-| `infra/worktree.py` | git worktree lifecycle, safe merge |
+| `infra/worktree.py` | git worktree lifecycle, safe merge (into a branch nobody has checked out, via a throwaway tree), push, tags |
+| `infra/forge.py` | pull/merge requests through `gh` / `glab` — no token, no HTTP; `ForgeUnavailable` kept apart from a refusal |
 | `infra/proc.py` | every subprocess, with stdin detached — see below |
 | `infra/store.py` | SQLite projection + BM25 retrieval (disposable) |
 | `infra/container.py` | container detection, loopback rewriting |
@@ -203,6 +205,7 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `services/queue.py` | the work queue: add, claim, complete, merge |
 | `services/leases.py` | acquire/renew/release, crash scanning, salvage advice |
 | `services/gates.py` | gate definitions, execution, evidence, independence |
+| `services/flow.py` | open a request, `pr sync` (merged / changes requested / closed / approved), version plans and cuts ([R16](RESEARCH.md)) |
 | `services/review.py` | reviewer backends — any LLM, four wire formats |
 | `services/sessions.py` | prompt provenance, redaction, replay, bundles |
 | `services/companions.py` | detect and register the MCP servers that serve the gates |

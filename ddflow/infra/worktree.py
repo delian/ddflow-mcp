@@ -20,13 +20,14 @@ Three rules encoded here, each from a failure that actually happened somewhere:
 from __future__ import annotations
 
 import os
-import re
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core.flow import safe_name as _core_safe_name
 from ..infra import proc as P
 
 
@@ -136,8 +137,8 @@ def current(start: Path) -> Worktree | None:
     return Worktree(item="", path=here, branch=branch, base="", created=False)
 
 
-def safe_name(item_id: str) -> str:
-    return re.sub(r"[^A-Za-z0-9._-]", "-", item_id).strip("-") or "item"
+# One implementation, in `core` -- the branch-name rules there build on it.
+safe_name = _core_safe_name
 
 
 @dataclass
@@ -149,17 +150,21 @@ class Worktree:
     created: bool = False
 
 
-def create(repo: Path, cfg: Config, item_id: str, *, base: str = "") -> Worktree:
+def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:
     """Create (or adopt) the worktree for an item. Idempotent by design.
 
     Adoption matters for recovery: after a crash the agent restarts, finds the
     worktree already present, and continues in it rather than erroring or — far worse —
     creating a second tree and abandoning the first with its work inside.
+
+    ``base`` and ``branch`` come from `core.flow` when a branching model names them (a
+    gitflow ``feature/`` branch off ``develop``, a task stacked on a dependency's
+    branch); empty keeps the trunk defaults.
     """
     root = repo_root(repo)
     base = base or cfg.worktree.base_ref or default_branch(root)
     name = safe_name(item_id)
-    branch = f"{cfg.worktree.branch_prefix}{name}"
+    branch = branch or f"{cfg.worktree.branch_prefix}{name}"
     from ..infra.container import default_worktree_root
 
     # Inside a container the default sibling root lands on the ephemeral layer and is
@@ -248,24 +253,73 @@ def commit(
 
 
 def merge(repo: Path, cfg: Config, wt: Worktree, *, message: str = "") -> GitResult:
-    """Merge the task branch into base FROM THE PRIMARY CHECKOUT, with no checkout.
+    """Merge the task branch into base, never switching any checkout's branch."""
+    return merge_into(repo, cfg, wt.base, wt.branch, message=message or f"merge {wt.item}")
 
-    Refuses if the primary is not already on base — switching it is exactly the
-    operation that kills a live session, so the tool reports the problem instead of
-    performing the dangerous fix.
+
+def checked_out_at(repo: Path, branch: str) -> Path | None:
+    """The worktree (primary or linked) that has ``branch`` checked out, if any."""
+    for entry in list_worktrees(repo):
+        if entry.get("branch", "") == f"refs/heads/{branch}":
+            return Path(entry["worktree"])
+    return None
+
+
+def merge_into(repo: Path, cfg: Config, target: str, source: str, *, message: str) -> GitResult:
+    """Merge ``source`` into ``target`` without switching any checkout's branch.
+
+    Three cases, by where ``target`` is checked out:
+
+    * **in the primary** — merge there, as ddflow always has.
+    * **nowhere** — merge in a throwaway worktree of ``target``, then remove it. This
+      is what gitflow needs: a hotfix lands on production AND develop, and the primary
+      can be on at most one of them. It used to be refused ("check out X yourself"),
+      which under gitflow meant every hotfix and every release stopped for a person.
+      The throwaway tree touches no one's files; only the branch ref moves.
+    * **in some other linked worktree** — refused. Merging there changes files under
+      whoever is working in it, which is exactly the live-session hazard rule 1 exists
+      for, and a throwaway tree is impossible because git allows a branch checked out
+      in one place only.
     """
     root = repo_root(repo)
-    cur = git(root, "rev-parse", "--abbrev-ref", "HEAD").out
-    if cur != wt.base:
+    if not git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{target}").ok:
         return GitResult(
-            2,
+            GIT_REFUSED,
+            "",
+            f"target branch {target!r} does not exist. Create it (for gitflow: "
+            f"`git branch {target} <production>`), or set [flow] / [worktree].base_ref.",
+        )
+    where = checked_out_at(root, target)
+    if where is not None and where.resolve() != root.resolve():
+        return GitResult(
+            GIT_REFUSED,
             "",
             (
-                f"primary checkout is on {cur!r}, not {wt.base!r}. ddflow will NOT switch "
-                f"it — a branch switch under a live agent session swaps files beneath it. "
-                f"Check out {wt.base} yourself in a quiet moment, then re-run."
+                f"{target!r} is checked out in the worktree {where}. ddflow will NOT merge "
+                f"into a tree someone may be working in, and git allows a branch checked "
+                f"out in only one place. Finish or move that session, then re-run."
             ),
         )
+    if where is not None:
+        return _merge_here(root, cfg, source, message)
+    wt_root = (root / cfg.worktree.root).resolve()
+    wt_root.mkdir(parents=True, exist_ok=True)
+    tmp = Path(tempfile.mkdtemp(prefix=f".merge-{safe_name(target)}-", dir=wt_root))
+    tmp.rmdir()  # `worktree add` wants to create it
+    add = git(root, "worktree", "add", str(tmp), target)
+    if not add.ok:
+        return GitResult(add.code, add.out, f"could not stage a merge of {target}: {add.err}")
+    try:
+        r = _merge_here(tmp, cfg, source, message)
+        if not r.ok:
+            git(tmp, "merge", "--abort")
+        return r
+    finally:
+        git(root, "worktree", "remove", "--force", str(tmp))
+        git(root, "worktree", "prune")
+
+
+def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult:
     # NO blanket dirty check here. An earlier version refused whenever the primary had
     # any modified tracked file, on the stated grounds that "a merge would mix them
     # into the result". That premise is FALSE, and a probe says so: merging with an
@@ -281,8 +335,21 @@ def merge(repo: Path, cfg: Config, wt: Worktree, *, message: str = "") -> GitRes
         args.append("--ff-only")
     elif cfg.worktree.merge_strategy == "squash":
         args.append("--squash")
-    args += ["-m", message or f"merge {wt.item}", wt.branch]
-    return git(root, *args)
+    args += ["-m", message, source]
+    r = git(tree, *args)
+    if r.ok and cfg.worktree.merge_strategy == "squash":
+        # `git merge --squash` STAGES the result and commits nothing -- `-m` is accepted
+        # and ignored. So a squash "merge" used to report success with the work sitting
+        # uncommitted in the primary, the task branch never reachable from base, and
+        # `remove_on_merge` then refusing to delete a tree it believed unmerged.
+        # Nothing to commit means the branch was already contained; that is success.
+        if git(tree, "diff", "--cached", "--quiet").ok:
+            return r
+        c = git(tree, "commit", "-m", message)
+        if not c.ok:
+            return GitResult(c.code, c.out, f"squash staged but commit failed: {c.err}")
+        return c
+    return r
 
 
 def head_sha(path: Path) -> str:
@@ -471,3 +538,72 @@ def absolutise(repo: Path, data: Any) -> Any:
         if isinstance(lv, str) and lv and not os.path.isabs(lv):
             out["lease"] = {**out["lease"], "worktree": str(load_path(repo, lv))}
     return out
+
+
+# -- remotes and tags (RESEARCH R16) -------------------------------------------------
+
+
+def push(path: Path, remote: str, branch: str, *, timeout: int = 300) -> GitResult:
+    """Push ``branch`` and set its upstream. Never ``--force``.
+
+    A rejected push means someone else moved the remote branch -- a reviewer's suggested
+    change committed from the forge UI is the usual one. Forcing would discard it, so
+    the rejection is returned for the agent to `git pull` and retry.
+    """
+    return git(path, "push", "--set-upstream", remote, f"{branch}:{branch}", timeout=timeout)
+
+
+def fetch(repo: Path, remote: str, *refs: str) -> GitResult:
+    return git(repo, "fetch", "--quiet", remote, *refs)
+
+
+def rev(repo: Path, ref: str) -> str:
+    r = git(repo, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    return r.out if r.ok else ""
+
+
+def version_tags(repo: Path, prefix: str) -> list[tuple[str, str]]:
+    """``(tag, version)`` for every tag ``<prefix>MAJOR.MINOR.PATCH``, newest version first."""
+    from ..core.flow import parse_version
+
+    r = git(repo, "tag", "--list", f"{prefix}*")
+    found = []
+    for line in r.out.splitlines() if r.ok else []:
+        name = line.strip()
+        ver = name[len(prefix) :]
+        parsed = parse_version(ver)
+        if parsed is not None:
+            found.append((parsed, name, ver))
+    return [(name, ver) for _, name, ver in sorted(found, reverse=True)]
+
+
+def reachable_tag(repo: Path, prefix: str, ref: str) -> tuple[str, str]:
+    """The highest version tag reachable from ``ref`` -- the version that ref is AT.
+
+    Not simply the highest tag in the repo: under gitflow a hotfix tag on production is
+    not on develop until it is back-merged, and a version computed from a tag the branch
+    does not contain would count the same commits twice.
+    """
+    for tag, ver in version_tags(repo, prefix):
+        if git(repo, "merge-base", "--is-ancestor", tag, ref).ok:
+            return tag, ver
+    return "", ""
+
+
+def log_messages(repo: Path, since: str, ref: str) -> list[str]:
+    """Full commit messages in ``since..ref`` (all of ``ref`` when ``since`` is empty).
+
+    ``--no-merges``: a merge commit carries no change of its own, and counting one made
+    every gitflow release look unreleased -- the back-merge of the tag into develop is a
+    commit after the tag, so develop always had "one commit to release".
+    """
+    rng = f"{since}..{ref}" if since else ref
+    r = git(repo, "log", "--no-merges", "--format=%B%x00", rng)
+    if not r.ok:
+        return []
+    return [m.strip() for m in r.out.split("\x00") if m.strip()]
+
+
+def tag(repo: Path, name: str, ref: str, message: str) -> GitResult:
+    """An ANNOTATED tag: it records who and when, and `git describe` sees it by default."""
+    return git(repo, "tag", "--annotate", name, "-m", message, ref)

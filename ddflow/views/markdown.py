@@ -20,7 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Config
-from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, RUNNING, State
+from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
 from ..core.schedule import Plan, critical_path
 
 GENERATED = (
@@ -119,7 +119,9 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             out.append("| | Task | State | Needs | Globs | Gates | Owner |")
             out.append("|---|---|---|---|---|---|---|")
             for t in tasks:
-                mark = {DONE: "x", RUNNING: "~", BLOCKED: "!", ABANDONED: "-"}.get(t.state, " ")
+                mark = {DONE: "x", RUNNING: "~", REVIEW: "r", BLOCKED: "!", ABANDONED: "-"}.get(
+                    t.state, " "
+                )
                 pipeline = (
                     pipeline_for(t, cfg) if cfg is not None else list(Config().gates.task_pipeline)
                 )

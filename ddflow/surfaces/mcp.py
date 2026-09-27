@@ -149,7 +149,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             called_from=called_from,
             agent=agent,
         ),
-        "payload": ("item", "holder", "worktree", "branch"),
+        "payload": ("item", "holder", "worktree", "branch", "base"),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
         # worktree. The dispatcher passes it only to tools that ask.
@@ -328,13 +328,21 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_merge": {
         "description": (
-            "Merge an item's branch into the base branch from the primary "
-            "checkout, without ever switching its branch."
+            "Land an item's branch without ever switching a checkout's branch. With "
+            "[flow].integration = 'pr' it pushes and opens (or updates) a pull request "
+            "instead, releases your lease and parks the item in REVIEW — take the next "
+            "item; `ddflow_pr_sync` completes it once a person merges it."
         ),
         "properties": {
             "id": ("string", "Item id.", True),
             "message": ("string", "Merge commit message.", False),
             "keep": ("boolean", "Keep the worktree after merging, for inspection.", False),
+            "model": (
+                "string",
+                "The AUTHOR's model. In PR mode the item completes later, at "
+                "`ddflow_pr_sync`, and the reviewer-independence check needs it then.",
+                False,
+            ),
             "allow_dirty": (
                 "boolean",
                 "Merge although the worktree has uncommitted changes. They are NOT "
@@ -349,9 +357,73 @@ TOOLS: dict[str, dict[str, Any]] = {
             message=a.get("message", "") or "",
             allow_dirty=bool(a.get("allow_dirty")),
             keep=bool(a.get("keep")),
+            model=a.get("model", "") or "",
             agent=agent,
         ),
-        "payload": ("id", "sha"),
+        "payload": ("id", "sha", "base", "pr"),
+    },
+    "ddflow_pr_sync": {
+        "description": (
+            "Ask the forge (GitHub/GitLab) what reviewers did with every request in "
+            "REVIEW, and record it: a merged request completes its item (and retargets "
+            "anything stacked on it), requested changes send the item back to the queue "
+            "WITH the review text, a closed one is parked for a person, an approved and "
+            "green one is merged when [flow].pr_merge = 'on_approval'. `ddflow_next` does "
+            "this itself when [flow].sync_on_next is on. Exit 2 = the forge could not be "
+            "asked, which is NOT 'nothing changed'."
+        ),
+        "properties": {"item": ("string", "Only this item (optional).", False)},
+        "api": lambda repo, a, agent: _api().pr_sync(
+            repo, item=a.get("item", "") or "", agent=agent
+        ),
+        "payload": "",
+    },
+    "ddflow_pr_status": {
+        "description": (
+            "Every item's pull request as last recorded — review, checks, target, rounds "
+            "of changes and when it was last looked at. Reads the log only; "
+            "`ddflow_pr_sync` asks the forge."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().pr_status(repo, agent=agent),
+        "payload": "",
+    },
+    "ddflow_version_show": {
+        "description": (
+            "The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the "
+            "release branch), the next one, the bump and why (Conventional Commits plus "
+            "the tags of finished items), and the release notes. Reads only."
+        ),
+        "properties": {
+            "bump": ("string", "Force major | minor | patch instead of the computed bump.", False),
+        },
+        "api": lambda repo, a, agent: _api().version_show(
+            repo, bump=a.get("bump", "") or "", agent=agent
+        ),
+        "payload": "",
+    },
+    "ddflow_version_cut": {
+        "description": (
+            "Tag the next version. trunk: tags the base branch. gitflow: makes release/X "
+            "from develop, merges it to production, tags it and merges the tag back — or, "
+            "with pull requests, opens the release request and lets `ddflow_pr_sync` tag "
+            "it once a person merges it. Exit 2 = nothing to release."
+        ),
+        "properties": {
+            "bump": ("string", "Force major | minor | patch.", False),
+            "version": ("string", "Exact MAJOR.MINOR.PATCH.", False),
+            "push": ("boolean", "Publish the tag (and gitflow branches) to the remote.", False),
+            "dry_run": ("boolean", "Compute and report; write nothing.", False),
+        },
+        "api": lambda repo, a, agent: _api().version_cut(
+            repo,
+            bump=a.get("bump", "") or "",
+            version=a.get("version", "") or "",
+            push=bool(a.get("push")),
+            dry_run=bool(a.get("dry_run")),
+            agent=agent,
+        ),
+        "payload": "",
     },
     "ddflow_phase_add": {
         "description": (

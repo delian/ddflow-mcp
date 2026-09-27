@@ -49,6 +49,7 @@ from .decisions import (
     decision_show,
     decision_supersede,
 )
+from .flow import pr_status, pr_sync, version_cut, version_show
 from .gates import Evidence as GateEvidence
 from .gates import record as gate_record
 from .gates import run as gate_run
@@ -178,6 +179,8 @@ __all__ = [
     "merge_item",
     "next_item",
     "phase_add",
+    "pr_status",
+    "pr_sync",
     "progress",
     "prompts",
     "rebuild",
@@ -200,6 +203,8 @@ __all__ = [
     "status",
     "task_add",
     "update",
+    "version_cut",
+    "version_show",
     "workflow_drop",
     "workflow_gate",
     "workflow_pipeline",

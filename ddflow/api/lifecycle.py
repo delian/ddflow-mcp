@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
-from ..core.model import ABANDONED, DONE
+from ..core.model import ABANDONED, DONE, REVIEW
 from ..core.plain import plain
 from ..infra import worktree as W
 from ..services import leases as L
@@ -64,8 +64,28 @@ def next_(
     from ..core.schedule import critical_path, plan
 
     log, cfg, st = _load(repo, agent)
+    synced: dict[str, Any] = {}
+    if (
+        cfg.flow.integration == "pr"
+        and cfg.flow.sync_on_next
+        and any(i.state == REVIEW for i in st.items.values())
+    ):
+        # Reviewers act between an agent's turns. Asking here is what lets a merged
+        # request complete, and a requested change come back as work, without anyone
+        # remembering to run `pr sync` -- the loop stays `next`, `claim`, work, `merge`.
+        from ..services import flow as FS
+
+        rep = FS.sync(repo, cfg, log)
+        synced = {
+            "changes": [f"{c.item}: {c.what}" for c in rep.changes],
+            "unavailable": rep.unavailable,
+        }
+        if rep.changes:
+            log, cfg, st = _load(repo, agent)
     p = plan(st, cfg, kind=kind, phase=phase, agent=cfg.agent.id or log.agent_id)
     data: dict[str, Any] = {
+        "review": [i.id for i in p.review],
+        "synced": synced,
         "ready": [plain(i) for i in p.ready],
         "blocked": [plain(b) for b in p.blocked],
         "running": [i.id for i in p.running],
@@ -123,6 +143,18 @@ def claim(
     log, cfg, _ = _load(repo, agent)
     events = log.read_all()
     st = fold(events, strict=False)
+    parked = st.items.get(item)
+    if parked is not None and parked.state == REVIEW and not force:
+        # Claiming it would let a push ride into the request its reviewers already
+        # judged -- and while it ran, `pr sync` would stop watching the request at all.
+        return O.refused(
+            "item.claimed",
+            f"{item} is in review ({parked.pr.url if parked.pr else 'its request'}); the "
+            f"reviewers have it. `ddflow pr sync` brings it back if they request changes. "
+            f"--force to take it back anyway.",
+            id=item,
+            alternatives=[],
+        )
     looping = [f for f in PR.detect(events, st, cfg) if f.item == item and f.severity == "block"]
     if looping and not force:
         return O.refused(
@@ -168,7 +200,14 @@ def claim(
             L.acquire(log, cfg, item, worktree=stored, branch=wt.branch, globs=want, force=True)
         else:
             try:
-                wt = W.create(repo, cfg, item)
+                from ..services import flow as FS
+
+                base, branch = ("", "")
+                if item in st.items:
+                    # The branching model decides the fork point: gitflow's develop or
+                    # production, or a dependency's unmerged branch when stacking.
+                    base, branch = FS.fork_point(repo, cfg, st, st.items[item])
+                wt = W.create(repo, cfg, item, base=base, branch=branch)
                 stored = W.store_path(repo, wt.path)
                 log.append(
                     "worktree.created",
@@ -271,6 +310,15 @@ def complete(
     return O.ok("item.completed", forced=forced, **base)
 
 
+def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
+    """Built directly: `O.refused(kind, reason, **data)` owns `reason`, so passing the
+    abandon reason as a wire field raised TypeError -- `abandon` on a DONE item crashed
+    with exit 1 instead of refusing with exit 3, and the refusal text was never shown."""
+    return O.Outcome(
+        kind="item.abandoned", data={"id": item, "reason": reason}, exit=O.REFUSED, reason=why
+    )
+
+
 def abandon(
     repo: Path, item: str, *, reason: str = "", force: bool = False, agent: str = ""
 ) -> O.Outcome:
@@ -285,13 +333,21 @@ def abandon(
     it = _require(st, item, "item.abandoned")
     if isinstance(it, O.Outcome):
         return it
+    if it.state == REVIEW and it.pr and it.pr.state == "open" and not force:
+        return _abandon_refused(
+            item,
+            reason,
+            f"{item} has an open request ({it.pr.url}). Abandoning it here leaves that "
+            f"request open -- mergeable by anyone, recorded by no one -- and anything "
+            f"stacked on it would be re-based onto the target carrying its commits. Close "
+            f"the request (`pr sync` then parks it), or --force.",
+        )
     if it.state == DONE and not force:
-        return O.refused(
-            "item.abandoned",
+        return _abandon_refused(
+            item,
+            reason,
             f"{item} is already done; abandoning it would rewrite finished history. "
             f"--force if you really mean it.",
-            id=item,
-            reason=reason,
         )
     log.append("item.abandoned", item, {"reason": reason, "kind": it.kind})
     if it.lease:
@@ -367,9 +423,18 @@ def merge(
     message: str = "",
     allow_dirty: bool = False,
     keep: bool = False,
+    model: str = "",
     agent: str = "",
 ) -> O.Outcome:
-    """Land an item's branch. The most consequential action in the package."""
+    """Land an item's branch. The most consequential action in the package.
+
+    With `[flow].integration = "pr"` landing is a person's decision, so this opens (or
+    updates) the request instead and parks the item in REVIEW; `pr sync` finishes it.
+    Same verb either way, so an agent's loop does not change with the repository's
+    merge policy.
+    """
+    from ..core import flow as F
+    from ..services import flow as FS
     from ..services import gates as G
 
     log, cfg, st = _load(repo, agent)
@@ -383,7 +448,7 @@ def merge(
         item=item,
         path=W.load_path(repo, it.worktree),
         branch=it.branch,
-        base=cfg.worktree.base_ref or W.default_branch(repo),
+        base=FS.target(repo, cfg, it),
     )
     dirty = W.dirty(wt)
     if dirty and not allow_dirty:
@@ -400,6 +465,11 @@ def merge(
             dirty=list(dirty),
             path=str(wt.path),
         )
+    if cfg.flow.integration == "pr":
+        return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
+    bad = F.problems(cfg)
+    if bad:
+        return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
     sha = W.head_sha(wt.path)
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     if not r.ok:
@@ -411,6 +481,14 @@ def merge(
         )
         return out
     log.append("worktree.merged", item, {"sha": sha, "branch": wt.branch})
+    # A gitflow hotfix lands on production AND develop. A failure here is reported, not
+    # rolled back: production has the fix, which was the urgent half.
+    back_merged, back_failed = [], []
+    for extra in F.back_merge_targets(it, cfg, W.default_branch(repo)):
+        br = W.merge_into(repo, cfg, extra, wt.branch, message=f"back-merge {item} into {extra}")
+        (back_merged if br.ok else back_failed).append(
+            extra if br.ok else f"{extra}: {br.err or br.out}"
+        )
     G.record(
         log,
         cfg,
@@ -432,6 +510,10 @@ def merge(
             removed_tree = True
         else:
             kept_reason = rr.err
+    if back_failed:
+        kept_reason = "; ".join(
+            filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
+        )
     return O.ok(
         "worktree.merged",
         id=item,
@@ -440,7 +522,34 @@ def merge(
         dirty=list(dirty),
         worktree_removed=removed_tree,
         kept_reason=kept_reason,
+        back_merged=back_merged,
+        pr="",
     )
+
+
+def _open_request(
+    repo: Path, cfg, log, it, *, message: str, model: str, dirty: list[str]
+) -> O.Outcome:
+    from ..services import flow as FS
+
+    op = FS.open_request(repo, cfg, log, it.id, title=message, model=model)
+    data: dict[str, Any] = {
+        "id": it.id,
+        "sha": "",
+        "base": op.base,
+        "dirty": list(dirty),
+        "pr": op.url,
+        "number": op.number,
+        "stacked_on": op.stacked_on,
+        "created": op.created,
+        "warnings": op.warnings,
+        "review": op.ok,
+    }
+    if op.unavailable:
+        return O.nothing("worktree.merged", op.reason, **data)
+    if op.refused:
+        return O.refused("worktree.merged", op.reason, **data)
+    return O.ok("worktree.merged", **data)
 
 
 def brief(
@@ -501,6 +610,16 @@ def brief(
         recovery=[r for r in recovery if r.salvageable],
         decisions=decisions,
     )
+    if item and item in st.items:
+        pr = st.items[item].pr
+        if pr is not None and pr.review == "changes_requested" and pr.feedback:
+            # FIRST, not appended: this is why the item is back, and an agent that fixes
+            # something other than what the reviewer asked for starts another round.
+            text = (
+                f"## Review feedback on {item} (round {pr.rounds}, {pr.url})\n\n"
+                f"Address this, commit, then `ddflow merge {item}` again -- it updates the "
+                f"same request.\n\n{pr.feedback}\n\n" + text
+            )
     return O.ok(
         "brief",
         brief=text,

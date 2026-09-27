@@ -27,7 +27,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import schedule
-from ..core.model import DONE, Lease, State, fold
+from ..core.model import DONE, REVIEW, Lease, State, fold
 from ..core.schedule import conflicts, plan_blocker
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -403,7 +403,10 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
             )
             _measure(rec, repo, cfg)
             out.append(rec)
-        elif not lease and it.worktree:
+        elif not lease and it.worktree and it.state != REVIEW:
+            # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
+            # changes a reviewer may request, and the request is its custodian. Reported
+            # as an orphan it led every brief as "salvage this" (RESEARCH R16).
             rec = Recovery(
                 item=it.id,
                 holder="(none)",

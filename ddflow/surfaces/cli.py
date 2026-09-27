@@ -37,6 +37,7 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
     _write_config,
 )
 from .commands.decisions import cmd_decision
+from .commands.flow import cmd_pr, cmd_version
 from .commands.gates import cmd_gate
 from .commands.knowledge import (
     cmd_bug,
@@ -405,7 +406,43 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     mg.add_argument("--message", default="")
     mg.add_argument("--keep", action="store_true")
     mg.add_argument("--allow-dirty", action="store_true")
+    mg.add_argument(
+        "--model",
+        default="",
+        help="the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and "
+        "the reviewer-independence check needs it then",
+    )
     mg.set_defaults(fn=cmd_merge)
+
+    pr = s.add_parser(
+        "pr", help="pull/merge requests: what reviewers did ([flow].integration = pr)"
+    )
+    pr_s = pr.add_subparsers(dest="pr_cmd", required=True)
+    psy = pr_s.add_parser(
+        "sync",
+        help="ask the forge about every request in review: complete merged ones, reopen "
+        "ones with requested changes, merge approved ones",
+    )
+    psy.add_argument("--item", default="", help="only this item")
+    psy.set_defaults(fn=cmd_pr)
+    pst = pr_s.add_parser("status", help="every item's request, from the log (no forge call)")
+    pst.set_defaults(fn=cmd_pr)
+
+    ver = s.add_parser("version", help="version tags: the next version, and cutting it")
+    ver_s = ver.add_subparsers(dest="version_cmd", required=True)
+    vsh = ver_s.add_parser("show", help="current version, next version, why, release notes")
+    vsh.add_argument("--bump", default="", choices=["", "major", "minor", "patch"])
+    vsh.set_defaults(fn=cmd_version)
+    vct = ver_s.add_parser(
+        "cut", help="tag the next version (gitflow: via a release branch, or a release request)"
+    )
+    vct.add_argument("--bump", default="", choices=["", "major", "minor", "patch"])
+    vct.add_argument("--version", dest="set_version", default="", help="exact MAJOR.MINOR.PATCH")
+    vct.add_argument(
+        "--push", action="store_true", help="publish the tag (and branches) to the remote"
+    )
+    vct.add_argument("--dry-run", action="store_true")
+    vct.set_defaults(fn=cmd_version)
 
     br = s.add_parser("brief", help="budgeted session-start pack")
     br.add_argument("--item", default="")

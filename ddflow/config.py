@@ -135,6 +135,140 @@ _doc(
 
 
 @dataclass
+class FlowConfig:
+    """Branching model, pull-request integration and version tags (RESEARCH R16)."""
+
+    model: str = "trunk"  # trunk | gitflow
+    integration: str = "merge"  # merge | pr
+    forge: str = "auto"  # auto | github | gitlab
+    remote: str = "origin"
+    develop_branch: str = "develop"
+    production_branch: str = ""  # "" = the repo's default branch
+    feature_prefix: str = "feature/"
+    bugfix_prefix: str = "bugfix/"
+    hotfix_prefix: str = "hotfix/"
+    release_prefix: str = "release/"
+    bugfix_tags: list[str] = field(default_factory=lambda: ["bug", "bugfix", "fix"])
+    hotfix_tags: list[str] = field(default_factory=lambda: ["hotfix"])
+    pr_merge: str = "on_approval"  # on_approval | auto | human
+    pr_draft: bool = False
+    pr_labels: list[str] = field(default_factory=list)
+    pr_reviewers: list[str] = field(default_factory=list)
+    stack: bool = True
+    on_changes_requested: str = "reopen"  # reopen | block
+    sync_on_next: bool = True
+    tag_prefix: str = "v"
+    initial_version: str = "0.1.0"
+
+
+_doc(
+    "flow",
+    "model",
+    "'trunk' (default): every task branches from and lands on one base branch — today's behaviour. 'gitflow': tasks branch from `develop_branch` as feature/ or bugfix/ branches, hotfixes branch from and land on `production_branch` and are back-merged into develop, and `version cut` makes a release/ branch, merges it to production, tags it and back-merges it.",
+)
+_doc(
+    "flow",
+    "integration",
+    "'merge' (default): `ddflow merge` lands the branch locally. 'pr': it pushes the branch and opens (or updates) a pull/merge request instead, releases the lease and parks the item in REVIEW so the agent can take the next task; `ddflow pr sync` completes it when the forge says it merged. Use 'pr' wherever merges need approval.",
+)
+_doc(
+    "flow",
+    "forge",
+    "Which forge CLI opens and reads pull requests: 'github' (`gh`), 'gitlab' (`glab`), or 'auto' — decided from the remote URL. ddflow shells out to the CLI the operator already authenticated; it stores no token.",
+)
+_doc(
+    "flow",
+    "remote",
+    "The git remote branches are pushed to and tags are published on.",
+)
+_doc(
+    "flow",
+    "develop_branch",
+    "gitflow only: the integration branch features and bugfixes branch from and land on.",
+)
+_doc(
+    "flow",
+    "production_branch",
+    "gitflow only: the released branch hotfixes branch from and releases land on. Empty means the repo's default branch (origin/HEAD, else main, else master).",
+)
+_doc(
+    "flow",
+    "feature_prefix",
+    "gitflow only: branch prefix for ordinary tasks.",
+)
+_doc(
+    "flow",
+    "bugfix_prefix",
+    "gitflow only: branch prefix for a task carrying one of `bugfix_tags`.",
+)
+_doc(
+    "flow",
+    "hotfix_prefix",
+    "gitflow only: branch prefix for a task carrying one of `hotfix_tags`. A hotfix forks from production and lands on production AND develop.",
+)
+_doc(
+    "flow",
+    "release_prefix",
+    "gitflow only: branch prefix `version cut` uses for the release branch.",
+)
+_doc(
+    "flow",
+    "bugfix_tags",
+    "Item tags that make a task a bugfix: a bugfix/ branch under gitflow, and a PATCH bump when versions are computed.",
+)
+_doc(
+    "flow",
+    "hotfix_tags",
+    "Item tags that make a task a hotfix under gitflow (forks from production). A hotfix is also a PATCH bump.",
+)
+_doc(
+    "flow",
+    "pr_merge",
+    "Who presses merge in 'pr' mode. 'on_approval' (default): `pr sync` merges once the forge reports the request APPROVED with no failing checks — a person's approval is still required, and branch protection still applies. 'auto': ask the forge to auto-merge when its own rules are met, at open time. 'human': ddflow never merges; a person does.",
+)
+_doc(
+    "flow",
+    "pr_draft",
+    "Open pull requests as drafts.",
+)
+_doc(
+    "flow",
+    "pr_labels",
+    "Labels added to every pull request ddflow opens.",
+)
+_doc(
+    "flow",
+    "pr_reviewers",
+    "Reviewers requested on every pull request ddflow opens (GitHub logins or teams; GitLab usernames).",
+)
+_doc(
+    "flow",
+    "stack",
+    "While a dependency waits in REVIEW, let its dependents START on top of its branch (a stacked pull request) instead of waiting for the merge. This is what keeps an agent working while humans review. A dependent with two unmerged dependencies on different branches still waits: one branch cannot sit on two.",
+)
+_doc(
+    "flow",
+    "on_changes_requested",
+    "What `pr sync` does when a reviewer requests changes. 'reopen' (default): the item returns to the queue with the review text attached, so the next agent to claim it sees what to fix. 'block': park it for a person.",
+)
+_doc(
+    "flow",
+    "sync_on_next",
+    "Let `ddflow next` run `pr sync` first when items wait in REVIEW, so merged work completes and requested changes come back without anyone remembering to ask. Costs one forge call per open request; a forge that cannot be reached is reported, never treated as 'nothing changed'.",
+)
+_doc(
+    "flow",
+    "tag_prefix",
+    "Prefix of version tags: `v` makes `v1.4.0`. Tags without it are not versions to ddflow.",
+)
+_doc(
+    "flow",
+    "initial_version",
+    "The version `version cut` proposes when no version tag exists yet.",
+)
+
+
+@dataclass
 class GatesConfig:
     """The per-task and per-phase quality pipelines."""
 
@@ -730,6 +864,7 @@ _doc(
 class Config:
     lease: LeaseConfig = field(default_factory=LeaseConfig)
     worktree: WorktreeConfig = field(default_factory=WorktreeConfig)
+    flow: FlowConfig = field(default_factory=FlowConfig)
     gates: GatesConfig = field(default_factory=GatesConfig)
     lessons: LessonsConfig = field(default_factory=LessonsConfig)
     session: SessionConfig = field(default_factory=SessionConfig)

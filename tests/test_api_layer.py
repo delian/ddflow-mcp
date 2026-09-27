@@ -287,6 +287,11 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
         ["gate", "verify", "T1", "unit_tests"],
         {"id": "T1", "gate": "unit_tests"},
     ),
+    "ddflow_pr_status": (["pr", "status"], {}),
+    "ddflow_pr_sync": (["pr", "sync"], {}),
+    "ddflow_version_show": (["version", "show"], {}),
+    # --dry-run writes nothing, so both surfaces see the same state.
+    "ddflow_version_cut": (["version", "cut", "--dry-run"], {"dry_run": True}),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because

@@ -249,6 +249,108 @@ URLs are in the four research transcripts and quoted in each
 `ddflow/templates/drivers/deltas/*.md`.
 
 
+## R16 — Can an autonomous queue work where merges need approval? (2026-09-27)
+
+**Operator question.** Make ddflow usable where teams run gitflow, merge only through
+approved pull requests, and tag versions — without giving up what ddflow is for: agents
+working task to task, phase by phase, in parallel, with as little human interaction as
+possible.
+
+**Claim.** Approval-gated merging can be absorbed by the queue with the agent's loop
+unchanged (`next` → `claim` → work → gates → `merge`), and with a human needed ONLY for the
+decision humans are there to make — approving — not for bookkeeping around it.
+
+**Falsifier.** Any one of: (a) an agent has to wait (poll, sleep, hold a lease) for a
+human before it can take other work; (b) a merged request needs a person to tell ddflow it
+merged; (c) review feedback needs a person to relay it to an agent; (d) ddflow can land
+unapproved work on a protected branch.
+
+**Probe.** The forge CLI contracts, read from the primary documentation rather than from
+memory (§6.5 of HANDOFF — a snippet is a pointer, never a source):
+`cli.github.com/manual/gh_pr_view` (the full `--json` field list: `reviewDecision`,
+`statusCheckRollup`, `mergeCommit`, `headRefOid`, `latestReviews`, …), `gh_pr_create`
+(prints the URL; says nothing about an existing request → ddflow looks first),
+`gh_pr_merge` (`--match-head-commit`, `--auto`, merge-queue behaviour);
+`gitlab-org/cli` docs for `glab api` (placeholders `:id`, `:fullpath`, …) and
+`glab mr create`; the GitLab REST merge-request API (`state` ∈ opened|closed|merged|locked,
+`merge_commit_sha`, `squash_commit_sha`, `detailed_merge_status`). Then an end-to-end
+test against a fake `gh` whose pushes and merges land in a REAL bare remote
+(`tests/fakeforge.py`), so every "it is on main" assertion is a statement about git.
+
+**Verdict: CONFIRMED, for all four falsifiers, with stated limits.**
+
+| falsifier | how it is refuted |
+|---|---|
+| (a) agent waits | `merge` in PR mode releases the lease and parks the item in a new derived state, **REVIEW** — not RUNNING (that is the shape of a crash) and not BLOCKED (nothing is wrong). Dependents may **stack** on the unmerged branch. |
+| (b) merged needs a person | `pr sync` (run by `next` itself while anything is in review) records the merge, passes the `merge` gate on the forge's evidence, completes the item, retargets stacked requests. |
+| (c) feedback needs relaying | "changes requested" returns the item to the queue with review bodies AND line comments; `brief` leads with them; the next claim resumes the same tree and the next `merge` updates the same request. |
+| (d) unapproved landing | ddflow merges only on an explicit APPROVED decision with no failing checks, pinned with `--match-head-commit` to the head that was approved; a stacked request is never merged into its dependency's branch; the forge's branch protection is the final authority and its refusal is reported, not worked around. ddflow holds no token — it drives `gh`/`glab` as the operator. |
+
+**Findings the design rests on.**
+
+1. **Two axes, not one.** Branching model (trunk | gitflow) and integration (local merge |
+   pull request) are independent; GitHub flow is trunk + PR. One knob would make the
+   combination nobody listed inexpressible.
+2. **"Approved" on GitLab needs a named approver.** The approvals endpoint reports
+   `approved: true` on a project with NO approval rules — "nobody had to approve", not
+   "somebody did". Treating it as approval would merge unreviewed work. Pinned by a test.
+3. **A GitHub status rollup has two shapes.** CheckRuns carry `status`/`conclusion`;
+   legacy commit statuses from external CI carry `state`. Reading one shape calls every
+   external CI "passing" by omission.
+4. **Merge commits must not count as releasable commits.** Gitflow's back-merge of the
+   tag into develop is a commit after the tag, so develop always looked one commit ahead
+   of its release. `--no-merges`. Found by the gitflow version test, mutation-verified.
+5. **The back-merge must come FROM production.** The tag sits on production's merge
+   commit; back-merging the release branch leaves the tag unreachable from develop and
+   the next version is computed from the previous tag.
+6. **Pre-existing defect found on the way:** `merge_strategy = "squash"` never committed —
+   `git merge --squash` stages the result and ignores `-m`, so ddflow reported a merge
+   with the work left uncommitted in the primary. Fixed, with a failing-first test.
+7. **Merging without a checkout generalises.** The primary can be on only one branch, and
+   gitflow lands hotfixes and releases on two. A target checked out nowhere is merged in a
+   throwaway worktree (only the ref moves); one checked out in another linked worktree is
+   refused (someone may be working in it).
+8. **Open a request only for work that could complete once merged.** The verdict is
+   computed as if `merge` had passed; anything left refuses the request, because a
+   refusal after the merge can no longer stop anything and a reviewer's time is the
+   scarce resource.
+
+**What the adversarial review of the first version found (same day).** A subagent told
+to refute it found five defects with running probes and two from documentation; all
+seven are fixed, each with a regression test that fails when the fix is reverted:
+
+* **"Pinned to the approved head" was false.** `--match-head-commit` pinned the head ddflow
+  last SAW. An item in REVIEW could be claimed, a push added, and the old approval merged
+  it — GitHub does not dismiss stale approvals by default. Now a claim of an item in
+  review is refused, and an approval (or change request) counts only if the review's own
+  `commit.oid` is the current head.
+* **An answered change request bounced forever.** The forge keeps reporting
+  CHANGES_REQUESTED until the reviewer looks again, so every sync after the fix-up push
+  reopened the item with the old feedback. Same fix: a decision on an older head is stale.
+* **A stacked request merged by a person into its dependency's branch was marked DONE**
+  while the target lacked its code. Merged is not landed: it now waits for its dependency,
+  or is parked if the dependency will never land.
+* **Abandoning an item with an open request** left the request mergeable and unrecorded.
+  Refused without `--force`. Adding this found a PRE-EXISTING crash: `abandon` on a DONE
+  item raised TypeError (`reason` passed twice to `O.refused`) instead of refusing.
+* **A closed release request was re-polled forever** and blocked its version number.
+* **`reviewDecision` is null without a required-review rule**, so approvals and change
+  requests were invisible in exactly the lightly protected repos. Derived from
+  `latestReviews` when it is null.
+* **A hotfix back-merge from the hotfix branch fails where the forge auto-deletes merged
+  branches.** It is now opened from production, like the release back-merge.
+* And `next` asked an unreachable forge once per request, each with a 120 s timeout; it
+  now stops at the first.
+
+**Not built, and why** (filed as B171–B177): a hotfix's back-merge request is reported but
+not tracked on the item; merge queues are honoured only as the forge's own refusal/queue
+(no queue-position reporting); Bitbucket/Gitea/Azure DevOps have no adapter; `version cut`
+writes no CHANGELOG file and bumps no version string in `pyproject.toml` and friends;
+there is no automatic release per completed phase; review comments are carried as text,
+not as individually resolvable threads.
+
+---
+
 ## R3 — Is MCP sufficient to make this agent-agnostic?
 
 **Claim.** Shipping only an MCP server makes the workflow portable across agents.
