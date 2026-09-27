@@ -27,18 +27,19 @@ ignore = [
 ]
 
 [lint.per-file-ignores]
-# argparse construction is inherently one long sequence of near-identical statements.
-# Splitting `build_parser` into a dozen `_add_x_parser` helpers would move the length
-# without reducing the thing that actually matters -- how much you must read to know
-# what the CLI accepts.
-"ddflow/surfaces/cli.py" = ["PLR0915", "PLR0912", "C901"]
-# `Server.handle` is a protocol dispatch table written as a method; each arm is three
-# lines and maps one JSON-RPC method. A registry here would be indirection without
-# abstraction, since no arm is reachable from anywhere else.
-# `Server.handle` is a protocol dispatch table written as a method: one arm per
-# JSON-RPC method, each three lines, none reachable from anywhere else. A registry
-# here would be indirection without abstraction, and the return count is just the
-# number of methods the protocol defines.
+# `ddflow/surfaces/cli.py` has NO per-file ignore (B163). It carried
+# `["PLR0915", "PLR0912", "C901"]` for `build_parser`, and a per-FILE ignore applies to every
+# function that happens to share the file — which for a 4,000-line module was ~45 of them.
+# Three were over the complexity limit invisibly for months and were each flagged the moment
+# B36 moved them out: `_render_workflow` (17 branches), `cmd_status` (16), `cmd_reviewers`
+# (18). All three were split. `build_parser` carries a targeted `# noqa: PLR0915` instead,
+# with the argument for it at the call site, so the suppression is exactly as wide as the
+# claim.
+#
+# `Server.handle` is a protocol dispatch table written as a method: one arm per JSON-RPC
+# method, each three lines, none reachable from anywhere else. A registry here would be
+# indirection without abstraction, and the return count is just the number of methods the
+# protocol defines. (This comment was duplicated almost verbatim; one copy.)
 "ddflow/surfaces/mcp.py" = ["PLR0912", "C901", "PLR0911"]
 # Tests and demos: magic values ARE the test, and a scenario is meant to read top to
 # bottom as a narrative rather than be decomposed into helpers.

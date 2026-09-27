@@ -245,7 +245,14 @@ def cmd_mcp(a, c: Ctx) -> int:
     return OK
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
+    # PLR0915 (statement count), suppressed HERE rather than for the whole file. argparse
+    # construction is inherently one long sequence of near-identical statements, and
+    # splitting it into a dozen `_add_x_parser` helpers would move the length without
+    # reducing what actually matters: how much you must read to know what the CLI accepts.
+    #
+    # The file-wide ignore this replaces also covered C901 and PLR0912 for ~45 other
+    # functions, three of which were over the limit and nobody knew (B163).
     p = argparse.ArgumentParser(
         prog="ddflow",
         description="A portable work-queue kernel for AI coding agents. "
