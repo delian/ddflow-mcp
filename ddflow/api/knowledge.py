@@ -466,7 +466,13 @@ def memory_add(
             id="",
         )
     mid = id or auto_id("M", text)
-    log.append("memory.recorded", mid, {"text": text, "tags": csv_list(tags)})
+    data: dict[str, Any] = {"text": text}
+    if tags:
+        # Only when given: the fold MERGES, keeping a field the event omits, and an
+        # always-present `tags: []` made correcting a fact by `--id` wipe its tags
+        # (cross-family critic).
+        data["tags"] = csv_list(tags)
+    log.append("memory.recorded", mid, data)
     replaced = bool(id) and id in st.memories
     return O.ok("memory.recorded", id=mid, replaced=replaced)
 

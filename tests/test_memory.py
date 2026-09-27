@@ -162,3 +162,10 @@ def test_a_query_returns_every_match_not_the_first_twenty(repo):
         run_cli(repo, "memory", "add", f"gpu fact number {i}", "--id", f"M-{i}")
     _c, out, _e = run_cli(repo, "--json", "memory", "list", "--query", "gpu")
     assert len(json.loads(out)["memories"]) == 23
+
+
+def test_correcting_a_memory_keeps_its_tags(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "memory", "add", "GPUs 0-3 free", "--id", "M-gpu", "--tags", "gpu")
+    run_cli(repo, "memory", "add", "GPUs 4-7 free", "--id", "M-gpu")
+    assert _state(repo).memories["M-gpu"].tags == ["gpu"]
