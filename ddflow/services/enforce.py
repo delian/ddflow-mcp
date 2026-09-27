@@ -172,15 +172,28 @@ def _this_worktree(repo: Path) -> Path | None:
     return Path(r.stdout.strip()).resolve()
 
 
-def staged_paths(repo: Path) -> list[str]:
+def staged_paths(repo: Path) -> list[str] | None:
     """Paths this commit will write.
 
     `--diff-filter=ACMR` over the INDEX, plus `--cached`, because a file the agent just
     created is not in HEAD and a diff against HEAD alone would not see it. Through
     `W.git_paths`, so a non-ASCII or non-UTF-8 name is neither C-quoted past the lease
     and view checks nor a crash of every commit.
+
+    None when git could not say. It used to collapse to `[]`, and "nothing staged" lets
+    every check pass: an `index.lock` held by a concurrent git turned the lease and view
+    checks into clean passes (roborev on 18cae1a). Callers refuse on None.
     """
-    return W.git_paths(repo, "diff", "--cached", "--name-only", "--diff-filter=ACMR") or []
+    return W.git_paths(repo, "diff", "--cached", "--name-only", "--diff-filter=ACMR")
+
+
+#: The refusal when the staged set itself is unknowable. Never a pass: "could not tell"
+#: is not "nothing to check".
+_UNKNOWN_STAGED = (
+    "ddflow: git could not report which paths this commit stages, so it cannot be "
+    "checked.\nRefusing rather than guessing. Check `git status`; a held `index.lock` "
+    "(another git running) or a damaged index is the usual cause."
+)
 
 
 #: Paths ddflow's own bookkeeping writes. Requiring a lease for these would make it
@@ -200,9 +213,12 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     if mode == "off":
         return 0, ""
 
-    paths = [
-        p for p in staged_paths(repo) if not any(p.startswith(prefix) for prefix in SELF_MANAGED)
-    ]
+    staged = staged_paths(repo)
+    if staged is None:
+        return (
+            (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
+        )
+    paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
     if not paths:
         return 0, ""
 
@@ -299,7 +315,10 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
         return 0, ""
     staged: dict[str, bytes] = {}
     names = {name for name, _ in VIEWS}
-    for p in staged_paths(repo):
+    listed = staged_paths(repo)
+    if listed is None:
+        return _verdict(mode, [_UNKNOWN_STAGED])
+    for p in listed:
         if Path(p).name not in names:
             continue
         data = staged_bytes(repo, p)

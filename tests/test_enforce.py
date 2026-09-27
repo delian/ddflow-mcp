@@ -334,3 +334,20 @@ def test_staged_paths_survives_a_filename_that_is_not_utf8(repo):
     code, msg = E.check_commit(repo)
     assert code == 1 and "a\rb.txt" in msg, msg
     E.check_views(repo)  # must not raise either
+
+
+@pytest.mark.parametrize("policy", ["block", "warn"])
+def test_an_unreadable_index_is_refused_not_read_as_nothing_staged(repo, policy):
+    """`staged_paths` collapsed git's failure into `[]`, and "nothing staged" passed every
+    check: a damaged index or a held lock turned the lease and view checks into clean
+    passes (roborev on 18cae1a). Planted with a real corrupt index -- `git diff --cached`
+    exits 128 on it."""
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text(f'[enforce]\ncommit_without_lease = "{policy}"\n')
+    (repo / ".git" / "index").write_bytes(b"garbage")
+    assert E.staged_paths(repo) is None
+    code, msg = E.check_commit(repo)
+    assert "could not report" in msg, msg
+    assert code == (1 if policy == "block" else 0), (code, msg)
+    vcode, vmsg = E.check_views(repo)  # generated_views defaults to block
+    assert vcode == 1 and "could not report" in vmsg, vmsg

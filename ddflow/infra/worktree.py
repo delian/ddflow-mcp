@@ -60,7 +60,10 @@ def git(repo: Path | str, *args: str, timeout: int = 300, check: bool = False) -
 def git_paths(repo: Path | str, *args: str, timeout: int = 60) -> list[str] | None:
     """File paths git lists, EXACTLY as the filesystem names them; None if git failed.
 
-    The one way this package reads a git path listing. Adds `-z` and reads BYTES:
+    The way a path listing SHOULD be read -- not yet the only one: several older listings
+    (`dirty`, the gate tree fingerprint, and others named in docs/HANDOFF.md §2) still
+    read without `-z` and are not migrated. A caller must treat None as "could not
+    tell", never as "no paths". Adds `-z` and reads BYTES:
     - without `-z`, git C-quotes any non-ASCII name (`"caf\\303\\251.txt"`), so a
       path built from it names no file and matches no glob;
     - with `-z` but in text mode, the raw bytes are decoded strictly as UTF-8, so ONE
