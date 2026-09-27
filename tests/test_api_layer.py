@@ -274,6 +274,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_lesson_search": (["lesson", "search", "x"], {"query": "x"}),
     "ddflow_lesson_verify": (["lesson", "verify"], {}),
     "ddflow_memory_list": (["memory", "list"], {}),
+    "ddflow_job_list": (["job", "list"], {}),
     "ddflow_recall": (["recall", "x"], {"query": "x"}),
     "ddflow_reviewers_list": (["reviewers", "list"], {}),
     "ddflow_cleanup": (["cleanup"], {}),
@@ -325,6 +326,10 @@ WRITES_NOT_COMPARABLE = {
     # Each call records a new memory under a content-addressed id / forgets one.
     "ddflow_memory_add",
     "ddflow_memory_forget",
+    # Launch a process / register one / end one: none can be invoked twice identically.
+    "ddflow_job_run",
+    "ddflow_job_add",
+    "ddflow_job_end",
     "ddflow_setup",
     "ddflow_workflow_pipeline",
     "ddflow_workflow_gate",

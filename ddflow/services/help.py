@@ -63,7 +63,17 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Shaping the work", ("phase", "task", "split", "update", "remove", "import")),
     (
         "Doing the work",
-        ("next", "claim", "heartbeat", "release", "complete", "block", "unblock", "abandon"),
+        (
+            "next",
+            "claim",
+            "heartbeat",
+            "release",
+            "complete",
+            "block",
+            "unblock",
+            "abandon",
+            "job",
+        ),
     ),
     ("Gates and review", ("gate", "review", "reviewers")),
     ("Landing it", ("merge", "cleanup")),

@@ -63,6 +63,62 @@ def cmd_lesson(a, c: Ctx) -> int:
     return FAIL
 
 
+def cmd_job(a, c: Ctx) -> int:
+    from ...api import jobs as AJ
+
+    if a.job_cmd == "run":
+        out = AJ.job_run(
+            c.repo,
+            a.item,
+            a.command,
+            log_file=a.log or "",
+            cwd=a.cwd or "",
+            agent=c.requested_agent,
+        )
+        msg = (
+            out.reason
+            if out.exit
+            else f"job {out.data['id']} running as pid {out.data['pid']}; log {out.data['log']}"
+        )
+        c.out(msg, out.body(("id", "pid", "log", "cwd")))
+        return out.exit
+    if a.job_cmd == "add":
+        out = AJ.job_add(
+            c.repo,
+            a.item,
+            a.pid,
+            command=a.command or "",
+            log_file=a.log or "",
+            agent=c.requested_agent,
+        )
+        c.out(
+            out.reason if out.exit else f"job {out.data['id']} registered",
+            out.body(("id", "pid", "log", "cwd")),
+        )
+        return out.exit
+    if a.job_cmd == "end":
+        out = AJ.job_end(
+            c.repo, a.job, exit_code=a.exit_code, note=a.note or "", agent=c.requested_agent
+        )
+        c.out(
+            out.reason if out.exit else f"job {a.job} ended (exit {out.data['exit_code']})",
+            out.body(("id", "exit_code")),
+        )
+        return out.exit
+    out = AJ.job_list(c.repo, item=a.item or "", include_ended=a.all, agent=c.requested_agent)
+    if c.json:
+        print(json.dumps(out.body("jobs"), indent=2, default=str))
+        return out.exit
+    if out.exit == NOTHING:
+        print(out.reason)
+        return NOTHING
+    for j in out.data["jobs"]:
+        print(
+            f"{j['id']}  {j['item']}  {j['status'].upper():9}  {j['detail']}\n    {j['command']}  -> {j['log']}"
+        )
+    return OK
+
+
 def cmd_memory(a, c: Ctx) -> int:
     if a.memory_cmd == "add":
         out = A.memory_add(

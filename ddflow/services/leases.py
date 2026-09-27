@@ -28,7 +28,7 @@ from typing import Any
 from ..config import Config
 from ..core import schedule
 from ..core.model import DONE, Lease, State, fold
-from ..core.schedule import conflicts, plan_blocker
+from ..core.schedule import capacities, conflicts, plan_blocker, resource_shortfall
 from ..infra import worktree as W
 from ..infra.log import EventLog
 
@@ -140,6 +140,7 @@ def acquire(
     branch: str = "",
     note: str = "",
     force: bool = False,
+    resources: list[str] | None = None,
 ) -> Lease:
     """Claim an item. Raises ``LeaseError`` (never steals) if someone live holds it.
 
@@ -232,6 +233,29 @@ def acquire(
                     alternatives=_alternatives(state, cfg, item_id, holder, now),
                 )
 
+        # Resources: checked against EVERY live lease, the claimant's own included --
+        # the same agent starting two 8-GPU runs on an 8-GPU box still overcommits it.
+        # Inside the transaction for the same reason as globs: two agents reading "4
+        # free" and both taking 4 is the check-then-act race the lock exists for.
+        wants = list(resources if resources is not None else it.resources)
+        if wants and not force:
+            try:
+                short = resource_shortfall(
+                    wants,
+                    state.active_leases(now, cfg.lease.grace_s),
+                    capacities(cfg),
+                    exclude=item_id,
+                )
+            except ValueError as exc:
+                short = str(exc)
+            if short:
+                raise LeaseError(
+                    f"{item_id} {short}. Wait for one to be released, or take something "
+                    f"that does not need it.",
+                    item=item_id,
+                    alternatives=_alternatives(state, cfg, item_id, holder, now),
+                )
+
         log.append(
             "lease.acquired",
             item_id,
@@ -244,6 +268,7 @@ def acquire(
                 "branch": branch,
                 "note": note,
                 "kind": it.kind,
+                "resources": wants,
             },
         )
         return Lease(
@@ -255,6 +280,7 @@ def acquire(
             branch=branch,
             globs=mine,
             note=note,
+            resources=wants,
         )
 
 

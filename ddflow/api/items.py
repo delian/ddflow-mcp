@@ -21,6 +21,7 @@ def update(
     globs: list[str] | None = None,
     tags: list[str] | None = None,
     priority: int | None = None,
+    resources: list[str] | None = None,
 ) -> O.Outcome:
     """Change an item's fields. `None` means "leave alone"; `[]` means "clear".
 
@@ -45,6 +46,8 @@ def update(
         fields["globs"] = list(globs)
     if tags is not None:
         fields["tags"] = list(tags)
+    if resources is not None:
+        fields["resources"] = list(resources)
     if priority is not None:
         fields["priority"] = int(priority)
 

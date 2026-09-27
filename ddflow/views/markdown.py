@@ -373,6 +373,31 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
             out.append(f"  - rejected: {d.alternatives[:160]}")
 
 
+def _brief_jobs(out: list[str], state: State) -> None:
+    """Long-running jobs nobody has recorded as ended, with their LIVE status.
+
+    Right after recovery: a job still running is the most expensive thing to restart by
+    accident, and one that died unrecorded is work to collect or redo -- both are what
+    the next session must know before it picks anything up.
+    """
+    from ..services import jobs as J
+
+    pending = [j for j in state.jobs.values() if not j.ended_at]
+    if not pending:
+        return
+    out += ["## Long-running jobs", ""]
+    for j in sorted(pending, key=lambda x: x.started_at):
+        s = J.status(j)
+        tail = {
+            "running": "WAIT for it; do not start it again",
+            "exited": "collect its result, then `ddflow job end`",
+            "gone": "it was killed: find out why before restarting",
+            "elsewhere": "check it on that host",
+        }.get(s.state, "")
+        out.append(f"- **{j.item}** `{j.id}` — {s.state.upper()}: {s.detail}. {tail}")
+    out.append("")
+
+
 def _brief_memories(out: list[str], memories: list) -> None:
     """Operational facts about this machine and repository, newest first.
 
@@ -427,6 +452,7 @@ def brief(
     """
     out: list[str] = ["# ddflow brief", ""]
     _brief_recovery(out, recovery or [])
+    _brief_jobs(out, state)
     if item:
         _brief_current(out, state, cfg, item, repo)
     _brief_ready(out, plan)

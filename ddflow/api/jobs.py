@@ -1,0 +1,152 @@
+"""`job run|add|list|end` -- long-running processes an item is waiting on."""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+from typing import Any
+
+from ..core import outcome as O
+from ..core.ids import auto_id
+from ._base import _load
+
+#: Where launched jobs write their output: under `.ddflow/local/`, which `init` ignores.
+JOB_LOG_DIR = ".ddflow/local/jobs"
+
+
+def _row(job, st) -> dict[str, Any]:
+    from ..services import jobs as J
+
+    s = J.status(job)
+    return {
+        "id": job.id,
+        "item": job.item,
+        "status": s.state,
+        "detail": s.detail,
+        "exit_code": s.exit_code,
+        "pid": job.pid,
+        "host": job.host,
+        "command": job.command,
+        "log": job.log,
+        "started_at": job.started_at,
+        "by": job.by,
+        "note": job.note,
+    }
+
+
+def _record(log, item: str, command: str, pid: int, log_path: str, cwd: str) -> str:
+    from ..services import jobs as J
+
+    jid = auto_id("J", item, command, str(pid))
+    log.append(
+        "job.started",
+        jid,
+        {
+            "item": item,
+            "command": command,
+            "pid": pid,
+            "host": J.host(),
+            "proc_start": J.proc_start(pid),
+            "log": log_path,
+            "cwd": cwd,
+        },
+    )
+    return jid
+
+
+def job_run(
+    repo: Path, item: str, command: str, *, log_file: str = "", cwd: str = "", agent: str = ""
+) -> O.Outcome:
+    """Launch `command` for `item`, detached, and record it.
+
+    Runs in the item's worktree when it has one (that is where its code is), else the
+    repository. Detached into its own session, so it outlives the agent, the MCP server
+    and a restarted remote-control service -- which is the point of a multi-hour run.
+    """
+    from ..infra import worktree as W
+    from ..services import jobs as J
+
+    log, _cfg, st = _load(repo, agent)
+    it = st.items.get(item)
+    if it is None or it.removed:
+        return O.failed("job.started", f"no such item {item!r}", id="")
+    if not command.strip():
+        return O.failed("job.started", "a job needs a command", id="")
+    where = Path(cwd) if cwd else (W.load_path(repo, it.worktree) if it.worktree else repo)
+    if not where.is_dir():
+        return O.failed("job.started", f"working directory {where} does not exist", id="")
+    # The log path is chosen BEFORE the id exists, so it is named for the item and a
+    # stamp; the id then records it.
+    out = Path(log_file) if log_file else repo / JOB_LOG_DIR / f"{item}-{int(time.time())}.log"
+    try:
+        pid = J.launch(command, where, out)
+    except RuntimeError as exc:
+        return O.failed("job.started", str(exc), id="")
+    jid = _record(log, item, command, pid, str(out), str(where))
+    return O.ok("job.started", id=jid, pid=pid, log=str(out), cwd=str(where))
+
+
+def job_add(
+    repo: Path, item: str, pid: int, *, command: str = "", log_file: str = "", agent: str = ""
+) -> O.Outcome:
+    """Register a process that was started some other way (a launcher script, torchrun)."""
+    from ..services import jobs as J
+
+    log, _cfg, st = _load(repo, agent)
+    it = st.items.get(item)
+    if it is None or it.removed:
+        return O.failed("job.started", f"no such item {item!r}", id="")
+    if pid <= 0 or not J.alive(pid):
+        return O.failed(
+            "job.started",
+            f"no running process {pid} on {J.host()}: register a job while it runs, so its "
+            f"identity (pid + start time) can be recorded",
+            id="",
+        )
+    jid = _record(log, item, command, pid, log_file, "")
+    return O.ok("job.started", id=jid, pid=pid, log=log_file, cwd="")
+
+
+def job_list(
+    repo: Path, *, item: str = "", include_ended: bool = False, agent: str = ""
+) -> O.Outcome:
+    """Jobs with their LIVE status, newest first. Ended jobs only with `include_ended`."""
+    _log, _cfg, st = _load(repo, agent)
+    jobs = sorted(st.jobs.values(), key=lambda j: j.started_at, reverse=True)
+    rows = [
+        _row(j, st)
+        for j in jobs
+        if (not item or j.item == item) and (include_ended or not j.ended_at)
+    ]
+    data = {"jobs": rows}
+    if not rows:
+        return O.nothing("job.list", "no jobs" + (f" for {item}" if item else ""), **data)
+    return O.ok("job.list", **data)
+
+
+def job_end(
+    repo: Path, job: str, *, exit_code: int | None = None, note: str = "", agent: str = ""
+) -> O.Outcome:
+    """Record how a job ended. The exit code defaults to the one its log recorded.
+
+    Refused while the process is still running: "ended" is a fact about the process,
+    and recording it early is how a queue says a run finished that is still writing.
+    """
+    from ..services import jobs as J
+
+    log, _cfg, st = _load(repo, agent)
+    j = st.jobs.get(job)
+    if j is None:
+        return O.failed("job.ended", f"no such job {job!r}", id=job)
+    if j.ended_at:
+        return O.nothing("job.ended", f"{job} already ended", id=job)
+    s = J.status(j)
+    if s.state == "running":
+        return O.refused(
+            "job.ended",
+            f"{job} is still running ({s.detail}). Stop it first, or wait.",
+            id=job,
+        )
+    code = exit_code if exit_code is not None else s.exit_code
+    log.append("job.ended", job, {"exit_code": code, "note": note or s.detail})
+    return O.ok("job.ended", id=job, exit_code=code)

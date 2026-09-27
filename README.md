@@ -499,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 86 knobs.
+cadences, and the rest of the 87 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1263,6 +1263,36 @@ now in the log, so every worktree sees a memory the moment it is written. A memo
 stopped being true is **forgotten with a reason**, never deleted: "we thought X until Y"
 is what stops the next agent re-learning X. An OptMem `LOG.txt` imports as memories
 dated when they became true. The log is committed: never put a secret in one.
+
+## Resources and long-running jobs
+
+Globs keep two agents out of one file. Work that **runs** on something — GPUs, a model
+server, a shared fleet — declares that too, and the same refusal applies:
+
+```sh
+ddflow update TRAIN.3 --resources gpu:6            # or **Resources:** gpu:6 in the plan
+ddflow claim TRAIN.3                                 # refused (exit 3) if it does not fit
+```
+
+`[schedule] resources = ["gpu=8", "vllm-fleet=1"]` sets capacities; a resource named
+nowhere is exclusive. Every live claim counts, the claimant's own included — one agent
+starting two 8-GPU runs overcommits the box just the same — and `next` withholds what
+does not fit, saying who holds what.
+
+The run itself is a **job**:
+
+```sh
+ddflow job run TRAIN.3 "uv run main.py train -c cfg.toml"   # detached; survives you
+ddflow job list        # running | exited N (from its log) | gone (killed) | elsewhere
+ddflow job end J3f2 --note "loss 0.12, ckpt in out/"         # refused while it runs
+```
+
+A launched job runs in the item's worktree, in a session of its own (it outlives the
+agent, the MCP server and a restarted remote-control service), and appends its exit code
+to its log so a run nobody watched still says how it ended. Liveness is computed, not
+stored: a zombie is not alive, and a reused pid is caught by the process start time.
+`ddflow job add --pid` registers a process started some other way. Every `brief` lists
+jobs not yet recorded as ended — "WAIT, do not start it again" for a running one.
 
 ## Status, progress, and loops
 
@@ -2164,7 +2194,7 @@ declared once and persists — see
 
 ## Configuration
 
-86 knobs across 16 sections, every one documented in place:
+87 knobs across 16 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

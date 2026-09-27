@@ -86,6 +86,9 @@ class Lease:
     branch: str = ""
     globs: list[str] = field(default_factory=list)
     note: str = ""
+    #: Physical resources this lease holds (`gpu:4`, `vllm-fleet`). See
+    #: `schedule.resource_shortfall`.
+    resources: list[str] = field(default_factory=list)
     #: Set when a `lease.expired` event was folded. The lease is KEPT so recovery can
     #: still see which worktree it pointed at.
     expired_at: str = ""
@@ -109,6 +112,10 @@ class Item:
     parent: str = ""  # a task's phase; "" for a phase
     needs: list[str] = field(default_factory=list)
     globs: list[str] = field(default_factory=list)
+    #: What the work RUNS on, beside what it writes: `gpu:4`, `vllm-fleet`. Globs keep two
+    #: agents out of one file; nothing kept two agents from both starting an 8-GPU run
+    #: on an 8-GPU box. Counted against `[schedule] resources` capacities.
+    resources: list[str] = field(default_factory=list)
     body: str = ""
     tags: list[str] = field(default_factory=list)
     priority: int = 100
@@ -188,6 +195,34 @@ class Lesson:
 
     def text(self) -> str:
         return "\n".join(x for x in (self.title, self.rule, self.why, self.how) if x)
+
+
+@dataclass
+class Job:
+    """A long-running process started for an item: a training run, a data generation.
+
+    The work of the projects ddflow is meant to take over is mostly WAITING -- a
+    multi-hour training run, a 5M-record generation across an 8-replica model fleet --
+    and a queue that knows only about files could not say whether the process an item
+    depends on is still alive, finished, or died hours ago. What liveness means here is
+    computed, never stored: see `services.jobs.status`.
+    """
+
+    id: str
+    item: str = ""
+    command: str = ""
+    pid: int = 0
+    host: str = ""
+    #: The process's start time as the kernel reports it, so a REUSED pid is not
+    #: mistaken for the job. "" where it cannot be read (not Linux).
+    proc_start: str = ""
+    log: str = ""
+    cwd: str = ""
+    started_at: str = ""
+    by: str = ""
+    ended_at: str = ""
+    exit_code: int | None = None
+    note: str = ""
 
 
 @dataclass
@@ -314,6 +349,7 @@ class State:
     research: dict[str, ResearchNote] = field(default_factory=dict)
     decisions: dict[str, Decision] = field(default_factory=dict)
     memories: dict[str, Memory] = field(default_factory=dict)
+    jobs: dict[str, Job] = field(default_factory=dict)
     sessions: dict[str, Session] = field(default_factory=dict)
     cadences: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     #: gate id -> how many times recording it fired the pipeline-order check, and how
@@ -485,6 +521,7 @@ def _h_added(st: State, ev: Event, kind: str) -> None:
     it.parent = _safe_parent(st, it.id, d.get("parent", it.parent))
     it.needs = list(d.get("needs", it.needs))
     it.globs = list(d.get("globs", it.globs))
+    it.resources = list(d.get("resources", it.resources))
     it.body = d.get("body", it.body)
     it.tags = list(d.get("tags", it.tags))
     it.priority = int(d.get("priority", it.priority))
@@ -498,7 +535,7 @@ def _h_updated(st: State, ev: Event, kind: str) -> None:
     for f in ("title", "parent", "body", "blocked_reason"):
         if f in d:
             setattr(it, f, _safe_parent(st, it.id, d[f]) if f == "parent" else d[f])
-    for f in ("needs", "globs", "tags"):
+    for f in ("needs", "globs", "tags", "resources"):
         if f in d:
             setattr(it, f, list(d[f]))
     if "priority" in d:
@@ -521,6 +558,7 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         branch=d.get("branch", ""),
         globs=list(d.get("globs", [])),
         note=d.get("note", ""),
+        resources=list(d.get("resources", [])),
     )
     it.worktree = it.lease.worktree or it.worktree
     it.branch = it.lease.branch or it.branch
@@ -794,6 +832,32 @@ def _h_research(st: State, ev: Event) -> None:
     )
 
 
+def _h_job_started(st: State, ev: Event) -> None:
+    d = ev.data
+    st.jobs[ev.subject] = Job(
+        id=ev.subject,
+        item=d.get("item", ""),
+        command=d.get("command", ""),
+        pid=int(d.get("pid", 0) or 0),
+        host=d.get("host", ""),
+        proc_start=str(d.get("proc_start", "")),
+        log=d.get("log", ""),
+        cwd=d.get("cwd", ""),
+        started_at=ev.ts,
+        by=ev.agent,
+    )
+
+
+def _h_job_ended(st: State, ev: Event) -> None:
+    j = st.jobs.get(ev.subject)
+    if j is None:
+        return
+    j.ended_at = ev.ts
+    code = ev.data.get("exit_code")
+    j.exit_code = int(code) if code is not None else None
+    j.note = ev.data.get("note", "") or j.note
+
+
 def _h_memory(st: State, ev: Event) -> None:
     """Merge, never replace -- a re-record that omits a field keeps the old one, and a
     re-record of a forgotten memory brings it back, which is what re-recording it means."""
@@ -937,6 +1001,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "decision.recorded": _h_decision,
     "decision.superseded": _h_decision_superseded,
     "memory.recorded": _h_memory,
+    "job.started": _h_job_started,
+    "job.ended": _h_job_ended,
     "memory.forgotten": _h_memory_forgotten,
     "session.started": _h_session_started,
     "session.prompt": _h_session_prompt,

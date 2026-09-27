@@ -349,6 +349,15 @@ class ScheduleConfig:
     cycle_policy: str = "error"  # error | warn
     unknown_dep_policy: str = "block"  # block | warn
     empty_phase: str = "note"  # note | problem | off
+    #: `name=capacity` for each physical resource items may declare.
+    resources: list[str] = field(default_factory=list)
+
+
+_doc(
+    "schedule",
+    "resources",
+    'Capacities of the physical resources work may declare with `--resources`, as `name=capacity`: ["gpu=8", "vllm-fleet=1"]. A claim is refused (exit 3) when the live leases\' declared use of a resource plus its own would exceed the capacity -- counted across EVERY holder, because a GPU does not care which agent is using it. A resource named nowhere here has capacity 1: exclusive. Globs keep two agents out of one file; this keeps two agents from both starting an 8-GPU run on an 8-GPU box.',
+)
 
 
 _doc(

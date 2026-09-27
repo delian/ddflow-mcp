@@ -130,6 +130,13 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "code change — a research or review task.",
                 False,
             ),
+            "resources": (
+                "string",
+                "Physical resources this claim holds, overriding the item's declared "
+                "ones, e.g. 'gpu:2'. Refused (exit 3) when live claims already use the "
+                "capacity ([schedule] resources) -- every holder counts, you included.",
+                False,
+            ),
             "force": (
                 "boolean",
                 "Override a refusal. Legitimate for exactly one thing: retrying after "
@@ -147,6 +154,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             force=bool(a.get("force")),
             no_worktree=bool(a.get("no_worktree")),
             called_from=called_from,
+            resources=a.get("resources", "") or "",
             agent=agent,
         ),
         "payload": ("item", "holder", "worktree", "branch"),
@@ -1576,6 +1584,15 @@ TOOLS: dict[str, dict[str, Any]] = {
             "body": ("string", "New detail / acceptance criteria.", False),
             "tags": ("string", "Comma-separated tags.", False),
             "priority": ("integer", "Lower is offered first (default 100).", False),
+            "resources": (
+                "string",
+                "Physical resources the work RUNS on, beside the files it writes: "
+                "'gpu:4,vllm-fleet'. `next` withholds the item and `claim` refuses it "
+                "while live claims use up the capacity ([schedule] resources). Declare it "
+                "for anything that starts a GPU job, a model server or a long run. Empty "
+                "string clears.",
+                False,
+            ),
         },
         # Typed, and the argv lambda that used to sit here is GONE rather than kept
         # "in case". The `api` branch runs first, so it was unreachable -- a second
@@ -1596,6 +1613,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             globs=_list_or_none(a, "globs"),
             tags=_list_or_none(a, "tags"),
             priority=a.get("priority"),
+            resources=_list_or_none(a, "resources"),
         ),
     },
     "ddflow_abandon": {
@@ -1676,6 +1694,89 @@ TOOLS: dict[str, dict[str, Any]] = {
             repo, a["id"], reason=a.get("reason", "") or "", agent=agent
         ),
         "payload": ("id",),
+    },
+    "ddflow_job_run": {
+        "description": (
+            "Launch a LONG-RUNNING command for an item -- a training run, a data "
+            "generation, a model server -- detached into its own session so it outlives "
+            "you, this server and a restarted remote-control service, and record it. Runs "
+            "in the item's worktree. Returns the job id, pid and log path. Then WAIT with "
+            "ddflow_job_list rather than polling the process yourself; `ddflow_brief` "
+            "shows running jobs to whoever starts the next session. Declare the item's "
+            "`resources` (ddflow_update) so nobody else starts a run on the same GPUs."
+        ),
+        "properties": {
+            "item": ("string", "Item the job is for.", True),
+            "command": ("string", "The shell command.", True),
+            "log": ("string", "Output file (default .ddflow/local/jobs/<item>-<t>.log).", False),
+            "cwd": ("string", "Working directory (default: the item's worktree).", False),
+        },
+        "api": lambda repo, a, agent: _api().job_run(
+            repo,
+            a["item"],
+            a["command"],
+            log_file=a.get("log", "") or "",
+            cwd=a.get("cwd", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id", "pid", "log", "cwd"),
+    },
+    "ddflow_job_add": {
+        "description": (
+            "Register a long-running process you started some other way (torchrun, a "
+            "launcher script), by pid, while it runs -- so its liveness can be checked by "
+            "anyone later, including after a pid is reused."
+        ),
+        "properties": {
+            "item": ("string", "Item the job is for.", True),
+            "pid": ("integer", "Its process id.", True),
+            "command": ("string", "What it is running, for humans.", False),
+            "log": ("string", "Where its output goes.", False),
+        },
+        "api": lambda repo, a, agent: _api().job_add(
+            repo,
+            a["item"],
+            int(a["pid"]),
+            command=a.get("command", "") or "",
+            log_file=a.get("log", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id", "pid", "log", "cwd"),
+    },
+    "ddflow_job_list": {
+        "description": (
+            "Long-running jobs and their LIVE status: running, exited (with the exit code "
+            "its log recorded), gone (killed: no exit recorded), elsewhere (another host), "
+            "or ended. Use it to decide whether to keep waiting, collect results, or "
+            "restart. A long run is a WAIT, never a reason to stop working the queue."
+        ),
+        "properties": {
+            "item": ("string", "Only this item's jobs.", False),
+            "all": ("boolean", "Include jobs already recorded as ended.", False),
+        },
+        "api": lambda repo, a, agent: _api().job_list(
+            repo, item=a.get("item", "") or "", include_ended=bool(a.get("all")), agent=agent
+        ),
+        "payload": "jobs",
+    },
+    "ddflow_job_end": {
+        "description": (
+            "Record that a job ended and how. Refused while the process is still running. "
+            "The exit code defaults to the one its log recorded."
+        ),
+        "properties": {
+            "job": ("string", "Job id.", True),
+            "exit_code": ("integer", "Override the recorded exit code.", False),
+            "note": ("string", "What came of it: metrics, where the output is.", False),
+        },
+        "api": lambda repo, a, agent: _api().job_end(
+            repo,
+            a["job"],
+            exit_code=a.get("exit_code"),
+            note=a.get("note", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id", "exit_code"),
     },
     "ddflow_memory_add": {
         "description": (

@@ -108,6 +108,7 @@ def claim(
     force: bool = False,
     no_worktree: bool = False,
     called_from: Path | None = None,
+    resources: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Acquire a lease and (optionally) bind a worktree. Exit 3 if refused.
@@ -136,7 +137,15 @@ def claim(
         )
     want = csv_list(globs) or None
     try:
-        lz = L.acquire(log, cfg, item, globs=want, note=note, force=force)
+        lz = L.acquire(
+            log,
+            cfg,
+            item,
+            globs=want,
+            note=note,
+            force=force,
+            resources=csv_list(resources) or None,
+        )
     except L.LeaseError as exc:
         reason = str(exc)
         if exc.alternatives:

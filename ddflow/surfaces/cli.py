@@ -41,6 +41,7 @@ from .commands.gates import cmd_gate
 from .commands.knowledge import (
     cmd_bug,
     cmd_history,
+    cmd_job,
     cmd_lesson,
     cmd_memory,
     cmd_recall,
@@ -104,7 +105,7 @@ def cmd_item_update(a, c: Ctx) -> int:
     for f in ("title", "body"):
         if getattr(a, f) is not None:
             d[f] = getattr(a, f)
-    for f in ("needs", "globs", "tags"):
+    for f in ("needs", "globs", "tags", "resources"):
         if getattr(a, f) is not None:
             d[f] = _csv(getattr(a, f))
     if a.priority is not None:
@@ -312,7 +313,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
 
     up = s.add_parser("update", help="change an item's fields")
     up.add_argument("id")
-    for f in ("title", "body", "needs", "globs", "tags"):
+    for f in ("title", "body", "needs", "globs", "tags", "resources"):
         up.add_argument(f"--{f}")
     up.add_argument("--priority", type=int)
     up.set_defaults(fn=cmd_item_update)
@@ -328,6 +329,11 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     cl.add_argument("--note")
     cl.add_argument("--force", action="store_true")
     cl.add_argument("--no-worktree", action="store_true")
+    cl.add_argument(
+        "--resources",
+        default="",
+        help="override the item's declared resources for this claim, e.g. 'gpu:2'",
+    )
     cl.set_defaults(fn=cmd_claim)
 
     hb = s.add_parser("heartbeat", help="renew a lease")
@@ -423,6 +429,30 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--check-recovery", action="store_true", default=A_LIFECYCLE.DEFAULT_CHECK_RECOVERY
     )
     br.set_defaults(fn=cmd_brief)
+
+    jb = s.add_parser("job", help="long-running processes an item waits on: run, add, list, end")
+    jb_s = jb.add_subparsers(dest="job_cmd", required=True)
+    jr = jb_s.add_parser("run", help="launch a command detached for an item and record it")
+    jr.add_argument("item")
+    jr.add_argument("command", help="shell command (quote it)")
+    jr.add_argument("--log", default="", help="output file (default .ddflow/local/jobs/)")
+    jr.add_argument("--cwd", default="", help="default: the item's worktree, else the repo")
+    jr.set_defaults(fn=cmd_job)
+    ja = jb_s.add_parser("add", help="register a process started some other way")
+    ja.add_argument("item")
+    ja.add_argument("--pid", type=int, required=True)
+    ja.add_argument("--command", default="")
+    ja.add_argument("--log", default="")
+    ja.set_defaults(fn=cmd_job)
+    jl = jb_s.add_parser("list", help="jobs with their live status (exit 2 = none)")
+    jl.add_argument("--item", default="")
+    jl.add_argument("--all", action="store_true", help="include ended jobs")
+    jl.set_defaults(fn=cmd_job)
+    je = jb_s.add_parser("end", help="record how a job ended (refused while it runs)")
+    je.add_argument("job")
+    je.add_argument("--exit-code", type=int, default=None, help="default: the one its log recorded")
+    je.add_argument("--note", default="")
+    je.set_defaults(fn=cmd_job)
 
     me = s.add_parser(
         "memory", help="operational facts about this machine/repo, shown at session start"

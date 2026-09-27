@@ -372,7 +372,71 @@ def item_blocker(
                 f"globs overlap {other_id} held by {lease.holder} ({pairs[0][0]} vs {pairs[0][1]})",
                 [other_id],
             )
+    if it.resources and it.id not in live:
+        try:
+            short = resource_shortfall(it.resources, live, capacities(cfg), exclude=it.id)
+        except ValueError as exc:
+            short = str(exc)
+        if short:
+            return Blocked(it.id, "resources", short, [])
     return None
+
+
+def parse_resources(specs: list[str]) -> dict[str, int]:
+    """`["gpu:4", "vllm-fleet"]` -> `{"gpu": 4, "vllm-fleet": 1}`. Repeats add up.
+
+    A count that is not a positive integer is a ValueError: silently reading `gpu:four`
+    as 1 would let a claim through that the operator meant to be large.
+    """
+    out: dict[str, int] = {}
+    for spec in specs:
+        name, _, count = spec.strip().partition(":")
+        name = name.strip()
+        if not name:
+            continue
+        n = int(count) if count.strip() else 1
+        if n < 1:
+            raise ValueError(f"resource {spec!r}: the count must be a positive integer")
+        out[name] = out.get(name, 0) + n
+    return out
+
+
+def capacities(cfg: Config) -> dict[str, int]:
+    """`[schedule] resources` as a dict. Undeclared resources are exclusive (capacity 1)."""
+    out: dict[str, int] = {}
+    for spec in cfg.schedule.resources:
+        name, _, cap = spec.partition("=")
+        out[name.strip()] = int(cap) if cap.strip() else 1
+    return out
+
+
+def resource_shortfall(
+    want: list[str], live: dict[str, Lease], caps: dict[str, int], exclude: str = ""
+) -> str:
+    """Why `want` does not fit beside the live leases, or "" when it does.
+
+    Every live lease counts, the caller's own included: resources are PHYSICAL. Two
+    items held by one agent still want two sets of GPUs, unlike two items writing one
+    file, where one author cannot collide with itself.
+    """
+    need = parse_resources(want)
+    if not need:
+        return ""
+    used: dict[str, list[tuple[str, int]]] = {}
+    for other_id, lease in live.items():
+        if other_id == exclude:
+            continue
+        for name, n in parse_resources(lease.resources).items():
+            used.setdefault(name, []).append((other_id, n))
+    for name, n in need.items():
+        cap = caps.get(name, 1)
+        taken = sum(k for _i, k in used.get(name, []))
+        if n > cap:
+            return f"needs {n} {name} but the capacity is {cap} ([schedule] resources)"
+        if taken + n > cap:
+            holders = ", ".join(f"{i} ({k})" for i, k in used[name])
+            return f"needs {n} {name}; {taken} of {cap} in use by {holders}"
+    return ""
 
 
 def interrupted(state: State, it: Item, live: dict[str, Lease]) -> str:

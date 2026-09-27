@@ -55,6 +55,7 @@ from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
 from .items import DEFAULT_PRIORITY, phase_add, split, task_add, update
+from .jobs import job_add, job_end, job_list, job_run
 from .knowledge import (
     Finding as ResearchFinding,
 )
@@ -175,6 +176,10 @@ __all__ = [
     "hooks",
     "import_project",
     "import_verify",
+    "job_add",
+    "job_end",
+    "job_list",
+    "job_run",
     "lesson_add",
     "lesson_search",
     "lessons_verify",

@@ -65,6 +65,7 @@ def cmd_claim(a, c: Ctx) -> int:
         # caller was already standing in a worktree, and resolving to the repo root loses
         # exactly that fact.
         called_from=c.called_from,
+        resources=a.resources or "",
         agent=c.requested_agent,
     )
     if out.exit != OK:

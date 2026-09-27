@@ -207,6 +207,8 @@ def _clean_title(text: str) -> str:
 #: several others copy. Absent in most repositories, which is fine: the agent adds them.
 _GLOBS = re.compile(r"\*\*Globs?:?\*\*:?\s*(.+)", re.I)
 _NEEDS = re.compile(r"\*\*Needs?:?\*\*:?\s*(.+)", re.I)
+#: `**Resources:** gpu:4, vllm-fleet` -- what the work runs on (see `schedule.resources`).
+_RESOURCES = re.compile(r"\*\*Resources?:?\*\*:?\s*(.+)", re.I)
 #: A markdown heading, used to group checkboxes into phases.
 _HEADING = re.compile(r"^(#{1,4})\s+(.*)$")
 
@@ -655,6 +657,9 @@ def scan_todos(
                 nd = _NEEDS.search(line)
                 if nd and anchor is not None:
                     anchor.needs = _parse_needs(nd.group(1))
+                rs = _RESOURCES.search(line)
+                if rs and anchor is not None:
+                    anchor.extra["resources"] = _parse_globs(rs.group(1))
                 continue
             done = m.group(2).lower() == "x"
             body = m.group(3).strip()
@@ -1939,6 +1944,7 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
                 "title": f.title,
                 "needs": f.needs,
                 "globs": f.globs,
+                "resources": f.extra.get("resources", []),
                 "body": f"Imported from {f.source}.",
                 # Both: the prose is what a human reads in `ddflow show`, the field is
                 # what `import --verify` counts. Deriving one from the other by regex is
