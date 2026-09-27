@@ -287,6 +287,28 @@ def _marker_in(text: str, markers: tuple[str, ...]) -> str:
     return ""
 
 
+#: A parenthesised aside still open at the end of the line.
+_OPEN_ASIDE = re.compile(r"\(([^()]*)$")
+#: Where the title of a checkbox with NO bold run ends: the first dash separator.
+_NONBOLD_SPLIT = re.compile(r"\s+(?:\u2014|--|-)\s+")
+#: How far into such a title a `MARKER:` lead may sit.
+_LEAD_WORD_CHARS = 25
+
+
+def _split_nonbold(body: str) -> tuple[str, str]:
+    """(title, annotation) of a checkbox with no bold run.
+
+    The title is the FIRST SENTENCE before any dash separator; everything after -- the
+    separator's tail, and later sentences ("Kubernetes backend. Out of scope for v1.")
+    -- is annotation, because that is where a disposition is written about the item
+    rather than in it.
+    """
+    m = _NONBOLD_SPLIT.search(body)
+    head, tail = (body[: m.start()], body[m.end() :]) if m else (body, "")
+    first, _sep, rest = head.partition(". ")
+    return first, f"{rest} {tail}".strip()
+
+
 def _disposition(raw: str) -> tuple[str, str]:
     """`("closed" | "hold" | "", marker)` for one checkbox's text (after `[ ]`).
 
@@ -302,9 +324,17 @@ def _disposition(raw: str) -> tuple[str, str]:
         close = body.find("**", 2)
         title, annotation = (body[2:close], body[close + 2 :]) if close != -1 else (body[2:], "")
     else:
-        title, annotation = "", body
+        # No bold run to say where the title ends. Reading the WHOLE line as annotation
+        # closed "Handle SKIPPED batches in the dataloader" -- live work, dropped
+        # (cross-family critic). The title is the text before the first separator; a
+        # disposition written as the leading word ("DECLINED: ...") still counts.
+        title, annotation = _split_nonbold(body)
+        lead = title.split(":", 1)[0] if ":" in title[:_LEAD_WORD_CHARS] else ""
+        annotation = f"{lead} {annotation}".strip()
     annotation = annotation[:_ANNOTATION_CHARS]
-    aside = " ".join(_TITLE_ASIDE.findall(title))
+    # Closed asides, and one left OPEN at the end of the line -- a `(Deferred to ...`
+    # whose closing paren sits on the item's next line.
+    aside = " ".join([*_TITLE_ASIDE.findall(title), *_OPEN_ASIDE.findall(title)])
     closed = _marker_in(annotation, _CLOSED_MARKERS) or _marker_in(aside, _CLOSED_MARKERS)
     if closed:
         return "closed", closed
@@ -356,6 +386,7 @@ def _status_disposition(line: str) -> tuple[str, str] | None:
 
 
 _SECTION = re.compile(r"^(#{2,6})\s+(.*)$")
+_ANY_HEADING = re.compile(r"^(#{1,6})\s+(.*)$")
 #: A fence line: ``` or ~~~, optionally indented and followed by an info string.
 _FENCE = re.compile(r"^\s{0,3}(```+|~~~+)")
 
@@ -959,7 +990,10 @@ def _id_entries(text: str) -> list[tuple[str, str, int]]:
             out.append((title, "\n".join(buf).strip(), start))
 
     for idx, ln in enumerate(lines, 1):
-        h = None if fenced[idx - 1] else _SECTION.match(ln)
+        # Level 1 included: a `# Appendix` after the last lesson is a container too, and
+        # `_SECTION` (#{2,6}) could not see it, so it leaked into that lesson's body
+        # (cross-family critic).
+        h = None if fenced[idx - 1] else _ANY_HEADING.match(ln)
         if h:
             depth, heading = len(h.group(1)), h.group(2).strip()
             if _LESSON_HEAD.match(heading):

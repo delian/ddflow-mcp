@@ -193,3 +193,20 @@ def test_a_fence_with_an_info_string_opens_a_block_and_never_closes_one(repo):
         "- [ ] **REAL.1** — work\n",
     )
     assert set(_tasks(repo)) == {"REAL.1"}
+
+
+# -- cross-family critic on 9d72c5b ------------------------------------------------------
+
+
+def test_a_non_bold_item_is_not_closed_by_a_word_in_its_title(repo):
+    assert IM._disposition("Handle SKIPPED batches in the dataloader") == ("", "")
+    assert IM._disposition("Kubernetes backend. Out of scope for v1.")[0] == "closed"
+    assert IM._disposition("DECLINED: the old approach")[0] == "closed"
+    assert IM._disposition("tidy up — DEFERRED until Q3")[0] == "hold"
+    assert IM._disposition("Example configs *(Deferred to the 2B run")[0] == "hold"
+
+
+def test_a_level_one_heading_ends_the_lesson_above_it(repo):
+    _write(repo, "docs/lessons.md", "## L1. rule\nbody\n\n# Appendix\nunrelated\n")
+    found, _ = IM.scan_lessons(repo)
+    assert "unrelated" not in found[0].body

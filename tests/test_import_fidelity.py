@@ -92,8 +92,9 @@ def test_a_marker_in_bare_title_prose_does_NOT(repo):
     scan hides exactly the work that needs doing.
 
     "Title" is the first bold run, which is the source picker's rule (`phase.py
-    ::_annotation_markers`) -- this classifier agrees with it on all 1,170 open boxes of
-    the project it was measured on. Where only the id is bold, the words after it are
+    ::_annotation_markers`) -- this classifier agrees with it on 1,166 of the 1,170 open
+    boxes of the project it was measured on (the rest: two of the picker's false
+    positives, two recorded non-findings ddflow closes). Where only the id is bold, the words after it are
     annotation, as they are there."""
     _write(repo, "docs/todo.md", DISPOSED)
     t = _tasks(repo, include_done=True)

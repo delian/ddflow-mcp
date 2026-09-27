@@ -1025,13 +1025,15 @@ Four guard rails, each of which exists because the alternative is silent:
 
 An open box is not always work. The import reads the project's own **dispositions** —
 the vocabulary and positions are those of the picker ddflow was extracted from, and
-agree with it on all 1,170 open boxes of that repository:
+agree with it on 1,166 of that repository's 1,170 open boxes. Of the four, two are the
+picker's own false positives ("cells run / skipped" in plain prose) and two are recorded
+non-findings with an unclosed "(… refuted it" aside, which ddflow closes:
 
 | The source says | Imported as |
 |---|---|
 | `DEFERRED`, `THEORETICAL`, `BLOCKED`, `ON HOLD`… after the title or in a `(aside)`; a `### Deferred` heading; `**STATUS**: DEFERRED` / `WATCH` | **blocked**, with the reason and the source line. Never offered; `ddflow unblock <id>` releases it |
 | `DECLINED`, `REFUTED`, `SUPERSEDED`, `SKIPPED`, `~~struck through~~`; `**STATUS**: SHIPPED` / `CLOSED` over an unticked box | history, like a ticked box — left out, or **abandoned** with `--include-done` |
-| a word in the title's own prose (`make the sampler handle SKIPPED batches`) | work — that is the item that fixes it |
+| a word in the title's own prose (`make the sampler handle SKIPPED batches`) | work — that is the item that fixes it. With no bold title, the title is the first sentence before a dash; a later sentence ("Out of scope for v1.") or a `MARKER:` lead is annotation |
 
 `[importer] archive_globs` names plan files that are history until a section is named
 (a 20,000-line legacy `docs/todo.md`): their open boxes import **blocked**, and
