@@ -81,9 +81,11 @@ def _candidates(repo: Path, globs: list[str]) -> list[Path]:
     operator's scratch files — matches in code nobody owns. Falls back to a filtered walk
     when this is not a git repository, so the feature still works in a bare directory.
     """
-    listed = W.git(repo, "ls-files", "-z")
-    if listed.ok and listed.out:
-        rels = [r for r in listed.out.split("\0") if r]
+    # `W.git_paths`, not `W.git(..., "-z")`: the latter decoded raw `-z` bytes as strict
+    # UTF-8, so one non-UTF-8 name made `ddflow lesson add` raise (roborev on e8543f9).
+    listed = W.git_paths(repo, "ls-files")
+    if listed:
+        rels = listed
     else:
         # RELATIVE parts, like the loop below. Filtering `p.parts` tested the ABSOLUTE
         # path, so a checkout living under any directory named `build`, `dist` or `venv`

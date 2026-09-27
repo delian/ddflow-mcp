@@ -238,3 +238,18 @@ def test_regressions_filters_superseded_lessons_itself(repo):
     assert INV.regressions(repo, _lessons(repo)) == [], (
         "regressions() reported a lesson the project has explicitly retired"
     )
+
+
+def test_a_non_utf8_filename_does_not_break_the_scan(repo):
+    """roborev on e8543f9, reproduced: `W.git(..., "ls-files", "-z")` decoded raw `-z`
+    bytes as strict UTF-8, so one latin-1-named tracked file made `scan` -- and so every
+    `ddflow lesson add` -- raise UnicodeDecodeError. The same bug had just been fixed in
+    the commit hook; one shared reader (`W.git_paths`) now serves both."""
+    import os
+
+    weird = os.fsdecode(b"caf\xe9.py")
+    (repo / weird).write_text("except OSError:\n    pass\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "odd name", "--no-verify")
+    sites = INV.scan(repo, r"except OSError", ["*.py"])
+    assert any(s.startswith(weird + ":") for s in sites), sites

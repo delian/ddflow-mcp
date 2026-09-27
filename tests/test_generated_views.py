@@ -334,3 +334,37 @@ def test_a_view_under_a_non_ascii_directory_is_still_checked(adopted):
     view.write_text(view.read_text() + "\nhand edit\n")
     r = _commit(adopted, "héllo/QUEUE.md")
     assert r.returncode != 0, "a hand-edited view under a non-ASCII path was committed"
+
+
+def test_the_log_probe_survives_a_non_utf8_shard_name(adopted):
+    """The log probe's own decode, pinned directly: the first test of this decode only
+    called `check_views` with no view staged, which returns before the probe runs, so it
+    passed with this call site reverted (roborev on e8543f9). Here the log dir is
+    tracked, a view IS staged, and an untracked shard has a non-UTF-8 name."""
+    import os
+
+    from ddflow.services import enforce as E
+
+    run_cli(adopted, "render")
+    _git(adopted, "add", VIEW)
+    odd = adopted / ".ddflow" / "events" / os.fsdecode(b"caf\xe9.jsonl")
+    odd.write_text("")
+    code, msg = E.check_views(adopted)
+    assert code == 1, msg
+    assert "caf" in msg and "could not report" not in msg, msg
+
+
+def test_git_paths_puts_z_before_the_pathspec(tmp_path):
+    """`-z` after `--` would be read as a PATH, not a flag: the listing would be
+    newline-separated and filtered to a file literally named `-z`."""
+    import os
+
+    from ddflow.infra import worktree as W
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "d").mkdir()
+    for name in (b"d/a.txt", b"d/caf\xe9.txt"):
+        (tmp_path / os.fsdecode(name)).write_text("x")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "-A"], check=True)
+    got = W.git_paths(tmp_path, "ls-files", "--", "d")
+    assert got == sorted(["d/a.txt", os.fsdecode(b"d/caf\xe9.txt")]), got

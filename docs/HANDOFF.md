@@ -63,6 +63,11 @@ quietly omits them. Both happened on 2026-09-27.
   Kilo ignores it (probed); re-running `adopt --agents kilo` adds the working `mcp` entry
   but does not remove the dead one.
 * `enforce._out_hint` names no `--out` when stale views span several directories.
+* **Seven git path listings still read without `-z`**, so a non-ASCII name comes back
+  C-quoted (wrong, not a crash): `services/gates.py:610,707,763` (the gate TREE
+  FINGERPRINT — B21's `tree_sha` — hashes paths from these), `infra/worktree.py:246,378,407`,
+  `surfaces/commands/setup.py:416`. The reader to use is `infra.worktree.git_paths`
+  (`--porcelain` needs `-z` too, but its records are `XY path`, so it wants its own parse).
 
 **Queue roborev on whatever you commit** — every run on this series has found something
 real. On `7216f5e` (job 817) it found two CONFIRMED defects the adversarial subagent had
@@ -79,7 +84,9 @@ THAT (`40950c9`, job 820): git C-quotes non-ASCII paths unless given `-z`, so th
 `git add -f` named no file. Every git path listing in `enforce.py` now uses `-z`. On THAT
 (`4f54455`, job 821): `-z` emits RAW bytes, and `text=True` decoded them strictly, so one
 non-UTF-8 filename made every commit raise. Read `-z` output as bytes and `os.fsdecode` it
-(`enforce._nul_paths`).
+(`W.git_paths`). On THAT (`e8543f9`, job 822): a THIRD caller, `inventory._candidates`,
+had the identical bug, and my test of the log-probe decode never reached the probe. All
+three now share `infra.worktree.git_paths`; each call site is pinned by its own test.
 
 ## 3. What was finished in the previous session
 
