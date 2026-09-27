@@ -35,6 +35,7 @@ import shlex
 import shutil
 import socket
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -803,32 +804,54 @@ def run_command_gate(
             "command": gdef.command,
             "missing_executable": missing,
         }
-    # PYTHONDONTWRITEBYTECODE, before the gate's own env so an operator can still
-    # override it deliberately. CPython invalidates a `.pyc` on the source's mtime and
-    # SIZE -- and an agent editing in a loop produces same-second, same-size edits by
-    # accident, which leaves a stale cache that looks valid. The run AFTER a patch then
-    # executes the code from BEFORE it and reports a pass about source that is no
-    # longer there: the worst possible failure for a verification step.
-    full_env = {"PYTHONDONTWRITEBYTECODE": "1", **os.environ, **gdef.env, **(env or {})}
-    start = time.time()
-    try:
-        p = P.run(
-            gdef.command,
-            shell=True,
-            cwd=str(cwd),
-            env=full_env,
-            capture_output=True,
-            text=True,
-            timeout=gdef.timeout_s,
-        )
-    except subprocess.TimeoutExpired:
-        return "unavailable", {
-            "reason": f"timed out after {gdef.timeout_s}s",
-            "command": gdef.command,
-            "elapsed_s": round(time.time() - start, 1),
+    # No bytecode cache in either direction. CPython invalidates a `.pyc` on the
+    # source's mtime and SIZE -- and an agent editing in a loop produces same-second,
+    # same-size edits by accident, which leaves a stale cache that looks valid. The run
+    # AFTER a patch then executes the code from BEFORE it and reports a pass about
+    # source that is no longer there: the worst possible failure for a verification step.
+    #
+    # PYTHONDONTWRITEBYTECODE alone only stops the gate WRITING a cache; it still READ
+    # the one the agent's own test run left in `__pycache__`, and executed stale code
+    # (tests/test_gates.py::test_a_gate_never_runs_a_stale_pyc_someone_else_wrote).
+    # Pointing PYTHONPYCACHEPREFIX at an empty directory makes the interpreter look
+    # there instead, so every module compiles from the source actually on disk.
+    #
+    # Set AFTER os.environ, so an ambient shell variable cannot quietly undo it, and
+    # BEFORE the gate's own env, so an operator can still override it deliberately.
+    #
+    # The cost is real, and the override is the escape hatch for it: every interpreter
+    # the gate starts compiles from source (measured ~0.2s -> ~1.0s for a heavy import
+    # set), and a gate that INSTALLS packages (`pip install -e . && pytest`, tox) records
+    # bytecode paths inside this throwaway directory in the venv's RECORD. A gate that
+    # pays too much sets `env = { PYTHONPYCACHEPREFIX = "" }` -- empty disables the
+    # prefix -- and accepts the stale-cache hazard for itself, knowingly.
+    with tempfile.TemporaryDirectory(prefix="ddflow-pyc-", ignore_cleanup_errors=True) as no_cache:
+        full_env = {
+            **os.environ,
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "PYTHONPYCACHEPREFIX": no_cache,
+            **gdef.env,
+            **(env or {}),
         }
-    except (OSError, ValueError) as exc:
-        return "unavailable", {"reason": f"could not execute: {exc}", "command": gdef.command}
+        start = time.time()
+        try:
+            p = P.run(
+                gdef.command,
+                shell=True,
+                cwd=str(cwd),
+                env=full_env,
+                capture_output=True,
+                text=True,
+                timeout=gdef.timeout_s,
+            )
+        except subprocess.TimeoutExpired:
+            return "unavailable", {
+                "reason": f"timed out after {gdef.timeout_s}s",
+                "command": gdef.command,
+                "elapsed_s": round(time.time() - start, 1),
+            }
+        except (OSError, ValueError) as exc:
+            return "unavailable", {"reason": f"could not execute: {exc}", "command": gdef.command}
     out = (p.stdout or "") + (p.stderr or "")
     # Belt and braces for the compound-command case the pre-flight cannot inspect
     # (pipes, &&, subshells): POSIX reserves 127 for "command not found" and 126 for

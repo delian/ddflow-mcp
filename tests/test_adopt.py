@@ -60,6 +60,30 @@ def test_adopt_writes_a_usable_mcp_config(repo, agent):
     assert isinstance(entry.get("args", []), list)
 
 
+def test_kilo_is_registered_under_the_key_kilo_actually_reads(repo):
+    """Kilo reads `mcp` -> {type: "local", command: [...]}, the opencode shape.
+
+    It was registered as `mcpServers` -> {command, args}, and the test above could not
+    see it: that test looks the entry up through `get_server` with the SAME shape the
+    writer used, and `DOCUMENTED_SHAPES` pins what each shape looks like, not which agent
+    gets which. So an agent assigned the wrong shape passed both. Probed against Kilo
+    7.2.20 (`kilo mcp list` in a scratch repo): the `mcpServers` file reported "No MCP
+    servers configured", the `mcp` file listed the server. Every `adopt --agents kilo`
+    until then wrote a file Kilo ignored and reported success. Primary doc:
+    https://kilo.ai/docs/automate/mcp/using-in-cli
+
+    Read LITERALLY, not through `get_server`, for the reason above.
+    """
+    assert run_cli(repo, "adopt", "--agents", "kilo")[0] == 0
+    data = json.loads((repo / ".kilo" / "kilo.json").read_text())
+    assert "mcpServers" not in data, "Kilo ignores `mcpServers`"
+    entry = data["mcp"]["ddflow"]
+    assert entry["type"] == "local"
+    assert isinstance(entry["command"], list) and entry["command"], entry
+    assert "args" not in entry, "Kilo takes the arguments inside `command`"
+    assert entry["enabled"] is True
+
+
 def test_cursor_gets_an_always_applied_project_rule(repo):
     """Cursor's precedence puts Project Rules ABOVE AGENTS.md.
 
@@ -168,7 +192,7 @@ def test_every_supported_agent_is_named_where_a_user_would_look(repo):
 #:
 #: Sources: docs/RESEARCH.md R15 records the doc URL behind every line here.
 DOCUMENTED_SHAPES: dict[str, dict] = {
-    # The common case: Claude Code, Gemini CLI, Cursor, Kilo, Kimi, Qwen, Antigravity,
+    # The common case: Claude Code, Gemini CLI, Cursor, Kimi, Qwen, Antigravity,
     # Devin, Qodo, Tabnine.
     "mcpServers": {"mcpServers": {"ddflow": {"command": "uvx", "args": ["ddflow-mcp"]}}},
     # VS Code: top-level `servers`, and the transport is NAMED in the entry.
@@ -187,7 +211,8 @@ DOCUMENTED_SHAPES: dict[str, dict] = {
     },
     # ZCode (GLM): nested under `mcp` -> `servers`.
     "mcp.servers": {"mcp": {"servers": {"ddflow": {"command": "uvx", "args": ["ddflow-mcp"]}}}},
-    # opencode: `command` is ONE array including the arguments, plus an explicit `enabled`.
+    # opencode and Kilo: `command` is ONE array including the arguments, plus an explicit
+    # `enabled`.
     "opencode": {
         "mcp": {"ddflow": {"type": "local", "command": ["uvx", "ddflow-mcp"], "enabled": True}}
     },
@@ -287,3 +312,18 @@ def test_every_agent_delta_names_its_own_mcp_arrangement():
             assert "no project-level" in text.lower() or "no mcp" in text.lower(), (
                 f"{key}: {target.delta} must say there is no project MCP file to write"
             )
+
+
+@pytest.mark.parametrize("existing", ['{"mcp": null}', '{"mcp": ["x"]}', '["x"]'])
+def test_a_config_holding_a_non_object_is_skipped_not_crashed_or_clobbered(repo, existing):
+    """Valid JSON with a non-object where servers go used to raise out of `adopt` (an
+    `assert` for null, a TypeError for a list) and abort it partway. Replacing it would
+    destroy the operator's data, so the answer is SKIPPED, the file untouched."""
+    cfg = repo / ".kilo" / "kilo.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(existing)
+    rc, out, err = run_cli(repo, "adopt", "--agents", "kilo")
+    assert "Traceback" not in err, err
+    assert rc == 0, err
+    assert f"SKIPPED {'.kilo/kilo.json'}" in out, out
+    assert cfg.read_text() == existing, "the operator's file was changed"

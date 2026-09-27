@@ -325,7 +325,19 @@ from this list); these are the rest, ranked as it ranked them.
   page is worse than a missing one, because a reader who finds nothing reads the code
   while a reader who finds a wrong default trusts it.
 
-- **B18 — regenerate-and-diff guard for generated files.** Any file marked generated is
+- **B18 — regenerate-and-diff guard for generated files. ✅ CLOSED 2026-09-27.**
+  `services/enforce.py::check_views`, run by the pre-commit hook after the lease check: a
+  STAGED view (a `views.markdown.VIEWS` name whose index bytes carry the GENERATED marker)
+  must equal what the log regenerates now, or the commit is refused with the file named
+  and `ddflow render` + `git add` as the remedy. Knob `[enforce] generated_views` (block |
+  warn | off, default block — it fires only on a commit that includes a view). Checks the
+  INDEX, not the working copy; finds views by marker, so `render --out` is covered. The
+  views now come from ONE map, `VIEWS`/`render_views`: `sessions.bundle` held a copy while
+  its docstring said it shared this one, and wrote different bytes. Tests:
+  `tests/test_generated_views.py` (9), 6 mutations. **Not covered, deliberately:** the
+  driver copies `adopt` writes to `docs/ddflow/drivers/` carry no marker, and the managed
+  AGENTS.md/CLAUDE.md blocks are already compared by `rules_status` in `doctor`.
+  *Original text below.* Any file marked generated is
   regenerated in pre-commit and must come back byte-identical. ddflow's own
   `docs/ddflow/*.md` views have exactly this hazard.
 
@@ -361,7 +373,26 @@ from this list); these are the rest, ranked as it ranked them.
   learned to skip it — 24 new clones arrived through that gap. "A count says 'worse' and
   never 'which'."
 
-- **B21 — verification-sandbox integrity.** Three real hazards for a system that runs
+- **B21 — verification-sandbox integrity. ✅ CLOSED 2026-09-27 — and it was NOT merely
+  unmarked.** Two of the three remedies had shipped (`tree_sha` in gate evidence; the
+  verdict from `returncode`, never parsed from stdout). The third had not:
+  `PYTHONDONTWRITEBYTECODE=1` stops a gate WRITING a `.pyc`, but it still READ the one the
+  agent's own test run left in `__pycache__`, and executed the stale code — probed with a
+  same-size, same-mtime edit. The existing test pinned the env var, not the hazard, so it
+  passed both ways. Fixed in `services/gates.py::run_command_gate` by also pointing
+  `PYTHONPYCACHEPREFIX` at an empty per-run directory, both set AFTER `os.environ` so an
+  ambient shell setting cannot undo them (a global `PYTHONPYCACHEPREFIX` is common, and
+  its directory fills from the operator's own runs). Tests:
+  `test_a_gate_never_runs_a_stale_pyc_someone_else_wrote`,
+  `test_an_ambient_pycache_prefix_does_not_reintroduce_the_stale_cache`; 3 mutations.
+  **The cost, found by adversarial review:** every interpreter a gate starts now compiles
+  from source (~0.2s -> ~1.0s on a heavy import set; this repo's end-to-end view tests went
+  38s -> 53s), and a gate that installs packages records bytecode paths in a deleted
+  temp directory in the venv's RECORD. A gate opts out with
+  `env = { PYTHONPYCACHEPREFIX = "" }` (verified: empty disables the prefix).
+  The hazard then bit this session's own mutation testing: a same-size mutant restored
+  within one second left `gates.py`'s mutant bytecode in place, and the test "failed" on
+  correct code. *Original text below.* Three real hazards for a system that runs
   parallel agents in worktrees: a patch can forge a `PASSED` line on stdout; same-second
   same-size edits leave valid-looking stale `.pyc` so the post-patch run re-executes the
   old code; and a probe is evidence about the tree it ran on, which a concurrent agent

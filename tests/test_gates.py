@@ -182,6 +182,77 @@ def test_the_runner_forbids_bytecode_caching(repo):
     assert "1" in ev["tail"], f"PYTHONDONTWRITEBYTECODE not set for the gate: {ev['tail']!r}"
 
 
+def test_a_gate_never_runs_a_stale_pyc_someone_else_wrote(repo, monkeypatch):
+    """The test above pins an env var; this one pins the HAZARD, and the var alone did
+    not prevent it.
+
+    `PYTHONDONTWRITEBYTECODE` stops the gate WRITING a cache. It does not stop the gate
+    READING one -- and the agent's own test run, outside any gate, writes them all the
+    time. Planted: import once (cache written), then a same-size edit with the mtime put
+    back. CPython validates a `.pyc` on exactly those two fields, so the gate executed the
+    OLD source and reported on code that was no longer there. Probed 2026-09-27; that is
+    why B21 was NOT the "fully implemented, merely unmarked" item the handoff believed.
+    """
+    import os
+    import subprocess
+
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    # With an ambient prefix (e.g. this suite running inside a ddflow gate) the gate would
+    # miss the planted cache even with the fix removed, and this test would pass both
+    # ways. Found by an adversarial review's mutation.
+    monkeypatch.delenv("PYTHONPYCACHEPREFIX", raising=False)
+    mod = repo / "stale_probe_mod.py"
+    mod.write_text('VALUE = "old"\n')
+    # Planted with caching explicitly ON: this suite may itself be running inside a gate,
+    # which now sets both variables, and inheriting them would plant nothing.
+    plant_env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in ("PYTHONDONTWRITEBYTECODE", "PYTHONPYCACHEPREFIX")
+    }
+    subprocess.run(
+        [sys.executable, "-c", "import stale_probe_mod"], cwd=repo, env=plant_env, check=True
+    )
+    assert list((repo / "__pycache__").glob("stale_probe_mod.*.pyc")), "no cache to go stale"
+    st = mod.stat()
+    mod.write_text('VALUE = "new"\n')  # same size
+    os.utime(mod, ns=(st.st_atime_ns, st.st_mtime_ns))  # same mtime
+
+    g = GateDef(
+        id="probe",
+        command=f"{sys.executable} -c 'import stale_probe_mod as m; print(m.VALUE)'",
+        cwd="repo",
+    )
+    _outcome, ev = run_command_gate(g, repo)
+    assert "new" in ev["tail"], f"the gate ran the stale cache: {ev['tail']!r}"
+
+
+def test_an_ambient_pycache_prefix_does_not_reintroduce_the_stale_cache(repo, monkeypatch):
+    """People set PYTHONPYCACHEPREFIX globally to keep `__pycache__` out of their trees.
+    That directory fills from their own runs, so inheriting it is the same hazard with
+    the cache moved. Only the gate's OWN `env` -- a deliberate choice -- may override."""
+    from ddflow.services.gates import GateDef, run_command_gate
+
+    ambient = repo / "ambient-cache"
+    monkeypatch.setenv("PYTHONPYCACHEPREFIX", str(ambient))
+    monkeypatch.setenv("PYTHONDONTWRITEBYTECODE", "")
+    show = "import os; print(os.environ['PYTHONPYCACHEPREFIX'], repr(os.environ['PYTHONDONTWRITEBYTECODE']))"
+    _o, ev = run_command_gate(
+        GateDef(id="p", command=f'{sys.executable} -c "{show}"', cwd="repo"), repo
+    )
+    assert str(ambient) not in ev["tail"] and "'1'" in ev["tail"], ev["tail"]
+
+    mine = GateDef(
+        id="p",
+        command=f'{sys.executable} -c "{show}"',
+        cwd="repo",
+        env={"PYTHONPYCACHEPREFIX": "/x"},
+    )
+    _o, ev = run_command_gate(mine, repo)
+    assert ev["tail"].startswith("/x "), f"a gate's own env must still win: {ev['tail']!r}"
+
+
 def test_a_gate_result_records_which_tree_it_ran_on(repo):
     """Evidence with no subject is an assertion. Two agents in two worktrees, or one
     agent editing between gates, and 'the tests passed' stops naming what it passed on."""

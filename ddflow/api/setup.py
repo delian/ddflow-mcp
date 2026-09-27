@@ -302,6 +302,10 @@ def hooks(repo: Path, *, action: str = "status", force: bool = False, agent: str
         return O.ok("hooks", message=msg, installed=E.installed(repo))
     if action == "check-commit":
         code, msg = E.check_commit(repo, cfg)
+        if code == 0:
+            vcode, vmsg = E.check_views(repo, cfg)
+            msg = "\n".join(x for x in (msg, vmsg) if x)
+            code = vcode
         if code == 0 and cfg.enforce.require_item_trailer:
             tcode, tmsg = E.check_item_trailer(repo)
             msg = "\n".join(x for x in (msg, tmsg) if x)

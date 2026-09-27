@@ -499,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 74 knobs.
+cadences, and the rest of the 75 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -2094,7 +2094,7 @@ declared once and persists — see
 
 ## Configuration
 
-74 knobs across 15 sections, every one documented in place:
+75 knobs across 15 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2137,7 +2137,9 @@ part that matters.
   interrupted agent's work is found rather than lost.
 * **Cadences** (`ddflow cadence`) tell you which periodic passes are due — bug hunts,
   dedupe, lesson compression — from the log rather than a calendar.
-* **A commit hook** (`ddflow hooks install`) can refuse an unclaimed edit outright.
+* **A commit hook** (`ddflow hooks install`) can refuse an unclaimed edit outright,
+  and refuses a staged `ddflow render` view that the log no longer regenerates
+  byte-for-byte — hand-edited, or stale (`[enforce] generated_views`).
 
 **Not automated, on purpose:**
 

@@ -401,9 +401,15 @@ def render(
         text = fn(st, cfg) if len(inspect.signature(fn).parameters) > 1 else fn(st)
         return O.ok("render", show=show, text=text, files=[])
 
+    from ..config import Config
     from ..infra.store import Store
 
-    files = render_md.write_views(repo, Store(repo, cfg).ensure(log), cfg, subdir=out_dir)
+    # Written views are rendered from the config FILES only, never `DDFLOW_*` env
+    # overrides. A file that gets committed must be reproducible from what is committed,
+    # or the pre-commit check (B18) refuses a correct render made under one environment
+    # and committed under another -- blaming a hand edit that never happened.
+    committed_cfg = Config.load(repo, env={})
+    files = render_md.write_views(repo, Store(repo, cfg).ensure(log), committed_cfg, subdir=out_dir)
     return O.ok("render", show="", text="", files=[str(f) for f in files])
 
 

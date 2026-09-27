@@ -10,18 +10,19 @@ the repository; nothing depends on remembering the conversation.
 
 | # | File | Why |
 |---|---|---|
-| 1 | `AGENTS.md` (and `CLAUDE.md`) | the managed work-queue block: claim before you edit |
+| 1 | *(none yet)* | **This repo has no `AGENTS.md` or `CLAUDE.md`** — adopting ddflow into itself is B7, an operator decision (§8). Earlier versions of this file said to read them |
 | 2 | `docs/BACKLOG.md` | 170 entries, with `✅ CLOSED` markers. The **top** section is a 2026-09-27 audit |
 | 3 | `docs/RESEARCH.md` | R15 is the agent-config research; §R-log covers the event log |
 | 4 | `docs/ARCHITECTURE.md` | the layering the AST test enforces |
 | 5 | `README.md` | the user-facing surface. It has ratchets pointing at it — see §4 |
 
-**The house rules that are not negotiable** (they are in `CLAUDE.md`, and every one of them
-caught a real defect during this session — see §6):
+**The house rules that are not negotiable** (they live HERE, since there is no `CLAUDE.md`;
+every one of them caught a real defect — see §6):
 
 * **No source change without a runnable probe that fails before the fix and passes after.**
   Then MUTATION-VERIFY it: revert the fix, watch the test go red, restore. A test that
-  passes both ways proves nothing, and is the single commonest failure here.
+  passes both ways proves nothing, and is the single commonest failure here. Run every
+  mutation check with `PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=$(mktemp -d)` (§6.6).
 * **`uv run pytest tests/ -q -m ""`** — the `-m ""` is load-bearing. The default `addopts`
   is `-m 'not slow'`, so a bare run silently **deselects 21 end-to-end scenarios**. A commit
   touching any surface must run with `-m ""`.
@@ -35,38 +36,40 @@ caught a real defect during this session — see §6):
 
 ```
 branch: main          (a standalone repo; the parent run_nemo_run tree is unrelated)
-HEAD:   564a3ad       "roborev 816: five findings, one a defect in B25 itself"
-pushed: yes — origin/main == 564a3ad
-tree:   CLEAN — nothing uncommitted, nothing in flight
+HEAD:   the commit that carries THIS version of this file — `git log -1 -- docs/HANDOFF.md`
+        (written this way on purpose: a hard-coded sha here went stale the moment it was
+        committed, twice)
 ```
 
-**Verified green at that commit**, and worth re-running before you trust it:
+**Verified.** `0777084` — the previous session's tip, which it had NOT fully run — was
+re-run on 2026-09-27 in a clean worktree: **1281 passed, 3 skipped, ruff clean**. The commit
+on top of it (Kilo, B21, B18) is verified in its own commit message; if that message does
+not say "full suite green", it was not.
 
 ```sh
 uv run ruff check . && uv run ruff format --check .
-uv run pytest tests/ -q -m ""        # ~27 min. Expect ~1285 passed, 1 skipped.
-uv run python demos/run_all.py       # ~2.5 min. Expect 6/6, 219 assertions.
+uv run pytest tests/ -q -m ""        # ~21-25 min.
+uv run python demos/run_all.py       # ~2.5-5 min. Expect 6/6, 219 assertions.
 ```
 
-**Run the full suite before trusting this tree.** It was green at **1280 passed** on
-`9234cdb`. The follow-up `564a3ad` was verified against ruff, the **eight test files it
-touches** (288 passed, 1 skipped) and the demos (6/6) — but the full `-m ""` run on that
-exact state was interrupted rather than completed. That is not a known failure; it is an
-unverified claim, and this file will not pretend otherwise.
+**Run a full suite in a separate worktree, not the one you are editing.** Tests spawn
+`python -m ddflow` from the working tree, so editing during a 20-minute run silently mixes
+two states into one result. `git stash create` + `git worktree add --detach` is the
+snapshot — and it does NOT carry untracked files: copy new test files in, or the run
+quietly omits them. Both happened on 2026-09-27.
 
-If anything is red, the failure is **new information**. Nothing was left half-finished.
+**Open follow-ups from the 2026-09-27 adversarial review** (real, small, not done):
+* Projects adopted for Kilo before the fix still hold a dead `mcpServers.ddflow` block.
+  Kilo ignores it (probed); re-running `adopt --agents kilo` adds the working `mcp` entry
+  but does not remove the dead one.
+* `enforce.staged_paths` does not use `git diff -z`, so a path with non-ASCII characters
+  comes back C-quoted and escapes both the lease check (pre-existing) and the view check.
+* `enforce._out_hint` names no `--out` when stale views span several directories.
 
-`roborev review 9234cdb` (job 816) found **five findings, all CONFIRMED, all fixed** in the
-commit after it — including a real defect in the B25 work: `expected = completed // every`
-assumed every run happened at its scheduled point, so a cadence that fired early and then
-stopped had `ran > expected`, the shortfall floored to zero, and `doctor` stayed silent while
-`ddflow cadence` called the pass DUE. The measure is now `since` (completions since the last
-run), the same quantity due-ness uses. **Queue roborev on whatever you commit** — every run
-on this series found something real, including one bug that reached a pushed commit.
+**Queue roborev on whatever you commit** — every run on this series has found something
+real.
 
----
-
-## 3. What was just finished (uncommitted)
+## 3. What was finished in the previous session
 
 Shipped in `9234cdb`. Three backlog items, all closed in `docs/BACKLOG.md`, all
 mutation-verified (31 mutations across the four slices).
@@ -122,26 +125,29 @@ and 2 are done (§3). **Resume at group 3.**
 
 ### Already resolved before you start — do not rebuild these
 
-* **B21 (verification-sandbox integrity) is already fully implemented.** Verified against the
-  source: `tree_sha` in gate evidence (`services/gates.py`), `PYTHONDONTWRITEBYTECODE=1` in
-  the gate env, and the verdict taken from `returncode` — never parsed from stdout. Its entry
-  was simply never marked. **Mark it closed and move on.**
+* **B21 (verification-sandbox integrity) — CLOSED 2026-09-27, and this file was wrong about
+  it.** An earlier version of this handoff said it was "fully implemented, merely unmarked".
+  A probe refuted that: `PYTHONDONTWRITEBYTECODE=1` stops a gate *writing* a `.pyc` but not
+  *reading* a stale one, so a gate executed old code. Fixed with `PYTHONPYCACHEPREFIX`; see
+  the B21 entry. The lesson for you: **a claim of "already done" is a claim — probe it.**
 * **B15** is closed (`gates.verify` mutation-verifies a gate).
 
-### Group 3 — the doc-integrity trio. START HERE.
+### Group 3 — the doc-integrity trio. B18 done; START at B17.
 
 These three share a "what does this diff touch?" helper; build it once.
 
-* **B18 — regenerate-and-diff guard for generated files.** *Partly there already*:
-  `views/markdown.py:383` regenerates every view and its docstring CLAIMS "same state in,
-  same bytes out". Nothing proves it. Build the check that regenerates and asserts
-  byte-identical output, and wire it into the commit gate. This is B18's natural first case.
+* **B18 — CLOSED 2026-09-27.** `enforce.check_views` in the pre-commit hook; knob
+  `[enforce] generated_views`; one view map (`views.markdown.VIEWS`). See its backlog entry.
+  It did NOT need a "what does this diff touch?" helper — the staged paths were enough — so
+  that helper is still unbuilt; B17 is where it earns its keep.
 * **B17 — doc-surface sync driven by the diff.** For every identifier/knob/default the diff
   removes or renames, grep the doc globs and fail on stale hits outside the diff.
-  **A real instance is waiting for you**: `templates/drivers/deltas/kilo-cline.md` documents
-  Kilo's MCP entry as `{"type": "local", "command": [...]}` while `_register_mcp` writes
-  `{"command": ..., "args": [...]}` for `SHAPE_MCP_SERVERS`. One of the two is wrong — check
-  Kilo's own docs (R15's method), fix whichever, and let B17 catch the class.
+  *The real instance that was waiting is FIXED (2026-09-27)*: the WRITER was wrong. Kilo reads
+  `mcp` (opencode's shape), and a probe against Kilo 7.2.20 showed the `mcpServers` file ddflow
+  wrote was silently ignored — so `adopt --agents kilo` never registered anything. The delta
+  doc was nearly right (its `timeout: 120` is milliseconds in Kilo). Two claims in one repo
+  disagreeing is B17's class exactly; `DOCUMENTED_SHAPES` missed it because it is keyed by
+  shape, not by agent. See RESEARCH R15's 2026-09-27 note.
 * **B22 — prose-pin coverage before editing an instruction file.** Which sentences in a
   rulebook are pinned by a test? Compressing one without knowing deleted nine rules silently
   on the source project.
@@ -183,7 +189,7 @@ This is not ceremony. On this session each reviewer found defects the other two 
 ```sh
 # 1. cross-family critic (different pretraining family — the only independent reviewer)
 cd /ai/delian/src/run_nemo_run/.claude/worktrees/<a-worktree>
-uv run scripts/critic_review.py --dirty --repo /ai/delian/src/run_nemo_run/ddflow \
+uv run scripts/critic_review.py --dirty --repo /home/delian/src/ddflow \
     -c configs/review_critic.toml --intent "<what the change does>"
 #   NOTE: this script lives in the PARENT repo, not in ddflow. Give it --repo.
 #   Budget >1500s. A SIGTERM/timeout is exit 143 = UNAVAILABLE, which is NOT a pass —
@@ -201,7 +207,7 @@ Do NOT run `roborev init` or install `agent-hook`.
 
 ---
 
-## 6. The five traps this session actually fell into
+## 6. The traps these sessions actually fell into
 
 Every one of these cost real time. They are the reason for the rules in §1.
 
@@ -231,6 +237,13 @@ Every one of these cost real time. They are the reason for the rules in §1.
    Code reads Claude's `.mcp.json`; its official docs say `.kimi-code/mcp.json`. Trusting the
    snippet would have written the wrong file and reported success. **Fetch the primary doc.**
 
+6. **Mutation testing is itself exposed to B21's hazard.** A mutant that swaps two lines
+   keeps the file's size; restored within the same second, it keeps its mtime too, and
+   CPython goes on running the MUTANT's cached bytecode. A test then "fails" on correct
+   code — or, the other way round, a mutant is never loaded and "survives". Run every
+   mutation check with `PYTHONDONTWRITEBYTECODE=1 PYTHONPYCACHEPREFIX=$(mktemp -d)`.
+   This cost real time on 2026-09-27.
+
 And one that is structural rather than a mistake: **evidence already in the repository beats a
 new probe.** The pointer-stub design for B170 was refuted by a sentence already in
 `templates/drivers/deltas/kilo-cline.md` — *"a link is only followed if the agent chooses to
@@ -242,7 +255,7 @@ follow it."* Grep before designing.
 
 * **`-m ""`** (§1). Eleven runs in this session read "21 deselected" before anyone noticed.
 * **The README has ratchets pointing at it.** `test_the_readme_knob_counts_match_the_config`
-  pins the knob count (currently **74 across 15 sections**) and
+  pins the knob count (currently **75 across 15 sections**) and
   `test_the_readme_names_each_agents_real_config_path` pins every agent's config path. Add a
   knob or an agent and the README must change in the same commit.
 * **`test_every_supported_agent_is_named_where_a_user_would_look`** requires every agent in

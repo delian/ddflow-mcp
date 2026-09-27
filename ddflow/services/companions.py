@@ -43,6 +43,7 @@ from ..infra import proc as P
 from .adopt import (
     AGENT_TARGETS,
     SHAPE_TOML,
+    UnplaceableConfig,
     get_server,
     place_server,
     server_entry_for,
@@ -483,7 +484,10 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         # and re-running `companions add` -- the obvious remedy -- reported success and
         # did nothing.
         return "unchanged", f"{rel} already registers {c.id} with the same launch command"
-    place_server(data, target.shape, c.id, c.entry())
+    try:
+        place_server(data, target.shape, c.id, c.entry())
+    except UnplaceableConfig as exc:
+        return "refused", f"SKIPPED {rel}: {exc}; add {c.id} by hand"
     if dry_run:
         # The MERGED result, not a lone entry: the write merges into a file holding the
         # operator's other servers, and a preview showing only the addition misleads in

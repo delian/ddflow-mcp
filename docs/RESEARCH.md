@@ -174,11 +174,11 @@ form:
 
 | shape | who | structure |
 |---|---|---|
-| `mcpServers` | Claude, Gemini, Cursor, Kilo, Kimi, Qwen, Antigravity, Devin, Qodo, Tabnine | `{"mcpServers": {"ddflow": {command, args}}}` |
+| `mcpServers` | Claude, Gemini, Cursor, Kimi, Qwen, Antigravity, Devin, Qodo, Tabnine | `{"mcpServers": {"ddflow": {command, args}}}` |
 | `servers` | **VS Code** | `{"servers": {"ddflow": {"type": "stdio", ...}}}` |
 | `mcpServers` + `type`/`tools` | **Copilot CLI** | `type: "local"`, and `tools` is an ALLOWLIST |
 | `mcp` → `servers` | **ZCode (GLM)** | nested one level deeper |
-| `mcp` + array command | **opencode** | `command` is ONE array including the arguments |
+| `mcp` + array command | **opencode**, **Kilo** (an opencode fork; corrected 2026-09-27 — see below) | `command` is ONE array including the arguments |
 
 **Three findings worth more than the table.**
 
@@ -203,6 +203,16 @@ flattened, Copilot's `tools` dropped) left it **green**. Replaced with `DOCUMENT
 in `tests/test_adopt.py`: the expected JSON written out **literally**, as the external
 contract it is. All five mutations now fail. *Parity is not correctness — the fixture has
 to come from outside the code it checks.*
+
+**And it still missed one (2026-09-27).** `DOCUMENTED_SHAPES` is keyed by SHAPE: it pins
+what each shape looks like, not which agent is assigned which. Kilo was assigned
+`mcpServers` while its own delta doc (`templates/drivers/deltas/kilo-cline.md`) showed the
+`mcp` form — two claims in one repo, one of them wrong. Kilo's primary docs
+(`kilo.ai/docs/automate/mcp/using-in-cli`) and a probe against Kilo 7.2.20 settled it: an
+`mcpServers` block in `.kilo/kilo.json` gives "No MCP servers configured"; the `mcp` block
+lists the server. Kilo's CLI is an opencode fork and takes opencode's shape. Every earlier
+`adopt --agents kilo` wrote a file Kilo ignored. Pinned by
+`test_kilo_is_registered_under_the_key_kilo_actually_reads`, which reads the file literally.
 
 **Instruction surfaces — the second half, and a design REFUTED before it shipped.**
 

@@ -14,7 +14,11 @@ The driver is `templates/drivers/implement-phase.md`. Read and follow it in full
 MCP registration in `.kilo/kilo.json`:
 
 ```json
-{ "mcpServers": { "ddflow": {
+{ "mcp": { "ddflow": {
     "type": "local", "command": ["python3", "-m", "ddflow", "--repo", ".", "mcp"],
-    "timeout": 120 } } }
+    "enabled": true } } }
 ```
+
+The key is `mcp`, not `mcpServers`: Kilo silently ignores an `mcpServers` block. `command`
+is ONE array including the arguments. `timeout`, if you add one, is in MILLISECONDS
+(default 10000). Source: https://kilo.ai/docs/automate/mcp/using-in-cli

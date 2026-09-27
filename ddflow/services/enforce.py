@@ -267,6 +267,91 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     return 1, msg
 
 
+def staged_bytes(repo: Path, path: str) -> bytes | None:
+    """The INDEX copy of ``path`` -- what the commit will actually write.
+
+    Not the working copy: a file fixed on disk but not re-staged would pass a check of
+    the disk while the commit carried the broken bytes.
+    """
+    r = P.run(["git", "-C", str(repo), "show", f":{path}"], capture_output=True, timeout=60)
+    return r.stdout if r.returncode == 0 else None
+
+
+def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
+    """(exit_code, message) for B18: a staged generated view must be byte-identical to
+    what the log regenerates now.
+
+    `docs/ddflow/` is SELF_MANAGED, so the lease check waves views through -- rightly,
+    since rendering needs no claim -- and until this nothing checked them at all. A view
+    that disagrees with the log is worse than none: it is the page people read INSTEAD
+    of the log. It goes wrong two ways, both caught here: hand-edited, or stale because
+    the queue moved after `ddflow render`.
+
+    A file counts as a view when its name is in `VIEWS` AND its staged content carries
+    the GENERATED marker -- so `render --out elsewhere` is still checked, while a
+    project's own `QUEUE.md`, or a document that merely quotes the marker, is not.
+    Fires only when a view is STAGED: a commit that does not include one is never
+    blocked because the queue moved, which would teach everyone to bypass the hook.
+    """
+    from ..views.markdown import GENERATED, VIEWS, render_views
+
+    cfg = cfg or Config.load(repo)
+    mode = cfg.enforce.generated_views
+    if mode == "off":
+        return 0, ""
+    staged: dict[str, bytes] = {}
+    names = {name for name, _ in VIEWS}
+    for p in staged_paths(repo):
+        if Path(p).name not in names:
+            continue
+        data = staged_bytes(repo, p)
+        if data is not None and data.startswith(GENERATED.encode("utf-8")):
+            staged[p] = data
+    if not staged:
+        return 0, ""
+
+    log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
+    # Config from the FILES, as `ddflow render` writes with: env overrides belong to
+    # whoever typed `git commit`, not to the view.
+    want = render_views(fold(log.read_all(), strict=False), Config.load(repo, env={}))
+    wrong = sorted(
+        p for p, data in staged.items() if _lf(data) != want[Path(p).name].encode("utf-8")
+    )
+    if not wrong:
+        return 0, ""
+    lines = [
+        f"ddflow: {len(wrong)} staged generated view(s) differ from what the event log "
+        "regenerates now:",
+        "",
+        *(f"  {p}" for p in wrong),
+        "",
+        "A view is regenerated from the log, never edited: either it was changed by hand,",
+        "or the queue moved after it was rendered. Regenerate it and stage the result:",
+        "    ddflow render" + _out_hint(wrong),
+        "    git add " + " ".join(wrong),
+        "",
+        f'Policy is [enforce].generated_views = "{mode}" in .ddflow/config.toml.',
+    ]
+    msg = "\n".join(lines)
+    if mode == "warn":
+        return 0, msg + '\n\n(warning only; set the policy to "block" to refuse)'
+    return 1, msg
+
+
+def _lf(data: bytes) -> bytes:
+    """Line endings are git's and the platform's business, not the view's content.
+    `write_text` writes CRLF on Windows and `core.autocrlf=false` stages it as is."""
+    return data.replace(b"\r\n", b"\n")
+
+
+def _out_hint(paths: list[str]) -> str:
+    """` --out DIR` when every wrong view lives outside the default directory together."""
+    dirs = {str(Path(p).parent) for p in paths}
+    if len(dirs) == 1 and (d := dirs.pop()) != "docs/ddflow":
+        return f" --out {d}"
+    return ""
+
+
 def check_item_trailer(repo: Path) -> tuple[int, str]:
     """Require an ``Item: <id>`` trailer on the commit being made.
 

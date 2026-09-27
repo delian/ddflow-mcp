@@ -417,20 +417,18 @@ def bundle(
 ) -> list[Path]:
     """Write a self-contained recovery kit: the brief, the queue, the knowledge.
 
-    Uses the same generator map as `render.write_views`. The two used to be separate
-    copies and had already drifted by one file — the bundle silently omitted the
-    research log, which is where the rejected approaches live.
+    Uses `views.markdown.render_views`, the one view map. It used to hold its own copy,
+    which had drifted twice: first by a whole file (the research log, where the rejected
+    approaches live, was silently omitted), then by bytes -- while this docstring said it
+    used the same map. Pinned by
+    `tests/test_generated_views.py::test_rendering_is_deterministic_and_the_bundle_writes_the_same_bytes`.
     """
-    from ..views.markdown import board, lessons_md, research_md
+    from ..views.markdown import render_views
 
     out_dir.mkdir(parents=True, exist_ok=True)
     written = [out_dir / "RECONSTRUCTION.md"]
     written[0].write_text(render_reconstruction(state, steps, project=project), "utf-8")
-    for name, text in (
-        ("QUEUE.md", board(state, cfg)),
-        ("LESSONS.md", lessons_md(state)),
-        ("RESEARCH.md", research_md(state)),
-    ):
+    for name, text in render_views(state, cfg).items():
         (out_dir / name).write_text(text, "utf-8")
         written.append(out_dir / name)
     return written

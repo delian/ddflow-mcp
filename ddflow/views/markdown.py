@@ -16,6 +16,7 @@ costs. It is retrieval, budgeted, with the budget enforced rather than hoped for
 from __future__ import annotations
 
 import textwrap
+from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Config
@@ -377,20 +378,33 @@ def brief(
     return text
 
 
+#: Every generated view: its filename and how to render it. The ONE map. There were two
+#: -- this function's and a copy in `sessions.bundle` whose docstring said it used this
+#: one -- and the copy already wrote different bytes. The pre-commit check
+#: (`services/enforce.py::check_views`) reads it too, so a view added here is checked
+#: without anyone remembering to.
+VIEWS: tuple[tuple[str, Callable[[State, Config | None], str]], ...] = (
+    ("QUEUE.md", board),
+    ("LESSONS.md", lambda state, _cfg: lessons_md(state)),
+    ("RESEARCH.md", lambda state, _cfg: research_md(state)),
+)
+
+
+def render_views(state: State, cfg: Config | None = None) -> dict[str, str]:
+    """filename -> the exact text a view file must hold for this state."""
+    return {name: fn(state, cfg).rstrip() + "\n" for name, fn in VIEWS}
+
+
 def write_views(
     root: Path, state: State, cfg: Config | None = None, *, subdir: str = "docs/ddflow"
 ) -> list[Path]:
-    """Regenerate every human view. Idempotent: same state in, same bytes out."""
+    """Regenerate every human view. Same state in, same bytes out -- which the commit
+    hook now HOLDS it to (B18): a staged view that differs from this is refused."""
     d = Path(root) / subdir
     d.mkdir(parents=True, exist_ok=True)
     written = []
-    for name, text in (
-        ("QUEUE.md", board(state, cfg)),
-        ("LESSONS.md", lessons_md(state)),
-        ("RESEARCH.md", research_md(state)),
-    ):
+    for name, new in render_views(state, cfg).items():
         p = d / name
-        new = text.rstrip() + "\n"
         if not p.exists() or p.read_text("utf-8") != new:
             p.write_text(new, "utf-8")
         written.append(p)

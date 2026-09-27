@@ -96,7 +96,10 @@ AGENT_TARGETS: dict[str, AgentTarget] = {
     # VS Code's built-in MCP support, which any VS Code agent uses -- not Copilot-specific.
     # Top-level key is `servers`, NOT `mcpServers`, and entries name their transport.
     "vscode": AgentTarget("vscode.md", ".vscode/mcp.json", SHAPE_SERVERS),
-    "kilo": AgentTarget("kilo-cline.md", ".kilo/kilo.json", SHAPE_MCP_SERVERS),
+    # Kilo Code. Its CLI is an opencode fork and reads opencode's shape: `mcp`, NOT
+    # `mcpServers`. This was SHAPE_MCP_SERVERS until a probe against Kilo 7.2.20 showed
+    # that file listing "No MCP servers configured" -- valid JSON, silently ignored.
+    "kilo": AgentTarget("kilo-cline.md", ".kilo/kilo.json", SHAPE_OPENCODE),
     "cursor": AgentTarget("cursor.md", ".cursor/mcp.json", SHAPE_MCP_SERVERS),
     # Kimi Code CLI. Project-level `.kimi-code/mcp.json` takes precedence over the
     # user-level copy. NOT a repo-root `.mcp.json`: secondary write-ups say it reuses
@@ -801,7 +804,10 @@ def _register_mcp(
             data = json.loads(path.read_text("utf-8") or "{}")
         except json.JSONDecodeError:
             return f"SKIPPED {rel}: it is not valid JSON; add the server by hand"
-    place_server(data, target.shape, "ddflow", entry)
+    try:
+        place_server(data, target.shape, "ddflow", entry)
+    except UnplaceableConfig as exc:
+        return f"SKIPPED {rel}: {exc}; add the server by hand"
     path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
     return f"registered ddflow in {rel}"
 
@@ -809,7 +815,7 @@ def _register_mcp(
 def server_entry_for(shape: str, entry: dict) -> dict:
     """``entry`` rewritten the way THIS agent's config must store it.
 
-    Only opencode differs, and it differs in a way that fails silently: `command` is one
+    Only opencode (and Kilo, its fork) differs, and it differs in a way that fails silently: `command` is one
     ARRAY including the arguments, the transport is named rather than inferred, and
     `enabled` is explicit. Handing it the common `{"command": str, "args": [...]}` form
     produces valid JSON that starts nothing.
@@ -857,22 +863,33 @@ def _server_container(data: dict, shape: str, *, create: bool) -> dict | None:
     node = data
     for part in path:
         if create:
-            node = node.setdefault(part, {})
+            node = node.setdefault(part, {}) if isinstance(node, dict) else None
+            if not isinstance(node, dict):
+                return None
         else:
-            node = node.get(part) or {}
+            node = (node.get(part) if isinstance(node, dict) else None) or {}
             if not isinstance(node, dict):
                 return None
     return node
+
+
+class UnplaceableConfig(ValueError):
+    """The operator's file is valid JSON but holds something other than an object where
+    servers live -- `{"mcp": null}`, `{"mcp": ["x"]}`, a top-level list. Replacing it
+    would destroy their data; guessing a merge would be worse. The caller says SKIPPED."""
 
 
 def place_server(data: dict, shape: str, name: str, entry: dict) -> None:
     """Put one server into ``data`` where ``shape`` says it belongs.
 
     Mutates in place and preserves every sibling: these files hold the operator's other
-    servers, and a tool that stomps them is a tool nobody runs twice.
+    servers, and a tool that stomps them is a tool nobody runs twice. Raises
+    `UnplaceableConfig` rather than crash (it used to be an `assert`, and a TypeError for
+    a list) when the file holds a non-object where servers go.
     """
     container = _server_container(data, shape, create=True)
-    assert container is not None  # create=True always yields one
+    if container is None:
+        raise UnplaceableConfig(f"not a JSON object where {shape!r} servers belong")
     container[name] = server_entry_for(shape, entry)
 
 
