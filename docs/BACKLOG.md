@@ -84,9 +84,9 @@ mechanically the entry was left open.
 * **Four are one design thread** (B109–B112): a storage seam, the scattered writers, the git
   coupling, and what an honest remote split would actually take. Filed deliberately as
   not-now.
-* **Two are compaction** (B6, B86): `log.compacted` is vocabulary with no mechanism —
-  verified again in this audit, there is no `compact` implementation anywhere — and nothing
-  compacts on the read path.
+* **Two were compaction** (B6, B86): both CLOSED 2026-09-27. B6 as a DECLINE (the kind
+  is removed; the recipe breaks `progress` and `loops`), B86 by making the read cheap
+  instead — parsing was 84% of it, not the fold the entry blamed.
 * **Six are individual items**: B7 (dogfooding, below), B13 (Windows untested — `fcntl.flock`
   is POSIX-only), B95 (THEORETICAL: `tree_fingerprint` is blind to a re-edited binary),
   B114 (`companions --verify` should launch and check it speaks MCP), B148 (blocked on the
@@ -101,7 +101,7 @@ closes an item mechanically and `ddflow import --verify` reports exactly this cl
 
 ## Structural
 
-- **B1 — ~~`fold` is a 150-line `if/elif` ladder~~ — DONE.** Replaced by
+- **B1 — ~~`fold` is a 150-line `if/elif` ladder~~ ✅ CLOSED.** Replaced by
   `model.HANDLERS: dict[str, Callable]`, and `events._kinds()` now *derives* the
   vocabulary from it rather than declaring a second copy. A kind that nothing
   interprets can no longer exist. *Found by: roborev architecture (C4). Retired in the
@@ -166,13 +166,61 @@ closes an item mechanically and `ddflow import --verify` reports exactly this cl
 
 ## Declared but unimplemented
 
-- **B6 — `log.compacted` is vocabulary without a mechanism.** The event kind exists,
-  `PROVENANCE_KINDS` documents what compaction must preserve, and `fold` handles the
-  marker — but nothing implements it. Either implement (rewrite shards keeping every
-  `PROVENANCE_KINDS` event plus the last state-bearing event per subject, then append
-  the marker) or remove the kind. Declaring a retention policy the system cannot execute
-  is worse than declaring none. *Found by: roborev architecture (C10). Not urgent: at
-  407k events/s the growth ceiling is far away.*
+- **B6 — `log.compacted` is vocabulary without a mechanism. ✅ CLOSED as a DECLINE —
+  the kind is removed.** The entry offered two options and said declaring a retention
+  policy the system cannot execute is worse than declaring none. It cannot execute this
+  one: `ddflow progress` and `ddflow loops` read RAW events, and `progress.work` pairs
+  `lease.acquired` with the next release across the whole history. Leases and gate
+  outcomes are not `PROVENANCE_KINDS`, so the filed recipe keeps a `lease.released` with
+  no acquire to pair with. **Probe:** a queue firing `repeat_claims` before compaction
+  reports nothing after, and six attempts become zero — under `[loops] on_detect =
+  "block"` a behaviour change, not a lost report. Two earlier probes cleared the ground:
+  a compaction DOES survive a `merge=union` merge, but two divergent compactions merge to
+  neither side's result and out of Lamport order. Growth is answered by B86 instead —
+  making the read cheap, not the log short. The ratchet's allowlist is now empty.
+  *`tests/test_log_read_cache.py`, `docs/RESEARCH.md` §R-log.*
+
+- **B166 — beyond ~100k events the read is still O(log).** The tail-parse cache
+  (B86) makes a WARM read cheap, and a warm read needs a long-lived process — an MCP
+  server. A one-shot CLI invocation still parses everything once. Measured 2026-09-27:
+
+  | events | cold read | warm read |
+  |---|---|---|
+  | 20,000 | 121.1 ms | 11.9 ms |
+  | 100,000 | 623.8 ms | 62.8 ms |
+
+  Note the warm column is NOT O(appended): the sort by Lamport key and the content-address
+  de-duplication still run over every event on every read, which is why warm grows 5.5×
+  across that span. Two separate pieces of work, then: an on-disk snapshot of folded
+  `State` for the cold path (invalidated by `EventLog.head()` — the fingerprint already
+  exists), and an incrementally-maintained sorted order for the warm one. Filed, not
+  urgent: no project is near 100k events, and the numbers are here so the decision is
+  made against them rather than a worry. *Successor to B86;
+  do NOT resolve it by compacting the log — see B6 for the probe that kills that.*
+
+- **B167 — a published package with no CHANGELOG.** ddflow is on PyPI (0.1.1) and has
+  no changelog, so an operator upgrading has `docs/BACKLOG.md` — an engineering record
+  of 167 items — or the git log. Wanted: `CHANGELOG.md`, Keep-a-Changelog, starting from
+  the next release rather than reconstructed backwards (a retroactive changelog invented
+  from commit messages claims a precision it does not have). *Noticed while trying to
+  write a B6/B86 entry into a file that does not exist.*
+
+- **B168 — `State.skipped_kinds` is written and never read.** `fold`'s docstring says
+  non-strict mode "counts what it skipped so the caller can refuse to act". It counts:
+  `model.py` populates `skipped_kinds` for every unrecognised kind. Nothing reads it —
+  `grep -rn skipped_kinds ddflow/` finds the write and nothing else — so a log written by
+  a NEWER ddflow folds with events silently dropped and no surface says so. All 16 `fold`
+  call sites pass `strict=False`, so this is the only channel there is. Wanted: `doctor`
+  reports a non-empty `skipped_kinds` as "this log was written by a newer version".
+  *Found by the rubber-duck reviewer while checking whether removing `log.compacted`
+  could be noticed — it could not. Same class as a dead config knob.*
+
+- **B169 — the warm read is not O(appended).** `read_all` re-parses only the tail, but it
+  still sorts every event by Lamport key and de-duplicates by content address on every
+  call, plus digests the prefix — and the digest is itself O(prefix), unavoidably, because
+  verifying bytes means reading them. Measured: warm 11.9 ms at 20k events, 62.8 ms at
+  100k — growing 5.3x across a 5x span, i.e. still linear in the LOG, not in the tail. Wanted: an incrementally-maintained sorted order.
+  *Successor to B86 alongside B166.*
 
 - **B7 — ddflow does not dogfood itself.** This backlog should be an ddflow queue, and
   this project's own development should run through its own gates. The reason it does
@@ -862,13 +910,23 @@ features worth taking.
   CLI. Nine of the twelve new tests were red before the fix. A further test asserts the
   README never names a prompt that does not resolve.
 
-- **B86. No compaction on the state-reading path. FILED, not urgent.** Every
-  state-reading call re-folds the whole log. Measured 2026-09-25: linear, converging on
-  **~8.7 µs/event** — 20,000 events is ~175 ms per call, which is fine. At ~100k events
-  it becomes ~0.9 s, which is not. Search and recall already avoid this via the SQLite
-  projection; the scheduling and status path does not. Filed with the numbers so the
-  decision to act is made against a measurement rather than a worry. *Supersedes the
-  vaguer B6.*
+- **B86. No compaction on the state-reading path. ✅ CLOSED — and this entry blamed
+  the wrong stage.** It said "re-folds the whole log", and `fold` is **7%** of a read.
+  Re-measured at 20,000 events: 115 ms total = parsing 97 ms (**84%**), fold 9 ms, sort
+  3.8 ms, disk 3.7 ms. Its other claim was also wrong: "search and recall avoid this via
+  the SQLite projection" does not extend to state, because `Store.ensure` returns
+  `fold(log.read_all())` on the FRESH path too — the index is a search projection and
+  cannot rebuild a `State`.
+
+  Fixed by not re-parsing rather than by compacting: `EventLog.read_all` re-parses only
+  the appended tail, re-hashing the re-used prefix to prove it is still the same bytes.
+  Warm read **11.9 ms vs 121.1 ms (10.2×)** at 20k events, **62.8 vs 623.8** at 100k;
+  `ddflow doctor` reads four times and now pays the full cost once. Knobs
+  `[log] reuse_parsed` and `[log] max_cached_events` (~736 bytes/event, so the 100k
+  default holds ~74 MB). Correctness cases mutation-verified: replaced inode, truncation,
+  torn tail, ceiling overflow, and both sides of the knob — the read side was found
+  UNTESTED by mutation M5 and is now covered. *Beyond ~100k events the answer is an
+  on-disk state snapshot; see B166.*
 
 ## B87–B95 — what the two reviewers found on B79–B81, 2026-09-25
 
@@ -2003,8 +2061,10 @@ Mechanisms added along the way, all of which the remaining seven will need:
   that the tool produces an answer. All four now CALL the tool, and each asserts something
   the argv version did not.
 
-- **B163. The `cli.py` C901 exemption was suppressing the measurement for ~45 functions.**
-  FILED, partly addressed. Written for `build_parser`, it applies per FILE, so
+- **B163. The `cli.py` C901 exemption was suppressing the measurement for ~45 functions.
+  ✅ CLOSED — shipped in `fa44dc3` and this entry was left unmarked.** The file-wide
+  ignore is gone and `build_parser` carries a `# noqa: PLR0915` on itself, which was the
+  "remaining question" below. Written for `build_parser`, it applies per FILE, so
   `_render_workflow` (17 branches), `cmd_status` (16) and `cmd_reviewers` (18) had been
   over the limit invisibly — each flagged the moment it moved out. The three are split.
   The remaining question is whether `build_parser` should get a `# noqa` on itself instead

@@ -92,6 +92,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
   - [Locking, contention and measured cost](#locking-contention-and-measured-cost)
 - [Crash recovery](#crash-recovery)
 - [Reconstruction from logs alone](#reconstruction-from-logs-alone)
+- [Reading the log, and why it is never compacted](#reading-the-log-and-why-it-is-never-compacted)
 - [Lessons, research and bugs](#lessons-research-and-bugs)
 - [Cadences](#cadences)
 - [Keeping session-start cost flat](#keeping-session-start-cost-flat)
@@ -500,7 +501,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 58 knobs.
+cadences, and the rest of the 70 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1581,6 +1582,90 @@ scrub at read time is a scrub that `git show` walks straight past.
 
 ---
 
+## Reading the log, and why it is never compacted
+
+The log only grows, so every state-reading call used to re-read and re-parse all of it.
+Measured at 20,000 events, that read costs **115 ms** — and the breakdown is the whole
+design argument:
+
+| stage | cost | share |
+|---|---|---|
+| `Event.from_json` | 97 ms | **84%** |
+| `fold` into state | 9 ms | 7% |
+| sort by Lamport key | 3.8 ms | 3% |
+| read the bytes off disk | 3.7 ms | 3% |
+| de-duplicate by content address | 0.7 ms | <1% |
+
+Parsing dominates, and **an append-only file guarantees the bytes already parsed have not
+changed.** So `EventLog.read_all` re-parses only the appended tail, and re-hashes the
+bytes it is re-using to prove they are still the same bytes:
+
+| events | read, uncached | warm read | |
+|---|---|---|---|
+| 20,000 | 121.1 ms | **11.9 ms** | 10.2× |
+| 100,000 | 623.8 ms | **62.8 ms** | 9.9× |
+
+A command like `ddflow doctor` — which reads four times — pays the full cost once instead
+of four times.
+
+Two knobs, `[log]`:
+
+| knob | default | what it trades |
+|---|---|---|
+| `reuse_parsed` | `true` | Off = always re-parse from scratch. Slower, and worth it only if a shard is being rewritten in place under a running process. |
+| `max_cached_events` | `100000` | Memory ceiling, in events. ~736 bytes per parsed event, so the default holds ~74 MB in a long-lived MCP server. Over the ceiling the cache is dropped and reads cost what they always did. |
+
+**The validity check is a content check, and that is the whole design.** The consumed
+prefix is re-hashed on every read — 1.1 ms to read plus 4.3 ms to digest, against the
+97 ms of parsing it avoids. The first version used `st_ino` instead, on the reasoning
+that "a `git merge` writes a temp file and renames, so the inode changes". That is false:
+
+```console
+$ git checkout -q other && stat -c %i .ddflow/events/a1.jsonl
+218500670
+$ git checkout -q main  && stat -c %i .ddflow/events/a1.jsonl
+218500670
+```
+
+Git rewrites tracked files **in place**. So switching between two branches that had
+diverged left a warm server serving events from the branch you left, silently losing the
+ones actually on disk, with the tail read starting mid-line — and because `Store.rebuild`
+takes its fingerprint from the real file while taking its events from the cache, that
+wrong state was written into the SQLite index *stamped as current*, which a fresh process
+would not rebuild away. A content digest makes a rewrite, a truncation, a `git checkout`,
+a `git merge`, a delete-and-recreate and a torn tail all one case, so there is no list of
+mechanisms to keep current.
+
+A **torn final line** from an append that died mid-write is reported by `ddflow doctor`
+and re-read until the writer completes it, never marked consumed. Every guarantee here is
+mutation-verified in `tests/test_log_read_cache.py` — including that the digest covers the
+whole prefix rather than a trailing window of it, which a smaller fixture cannot tell
+apart.
+
+### The compaction that was declined
+
+An event kind `log.compacted` was reserved for a retention pass that shrank the log. It
+has been **removed**, because the recipe it was reserved for cannot be implemented
+without breaking two shipped commands. Three probes:
+
+1. **A compaction survives a `merge=union` merge.** One branch compacts, the other
+   appends; the deletions stick. So union is not the obstacle.
+2. **Two divergent compactions merge to neither side's result**, and out of Lamport
+   order — the case union cannot resolve.
+3. **The decisive one.** `ddflow progress` and `ddflow loops` read **raw events**, not
+   folded state: `progress.work` pairs each `lease.acquired` with the next release across
+   the whole history. Leases and gate outcomes are not `PROVENANCE_KINDS`, so keeping
+   "the last state-bearing event per subject" leaves a `lease.released` with no acquire
+   to pair with. A queue whose loop detector fires `repeat_claims` before compaction
+   reports **nothing** after it, and six attempts become zero — and under
+   `[loops] on_detect = "block"` that is a behaviour change, not just a lost report.
+
+Growth is addressed by making the read cheap rather than the log short, which keeps it
+append-only and auditable. Beyond ~100k events the right answer is an on-disk state
+snapshot, not a shorter history.
+
+---
+
 ## Lessons, research and bugs
 
 ```sh
@@ -1874,7 +1959,7 @@ declared once and persists — see
 
 ## Configuration
 
-61 knobs across 12 sections, every one documented in place:
+70 knobs across 15 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

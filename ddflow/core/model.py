@@ -813,10 +813,6 @@ def _h_cadence(st: State, ev: Event) -> None:
     )
 
 
-def _h_noop(st: State, ev: Event) -> None:
-    """A marker with no state effect (e.g. `log.compacted`)."""
-
-
 #: kind -> handler. The single declaration of the event vocabulary.
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": lambda st, ev: _h_added(st, ev, "phase"),
@@ -856,7 +852,6 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "session.ended": _h_session_ended,
     "gate.out_of_order": _h_gate_out_of_order,
     "cadence.ran": _h_cadence,
-    "log.compacted": _h_noop,
 }
 
 

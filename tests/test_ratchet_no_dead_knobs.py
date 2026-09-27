@@ -58,7 +58,16 @@ def _alias_map(src: str) -> dict[str, str]:
     read for the bad ones.
     """
     out: dict[str, str] = {}
-    for m in re.finditer(r"^\s*(\w+)\s*=\s*(?:self\.)?(?:c\.)?cfg\.(\w+)\s*$", src, re.M):
+    # Two bindings, both good style, both invisible to a plain `.section.knob` grep:
+    #   1. a local:            `lc = cfg.loops`
+    #   2. a keyword argument: `EventLog(repo, log_cfg=cfg.log)`  -> alias "log_cfg"
+    # (2) was added when `[log]` arrived: `infra/log.py` reads `self.log_cfg.reuse_parsed`
+    # and no line anywhere spells `.log.reuse_parsed`, so both knobs were reported dead
+    # while two tests proved they were read. The detector was blind, not the code.
+    #
+    # `(?![\w.])` keeps it from treating a deeper path as a section: `agent=cfg.agent.id`
+    # must NOT bind "agent", or the scan quietly weakens for every `agent.*` knob.
+    for m in re.finditer(r"(\w+)\s*=\s*(?:self\.)?(?:[\w]+\.)?cfg\.(\w+)(?![\w.])", src):
         out[m.group(1)] = m.group(2)
     return out
 

@@ -97,8 +97,12 @@ def test_every_declared_event_kind_can_actually_be_emitted():
 
     `item.abandoned`, `task.removed` and `phase.removed` were declared in the handler
     registry and handled by the fold, and no command emitted any of them — so three
-    legitimate states of a work item were unreachable. `log.compacted` remains
-    deliberately unemitted and is allowlisted with its reason.
+    legitimate states of a work item were unreachable.
+
+    The allowlist is EMPTY, and that is the point: `log.compacted` used to sit in it as
+    "reserved for a compaction pass", and reserving a word for years is how a vocabulary
+    acquires terms nothing means. B6 removed the kind, so every kind the registry
+    declares is now a kind some command can actually emit.
     """
     import pathlib as _p
 
@@ -110,10 +114,9 @@ def test_every_declared_event_kind_can_actually_be_emitted():
     # everything cannot be wrong about where the code is.
     pkg = _p.Path(__file__).resolve().parents[1] / "ddflow"
     src = "".join(f.read_text("utf-8") for f in pkg.rglob("*.py") if "__pycache__" not in str(f))
-    allowed_unemitted = {
-        # Reserved for a compaction pass that is not implemented; filed as B6.
-        "log.compacted",
-    }
+    # Empty ON PURPOSE. Adding a kind here needs a reason that survives being read
+    # aloud a year later; "we might implement it" was not one (B6).
+    allowed_unemitted: set[str] = set()
     dead = [
         k
         for k in sorted(HANDLERS)

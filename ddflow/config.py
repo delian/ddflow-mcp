@@ -530,6 +530,26 @@ _doc("prompts", "session_brief_header", "Path to the header template for `ddflow
 
 
 @dataclass
+class LogConfig:
+    """Reading the append-only log — the cost every state-reading call pays."""
+
+    reuse_parsed: bool = True
+    max_cached_events: int = 100_000
+
+
+_doc(
+    "log",
+    "reuse_parsed",
+    "Re-use already-parsed events instead of re-parsing the whole log on every read. Sound because the log is APPEND-ONLY: a line that has been parsed can never change, so only the appended tail is new. Measured at 20k events: JSON parsing is 97ms of a 115ms read (84%), so this is where the time is. Set false to always re-read from scratch — slower, and the only reason to want it is a shard being rewritten in place under a running process, which `ddflow doctor` reports as a content-address mismatch anyway.",
+)
+_doc(
+    "log",
+    "max_cached_events",
+    "Memory ceiling for reuse_parsed, in events. Measured at ~736 bytes per parsed event, so the 100,000 default holds ~74 MB in a long-lived MCP server. Above the ceiling the cache is not used and reads cost what they always did — graceful, not a failure. A project big enough to hit this wants an on-disk state snapshot rather than a bigger process.",
+)
+
+
+@dataclass
 class LoopsConfig:
     """Runtime loop detection — work that repeats instead of finishing."""
 
@@ -690,6 +710,7 @@ class Config:
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
+    log: LogConfig = field(default_factory=LogConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 

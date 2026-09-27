@@ -4,6 +4,11 @@ Serialised appends under `fcntl.flock` with an `fsync`, per-agent shards so two 
 never write the same file, and a tail read for the Lamport clock so the cost of
 appending is O(shards) rather than O(events).
 
+Reading exploits the same append-only property: `read_all` re-parses only the bytes
+APPENDED since the last read, because parsing is 84% of a read's cost (97 ms of 115 ms
+at 20,000 events) and a line already parsed cannot have changed. This is why the log is
+never compacted — see `tests/test_log_read_cache.py` for the probe that declined it.
+
 The `Event` record itself lives in `core.events`: it is a value with no I/O, and the
 domain layer needs it without needing this.
 """
@@ -13,15 +18,18 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import getpass
+import hashlib
 import json
 import os
 import socket
 import subprocess
 import time
 from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from ..config import LogConfig
 from ..core.events import (
     PROVENANCE_KINDS,
     SCHEMA_VERSION,
@@ -40,6 +48,7 @@ __all__ = [
     "Event",
     "EventLog",
     "canonical",
+    "clear_parse_cache",
     "default_agent_id",
     "effective_agent_id",
     "resolve_agent_id",
@@ -47,6 +56,108 @@ __all__ = [
 ]
 
 _AGENT_ID_CACHE: dict[str, str] = {}
+
+
+@dataclass(slots=True)
+class _Parsed:
+    """What has already been parsed out of one shard, and how far into it we got.
+
+    `consumed` is a byte offset just past the last NEWLINE taken, never merely the
+    file size: a shard can end in a torn fragment from an append that died mid-write,
+    and marking that fragment consumed would skip the event permanently once the
+    writer completed it.
+
+    `digest` is a hash of those `consumed` bytes, and it is re-verified on every read.
+    That is the whole validity check, and it is a CONTENT check on purpose. The first
+    version of this used `st_ino` on the reasoning that "a `git merge` writes a temp
+    file and renames, so the inode changes" — which is false, and measurably so:
+
+        $ git checkout -q other && stat -c %i .ddflow/events/a1.jsonl
+        218500670
+        $ git checkout -q main && stat -c %i .ddflow/events/a1.jsonl
+        218500670
+
+    Both `git checkout` and `git merge` rewrite the file IN PLACE. So switching branches
+    left a warm cache serving the events of the branch you left, the tail read starting
+    mid-line in the new file, and `ddflow doctor` reporting a torn append about an intact
+    log — and because `Store.rebuild` takes its fingerprint from `head()` (the real file)
+    while taking its events from `read_all()` (the stale set), that wrong state was
+    written into the SQLite index and stamped as current. A transient cache bug became
+    on-disk corruption that a fresh process would not rebuild away.
+
+    Hashing is affordable precisely because parsing is not: at 20,000 events the prefix
+    is 3.58 MB, which reads in 1.1 ms and digests in 4.3 ms, against the 97 ms of
+    `Event.from_json` it avoids. A heuristic would save ~5 ms and cost soundness.
+    """
+
+    consumed: int
+    digest: str
+    events: tuple[Event, ...]
+    skipped: int
+
+
+#: Absolute shard path -> what has been parsed from it. Process-lifetime and keyed by
+#: path rather than held on the instance, because a fresh `EventLog` is built per API
+#: call and per MCP tool call — an instance-level cache would never be hit twice.
+#:
+#: Sound ONLY because the log is append-only, and for a reason worth stating: an
+#: incremental *projector* can disagree with `fold` and so is refused outright
+#: (`Store.rebuild`), but an incremental *reader* cannot, because each line parses
+#: independently of every other. Re-using a parse is not a second implementation of
+#: anything.
+#:
+#: **Unlocked, because nothing in this process is concurrent.** `mcp.serve` is a strictly
+#: sequential `for raw in stdin:` loop — no threads, no asyncio — so a request is finished
+#: before the next is read. Adding concurrency to that loop means guarding this dict.
+#:
+#: No eviction policy beyond the ceiling: once full, the shards already in it keep their
+#: entries and later ones are simply not cached. That is unfair rather than wrong, and a
+#: project with enough shards to notice has a bigger problem (B166).
+_PARSE_CACHE: dict[Path, _Parsed] = {}
+
+
+def clear_parse_cache() -> None:
+    """Drop every parsed shard.
+
+    For tests. NOT needed after a merge or a branch switch — the per-read digest check
+    detects those, which is the point of making it a content check. Nothing in `ddflow`
+    calls this, and that is the correct amount.
+    """
+    _PARSE_CACHE.clear()
+
+
+def _cached_events() -> int:
+    """How many events the whole cache is holding, across every shard of every repo."""
+    return sum(len(e.events) for e in _PARSE_CACHE.values())
+
+
+def _digest(data: bytes) -> str:
+    """Are these the same bytes? An ephemeral, in-memory comparison — NOT a content
+    address.
+
+    Deliberately not the repo's `blake2b` convention (`events.Event.compute_id`,
+    `ids.short_id`), and the distinction matters: those are stable identities that are
+    written to disk and cannot change without invalidating every stored id. This one is
+    never persisted and never compared across processes, so the only criterion is speed
+    over a multi-megabyte buffer — where `sha256` wins on CPU acceleration, measured at
+    4.3 ms per 3.58 MB against blake2b's 10.4 ms.
+    """
+    return hashlib.sha256(data).hexdigest()
+
+
+def _parse_lines(chunk: bytes) -> tuple[list[Event], int]:
+    """`(events, unparseable-line-count)` for a run of whole lines."""
+    out: list[Event] = []
+    skipped = 0
+    for raw in chunk.decode("utf-8", errors="replace").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            out.append(Event.from_json(line))
+        except (json.JSONDecodeError, KeyError):
+            skipped += 1
+    return out, skipped
 
 
 def _toplevel(path: str) -> str:
@@ -219,7 +330,17 @@ class EventLog:
     A torn line is reported by ``ddflow doctor``.
     """
 
-    def __init__(self, root: Path, agent_id: str = "", *, lock_timeout_s: float = 30.0) -> None:
+    def __init__(
+        self,
+        root: Path,
+        agent_id: str = "",
+        *,
+        lock_timeout_s: float = 30.0,
+        log_cfg: LogConfig | None = None,
+    ) -> None:
+        # Defaults come FROM the dataclass rather than being repeated here, so the
+        # documented default and the effective one cannot drift.
+        self.log_cfg = log_cfg or LogConfig()
         self.root = Path(root)
         self.dir = self.root / ".ddflow" / "events"
         self.agent_id = agent_id or default_agent_id(self.root)
@@ -413,22 +534,88 @@ class EventLog:
         return shards, high, total
 
     # -- reading -------------------------------------------------------------------
+    def _read_shard(self, path: Path) -> tuple[list[Event], int]:
+        """One shard's events, re-parsing only what has been APPENDED since last time.
+
+        Parsing dominates a read — 97 ms of 115 ms at 20,000 events — and an
+        append-only file guarantees the bytes already parsed have not changed, so the
+        tail is the only new work. The guarantee is CHECKED rather than assumed: the
+        consumed prefix is re-hashed on every read (measured: a 20,000-event warm read
+        costs 11.9 ms against 121.1 ms uncached, ~10x) and any mismatch falls back to a
+        full parse. A
+        rewrite, a truncation, a `git checkout`, a `git merge` and a delete-and-recreate
+        all land in that one case, so there is no list of mechanisms to keep current.
+
+        A trailing fragment with no newline is parsed (so `doctor` keeps reporting a
+        torn append) but never marked consumed, so the next call re-reads it and sees
+        the completed line.
+        """
+        try:
+            data = path.read_bytes()
+        except FileNotFoundError:
+            # Vanished between the glob and the read -- another agent's shard removed, or
+            # a branch switch. Benign, and the only OSError that is: anything else means
+            # the file is THERE and we cannot read it (permissions, a stale NFS handle,
+            # a directory where a shard should be), and swallowing that would drop a
+            # whole agent's events from the queue while reporting success. Caught by the
+            # cross-family critic: the pre-cache code caught `FileNotFoundError` only,
+            # and widening it to `OSError` turned a loud failure into a silent one.
+            return [], 0
+        cached = _PARSE_CACHE.get(path) if self.log_cfg.reuse_parsed else None
+        start, base, skipped = 0, [], 0
+        hasher = None
+        if cached is not None and len(data) >= cached.consumed:
+            # The ONLY thing that licenses re-using a parse: those exact bytes are still
+            # there. Not the inode, not the size, not the mtime -- all three are proxies,
+            # and the inode proxy was wrong about the case it was written for.
+            h = hashlib.sha256(data[: cached.consumed])
+            if h.hexdigest() == cached.digest:
+                start, base, skipped = cached.consumed, list(cached.events), cached.skipped
+                # Kept so the digest STORED below continues this one rather than making a
+                # second pass over the same prefix. `hexdigest()` does not finalise a
+                # hashlib object, so it can still be updated with the appended bytes --
+                # which makes the store side O(appended) like the parse beside it.
+                hasher = h
+        chunk = data[start:]
+        cut = chunk.rfind(b"\n") + 1  # 0 when the tail holds no newline at all
+        whole, fragment = chunk[:cut], chunk[cut:]
+        fresh, fresh_skipped = _parse_lines(whole)
+        events = base + fresh
+        skipped += fresh_skipped
+        # The ceiling is GLOBAL -- every shard of every repo this process has read. It is
+        # documented as a memory ceiling, and a per-shard limit is not one: a repo with
+        # eight agents would hold eight times the promised bound.
+        held = _cached_events() - len(_PARSE_CACHE.get(path, _Parsed(0, "", (), 0)).events)
+        if self.log_cfg.reuse_parsed and held + len(events) <= self.log_cfg.max_cached_events:
+            if hasher is None:
+                digest = _digest(data[: start + cut])
+            else:
+                hasher.update(whole)
+                digest = hasher.hexdigest()
+            _PARSE_CACHE[path] = _Parsed(start + cut, digest, tuple(events), skipped)
+        else:
+            # Over the ceiling (or disabled): do not hold it, and do not leave a STALE
+            # entry behind either -- an entry left behind would be served forever.
+            _PARSE_CACHE.pop(path, None)
+        torn, torn_skipped = _parse_lines(fragment)
+        return events + torn, skipped + torn_skipped
+
     def read_all(self) -> list[Event]:
         out: list[Event] = []
         self.skipped_lines = 0
-        for p in self.shards():
-            try:
-                text = p.read_text("utf-8", errors="replace")
-            except FileNotFoundError:
-                continue
-            for raw in text.splitlines():
-                line = raw.strip()
-                if not line:
-                    continue
-                try:
-                    out.append(Event.from_json(line))
-                except (json.JSONDecodeError, KeyError):
-                    self.skipped_lines += 1
+        live = self.shards()
+        # A deleted shard's entry would otherwise live for the process lifetime: nothing
+        # visits a path `shards()` no longer returns, so `_read_shard` never sees it. That
+        # is a slow leak, and it is also a trap -- `rm -rf .ddflow && ddflow init` under a
+        # running server can land a NEW shard on the SAME path, and the digest check would
+        # then be the only thing standing between it and the old events.
+        if self.log_cfg.reuse_parsed:
+            for gone in [p for p in _PARSE_CACHE if p.parent == self.dir and p not in live]:
+                del _PARSE_CACHE[gone]
+        for p in live:
+            events, skipped = self._read_shard(p)
+            out.extend(events)
+            self.skipped_lines += skipped
         # De-duplicate by content address: merging two branches can bring the same
         # event in twice via two shard copies, and a union must be idempotent.
         seen: set[str] = set()

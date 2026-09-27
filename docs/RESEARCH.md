@@ -116,12 +116,33 @@ because the SQLite index means the common read path does not fold at all, but it
 recorded here because an unprobed number that happens to be conservative is still an
 unprobed number.)
 
-**Residual risk, accepted and mitigated:** a log that grows without bound eventually
-makes `rebuild` slow. At the measured rate 1 M events fold in ~2.5 s, so the ceiling is
-far away. The `log.compacted` event kind is reserved for a compaction path, which must
-preserve every `PROVENANCE_KINDS` event — those are the reconstruction input. Not
-implemented, because no project is near that scale and a compactor written against an
-imagined workload compacts the wrong thing.
+**Residual risk, addressed 2026-09-27 — and the earlier plan here was wrong.** This
+paragraph used to reserve a `log.compacted` kind for a compaction path. Two things were
+mis-stated. First, *"the SQLite index means the common read path does not fold at all"*
+(above) is false for `Store.ensure`, which on the fresh path returns
+`fold(log.read_all())` — the index is a SEARCH projection and cannot reconstruct a full
+`State`, so the state path always paid the full read. Second, the cost was attributed to
+`fold`, which is **7%** of it; `Event.from_json` is **84%**. Re-measured at 20,000
+events: 115 ms total, of which parsing 97 ms, fold 9 ms, sort 3.8 ms, read 3.7 ms.
+
+So the fix was to stop re-parsing, not to shorten the log: `read_all` now re-parses only
+the appended tail, with the re-used prefix re-hashed to prove it is still the same bytes.
+Warm read **11.9 ms vs 121.1 ms (10.2×)** at 20,000 events, **62.8 ms vs 623.8 ms** at
+100,000. An incremental *projector* is still refused (`Store.rebuild`'s docstring — it
+can disagree with `fold`); an incremental *reader* cannot disagree, because each line
+parses independently of every other.
+
+**And the compaction was DECLINED, with the probe that killed it.** `ddflow progress` and
+`ddflow loops` consume raw events: `progress.work` pairs `lease.acquired` with the next
+release across the entire history. Leases and gate outcomes are not `PROVENANCE_KINDS`,
+so the filed recipe — "every `PROVENANCE_KINDS` event plus the last state-bearing event
+per subject" — leaves a `lease.released` with no acquire. Probe: a queue that fires
+`repeat_claims` before compaction reports nothing after it, and six attempts become
+**zero**. Under `[loops] on_detect = "block"` that is a behaviour change, not a lost
+report. The kind is removed and the allowlist in
+`tests/test_abandon_remove.py::test_every_declared_event_kind_can_actually_be_emitted`
+is now empty. Regression tests and all eight mutations: `tests/test_log_read_cache.py`.
+Budget: ≤1h, no GPU; spent ~50 min.
 
 **Source:** [Sanders et al., *The Log is the Agent: Event-Sourced Reactive Graphs for
 Auditable, Forkable Agentic Systems*, arXiv:2605.21997](https://arxiv.org/abs/2605.21997).

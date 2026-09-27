@@ -32,5 +32,5 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
         cfg.agent.id = resolved
         # The layer that actually WON, not a guess from comparing values.
         cfg.sources["agent.id"] = layer
-    log = EventLog(repo, resolved, lock_timeout_s=cfg.lease.acquire_timeout_s)
+    log = EventLog(repo, resolved, lock_timeout_s=cfg.lease.acquire_timeout_s, log_cfg=cfg.log)
     return log, cfg, fold(log.read_all(), strict=False)

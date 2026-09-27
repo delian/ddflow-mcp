@@ -84,7 +84,10 @@ class Ctx:
             # blamed the environment for a variable nobody had exported.
             self.cfg.sources["agent.id"] = layer
         self.log = EventLog(
-            self.repo, self.cfg.agent.id, lock_timeout_s=self.cfg.lease.acquire_timeout_s
+            self.repo,
+            self.cfg.agent.id,
+            lock_timeout_s=self.cfg.lease.acquire_timeout_s,
+            log_cfg=self.cfg.log,
         )
         self.store = Store(self.repo, self.cfg)
         self.gates = G.load_gates(self.repo, self.cfg)

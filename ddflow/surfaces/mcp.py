@@ -2416,7 +2416,7 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         # DDFLOW_AGENT set the handshake reported the connection's OWN claimed work as
         # someone else's, at the one moment the agent is told what to do next. B88's
         # sweep fixed two call sites and missed this one.
-        log = EventLog(repo, effective_agent_id(repo, cfg, agent))
+        log = EventLog(repo, effective_agent_id(repo, cfg, agent), log_cfg=cfg.log)
         events = log.read_all()
         st = fold(events, strict=False)
         p = plan(st, cfg, agent=log.agent_id)

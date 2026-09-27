@@ -208,7 +208,7 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     if not paths:
         return 0, ""
 
-    log = EventLog(repo, agent or cfg.agent.id or "")
+    log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     state = fold(log.read_all(), strict=False)
     now = time.time()
     me = log.agent_id
