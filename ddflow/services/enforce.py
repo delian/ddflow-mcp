@@ -181,8 +181,10 @@ def staged_paths(repo: Path) -> list[str] | None:
     and view checks nor a crash of every commit.
 
     None when git could not say. It used to collapse to `[]`, and "nothing staged" lets
-    every check pass: an `index.lock` held by a concurrent git turned the lease and view
-    checks into clean passes (roborev on 18cae1a). Callers refuse on None.
+    every check pass: a damaged index (git exits 128, "index file smaller than expected")
+    turned the lease and view checks into clean passes (roborev on 18cae1a). Callers
+    refuse on None. NOT a held `index.lock`: these reads take no lock and succeed under
+    one (verified), so naming it would send an operator hunting for the wrong cause.
     """
     return W.git_paths(repo, "diff", "--cached", "--name-only", "--diff-filter=ACMR")
 
@@ -191,8 +193,8 @@ def staged_paths(repo: Path) -> list[str] | None:
 #: is not "nothing to check".
 _UNKNOWN_STAGED = (
     "ddflow: git could not report which paths this commit stages, so it cannot be "
-    "checked.\nRefusing rather than guessing. Check `git status`; a held `index.lock` "
-    "(another git running) or a damaged index is the usual cause."
+    "checked.\nRefusing rather than guessing. Check `git status`: a damaged or "
+    "truncated `.git/index` is the usual cause."
 )
 
 
@@ -304,8 +306,10 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     A file counts as a view when its name is in `VIEWS` AND its staged content carries
     the GENERATED marker -- so `render --out elsewhere` is still checked, while a
     project's own `QUEUE.md`, or a document that merely quotes the marker, is not.
-    Fires only when a view is STAGED: a commit that does not include one is never
-    blocked because the queue moved, which would teach everyone to bypass the hook.
+    Fires only when a view is STAGED -- or when git cannot report the staged set at all,
+    since "could not tell whether a view is staged" is not "no view is staged". A commit
+    that stages no view is never blocked because the queue moved, which would teach
+    everyone to bypass the hook.
     """
     from ..views.markdown import GENERATED, VIEWS, render_views
 

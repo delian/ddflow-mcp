@@ -349,5 +349,9 @@ def test_an_unreadable_index_is_refused_not_read_as_nothing_staged(repo, policy)
     code, msg = E.check_commit(repo)
     assert "could not report" in msg, msg
     assert code == (1 if policy == "block" else 0), (code, msg)
-    vcode, vmsg = E.check_views(repo)  # generated_views defaults to block
+    # No view is staged here (nothing is readable at all): refused anyway, because "could
+    # not tell whether a view is staged" is not "no view is staged". generated_views
+    # defaults to block, independently of the lease policy above.
+    vcode, vmsg = E.check_views(repo)
     assert vcode == 1 and "could not report" in vmsg, vmsg
+    assert "index.lock" not in msg + vmsg, "names a cause that cannot trigger this"
