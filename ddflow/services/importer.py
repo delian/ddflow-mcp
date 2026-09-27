@@ -1033,6 +1033,18 @@ def scan_lesson_summaries(
     return found, empty
 
 
+_LEAD = re.compile(r"^\*\*(.+?)\*\*[\s.:—-]*")
+
+
+def _summary_text(bullet: str) -> str:
+    """A bullet as a SUMMARY: without its trailing citation, and without its bold lead
+    when there is more after it -- the lead is the lesson's title, which the summary
+    view prints already, so keeping it rendered every entry as its title twice."""
+    text = _TRAILING_CITE.sub("", bullet)
+    rest = _LEAD.sub("", text, count=1).strip()
+    return rest or text
+
+
 def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
     """Resolve `summary` records against the lessons found beside them. In place.
 
@@ -1056,7 +1068,7 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
         cites = f.extra.get("cites", [])
         target = lessons.get(cites[0]) if len(cites) == 1 else None
         if target is not None and not target.extra.get("summary"):
-            target.extra["summary"] = _TRAILING_CITE.sub("", f.body)
+            target.extra["summary"] = _summary_text(f.body)
             attached += 1
             continue
         category = f.extra.get("category", "")
@@ -1068,7 +1080,7 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
                 source=f.source,
                 body=f.body,
                 extra={
-                    "summary": _TRAILING_CITE.sub("", f.body),
+                    "summary": _summary_text(f.body),
                     "seen_in": cites,
                     "tags": ["summary", *([_slug(category, 24)] if category else [])],
                 },

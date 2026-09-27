@@ -281,7 +281,10 @@ def test_a_bullet_citing_one_lesson_becomes_its_summary_and_the_rest_become_less
     code, _out, err = run_cli(repo, "--json", "import", "--apply")
     assert code == OK, err
     st = _state(repo)
-    assert st.lessons["L99"].summary.startswith("**Run the rubber-duck**")
+    # The bullet's bold lead is dropped: it is the title, which the view prints already.
+    assert st.lessons["L99"].summary == "before declaring done."
+    code, out, _e = run_cli(repo, "render", "--show", "lessons-summary")
+    assert out.count("rng-ordered collection is part of the output contract") == 1
     consolidated = [ls for ls in st.lessons.values() if "summary" in ls.tags]
     assert len(consolidated) == 2, [ls.id for ls in consolidated]
     multi = next(ls for ls in consolidated if "downstream" in ls.title)
