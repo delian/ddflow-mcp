@@ -40,6 +40,10 @@ def cmd_cleanup(a, c: Ctx) -> int:
 
 def cmd_cadence(a, c: Ctx) -> int:
     out = A.cadence(c.repo, ran=a.ran or "", note=a.note or "", agent=c.requested_agent)
+    if out.exit == FAIL:
+        # Printed nothing and exited 0 before `cadence` could fail at all.
+        print(out.reason, file=sys.stderr)
+        return FAIL
     if a.ran:
         c.out(f"recorded cadence run: {a.ran}", out.body(("cadence",)))
         return OK

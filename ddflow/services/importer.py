@@ -1108,16 +1108,30 @@ def scan_lesson_summaries(
     return found, empty
 
 
-_LEAD = re.compile(r"^\*\*(.+?)\*\*[\s.:—-]*")
+#: The bold lead and at most ONE separator after it. A greedy separator run ate the
+#: dashes of an explanation starting with a flag -- "**Pass** -f to force" became
+#: "f to force" (roborev 831).
+_LEAD = re.compile(r"^\*\*(.+?)\*\*\s*(?:[.:\u2014\u2013]\s+|-\s+)?")
 
 
-def _summary_text(bullet: str) -> str:
+def _summary_text(bullet: str, title: str = "") -> str:
     """A bullet as a SUMMARY: without its trailing citation, and without its bold lead
-    when there is more after it -- the lead is the lesson's title, which the summary
-    view prints already, so keeping it rendered every entry as its title twice."""
+    when that lead IS the title the view prints -- keeping it rendered every entry as
+    its title twice. A lead that says something the title does not is kept: attached to
+    a lesson whose title came from the corpus, dropping it lost the only copy of that
+    wording (roborev 831)."""
     text = _TRAILING_CITE.sub("", bullet)
-    rest = _LEAD.sub("", text, count=1).strip()
-    return rest or text
+    lead = _LEAD.match(text)
+    if not lead:
+        return text
+    rest = text[lead.end() :].strip()
+    a, b = _norm(lead.group(1)), _norm(title)
+    same = not title or a.startswith(b) or b.startswith(a)
+    return (rest or text) if same else text
+
+
+def _norm(s: str) -> str:
+    return re.sub(r"\W+", " ", s).strip().lower()
 
 
 def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
@@ -1151,7 +1165,7 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
         cites = f.extra.get("cites", [])
         target = lessons.get(cites[0]) if len(cites) == 1 else None
         if target is not None and not target.extra.get("summary"):
-            target.extra["summary"] = _summary_text(f.body)
+            target.extra["summary"] = _summary_text(f.body, target.title)
             attached += 1
             continue
         category = f.extra.get("category", "")

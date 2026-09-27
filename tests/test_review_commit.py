@@ -108,3 +108,21 @@ def test_over_mcp_too(repo, tmp_path):
     )
     text = json.dumps(reply["result"])
     assert "Division by zero" in text
+
+
+def test_a_shallow_clone_is_not_reviewed_against_the_empty_tree(repo, tmp_path):
+    """roborev 830: a missing parent was taken for NO parent, and the whole tree was
+    handed to the reviewer as the commit's change."""
+    _setup(repo, tmp_path)
+    _commit(repo, "calc.py", "def divide(a, b):\n    return a / b\n", "add divide")
+    top = _commit(repo, "NOTES.md", "notes\n", "notes")
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(shallow)], check=True
+    )
+    from ddflow.api.review import commit_diff
+
+    diff, how = commit_diff(shallow, top)
+    assert diff == "" and "not in this clone" in how, how
+    diff, _how = commit_diff(repo, top)
+    assert "NOTES.md" in diff and "calc.py" not in diff

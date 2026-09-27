@@ -297,6 +297,7 @@ SUMMARY = """# Lessons — summary
 
 ## Process
 - **Run the rubber-duck** before declaring done. [L99]
+- **Grep the OPERATION** -- the def is not enough. [L98]
 - **Mirror the downstream consumer's config.** Model ids and paths. [L98/L100]
 
 ## Correctness
@@ -311,12 +312,15 @@ def test_a_bullet_citing_one_lesson_becomes_its_summary_and_the_rest_become_less
     code, _out, err = run_cli(repo, "--json", "import", "--apply")
     assert code == OK, err
     st = _state(repo)
-    # The bullet's bold lead is dropped: it is the title, which the view prints already.
-    assert st.lessons["L99"].summary == "before declaring done."
+    # A lead that IS the lesson's title is dropped (the view prints the title); one that
+    # says something the title does not is the only copy of that wording, and is kept.
+    assert st.lessons["L98"].summary == "-- the def is not enough."
+    assert st.lessons["L99"].summary == "**Run the rubber-duck** before declaring done."
     code, out, _e = run_cli(repo, "render", "--show", "lessons-summary")
     assert out.count("rng-ordered collection is part of the output contract") == 1
     consolidated = [ls for ls in st.lessons.values() if "summary" in ls.tags]
     assert len(consolidated) == 2, [ls.id for ls in consolidated]
+    assert _summary_of_flag() == "-f to force", "a flag's dash was eaten with the separator"
     multi = next(ls for ls in consolidated if "downstream" in ls.title)
     assert {"L98", "L100"} <= set(multi.seen_in)
     rng = next(ls for ls in consolidated if "rng-ordered" in ls.title)
@@ -442,3 +446,7 @@ def test_a_source_that_yields_nothing_is_SAID_in_the_human_proposal(repo):
     code, out, err = run_cli(repo, "import")
     assert code == OK, err
     assert "yielded NOTHING" in out and "docs/todo.md" in out
+
+
+def _summary_of_flag() -> str:
+    return IM._summary_text("**Pass** -f to force", "Pass")

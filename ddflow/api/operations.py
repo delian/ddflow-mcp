@@ -56,22 +56,35 @@ def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
 
 
 def _calendar(cfg) -> dict[str, float]:
-    """`[cadence] every_days` as name -> days."""
+    """`[cadence] every_days` as name -> days. Raises ValueError naming the knob for an
+    entry that is not `name=<positive number>`: one typo raised a bare float() error,
+    and an entry without `=` was DROPPED -- a weekly pass never reported due, and
+    nothing said the knob was ignored (roborev 830)."""
     out: dict[str, float] = {}
     for spec in cfg.cadence.every_days:
-        name, _, days = spec.partition("=")
-        if name.strip() and days.strip():
-            out[name.strip()] = float(days)
+        name, sep, days = spec.partition("=")
+        try:
+            value = float(days) if sep and name.strip() else 0.0
+        except ValueError:
+            value = 0.0
+        if value <= 0:
+            raise ValueError(
+                f"[cadence] every_days entry {spec!r} is not `name=days` with a positive "
+                f'number of days (e.g. "bug_hunt=7")'
+            )
+        out[name.strip()] = value
     return out
 
 
-def _calendar_due(st, cfg, now: float | None = None) -> list[dict[str, Any]]:
+def _calendar_due(
+    st, cfg, now: float | None = None, calendar: dict[str, float] | None = None
+) -> list[dict[str, Any]]:
     """Calendar cadences not recorded as run within their period -- or ever."""
     from ..core.progress import epoch
 
     now = time.time() if now is None else now
     due = []
-    for name, days in _calendar(cfg).items():
+    for name, days in (calendar if calendar is not None else _calendar(cfg)).items():
         runs = st.cadences.get(name, [])
         # The NEWEST run by its own timestamp, not the last in fold order: the log is
         # ordered by Lamport clock, and two machines' runs can fold older-last
@@ -97,6 +110,10 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
     log, cfg, st = _load(repo, agent)
     done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
     done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
+    try:
+        calendar = _calendar(cfg)
+    except ValueError as exc:
+        return O.failed("cadence", str(exc), due=[])
 
     if ran:
         if ran == "lessons_compression":
@@ -126,9 +143,9 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
         ("mutation_tests", cfg.cadence.mutation_tests_every_phases, "phases", done_phases),
         ("lessons_pass", cfg.cadence.lessons_pass_every_phases, "phases", done_phases),
     ):
-        if name in _calendar(cfg):
-            # Configured by the calendar instead: its runs record a DATE, and reading
-            # one as a completion count would raise -- or, worse, compare nonsense.
+        if name in calendar:
+            # The calendar entry of the same name REPLACES this pass; without the skip
+            # it would also fall due by completions, reported twice under one name.
             continue
         runs = st.cadences.get(name, [])
         at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
@@ -136,7 +153,7 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
         if every > 0 and since >= every:
             due.append({"cadence": name, "since": since, "every": every, "unit": unit})
     due += lessons_cadence(st, cfg)
-    due += _calendar_due(st, cfg)
+    due += _calendar_due(st, cfg, calendar=calendar)
     data: dict[str, Any] = {"due": due, "tasks_done": done_tasks, "phases_done": done_phases}
     if not due:
         return O.nothing(

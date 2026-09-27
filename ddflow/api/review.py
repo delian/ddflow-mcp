@@ -35,8 +35,21 @@ def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
     if not r.ok:
         return "", f"commit {sha!r} not found"
     full = r.out
-    parent = W.git(repo, "rev-parse", "--verify", "--quiet", f"{full}^1")
-    base = parent.out if parent.ok else "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+    # Whether the commit HAS a parent comes from its own header, which a shallow clone
+    # keeps; whether the parent is PRESENT is a separate question. Conflating them
+    # reviewed a shallow-cloned commit against the empty tree -- the whole repository
+    # presented as that commit's change (roborev 830).
+    header = W.git(repo, "cat-file", "-p", full)
+    parents = [ln.split()[1] for ln in header.out.splitlines() if ln.startswith("parent ")]
+    if not parents:
+        base = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # the empty tree: a root commit
+    else:
+        base = parents[0]
+        if not W.git(repo, "cat-file", "-e", f"{base}^{{commit}}").ok:
+            return "", (
+                f"commit {full[:12]}'s parent {base[:12]} is not in this clone (shallow?); "
+                f"its change cannot be computed here"
+            )
     d = W.git(repo, "diff", "--no-color", base, full)
     return (d.out + "\n") if d.ok and d.out else "", f"commit {full[:12]} vs its first parent"
 

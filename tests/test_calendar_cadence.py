@@ -51,13 +51,30 @@ def test_it_falls_due_again_after_its_period():
 
 
 def test_a_calendar_name_replaces_the_count_based_pass_of_the_same_name(repo):
-    """Its runs record a DATE; read as a completion count it would raise."""
+    """Without the skip the count-based pass of that name ALSO falls due by completions.
+
+    roborev 830: the first version of this test could not fail -- with no completed
+    work the count-based pass was never due either way. Here it would be."""
+    from ddflow.infra.log import EventLog
+
     run_cli(repo, "init")
-    (repo / ".ddflow" / "config.toml").write_text('[cadence]\nevery_days = ["dedupe_sweep=7"]\n')
+    (repo / ".ddflow" / "config.toml").write_text(
+        '[cadence]\nevery_days = ["dedupe_sweep=7"]\ndedupe_sweep_every_tasks = 1\n'
+    )
     run_cli(repo, "cadence", "--ran", "dedupe_sweep")
-    code, _out, err = run_cli(repo, "--json", "cadence")
-    assert code in (OK, NOTHING), err
-    assert "dedupe_sweep" not in _due(repo)
+    for t in ("T1", "T2", "T3"):
+        run_cli(repo, "task", "add", t, "--globs", f"{t}.py")
+        EventLog(repo, "x").append("item.completed", t, {"kind": "task"})
+    assert "dedupe_sweep" not in _due(repo), "the count-based pass fired under a calendar name"
+
+
+def test_a_malformed_every_days_entry_is_an_error_naming_the_knob(repo):
+    run_cli(repo, "init")
+    for bad in ('"bug_hunt"', '"bug_hunt=abc"', '"bug_hunt=0"'):
+        (repo / ".ddflow" / "config.toml").write_text(f"[cadence]\nevery_days = [{bad}]\n")
+        code, out, err = run_cli(repo, "cadence")
+        assert code == FAIL, bad
+        assert "[cadence] every_days entry" in out + err, bad
 
 
 def test_the_session_start_hook_says_what_is_due(repo):
