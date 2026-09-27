@@ -520,6 +520,8 @@ class CadenceConfig:
     dedupe_sweep_every_tasks: int = 4
     lessons_pass_every_phases: int = 4
     max_missed: int = 1
+    #: `name=days` for passes that are due by the CALENDAR, not by completions.
+    every_days: list[str] = field(default_factory=list)
 
 
 _doc(
@@ -531,6 +533,11 @@ _doc(
     "gates",
     "rate_max_fail",
     "Failure rate (0.0-1.0) at which a gate is reported as failing on nearly everything. 'A gate that fails on everything is worse than no gate: it trains the next reader to skip it.' At or above this, the gate is flaky or measuring a moving target and re-running it will not converge -- the remedy is to repair the gate, not the work.",
+)
+_doc(
+    "cadence",
+    "every_days",
+    'Passes that fall due by the calendar rather than by completed work, as `name=days`: ["bug_hunt=7", "dedupe=7"]. `ddflow cadence` reports one due when `cadence --ran <name>` has not been recorded within that many days -- or ever, so a weekly pass that has never run is due now rather than silently never. For a rule like \'a bug hunt every week\' that otherwise lives only in prose, which is where it stops happening.',
 )
 _doc(
     "cadence",

@@ -1536,6 +1536,13 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "base": ("string", "Ref to diff against (default: the item's base branch).", False),
             "context": ("string", "Extra context to hand the reviewer.", False),
+            "commit": (
+                "string",
+                "Review this ONE landed commit (against its first parent) instead of the "
+                "item's branch: the after-merge review, when the branch is gone. Never "
+                "pass a merge's own sha expecting its branch's changes AND more.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().run_review(
             repo,
@@ -1544,6 +1551,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             intent=a.get("intent", "") or "",
             context=a.get("context", "") or "",
             base=a.get("base", "") or "",
+            commit=a.get("commit", "") or "",
             agent=agent,
         ),
         # The TRANSCRIPT the run produced — findings already formatted with their

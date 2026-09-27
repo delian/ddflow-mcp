@@ -16,6 +16,7 @@ Two exit-code rules here are load-bearing and neither is obvious from the code:
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,38 @@ def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
     return O.ok("cleanup", **data)
 
 
+def _calendar(cfg) -> dict[str, float]:
+    """`[cadence] every_days` as name -> days."""
+    out: dict[str, float] = {}
+    for spec in cfg.cadence.every_days:
+        name, _, days = spec.partition("=")
+        if name.strip() and days.strip():
+            out[name.strip()] = float(days)
+    return out
+
+
+def _calendar_due(st, cfg, now: float | None = None) -> list[dict[str, Any]]:
+    """Calendar cadences not recorded as run within their period -- or ever."""
+    from ..core.progress import epoch
+
+    now = time.time() if now is None else now
+    due = []
+    for name, days in _calendar(cfg).items():
+        runs = st.cadences.get(name, [])
+        last = epoch(runs[-1]["at"]) if runs else 0.0
+        age_days = (now - last) / 86400 if last else None
+        if age_days is None or age_days >= days:
+            due.append(
+                {
+                    "cadence": name,
+                    "since": "never" if age_days is None else f"{age_days:.1f} days",
+                    "every": days,
+                    "unit": "days",
+                }
+            )
+    return due
+
+
 def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.Outcome:
     """Which periodic passes are due? Derived from the log, so there is no state file."""
     from ..services.cadence import lessons_cadence
@@ -69,6 +102,8 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
                 {"bytes": sum(len(x.text().encode("utf-8")) for x in live), "entries": len(live)}
             )
         else:
+            # A calendar cadence is timed by the run event's own timestamp; what it
+            # records here is incidental.
             result = str(
                 done_tasks if ran in ("integration_tests", "dedupe_sweep") else done_phases
             )
@@ -88,12 +123,17 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
         ("mutation_tests", cfg.cadence.mutation_tests_every_phases, "phases", done_phases),
         ("lessons_pass", cfg.cadence.lessons_pass_every_phases, "phases", done_phases),
     ):
+        if name in _calendar(cfg):
+            # Configured by the calendar instead: its runs record a DATE, and reading
+            # one as a completion count would raise -- or, worse, compare nonsense.
+            continue
         runs = st.cadences.get(name, [])
         at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
         since = count - at_last
         if every > 0 and since >= every:
             due.append({"cadence": name, "since": since, "every": every, "unit": unit})
     due += lessons_cadence(st, cfg)
+    due += _calendar_due(st, cfg)
     data: dict[str, Any] = {"due": due, "tasks_done": done_tasks, "phases_done": done_phases}
     if not due:
         return O.nothing(

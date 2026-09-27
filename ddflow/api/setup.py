@@ -384,6 +384,19 @@ def _session_start(repo: Path, agent: str) -> O.Outcome:
     except Exception as exc:
         parts += [f"_(external sync failed: {exc})_", ""]
     try:
+        from .operations import cadence
+
+        due = cadence(repo, agent=agent)
+        if due.exit == O.OK and due.data.get("due"):
+            parts += [
+                "Periodic passes DUE: "
+                + ", ".join(f"{d['cadence']} (last: {d['since']})" for d in due.data["due"])
+                + ". Record each with `ddflow cadence --ran <name>` when done.",
+                "",
+            ]
+    except Exception as exc:
+        parts += [f"_(cadence check failed: {exc})_", ""]
+    try:
         out = brief(repo, check_recovery=True, agent=agent)
         parts.append(out.data.get("text", "") or out.reason)
     except Exception as exc:

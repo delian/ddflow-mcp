@@ -727,6 +727,11 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     rw.add_argument("--context", default="")
     rw.add_argument("--base", default="")
+    rw.add_argument(
+        "--commit",
+        default="",
+        help="review this one landed commit (vs its first parent) instead of the item's branch",
+    )
     rw.set_defaults(fn=cmd_review)
 
     ad = s.add_parser("adopt", help="install ddflow into this project for one or more agents")

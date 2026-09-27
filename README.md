@@ -499,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 88 knobs.
+cadences, and the rest of the 89 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -2208,7 +2208,7 @@ declared once and persists — see
 
 ## Configuration
 
-88 knobs across 16 sections, every one documented in place:
+89 knobs across 16 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2250,7 +2250,12 @@ part that matters.
 * **Crash recovery**: `ddflow recover` finds worktrees whose lease expired, so an
   interrupted agent's work is found rather than lost.
 * **Cadences** (`ddflow cadence`) tell you which periodic passes are due — bug hunts,
-  dedupe, lesson compression — from the log rather than a calendar.
+  dedupe, lesson compression — from the log, counted in completed work; and, for a rule
+  like "a bug hunt every week", by the calendar (`[cadence] every_days =
+  ["bug_hunt=7"]`: never run means due now). The SessionStart hook lists what is due.
+* **Post-merge review**: `ddflow review <item> --commit <sha>` reviews one landed
+  commit against its first parent — a merge as what it brought in — when the branch
+  is gone.
 * **A commit hook** (`ddflow hooks install`) can refuse an unclaimed edit outright,
   and refuses a staged `ddflow render` view that the log no longer regenerates
   byte-for-byte — hand-edited, or stale (`[enforce] generated_views`). Its commit-msg

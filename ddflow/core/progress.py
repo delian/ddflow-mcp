@@ -57,6 +57,11 @@ PROGRESS_KINDS: frozenset[str] = frozenset(
 )
 
 
+def epoch(ts: str) -> float:
+    """Public name for `_epoch`: event timestamp -> epoch seconds, 0.0 when unparseable."""
+    return _epoch(ts)
+
+
 def _epoch(ts: str) -> float:
     """Event timestamp -> epoch seconds. 0.0 when unparseable.
 

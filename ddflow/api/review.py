@@ -23,6 +23,24 @@ from ..infra import worktree as W
 from ._base import _load
 
 
+def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
+    """(diff, how) for ONE landed commit, against its first parent.
+
+    The review the source projects run after every commit (`roborev review <sha>`) is of
+    the commit, not of a branch: by then the branch is merged and gone, and HEAD may be a
+    merge whose own diff is empty. First parent, so a merge commit's review is of what
+    the merge brought in. A root commit is diffed against the empty tree.
+    """
+    r = W.git(repo, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}")
+    if not r.ok:
+        return "", f"commit {sha!r} not found"
+    full = r.out
+    parent = W.git(repo, "rev-parse", "--verify", "--quiet", f"{full}^1")
+    base = parent.out if parent.ok else "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+    d = W.git(repo, "diff", "--no-color", base, full)
+    return (d.out + "\n") if d.ok and d.out else "", f"commit {full[:12]} vs its first parent"
+
+
 def diff_for(repo: Path, cfg, st, item: str, base: str = "") -> tuple[str, str]:
     """(diff, how) for an item: its worktree branch vs base, plus the working tree.
 
@@ -129,9 +147,14 @@ def review(
     context: str = "",
     base: str = "",
     on_progress: Callable[[str], None] | None = None,
+    commit: str = "",
     agent: str = "",
 ) -> O.Outcome:
-    """Run every reviewer configured for `gate`, and record the outcome against `item`."""
+    """Run every reviewer configured for `gate`, and record the outcome against `item`.
+
+    `commit` reviews that one landed commit instead of the item's branch -- the
+    after-merge review, recorded against the item (done or not) all the same.
+    """
     from ..services import gates as G
     from ..services import prompts as P
     from ..services import review as R
@@ -176,7 +199,7 @@ def review(
             how="",
         )
 
-    diff, how = diff_for(repo, cfg, st, item, base)
+    diff, how = commit_diff(repo, commit) if commit else diff_for(repo, cfg, st, item, base)
     if not diff.strip():
         return unavailable(
             f"Empty diff ({how}) — nothing to review. Recording UNAVAILABLE.", how=how

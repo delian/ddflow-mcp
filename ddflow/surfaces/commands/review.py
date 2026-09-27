@@ -29,6 +29,7 @@ def cmd_review(a, c: Ctx) -> int:
         intent=a.intent or "",
         context=a.context or "",
         base=a.base or "",
+        commit=a.commit or "",
         # Streamed as it happens. Silence for two minutes reads as a hang, and an agent
         # watching a hung tool kills it.
         on_progress=lambda line: print(line, flush=True),
