@@ -319,12 +319,22 @@ def _heading_disposition(heading: str) -> tuple[str, str]:
     return ("hold", f"under a {m} heading") if m else ("", "")
 
 
+#: A negation in a STATUS verdict. Not an `UN-` prefix: `UNSHIPPED` already fails the
+#: word-start guard in `_marker_in`, and matching `un` caught "DEFERRED until ...".
+_NEGATED = re.compile(r"(?i)\b(NOT|NEVER|NO LONGER)\b|N'T\b")
+
+
 def _status_disposition(line: str) -> tuple[str, str] | None:
     """The disposition a `**STATUS**:` line gives its section, or None if not one."""
     m = _STATUS_LINE.match(line)
     if not m:
         return None
     verdict = re.split(r"\s[—\-(]|[—(]", m.group(1).strip(), maxsplit=1)[0].strip()
+    if _NEGATED.search(verdict):
+        # `NOT DONE`, `NOT SHIPPED yet`: the word is there and the meaning is the
+        # opposite. Read as closed, a section the operator marked unfinished imported
+        # its open work as history (roborev 824). A negated verdict is live.
+        return "", ""
     closed = _marker_in(verdict, _STATUS_CLOSED)
     if closed:
         return "closed", f"its section's STATUS is {closed}"
@@ -966,7 +976,10 @@ _BULLET = re.compile(r"^[-*]\s+(.*)$")
 _CITES = re.compile(r"\bL\d+[a-z]?\b")
 _TRAILING_CITE = re.compile(r"\s*\[([^\]]*)\]\s*$")
 #: How a generated file announces itself, in the first lines.
-_GENERATED_MARK = re.compile(r"GENERATED|DO NOT EDIT", re.I)
+#: How a generated file announces itself: a comment banner, or the literal DO NOT EDIT.
+#: Not the bare word anywhere -- a hand-written bullet saying "never hand-edit generated
+#: code" discarded the whole summary it was in (roborev 824).
+_GENERATED_MARK = re.compile(r"<!--[^>]*\bGENERATED\b|\bDO NOT EDIT\b")
 
 
 def _summary_bullet(lines: list[str], source: str, category: str) -> Found:
@@ -1369,6 +1382,46 @@ def _known_ids(state) -> set[str]:
     return known
 
 
+def _pull_in_needed(
+    plan: ImportPlan, deferred_done: dict[str, Found], held: list[str]
+) -> tuple[int, int]:
+    """Bring in finished/closed items that open work depends on. Returns (done, closed).
+
+    A FINISHED dependency comes in as done, so the dependent is ready. A CLOSED one
+    (declined, refuted) comes in as abandoned -- which never satisfies a dependency, so
+    the dependent would sit blocked forever on "S.1 is abandoned" after a note promising
+    the opposite (roborev 824). Such a dependent is HELD instead, saying which declined
+    item it waits on: somebody has to decide whether the dependency still stands.
+    """
+    wanted = {d for f in plan.found for d in f.needs} & set(deferred_done)
+    done = closed = 0
+    for ident in sorted(wanted):
+        plan.found.append(deferred_done[ident])
+        if deferred_done[ident].done:
+            done += 1
+        else:
+            closed += 1
+    declined = {i for i in wanted if not deferred_done[i].done}
+    for f in plan.found:
+        if f.kind != "task" or f.done or f.extra.get("disposition"):
+            continue
+        waits = sorted(set(f.needs) & declined)
+        if waits:
+            f.extra["disposition"] = "hold"
+            f.extra["disposition_why"] = (
+                f"needs {', '.join(waits)}, which the source declines -- drop the "
+                f"dependency and unblock, or abandon this too"
+            )
+            held.append(f.ident)
+    if wanted:
+        plan.notes.append(
+            f"{len(wanted)} finished or declined task(s) were imported anyway because open "
+            f"work depends on them: {', '.join(sorted(wanted))}. A finished one satisfies "
+            f"the dependency; a declined one never can, so what waits on it is held."
+        )
+    return done, closed
+
+
 def _note_withheld(
     plan: ImportPlan, done_skipped: int, closed_skipped: int, held: list[str]
 ) -> None:
@@ -1551,21 +1604,8 @@ def plan_import(
     # it leaves the open one blocked on an id the queue has never heard of — and an
     # unknown dependency is treated as unmet, deliberately, so the import would land
     # permanently stuck work and look like it had succeeded.
-    wanted = {d for f in plan.found for d in f.needs} & set(deferred_done)
-    for ident in sorted(wanted):
-        plan.found.append(deferred_done[ident])
-        if deferred_done[ident].done:
-            done_skipped -= 1
-        else:
-            closed_skipped -= 1
-    if wanted:
-        plan.notes.append(
-            f"{len(wanted)} completed task(s) were imported anyway because open work "
-            f"depends on them: {', '.join(sorted(wanted))}. Without them those "
-            f"dependencies would be unresolvable and the open items would import "
-            f"permanently blocked."
-        )
-    _note_withheld(plan, done_skipped, closed_skipped, held)
+    done_pulled, closed_pulled = _pull_in_needed(plan, deferred_done, held)
+    _note_withheld(plan, done_skipped - done_pulled, closed_skipped - closed_pulled, held)
 
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:

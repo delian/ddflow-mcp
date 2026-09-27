@@ -165,15 +165,45 @@ def test_include_done_brings_closed_work_in_as_ABANDONED(repo):
     assert "REFUTED" in st.items["A.5"].blocked_reason
 
 
-def test_a_closed_item_that_open_work_NEEDS_is_imported_so_the_need_resolves(repo):
+def test_work_that_needs_a_DECLINED_item_is_held_saying_so_not_silently_stuck(repo):
+    """roborev 824: the declined dependency imported as ABANDONED, which never satisfies
+    a need, so S.2 sat blocked on "S.1 is abandoned" after a note promising otherwise --
+    and this test only checked the plan, never the queue."""
     _write(
         repo,
         "docs/todo.md",
         "## S\n\n- [ ] **S.1** — DECLINED: was the old approach\n"
-        "- [ ] **S.2** — the new approach\n  **Needs:** S.1\n",
+        "- [ ] **S.2** — the new approach\n  **Needs:** S.1\n"
+        "- [x] **S.3** — done long ago\n- [ ] **S.4** — builds on it\n  **Needs:** S.3\n",
     )
-    t = _tasks(repo)
-    assert "S.1" in t, "a need on a closed item would otherwise import permanently blocked"
+    code, _out, err = run_cli(repo, "import", "--apply")
+    assert code == OK, err
+    st = _state(repo)
+    assert st.items["S.1"].state == ABANDONED
+    assert st.items["S.2"].state == BLOCKED
+    assert "S.1, which the source declines" in st.items["S.2"].blocked_reason
+    _c, out, _e = run_cli(repo, "--json", "next")
+    assert "S.4" in {r["id"] for r in json.loads(out)["ready"]}, "a DONE dependency must resolve"
+
+
+def test_a_NEGATED_status_is_live(repo):
+    """roborev 824: `NOT DONE` contains DONE."""
+    for verdict in ("NOT DONE — 3 remaining", "NOT SHIPPED yet", "not complete", "UNFINISHED"):
+        _write(repo, "docs/todo.md", f"## S\n**STATUS**: {verdict}\n\n- [ ] **S.1** — live\n")
+        assert _tasks(repo)["S.1"].extra.get("disposition") == "", verdict
+
+
+def test_a_hand_written_summary_that_mentions_generated_code_is_still_imported(repo):
+    _write(repo, "docs/lessons.md", "# L\n\n## a rule\nx\n")
+    _write(
+        repo,
+        "docs/lessons-summary.md",
+        "# Lessons summary\n\n- **Never hand-edit generated code.** Regenerate it. [L42]\n",
+    )
+    plan = IM.plan_import(repo, None)
+    assert any(
+        f.title == "Never hand-edit generated code" for f in plan.found if f.kind == "lesson"
+    )
 
 
 # -- archives: a plan file that is history until a section is named ------------------------
