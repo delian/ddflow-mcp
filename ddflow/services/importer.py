@@ -269,6 +269,8 @@ _SECTION_CLOSED = ("DECLINED", "OPTED OUT", "DESCOPED")
 _STATUS_LINE = re.compile(r"^\s*\*\*STATUS\*\*\s*:?\s*(.+)$", re.I)
 _STATUS_CLOSED = ("SHIPPED", "CLOSED", "DECLINED", "SUPERSEDED", "ABANDONED", "DONE", "COMPLETE")
 _STATUS_HOLD = ("DEFERRED", "WATCH", "ON HOLD", "PARKED", "BLOCKED")
+#: Words that contradict a closed verdict later on the same STATUS line.
+_STATUS_LIVE = ("IN PROGRESS", "REOPENED", "RE-OPENED")
 _TITLE_ASIDE = re.compile(r"\(([^)]*)\)")
 
 
@@ -337,6 +339,15 @@ def _status_disposition(line: str) -> tuple[str, str] | None:
         return "", ""
     closed = _marker_in(verdict, _STATUS_CLOSED)
     if closed:
+        live = _marker_in(m.group(1), _STATUS_LIVE)
+        if live:
+            # `CLOSED -- reopened in Phase 12, IN PROGRESS now`: a line extended in
+            # place rather than rewritten. Dropping it as history lost live work; held,
+            # it is visible and one `unblock` from work (rubber-duck).
+            return "hold", (
+                f"its section's STATUS says {closed} but also {live} -- ask the operator "
+                f"which is true"
+            )
         return "closed", f"its section's STATUS is {closed}"
     hold = _marker_in(verdict, _STATUS_HOLD)
     if hold:
@@ -356,24 +367,39 @@ def _fenced(lines: list[str]) -> list[bool]:
     in a real research log imported as a research entry of its own and carried away the
     addendum after it; a `- [ ]` inside a fenced example became a task. Inside a fence
     they are text, and they stay in the body of whatever entry the fence belongs to.
+
+    A fence never CLOSED is treated as not a fence at all. CommonMark would run it to the
+    end of the file, and did here: one typo swallowed every heading and checkbox after
+    it, and because the file had yielded something earlier, nothing was reported
+    (rubber-duck). A stray fence line costs one line of structure; the other reading
+    costs the rest of the file.
     """
     out: list[bool] = []
     fence = ""
-    for ln in lines:
+    opened = -1
+    for i, ln in enumerate(lines):
         m = _FENCE.match(ln)
         if fence:
             out.append(True)
-            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+            # A closing fence carries no info string: "```py" opens a block, never
+            # closes one.
+            closes = m and not ln.strip()[len(m.group(1)) :].strip()
+            if closes and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
                 fence = ""
         elif m:
             fence = m.group(1)
+            opened = i
             out.append(True)
         else:
             out.append(False)
+    if fence:
+        # Re-read everything after the stray opener as if it were not there, so a
+        # properly paired fence further down is still a fence.
+        out[opened + 1 :] = _fenced(lines[opened + 1 :])
     return out
 
 
-def _sections(text: str, level: int = 0) -> list[tuple[str, str, int]]:
+def _sections(text: str) -> list[tuple[str, str, int]]:
     """`(title, body, first_line)` for every heading at the document's TOP level.
 
     The ONE splitter for lessons, research entries and journal entries -- all three are
@@ -394,19 +420,11 @@ def _sections(text: str, level: int = 0) -> list[tuple[str, str, int]]:
     levels = [len(m.group(1)) for m in heads if m]
     if not levels:
         return []
-    top = level or min(levels)
+    top = min(levels)
     out: list[tuple[str, str, int]] = []
     title, buf, start = "", [], 0
     for idx, ln in enumerate(lines, 1):
         h = heads[idx - 1]
-        if h and len(h.group(1)) < top:
-            # A SHALLOWER heading ends the current entry without starting one: with an
-            # explicit `level`, the `## 2026-06-28 -- context` groups around `### L100.`
-            # entries are containers, and their prose must not leak into the entry above.
-            if title:
-                out.append((title, "\n".join(buf).strip(), start))
-            title, buf = "", []
-            continue
         if not h or len(h.group(1)) != top:
             if title:
                 buf.append(ln)
@@ -902,13 +920,13 @@ _LESSON_BODY_CHARS = 16000
 
 
 def _lesson_level(text: str) -> int:
-    """The heading level lessons live at: the level of id-bearing headings if any, else 0.
+    """Non-zero when the corpus names its lessons with ids (`### L100.`); then
+    `_id_entries` splits it, else the shallowest heading level does.
 
-    0 means "the shallowest level present", which is the old rule and right for a corpus
-    of `## title` entries. A corpus that groups `### L100.` entries under `## <date> --
-    <context>` headings has its lessons ONE level down, and splitting at the top imported
-    176 lessons as 24 date-groups -- each "lesson" a day's worth of unrelated rules under
-    a heading that states none of them.
+    A corpus that groups `### L100.` entries under `## <date> -- <context>` headings has
+    its lessons below the top level, and splitting at the top imported 176 lessons as 24
+    date-groups -- each "lesson" a day's worth of unrelated rules under a heading that
+    states none of them.
     """
     counts: dict[int, int] = {}
     lines = text.splitlines()
@@ -917,6 +935,45 @@ def _lesson_level(text: str) -> int:
         if h and _LESSON_HEAD.match(h.group(2).strip()):
             counts[len(h.group(1))] = counts.get(len(h.group(1)), 0) + 1
     return max(counts, key=counts.get) if counts else 0
+
+
+def _id_entries(text: str) -> list[tuple[str, str, int]]:
+    """`(title, body, line)` for every heading that carries a lesson id, AT ANY DEPTH.
+
+    A single level chosen by majority vote dropped an id-bearing lesson that sat one
+    level off -- a `## L200.` among `### L1xx.` entries vanished, neither merged nor
+    reported (rubber-duck). Here each id-bearing heading starts an entry wherever it is;
+    a heading WITHOUT an id at the entry's own depth or shallower is a container
+    (`## <date> -- context`) and ends it, and a deeper one is part of its body.
+    """
+    lines = text.splitlines()
+    fenced = _fenced(lines)
+    out: list[tuple[str, str, int]] = []
+    title: str | None = None
+    level = 0
+    buf: list[str] = []
+    start = 0
+
+    def flush() -> None:
+        if title is not None:
+            out.append((title, "\n".join(buf).strip(), start))
+
+    for idx, ln in enumerate(lines, 1):
+        h = None if fenced[idx - 1] else _SECTION.match(ln)
+        if h:
+            depth, heading = len(h.group(1)), h.group(2).strip()
+            if _LESSON_HEAD.match(heading):
+                flush()
+                title, level, buf, start = heading, depth, [], idx
+                continue
+            if title is not None and depth <= level:
+                flush()
+                title = None
+                continue
+        if title is not None:
+            buf.append(ln)
+    flush()
+    return out
 
 
 def _one_paragraph(m: re.Match | None) -> str:
@@ -949,7 +1006,8 @@ def scan_lessons(
         rel = str(path.relative_to(repo))
         text = path.read_text("utf-8", errors="replace")
         level = _lesson_level(text)
-        sections = [s for s in _sections(text, level) if not _is_index_section(s[0])]
+        raw = _id_entries(text) if level else _sections(text)
+        sections = [s for s in raw if not _is_index_section(s[0])]
         if not sections:
             empty.append(rel)
             continue
@@ -1071,7 +1129,15 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
     lessons, or none -- is a consolidated rule nothing else holds, and becomes a lesson
     tagged `summary` with its citations as provenance. No bullet is dropped.
     """
-    lessons = {f.ident: f for f in scanned if f.kind == "lesson"}
+    # Only an id carried by exactly ONE lesson can be cited unambiguously. Two files
+    # both holding `L1` (a current corpus and a retrospective) made the dict keep
+    # whichever was scanned LAST, and the bullet meant for the current lesson landed on
+    # an unrelated old one that the uniquifier later renamed `L1-2` (rubber-duck).
+    by_id: dict[str, list[Found]] = {}
+    for f in scanned:
+        if f.kind == "lesson":
+            by_id.setdefault(f.ident, []).append(f)
+    lessons = {i: fs[0] for i, fs in by_id.items() if len(fs) == 1}
     attached = consolidated = 0
     generated: list[str] = []
     out: list[Found] = []

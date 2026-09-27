@@ -20,6 +20,11 @@ def cmd_phase_add(a, c: Ctx) -> int:
         priority=a.priority,
         agent=c.requested_agent,
     )
+    if out.exit:
+        # It could not fail before ids were validated, so this printed "added"
+        # unconditionally -- over an exit 1.
+        print(out.reason, file=sys.stderr)
+        return out.exit
     c.out(f"phase {a.id} added", out.body(("id",)))
     return out.exit
 

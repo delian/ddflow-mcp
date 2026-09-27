@@ -225,7 +225,7 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
     ``needs`` surfaces as a blocked item rather than as an item that silently starts
     early. Treating unknown as satisfied is the vacuous-truth trap in its purest form.
     """
-    if is_external(dep):
+    if is_external(dep) and dep not in state.items:
         seen = state.external.get(dep)
         if seen is None:
             return False, (

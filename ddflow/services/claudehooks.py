@@ -59,6 +59,25 @@ def _read(path: Path) -> dict[str, Any]:
     return data
 
 
+def _hooks_of(group: Any, path: Path) -> list[Any]:
+    """A SessionStart group's hook list; a non-list is refused, not iterated.
+
+    `{"hooks": 5}` in a group -- another tool's bug, a manual edit -- crashed status,
+    install and uninstall with a TypeError instead of the refusal this module promises
+    for a file it cannot make sense of (rubber-duck).
+    """
+    if not isinstance(group, dict):
+        return []
+    hooks = group.get("hooks")
+    if hooks is None:
+        return []
+    if not isinstance(hooks, list):
+        raise SettingsError(
+            f"{path}: a SessionStart group's `hooks` is not a list; not touching it"
+        )
+    return hooks
+
+
 def _ours(hook: Any) -> bool:
     return isinstance(hook, dict) and MARKER in str(hook.get("command", ""))
 
@@ -84,7 +103,11 @@ def state(repo: Path) -> tuple[bool | None, str]:
         data = _read(settings_path(repo))
     except SettingsError as exc:
         return None, str(exc)
-    on = any(_ours(h) for g in _groups(data) if isinstance(g, dict) for h in (g.get("hooks") or []))
+    path = settings_path(repo)
+    try:
+        on = any(_ours(h) for g in _groups(data) for h in _hooks_of(g, path))
+    except SettingsError as exc:
+        return None, str(exc)
     return on, ""
 
 
@@ -100,9 +123,7 @@ def install(repo: Path, command: str) -> str:
         raise SettingsError(f"{path}: `hooks.SessionStart` is not a list; not touching it")
     entry = {"type": "command", "command": command}
     for g in groups:
-        if not isinstance(g, dict):
-            continue
-        for i, h in enumerate(g.get("hooks") or []):
+        for i, h in enumerate(_hooks_of(g, path)):
             if _ours(h):
                 if h == entry:
                     return f"the ddflow SessionStart hook is already in {path}"
@@ -127,7 +148,7 @@ def uninstall(repo: Path) -> str:
         if not isinstance(g, dict):
             kept_groups.append(g)
             continue
-        hooks = g.get("hooks") or []
+        hooks = _hooks_of(g, path)
         rest = [h for h in hooks if not _ours(h)]
         removed += len(hooks) - len(rest)
         if rest or not hooks:

@@ -335,14 +335,23 @@ def _check_msg(cfg, msg_file: str) -> O.Outcome:
         # git always passes the file; no file means we were not called by git, and
         # inventing a failure from missing input is the vacuous-FAIL mirror.
         return O.ok("hooks", **data)
-    merging = (
+    # A merge really in progress: MERGE_HEAD resolves AND is not already contained in
+    # HEAD. A stale or planted MERGE_HEAD pointing at HEAD exempted every ordinary
+    # commit from the trailer rule (rubber-duck).
+    head = P.run(
+        ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    merging = head.returncode == 0 and (
         P.run(
-            ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+            ["git", "merge-base", "--is-ancestor", head.stdout.strip(), "HEAD"],
             capture_output=True,
             text=True,
             timeout=30,
         ).returncode
-        == 0
+        != 0
     )
     code, msg = E.check_item_trailer(
         path.read_text("utf-8", errors="replace"),

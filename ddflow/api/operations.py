@@ -73,7 +73,10 @@ def _calendar_due(st, cfg, now: float | None = None) -> list[dict[str, Any]]:
     due = []
     for name, days in _calendar(cfg).items():
         runs = st.cadences.get(name, [])
-        last = epoch(runs[-1]["at"]) if runs else 0.0
+        # The NEWEST run by its own timestamp, not the last in fold order: the log is
+        # ordered by Lamport clock, and two machines' runs can fold older-last
+        # (rubber-duck).
+        last = max((epoch(r["at"]) for r in runs), default=0.0)
         age_days = (now - last) / 86400 if last else None
         if age_days is None or age_days >= days:
             due.append(

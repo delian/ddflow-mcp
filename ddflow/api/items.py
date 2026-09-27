@@ -62,6 +62,18 @@ def update(
     return O.ok("item.updated", id=item, changed=sorted(fields), fields=fields)
 
 
+def _bad_id(item: str) -> str:
+    """Why `item` cannot be a local id, or "". A colon is how a dependency names an item
+    in ANOTHER repository (`repo:ID`); a local `foo:bar` was taken for one, looked up
+    in the sibling observations, and blocked everything that needed it (rubber-duck)."""
+    if ":" in item:
+        return (
+            f"{item!r}: a colon marks a dependency in another repository (`repo:ID`, "
+            f"[schedule] repos), so it cannot be part of a local id"
+        )
+    return ""
+
+
 #: Splitting into one piece is a rename, not a split.
 MIN_SPLIT_PARTS = 2
 
@@ -87,6 +99,9 @@ def phase_add(
     agent: str = "",
 ) -> O.Outcome:
     """Add a phase — an umbrella that completes when its tasks do."""
+    bad = _bad_id(item)
+    if bad:
+        return O.failed("phase.added", bad, id=item)
     log, _cfg, _st = _load(repo, agent)
     log.append(
         "phase.added",
@@ -124,6 +139,9 @@ def task_add(
     """
     from ..services import leases as L
 
+    bad = _bad_id(item)
+    if bad:
+        return O.failed("task.added", bad, id=item)
     log, _cfg, st = _load(repo, agent)
     if parent and parent not in st.items:
         return O.failed(
