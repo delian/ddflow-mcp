@@ -367,3 +367,45 @@ def test_configured_globs_REPLACE_the_defaults(repo):
     assert code == OK, err
     titles = {f["title"] for f in json.loads(out)["found"] if f["kind"] == "lesson"}
     assert titles == {"configured rule"}
+
+
+# -- what the proposal must not invent, and must not hide -------------------------------------
+
+FENCED = """# Research
+
+## R1 — a real entry
+Some claim. CONFIRMED.
+
+```console
+$ ddflow recall x
+## PROMPT/NOTE — the operator asked
+- [ ] **FAKE.1** — an example checkbox inside a fence
+```
+
+Addendum that belongs to R1.
+
+## R2 — the next entry
+REFUTED.
+"""
+
+
+def test_headings_and_checkboxes_inside_a_code_fence_are_text(repo):
+    _write(repo, "docs/RESEARCH.md", FENCED)
+    _write(
+        repo,
+        "docs/todo.md",
+        "## Plan\n\n```md\n- [ ] **FAKE.2** — example\n```\n- [ ] **REAL.1** — work\n",
+    )
+    found, _ = IM.scan_research(repo)
+    assert [f.title for f in found] == ["R1 — a real entry", "R2 — the next entry"]
+    assert "Addendum that belongs to R1" in found[0].body, "the fence carried R1's tail away"
+    assert "PROMPT/NOTE" in found[0].body, "fenced text is still part of the entry's body"
+    assert set(_tasks(repo)) == {"REAL.1"}
+
+
+def test_a_source_that_yields_nothing_is_SAID_in_the_human_proposal(repo):
+    _write(repo, "docs/todo.md", "# Backlog\n\n- **B7 — dogfood.** prose, no checkbox\n")
+    _write(repo, "docs/lessons.md", "# L\n\n## a rule\nx\n")
+    code, out, err = run_cli(repo, "import")
+    assert code == OK, err
+    assert "yielded NOTHING" in out and "docs/todo.md" in out

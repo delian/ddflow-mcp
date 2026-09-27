@@ -318,6 +318,39 @@ def _worktree_drift(repo: Path, here: Path) -> str:
     return msg
 
 
+def _check_msg(cfg, msg_file: str) -> O.Outcome:
+    """The commit-msg hook's check: the trailer, read from the message being committed."""
+    from ..infra import proc as P
+    from ..services import enforce as E
+
+    data: dict[str, Any] = {"message": "", "installed": True, "policy": ""}
+    if not cfg.enforce.require_item_trailer:
+        return O.ok("hooks", **data)
+    path = Path(msg_file)
+    if not msg_file or not path.is_file():
+        # git always passes the file; no file means we were not called by git, and
+        # inventing a failure from missing input is the vacuous-FAIL mirror.
+        return O.ok("hooks", **data)
+    merging = (
+        P.run(
+            ["git", "rev-parse", "-q", "--verify", "MERGE_HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).returncode
+        == 0
+    )
+    code, msg = E.check_item_trailer(
+        path.read_text("utf-8", errors="replace"),
+        list(cfg.enforce.item_trailer_keys) or ["Item"],
+        merging=merging,
+    )
+    data["message"] = msg
+    if code == 0:
+        return O.ok("hooks", **data)
+    return O.Outcome(kind="hooks", data=data, exit=code, reason=msg)
+
+
 def _session_start(repo: Path, agent: str) -> O.Outcome:
     """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
 
@@ -352,6 +385,7 @@ def hooks(
     action: str = "status",
     force: bool = False,
     claude: bool = False,
+    msg_file: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """The commit hook: install, uninstall, status, or run the check itself.
@@ -365,6 +399,8 @@ def hooks(
     if action == "session-start":
         return _session_start(repo, agent)
     _log, cfg, _st = _load(repo, agent)
+    if action == "check-msg":
+        return _check_msg(cfg, msg_file)
     if claude and action in ("install", "uninstall"):
         try:
             if action == "install":
@@ -390,10 +426,6 @@ def hooks(
             vcode, vmsg = E.check_views(repo, cfg)
             msg = "\n".join(x for x in (msg, vmsg) if x)
             code = vcode
-        if code == 0 and cfg.enforce.require_item_trailer:
-            tcode, tmsg = E.check_item_trailer(repo)
-            msg = "\n".join(x for x in (msg, tmsg) if x)
-            code = tcode
         data = {
             "message": msg,
             "installed": E.installed(repo),

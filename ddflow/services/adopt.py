@@ -510,6 +510,15 @@ def adopt(
             f"not a configuration one: reinstall ddflow-mcp."
         )
 
+    # Validate EVERY name before writing ANYTHING. The check used to sit inside the copy
+    # loop, after the canonical driver was already written, so `--agents claude-code`
+    # left a file behind and then exited 1 -- a partial adoption reported as a failure.
+    unknown = [k for k in agents if k not in AGENT_TARGETS]
+    if unknown:
+        raise ValueError(
+            f"unknown agent(s) {', '.join(map(repr, unknown))}; known: {', '.join(AGENT_TARGETS)}"
+        )
+
     drivers_dst = repo / docs_dir / "drivers"
     drivers_dst.mkdir(parents=True, exist_ok=True)
     shutil.copy2(templates / "drivers" / "implement-phase.md", drivers_dst / "implement-phase.md")
@@ -517,8 +526,6 @@ def adopt(
 
     (drivers_dst / "deltas").mkdir(exist_ok=True)
     for key in agents:
-        if key not in AGENT_TARGETS:
-            raise ValueError(f"unknown agent {key!r}; known: {', '.join(AGENT_TARGETS)}")
         delta = AGENT_TARGETS[key].delta
         shutil.copy2(templates / "drivers" / "deltas" / delta, drivers_dst / "deltas" / delta)
         actions.append(f"wrote {docs_dir}/drivers/deltas/{delta}")

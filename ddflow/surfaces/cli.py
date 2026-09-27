@@ -862,6 +862,9 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     hku.set_defaults(fn=cmd_hooks)
     hk_s.add_parser("status").set_defaults(fn=cmd_hooks)
     hk_s.add_parser("check-commit", help="(invoked by the hook)").set_defaults(fn=cmd_hooks)
+    hkm = hk_s.add_parser("check-msg", help="(invoked by the commit-msg hook)")
+    hkm.add_argument("msg_file", help="the message file git passes the hook")
+    hkm.set_defaults(fn=cmd_hooks)
     hk_s.add_parser(
         "session-start",
         help="(invoked by the Claude Code SessionStart hook) print the brief; always exit 0",

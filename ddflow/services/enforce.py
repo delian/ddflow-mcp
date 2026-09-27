@@ -123,46 +123,83 @@ def hooks_dir(repo: Path) -> Path:
     return path if path.is_absolute() else (Path(repo) / path).resolve()
 
 
-def install(repo: Path, *, force: bool = False) -> str:
-    d = hooks_dir(repo)
-    d.mkdir(parents=True, exist_ok=True)
-    hook = d / "pre-commit"
+#: The commit-msg hook. The trailer check lives HERE and not in pre-commit because git
+#: writes the message only after pre-commit has run: the pre-commit version read
+#: `.git/COMMIT_EDITMSG`, which still held the PREVIOUS commit's message, so a commit
+#: WITH `Item: X` was refused and one without it passed after any commit that had one.
+_COMMIT_MSG = """#!/bin/sh
+{marker}
+# Checks the commit MESSAGE: the trailer [enforce].require_item_trailer asks for.
+# Does nothing while that knob is off.
+{invocation}
+"""
+
+
+def _msg_invocation() -> str:
+    return f'{command_line("hooks check-msg", exec_=True)} "$@"'
+
+
+#: hook name -> (template, invocation builder). ONE table, so install, uninstall and
+#: status cannot disagree about which hooks ddflow owns.
+def _hooks() -> dict[str, tuple[str, str]]:
+    return {
+        "pre-commit": (_PRE_COMMIT, _invocation()),
+        "commit-msg": (_COMMIT_MSG, _msg_invocation()),
+    }
+
+
+def _install_one(d: Path, name: str, template: str, invocation: str, force: bool) -> str:
+    hook = d / name
+    text = template.format(marker=HOOK_MARKER, invocation=invocation)
     if hook.exists():
         existing = hook.read_text("utf-8", errors="replace")
         if HOOK_MARKER in existing:
-            hook.write_text(
-                _PRE_COMMIT.format(marker=HOOK_MARKER, invocation=_invocation()), "utf-8"
-            )
+            hook.write_text(text, "utf-8")
             _chmod_x(hook)
-            return f"updated the ddflow hook at {hook}"
+            return f"updated the ddflow {name} hook at {hook}"
         if not force:
             # Never clobber someone else's hook. A workflow tool that silently replaces
-            # a project's existing pre-commit checks has done more damage than the
-            # discipline it was installing is worth.
+            # a project's existing checks has done more damage than the discipline it
+            # was installing is worth.
             return (
                 f"REFUSED: {hook} already exists and is not managed by ddflow. "
                 f"Add this line to it yourself:\n"
-                f"    {_invocation().replace('exec ', '')} || exit 1\n"
+                f"    {invocation.replace('exec ', '')} || exit 1\n"
                 f"or re-run with --force to replace it."
             )
-    hook.write_text(_PRE_COMMIT.format(marker=HOOK_MARKER, invocation=_invocation()), "utf-8")
+    hook.write_text(text, "utf-8")
     _chmod_x(hook)
-    return f"installed the ddflow pre-commit hook at {hook}"
+    return f"installed the ddflow {name} hook at {hook}"
+
+
+def install(repo: Path, *, force: bool = False) -> str:
+    """Both hooks. REFUSED if the pre-commit one was, since that is the one that
+    enforces leases; a refused commit-msg hook is reported with the line to add."""
+    d = hooks_dir(repo)
+    d.mkdir(parents=True, exist_ok=True)
+    msgs = [_install_one(d, n, t, inv, force) for n, (t, inv) in _hooks().items()]
+    text = "\n".join(msgs)
+    return text if msgs[0].startswith("REFUSED") else text.replace("REFUSED:", "NOT INSTALLED:")
 
 
 def uninstall(repo: Path) -> str:
-    hook = hooks_dir(repo) / "pre-commit"
-    if not hook.exists():
-        return "no pre-commit hook installed"
-    if HOOK_MARKER not in hook.read_text("utf-8", errors="replace"):
-        return f"REFUSED: {hook} is not managed by ddflow; leaving it alone"
-    hook.unlink()
-    return f"removed {hook}"
+    d = hooks_dir(repo)
+    out = []
+    for name in _hooks():
+        hook = d / name
+        if not hook.exists():
+            continue
+        if HOOK_MARKER not in hook.read_text("utf-8", errors="replace"):
+            out.append(f"REFUSED: {hook} is not managed by ddflow; leaving it alone")
+            continue
+        hook.unlink()
+        out.append(f"removed {hook}")
+    return "\n".join(out) or "no ddflow hook installed"
 
 
-def installed(repo: Path) -> bool:
+def installed(repo: Path, name: str = "pre-commit") -> bool:
     try:
-        hook = hooks_dir(repo) / "pre-commit"
+        hook = hooks_dir(repo) / name
     except RuntimeError:
         return False
     return hook.exists() and HOOK_MARKER in hook.read_text("utf-8", errors="replace")
@@ -482,40 +519,31 @@ def _out_hint(paths: list[str]) -> str:
     return ""
 
 
-def check_item_trailer(repo: Path) -> tuple[int, str]:
-    """Require an ``Item: <id>`` trailer on the commit being made.
+def check_item_trailer(message: str, keys: list[str], *, merging: bool = False) -> tuple[int, str]:
+    """Require one of `keys` as a trailer (`Item: P1.T3`) in the commit MESSAGE.
 
-    Enabled by ``[enforce].require_item_trailer``. The trailer is what lets an audit
-    reconcile shipped commits against the queue with
-    ``git log --format='%(trailers:key=Item,valueonly)'`` instead of parsing prose —
-    which is the difference between a check that can run on every commit and one that
-    needs an agent to read the whole history.
+    Enabled by ``[enforce].require_item_trailer``; the accepted keys are
+    ``[enforce].item_trailer_keys`` (a project that has written `Phase: <id>` for months
+    keeps writing it). The trailer is what lets an audit reconcile shipped commits
+    against the queue with ``git log --format='%(trailers:key=Item,valueonly)'`` instead
+    of parsing prose.
 
-    Off by default: on a repository with human contributors it is noise, and a rule
-    that most commits violate is a rule everyone learns to bypass.
+    Called by the commit-msg hook with the message being committed -- never with
+    `COMMIT_EDITMSG` from pre-commit, which is the previous commit's. A merge commit is
+    exempt: it carries the trailers of the commits it merges. A `#Item:` comment line
+    does not count, because its key is `#Item`.
     """
-    msg_file = Path(repo) / ".git" / "COMMIT_EDITMSG"
-    r = P.run(
-        ["git", "-C", str(repo), "rev-parse", "--git-path", "COMMIT_EDITMSG"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    if r.returncode == 0 and r.stdout.strip():
-        cand = Path(r.stdout.strip())
-        msg_file = cand if cand.is_absolute() else (Path(repo) / cand)
-    if not msg_file.is_file():
-        # No message to inspect yet (e.g. `-m` handled later in the hook order). Do not
-        # invent a failure from missing input -- that is the vacuous-FAIL mirror of the
-        # vacuous pass.
+    if merging:
         return 0, ""
-    text = msg_file.read_text("utf-8", errors="replace")
-    if any(ln.startswith("Item:") and ln[5:].strip() for ln in text.splitlines()):
-        return 0, ""
+    for ln in message.splitlines():
+        key, sep, value = ln.partition(":")
+        if sep and key.strip() in keys and value.strip():
+            return 0, ""
+    shown = " or ".join(f"`{k}: <id>`" for k in keys)
     return 1, (
-        "ddflow: this commit has no `Item: <id>` trailer, and "
-        "[enforce].require_item_trailer is on.\n\n"
-        "Add a final line to the commit message, e.g.:\n"
-        "    Item: P1.T3\n\n"
-        "It is what lets an audit match commits to queue items mechanically."
+        f"ddflow: this commit has no {shown} trailer, and "
+        f"[enforce].require_item_trailer is on.\n\n"
+        f"Add a final line to the commit message, e.g.:\n"
+        f"    {keys[0]}: P1.T3\n\n"
+        f"It is what lets an audit match commits to queue items mechanically."
     )

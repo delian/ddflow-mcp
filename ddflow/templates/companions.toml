@@ -62,7 +62,9 @@ one copy and misses the rest."""
 # `roborev review <sha>` after a commit, `roborev analyze duplication <files>` on the
 # dedupe cadence — so there is nothing to put in an MCP config.
 kind = "cli"
-detect = ["roborev", "--version"]
+# `roborev version`, not `--version`: v0.63 rejects the flag ("unknown flag") and exits
+# non-zero, so an installed roborev was reported NOT installed.
+detect = ["roborev", "version"]
 command = "roborev"
 install = "cargo install roborev"
 note = "Or see the project README for prebuilt binaries. Pin the review agent per repo in .roborev.toml — the machine-global default may name an agent you do not have, and roborev exits 0 while reporting it cannot review."

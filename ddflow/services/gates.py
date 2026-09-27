@@ -31,6 +31,7 @@ from __future__ import annotations
 import getpass
 import hashlib
 import os
+import re
 import shlex
 import shutil
 import socket
@@ -69,6 +70,19 @@ class GateDef:
     #: restored. A gate with no registered mutation is a gate nobody has shown can go
     #: red — see `verify`.
     mutations: list[dict[str, str]] = field(default_factory=list)
+    #: Exit codes that mean "could not run" / "ran part of it", for tools that SAY so by
+    #: exit code. A cross-family critic that exits 2 when its endpoint is down and 3 when
+    #: only some files were reviewed was recorded as FAILED either way -- and a failure
+    #: that is really an outage sends the author off to fix code that nobody reviewed.
+    unavailable_exits: list[int] = field(default_factory=list)
+    partial_exits: list[int] = field(default_factory=list)
+    #: For tools whose exit code does not carry the verdict. `require_output`: a regex
+    #: that must appear for exit 0 to count as PASSED -- absent, the tool did not
+    #: demonstrably do its job, which is UNAVAILABLE (a reviewer that exits 0 having
+    #: degenerated into nothing). `fail_output`: a regex whose presence FAILS an exit 0
+    #: (a reviewer that reports findings and exits 0 anyway).
+    require_output: str = ""
+    fail_output: str = ""
 
     #: This gate is satisfied by a PERSON, not by the agent and not by a command.
     #: See :meth:`is_human_gate`.
@@ -882,7 +896,39 @@ def run_command_gate(
         # without this the log cannot tell them apart.
         "diff_stat": diff_stat(cwd),
     }
-    return ("passed" if p.returncode == 0 else "failed"), ev
+    outcome, why = classify_exit(gdef, p.returncode, out)
+    if why:
+        ev["reason"] = why
+    return outcome, ev
+
+
+def classify_exit(gdef: GateDef, code: int, output: str) -> tuple[str, str]:
+    """`(outcome, reason)` for a command that RAN. The reason is "" for a plain pass/fail.
+
+    The gate's declared exit codes and output patterns first, then the POSIX default.
+    A pattern that does not compile is UNAVAILABLE naming the knob: a broken verdict
+    rule decides nothing, and guessing either way would be a verdict nobody gave.
+    """
+    if code in gdef.unavailable_exits:
+        return "unavailable", (
+            f"exit {code} is declared UNAVAILABLE for this gate (unavailable_exits): the "
+            f"tool could not do its job. NOT a failing check."
+        )
+    if code in gdef.partial_exits:
+        return "partial", f"exit {code} is declared PARTIAL for this gate (partial_exits)"
+    if code != 0:
+        return "failed", ""
+    try:
+        if gdef.fail_output and re.search(gdef.fail_output, output, re.M):
+            return "failed", f"exit 0, but the output matches fail_output /{gdef.fail_output}/"
+        if gdef.require_output and not re.search(gdef.require_output, output, re.M):
+            return "unavailable", (
+                f"exit 0, but the output lacks require_output /{gdef.require_output}/: the "
+                f"tool did not demonstrably do its job. NOT a pass."
+            )
+    except re.error as exc:
+        return "unavailable", f"gate {gdef.id!r} has an invalid output pattern ({exc})"
+    return "passed", ""
 
 
 _SHELL_META = set(";|&<>()$`\n")

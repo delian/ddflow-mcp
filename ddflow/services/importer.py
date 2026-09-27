@@ -333,6 +333,32 @@ def _status_disposition(line: str) -> tuple[str, str] | None:
 
 
 _SECTION = re.compile(r"^(#{2,6})\s+(.*)$")
+#: A fence line: ``` or ~~~, optionally indented and followed by an info string.
+_FENCE = re.compile(r"^\s{0,3}(```+|~~~+)")
+
+
+def _fenced(lines: list[str]) -> list[bool]:
+    """Which lines sit inside a fenced code block (fence lines included).
+
+    Structure is read only OUTSIDE fences. A `## PROMPT/NOTE` inside a ```console block
+    in a real research log imported as a research entry of its own and carried away the
+    addendum after it; a `- [ ]` inside a fenced example became a task. Inside a fence
+    they are text, and they stay in the body of whatever entry the fence belongs to.
+    """
+    out: list[bool] = []
+    fence = ""
+    for ln in lines:
+        m = _FENCE.match(ln)
+        if fence:
+            out.append(True)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= len(fence):
+                fence = ""
+        elif m:
+            fence = m.group(1)
+            out.append(True)
+        else:
+            out.append(False)
+    return out
 
 
 def _sections(text: str, level: int = 0) -> list[tuple[str, str, int]]:
@@ -350,14 +376,17 @@ def _sections(text: str, level: int = 0) -> list[tuple[str, str, int]]:
     "Sources (opened, not snippet-cited)" and meant nothing on their own. Measured on a
     real corpus: 358 fragments where the file has ~90 entries.
     """
-    levels = [len(m.group(1)) for m in (_SECTION.match(ln) for ln in text.splitlines()) if m]
+    lines = text.splitlines()
+    fenced = _fenced(lines)
+    heads = [None if f else _SECTION.match(ln) for ln, f in zip(lines, fenced, strict=True)]
+    levels = [len(m.group(1)) for m in heads if m]
     if not levels:
         return []
     top = level or min(levels)
     out: list[tuple[str, str, int]] = []
     title, buf, start = "", [], 0
-    for idx, ln in enumerate(text.splitlines(), 1):
-        h = _SECTION.match(ln)
+    for idx, ln in enumerate(lines, 1):
+        h = heads[idx - 1]
         if h and len(h.group(1)) < top:
             # A SHALLOWER heading ends the current entry without starting one: with an
             # explicit `level`, the `## 2026-06-28 -- context` groups around `### L100.`
@@ -541,6 +570,22 @@ def _unique(preferred: str, fallback: str, taken: set[str]) -> str:
     return f"{base}-{n}"
 
 
+def _box_disposition(
+    body: str, stack: list[tuple[int, tuple[str, str] | None]], archived: bool
+) -> tuple[str, str]:
+    """An open box's disposition: its own marker, else its nearest heading's or section
+    STATUS's, else -- in an archive file -- held until someone names the section."""
+    kind, marker = _disposition(body)
+    if kind:
+        return kind, f"marked {marker}"
+    inherited = next((d for _lvl, d in reversed(stack) if d is not None), None)
+    if inherited and inherited[0]:
+        return inherited
+    if archived:
+        return "hold", "in an archive file (release its phase to drive it)"
+    return "", ""
+
+
 def scan_todos(
     repo: Path, globs: tuple[str, ...] = TODO_GLOBS, archive: tuple[str, ...] = ()
 ) -> tuple[list[Found], list[str]]:
@@ -575,7 +620,11 @@ def scan_todos(
         #: `## Session` STATUS line governs the `### 159.A` groups under it, and each of
         #: those is its own phase here, so the section's verdict has to be carried down.
         stack: list[tuple[int, tuple[str, str] | None]] = []
-        for n, line in enumerate(text.splitlines(), 1):
+        lines = text.splitlines()
+        fenced = _fenced(lines)
+        for n, line in enumerate(lines, 1):
+            if fenced[n - 1]:
+                continue
             h = _HEADING.match(line)
             if h:
                 heading = h.group(2).strip()
@@ -609,16 +658,7 @@ def scan_todos(
                 continue
             done = m.group(2).lower() == "x"
             body = m.group(3).strip()
-            disposition = ("", "")
-            if not done:
-                kind, marker = _disposition(body)
-                if kind:
-                    disposition = (kind, f"marked {marker}")
-                else:
-                    inherited = next((d for _lvl, d in reversed(stack) if d is not None), None)
-                    disposition = inherited or ("", "")
-                if archived and not disposition[0]:
-                    disposition = ("hold", "in an archive file (release its phase to drive it)")
+            disposition = ("", "") if done else _box_disposition(body, stack, archived)
             if body.startswith("~~"):
                 # The strike-through is the disposition, recorded above; the id inside it
                 # is still the id every `Needs:` line and commit trailer uses.
@@ -852,8 +892,9 @@ def _lesson_level(text: str) -> int:
     a heading that states none of them.
     """
     counts: dict[int, int] = {}
-    for ln in text.splitlines():
-        h = _SECTION.match(ln)
+    lines = text.splitlines()
+    for ln, inside in zip(lines, _fenced(lines), strict=True):
+        h = None if inside else _SECTION.match(ln)
         if h and _LESSON_HEAD.match(h.group(2).strip()):
             counts[len(h.group(1))] = counts.get(len(h.group(1)), 0) + 1
     return max(counts, key=counts.get) if counts else 0
@@ -963,7 +1004,11 @@ def scan_lesson_summaries(
         current: list[str] = []
         start = 0
 
-        for n, ln in enumerate(text.splitlines(), 1):
+        lines = text.splitlines()
+        fenced = _fenced(lines)
+        for n, ln in enumerate(lines, 1):
+            if fenced[n - 1]:
+                continue
             h = _SECTION.match(ln)
             b = _BULLET.match(ln)
             if h or b or not ln.strip():
@@ -1330,6 +1375,18 @@ def _note_withheld(
             f"E.g. {', '.join(held[:_NOTE_EXAMPLES])}"
             + (", ..." if len(held) > _NOTE_EXAMPLES else "")
             + "."
+        )
+    if plan.empty_sources:
+        # In the NOTES, not only in `empty_sources`: the human-readable proposal never
+        # printed that field, so pointing `todo_globs` at a backlog written as bold
+        # bullets instead of checkboxes printed a clean-looking proposal with nothing
+        # from it, and the footer still said "the headings became phases".
+        plan.notes.append(
+            f"{len(plan.empty_sources)} file(s) matched a source pattern and yielded "
+            f"NOTHING — usually an unusual format (a plan with no `- [ ]` checkboxes, "
+            f"lessons with no headings) rather than an empty file: "
+            f"{', '.join(plan.empty_sources[:_NOTE_EXAMPLES])}"
+            + (", ..." if len(plan.empty_sources) > _NOTE_EXAMPLES else "")
         )
 
 
@@ -1801,7 +1858,11 @@ def verify_import(
     plan = plan_import(repo, state, max_tasks=10**9, sources=sources, archive=archive)
     r.drift = list(plan.found)
     r.empty_sources = list(plan.empty_sources)
-    r.notes.extend(n for n in plan.notes if "already-ticked" not in n)
+    # Minus the two notes this report states in its own terms: history left out, and
+    # sources that yielded nothing (`findings`).
+    r.notes.extend(
+        n for n in plan.notes if "already-ticked" not in n and "yielded NOTHING" not in n
+    )
     r.notes.append(
         "Dependencies that do not resolve, duplicate globs and cycles are `ddflow "
         "doctor`'s job and it reports them in its own words -- this does not repeat "

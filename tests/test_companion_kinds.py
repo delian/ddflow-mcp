@@ -431,3 +431,16 @@ def test_no_mcp_companion_launches_a_subcommand_its_probe_never_exercises(tmp_pa
             f"`{' '.join(c.detect)}` — the probe never exercises {target[-1]!r}, so a "
             f"passing detection says nothing about whether the launch works"
         )
+
+
+def test_roborev_is_detected_with_a_subcommand_it_actually_has():
+    """v0.63 rejects `--version` ("unknown flag") and exits non-zero, so an installed
+    roborev was reported as not installed."""
+    import tomllib
+    from pathlib import Path as _P
+
+    reg = tomllib.loads(
+        (_P(__file__).resolve().parents[1] / "ddflow/templates/companions.toml").read_text()
+    )
+    roborev = next(c for c in reg["companion"] if c["id"] == "roborev")
+    assert roborev["detect"] == ["roborev", "version"]

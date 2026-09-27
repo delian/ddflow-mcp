@@ -354,3 +354,28 @@ def test_a_refused_adoption_fails_over_mcp_too(repo):
     assert result.get("isError") is True, result
     assert result.get("_meta", {}).get("exit") == 1, result
     assert "SKIPPED" in result["content"][0]["text"], result
+
+
+def test_an_unknown_agent_is_refused_BEFORE_anything_is_written(repo):
+    """`--agents claude-code` wrote the canonical driver and then exited 1 on the name:
+    a partial adoption reported as a failure, which a retry then half-repeats."""
+    from conftest import run_cli as _run
+
+    _run(repo, "init")
+    code, _out, err = _run(repo, "adopt", "--agents", "claude,no-such-agent")
+    assert code != 0 and "no-such-agent" in err
+    assert not (repo / "docs" / "ddflow" / "drivers").exists(), "adopt wrote before refusing"
+    assert not (repo / "AGENTS.md").exists()
+
+
+def test_the_config_write_lock_is_ignored_so_git_add_ddflow_cannot_commit_it(repo):
+    import subprocess as _sp
+
+    from conftest import run_cli as _run
+
+    _run(repo, "init")
+    (repo / ".ddflow" / ".config.toml.lock").write_text("")
+    r = _sp.run(
+        ["git", "-C", str(repo), "check-ignore", "-q", ".ddflow/.config.toml.lock"], timeout=60
+    )
+    assert r.returncode == 0, "the lock file `config --set` leaves behind is not ignored"

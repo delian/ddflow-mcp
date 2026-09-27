@@ -678,6 +678,7 @@ class EnforceConfig:
     commit_without_lease: str = "warn"  # block | warn | off
     install_hooks_on_setup: bool = True
     require_item_trailer: bool = False
+    item_trailer_keys: list[str] = field(default_factory=lambda: ["Item"])
     generated_views: str = "block"  # block | warn | off
 
 
@@ -694,7 +695,12 @@ _doc(
 _doc(
     "enforce",
     "require_item_trailer",
-    "Require every commit to carry an `Item: <id>` git trailer. Makes commits reconcilable against the queue by `git log --format='%(trailers:key=Item)'` instead of by parsing prose. Off by default because it is noisy on a repo with non-agent contributors.",
+    "Require every commit to carry an `Item: <id>` git trailer (or another key from item_trailer_keys), checked by the commit-msg hook `ddflow hooks install` adds. Makes commits reconcilable against the queue by `git log --format='%(trailers:key=Item)'` instead of by parsing prose. Off by default because it is noisy on a repo with non-agent contributors.",
+)
+_doc(
+    "enforce",
+    "item_trailer_keys",
+    'Trailer keys that satisfy require_item_trailer; any one of them will do. A project that has written `Phase: <id>` (or `Phase-ships: none` for a commit that ships no item) in every commit for months keeps its convention: set ["Phase", "Phase-ships"]. Checked by the commit-msg hook on the message being committed; merge commits are exempt.',
 )
 _doc(
     "enforce",

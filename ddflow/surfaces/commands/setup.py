@@ -223,6 +223,7 @@ def cmd_hooks(a, c: Ctx) -> int:
         action=a.hooks_cmd or "status",
         force=bool(getattr(a, "force", False)),
         claude=bool(getattr(a, "claude", False)),
+        msg_file=getattr(a, "msg_file", "") or "",
         agent=c.requested_agent,
     )
     if a.hooks_cmd == "session-start":
@@ -230,7 +231,7 @@ def cmd_hooks(a, c: Ctx) -> int:
         # that fails at session start blocks nothing useful.
         print(out.data["message"])
         return OK
-    if a.hooks_cmd == "check-commit":
+    if a.hooks_cmd in ("check-commit", "check-msg"):
         # The MESSAGE is the product here, and it goes to stderr because a commit hook's
         # output is diagnostics, not data.
         if out.data["message"]:
@@ -379,7 +380,10 @@ def cmd_init(a, c: Ctx) -> int:
         "# They are machine-local on purpose: a committed index resurrects dead agents'\n"
         "# leases on every clone, and a committed cache is a merge conflict with no\n"
         "# meaningful resolution.\n"
-        "index.db\nindex.db-*\nindex.rebuilding*\nevents.lock\nlocal/\n",
+        "index.db\nindex.db-*\nindex.rebuilding*\nevents.lock\nlocal/\n"
+        "# The lock `config --set` / `workflow gate` take for a read-modify-write of a\n"
+        "# config file. Without this line `git add .ddflow`, as `init` instructs, committed it.\n"
+        ".*.lock\n",
         "utf-8",
     )
     cfgp = d / "config.toml"

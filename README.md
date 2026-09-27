@@ -499,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 85 knobs.
+cadences, and the rest of the 86 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1409,6 +1409,24 @@ own bug, found by a cross-family review of it:
   catch the vacuous-pass class contained it. It now runs unmutated first and refuses
   without a pass.
 
+### When the exit code is not the verdict
+
+Some tools say "I could not run" or "I only did part of it" with an exit code, and some
+exit 0 whatever happened. A command gate can say which:
+
+```toml
+[gate.critic]
+command = "uv run scripts/critic_review.py --dirty -c configs/review_critic.toml"
+unavailable_exits = [2, 143]      # endpoint down / SIGTERM: UNAVAILABLE, not failed
+partial_exits = [3]               # reviewed part of the diff: PARTIAL
+require_output = '^STATUS:'       # exit 0 without it = the tool did not do its job
+fail_output = '^\s*- \[(HIGH|MEDIUM)\]'   # exit 0 WITH findings = failed
+```
+
+`ddflow gate run` also renews the caller's lease every `[lease] heartbeat_s` while the
+command runs, so a 25-minute suite does not outlive a 30-minute lease and read as
+abandoned work.
+
 ---
 
 ## The phase pipeline
@@ -2146,7 +2164,7 @@ declared once and persists — see
 
 ## Configuration
 
-85 knobs across 16 sections, every one documented in place:
+86 knobs across 16 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2191,7 +2209,10 @@ part that matters.
   dedupe, lesson compression — from the log rather than a calendar.
 * **A commit hook** (`ddflow hooks install`) can refuse an unclaimed edit outright,
   and refuses a staged `ddflow render` view that the log no longer regenerates
-  byte-for-byte — hand-edited, or stale (`[enforce] generated_views`).
+  byte-for-byte — hand-edited, or stale (`[enforce] generated_views`). Its commit-msg
+  sibling requires an `Item:` trailer when `[enforce] require_item_trailer` is on — or
+  the project's own keys (`item_trailer_keys = ["Phase", "Phase-ships"]`); merges are
+  exempt.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
   crashed work to recover, ready items, binding decisions, operational memory — into
   every session, including after a context compaction, whether or not the agent
