@@ -229,7 +229,9 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
     from ..services import external as EX
 
     configured = EX.repos(cfg, repo)
-    for it in st.items.values():
+    # Live items only, as `external.referenced` observes: a removed item's dependency
+    # produced a finding `external sync` would never clear (roborev 829).
+    for it in (i for i in st.items.values() if not i.removed):
         problems += [
             f"{it.id} needs unknown item {dep!r}"
             for dep in it.needs

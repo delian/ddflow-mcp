@@ -275,7 +275,6 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_lesson_verify": (["lesson", "verify"], {}),
     "ddflow_memory_list": (["memory", "list"], {}),
     "ddflow_job_list": (["job", "list"], {}),
-    "ddflow_external_sync": (["external", "sync"], {}),
     "ddflow_recall": (["recall", "x"], {"query": "x"}),
     "ddflow_reviewers_list": (["reviewers", "list"], {}),
     "ddflow_cleanup": (["cleanup"], {}),
@@ -327,6 +326,10 @@ WRITES_NOT_COMPARABLE = {
     # Each call records a new memory under a content-addressed id / forgets one.
     "ddflow_memory_add",
     "ddflow_memory_forget",
+    # Records an observation the FIRST time it sees a change: the second surface sees
+    # none. Its row compared two empty results (roborev 829); pinned by
+    # tests/test_external_deps.py instead.
+    "ddflow_external_sync",
     # Launch a process / register one / end one: none can be invoked twice identically.
     "ddflow_job_run",
     "ddflow_job_add",

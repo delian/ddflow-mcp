@@ -110,3 +110,13 @@ def test_the_session_start_hook_observes_before_the_brief(repo):
     assert code == OK
     assert "trainer:132.D is done" in out
     assert "GEN.1" in out.split("## Ready now", 1)[1]
+
+
+def test_a_removed_items_external_dependency_is_not_a_doctor_finding(repo):
+    """roborev 829: doctor looked at removed items and sync did not, so the finding's
+    remedy could never clear it."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "GONE", "--needs", "nowhere:1.A", "--globs", "g.py")
+    run_cli(repo, "remove", "GONE", "--reason", "dropped")
+    _code, out, _e = run_cli(repo, "doctor")
+    assert "nowhere" not in out
