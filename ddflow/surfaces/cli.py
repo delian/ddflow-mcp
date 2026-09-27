@@ -430,7 +430,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--pattern",
         default="",
         help="regex this lesson forbids. Scans NOW and stores WHICH sites match, so "
-        "`lessons verify` can name what reappeared — a count could only say it got worse",
+        "`lesson verify` can name what reappeared — a count could only say it got worse",
     )
     la.add_argument(
         "--globs", default="", help="comma-separated globs to scan (default: all tracked files)"

@@ -390,16 +390,26 @@ from this list); these are the rest, ranked as it ranked them.
   no gate: it trains the next reader to skip it." ddflow has the event log to compute
   this from; a gate firing on ~100% of changes should be auto-flagged for repair.
 
-- **B25 — cadence fired-vs-scheduled counter. ✅ CLOSED.** `rates.cadence_rates()` gives
-  `ran` against `expected`, and it is EXACT rather than estimated because a cadence here is
-  counted in completions, not wall-clock: `expected = completed // every` is a fact about
-  the log. `never_fired()` reports one that has fallen more than `cadence.max_missed`
-  periods behind — being merely DUE is not a finding, because `ddflow cadence` already says
-  that, and running EARLY is not one either (`missed` floors at zero). Original text below.
-  7 tests, 3 mutations. "The mechanism you did not measure is the
+- **B25 — cadence fired-vs-scheduled counter. ✅ CLOSED.** `rates.cadence_rates()` measures
+  `since` — completions since the pass LAST fired — which is the same quantity `api.cadence`
+  uses for due-ness, and it is exact rather than estimated because a cadence here counts
+  completions, not wall-clock. `stalled()` reports one more than `cadence.max_missed`
+  scheduled runs behind: merely DUE is not a finding (`ddflow cadence` already says that)
+  and running EARLY is not one either (`overdue_periods` floors at zero).
+
+  **The first version of this was wrong and roborev caught it on `9234cdb`.** It computed
+  `expected = completed // every` and compared that to the number of runs, which assumes
+  every run happened at its scheduled point. A pass that fired three times EARLY and then
+  stopped therefore had `ran (3) > expected (1)`, so the shortfall floored to zero and
+  `doctor` stayed silent while `ddflow cadence` reported the pass DUE — **the exact failure
+  B25 exists to detect, hidden by its own arithmetic.** Two measures of "is this behind"
+  that can disagree is a situation nobody can reason about; there is now one, and
+  `test_the_report_agrees_with_ddflow_cadences_own_due_ness` pins the two together. The
+  `doctor` label was also literally false ("never fired" about a cadence that had).
+  16 tests, 7 mutations. *The original filing below is superseded, not current.* "The mechanism you did not measure is the
   one that is not running" — on the source project three wakeups were scheduled and zero
   ever fired, producing a 12-hour stall while an undesignated mechanism did the work.
-  **PARTIAL.** The due-ness computation exists (`cli.py:2451`); what is missing is a fired-vs-scheduled counter, so the cadence's own hit rate still cannot be argued.
+  ~~**PARTIAL.** The due-ness computation exists (`cli.py:2451`); what is missing is a fired-vs-scheduled counter, so the cadence's own hit rate still cannot be argued.~~ *(superseded by the closure above.)*
 
 
 - **B26 — test-polluter bisect.** Delta-bisect the test file that makes another fail only

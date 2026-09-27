@@ -276,7 +276,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     from ..services import rates as RT
 
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
-    notes += [f"cadence never fired: {r.render()}" for r in RT.never_fired(st, cfg)]
+    notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     for it in st.items.values():
         problems += [
             f"{it.id} needs unknown item {dep!r}" for dep in it.needs if dep not in st.items

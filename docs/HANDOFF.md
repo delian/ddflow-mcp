@@ -34,29 +34,38 @@ caught a real defect during this session — see §6):
 ## 2. State of the tree right now
 
 ```
-branch: main          (this is a standalone repo; its parent run_nemo_run is unrelated)
-HEAD:   3040d4b       "22 coding agents, and one set of rules that reaches all of them"
-pushed: yes — origin/main == HEAD at the time of writing
+branch: main          (a standalone repo; the parent run_nemo_run tree is unrelated)
+HEAD:   9234cdb       "B19 + B20 + B24 + B25: ddflow checks its own machinery"
+pushed: yes — origin/main == 9234cdb
+tree:   CLEAN — nothing uncommitted, nothing in flight
 ```
 
-**There are UNCOMMITTED changes**, and they are complete and green, not half-finished. They
-are the work described in §3 below. If you are resuming:
+**Verified green at that commit**, and worth re-running before you trust it:
 
 ```sh
-git status --short          # expect ~17 modified/new files
 uv run ruff check . && uv run ruff format --check .
-uv run pytest tests/ -q -m ""      # ~24 min, expect 0 failures
-uv run python demos/run_all.py     # expect 6/6, 219 assertions
+uv run pytest tests/ -q -m ""        # ~27 min. Expect 1280 passed, 1 skipped.
+uv run python demos/run_all.py       # ~2.5 min. Expect 6/6, 219 assertions.
 ```
 
-If that is green, commit it. A suggested message is in §3. If it is NOT green, the failure is
-new information — read it before assuming this document is wrong.
+If any of that is red, the failure is **new information** — read it before assuming this
+document is wrong. Nothing was left half-finished, so a red suite means something changed
+after 9234cdb.
+
+`roborev review 9234cdb` (job 816) found **five findings, all CONFIRMED, all fixed** in the
+commit after it — including a real defect in the B25 work: `expected = completed // every`
+assumed every run happened at its scheduled point, so a cadence that fired early and then
+stopped had `ran > expected`, the shortfall floored to zero, and `doctor` stayed silent while
+`ddflow cadence` called the pass DUE. The measure is now `since` (completions since the last
+run), the same quantity due-ness uses. **Queue roborev on whatever you commit** — every run
+on this series found something real, including one bug that reached a pushed commit.
 
 ---
 
 ## 3. What was just finished (uncommitted)
 
-Three backlog items, all closed in `docs/BACKLOG.md`, all mutation-verified.
+Shipped in `9234cdb`. Three backlog items, all closed in `docs/BACKLOG.md`, all
+mutation-verified (31 mutations across the four slices).
 
 **B19 — pickability audit.** `core/schedule.py::unpickable()`, surfaced by `doctor`.
 New knob `[schedule] empty_phase` (note | problem | off). Tests: `tests/test_pickability.py`.
@@ -98,8 +107,7 @@ writer cannot disagree. Also removed `AgentTarget.rules`, a field written for si
 read by nothing, which had already drifted from `NATIVE_RULES`. Tests appended to
 `tests/test_unified_rules.py`; 4 mutations verified.
 
-Suggested commit message subject: `B19 + B20 + B24 + B25: ddflow checks its own machinery`.
-Put the roborev fixes in the same commit or a follow-up — they are independent.
+All of it is in `9234cdb`; `git show 9234cdb` has the full reasoning in its message.
 
 ---
 

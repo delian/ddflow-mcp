@@ -66,7 +66,7 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
     """Record a transferable rule — the pattern, not the incident.
 
     With ``pattern``, the repository is SCANNED NOW and the matching sites are stored with
-    the lesson (B20). That is the whole mechanism: `ddflow lessons verify` re-scans later
+    the lesson (B20). That is the whole mechanism: `ddflow lesson verify` re-scans later
     and names which sites appeared, where a stored count could only say that things got
     worse. A count cannot be acted on and cannot be reviewed.
     """

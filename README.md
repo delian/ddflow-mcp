@@ -1707,10 +1707,12 @@ re-running it will not converge. A **skipped** gate is not a run, because counti
 failures would make an unconfigured gate look like a broken one.
 
 **Did the periodic passes ever fire?** *The mechanism you did not measure is the one that is
-not running.* Because a cadence here counts completions rather than wall-clock, fired versus
-scheduled is exact: `expected = completed // every`. A cadence more than
-`cadence.max_missed` periods behind is reported. Being merely *due* is not a finding —
-`ddflow cadence` already says that — and running early is not one either.
+not running.* Because a cadence here counts completions rather than wall-clock, this is exact
+rather than estimated: `since` is the completions elapsed since the pass last fired, which is
+the **same quantity** `ddflow cadence` uses to decide due-ness — deliberately, because two
+measures of "is this behind" that can disagree is a situation nobody can reason about. A pass
+more than `cadence.max_missed` scheduled runs behind is reported. Being merely *due* is not a
+finding (`ddflow cadence` already says that), and running early is not one either.
 
 All three are **notes, not problems**: a defect in the machinery that checks the work must
 not block the work.

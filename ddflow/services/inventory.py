@@ -85,10 +85,15 @@ def _candidates(repo: Path, globs: list[str]) -> list[Path]:
     if listed.ok and listed.out:
         rels = [r for r in listed.out.split("\0") if r]
     else:
+        # RELATIVE parts, like the loop below. Filtering `p.parts` tested the ABSOLUTE
+        # path, so a checkout living under any directory named `build`, `dist` or `venv`
+        # excluded every file in the repository and `scan()` returned an empty inventory —
+        # indistinguishable from clean code, which is the state this module refuses to
+        # produce for an uncompilable pattern. Found by roborev on 9234cdb.
         rels = [
             str(p.relative_to(repo))
             for p in repo.rglob("*")
-            if p.is_file() and not any(part in SKIP_DIRS for part in p.parts)
+            if p.is_file() and not any(part in SKIP_DIRS for part in p.relative_to(repo).parts)
         ]
     out = []
     for rel in sorted(rels):

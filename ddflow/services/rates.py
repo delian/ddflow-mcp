@@ -115,21 +115,44 @@ class CadenceRate:
     unit: str
     count: int  #: completions of `unit` so far
     ran: int  #: `cadence.ran` events recorded
+    at_last: int  #: the completion count recorded BY the most recent run; 0 if never run
+
+    @property
+    def since(self) -> int:
+        """Completions since it last fired — or since the beginning if it never has.
+
+        This is the SAME quantity `api.cadence` uses to decide due-ness, and it has to be:
+        two measures of "is this pass behind" that can disagree is a situation nobody can
+        reason about, and the first version of this class had exactly that. It computed
+        `expected = count // every` and compared it to the number of runs, which assumes
+        every run happened at its scheduled point. A cadence that fired three times EARLY
+        and then stopped therefore had `ran (3) > expected (1)`, so `missed` floored to 0
+        and `doctor` stayed silent while `ddflow cadence` reported it DUE — the exact
+        failure B25 exists to detect, hidden by its own arithmetic. Found by roborev on
+        9234cdb, reproduced against both surfaces.
+        """
+        return max(0, self.count - self.at_last)
+
+    @property
+    def overdue_periods(self) -> int:
+        """How many scheduled firings have passed since it last fired.
+
+        0 = up to date, 1 = simply due (which `ddflow cadence` already says), 2+ = it has
+        been skipped, which is what `stalled()` reports.
+        """
+        return self.since // self.every if self.every > 0 else 0
 
     @property
     def expected(self) -> int:
-        """How many times it should have fired by now."""
+        """Total firings the schedule has called for. Informational only — do NOT decide
+        behind-ness from this, see `since`."""
         return self.count // self.every if self.every > 0 else 0
 
-    @property
-    def missed(self) -> int:
-        """Scheduled minus fired, never negative — running EARLY is not a defect."""
-        return max(0, self.expected - self.ran)
-
     def render(self) -> str:
+        last = f"last at {self.at_last}" if self.ran else "NEVER fired"
         return (
-            f"{self.name}: fired {self.ran} of {self.expected} scheduled "
-            f"({self.count} {self.unit} completed, every {self.every})"
+            f"{self.name}: fired {self.ran}x ({last}), {self.since} {self.unit} since — "
+            f"{self.overdue_periods} scheduled run(s) skipped (every {self.every})"
         )
 
 
@@ -150,17 +173,31 @@ def cadence_rates(state: State, cfg: Config) -> list[CadenceRate]:
         ("mutation_tests", c.mutation_tests_every_phases, "phases", done_phases),
         ("lessons_pass", c.lessons_pass_every_phases, "phases", done_phases),
     )
-    return [
-        CadenceRate(name, every, unit, count, len(state.cadences.get(name, [])))
-        for name, every, unit, count in spec
-    ]
+    out = []
+    for name, every, unit, count in spec:
+        runs = state.cadences.get(name, [])
+        # The completion count the LAST run recorded, which is what `api.cadence` reads to
+        # compute due-ness. A malformed or absent `result` reads as 0 — treating an
+        # unparseable record as "it never ran" errs toward reporting, which is the safe
+        # direction for a check whose whole purpose is to notice silence.
+        try:
+            at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
+        except (TypeError, ValueError):
+            at_last = 0
+        out.append(CadenceRate(name, every, unit, count, len(runs), at_last))
+    return out
 
 
-def never_fired(state: State, cfg: Config) -> list[CadenceRate]:
+def stalled(state: State, cfg: Config) -> list[CadenceRate]:
     """Cadences that have fallen far enough behind to be worth saying out loud.
 
-    `cadence.max_missed` rather than "any miss": a pass that is one period behind is simply
-    due, which `ddflow cadence` already reports. This is for the case the source project
-    hit — scheduled repeatedly, fired never, and nothing anywhere said so.
+    `cadence.max_missed` rather than "any miss": one period behind is simply DUE, which
+    `ddflow cadence` already reports, and a check that repeats another check's output is one
+    nobody reads twice. This is for the case the source project hit — scheduled repeatedly,
+    fired never, and nothing anywhere said so.
+
+    Named `stalled`, not `never_fired`: it also catches a pass that fired for a while and
+    then stopped, which is the commoner and quieter version. The old name went into a
+    `doctor` label that read "cadence never fired" about a cadence that plainly had.
     """
-    return [r for r in cadence_rates(state, cfg) if r.missed > cfg.cadence.max_missed]
+    return [r for r in cadence_rates(state, cfg) if r.overdue_periods > cfg.cadence.max_missed]
