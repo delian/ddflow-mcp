@@ -39,7 +39,27 @@ coordination layer provides was resting on a file nobody verified.
 - **`init`**: REPORTS it, does not write. Writing prose into someone's AGENTS.md is
   `adopt`'s job.
 
-Seven mutations verified. The seventh is the one worth keeping: disabling the
+**B165 (same pass): the NATIVE rules surfaces were the ones that mattered and the ones
+nobody checked.** Operator question — "the same with Cursor, as it doesn't follow AGENTS.md
+probably?" — and it was right. Cursor's precedence is Team Rules > Project Rules > User Rules
+> `.cursorrules` > `AGENTS.md`, so `.cursor/rules/ddflow.mdc` is what binds; `adopt` has
+always written it, and `rules_status` checked only `AGENTS.md` and `CLAUDE.md`. A project
+adopted for Cursor with a deleted or drifted `.mdc` had an agent that does not follow the
+rules, while every check reported it as fine. The one file whose entire purpose was to bind
+was the one nobody verified.
+
+`adopted_agents(repo)` reads the driver deltas on disk — nothing else records which agents a
+project was adopted for — so a Claude-only project is never asked for a Cursor rule.
+`native_rule_text()` is the single generator for its content, as `project_section()` is for
+the block.
+
+And a fifth state, `not_binding`: `alwaysApply: false` means the file exists, reads perfectly
+and may never be loaded, which for claim-before-you-edit is the same as not having it and
+strictly worse than drifted text. Reported at the severity of MISSING. Five more mutations
+verified, including the original gap (skip the native surfaces entirely) and a writer/checker
+divergence.
+
+Seven mutations verified for the AGENTS.md half. The seventh is the one worth keeping: disabling the
 replace-the-block branch does NOT lose the operator's prose — it appends a second block — so
 the prose test passed while every re-adopt grew the file. Two blocks is worse than one stale
 one, because the agent reads both and nothing says which is current. Probed by counting

@@ -1644,12 +1644,24 @@ deleted `AGENTS.md`, a block someone stripped, or a block written by an older dd
 left the agent reading rules that were absent or wrong while every surface reported the
 project as adopted. **Adoption is a config file; the instructions are a separate fact.**
 
-Four states are now detected — `current`, `stale` (drifted from what this version writes),
-`no_block` (file there, block gone), `missing` — and reported on three surfaces:
+**Cursor does not really follow AGENTS.md**, and it is not alone. Its precedence is Team
+Rules > Project Rules > User Rules > `.cursorrules` > `AGENTS.md`, so
+`.cursor/rules/ddflow.mdc` is what actually binds — which is why `adopt` writes it. That
+file is checked too, for every agent the project was adopted for (read from the driver
+deltas on disk, so a Claude-only project is never asked for a Cursor rule).
+
+It carries the **same block** with binding frontmatter, and `alwaysApply: true` is part of
+what is verified: a rule with `alwaysApply: false` exists, reads perfectly, and may never be
+loaded — which for claim-before-you-edit is the same as not having it, and strictly worse
+than drifted text. It is reported at the severity of *missing*, not of *stale*.
+
+Five states are detected — `current`, `stale` (drifted from what this version writes),
+`no_block` (file there, block gone), `not_binding` (native rule that will not apply),
+`missing` — and reported on three surfaces:
 
 | Surface | What it does |
 |---|---|
-| `ddflow doctor` | **missing** is a PROBLEM (exit 1) — the agent has no rules at all. **stale** is a note, so an upgrade does not turn the health check red. |
+| `ddflow doctor` | **missing** and **not_binding** are PROBLEMS (exit 1) — the agent has no rules, or has them and will not load them. **stale** is a note, so an upgrade does not turn the health check red. |
 | The MCP handshake | A block naming the file, what is wrong, and **ask the operator first**. |
 | The footer on tool results | Reports it mid-session, because the handshake fires once. |
 

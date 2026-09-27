@@ -19,6 +19,7 @@ after an upgrade updates the block and leaves your own prose alone.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -130,6 +131,11 @@ def project_section(docs_dir: str = "docs/ddflow") -> str:
 RULES_FILES = ("AGENTS.md", "CLAUDE.md")
 
 MISSING, NO_BLOCK, STALE, CURRENT = "missing", "no_block", "stale", "current"
+#: A native rule that EXISTS and does not bind. `alwaysApply: false` makes Cursor load the
+#: file only when it feels like it, which for claim-before-you-edit is the same as not
+#: having it — and strictly worse than stale TEXT, because the text is fine and inert.
+#: Reported at the severity of missing, not of drifted.
+NOT_BINDING = "not_binding"
 
 
 @dataclass
@@ -146,10 +152,53 @@ class RulesState:
     def render(self) -> str:
         return {
             MISSING: f"{self.path} does not exist — the agent has no project rules at all",
+            NOT_BINDING: (
+                f"{self.path} exists but does not bind (`alwaysApply` is not true), so the "
+                f"agent may never load it"
+            ),
             NO_BLOCK: f"{self.path} exists but its ddflow section was removed",
             STALE: f"{self.path}'s ddflow section is from an older version and has drifted",
             CURRENT: f"{self.path} is current",
         }[self.state]
+
+
+#: Frontmatter that makes a Cursor project rule BIND. `alwaysApply: true`, because
+#: claim-before-you-edit is not a rule that should depend on the model choosing to load it.
+_NATIVE_FRONTMATTER = (
+    "---\n"
+    "description: >-\n"
+    "  How work is queued, claimed and reviewed in this project. Read before\n"
+    "  starting any task, and before editing any file.\n"
+    "globs:\n"
+    "alwaysApply: true\n"
+    "---\n\n"
+)
+
+
+def native_rule_text(docs_dir: str = "docs/ddflow") -> str:
+    """The exact content of an agent's NATIVE rules file.
+
+    The same managed block as `AGENTS.md`, with the markers stripped and binding
+    frontmatter added — so the two copies cannot say different things. Factored out for the
+    same reason `project_section` was: the checker has to compare against what the writer
+    writes, and two generators would be two answers.
+    """
+    body = project_section(docs_dir).replace(BEGIN, "").replace(END, "").strip()
+    return _NATIVE_FRONTMATTER + body + "\n"
+
+
+def adopted_agents(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[str]:
+    """Which agents this project was adopted FOR, read from the driver deltas on disk.
+
+    Nothing records the list — `adopt` takes it as an argument and writes per-agent files.
+    The deltas are therefore the only durable trace, and they are what tells the checker
+    whether `.cursor/rules/ddflow.mdc` is expected here or would be noise.
+    """
+    deltas = Path(repo) / docs_dir / "drivers" / "deltas"
+    if not deltas.is_dir():
+        return []
+    present = {p.name for p in deltas.glob("*.md")}
+    return sorted(key for key, (delta, _mcp) in AGENT_TARGETS.items() if delta in present)
 
 
 def has_been_adopted(repo: Path, *, docs_dir: str = "docs/ddflow") -> bool:
@@ -196,6 +245,35 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
             continue
         block = text[text.index(BEGIN) : text.index(END) + len(END)].strip()
         out.append(RulesState(name, CURRENT if block == want else STALE))
+
+    # The NATIVE surfaces, which for some agents OUTRANK `AGENTS.md` and are therefore what
+    # actually binds. Cursor's precedence is Team Rules > Project Rules > User Rules >
+    # `.cursorrules` > `AGENTS.md`, so a project adopted for Cursor with a missing or drifted
+    # `.cursor/rules/ddflow.mdc` has an agent that does not follow the rules — while
+    # `AGENTS.md` sits there current and every check reported the project as fine. This was
+    # the whole point of writing the native file and it was the one file nobody verified.
+    #
+    # No BEGIN/END markers here: the frontmatter has to be first for the rule to bind, so
+    # the file is ddflow's entirely and `no_block` cannot apply. Missing, drifted, current.
+    want_native = native_rule_text(docs_dir)
+    for key in adopted_agents(repo, docs_dir=docs_dir):
+        rel = NATIVE_RULES.get(key)
+        if not rel:
+            continue
+        path = Path(repo) / rel
+        if not path.is_file():
+            out.append(RulesState(rel, MISSING))
+            continue
+        got = path.read_text("utf-8", errors="replace")
+        if got == want_native:
+            out.append(RulesState(rel, CURRENT))
+        elif not re.search(r"^alwaysApply:\s*true\s*$", got, re.M):
+            # Checked BEFORE `stale`, because it is the more serious fault and a file that
+            # does not bind is usually also textually different. Drifted text still gets
+            # read; a rule with `alwaysApply: false` may never be loaded at all.
+            out.append(RulesState(rel, NOT_BINDING))
+        else:
+            out.append(RulesState(rel, STALE))
     return out
 
 
@@ -250,11 +328,11 @@ def adopt(
     for key in agents:
         actions.append(_register_mcp(repo, key, launch=launch, image=image))
         if key in NATIVE_RULES:
-            actions.append(_write_native_rule(repo, key, section))
+            actions.append(_write_native_rule(repo, key, docs_dir))
     return actions
 
 
-def _write_native_rule(repo: Path, key: str, section: str) -> str:
+def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> str:
     """Write the agent's own rules file, for agents whose native surface outranks
     `AGENTS.md`.
 
@@ -265,17 +343,7 @@ def _write_native_rule(repo: Path, key: str, section: str) -> str:
     """
     path = repo / NATIVE_RULES[key]
     path.parent.mkdir(parents=True, exist_ok=True)
-    body = section.replace(BEGIN, "").replace(END, "").strip()
-    frontmatter = (
-        "---\n"
-        "description: >-\n"
-        "  How work is queued, claimed and reviewed in this project. Read before\n"
-        "  starting any task, and before editing any file.\n"
-        "globs:\n"
-        "alwaysApply: true\n"
-        "---\n\n"
-    )
-    path.write_text(frontmatter + body + "\n", "utf-8")
+    path.write_text(native_rule_text(docs_dir), "utf-8")
     return f"wrote {NATIVE_RULES[key]} (always-applied project rule)"
 
 

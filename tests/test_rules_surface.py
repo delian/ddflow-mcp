@@ -260,3 +260,101 @@ def test_a_project_that_only_ran_init_is_not_nagged(repo):
     _adopted(repo)
     assert has_been_adopted(repo)
     assert [r.state for r in rules_status(repo)] == [CURRENT, CURRENT]
+
+
+# -- the NATIVE surfaces, which for some agents outrank AGENTS.md ---------------------------
+
+
+def _adopted_for(repo: Path, agents: str) -> None:
+    code, _out, err = run_cli(repo, "adopt", "--agents", agents)
+    assert code == 0, err
+
+
+def test_cursors_own_rule_file_is_checked_because_it_is_what_binds(repo):
+    """Cursor does not follow `AGENTS.md` in any meaningful sense.
+
+    Its precedence is Team Rules > Project Rules > User Rules > `.cursorrules` >
+    `AGENTS.md`, so `.cursor/rules/ddflow.mdc` is what actually binds. `adopt` has always
+    written it — and `rules_status` checked only AGENTS.md and CLAUDE.md, so a project
+    adopted for Cursor with a deleted or drifted `.mdc` had an agent that does not follow
+    the rules while every check reported the project as fine. The one file whose whole
+    purpose was to bind was the one nobody verified.
+    """
+    from ddflow.services.adopt import NATIVE_RULES, adopted_agents
+
+    _adopted_for(repo, "cursor")
+    assert adopted_agents(repo) == ["cursor"]
+    mdc = repo / NATIVE_RULES["cursor"]
+    assert mdc.is_file(), "adopt did not write the native rule"
+    assert _state(repo, str(NATIVE_RULES["cursor"])) == CURRENT
+
+    original = mdc.read_text()
+    mdc.unlink()
+    assert _state(repo, ".cursor/rules/ddflow.mdc") == MISSING
+
+    mdc.write_text(original.replace("Claim before you edit", "Claim eventually"))
+    assert _state(repo, ".cursor/rules/ddflow.mdc") == STALE
+
+
+def test_a_rule_that_does_not_BIND_is_as_serious_as_a_missing_one(repo):
+    """`alwaysApply: false` is the mechanism switched off, not a milder drift.
+
+    The file is there, its text may be perfect, and Cursor may never load it — which for
+    claim-before-you-edit is the same as not having it. Reporting that as a note would put
+    it below the threshold an operator reads, so it fails the health check like MISSING.
+    Drifted TEXT still gets read, and stays a note.
+    """
+    from ddflow import api
+    from ddflow.services.adopt import NOT_BINDING
+
+    _adopted_for(repo, "cursor")
+    mdc = repo / ".cursor" / "rules" / "ddflow.mdc"
+
+    mdc.write_text(mdc.read_text().replace("alwaysApply: true", "alwaysApply: false"))
+    assert _state(repo, ".cursor/rules/ddflow.mdc") == NOT_BINDING
+    out = api.doctor(repo)
+    assert out.exit == 1, "a rule that does not bind passed the health check"
+    assert any("does not bind" in p for p in out.data["problems"]), out.data["problems"]
+
+    # Text drift alone: still read, still a note, health check green.
+    mdc.write_text(
+        mdc.read_text()
+        .replace("alwaysApply: false", "alwaysApply: true")
+        .replace("Claim before you edit", "Claim eventually")
+    )
+    assert _state(repo, ".cursor/rules/ddflow.mdc") == STALE
+    assert api.doctor(repo).exit == 0
+
+
+def test_the_native_rule_is_not_expected_for_agents_that_were_not_adopted(repo):
+    """`.cursor/rules/ddflow.mdc` in a Claude-only project would be noise, and demanding it
+    would make `doctor` permanently red for everyone who does not use Cursor."""
+    _adopted_for(repo, "claude")
+    paths = [r.path for r in rules_status(repo)]
+    assert not any("cursor" in p for p in paths), paths
+    assert "AGENTS.md" in paths
+
+
+def test_the_native_rule_and_AGENTS_md_carry_the_SAME_text(repo):
+    """One source, so the two copies cannot say different things. The only difference is the
+    frontmatter, which is what makes the Cursor rule bind."""
+    from ddflow.services.adopt import END, native_rule_text
+
+    _adopted_for(repo, "cursor")
+    body = project_section().replace(BEGIN, "").replace(END, "").strip()
+    native = native_rule_text()
+    assert body in native, "the native rule is not the same block"
+    assert native.startswith("---\n"), "frontmatter must be first or the rule does not bind"
+    assert "alwaysApply: true" in native
+    assert (repo / ".cursor" / "rules" / "ddflow.mdc").read_text() == native
+
+
+def test_adopt_repairs_the_native_rule_too(repo):
+    """The CLI half, for the surface that actually binds."""
+    _adopted_for(repo, "cursor")
+    mdc = repo / ".cursor" / "rules" / "ddflow.mdc"
+    mdc.write_text("---\nalwaysApply: false\n---\n\nnonsense\n")
+    assert _state(repo, ".cursor/rules/ddflow.mdc") != CURRENT
+
+    _adopted_for(repo, "cursor")
+    assert _state(repo, ".cursor/rules/ddflow.mdc") == CURRENT
