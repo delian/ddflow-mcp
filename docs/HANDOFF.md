@@ -76,7 +76,10 @@ had no MCP parity test. On THAT (`8b167e9`, job 819): the printed remedy for an 
 shard (`git add`) stages nothing, so following it was refused forever — fixed, and the test
 now RUNS the printed `git add` lines and commits. **Test a remedy by executing it.** On
 THAT (`40950c9`, job 820): git C-quotes non-ASCII paths unless given `-z`, so the new
-`git add -f` named no file. Every git path listing in `enforce.py` now uses `-z`.
+`git add -f` named no file. Every git path listing in `enforce.py` now uses `-z`. On THAT
+(`4f54455`, job 821): `-z` emits RAW bytes, and `text=True` decoded them strictly, so one
+non-UTF-8 filename made every commit raise. Read `-z` output as bytes and `os.fsdecode` it
+(`enforce._nul_paths`).
 
 ## 3. What was finished in the previous session
 

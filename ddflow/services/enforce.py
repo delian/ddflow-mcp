@@ -28,6 +28,7 @@ where the agent is not the one running it.
 
 from __future__ import annotations
 
+import os
 import shlex
 import stat
 import sys
@@ -181,13 +182,24 @@ def staged_paths(repo: Path) -> list[str]:
     r = P.run(
         ["git", "-C", str(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
         capture_output=True,
-        text=True,
         timeout=60,
     )
     # `-z`, or a non-ASCII path comes back C-quoted and matches no lease glob and no view
     # name -- escaping both checks (found in review of 7216f5e, recorded, fixed with the
     # same bug in the log probe).
-    return [p for p in r.stdout.split("\0") if p]
+    return _nul_paths(r.stdout)
+
+
+def _nul_paths(out: bytes) -> list[str]:
+    """Paths from git's `-z` output, as the filesystem names them.
+
+    BYTES, decoded with `os.fsdecode`: `-z` makes git emit raw filename bytes, and text
+    mode decoded them strictly as UTF-8 -- one latin-1-named file anywhere in a commit
+    raised out of the hook, so the repository could not commit at all. Text mode also
+    rewrote a `\r` in a name to `\n`. `fsdecode` (surrogateescape) round-trips any
+    name the filesystem holds (roborev on 4f54455).
+    """
+    return [os.fsdecode(p) for p in out.split(b"\0") if p]
 
 
 #: Paths ddflow's own bookkeeping writes. Requiring a lease for these would make it
@@ -435,15 +447,10 @@ def _unstaged_under(repo: Path, d: Path) -> LogProbe:
         # `-z`: without it git C-quotes a non-ASCII path (`"caf\303\251.jsonl"`), and a
         # remedy built from that string names a file that does not exist -- `git add -f`
         # fails and the refusal never clears (roborev on 40950c9, reproduced).
-        r = P.run(
-            ["git", "-C", str(repo), *argv, "-z", "--", rel],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
+        r = P.run(["git", "-C", str(repo), *argv, "-z", "--", rel], capture_output=True, timeout=60)
         if r.returncode != 0:
             return None
-        return [p for p in r.stdout.split("\0") if p]
+        return _nul_paths(r.stdout)
 
     tracked = git("ls-files")
     modified = git("diff", "--name-only")

@@ -311,3 +311,26 @@ def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
     assert r.returncode == 0, (
         f"the hook refused a commit inside the very worktree the lease created:\n{r.stderr}"
     )
+
+
+def test_staged_paths_survives_a_filename_that_is_not_utf8(repo):
+    """With `-z` git emits RAW filename bytes, and `text=True` decoded them strictly as
+    UTF-8: one latin-1-named file anywhere in the commit raised UnicodeDecodeError out of
+    the hook, and the repository could not commit at all (roborev on 4f54455). Text mode
+    also rewrote a `\\r` in a name to `\\n`. `os.fsdecode` round-trips both."""
+    import os as _os
+
+    weird = [b"caf\xe9.txt", b"a\rb.txt"]
+    for name in weird:
+        (repo / _os.fsdecode(name)).write_bytes(b"x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    got = E.staged_paths(repo)
+    for name in weird:
+        assert _os.fsdecode(name) in got, (name, got)
+        assert (repo / _os.fsdecode(name)).exists(), "the returned path names no file"
+    # ...and the whole hook path, which formats these names into its message.
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "block"\n')
+    code, msg = E.check_commit(repo)
+    assert code == 1 and "a\rb.txt" in msg, msg
+    E.check_views(repo)  # must not raise either
