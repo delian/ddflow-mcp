@@ -62,8 +62,6 @@ quietly omits them. Both happened on 2026-09-27.
 * Projects adopted for Kilo before the fix still hold a dead `mcpServers.ddflow` block.
   Kilo ignores it (probed); re-running `adopt --agents kilo` adds the working `mcp` entry
   but does not remove the dead one.
-* `enforce.staged_paths` does not use `git diff -z`, so a path with non-ASCII characters
-  comes back C-quoted and escapes both the lease check (pre-existing) and the view check.
 * `enforce._out_hint` names no `--out` when stale views span several directories.
 
 **Queue roborev on whatever you commit** — every run on this series has found something
@@ -76,7 +74,9 @@ found three more, fixed after it: the staged-log probe ignored git's exit status
 `git` read as "clean"), `--exclude-standard` hid a partially ignored shard, and the refusal
 had no MCP parity test. On THAT (`8b167e9`, job 819): the printed remedy for an ignored
 shard (`git add`) stages nothing, so following it was refused forever — fixed, and the test
-now RUNS the printed `git add` lines and commits. **Test a remedy by executing it.**
+now RUNS the printed `git add` lines and commits. **Test a remedy by executing it.** On
+THAT (`40950c9`, job 820): git C-quotes non-ASCII paths unless given `-z`, so the new
+`git add -f` named no file. Every git path listing in `enforce.py` now uses `-z`.
 
 ## 3. What was finished in the previous session
 

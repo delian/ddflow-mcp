@@ -179,12 +179,15 @@ def staged_paths(repo: Path) -> list[str]:
     created is not in HEAD and a diff against HEAD alone would not see it.
     """
     r = P.run(
-        ["git", "-C", str(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+        ["git", "-C", str(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
         capture_output=True,
         text=True,
         timeout=60,
     )
-    return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    # `-z`, or a non-ASCII path comes back C-quoted and matches no lease glob and no view
+    # name -- escaping both checks (found in review of 7216f5e, recorded, fixed with the
+    # same bug in the log probe).
+    return [p for p in r.stdout.split("\0") if p]
 
 
 #: Paths ddflow's own bookkeeping writes. Requiring a lease for these would make it
@@ -429,12 +432,18 @@ def _unstaged_under(repo: Path, d: Path) -> LogProbe:
     rel = _rel(repo, d)
 
     def git(*argv: str) -> list[str] | None:
+        # `-z`: without it git C-quotes a non-ASCII path (`"caf\303\251.jsonl"`), and a
+        # remedy built from that string names a file that does not exist -- `git add -f`
+        # fails and the refusal never clears (roborev on 40950c9, reproduced).
         r = P.run(
-            ["git", "-C", str(repo), *argv, "--", rel], capture_output=True, text=True, timeout=60
+            ["git", "-C", str(repo), *argv, "-z", "--", rel],
+            capture_output=True,
+            text=True,
+            timeout=60,
         )
         if r.returncode != 0:
             return None
-        return [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+        return [p for p in r.stdout.split("\0") if p]
 
     tracked = git("ls-files")
     modified = git("diff", "--name-only")

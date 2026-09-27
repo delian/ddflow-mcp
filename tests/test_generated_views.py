@@ -277,3 +277,60 @@ def test_check_views_refuses_when_the_log_probe_failed(adopted, monkeypatch):
     monkeypatch.setattr(E, "_unstaged_under", lambda *_a: E.LogProbe([], [], failed=True))
     code, msg = E.check_views(adopted)
     assert code == 1 and "could not report" in msg, msg
+
+
+def _follow_the_remedy(repo: Path, stderr: str) -> subprocess.CompletedProcess:
+    """Run every printed `    git add ...` line exactly as a user would paste it, then
+    commit. A remedy is tested by EXECUTING it."""
+    import shlex
+
+    for line in stderr.splitlines():
+        if line.startswith("    git add"):
+            r = _git(repo, *shlex.split(line.strip())[1:])
+            assert r.returncode == 0, f"the printed remedy failed: {line!r}\n{r.stderr}"
+    return subprocess.run(
+        ["git", "-C", str(repo), "commit", "-m", "views"], capture_output=True, text=True
+    )
+
+
+def test_a_non_ascii_ignored_shard_gets_a_remedy_that_works(adopted):
+    """roborev on 40950c9, reproduced: git C-quotes non-ASCII paths by default, so the
+    printed `git add -f '.ddflow/events/caf\\303\\251.jsonl'` named no file and the refusal
+    never cleared. `isalnum()` keeps `é`, so agent `café` really writes this shard."""
+    (adopted / ".gitignore").write_text(".ddflow/events/café.jsonl\n")
+    _git(adopted, "add", ".gitignore")
+    _git(adopted, "commit", "-qm", "ignore one shard", "--no-verify")
+    run_cli(adopted, "task", "add", "P1.T9", "--phase", "P1", "--globs", "x", agent="café")
+    assert (adopted / ".ddflow" / "events" / "café.jsonl").is_file()
+    run_cli(adopted, "render")
+    r = _commit(adopted, VIEW)
+    assert r.returncode != 0 and "café.jsonl" in r.stderr, r.stderr
+    r2 = _follow_the_remedy(adopted, r.stderr)
+    assert r2.returncode == 0, f"following the printed remedy did not clear it:\n{r2.stderr}"
+
+
+def test_the_mixed_case_remedy_clears_both_kinds_at_once(adopted):
+    """A modified TRACKED shard and an IGNORED one together: two remedy lines, and both
+    must be needed and sufficient (roborev on 40950c9, low)."""
+    (adopted / ".gitignore").write_text(".ddflow/events/ghost.jsonl\n")
+    _git(adopted, "add", ".gitignore")
+    _git(adopted, "commit", "-qm", "ignore one shard", "--no-verify")
+    run_cli(adopted, "task", "add", "P1.T8", "--phase", "P1", "--globs", "y")  # tracked shard
+    run_cli(adopted, "task", "add", "P1.T9", "--phase", "P1", "--globs", "x", agent="ghost")
+    run_cli(adopted, "render")
+    r = _commit(adopted, VIEW)
+    assert r.returncode != 0
+    assert "git add -f" in r.stderr and "git add .ddflow/events" in r.stderr, r.stderr
+    r2 = _follow_the_remedy(adopted, r.stderr)
+    assert r2.returncode == 0, f"following the printed remedy did not clear it:\n{r2.stderr}"
+
+
+def test_a_view_under_a_non_ascii_directory_is_still_checked(adopted):
+    """`staged_paths` had the same C-quoting: a view in `--out héllo` came back as
+    `"h\\303\\251llo/QUEUE.md"`, whose `.name` is `QUEUE.md"` -- not a view name -- so a
+    hand-edited view there was committed unchecked."""
+    assert run_cli(adopted, "render", "--out", "héllo")[0] == 0
+    view = adopted / "héllo" / "QUEUE.md"
+    view.write_text(view.read_text() + "\nhand edit\n")
+    r = _commit(adopted, "héllo/QUEUE.md")
+    assert r.returncode != 0, "a hand-edited view under a non-ASCII path was committed"
