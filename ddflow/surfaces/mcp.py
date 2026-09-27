@@ -31,6 +31,7 @@ import json
 import os
 import re
 import sys
+import time
 import traceback
 from pathlib import Path
 from typing import Any
@@ -1818,6 +1819,14 @@ class Server:
         #: every subagent of one harness reports the same `clientInfo.name`, so using
         #: it as an id would reproduce the exact collapse above while looking specific.
         self.client_info: dict[str, Any] = {}
+        #: Re-instruction cadence, per CONNECTION. `initialize` delivers the rules once and
+        #: nothing re-states them afterwards; after a context compaction the model may
+        #: retain none of it, and MCP has no server->client context-injection primitive. A
+        #: footer on tool results is the only channel that survives, so these two counters
+        #: decide how often it is allowed to speak. Per-connection because that is the
+        #: lifetime of the context it is compensating for.
+        self._calls_since_footer = 0
+        self._last_footer_at = 0.0
 
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method = msg.get("method", "")
@@ -1966,7 +1975,14 @@ class Server:
                     wants_text = wants_text(args)
                 if callable(payload):
                     payload = payload(args)
-                return _ok(mid, _outcome_result(result, payload, as_text=bool(wants_text)))
+                out = _outcome_result(result, payload, as_text=bool(wants_text))
+                # The footer goes on LAST, after the reason block, so it never comes between
+                # a caller and the answer it asked for — `content[0]` is still the body and
+                # `jtool`-style consumers are untouched.
+                note = _obligation_footer(self)
+                if note:
+                    out["content"].append({"type": "text", "text": note})
+                return _ok(mid, out)
 
             # No argv fallback. Every tool declares `api`, `ARGV_TOOLS_CEILING` is 0, and
             # `test_every_tool_has_exactly_one_dispatch_mechanism` requires exactly one
@@ -2110,6 +2126,45 @@ class Server:
                 },
             )
         return _err(mid, -32601, f"method not found: {method}")
+
+
+def _obligation_footer(server) -> str:
+    """The re-instruction footer, or "" — see `services/obligations.py` and `[reinstruct]`.
+
+    Two guards, in this order, because the cheap one comes first: the CADENCE is counters on
+    the connection and costs nothing, and only once it opens does this fold the log. Both
+    `every_calls` and `every_seconds` must be satisfied, so a burst of calls does not
+    produce a burst of footers.
+
+    Swallows everything. A footer is a courtesy on top of an answer the caller asked for,
+    and a broken courtesy must never turn a successful tool call into a failure.
+    """
+    try:
+        from ..config import Config
+        from ..core.model import fold
+        from ..infra.log import EventLog
+        from ..services import obligations as OB
+
+        cfg = Config.load(server.repo)
+        if not cfg.reinstruct.enabled:
+            return ""
+        server._calls_since_footer += 1
+        now = time.time()
+        if server._calls_since_footer < cfg.reinstruct.every_calls:
+            return ""
+        if now - server._last_footer_at < cfg.reinstruct.every_seconds:
+            return ""
+        state = fold(EventLog(server.repo).read_all(), strict=False)
+        text = OB.footer(state, cfg, limit=cfg.reinstruct.max_items)
+        if not text:
+            # Nothing to say. The counters are NOT reset: a quiet project should not have
+            # to wait another twelve calls once something does come up.
+            return ""
+        server._calls_since_footer = 0
+        server._last_footer_at = now
+        return text
+    except Exception:
+        return ""
 
 
 def _macro_error() -> type[Exception]:

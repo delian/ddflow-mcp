@@ -40,6 +40,7 @@ the same implementation, so neither drifts from the other.
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
 | **invoke a workflow / a mode of your own** | `ddflow prompts list` · `prompts show <name>` | `prompts/list` · `prompts/get` |
+| **see what this project left undone** | `ddflow doctor` · `ddflow status` | the [footer on tool results](#surviving-a-compaction) |
 | **ask the tool to explain itself** | `ddflow help [topic]` | `ddflow_help` |
 
 Every read command takes `--json`. Every exit code means the same thing everywhere:
@@ -1628,6 +1629,58 @@ Record one with: ddflow cadence --ran <name>
 
 Configurable: integration tests, architecture review, mutation testing, duplication
 sweep, lessons compression.
+
+---
+
+## Surviving a compaction
+
+The instruction block reaches the model **once**, at connect. After a context compaction it
+may retain none of it, and MCP has no server-to-client primitive for injecting context —
+the three that exist (`roots/list`, `sampling/createMessage`, `elicitation/create`) all go
+the other way or ask a question. Three things already survive:
+
+- the **AGENTS.md / CLAUDE.md sections** `ddflow setup` writes, plus each agent's native
+  rules file — the client re-reads its own rules, so this is the durable channel;
+- the **commit hook**, which refuses a commit with no item trailer and says what to add.
+  Enforcement at the moment of the act needs no context at all;
+- `ddflow help <topic>`, which the agent can ask for — if it thinks to.
+
+What none of those do is **speak up unprompted**. A footer on tool results is the only
+channel that is guaranteed to be heard again, because an agent driving ddflow calls tools
+continuously:
+
+```
+ddflow: left undone in this project —
+  · 1 bug(s) still open: B1 — close with `ddflow_bug_fixed` (it requires the regression test) or say why not
+  · 2 gate(s) skipped, not run: T4.critic, T4.standards — run them, or leave the skip on the record deliberately
+```
+
+**It is not a banner, and the difference is the whole design.** A fixed reminder appended to
+63 tools is trained out inside a session and costs tokens on every call. This one:
+
+- **names what happened**, never restates a rule — an id, a count, and the call that
+  discharges it;
+- **stops** once the thing is dealt with, so it cannot be trained out by repetition;
+- **says nothing at all** when the project has nothing outstanding — not a cheerful "all
+  clear", which is the same thing readers learn to skip;
+- is **cadenced**: at most once every `every_calls` calls *and* `every_seconds` seconds, so
+  a burst of calls is not a burst of footers;
+- **cannot break the call it rides on**. It is a courtesy on top of an answer, appended
+  after the body, and a failure inside it is swallowed. `content[0]` is still the
+  structured result.
+
+```toml
+[reinstruct]
+enabled      = true   # false silences it entirely
+every_calls  = 12
+every_seconds = 240
+max_items    = 3
+```
+
+What it currently notices: bugs found and never closed, gates skipped and never revisited,
+and work finishing with no lesson ever recorded (after `[lessons] reflect_after_items`, so
+one task is not reported — the pattern is, and the threshold is a knob because where the
+line sits is a judgement).
 
 ---
 

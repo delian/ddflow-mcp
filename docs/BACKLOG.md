@@ -1719,7 +1719,39 @@ the reason this is a gap rather than a hole:
    says what to add. Enforcement at the moment of the act needs no context at all.
 3. `ddflow_help <topic>` — eleven topics. PULL-based: the agent has to think to ask.
 
-- **B158. Nothing PUSHES the rules after `initialize`.** `_instructions()` is delivered
+- **B158 + B159. ✅ CLOSED 2026-09-27.** `[reinstruct]` + `services/obligations.py`: a
+  cadenced, stateful footer on tool results, appended after the body so `content[0]` is
+  still the structured answer.
+
+  Done together, as the entries said they had to be — B158 alone is a banner and B159 alone
+  has nowhere to appear. The design work was entirely in NOT being a banner:
+
+  * **Names what happened, never restates a rule.** An id, a count, and the call that
+    discharges it. `test_an_open_bug_is_named_with_the_call_that_closes_it`.
+  * **STOPS once discharged**, which is what makes it un-trainable-out: repetition would
+    mean it was ignored. `test_the_footer_STOPS_once_the_obligation_is_discharged`.
+  * **Silent when there is nothing outstanding** — not a cheerful "all clear", which is the
+    same thing readers learn to skip. Mutating it to say "all clear" fails a test.
+  * **Cadenced on BOTH counters**, so a burst of calls is not a burst of footers. The cheap
+    guard (counters on the connection) runs before the expensive one (the fold).
+  * **Cannot break the call it rides on.** Swallowed entirely; a courtesy that turns a
+    working tool into a failure is worse than no courtesy.
+
+  ON by default, with a generous cadence, and that is a deliberate departure from the
+  entry's "off or cheap by default": an opt-in feature nobody enables does not solve the
+  problem it was filed for. `enabled = false` silences it completely.
+
+  **A bug in the first draft, worth recording because it is this module's own failure
+  mode:** the skipped-gate check tested `isinstance(record, dict)` while `Item.gates` holds
+  `GateRecord` dataclasses — so it found nothing, ever, and reported no skipped gate while
+  looking like it was checking. A check that silently finds nothing is exactly what
+  `obligations.py` exists to catch elsewhere. Caught by writing the test first.
+
+  Six mutations verified. What it notices today: open bugs, skipped gates, and work
+  finishing with no lesson ever recorded past `[lessons] reflect_after_items` — a knob,
+  because where that line sits is a judgement.
+
+  Original: Nothing PUSHES the rules after `initialize`. `_instructions()` is delivered
   exactly once, at handshake. After a compaction the model may retain none of it, and
   MCP has no server→client context-injection primitive — the three that exist are
   `roots/list`, `sampling/createMessage` and `elicitation/create`, none of which injects
@@ -1737,7 +1769,7 @@ the reason this is a gap rather than a hole:
   naming the next concrete obligation rather than restating the rules; (c)
   **config-gated**, off or cheap by default.
 
-- **B159. ddflow can see which recording obligations were SKIPPED, and never says so.**
+- **B159. (closed with B158 above.)** ddflow can see which recording obligations were SKIPPED, and never says so.
   This is what would make B158's footer worth reading. The log knows that a task
   completed with no lesson, no decision and no research entry; that a bug was found and
   never marked fixed; that a phase shipped with no session note. That is the same shape
