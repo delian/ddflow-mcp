@@ -190,3 +190,14 @@ def test_a_job_on_another_host_is_not_ended_without_force(repo):
     code, out, err = run_cli(repo, "job", "end", "J-remote", "--force")
     assert code == OK, err
     assert "exit unknown" in out, "a job with no exit code printed 'exit None'"
+
+
+def test_two_launches_in_one_second_do_not_share_a_log(repo):
+    from ddflow.api import jobs as AJ
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "claim", "T", "--no-worktree", agent="w")
+    # In-process and back to back: two CLI calls never land in the same second.
+    logs = {AJ.job_run(repo, "T", "true", agent="w").data["log"] for _ in range(2)}
+    assert len(logs) == 2, "two jobs wrote one log"

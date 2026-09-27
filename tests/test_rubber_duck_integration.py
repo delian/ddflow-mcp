@@ -210,3 +210,25 @@ def test_a_level_one_heading_ends_the_lesson_above_it(repo):
     _write(repo, "docs/lessons.md", "## L1. rule\nbody\n\n# Appendix\nunrelated\n")
     found, _ = IM.scan_lessons(repo)
     assert "unrelated" not in found[0].body
+
+
+# -- roborev 835 (whole branch) -----------------------------------------------------------
+
+
+def test_a_marker_inside_a_colon_phrase_is_not_a_lead(repo):
+    assert IM._disposition("Retry REFUTED requests: add backoff") == ("", "")
+    assert IM._disposition("Handle DECLINED offers: show a message") == ("", "")
+    assert IM._disposition("DECLINED: the old approach")[0] == "closed"
+
+
+def test_an_external_need_in_a_plan_is_not_called_unresolvable(repo):
+    _write(repo, "docs/todo.md", "## S\n\n- [ ] **S.1** — gen\n  **Needs:** trainer:132.D\n")
+    plan = IM.plan_import(repo, None)
+    assert not any("did not find" in n for n in plan.notes), plan.notes
+
+
+def test_a_malformed_cadence_is_said_at_session_start(repo):
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[cadence]\nevery_days = ["bug_hunt"]\n')
+    _c, out, _e = run_cli(repo, "hooks", "session-start")
+    assert "cadence check failed" in out

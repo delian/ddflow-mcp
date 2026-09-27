@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core.model import ABANDONED, DONE
+from ..core.schedule import is_external
 from ..infra import proc as P
 from ..infra.log import EventLog
 
@@ -329,7 +330,11 @@ def _disposition(raw: str) -> tuple[str, str]:
         # (cross-family critic). The title is the text before the first separator; a
         # disposition written as the leading word ("DECLINED: ...") still counts.
         title, annotation = _split_nonbold(body)
-        lead = title.split(":", 1)[0] if ":" in title[:_LEAD_WORD_CHARS] else ""
+        lead = title.split(":", 1)[0].strip() if ":" in title[:_LEAD_WORD_CHARS] else ""
+        # Only a lead that IS a marker ("DECLINED: ..."), never a phrase containing one:
+        # "Retry REFUTED requests: add backoff" is work (roborev 835).
+        if lead.upper() not in (*_CLOSED_MARKERS, *_HOLD_MARKERS):
+            lead = ""
         annotation = f"{lead} {annotation}".strip()
     annotation = annotation[:_ANNOTATION_CHARS]
     # Closed asides, and one left OPEN at the end of the line -- a `(Deferred to ...`
@@ -1464,7 +1469,10 @@ def _flag_unresolvable_needs(plan: ImportPlan, known: set[str]) -> None:
     missing: dict[str, list[str]] = {}
     for f in plan.found:
         for d in f.needs:
-            if d not in ids:
+            # A sibling-repo dependency is resolved by `external sync`, not by this
+            # scan; calling it unresolvable sent the operator to "correct" a correct
+            # dependency (roborev 835).
+            if d not in ids and not is_external(d):
                 missing.setdefault(d, []).append(f.ident)
     if not missing:
         return

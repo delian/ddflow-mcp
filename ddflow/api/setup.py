@@ -400,7 +400,9 @@ def _session_start(repo: Path, agent: str) -> O.Outcome:
         from .operations import cadence
 
         due = cadence(repo, agent=agent)
-        if due.exit == O.OK and due.data.get("due"):
+        if due.exit == O.FAIL:
+            parts += [f"_(cadence check failed: {due.reason})_", ""]
+        elif due.exit == O.OK and due.data.get("due"):
             parts += [
                 "Periodic passes DUE: "
                 + ", ".join(f"{d['cadence']} (last: {d['since']})" for d in due.data["due"])
