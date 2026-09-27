@@ -192,7 +192,7 @@ def test_a_view_rendered_from_unstaged_events_is_refused(adopted):
     assert run_cli(adopted, "render")[0] == 0
     r = _commit(adopted, VIEW)  # the log is NOT staged
     assert r.returncode != 0, "a view ahead of its committed log was committed"
-    assert "unstaged" in r.stderr and "git add .ddflow/events" in r.stderr, r.stderr
+    assert "does not record" in r.stderr and "git add .ddflow/events" in r.stderr, r.stderr
     shown = _git(adopted, "show", "HEAD:" + VIEW)
     assert "P1.T2" not in shown.stdout, "the ahead-of-log view reached HEAD"
 
@@ -241,6 +241,21 @@ def test_a_view_rendered_from_an_ignored_shard_is_refused(adopted):
     r = _commit(adopted, VIEW)
     assert r.returncode != 0, "a view ahead of its committed log passed via an ignored shard"
 
+    # And the printed remedy must CLEAR it. The first version printed `git add
+    # .ddflow/events`, which skips an ignored file and exits 0, so following the message
+    # literally was refused again, forever (roborev on 8b167e9). Run every `    git ...`
+    # line exactly as printed, then commit.
+    assert "(gitignored)" in r.stderr and "git add -f" in r.stderr, r.stderr
+    import shlex
+
+    for line in r.stderr.splitlines():
+        if line.startswith("    git add"):
+            _git(adopted, *shlex.split(line.strip())[1:])
+    r2 = subprocess.run(
+        ["git", "-C", str(adopted), "commit", "-m", "views"], capture_output=True, text=True
+    )
+    assert r2.returncode == 0, f"following the printed remedy did not clear it:\n{r2.stderr}"
+
 
 def test_a_git_failure_is_reported_never_read_as_a_clean_log(tmp_path):
     """roborev on 43c2034: the probe ignored git's exit status, so a failed `git` (a
@@ -249,4 +264,16 @@ def test_a_git_failure_is_reported_never_read_as_a_clean_log(tmp_path):
     from ddflow.services.enforce import _unstaged_under
 
     got = _unstaged_under(tmp_path, tmp_path / ".ddflow" / "events")
-    assert got and "could not report" in got[0], got
+    assert got.failed, got
+
+
+def test_check_views_refuses_when_the_log_probe_failed(adopted, monkeypatch):
+    """The probe reporting `failed` is only half; the check must act on it rather than
+    fall through to comparing against the disk log."""
+    from ddflow.services import enforce as E
+
+    run_cli(adopted, "render")
+    _git(adopted, "add", VIEW)
+    monkeypatch.setattr(E, "_unstaged_under", lambda *_a: E.LogProbe([], [], failed=True))
+    code, msg = E.check_views(adopted)
+    assert code == 1 and "could not report" in msg, msg

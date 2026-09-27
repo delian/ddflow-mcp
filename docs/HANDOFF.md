@@ -74,7 +74,9 @@ and exited 0 after SKIPPING an MCP registration — the wrote-nothing-reported-s
 reintroduced by the very commit that fixed it for Kilo. On THAT fix (`43c2034`, job 818) it
 found three more, fixed after it: the staged-log probe ignored git's exit status (a failed
 `git` read as "clean"), `--exclude-standard` hid a partially ignored shard, and the refusal
-had no MCP parity test.
+had no MCP parity test. On THAT (`8b167e9`, job 819): the printed remedy for an ignored
+shard (`git add`) stages nothing, so following it was refused forever — fixed, and the test
+now RUNS the printed `git add` lines and commits. **Test a remedy by executing it.**
 
 ## 3. What was finished in the previous session
 

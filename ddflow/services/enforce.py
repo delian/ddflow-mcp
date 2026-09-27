@@ -32,6 +32,7 @@ import shlex
 import stat
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
@@ -318,18 +319,45 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
     # be fully staged: then the log on disk IS the committed log, and the comparison
     # below is exact.
-    unstaged = _unstaged_under(repo, log.dir)
-    if unstaged:
+    probe = _unstaged_under(repo, log.dir)
+    if probe.failed:
+        return _verdict(
+            mode,
+            [
+                "ddflow: a generated view is staged, but git could not report the state of "
+                f"the event log ({_rel(repo, log.dir)}) it must agree with.",
+                "",
+                "Refusing rather than guessing: an unreadable log state is not a clean one.",
+                "Check `git status`; a locked or damaged index is the usual cause.",
+            ],
+        )
+    if probe.paths:
+        # Each case gets the command that CLEARS it. A plain `git add` stages nothing for
+        # an ignored file and exits 0, so the one remedy for every case left an ignored
+        # shard refused forever with identical output (roborev on 8b167e9, reproduced).
+        remedy = []
+        if probe.ignored:
+            remedy += [
+                "These are GITIGNORED, so a plain `git add` skips them. Force them in, or",
+                "stop ignoring shards (a committed log with some shards ignored cannot",
+                "match a view rendered from all of them):",
+                "    git add -f " + " ".join(shlex.quote(p) for p in probe.ignored),
+            ]
+        if set(probe.paths) - set(probe.ignored):
+            remedy += [f"    git add {shlex.quote(_rel(repo, log.dir))}"]
         return _verdict(
             mode,
             [
                 f"ddflow: a generated view is staged, but the event log it is rendered from "
-                f"has {len(unstaged)} unstaged change(s):",
+                f"has {len(probe.paths)} change(s) the commit does not record:",
                 "",
-                *(f"  {p}" for p in unstaged[:MAX_LISTED_PATHS]),
+                *(
+                    f"  {p}" + ("   (gitignored)" if p in probe.ignored else "")
+                    for p in probe.paths[:MAX_LISTED_PATHS]
+                ),
                 "",
                 "A committed view must agree with the log committed beside it. Stage both:",
-                f"    git add {shlex.quote(_rel(repo, log.dir))}",
+                *remedy,
                 "    ddflow render" + _out_hint(sorted(staged)),
                 "    git add " + " ".join(shlex.quote(p) for p in sorted(staged)),
             ],
@@ -374,7 +402,16 @@ def _rel(repo: Path, path: Path) -> str:
         return str(path)
 
 
-def _unstaged_under(repo: Path, d: Path) -> list[str]:
+@dataclass(frozen=True)
+class LogProbe:
+    """What the commit would NOT record under the log dir, and why."""
+
+    paths: list[str]  #: not in the index, or modified since staged
+    ignored: list[str]  #: the subset a plain `git add` would skip
+    failed: bool = False  #: git could not say -- never read as "clean"
+
+
+def _unstaged_under(repo: Path, d: Path) -> LogProbe:
     """Paths under ``d`` whose working copy is not what the commit will record:
     modified-but-not-staged, or not in the index at all.
 
@@ -385,9 +422,9 @@ def _unstaged_under(repo: Path, d: Path) -> list[str]:
     some shards would otherwise render a view from an ignored shard, commit it beside a
     log that lacks it, and pass (roborev on 43c2034).
 
-    A git failure is REPORTED as a path, never read as "nothing unstaged": an empty
-    stdout from a command that failed is not evidence of a clean log, and returning []
-    would silently reopen the exact false pass this exists to close (roborev on 43c2034).
+    A git failure is `failed`, never an empty list: an empty stdout from a command that
+    failed is not evidence of a clean log, and reading it as one would silently reopen
+    the exact false pass this exists to close (roborev on 43c2034).
     """
     rel = _rel(repo, d)
 
@@ -402,11 +439,12 @@ def _unstaged_under(repo: Path, d: Path) -> list[str]:
     tracked = git("ls-files")
     modified = git("diff", "--name-only")
     untracked = git("ls-files", "--others")  # ignored ones included, deliberately
-    if tracked is None or modified is None or untracked is None:
-        return [f"{rel} (git could not report its state -- refusing rather than guessing)"]
+    ignored = git("ls-files", "--others", "--ignored", "--exclude-standard")
+    if tracked is None or modified is None or untracked is None or ignored is None:
+        return LogProbe([], [], failed=True)
     if not tracked:
-        return []
-    return sorted(set(modified + untracked))
+        return LogProbe([], [])
+    return LogProbe(sorted(set(modified + untracked)), sorted(ignored))
 
 
 def _lf(data: bytes) -> bytes:
