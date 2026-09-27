@@ -308,7 +308,11 @@ def _worktree_drift(repo: Path, here: Path) -> str:
         return ""
     base = W.default_branch(repo)
     n = W.git(here, "rev-list", "--count", f"HEAD..{base}")
-    if not n.ok or not n.out.isdigit() or int(n.out) == 0:
+    if not n.ok or not n.out.isdigit():
+        # "Could not tell" is not "not behind" (roborev 826): an unborn HEAD, an
+        # unrelated history or an unresolvable base all land here.
+        return f"Could not tell whether this checkout is behind `{base}`: {n.err or n.out}"
+    if int(n.out) == 0:
         return ""
     changed = W.git(here, "diff", "--name-only", f"HEAD...{base}", "--", *_RULEBOOKS)
     rules = [p for p in changed.out.splitlines() if p] if changed.ok else []
@@ -409,6 +413,47 @@ def _session_start(repo: Path, agent: str) -> O.Outcome:
     return O.ok("hooks", message="\n".join(parts), installed=True, policy="")
 
 
+def _hooks_status(repo: Path, cfg) -> O.Outcome:
+    """What is installed, and whether the installed hook and the policy agree."""
+    from ..services import claudehooks as CH
+    from ..services import enforce as E
+
+    on = E.installed(repo)
+    mode = cfg.enforce.commit_without_lease
+    # The two halves must AGREE or neither enforces anything, and each mismatch reads
+    # differently: a hook with a `warn` policy reports and allows, while a `block` policy
+    # with no hook is a rule nothing applies.
+    note = ""
+    if on and mode == "warn":
+        note = (
+            "\n\nNOTE: the hook is installed but the policy is 'warn', so it reports and "
+            "allows. Set it to 'block' to refuse."
+        )
+    elif not on and mode == "block":
+        note = (
+            "\n\nNOTE: the policy is 'block' but NO HOOK IS INSTALLED, so nothing enforces "
+            "it. Run `ddflow hooks install`."
+        )
+    session, unreadable = CH.state(repo)
+    if session is None:
+        session_line = f"UNKNOWN -- {unreadable}"
+    elif session:
+        session_line = "installed"
+    else:
+        session_line = (
+            "not installed (`ddflow hooks install --claude` puts the brief in every session)"
+        )
+    message = (
+        f"pre-commit hook: {'installed' if on else 'NOT installed'}\n"
+        f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
+        f"Claude Code SessionStart hook: {session_line}"
+    )
+    data = {"installed": on, "policy": mode, "session_hook": session, "message": message}
+    if on or mode == "off":
+        return O.ok("hooks", **data)
+    return O.nothing("hooks", message, **data)
+
+
 def hooks(
     repo: Path,
     *,
@@ -465,33 +510,7 @@ def hooks(
             return O.ok("hooks", **data)
         return O.Outcome(kind="hooks", data=data, exit=code, reason=msg)
 
-    on = E.installed(repo)
-    mode = cfg.enforce.commit_without_lease
-    # The two halves must AGREE or neither enforces anything, and each mismatch reads
-    # differently: a hook with a `warn` policy reports and allows, while a `block` policy
-    # with no hook is a rule nothing applies.
-    note = ""
-    if on and mode == "warn":
-        note = (
-            "\n\nNOTE: the hook is installed but the policy is 'warn', so it reports and "
-            "allows. Set it to 'block' to refuse."
-        )
-    elif not on and mode == "block":
-        note = (
-            "\n\nNOTE: the policy is 'block' but NO HOOK IS INSTALLED, so nothing enforces "
-            "it. Run `ddflow hooks install`."
-        )
-    session = CH.installed(repo)
-    message = (
-        f"pre-commit hook: {'installed' if on else 'NOT installed'}\n"
-        f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
-        f"Claude Code SessionStart hook: {'installed' if session else 'not installed'}"
-        + ("" if session else " (`ddflow hooks install --claude` puts the brief in every session)")
-    )
-    data = {"installed": on, "policy": mode, "session_hook": session, "message": message}
-    if on or mode == "off":
-        return O.ok("hooks", **data)
-    return O.nothing("hooks", message, **data)
+    return _hooks_status(repo, cfg)
 
 
 def prompts(

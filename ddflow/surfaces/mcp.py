@@ -1366,9 +1366,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             claude=bool(a.get("claude")),
             agent=agent,
         ),
-        # The two FACTS. `message` is the prose rendering of them and stays OUT of the
-        # JSON body: `hooks status --json` has always emitted exactly these two, and
-        # adding a key is a wire change this migration does not get to make.
+        # The FACTS. `message` is the prose rendering of them and stays OUT of the JSON
+        # body. `session_hook` was ADDED deliberately with the SessionStart hook -- a
+        # wire change of its own, not part of the migration this comment once guarded
+        # -- and is `null` when the settings file could not be read.
         "payload": ("installed", "policy", "session_hook"),
     },
     "ddflow_doctor": {

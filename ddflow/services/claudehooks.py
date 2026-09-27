@@ -50,6 +50,10 @@ def _read(path: Path) -> dict[str, Any]:
         data = json.loads(path.read_text("utf-8") or "{}")
     except json.JSONDecodeError as exc:
         raise SettingsError(f"{path} is not valid JSON ({exc}); not touching it") from exc
+    except (UnicodeDecodeError, OSError) as exc:
+        # Not a JSONDecodeError, so it escaped every handler and crashed `hooks status`
+        # on a file ddflow never wrote (roborev 826).
+        raise SettingsError(f"{path} could not be read ({exc}); not touching it") from exc
     if not isinstance(data, dict):
         raise SettingsError(f"{path} is not a JSON object; not touching it")
     return data
@@ -68,13 +72,20 @@ def _groups(data: dict[str, Any]) -> list[Any]:
 
 
 def installed(repo: Path) -> bool:
+    """True only when our hook is demonstrably there; see `state` for "could not tell"."""
+    return state(repo)[0] is True
+
+
+def state(repo: Path) -> tuple[bool | None, str]:
+    """(installed?, why). None means the settings file could not be read -- which is
+    NOT the same as "not installed", and reporting it as that told an operator to
+    install a hook into a file ddflow would then refuse to touch (roborev 826)."""
     try:
         data = _read(settings_path(repo))
-    except SettingsError:
-        return False
-    return any(
-        _ours(h) for g in _groups(data) if isinstance(g, dict) for h in (g.get("hooks") or [])
-    )
+    except SettingsError as exc:
+        return None, str(exc)
+    on = any(_ours(h) for g in _groups(data) if isinstance(g, dict) for h in (g.get("hooks") or []))
+    return on, ""
 
 
 def install(repo: Path, command: str) -> str:
@@ -134,5 +145,9 @@ def uninstall(repo: Path) -> str:
 
 
 def _write(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
+    """Atomically: a truncate-then-write interrupted midway leaves an EMPTY settings
+    file, which `_read` takes as `{}` -- the operator's permissions and hooks gone, and
+    the next install reporting success over the loss (roborev 826)."""
+    from ..infra.tomlcfg import atomic_write
+
+    atomic_write(path, json.dumps(data, indent=2) + "\n")

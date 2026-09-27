@@ -190,3 +190,49 @@ def test_the_mcp_tool_installs_it_too(repo):
     )
     assert not reply["result"].get("isError"), reply
     assert len(_ours(_settings(repo))) == 1
+
+
+# -- roborev 826 ------------------------------------------------------------------------
+
+
+def test_a_settings_file_that_is_not_utf8_is_refused_and_status_says_UNKNOWN(repo):
+    run_cli(repo, "init")
+    (repo / ".claude").mkdir()
+    raw = b'{"model": "\xff\xfe"}'
+    (repo / ".claude" / "settings.json").write_bytes(raw)
+    code, _out, err = run_cli(repo, "hooks", "install", "--claude")
+    assert code == FAIL and "could not be read" in err
+    assert (repo / ".claude" / "settings.json").read_bytes() == raw
+    code, out, err = run_cli(repo, "--json", "hooks", "status")
+    assert "Traceback" not in err
+    assert json.loads(out)["session_hook"] is None, "unreadable was reported as 'not installed'"
+
+
+def test_the_settings_file_is_replaced_atomically(repo, monkeypatch):
+    """A truncate-then-write that dies midway leaves an EMPTY file, read back as `{}`."""
+    from ddflow.infra import tomlcfg
+    from ddflow.services import claudehooks as CH
+
+    run_cli(repo, "init")
+    (repo / ".claude").mkdir()
+    (repo / ".claude" / "settings.json").write_text(json.dumps(EXISTING))
+
+    def boom(path, text):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(tomlcfg, "atomic_write", boom)
+    try:
+        CH.install(repo, "ddflow hooks session-start")
+    except OSError:
+        pass
+    assert json.loads((repo / ".claude" / "settings.json").read_text()) == EXISTING
+
+
+def test_a_drift_check_that_cannot_run_says_so_instead_of_not_behind(repo, tmp_path):
+    from ddflow.api.setup import _worktree_drift
+
+    unborn = tmp_path / "unborn"
+    unborn.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "main", str(unborn)], check=True)
+    msg = _worktree_drift(repo, unborn)
+    assert msg.startswith("Could not tell"), msg
