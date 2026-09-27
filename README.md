@@ -499,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 75 knobs.
+cadences, and the rest of the 83 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1021,6 +1021,36 @@ Four guard rails, each of which exists because the alternative is silent:
 - **Idempotent.** Ids derive from the source, so re-running after you edit the todo adds
   what is new and leaves the rest alone. A second run over an unchanged project exits 2.
 
+### What an unticked box means, and where things live
+
+An open box is not always work. The import reads the project's own **dispositions** —
+the vocabulary and positions are those of the picker ddflow was extracted from, and
+agree with it on all 1,170 open boxes of that repository:
+
+| The source says | Imported as |
+|---|---|
+| `DEFERRED`, `THEORETICAL`, `BLOCKED`, `ON HOLD`… after the title or in a `(aside)`; a `### Deferred` heading; `**STATUS**: DEFERRED` / `WATCH` | **blocked**, with the reason and the source line. Never offered; `ddflow unblock <id>` releases it |
+| `DECLINED`, `REFUTED`, `SUPERSEDED`, `SKIPPED`, `~~struck through~~`; `**STATUS**: SHIPPED` / `CLOSED` over an unticked box | history, like a ticked box — left out, or **abandoned** with `--include-done` |
+| a word in the title's own prose (`make the sampler handle SKIPPED batches`) | work — that is the item that fixes it |
+
+`[importer] archive_globs` names plan files that are history until a section is named
+(a 20,000-line legacy `docs/todo.md`): their open boxes import **blocked**, and
+`ddflow unblock <phase>` releases a whole section at once.
+
+Each source family's location is a knob — `todo_globs`, `lesson_globs`,
+`lesson_summary_globs`, `decision_globs`, `research_globs`, `journal_globs`,
+`memory_globs` — and a set knob **replaces** the defaults, because the same filename
+means opposite things in different projects (`docs/LOG.md` is one repository's whole
+journal and another's generated index of it; an `Index` section is never imported).
+
+Lessons are split at the level they actually live at: `### L100. …` entries grouped under
+`## <date>` headings import one per lesson **with their own ids**, so `[L147]`
+cross-references still resolve. A lesson's `**Compressed:**` paragraph becomes its
+**summary**; a hand-written `lessons-summary.md` bullet that cites exactly one lesson
+becomes that lesson's summary, and every other bullet becomes a consolidated lesson tagged
+`summary`. A GENERATED summary file is skipped. `ddflow render` writes them all back out
+as `docs/ddflow/LESSONS-SUMMARY.md` (also `ddflow://lessons-summary`).
+
 ### Verifying an import, at any time
 
 The import's weak spot was never the parsing. It is everything *after* `--apply`: 1,170
@@ -1524,7 +1554,8 @@ Nothing errors. There is no signal that can tell them apart, so identity is **de
 
 | How | When |
 |---|---|
-| `ddflow_identify` (MCP) | An agent or subagent announcing itself on its connection. Call it first. |
+| `as_agent` argument (MCP, every tool) | A **subagent sharing its parent's connection** — Claude Code's subagents do. Per call; the connection's identity is untouched. |
+| `ddflow_identify` (MCP) | An agent announcing itself on its own connection. Call it first. |
 | `DDFLOW_AGENT` env var | A harness that spawns agents and knows their names. Process-wide. |
 | `--agent` (CLI) | Scripts and one-off commands. |
 | tree-derived default | One agent per worktree. Reported as *undeclared*, so you can see it. |
@@ -1535,7 +1566,10 @@ declaration time means the caller reads the reason rather than discovering it at
 first write.
 
 **If more than one agent works one tree at once, declare identity.** Everything that
-attributes work depends on it.
+attributes work depends on it. A subagent must not call `ddflow_identify` on a shared
+connection — that renames its parent — and passes `as_agent` instead; without it, two
+subagents claiming the same file are one holder, and a holder's own leases never
+conflict with each other.
 
 ### Can one server serve several projects?
 
@@ -2094,7 +2128,7 @@ declared once and persists — see
 
 ## Configuration
 
-75 knobs across 15 sections, every one documented in place:
+83 knobs across 15 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

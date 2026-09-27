@@ -318,6 +318,9 @@ TEXT_BODIED = {
 
 WRITES_NOT_COMPARABLE = {
     "ddflow_update",
+    # Releases held work: a second call finds nothing blocked and exits 2. Its behaviour
+    # is pinned by tests/test_import_fidelity.py.
+    "ddflow_unblock",
     "ddflow_setup",
     "ddflow_workflow_pipeline",
     "ddflow_workflow_gate",

@@ -61,7 +61,10 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("The rules this project runs by", ("workflow",)),
     ("Shaping the work", ("phase", "task", "split", "update", "remove", "import")),
-    ("Doing the work", ("next", "claim", "heartbeat", "release", "complete", "block", "abandon")),
+    (
+        "Doing the work",
+        ("next", "claim", "heartbeat", "release", "complete", "block", "unblock", "abandon"),
+    ),
     ("Gates and review", ("gate", "review", "reviewers")),
     ("Landing it", ("merge", "cleanup")),
     ("What the project remembers", ("recall", "lesson", "decision", "research", "bug", "session")),

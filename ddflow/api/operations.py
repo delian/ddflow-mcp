@@ -109,8 +109,10 @@ def import_verify(repo: Path, *, agent: str = "") -> O.Outcome:
     docstring for why none of them may be collapsed."""
     from ..services import importer as IM
 
-    _log, _cfg, st = _load(repo, agent)
-    r = IM.verify_import(repo, st)
+    _log, cfg, st = _load(repo, agent)
+    r = IM.verify_import(
+        repo, st, sources=IM.sources_from(cfg), archive=tuple(cfg.importer.archive_globs)
+    )
     data: dict[str, Any] = {
         "imported": r.imported,
         "total": r.total,
@@ -159,7 +161,12 @@ def import_project(
     # [importer] max_tasks in the config is not silently overruled by an argparse default
     # that looks like a choice and is not one.
     plan = IM.plan_import(
-        repo, st, include_done=include_done, max_tasks=max_tasks or cfg.importer.max_tasks
+        repo,
+        st,
+        include_done=include_done,
+        max_tasks=max_tasks or cfg.importer.max_tasks,
+        sources=IM.sources_from(cfg),
+        archive=tuple(cfg.importer.archive_globs),
     )
     data: dict[str, Any] = {
         "summary": plan.summary(),

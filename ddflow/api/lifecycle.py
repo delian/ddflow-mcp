@@ -360,6 +360,41 @@ def block(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outc
     return O.Outcome(kind="item.blocked", data={"id": item, "reason": reason})
 
 
+def unblock(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outcome:
+    """Release a blocked item -- and every blocked item beneath it -- back into the queue.
+
+    The subtree is what makes "drive this legacy section" one command. An import holds
+    the open work of an archive file as blocked, one phase per section, and naming the
+    section is how its work becomes work again (the source project's `phase.py next
+    --session X`). Releasing thirty tasks one id at a time is how half of them stay held.
+
+    Exit 2 when nothing under `item` is blocked: "nothing to release" is a fact the
+    caller should see, not a success that wrote no event.
+    """
+    from ..core.model import BLOCKED
+
+    log, _cfg, st = _load(repo, agent)
+    it = _require(st, item, "item.unblocked")
+    if isinstance(it, O.Outcome):
+        return it
+    targets = [item] if it.state == BLOCKED else []
+    targets += sorted(
+        d for d in st.descendants(item) if st.items[d].state == BLOCKED and not st.items[d].removed
+    )
+    if not targets:
+        return O.nothing(
+            "item.unblocked",
+            f"{item} is {it.state} and nothing beneath it is blocked",
+            id=item,
+            was="",
+            released=[],
+        )
+    was = it.blocked_reason if it.state == BLOCKED else ""
+    for t in targets:
+        log.append("item.unblocked", t, {"note": note, "was": st.items[t].blocked_reason})
+    return O.ok("item.unblocked", id=item, was=was, released=targets)
+
+
 def merge(
     repo: Path,
     item: str,

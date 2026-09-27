@@ -361,3 +361,65 @@ def test_the_resolver_reports_which_layer_won(repo, monkeypatch):
     assert resolve_agent_id(repo, cfg) == ("alpha", "env")
     # and an explicit declaration still beats it
     assert resolve_agent_id(repo, cfg, "mine")[1] == "explicit"
+
+
+# -- per CALL: subagents that share their parent's connection ------------------------
+
+
+def test_subagents_sharing_ONE_connection_are_told_apart_by_as_agent(repo):
+    """Claude Code dispatches subagents over the parent session's MCP connection. A
+    connection-level declaration cannot separate them -- one subagent calling
+    `ddflow_identify` renames its parent and every sibling. Without a per-call name
+    their claims share a holder, and the conflict check skips a holder's own leases, so
+    two subagents claiming the SAME file are both granted. `as_agent` must make the
+    second one a refusal."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "shared.py")
+    run_cli(repo, "task", "add", "T2", "--globs", "shared.py")
+    srv = Server(repo)
+    first = _call(srv, "ddflow_claim", id="T1", no_worktree=True, as_agent="sub-1")
+    assert not first.get("isError"), _text(first)
+    second = _call(srv, "ddflow_claim", id="T2", no_worktree=True, as_agent="sub-2")
+    assert second["_meta"]["exit"] == 3, second  # refused: coordination, not an error
+    st = fold(EventLog(repo).read_all(), strict=False)
+    assert st.items["T1"].lease.holder == "sub-1"
+    assert st.items["T2"].lease is None, "an overlapping claim by a sibling was granted"
+
+
+def test_as_agent_does_not_change_the_connections_identity(repo):
+    """Per call means per call. A subagent's name leaking into the connection would
+    attribute the parent's next write to the subagent -- the same collapse, reversed."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    srv = Server(repo)
+    _call(srv, "ddflow_identify", agent="parent")
+    _call(srv, "ddflow_update", id="T1", title="by the subagent", as_agent="sub-1")
+    _call(srv, "ddflow_update", id="T2", title="by the parent")
+    assert srv.agent == "parent"
+    authors = {e.subject: e.agent for e in EventLog(repo).read_all() if e.kind == "task.updated"}
+    assert authors == {"T1": "sub-1", "T2": "parent"}, authors
+
+
+def test_as_agent_is_refused_when_it_could_not_be_a_shard_filename(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    srv = Server(repo)
+    for bad in ("../escape", "has space", "a" * 65):
+        result = _call(srv, "ddflow_update", id="T1", title="x", as_agent=bad)
+        assert result.get("isError"), f"{bad!r} was accepted"
+    titles = [e for e in EventLog(repo).read_all() if e.kind == "task.updated"]
+    assert not titles, "a call with a refused name still wrote"
+
+
+def test_every_tool_but_identify_advertises_as_agent():
+    """A capability the schema does not show is one a model will not use."""
+    from ddflow.surfaces.mcp import _schema
+
+    missing = [
+        n
+        for n, s in TOOLS.items()
+        if n != "ddflow_identify" and "as_agent" not in _schema(s)["properties"]
+    ]
+    assert not missing, missing
+    assert "as_agent" not in _schema(TOOLS["ddflow_identify"])["properties"]

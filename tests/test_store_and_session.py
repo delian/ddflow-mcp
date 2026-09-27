@@ -157,7 +157,13 @@ def test_bundle_is_self_contained(log, cfg, repo, tmp_path):
     # RESEARCH.md is in the set deliberately: the bundle and `render.write_views` were
     # two copies of one generator map and had already drifted by exactly this file, so
     # a recovery kit omitted the rejected-approaches log — the part a rebuild most needs.
-    assert names == {"RECONSTRUCTION.md", "QUEUE.md", "LESSONS.md", "RESEARCH.md"}
+    assert names == {
+        "RECONSTRUCTION.md",
+        "QUEUE.md",
+        "LESSONS.md",
+        "LESSONS-SUMMARY.md",
+        "RESEARCH.md",
+    }
     assert all(f.read_text().strip() for f in files)
     assert "REFUTED" in (tmp_path / "kit" / "RESEARCH.md").read_text()
 

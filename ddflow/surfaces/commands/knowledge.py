@@ -28,6 +28,7 @@ def cmd_lesson(a, c: Ctx) -> int:
                 rule=a.rule or "",
                 why=a.why or "",
                 how=a.how or "",
+                summary=a.summary or "",
                 tags=a.tags or "",
                 seen_in=a.seen_in or "",
                 supersedes=a.supersedes or "",

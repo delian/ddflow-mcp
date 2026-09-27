@@ -149,6 +149,23 @@ def cmd_block(a, c: Ctx) -> int:
     return OK
 
 
+def cmd_unblock(a, c: Ctx) -> int:
+    out = A.unblock(c.repo, a.id, note=a.note or "", agent=c.requested_agent)
+    if out.exit not in (OK, NOTHING):
+        return _refused(out)
+    keys = ("id", "was", "released")
+    if out.exit == NOTHING:
+        c.out(out.reason, out.body(keys))
+        return NOTHING
+    released = out.data["released"]
+    c.out(
+        f"released {len(released)} item(s): {', '.join(released[:MAX_LISTED_FILES])}"
+        + (" ..." if len(released) > MAX_LISTED_FILES else ""),
+        out.body(keys),
+    )
+    return OK
+
+
 def cmd_merge(a, c: Ctx) -> int:
     out = A.merge(
         c.repo,

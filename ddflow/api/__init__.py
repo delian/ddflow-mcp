@@ -82,6 +82,7 @@ from .lifecycle import (
     claim,
     complete,
     heartbeat,
+    unblock,
 )
 from .lifecycle import merge as merge_item
 from .lifecycle import next_ as next_item
@@ -199,6 +200,7 @@ __all__ = [
     "split",
     "status",
     "task_add",
+    "unblock",
     "update",
     "workflow_drop",
     "workflow_gate",

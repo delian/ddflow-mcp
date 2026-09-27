@@ -181,6 +181,56 @@ def lessons_md(state: State) -> str:
     return "\n".join(out)
 
 
+#: How much of a lesson's rule stands in for a summary it does not have. One paragraph is
+#: the unit: the first one, cut at this many characters.
+_SUMMARY_FALLBACK_CHARS = 400
+
+
+def _summary_of(ls) -> str:
+    if ls.summary:
+        return ls.summary
+    first = (ls.rule or "").strip().split("\n\n", 1)[0]
+    first = " ".join(first.split())
+    if len(first) > _SUMMARY_FALLBACK_CHARS:
+        first = first[:_SUMMARY_FALLBACK_CHARS].rsplit(" ", 1)[0] + " …"
+    return first
+
+
+def lessons_summary_md(state: State) -> str:
+    """The distilled rulebook: every live lesson in one paragraph, grouped by tag.
+
+    The file a reader opens INSTEAD of the corpus. Each entry is the lesson's own
+    `summary` when it has one, else the first paragraph of its rule -- said, because a
+    reader cannot otherwise tell a curated summary from a truncation. `imported` is a
+    provenance tag, not a subject, so it never becomes a heading.
+    """
+    out = [
+        GENERATED,
+        "",
+        "# Lessons — summary",
+        "",
+        "One paragraph per live lesson; `ddflow recall` or `LESSONS.md` for the full rule. "
+        "An entry marked _(first paragraph)_ has no summary of its own yet — "
+        "`ddflow lesson add --id <id> --summary ...` gives it one.",
+        "",
+    ]
+    live = [x for x in state.lessons.values() if not x.superseded_by]
+    if not live:
+        out.append("_None recorded._")
+        return "\n".join(out)
+    by_tag: dict[str, list] = {}
+    for ls in sorted(live, key=lambda x: x.id):
+        subject = [t for t in (ls.tags or []) if t not in ("imported", "summary")]
+        by_tag.setdefault(subject[0] if subject else "general", []).append(ls)
+    for tag in sorted(by_tag):
+        out += [f"## {tag}", ""]
+        for ls in by_tag[tag]:
+            mark = "" if ls.summary else " _(first paragraph)_"
+            out.append(f"- **{ls.title.rstrip('.')}.** {_summary_of(ls)}{mark} `[{ls.id}]`")
+        out.append("")
+    return "\n".join(out)
+
+
 def research_md(state: State) -> str:
     out = [
         GENERATED,
@@ -386,6 +436,7 @@ def brief(
 VIEWS: tuple[tuple[str, Callable[[State, Config | None], str]], ...] = (
     ("QUEUE.md", board),
     ("LESSONS.md", lambda state, _cfg: lessons_md(state)),
+    ("LESSONS-SUMMARY.md", lambda state, _cfg: lessons_summary_md(state)),
     ("RESEARCH.md", lambda state, _cfg: research_md(state)),
 )
 

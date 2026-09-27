@@ -362,7 +362,7 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
 #: `--show` exists so the MCP `resources/read` handler can serve these through one code
 #: path like everything else. It used to fold the log itself -- a second data path in a
 #: module whose whole premise is "one implementation, two doors".
-_RENDERABLE = ("lessons", "research", "board")
+_RENDERABLE = ("lessons", "lessons-summary", "research", "board")
 
 #: Where `render` writes its views when no directory is given.
 DEFAULT_RENDER_DIR = "docs/ddflow"
@@ -390,6 +390,7 @@ def render(
             )
         fn = {
             "lessons": render_md.lessons_md,
+            "lessons-summary": render_md.lessons_summary_md,
             "research": render_md.research_md,
             "board": render_md.board,
         }[show]

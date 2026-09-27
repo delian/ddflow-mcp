@@ -14,6 +14,7 @@ HISTORY_VERBS: dict[str, str] = {
     "task.removed": "removed from the queue",
     "phase.removed": "removed from the queue",
     "item.blocked": "blocked",
+    "item.unblocked": "unblocked",
     "item.abandoned": "abandoned",
     "item.completed": "completed",
     "lease.acquired": "claimed",

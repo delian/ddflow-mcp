@@ -52,6 +52,8 @@ class LessonDraft:
     rule: str = ""
     why: str = ""
     how: str = ""
+    #: The one-paragraph form, rendered into `LESSONS-SUMMARY.md`.
+    summary: str = ""
     tags: str = ""
     seen_in: str = ""
     supersedes: str = ""
@@ -83,6 +85,8 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
         "seen_in": csv_list(draft.seen_in),
         "supersedes": csv_list(draft.supersedes),
     }
+    if draft.summary:
+        data["summary"] = draft.summary
     sites: list[str] = []
     if draft.pattern:
         globlist = csv_list(draft.globs)

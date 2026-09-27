@@ -490,6 +490,13 @@ TOOLS: dict[str, dict[str, Any]] = {
             "rule": ("string", "The rule in full.", False),
             "why": ("string", "Why it is true / what went wrong.", False),
             "how": ("string", "How to apply or detect it.", False),
+            "summary": (
+                "string",
+                "The lesson in ONE paragraph -- what a reader who will not open the full "
+                "rule needs. Rendered into docs/ddflow/LESSONS-SUMMARY.md, the project's "
+                "distilled rulebook.",
+                False,
+            ),
             "tags": ("string", "Comma-separated tags.", False),
             "seen_in": (
                 "string",
@@ -527,6 +534,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 rule=a.get("rule", "") or "",
                 why=a.get("why", "") or "",
                 how=a.get("how", "") or "",
+                summary=a.get("summary", "") or "",
                 tags=a.get("tags", "") or "",
                 seen_in=a.get("seen_in", "") or "",
                 supersedes=a.get("supersedes", "") or "",
@@ -768,7 +776,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             "review passes independence against itself. There is no way to detect this "
             "from the outside, so it has to be declared. Pick a name that is stable for "
             "your whole session and distinct from the other agents': your role or "
-            "assignment, not a random string. Idempotent; call it again to correct it."
+            "assignment, not a random string. Idempotent; call it again to correct it. "
+            "A SUBAGENT sharing its parent's connection must NOT call this -- it would "
+            "rename the parent -- and passes `as_agent` on each call instead."
         ),
         "properties": {
             "agent": (
@@ -912,14 +922,15 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_render": {
         "description": (
-            "Regenerate the human-readable markdown views (queue, lessons, "
-            "research) under docs/ddflow/."
+            "Regenerate the human-readable markdown views (queue, lessons, the "
+            "one-paragraph lessons summary, research) under docs/ddflow/."
         ),
         "properties": {
             "out": ("string", "Directory for the generated views (default: docs/ddflow).", False),
             "show": (
                 "string",
-                "Print ONE view instead of writing files: lessons, research, or board. "
+                "Print ONE view instead of writing files: lessons, lessons-summary, "
+                "research, or board. "
                 "This is what the ddflow:// resources are served from.",
                 False,
             ),
@@ -1651,6 +1662,24 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id",),
     },
+    "ddflow_unblock": {
+        "description": (
+            "Release a BLOCKED item -- and every blocked item beneath it -- back into "
+            "the queue, so `next` can offer them again. The inverse of ddflow_block, and "
+            "how deferred work, or a whole archived section an import landed as blocked, "
+            "becomes work once the OPERATOR says so: pass a phase id to release its "
+            "section. Do not release held work on your own judgement. Returns "
+            "nothing-to-do (exit 2) when nothing there is blocked."
+        ),
+        "properties": {
+            "id": ("string", "Item id.", True),
+            "note": ("string", "Why it is work again (who decided, and when).", False),
+        },
+        "api": lambda repo, a, agent: _api().unblock(
+            repo, a["id"], note=a.get("note", "") or "", agent=agent
+        ),
+        "payload": ("id", "was", "released"),
+    },
     "ddflow_session_start": {
         "description": "Open a session for provenance logging. Returns the session id.",
         "properties": {
@@ -1684,12 +1713,42 @@ def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:
     return [flag, str(v)] if v not in (None, "", []) else []
 
 
+#: The per-CALL identity override every tool accepts except `ddflow_identify` itself.
+#:
+#: `ddflow_identify` declares identity per CONNECTION, which covers several agents that
+#: each spawn their own server. It does not cover the configuration Claude Code actually
+#: runs: subagents dispatched by one session share that session's MCP connection, so a
+#: subagent that called `ddflow_identify` would re-identify its PARENT and every sibling
+#: mid-flight. Their claims then share one holder -- and the glob-conflict check skips a
+#: holder's own leases (`leases.acquire`), so two subagents claiming overlapping files
+#: are both granted. The CLI has always had the per-call form (`--agent`); this is the
+#: same thing on the other surface.
+AS_AGENT = "as_agent"
+_AS_AGENT_SPEC = (
+    "string",
+    "Act as THIS agent for this one call only, without changing the connection's "
+    "identity. For subagents that share their parent's MCP connection (Claude Code "
+    "subagents do): each passes its own stable name here so claims, gate outcomes and "
+    "reviews are attributed to it and its claims conflict-check against its siblings'. "
+    "Same rules as ddflow_identify's name. Equivalent to the CLI's `--agent`.",
+    False,
+)
+
+
+def _properties(spec: dict[str, Any]) -> dict[str, tuple[str, str, bool]]:
+    """A tool's declared properties plus `as_agent`, which every tool but `identify`
+    takes. One function, so the schema a client sees and the argument check the
+    dispatcher applies can never disagree about it."""
+    props = dict(spec["properties"])
+    if not spec.get("identify"):
+        props[AS_AGENT] = _AS_AGENT_SPEC
+    return props
+
+
 def _schema(spec: dict[str, Any]) -> dict[str, Any]:
-    props = {
-        name: {"type": t, "description": desc}
-        for name, (t, desc, _req) in spec["properties"].items()
-    }
-    required = [n for n, (_t, _d, req) in spec["properties"].items() if req]
+    all_props = _properties(spec)
+    props = {name: {"type": t, "description": desc} for name, (t, desc, _req) in all_props.items()}
+    required = [n for n, (_t, _d, req) in all_props.items() if req]
     return {
         "type": "object",
         "properties": props,
@@ -1849,7 +1908,7 @@ class Server:
 
     There is no signal that can distinguish them -- so identity has to be DECLARED:
     `DDFLOW_AGENT` in the environment, or `ddflow_identify` on the connection, or an
-    `agent` argument on the individual call. Explicit beats derived, innermost wins.
+    `as_agent` argument on the individual call. Explicit beats derived, innermost wins.
     """
 
     def __init__(self, repo: Path, agent: str = "", *, called_from: Path | None = None) -> None:
@@ -1943,16 +2002,37 @@ class Server:
             # success and a decision under a generated id — then `supersedes: D1`
             # pointed at nothing. Silence at an API boundary is the silent-knob-drop
             # class, and an agent cannot see it at all: it has only the reply.
-            unknown = sorted(set(args) - set(spec["properties"]))
+            known = _properties(spec)
+            unknown = sorted(set(args) - set(known))
             if unknown:
                 return _ok(
                     mid,
                     _text(
                         f"unknown argument(s) for {name}: {', '.join(unknown)}. "
-                        f"Known: {', '.join(sorted(spec['properties']))}",
+                        f"Known: {', '.join(sorted(known))}",
                         error=True,
                     ),
                 )
+            # The per-call identity, stripped BEFORE the tool sees its arguments so no
+            # api lambda has to know it exists. Validated with the same rule as a
+            # declaration: it becomes a log shard filename either way.
+            agent = self.agent
+            if AS_AGENT in args:
+                args = dict(args)
+                want = args.pop(AS_AGENT)
+                if not isinstance(want, str):
+                    return _ok(mid, _text(f"{AS_AGENT} must be a string", error=True))
+                want = want.strip()
+                if want and not _VALID_AGENT.fullmatch(want):
+                    return _ok(
+                        mid,
+                        _text(
+                            f"{want!r} is not a usable agent name: use letters, digits, "
+                            f"'.', '_' or '-', up to 64 characters.",
+                            error=True,
+                        ),
+                    )
+                agent = want or agent
             # The typed path, when this tool has one. No argv, no re-parsing, no
             # scraping stdout, and no swapping process-global streams -- which is what
             # made the string path non-reentrant. `api` is where a protocol adapter
@@ -2004,11 +2084,9 @@ class Server:
                     # primary loses the only fact that says so. `main()` computed it and
                     # discarded it, which is why adoption was unreachable from MCP.
                     if spec.get("wants_called_from"):
-                        result = spec["api"](
-                            self.repo, args, self.agent, called_from=self.called_from
-                        )
+                        result = spec["api"](self.repo, args, agent, called_from=self.called_from)
                     else:
-                        result = spec["api"](self.repo, args, self.agent)
+                        result = spec["api"](self.repo, args, agent)
                 except (KeyError, TypeError, ValueError) as exc:
                     return _ok(mid, _text(f"bad arguments: {exc}", error=True))
                 # `text` may be a bool or a predicate on the arguments: `render`
@@ -2070,6 +2148,12 @@ class Server:
                             "mimeType": "text/markdown",
                         },
                         {
+                            "uri": "ddflow://lessons-summary",
+                            "name": "Lessons summary",
+                            "description": "Every live lesson in one paragraph, by tag.",
+                            "mimeType": "text/markdown",
+                        },
+                        {
                             "uri": "ddflow://research",
                             "name": "Research log",
                             "description": "Findings with verdicts and probes.",
@@ -2095,6 +2179,9 @@ class Server:
                 # swap existed at all (B97).
                 "ddflow://brief": lambda repo: _api().brief(repo).data["text"],
                 "ddflow://lessons": lambda repo: _api().render(repo, show="lessons").data["text"],
+                "ddflow://lessons-summary": lambda repo: (
+                    _api().render(repo, show="lessons-summary").data["text"]
+                ),
                 "ddflow://research": lambda repo: _api().render(repo, show="research").data["text"],
             }.get(uri)
             if not cmd:
@@ -2296,9 +2383,12 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     # Cheap enough for a handshake: `glob` on a handful of known paths, no parsing.
     # The point is only to know whether to OFFER the import, not to do it.
     try:
+        from ..config import Config as _Cfg
         from ..services import importer as IM
 
-        v["importable"] = len(IM._files(repo, IM.SOURCE_GLOBS))
+        # The CONFIGURED sources: a project that moved its journal to a path the
+        # defaults do not know was told "nothing to import" about its whole history.
+        v["importable"] = len(IM._files(repo, IM.all_source_globs(_Cfg.load(repo))))
     except Exception:
         pass
     if not adopted:

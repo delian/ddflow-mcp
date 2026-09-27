@@ -174,6 +174,11 @@ class Lesson:
     tags: list[str] = field(default_factory=list)
     at: str = ""
     superseded_by: str = ""
+    #: The lesson in one paragraph: what a lessons SUMMARY is made of. Both projects this
+    #: was built against keep one beside their corpus -- one generated from each entry's
+    #: `**Compressed:**` paragraph, one written by hand -- and a queue with no field for
+    #: it could only offer the full rule, which is the thing a summary exists to avoid.
+    summary: str = ""
     #: B20. The pattern this lesson forbids, and WHICH sites it currently occurs at --
     #: never how many. A count says "worse" and never "which", so it cannot be acted on or
     #: reviewed; `services/inventory.py` diffs the list and names what appeared.
@@ -571,6 +576,21 @@ def _h_state(new_state: str):
     return handler
 
 
+def _h_unblocked(st: State, ev: Event) -> None:
+    """Release a BLOCKED item back to OPEN. Anything else is left exactly as it is.
+
+    Without this there was no way back: a blocked item could only be forced past with
+    `claim --force`, which also overrides dependencies and live leases. An import that
+    lands a project's deferred work as BLOCKED needs the one-word inverse, or "held" is
+    a synonym for "lost".
+    """
+    it = st.items.get(ev.subject)
+    if it is None or it.state != BLOCKED:
+        return
+    it.state = OPEN
+    it.blocked_reason = ""
+
+
 def _count_recording(st: State, gate: str) -> None:
     st.gate_order.setdefault(gate, {"fired": 0, "recorded": 0})["recorded"] += 1
 
@@ -653,6 +673,7 @@ def _h_lesson(st: State, ev: Event) -> None:
         rule=d.get("rule", "") or (prev.rule if prev else ""),
         why=d.get("why", "") or (prev.why if prev else ""),
         how=d.get("how", "") or (prev.how if prev else ""),
+        summary=d.get("summary", "") or (prev.summary if prev else ""),
         seen_in=list(d.get("seen_in", [])),
         tags=list(d.get("tags", prev.tags if prev else [])),
         # Merged like every other field, not replaced: a re-record that omits the pattern
@@ -839,6 +860,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "lease.expired": _h_lease_gone,
     "item.started": _h_state(RUNNING),
     "item.blocked": _h_state(BLOCKED),
+    "item.unblocked": _h_unblocked,
     "item.completed": _h_state(DONE),
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},

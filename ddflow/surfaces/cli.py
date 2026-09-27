@@ -57,6 +57,7 @@ from .commands.lifecycle import (
     cmd_next,
     cmd_release,
     cmd_remove,
+    cmd_unblock,
 )
 from .commands.operations import cmd_cadence, cmd_cleanup, cmd_import
 from .commands.queue import cmd_phase_add, cmd_split, cmd_task_add
@@ -400,6 +401,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bl.add_argument("--reason", required=True)
     bl.set_defaults(fn=cmd_block)
 
+    ub = s.add_parser(
+        "unblock", help="release a blocked item back into the queue (exit 2 = not blocked)"
+    )
+    ub.add_argument("id")
+    ub.add_argument("--note", default="", help="why it is work again")
+    ub.set_defaults(fn=cmd_unblock)
+
     mg = s.add_parser("merge", help="merge an item's branch from the primary checkout")
     mg.add_argument("id")
     mg.add_argument("--message", default="")
@@ -423,6 +431,11 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     la.add_argument("--rule", default="")
     la.add_argument("--why", default="")
     la.add_argument("--how", default="")
+    la.add_argument(
+        "--summary",
+        default="",
+        help="the lesson in one paragraph; what docs/ddflow/LESSONS-SUMMARY.md is made of",
+    )
     la.add_argument("--tags", default="")
     la.add_argument("--seen-in", default="")
     la.add_argument("--supersedes", default="")
@@ -590,7 +603,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rn.add_argument(
         "--show",
         default="",
-        help="print ONE view to stdout instead of writing files: lessons, research, board",
+        help="print ONE view to stdout instead of writing files: lessons, lessons-summary, research, board",
     )
     rn.set_defaults(fn=cmd_render)
     bd = s.add_parser("board")

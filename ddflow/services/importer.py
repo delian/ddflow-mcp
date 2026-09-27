@@ -32,6 +32,7 @@ Three rules hold this together:
 
 from __future__ import annotations
 
+import fnmatch
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -63,6 +64,15 @@ LESSON_GLOBS = (
     "LESSONS.md",
     "docs/LESSONS.md",
     "docs/retrospectives/*.md",
+)
+#: The distilled companion some projects keep beside the lessons corpus. Hand-written ones
+#: carry information the corpus does not -- which rules the team considers essential, in
+#: what words -- and a GENERATED one carries nothing the corpus lacks, so it is skipped.
+LESSON_SUMMARY_GLOBS = (
+    "docs/lessons-summary.md",
+    "docs/lessons_summary.md",
+    "docs/LESSONS-SUMMARY.md",
+    "LESSONS-SUMMARY.md",
 )
 #: A heading that says the work is finished, in the spellings projects actually use.
 #: Checked against the PHASE heading only: a phase marked shipped whose tasks are still
@@ -99,6 +109,11 @@ JOURNAL_GLOBS = (
     "docs/CHANGELOG.md",
     "CHANGELOG.md",
     "docs/log.md",
+    # Upper-case too: a case-SENSITIVE filesystem treats it as a different file, and one
+    # real project keeps its whole 287-entry journal there, which the lower-case pattern
+    # silently never read. Where it is instead a generated index of monthly shards, its
+    # only section is "Index", which `_is_index_section` drops.
+    "docs/LOG.md",
     "JOURNAL.md",
 )
 
@@ -107,7 +122,13 @@ JOURNAL_GLOBS = (
 #: seven families — so a project whose entire history is an engineering journal and a
 #: memory store was told nothing, which is precisely the case the offer exists for.
 SOURCE_GLOBS = (
-    TODO_GLOBS + LESSON_GLOBS + DECISION_GLOBS + RESEARCH_GLOBS + JOURNAL_GLOBS + OPTMEM_GLOBS
+    TODO_GLOBS
+    + LESSON_GLOBS
+    + LESSON_SUMMARY_GLOBS
+    + DECISION_GLOBS
+    + RESEARCH_GLOBS
+    + JOURNAL_GLOBS
+    + OPTMEM_GLOBS
 )
 
 #: `- [ ] **P1.T2** — do the thing` / `- [x] do the thing`
@@ -139,7 +160,11 @@ _ID = r"[A-Za-z0-9][\w.\-]*"
 _ITEM_ID = re.compile(
     r"^(?:"
     rf"\*\*({_ID})\*\*|"
-    rf"\[({_ID})\]"
+    rf"\[({_ID})\]|"
+    # ANNOTATED: `**MC-F5 (THEORETICAL — no code change)**` -- the bold wraps the id and
+    # an aside about its status, and none of the other shapes saw an id there, so the
+    # item imported under a prose slug that no `Needs:` line and no commit trailer names.
+    rf"\*\*({_ID})\s*\([^)]{{0,80}}\)\*\*"
     r")\s*[—\-:]?\s*"
     rf"|^(?:\*\*)?({_ID})(?:\s*\([^)]{{0,30}}\))?\s*[—:]\s+"
 )
@@ -160,7 +185,7 @@ def _split_id(text: str) -> tuple[str, str]:
     m = _ITEM_ID.match(text)
     if not m:
         return "", text
-    token = m.group(1) or m.group(2) or m.group(3) or ""
+    token = m.group(1) or m.group(2) or m.group(3) or m.group(4) or ""
     if not _is_id(token):
         return "", text
     return token, text[m.end() :]
@@ -185,11 +210,132 @@ _NEEDS = re.compile(r"\*\*Needs?:?\*\*:?\s*(.+)", re.I)
 #: A markdown heading, used to group checkboxes into phases.
 _HEADING = re.compile(r"^(#{1,4})\s+(.*)$")
 
+#: DISPOSITIONS: an open `- [ ]` box that is NOT work to start. Two kinds, because they
+#: need different treatment in the queue:
+#:
+#:   CLOSED -- the operator decided it will not be done (declined, refuted, superseded).
+#:             History, exactly like a ticked box: not imported by default, imported as
+#:             ABANDONED with `include_done`.
+#:   HOLD   -- it may become work later (deferred, theoretical, blocked). Imported as
+#:             BLOCKED with the reason, so it is visible, never offered, and one
+#:             `ddflow unblock` away from being work.
+#:
+#: The vocabulary and the positions it is read in are taken from the picker of the
+#: project this was extracted from (`scripts/phase.py::_NOT_WORK`), where each word was
+#: MEASURED over ~1,100 open boxes. Without them the import offered every one of that
+#: repository's deferred and refuted findings as ready work: 1,179 open tasks, where its
+#: own picker offers ~120. A queue that hands out operator-declined work is worse than an
+#: empty one, because the agent that picks it up does it.
+_CLOSED_MARKERS = (
+    "DECLINED",
+    "REFUTED",
+    "REFUSED",
+    "RETRACT",
+    "SKIPPED",
+    "SUPERSEDED",
+    "WONTFIX",
+    "WON'T FIX",
+    "OUT OF SCOPE",
+    "OPTED OUT",
+    "OPT-OUT",
+    "DESCOPED",
+    "OBSOLETE",
+)
+_HOLD_MARKERS = (
+    "DEFERRED",
+    "THEORETICAL",
+    "BLOCKED",
+    "PRE-EXISTING",
+    "NOT FIXED",
+    "NOT WORKED",
+    "ON HOLD",
+    "PARKED",
+)
+#: Inside a title's parenthesised aside `PRE-EXISTING` records WHEN a bug originated --
+#: `**MC-F1 (roborev 72 -- pre-existing, HIGH)**` is fully specified work -- so it does
+#: not dispose there. After the title it does: nothing else would be written there.
+_ASIDE_NOT_DISPOSITIONS = ("PRE-EXISTING",)
+#: How far past the title an annotation is read. The measured window; a whole item body
+#: reaches prose that merely DESCRIBES a deferral.
+_ANNOTATION_CHARS = 160
+#: A heading that disposes everything under it: `### Deferred`, `## DECLINED items`.
+_SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED")
+_SECTION_CLOSED = ("DECLINED", "OPTED OUT", "DESCOPED")
+#: A section's own `**STATUS**:` line. Its VERDICT is the leading token, never the whole
+#: line: `IN PROGRESS -- 373 of 534 (B.5 CLOSED 2026-08-17)` is live, and matching the
+#: whole line read it as closed.
+_STATUS_LINE = re.compile(r"^\s*\*\*STATUS\*\*\s*:?\s*(.+)$", re.I)
+_STATUS_CLOSED = ("SHIPPED", "CLOSED", "DECLINED", "SUPERSEDED", "ABANDONED", "DONE", "COMPLETE")
+_STATUS_HOLD = ("DEFERRED", "WATCH", "ON HOLD", "PARKED", "BLOCKED")
+_TITLE_ASIDE = re.compile(r"\(([^)]*)\)")
+
+
+def _marker_in(text: str, markers: tuple[str, ...]) -> str:
+    """The first marker present in `text` at a word START, case-insensitively.
+
+    Word-start rather than substring: `UNBLOCKED` is not `BLOCKED`. The end is left open
+    so `RETRACT` still matches `RETRACTED`.
+    """
+    up = text.upper()
+    for m in markers:
+        if re.search(rf"(?<![A-Z0-9]){re.escape(m)}", up):
+            return m
+    return ""
+
+
+def _disposition(raw: str) -> tuple[str, str]:
+    """`("closed" | "hold" | "", marker)` for one checkbox's text (after `[ ]`).
+
+    A marker counts where it ANNOTATES the item -- after the title's bold run, or inside
+    a parenthesised aside within the title -- and never in bare title prose:
+    `**X.1 -- make the sampler handle SKIPPED batches**` is live work whose title merely
+    mentions the word. A struck-through item (`~~...~~`) is closed.
+    """
+    body = raw.lstrip()
+    if body.startswith("~~"):
+        return "closed", "STRUCK THROUGH"
+    if body.startswith("**"):
+        close = body.find("**", 2)
+        title, annotation = (body[2:close], body[close + 2 :]) if close != -1 else (body[2:], "")
+    else:
+        title, annotation = "", body
+    annotation = annotation[:_ANNOTATION_CHARS]
+    aside = " ".join(_TITLE_ASIDE.findall(title))
+    closed = _marker_in(annotation, _CLOSED_MARKERS) or _marker_in(aside, _CLOSED_MARKERS)
+    if closed:
+        return "closed", closed
+    hold_aside = tuple(m for m in _HOLD_MARKERS if m not in _ASIDE_NOT_DISPOSITIONS)
+    hold = _marker_in(annotation, _HOLD_MARKERS) or _marker_in(aside, hold_aside)
+    return ("hold", hold) if hold else ("", "")
+
+
+def _heading_disposition(heading: str) -> tuple[str, str]:
+    m = _marker_in(heading, _SECTION_CLOSED)
+    if m:
+        return "closed", f"under a {m} heading"
+    m = _marker_in(heading, _SECTION_HOLD)
+    return ("hold", f"under a {m} heading") if m else ("", "")
+
+
+def _status_disposition(line: str) -> tuple[str, str] | None:
+    """The disposition a `**STATUS**:` line gives its section, or None if not one."""
+    m = _STATUS_LINE.match(line)
+    if not m:
+        return None
+    verdict = re.split(r"\s[—\-(]|[—(]", m.group(1).strip(), maxsplit=1)[0].strip()
+    closed = _marker_in(verdict, _STATUS_CLOSED)
+    if closed:
+        return "closed", f"its section's STATUS is {closed}"
+    hold = _marker_in(verdict, _STATUS_HOLD)
+    if hold:
+        return "hold", f"its section's STATUS is {hold}"
+    return "", ""
+
 
 _SECTION = re.compile(r"^(#{2,6})\s+(.*)$")
 
 
-def _sections(text: str) -> list[tuple[str, str, int]]:
+def _sections(text: str, level: int = 0) -> list[tuple[str, str, int]]:
     """`(title, body, first_line)` for every heading at the document's TOP level.
 
     The ONE splitter for lessons, research entries and journal entries -- all three are
@@ -207,11 +353,19 @@ def _sections(text: str) -> list[tuple[str, str, int]]:
     levels = [len(m.group(1)) for m in (_SECTION.match(ln) for ln in text.splitlines()) if m]
     if not levels:
         return []
-    top = min(levels)
+    top = level or min(levels)
     out: list[tuple[str, str, int]] = []
     title, buf, start = "", [], 0
     for idx, ln in enumerate(text.splitlines(), 1):
         h = _SECTION.match(ln)
+        if h and len(h.group(1)) < top:
+            # A SHALLOWER heading ends the current entry without starting one: with an
+            # explicit `level`, the `## 2026-06-28 -- context` groups around `### L100.`
+            # entries are containers, and their prose must not leak into the entry above.
+            if title:
+                out.append((title, "\n".join(buf).strip(), start))
+            title, buf = "", []
+            continue
         if not h or len(h.group(1)) != top:
             if title:
                 buf.append(ln)
@@ -385,7 +539,9 @@ def _unique(preferred: str, fallback: str, taken: set[str]) -> str:
     return f"{base}-{n}"
 
 
-def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
+def scan_todos(
+    repo: Path, globs: tuple[str, ...] = TODO_GLOBS, archive: tuple[str, ...] = ()
+) -> tuple[list[Found], list[str]]:
     """Checklists → phases and tasks, grouped by the heading above them.
 
     A heading with checkboxes under it is a phase; each checkbox is a task. That is a
@@ -395,9 +551,16 @@ def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
     found: list[Found] = []
     empty: list[str] = []
     taken: set[str] = set()
-    for path in _files(repo, TODO_GLOBS):
+    for path in _files(repo, globs):
         rel = str(path.relative_to(repo))
         text = path.read_text("utf-8", errors="replace")
+        # An ARCHIVE file's open boxes are history until someone names the section --
+        # the source project's rule for its 20,000-line `docs/todo.md`, where no
+        # classifier over the prose is trustworthy because "is this work?" is a property
+        # of what the operator intends, not of the text. Held, not dropped: still
+        # searchable, still resolvable as a dependency, and `ddflow unblock <phase>`
+        # releases a whole section.
+        archived = any(fnmatch.fnmatch(rel, g) for g in archive)
         heading = ""
         heading_line = 0
         phase_ident = ""
@@ -405,6 +568,11 @@ def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
         #: one, so nothing leaks across a file or a heading boundary.
         anchor: Found | None = None
         before = len(found)
+        #: `(level, disposition)` per open heading. None means "says nothing, inherit";
+        #: `("", "")` is an explicit ACTIVE status, which overrides an ancestor's. A
+        #: `## Session` STATUS line governs the `### 159.A` groups under it, and each of
+        #: those is its own phase here, so the section's verdict has to be carried down.
+        stack: list[tuple[int, tuple[str, str] | None]] = []
         for n, line in enumerate(text.splitlines(), 1):
             h = _HEADING.match(line)
             if h:
@@ -412,9 +580,18 @@ def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
                 heading_line = n
                 phase_ident = ""
                 anchor = None
+                level = len(h.group(1))
+                while stack and stack[-1][0] >= level:
+                    stack.pop()
+                own = _heading_disposition(heading)
+                stack.append((level, own if own[0] else None))
                 continue
             m = _CHECK.match(line)
             if not m:
+                status = _status_disposition(line)
+                if status is not None and stack:
+                    stack[-1] = (stack[-1][0], status)
+                    continue
                 # Annotations live on the lines under their item -- and `anchor` is
                 # reset per FILE, because `found` is not. A `**Globs:**` line at the top
                 # of `b.md` was landing on the last task of `a.md`: a mis-attribution
@@ -430,6 +607,20 @@ def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
                 continue
             done = m.group(2).lower() == "x"
             body = m.group(3).strip()
+            disposition = ("", "")
+            if not done:
+                kind, marker = _disposition(body)
+                if kind:
+                    disposition = (kind, f"marked {marker}")
+                else:
+                    inherited = next((d for _lvl, d in reversed(stack) if d is not None), None)
+                    disposition = inherited or ("", "")
+                if archived and not disposition[0]:
+                    disposition = ("hold", "in an archive file (release its phase to drive it)")
+            if body.startswith("~~"):
+                # The strike-through is the disposition, recorded above; the id inside it
+                # is still the id every `Needs:` line and commit trailer uses.
+                body = body.replace("~~", "").strip()
             ident, body = _split_id(body)
             body = _clean_title(body)
             if heading and not phase_ident:
@@ -474,6 +665,11 @@ def scan_todos(repo: Path) -> tuple[list[Found], list[str]]:
                     # the phase silently keeps its prose slug. The phase branch above
                     # already guards this with `declared == phase_ident`.
                     "id_from_source": bool(ident) and chosen == ident,
+                    # `closed` | `hold` | "" and the words that decided it, which become
+                    # the blocked/abandoned reason -- a held item that cannot say why it
+                    # is held is one nobody can decide to release.
+                    "disposition": disposition[0],
+                    "disposition_why": disposition[1],
                 },
             )
             found.append(anchor)
@@ -587,6 +783,7 @@ def _scan_sections(
     kind: str,
     ident: Callable[[str, str], str],
     extra: Callable[[str, str, str], dict[str, Any]] | None = None,
+    body_chars: int = 2000,
 ) -> tuple[list[Found], list[str]]:
     """Every `##` section of every matching file, as `kind`.
 
@@ -605,37 +802,249 @@ def _scan_sections(
         if not sections:
             empty.append(rel)
             continue
-        for title, body, line in sections:
+        kept = [s for s in sections if not _is_index_section(s[0])]
+        if not kept:
+            empty.append(rel)
+            continue
+        for title, body, line in kept:
             found.append(
                 Found(
                     kind=kind,
                     ident=ident(title, rel),
                     title=title[:120],
                     source=f"{rel}:{line}",
-                    body=body[:2000],
+                    body=body[:body_chars],
                     extra=extra(title, body, rel) if extra else {},
                 )
             )
     return found, empty
 
 
-def scan_lessons(repo: Path) -> tuple[list[Found], list[str]]:
-    """`## ` headings in a lessons corpus, each with the prose beneath it.
+#: Titles of sections that are a table of contents rather than an entry.
+_INDEX_TITLES = {"index", "contents", "table of contents", "toc"}
 
-    Deliberately shallow. A lessons file accumulated over years contains rules that no
-    longer apply to symbols that no longer exist, and deciding which is a judgement the
-    agent makes with the operator — see the `import-existing-project` prompt. Importing
-    all of them and letting `recall` rank them is better than importing none, because a
-    lesson nobody can search is a lesson nobody applies.
+
+def _is_index_section(title: str) -> bool:
+    return title.strip().strip("#*_ ").lower() in _INDEX_TITLES
+
+
+#: A lesson heading that carries the project's own id: `### L100 (reinforces L99). Threads
+#: and async share one GIL`. The id is what every cross-reference in the corpus (`[L147]`)
+#: and every summary bullet cites, so it is kept rather than slugged away.
+_LESSON_HEAD = re.compile(r"^(L\d+[a-z]?)\b\s*(?:\([^)]{0,80}\))?\s*[.:—-]?\s*(.*)$")
+_COMPRESSED = re.compile(r"\*\*Compressed:?\*\*:?\s*(.+?)(?:\n\s*\n|\Z)", re.S)
+_SEEN_IN = re.compile(r"\*\*Seen in:?\*\*:?\s*(.+?)(?:\n\s*\n|\Z)", re.S)
+#: Lessons are long; a 2,000-character cap kept roughly the first half of a typical entry
+#: in the corpora this was measured on. The source file is committed anyway, so keeping the
+#: whole rule costs nothing it does not already cost.
+_LESSON_BODY_CHARS = 16000
+
+
+def _lesson_level(text: str) -> int:
+    """The heading level lessons live at: the level of id-bearing headings if any, else 0.
+
+    0 means "the shallowest level present", which is the old rule and right for a corpus
+    of `## title` entries. A corpus that groups `### L100.` entries under `## <date> --
+    <context>` headings has its lessons ONE level down, and splitting at the top imported
+    176 lessons as 24 date-groups -- each "lesson" a day's worth of unrelated rules under
+    a heading that states none of them.
     """
-    return _scan_sections(repo, LESSON_GLOBS, "lesson", lambda t, _r: f"L-{_slug(t, 32)}")
+    counts: dict[int, int] = {}
+    for ln in text.splitlines():
+        h = _SECTION.match(ln)
+        if h and _LESSON_HEAD.match(h.group(2).strip()):
+            counts[len(h.group(1))] = counts.get(len(h.group(1)), 0) + 1
+    return max(counts, key=counts.get) if counts else 0
 
 
-def scan_decisions(repo: Path) -> tuple[list[Found], list[str]]:
+def _one_paragraph(m: re.Match | None) -> str:
+    return " ".join(m.group(1).split()) if m else ""
+
+
+def scan_lessons(
+    repo: Path, globs: tuple[str, ...] = LESSON_GLOBS
+) -> tuple[list[Found], list[str]]:
+    """Every lesson in a lessons corpus, each with the prose beneath it.
+
+    Deliberately shallow about MEANING. A lessons file accumulated over years contains
+    rules that no longer apply to symbols that no longer exist, and deciding which is a
+    judgement the agent makes with the operator — see the `import-existing-project`
+    prompt. Importing all of them and letting `recall` rank them is better than importing
+    none, because a lesson nobody can search is a lesson nobody applies.
+
+    Careful about STRUCTURE, because two layouts are common and they differ in the level
+    lessons live at (`_lesson_level`). Three things are read out of the body rather than
+    left in prose, because each is what a consumer acts on:
+
+    * the project's own lesson id (`L100`) when the heading carries one;
+    * a `**Compressed:**` paragraph -- the lesson's one-paragraph form, which is what a
+      lessons SUMMARY is made of;
+    * `**Seen in:**` pointers, which are provenance.
+    """
+    found: list[Found] = []
+    empty: list[str] = []
+    for path in _files(repo, globs):
+        rel = str(path.relative_to(repo))
+        text = path.read_text("utf-8", errors="replace")
+        level = _lesson_level(text)
+        sections = [s for s in _sections(text, level) if not _is_index_section(s[0])]
+        if not sections:
+            empty.append(rel)
+            continue
+        for title, body, line in sections:
+            m = _LESSON_HEAD.match(title) if level else None
+            ident = m.group(1) if m else f"L-{_slug(title, 32)}"
+            shown = m.group(2).strip() if m and m.group(2).strip() else title
+            seen = _one_paragraph(_SEEN_IN.search(body))
+            found.append(
+                Found(
+                    kind="lesson",
+                    ident=ident,
+                    title=shown[:120],
+                    source=f"{rel}:{line}",
+                    body=body[:_LESSON_BODY_CHARS],
+                    extra={
+                        "summary": _one_paragraph(_COMPRESSED.search(body)),
+                        "seen_in": [seen[:300]] if seen else [],
+                        "tags": [],
+                    },
+                )
+            )
+    return found, empty
+
+
+#: `- **bold lead.** explanation [L170]` -- a hand-written summary bullet and what it cites.
+_BULLET = re.compile(r"^[-*]\s+(.*)$")
+_CITES = re.compile(r"\bL\d+[a-z]?\b")
+_TRAILING_CITE = re.compile(r"\s*\[([^\]]*)\]\s*$")
+#: How a generated file announces itself, in the first lines.
+_GENERATED_MARK = re.compile(r"GENERATED|DO NOT EDIT", re.I)
+
+
+def _summary_bullet(lines: list[str], source: str, category: str) -> Found:
+    """One summary bullet, its lead and the lessons it cites."""
+    text = " ".join(" ".join(lines).split())
+    lead = re.match(r"\*\*(.+?)\*\*", text)
+    tail = _TRAILING_CITE.search(text)
+    cites = _CITES.findall(tail.group(1)) if tail else _CITES.findall(text)
+    return Found(
+        kind="summary",
+        ident="",
+        title=(lead.group(1) if lead else text)[:120].rstrip(". "),
+        source=source,
+        body=text,
+        extra={"category": category, "cites": list(dict.fromkeys(cites))},
+    )
+
+
+def scan_lesson_summaries(
+    repo: Path, globs: tuple[str, ...] = LESSON_SUMMARY_GLOBS
+) -> tuple[list[Found], list[str]]:
+    """Bullets of a hand-written lessons summary, as `summary` records.
+
+    NOT lessons yet: `_attach_summaries` decides. A bullet citing exactly one lesson the
+    import also found becomes that lesson's summary; any other bullet is a consolidated
+    rule in its own right and becomes a lesson. A GENERATED summary yields one
+    `summary_generated` marker and nothing else -- its every word is already in the
+    corpus, and importing it would put each rule in the queue twice.
+    """
+    found: list[Found] = []
+    empty: list[str] = []
+    for path in _files(repo, globs):
+        rel = str(path.relative_to(repo))
+        text = path.read_text("utf-8", errors="replace")
+        if _GENERATED_MARK.search("\n".join(text.splitlines()[:15])):
+            found.append(Found(kind="summary_generated", ident="", title="", source=rel))
+            continue
+        before = len(found)
+        category = ""
+        current: list[str] = []
+        start = 0
+
+        for n, ln in enumerate(text.splitlines(), 1):
+            h = _SECTION.match(ln)
+            b = _BULLET.match(ln)
+            if h or b or not ln.strip():
+                if current:
+                    found.append(_summary_bullet(current, f"{rel}:{start}", category))
+                current = []
+            if h:
+                category = h.group(2).strip()
+            elif b:
+                current, start = [b.group(1)], n
+            elif ln.strip() and current and ln[:1].isspace():
+                current.append(ln.strip())
+        if current:
+            found.append(_summary_bullet(current, f"{rel}:{start}", category))
+        if len(found) == before:
+            empty.append(rel)
+    return found, empty
+
+
+def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
+    """Resolve `summary` records against the lessons found beside them. In place.
+
+    A bullet that cites exactly one lesson the import found, which has no summary of its
+    own, becomes that lesson's summary: that is what the bullet IS, and filing it beside
+    the lesson would put one rule in the queue twice. Every other bullet -- citing several
+    lessons, or none -- is a consolidated rule nothing else holds, and becomes a lesson
+    tagged `summary` with its citations as provenance. No bullet is dropped.
+    """
+    lessons = {f.ident: f for f in scanned if f.kind == "lesson"}
+    attached = consolidated = 0
+    generated: list[str] = []
+    out: list[Found] = []
+    for f in scanned:
+        if f.kind == "summary_generated":
+            generated.append(f.source)
+            continue
+        if f.kind != "summary":
+            out.append(f)
+            continue
+        cites = f.extra.get("cites", [])
+        target = lessons.get(cites[0]) if len(cites) == 1 else None
+        if target is not None and not target.extra.get("summary"):
+            target.extra["summary"] = _TRAILING_CITE.sub("", f.body)
+            attached += 1
+            continue
+        category = f.extra.get("category", "")
+        out.append(
+            Found(
+                kind="lesson",
+                ident=f"LS-{_slug(category, 12)}-{_slug(f.title, 28)}",
+                title=f.title,
+                source=f.source,
+                body=f.body,
+                extra={
+                    "summary": _TRAILING_CITE.sub("", f.body),
+                    "seen_in": cites,
+                    "tags": ["summary", *([_slug(category, 24)] if category else [])],
+                },
+            )
+        )
+        consolidated += 1
+    scanned[:] = out
+    if attached or consolidated:
+        plan.notes.append(
+            f"Lessons summary: {attached} bullet(s) became the summary of the one lesson "
+            f"they cite; {consolidated} cite several lessons or none and were imported as "
+            f"lessons of their own, tagged `summary`. `ddflow render` writes them back out "
+            f"as docs/ddflow/LESSONS-SUMMARY.md."
+        )
+    if generated:
+        plan.notes.append(
+            f"{', '.join(generated)} is GENERATED from the lessons corpus, so it was not "
+            f"imported: each lesson's own `**Compressed:**` paragraph is its summary."
+        )
+
+
+def scan_decisions(
+    repo: Path, globs: tuple[str, ...] = DECISION_GLOBS
+) -> tuple[list[Found], list[str]]:
     """One ADR file = one decision. The oldest convention in the list and the clearest."""
     found: list[Found] = []
     empty: list[str] = []
-    for path in _files(repo, DECISION_GLOBS):
+    for path in _files(repo, globs):
         # `docs/adr/README.md` is the index OF the decisions, not one of them, and it
         # imported as a decision titled "Architecture Decision Records" whose body was
         # a table of contents. Every ADR directory has one.
@@ -661,11 +1070,13 @@ def scan_decisions(repo: Path) -> tuple[list[Found], list[str]]:
             )
         )
     if not found:
-        empty.extend(str(p.relative_to(repo)) for p in _files(repo, DECISION_GLOBS))
+        empty.extend(str(p.relative_to(repo)) for p in _files(repo, globs))
     return found, empty
 
 
-def scan_research(repo: Path) -> tuple[list[Found], list[str]]:
+def scan_research(
+    repo: Path, globs: tuple[str, ...] = RESEARCH_GLOBS
+) -> tuple[list[Found], list[str]]:
     """`## ` sections of a research log, with their verdict if one is stated.
 
     A REFUTED entry is worth as much as an adopted one — it is what stops the next
@@ -674,7 +1085,7 @@ def scan_research(repo: Path) -> tuple[list[Found], list[str]]:
     """
     return _scan_sections(
         repo,
-        RESEARCH_GLOBS,
+        globs,
         "research",
         lambda t, _r: f"R-{_slug(t, 32)}",
         lambda _t, body, _r: {"verdict": _verdict(body)},
@@ -686,7 +1097,9 @@ def _verdict(body: str) -> str:
     return m.group(1) if m else "THEORETICAL"
 
 
-def scan_journal(repo: Path) -> tuple[list[Found], list[str]]:
+def scan_journal(
+    repo: Path, globs: tuple[str, ...] = JOURNAL_GLOBS
+) -> tuple[list[Found], list[str]]:
     """Engineering-journal entries: one `##` heading = one thing that happened.
 
     Imported as session NOTES rather than as tasks or lessons, because that is what a
@@ -696,14 +1109,14 @@ def scan_journal(repo: Path) -> tuple[list[Found], list[str]]:
     """
     return _scan_sections(
         repo,
-        JOURNAL_GLOBS,
+        globs,
         "journal",
         lambda t, rel: f"J-{_slug(rel, 20)}-{_slug(t, 28)}",
         lambda t, body, rel: {"at": _date_hint(t, body[:200], rel)},
     )
 
 
-def scan_optmem(repo: Path) -> tuple[list[Found], list[str]]:
+def scan_optmem(repo: Path, globs: tuple[str, ...] = OPTMEM_GLOBS) -> tuple[list[Found], list[str]]:
     """OptMem's `LOG.txt` — one fixed-width record per line, one memory per record.
 
     This is the source with the highest value per byte and the one a fresh queue most
@@ -719,7 +1132,7 @@ def scan_optmem(repo: Path) -> tuple[list[Found], list[str]]:
     """
     found: list[Found] = []
     empty: list[str] = []
-    for path in _files(repo, OPTMEM_GLOBS):
+    for path in _files(repo, globs):
         rel = str(path.relative_to(repo))
         before = len(found)
         for line_no, ln in enumerate(path.read_text("utf-8", errors="replace").splitlines(), 1):
@@ -809,7 +1222,12 @@ def _flag_shipped_phases_with_open_tasks(plan: ImportPlan) -> None:
     """
     open_by_phase: dict[str, int] = {}
     for f in plan.found:
-        if f.kind == "task" and not f.done and f.extra.get("phase"):
+        if (
+            f.kind == "task"
+            and not f.done
+            and not f.extra.get("disposition")
+            and f.extra.get("phase")
+        ):
             open_by_phase[f.extra["phase"]] = open_by_phase.get(f.extra["phase"], 0) + 1
     drifted = [
         f
@@ -866,8 +1284,117 @@ def _flag_unresolvable_needs(plan: ImportPlan, known: set[str]) -> None:
     )
 
 
+def _known_ids(state) -> set[str]:
+    """Every id already in the queue, so a re-run proposes only what is new."""
+    known: set[str] = set()
+    if state is not None:
+        known |= set(getattr(state, "items", {}))
+        known |= set(getattr(state, "lessons", {}))
+        known |= set(getattr(state, "decisions", {}))
+        known |= set(getattr(state, "research", {}))
+        known |= set(getattr(state, "memories", {}))
+        # Journal entries land as session NOTES, not as their own records, so "is this
+        # already imported" cannot be answered by an id table. It is answered by the
+        # `ident` each note carries -- without this a second import duplicated every
+        # journal entry while reporting success, and the existing idempotency test never
+        # saw it because its fixture had none.
+        for sess in getattr(state, "sessions", {}).values():
+            known |= {n.get("ident", "") for n in sess.notes if n.get("ident")}
+    known.discard("")
+    return known
+
+
+def _note_withheld(
+    plan: ImportPlan, done_skipped: int, closed_skipped: int, held: list[str]
+) -> None:
+    """Say what the import deliberately did not offer as work, and how to get it."""
+    if done_skipped:
+        plan.notes.append(
+            f"{done_skipped} already-ticked task(s) were NOT imported. They are history, "
+            f"not a queue — pass include_done to bring them in as completed items."
+        )
+    if closed_skipped:
+        plan.notes.append(
+            f"{closed_skipped} open task(s) were NOT imported because the source disposes "
+            f"of them (declined, refuted, superseded, struck through, or in a section whose "
+            f"STATUS says it is closed). They are history — pass include_done to bring them "
+            f"in as abandoned items."
+        )
+    if held:
+        plan.notes.append(
+            f"{len(held)} open task(s) are marked deferred, theoretical or blocked (on the "
+            f"item, its heading or its section's STATUS) and import as BLOCKED with that "
+            f"reason: visible, never offered, and released with `ddflow unblock <id>`. "
+            f"E.g. {', '.join(held[:_NOTE_EXAMPLES])}"
+            + (", ..." if len(held) > _NOTE_EXAMPLES else "")
+            + "."
+        )
+
+
+#: A scanner: repo and globs in, `(found, files that matched and yielded nothing)` out.
+Scanner = Callable[..., tuple[list[Found], list[str]]]
+
+
+def _scanners() -> tuple[tuple[str, Scanner, tuple[str, ...]], ...]:
+    """family -> (scanner, the globs it reads when `[importer] <family>_globs` is empty).
+
+    ONE table: `plan_import`, the handshake's "is there anything to import?" count and the
+    config knobs all read it, so a family added here is configurable and counted without
+    anyone remembering to. A function rather than a constant only because the scanners are
+    defined above it and the table must follow them.
+    """
+    return (
+        ("todo", scan_todos, TODO_GLOBS),
+        ("lesson", scan_lessons, LESSON_GLOBS),
+        ("lesson_summary", scan_lesson_summaries, LESSON_SUMMARY_GLOBS),
+        ("decision", scan_decisions, DECISION_GLOBS),
+        ("research", scan_research, RESEARCH_GLOBS),
+        ("journal", scan_journal, JOURNAL_GLOBS),
+        ("memory", scan_optmem, OPTMEM_GLOBS),
+    )
+
+
+def sources_from(cfg) -> dict[str, tuple[str, ...]]:
+    """The globs each family reads under this config: the knob when set, else the default.
+
+    A set knob REPLACES the default rather than extending it. That is what lets a project
+    whose `docs/LOG.md` is a generated index of its real journal leave it out, and a
+    project whose `docs/LOG.md` IS the journal put it in -- the same filename meaning
+    opposite things in the two repositories this was built against.
+
+    Spelled out knob by knob rather than read with `getattr(f"{family}_globs")`: a
+    family added to `_scanners()` with no knob behind it is then a KeyError here, not a
+    silently unconfigurable source.
+    """
+    imp = cfg.importer
+    configured = {
+        "todo": imp.todo_globs,
+        "lesson": imp.lesson_globs,
+        "lesson_summary": imp.lesson_summary_globs,
+        "decision": imp.decision_globs,
+        "research": imp.research_globs,
+        "journal": imp.journal_globs,
+        "memory": imp.memory_globs,
+    }
+    return {
+        family: tuple(configured[family] or ()) or default for family, _scan, default in _scanners()
+    }
+
+
+def all_source_globs(cfg=None) -> tuple[str, ...]:
+    """Every file pattern the scanners read under `cfg` (the defaults without one)."""
+    srcs = sources_from(cfg) if cfg is not None else {f: d for f, _s, d in _scanners()}
+    return tuple(g for globs in srcs.values() for g in globs)
+
+
 def plan_import(
-    repo: Path, state=None, *, include_done: bool = False, max_tasks: int = 200
+    repo: Path,
+    state=None,
+    *,
+    include_done: bool = False,
+    max_tasks: int = 200,
+    sources: dict[str, tuple[str, ...]] | None = None,
+    archive: tuple[str, ...] = (),
 ) -> ImportPlan:
     """Read everything importable. Writes NOTHING.
 
@@ -880,66 +1407,68 @@ def plan_import(
     as a queue, because none of it is work anyone will do. What matters for "continue
     from where we left off" is the OPEN items, the branches still in flight, and the
     memory (lessons, decisions). `include_done=True` imports the rest as closed items
-    when the history itself is what you want.
+    when the history itself is what you want. Open items the source itself DISPOSES of
+    (declined, refuted, struck through) are history too and follow the same rule; items
+    it DEFERS import as blocked.
 
     ``max_tasks`` is a guard rail rather than a policy: an import that silently writes
     five thousand events into a log that is committed to git is not recoverable by
     anything short of editing history. Over the cap, the plan reports the overflow and
     refuses to propose it — narrow the scope, or raise the cap deliberately.
+
+    ``sources`` maps a family (`todo`, `lesson`, ...) to the globs to read for it; a
+    family absent from it reads its defaults. `sources_from(cfg)` builds it from config.
+    ``archive`` names todo files whose open items are history until released: they import
+    as BLOCKED (`[importer] archive_globs`).
     """
     plan = ImportPlan()
-    known: set[str] = set()
-    if state is not None:
-        known |= set(getattr(state, "items", {}))
-        known |= set(getattr(state, "lessons", {}))
-        known |= set(getattr(state, "decisions", {}))
-        known |= set(getattr(state, "research", {}))
-        # Journal entries and memories land as session NOTES, not as their own records,
-        # so "is this already imported" cannot be answered by an id table. It is
-        # answered by the `ident` each note carries -- without this a second import
-        # duplicated every journal entry and every memory while reporting success, and
-        # the existing idempotency test never saw it because its fixture had neither.
-        for sess in getattr(state, "sessions", {}).values():
-            known |= {n.get("ident", "") for n in sess.notes if n.get("ident")}
-    known.discard("")
+    known = _known_ids(state)
+    sources = sources or {}
 
     done_skipped = 0
+    closed_skipped = 0
+    held: list[str] = []
     deferred_done: dict[str, Found] = {}
     proposed: set[str] = set()
-    for scan in (
-        scan_todos,
-        scan_lessons,
-        scan_decisions,
-        scan_research,
-        scan_journal,
-        scan_optmem,
-    ):
-        items, empty = scan(repo)
-        for f in items:
-            # Uniquify BEFORE the already-imported check, and against what THIS scan
-            # proposed rather than against what is in the queue. Both halves matter:
-            #
-            # Ids are the queue's primary key, and a collision is silent data loss --
-            # the second event folds over the first, one item disappears, and the
-            # import reports both as written. Two lessons whose titles agree in their
-            # first 32 characters collide; a real corpus had 42 such pairs. Doing it
-            # once here rather than inside each scanner is six private `taken` sets
-            # avoided, and cross-scanner collisions caught.
-            #
-            # Seeding from `known` instead would make the id depend on what had
-            # already been imported: the pair that became `L-x` and `L-x-2` on the
-            # first run would come out `L-x-2`, `L-x-3` on the second, and an import
-            # advertised as idempotent would duplicate its whole corpus on every run.
-            f.ident = _unique("", f.ident, proposed)
-            if f.ident in known:
-                plan.skipped_existing.append(f.ident)
-                continue
-            if f.kind == "task" and f.done and not include_done:
-                deferred_done[f.ident] = f
-                done_skipped += 1
-                continue
-            plan.found.append(f)
+    scanned: list[Found] = []
+    for family, scan, default in _scanners():
+        globs = sources.get(family) or default
+        items, empty = scan(repo, globs, archive) if family == "todo" else scan(repo, globs)
         plan.empty_sources.extend(empty)
+        scanned.extend(items)
+    _attach_summaries(scanned, plan)
+    for f in scanned:
+        # Uniquify BEFORE the already-imported check, and against what THIS scan
+        # proposed rather than against what is in the queue. Both halves matter:
+        #
+        # Ids are the queue's primary key, and a collision is silent data loss --
+        # the second event folds over the first, one item disappears, and the
+        # import reports both as written. Two lessons whose titles agree in their
+        # first 32 characters collide; a real corpus had 42 such pairs. Doing it
+        # once here rather than inside each scanner is six private `taken` sets
+        # avoided, and cross-scanner collisions caught.
+        #
+        # Seeding from `known` instead would make the id depend on what had
+        # already been imported: the pair that became `L-x` and `L-x-2` on the
+        # first run would come out `L-x-2`, `L-x-3` on the second, and an import
+        # advertised as idempotent would duplicate its whole corpus on every run.
+        f.ident = _unique("", f.ident, proposed)
+        if f.ident in known:
+            plan.skipped_existing.append(f.ident)
+            continue
+        if f.kind == "task" and f.done and not include_done:
+            deferred_done[f.ident] = f
+            done_skipped += 1
+            continue
+        if f.kind == "task" and f.extra.get("disposition") == "closed" and not include_done:
+            # Declined, refuted, superseded: history, the same as a ticked box -- and
+            # brought in the same way when open work depends on it.
+            deferred_done[f.ident] = f
+            closed_skipped += 1
+            continue
+        if f.kind == "task" and f.extra.get("disposition") == "hold":
+            held.append(f.ident)
+        plan.found.append(f)
 
     # A finished task that an OPEN task depends on has to come too, as done. Skipping
     # it leaves the open one blocked on an id the queue has never heard of — and an
@@ -948,7 +1477,10 @@ def plan_import(
     wanted = {d for f in plan.found for d in f.needs} & set(deferred_done)
     for ident in sorted(wanted):
         plan.found.append(deferred_done[ident])
-        done_skipped -= 1
+        if deferred_done[ident].done:
+            done_skipped -= 1
+        else:
+            closed_skipped -= 1
     if wanted:
         plan.notes.append(
             f"{len(wanted)} completed task(s) were imported anyway because open work "
@@ -956,11 +1488,7 @@ def plan_import(
             f"dependencies would be unresolvable and the open items would import "
             f"permanently blocked."
         )
-    if done_skipped:
-        plan.notes.append(
-            f"{done_skipped} already-ticked task(s) were NOT imported. They are history, "
-            f"not a queue — pass include_done to bring them in as completed items."
-        )
+    _note_withheld(plan, done_skipped, closed_skipped, held)
 
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:
@@ -1217,7 +1745,14 @@ def _has_open_child(state, phase) -> bool:
     return any(c.state not in (DONE, ABANDONED) and not c.removed for c in state.children(phase.id))
 
 
-def verify_import(repo: Path, state, *, rescan: bool = True) -> VerifyReport:
+def verify_import(
+    repo: Path,
+    state,
+    *,
+    rescan: bool = True,
+    sources: dict[str, tuple[str, ...]] | None = None,
+    archive: tuple[str, ...] = (),
+) -> VerifyReport:
     """Was the import done, is it still true, and did anyone finish it?
 
     ``rescan=False`` answers only from the folded queue and touches no file. That is
@@ -1252,7 +1787,7 @@ def verify_import(repo: Path, state, *, rescan: bool = True) -> VerifyReport:
         if not (repo / rel).is_file():
             r.vanished.extend((i, rel) for i in sorted(ids))
 
-    plan = plan_import(repo, state, max_tasks=10**9)
+    plan = plan_import(repo, state, max_tasks=10**9, sources=sources, archive=archive)
     r.drift = list(plan.found)
     r.empty_sources = list(plan.empty_sources)
     r.notes.extend(n for n in plan.notes if "already-ticked" not in n)
@@ -1307,12 +1842,41 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
                 {"kind": "task", "imported": True, "evidence": f"ticked in {f.source}"},
             )
             bump("task_done")
+        elif f.extra.get("disposition") == "closed":
+            log.append(
+                "item.abandoned",
+                f.ident,
+                {
+                    "kind": "task",
+                    "imported": True,
+                    "reason": f"{f.extra.get('disposition_why', 'closed')} in {f.source}",
+                },
+            )
+            bump("task_closed")
+        elif f.extra.get("disposition") == "hold":
+            log.append(
+                "item.blocked",
+                f.ident,
+                {
+                    "kind": "task",
+                    "imported": True,
+                    "reason": (
+                        f"{f.extra.get('disposition_why', 'held')} in {f.source}. "
+                        f"`ddflow unblock {f.ident}` when it becomes work."
+                    ),
+                },
+            )
+            bump("task_held")
     for f in plan.by_kind("lesson"):
-        log.append(
-            "lesson.recorded",
-            f.ident,
-            {"title": f.title, "rule": f.body, "tags": ["imported"], "seen_in": [f.source]},
-        )
+        data: dict[str, Any] = {
+            "title": f.title,
+            "rule": f.body,
+            "tags": ["imported", *f.extra.get("tags", [])],
+            "seen_in": [f.source, *f.extra.get("seen_in", [])],
+        }
+        if f.extra.get("summary"):
+            data["summary"] = f.extra["summary"]
+        log.append("lesson.recorded", f.ident, data)
         bump("lesson")
     for f in plan.by_kind("decision"):
         log.append(
