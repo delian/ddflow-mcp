@@ -39,9 +39,22 @@ from typing import Any
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "ddflow", "version": "0.1.1", "title": "ddflow work-queue kernel"}
 
+
 #: Tool surface. Each entry maps an MCP tool onto an argv the CLI already understands,
 #: so there is exactly one implementation of every operation.
 #: (description, {property: (json_type, description, required)}, argv builder)
+def _AGENT_KEYS() -> list[str]:
+    """Every supported harness, from the one registry that defines them.
+
+    A function rather than an import at module scope: `TOOLS` is built at import time and
+    `services.adopt` pulls in `infra.paths`, which this module must not require merely to
+    describe its own tools.
+    """
+    from ..services.adopt import AGENT_TARGETS
+
+    return list(AGENT_TARGETS)
+
+
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_brief": {
         "description": (
@@ -1350,8 +1363,10 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "agents": (
                 "string",
+                # GENERATED from the registry. Hand-kept copies of this list have
+                # drifted twice; an agent reads this spec to decide what it may pass.
                 "Comma-separated agents to write driver deltas for: "
-                "claude,gemini,codex,copilot,kilo,cursor. Default: all.",
+                f"{','.join(_AGENT_KEYS())}. Default: all.",
                 False,
             )
         },

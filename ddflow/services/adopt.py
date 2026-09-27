@@ -23,28 +23,206 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from ..infra import paths
+
+#: Where an operator reads the manual step for an agent with no project config.
+_DOCS_HINT = "docs/ddflow/drivers/deltas/"
 
 BEGIN = "<!-- DDFLOW:BEGIN (managed — edits inside this block are overwritten) -->"
 END = "<!-- DDFLOW:END -->"
 
-AGENT_TARGETS: dict[str, tuple[str, str]] = {
-    # agent key -> (delta filename, mcp config path relative to repo root)
-    "claude": ("claude-code.md", ".mcp.json"),
-    "gemini": ("gemini-cli.md", ".gemini/settings.json"),
-    "codex": ("codex-cli.md", ".codex/config.toml"),
-    "copilot": ("github-copilot.md", ".vscode/mcp.json"),
-    "kilo": ("kilo-cline.md", ".kilo/kilo.json"),
-    "cursor": ("cursor.md", ".cursor/mcp.json"),
+#: How a server entry nests inside an agent's config file. A VOCABULARY rather than a
+#: chain of `if key == ...`: the writer used to special-case Copilot inline, which worked
+#: for exactly two shapes and could not express a third. Each value is checked against
+#: that agent's own documentation — see `docs/RESEARCH.md` R15.
+SHAPE_MCP_SERVERS = "mcpServers"  #: {"mcpServers": {"ddflow": {command, args}}} -- common
+SHAPE_SERVERS = "servers"  #: {"servers": {"ddflow": {type: "stdio", command, args}}} -- VS Code
+SHAPE_COPILOT = "copilot"  #: {"mcpServers": {"ddflow": {type: "local", ..., tools}}} -- Copilot CLI
+SHAPE_MCP_DOT_SERVERS = "mcp.servers"  #: {"mcp": {"servers": {...}}} -- ZCode (GLM)
+SHAPE_OPENCODE = "opencode"  #: {"mcp": {"ddflow": {type: "local", command: [...]}}}
+SHAPE_TOML = "toml.mcp_servers"  #: [mcp_servers.ddflow] in TOML -- Codex
+#: No project-level MCP config file EXISTS for this agent: it is configured in an IDE
+#: panel, a web UI, or a user-level file outside the repository. The delta doc and
+#: `AGENTS.md` still apply, and those are the parts that make the workflow portable — so
+#: the agent is SUPPORTED, and the honest record is that one step is manual. Inventing a
+#: plausible path would be worse than admitting it: ddflow would write a file the agent
+#: never reads and the operator would believe it was wired up.
+SHAPE_NONE = "none"
+
+
+@dataclass(frozen=True)
+class AgentTarget:
+    """One supported harness: its delta doc, its MCP config file, and that file's shape.
+
+    One record per agent rather than parallel dicts keyed by the same string. Two dicts
+    that must be edited together are the drift this project keeps paying for -- there
+    were three of them before this (a ternary in the adopter, `_json_field` in the
+    companions writer, and a `SERVERS_FIELD_AGENTS` set beside it), and the comment on
+    the last one correctly predicted that a third shape would break them.
+    """
+
+    delta: str  #: filename under `templates/drivers/deltas/`
+    config: str  #: MCP config path relative to the repo root; "" when none exists
+    shape: str  #: one of the SHAPE_* constants above
+    #: The instruction surface this agent ACTUALLY reads, when it is not `AGENTS.md`.
+    #: Empty means "not documented either way" — which is a different claim from
+    #: "AGENTS.md", and the README says so rather than guessing.
+    rules: str = "AGENTS.md"
+
+    @property
+    def writes_config(self) -> bool:
+        return bool(self.config) and self.shape != SHAPE_NONE
+
+
+#: Every harness ddflow can adopt a project into. Each path and shape is taken from that
+#: product's OWN documentation (`docs/RESEARCH.md` R15) -- never from the family
+#: resemblance between them, because a wrong key is valid JSON that the agent silently
+#: ignores, which looks exactly like success.
+AGENT_TARGETS: dict[str, AgentTarget] = {
+    "claude": AgentTarget("claude-code.md", ".mcp.json", SHAPE_MCP_SERVERS, "CLAUDE.md"),
+    "gemini": AgentTarget("gemini-cli.md", ".gemini/settings.json", SHAPE_MCP_SERVERS),
+    "codex": AgentTarget("codex-cli.md", ".codex/config.toml", SHAPE_TOML),
+    # GitHub Copilot's OWN surface, separate from VS Code's. The CLI searches upward for
+    # `.mcp.json` and also reads `.github/mcp.json`, which is the one meant to be
+    # committed and shared, so that is the one written. Its entries carry `type: "local"`
+    # and a `tools` allowlist. This used to point at `.vscode/mcp.json`, which is VS
+    # Code's file and is now the `vscode` target -- adopt BOTH to cover both surfaces.
+    "copilot": AgentTarget("github-copilot.md", ".github/mcp.json", SHAPE_COPILOT),
+    # VS Code's built-in MCP support, which any VS Code agent uses -- not Copilot-specific.
+    # Top-level key is `servers`, NOT `mcpServers`, and entries name their transport.
+    "vscode": AgentTarget("vscode.md", ".vscode/mcp.json", SHAPE_SERVERS),
+    "kilo": AgentTarget("kilo-cline.md", ".kilo/kilo.json", SHAPE_MCP_SERVERS),
+    "cursor": AgentTarget("cursor.md", ".cursor/mcp.json", SHAPE_MCP_SERVERS),
+    # Kimi Code CLI. Project-level `.kimi-code/mcp.json` takes precedence over the
+    # user-level copy. NOT a repo-root `.mcp.json`: secondary write-ups say it reuses
+    # Claude's file and the official docs do not, so only the official docs count.
+    "kimi": AgentTarget("kimi-code.md", ".kimi-code/mcp.json", SHAPE_MCP_SERVERS),
+    # opencode. `command` is ONE array including the arguments, and `enabled` is explicit.
+    "opencode": AgentTarget("opencode.md", "opencode.json", SHAPE_OPENCODE),
+    # ZCode, Zhipu's coding agent and how GLM is driven. Nests under `mcp` -> `servers`.
+    "glm": AgentTarget("zcode-glm.md", ".zcode/config.json", SHAPE_MCP_DOT_SERVERS),
+    # Qwen Code CLI, a Gemini CLI fork: same settings shape, its own directory. Its
+    # default context file is QWEN.md, and it reads AGENTS.md when present.
+    "qwen": AgentTarget("qwen-code.md", ".qwen/settings.json", SHAPE_MCP_SERVERS, "QWEN.md"),
+    # Google Antigravity. Workspace MCP is `.agents/mcp_config.json`; rules may be
+    # AGENTS.md, GEMINI.md, or `.agents/rules/`.
+    "antigravity": AgentTarget("antigravity.md", ".agents/mcp_config.json", SHAPE_MCP_SERVERS),
+    # Devin CLI. `.devin/mcp_config.json` is the git-tracked project scope (a
+    # `.local.json` sibling exists for secrets and is gitignored). CLOUD Devin sessions
+    # are configured in the web UI instead, which no repo file can do.
+    "devin": AgentTarget("devin.md", ".devin/mcp_config.json", SHAPE_MCP_SERVERS),
+    # Qodo Command reads an `mcp.json` at the project root. The Qodo Gen IDE plugin keeps
+    # its own per-user config, which is the manual half named in the delta.
+    "qodo": AgentTarget("qodo.md", "mcp.json", SHAPE_MCP_SERVERS),
+    # Tabnine Agent. Project scope SHALLOW-MERGES over user and system scopes.
+    "tabnine": AgentTarget(
+        "tabnine.md", ".tabnine/agent/settings.json", SHAPE_MCP_SERVERS, ".tabnine/guidelines/"
+    ),
+    # --- Supported, but with NO project-level MCP file to write. -------------------
+    # Each of these is a verified absence, not an unresearched gap: the delta doc says
+    # where the operator must add the server by hand, and AGENTS.md still carries the
+    # workflow.
+    #
+    # Aider has no MCP client support at all, and no AGENTS.md convention -- it loads a
+    # read-only context file named by `read:` in `.aider.conf.yml`.
+    "aider": AgentTarget("aider.md", "", SHAPE_NONE, ".aider.conf.yml `read:`"),
+    # Cline's MCP settings are a single GLOBAL file; its project surface is rules only.
+    "cline": AgentTarget("cline.md", "", SHAPE_NONE, ".clinerules/"),
+    # Windsurf/Cascade is now Devin Desktop; its docs state a global config only.
+    "windsurf": AgentTarget("windsurf.md", "", SHAPE_NONE),
+    # Replit configures MCP entirely in the web UI, and its instruction file is replit.md.
+    "replit": AgentTarget("replit.md", "", SHAPE_NONE, "replit.md"),
+    # OpenHands' primary path is Settings -> MCP in the UI. A `config.toml` `[mcp]`
+    # `stdio_servers` array still exists and its own docs call it development-only, so
+    # it is documented in the delta rather than written here.
+    "openhands": AgentTarget("openhands.md", "", SHAPE_NONE),
+    # Goose keeps extensions in a user-level YAML; its project surface is `.goosehints`,
+    # and it reads AGENTS.md as well.
+    "goose": AgentTarget("goose.md", "", SHAPE_NONE),
+    # Sourcegraph Cody is Enterprise-only since 2025-07-23 and is configured through the
+    # editor's own settings, under a `cody.mcpServers` key rather than a repo file.
+    "cody": AgentTarget("cody.md", "", SHAPE_NONE, ""),
 }
 
-#: Agents whose NATIVE rules surface outranks `AGENTS.md`, and where writing only
-#: AGENTS.md would therefore be unreliable. Cursor's precedence is
-#: Team Rules > Project Rules > User Rules > .cursorrules > AGENTS.md, so a project
-#: rule is what actually binds; AGENTS.md is written too, as the fallback it is.
-NATIVE_RULES: dict[str, str] = {
-    "cursor": ".cursor/rules/ddflow.mdc",
+
+#: How a native rules surface must be written.
+#:
+#: `FORM_WHOLE` — the file is ddflow's entirely, because something must come FIRST in it
+#:   (Cursor's `.mdc` binds through YAML frontmatter, which cannot be preceded by a marker).
+#: `FORM_BLOCK` — a managed BEGIN/END block inside a file the project may already own, so
+#:   the operator's own rules survive alongside ours.
+#: `FORM_AIDER` — not a rules file at all: a `read:` entry in `.aider.conf.yml`, because
+#:   Aider discovers nothing automatically and only loads what it is told to load.
+FORM_WHOLE = "whole"
+FORM_BLOCK = "block"
+FORM_AIDER = "aider-conf"
+
+
+@dataclass(frozen=True)
+class NativeRule:
+    """One agent's own instruction surface, and how to write into it."""
+
+    path: str  #: relative to the repo root
+    form: str  #: FORM_WHOLE | FORM_BLOCK | FORM_AIDER
+    why: str  #: why `AGENTS.md` alone is not enough here — shown by `doctor`
+
+
+#: Agents whose OWN instruction surface must also carry the block, because `AGENTS.md`
+#: alone does not reach them.
+#:
+#: **The block is INLINED into each, never pointed at.** A pointer was the obvious design
+#: and this repo had already refuted it: *"a link is only followed if the agent chooses to
+#: follow it"* (`templates/drivers/deltas/kilo-cline.md`). A one-line stub saying "see
+#: AGENTS.md" is therefore a rule that binds only if the model feels like opening a file,
+#: which is exactly the property an enforced rule must not have.
+#:
+#: Inlining means N copies of one text, and the answer to that is the answer already used
+#: for `AGENTS.md` and `CLAUDE.md`: ONE generator (`project_section`), a managed block, and
+#: `rules_status()` comparing every copy against it so drift is reported rather than
+#: discovered. Duplication that a check owns is not duplication that drifts.
+#:
+#: Absent from this map means the agent reads `AGENTS.md` directly — which is most of them,
+#: and is the whole reason `AGENTS.md` is the canonical surface.
+NATIVE_RULES: dict[str, NativeRule] = {
+    # Precedence is Team Rules > Project Rules > User Rules > .cursorrules > AGENTS.md, so
+    # a project rule is what actually binds and AGENTS.md is the fallback it is.
+    "cursor": NativeRule(
+        ".cursor/rules/ddflow.mdc",
+        FORM_WHOLE,
+        "Cursor ranks project rules ABOVE AGENTS.md, so AGENTS.md alone is outranked",
+    ),
+    # QWEN.md is Qwen Code's default context file. It reads AGENTS.md when present, but the
+    # default is what an unconfigured checkout uses.
+    "qwen": NativeRule(
+        "QWEN.md", FORM_BLOCK, "QWEN.md is Qwen Code's DEFAULT context file, not AGENTS.md"
+    ),
+    # Cline's project surface is a rules directory; its MCP config is global-only.
+    "cline": NativeRule(
+        ".clinerules/ddflow.md", FORM_BLOCK, "Cline reads .clinerules/, not AGENTS.md"
+    ),
+    "tabnine": NativeRule(
+        ".tabnine/guidelines/ddflow.md",
+        FORM_BLOCK,
+        "Tabnine Agent reads .tabnine/guidelines/*.md, not AGENTS.md",
+    ),
+    # Replit's own convention, and it must be at the project root.
+    "replit": NativeRule(
+        "replit.md", FORM_BLOCK, "Replit reads replit.md at the project root, not AGENTS.md"
+    ),
+    # Goose reads AGENTS.md *and* .goosehints by default; the hints file is the one that is
+    # committed and the one CONTEXT_FILE_NAMES cannot silently drop.
+    "goose": NativeRule(
+        ".goosehints", FORM_BLOCK, "Goose reads .goosehints as well, and it is committed"
+    ),
+    # Aider auto-discovers NOTHING. Without a `read:` entry it never sees the rules at all,
+    # which makes this the most load-bearing entry in the map.
+    "aider": NativeRule(
+        ".aider.conf.yml",
+        FORM_AIDER,
+        "Aider loads only what `read:` names — it discovers no instruction file at all",
+    ),
 }
 
 # The per-project text, deliberately SHORT.
@@ -150,16 +328,30 @@ class RulesState:
         return self.state != CURRENT
 
     def render(self) -> str:
+        # `not_binding` means "present and will not take effect", and the REASON differs by
+        # surface. It used to render Cursor's reason for every one of them, so an operator
+        # whose `.aider.conf.yml` was missing its `read:` entry was told that `alwaysApply`
+        # was not true — about a file that has no such key. A message that names the wrong
+        # cause is worse than a generic one: it sends the reader to fix something that is
+        # not broken.
+        if self.state == NOT_BINDING:
+            return f"{self.path} exists but does not bind: {self.not_binding_reason}"
         return {
             MISSING: f"{self.path} does not exist — the agent has no project rules at all",
-            NOT_BINDING: (
-                f"{self.path} exists but does not bind (`alwaysApply` is not true), so the "
-                f"agent may never load it"
-            ),
             NO_BLOCK: f"{self.path} exists but its ddflow section was removed",
             STALE: f"{self.path}'s ddflow section is from an older version and has drifted",
             CURRENT: f"{self.path} is current",
         }[self.state]
+
+    @property
+    def not_binding_reason(self) -> str:
+        """Why this surface will not take effect, in its OWN terms."""
+        if self.path.endswith(".aider.conf.yml"):
+            return (
+                f"it does not list `{AIDER_READS}` under `read:`, and Aider loads no "
+                f"instruction file it was not told to load"
+            )
+        return "`alwaysApply` is not true, so the agent may never load it"
 
 
 #: Frontmatter that makes a Cursor project rule BIND. `alwaysApply: true`, because
@@ -198,7 +390,7 @@ def adopted_agents(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[str]:
     if not deltas.is_dir():
         return []
     present = {p.name for p in deltas.glob("*.md")}
-    return sorted(key for key, (delta, _mcp) in AGENT_TARGETS.items() if delta in present)
+    return sorted(key for key, t in AGENT_TARGETS.items() if t.delta in present)
 
 
 def has_been_adopted(repo: Path, *, docs_dir: str = "docs/ddflow") -> bool:
@@ -256,24 +448,37 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
     # No BEGIN/END markers here: the frontmatter has to be first for the rule to bind, so
     # the file is ddflow's entirely and `no_block` cannot apply. Missing, drifted, current.
     want_native = native_rule_text(docs_dir)
+    want_block = project_section(docs_dir).strip()
     for key in adopted_agents(repo, docs_dir=docs_dir):
-        rel = NATIVE_RULES.get(key)
-        if not rel:
-            continue
-        path = Path(repo) / rel
+        rule = NATIVE_RULES.get(key)
+        if rule is None:
+            continue  # reads AGENTS.md directly, which the loop above already checked
+        path = Path(repo) / rule.path
         if not path.is_file():
-            out.append(RulesState(rel, MISSING))
+            out.append(RulesState(rule.path, MISSING))
             continue
         got = path.read_text("utf-8", errors="replace")
+        if rule.form == FORM_AIDER:
+            # Not a rules file: the question is whether Aider is TOLD to load AGENTS.md.
+            found = re.search(rf"^\s*(-\s*)?{re.escape(AIDER_READS)}\s*$", got, re.M)
+            out.append(RulesState(rule.path, CURRENT if found else NOT_BINDING))
+            continue
+        if rule.form == FORM_BLOCK:
+            if BEGIN not in got or END not in got:
+                out.append(RulesState(rule.path, NO_BLOCK))
+                continue
+            block = got[got.index(BEGIN) : got.index(END) + len(END)].strip()
+            out.append(RulesState(rule.path, CURRENT if block == want_block else STALE))
+            continue
         if got == want_native:
-            out.append(RulesState(rel, CURRENT))
+            out.append(RulesState(rule.path, CURRENT))
         elif not re.search(r"^alwaysApply:\s*true\s*$", got, re.M):
             # Checked BEFORE `stale`, because it is the more serious fault and a file that
             # does not bind is usually also textually different. Drifted text still gets
             # read; a rule with `alwaysApply: false` may never be loaded at all.
-            out.append(RulesState(rel, NOT_BINDING))
+            out.append(RulesState(rule.path, NOT_BINDING))
         else:
-            out.append(RulesState(rel, STALE))
+            out.append(RulesState(rule.path, STALE))
     return out
 
 
@@ -310,7 +515,7 @@ def adopt(
     for key in agents:
         if key not in AGENT_TARGETS:
             raise ValueError(f"unknown agent {key!r}; known: {', '.join(AGENT_TARGETS)}")
-        delta, _ = AGENT_TARGETS[key]
+        delta = AGENT_TARGETS[key].delta
         shutil.copy2(templates / "drivers" / "deltas" / delta, drivers_dst / "deltas" / delta)
         actions.append(f"wrote {docs_dir}/drivers/deltas/{delta}")
 
@@ -341,10 +546,62 @@ def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> s
     what makes the rule bind: `alwaysApply: true`, because claim-before-you-edit is not
     a rule that should depend on the model choosing to load it.
     """
-    path = repo / NATIVE_RULES[key]
+    rule = NATIVE_RULES[key]
+    path = repo / rule.path
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(native_rule_text(docs_dir), "utf-8")
-    return f"wrote {NATIVE_RULES[key]} (always-applied project rule)"
+    if rule.form == FORM_WHOLE:
+        # The whole file is ours: the frontmatter has to come FIRST for the rule to bind,
+        # so there is nowhere to put a marker above it.
+        path.write_text(native_rule_text(docs_dir), "utf-8")
+        return f"wrote {rule.path} (always-applied project rule)"
+    if rule.form == FORM_BLOCK:
+        # A file the project may already own (`QWEN.md`, `replit.md`, `.goosehints`), so a
+        # managed block rather than a wholesale write — the operator's own rules stay.
+        return _upsert_block(path, project_section(docs_dir))
+    if rule.form == FORM_AIDER:
+        return _add_aider_read(path)
+    raise ValueError(f"unknown native rules form {rule.form!r}")
+
+
+#: The instruction file Aider must be told to load. One name, used by the writer and by
+#: the checker, so "did we wire Aider up?" has one answer.
+AIDER_READS = "AGENTS.md"
+
+
+def _add_aider_read(path: Path) -> str:
+    """Add `AGENTS.md` to `read:` in `.aider.conf.yml`.
+
+    Aider discovers no instruction file at all — not `AGENTS.md`, not a convention of its
+    own — so without this entry the rules are present in the repository and invisible to
+    the agent. That makes this the one native surface where doing nothing is silent total
+    failure rather than degraded behaviour.
+
+    Edited as TEXT, not through a YAML round-trip: the file is the operator's, it may carry
+    comments and ordering that matter to them, and a dump-and-rewrite would quietly discard
+    both. `yaml` is also not a dependency of this package and should not become one to add
+    a line.
+    """
+    text = path.read_text("utf-8") if path.exists() else ""
+    if re.search(rf"^\s*(-\s*)?{re.escape(AIDER_READS)}\s*$", text, re.M):
+        return f"{path.name} already loads {AIDER_READS}"
+    if re.search(r"^read:", text, re.M):
+        # An existing `read:` — append to it as a list item. A scalar form (`read: X`) is
+        # rewritten into a list so both entries survive; replacing it would drop theirs.
+        def _extend(m: re.Match) -> str:
+            value = m.group(2).strip()
+            if not value:
+                return f"{m.group(1)}\n  - {AIDER_READS}"
+            if value.startswith("["):
+                inner = value.rstrip("]").rstrip()
+                return f"{m.group(1)} {inner}, {AIDER_READS}]"
+            return f"read:\n  - {value}\n  - {AIDER_READS}"
+
+        new_text = re.sub(r"^(read:)([^\n]*)", _extend, text, count=1, flags=re.M)
+        path.write_text(new_text, "utf-8")
+        return f"added {AIDER_READS} to read: in {path.name}"
+    prefix = text.rstrip() + "\n" if text.strip() else ""
+    path.write_text(f"{prefix}read:\n  - {AIDER_READS}\n", "utf-8")
+    return f"{'added' if prefix else 'created'} read: {AIDER_READS} in {path.name}"
 
 
 def _upsert_block(path: Path, section: str) -> str:
@@ -454,7 +711,13 @@ def _register_mcp(
     Merged rather than overwritten: these files hold the user's other servers, and a
     tool that stomps them is a tool nobody runs twice.
     """
-    _, rel = AGENT_TARGETS[key]
+    target = AGENT_TARGETS[key]
+    if not target.config or target.shape == SHAPE_NONE:
+        return (
+            f"{key}: no project-level MCP config file exists — register the server in its "
+            f"own settings (see {_DOCS_HINT})"
+        )
+    rel = target.config
     path = repo / rel
     path.parent.mkdir(parents=True, exist_ok=True)
     # `uvx` fetches and runs the published package in an ephemeral environment, so a
@@ -465,7 +728,7 @@ def _register_mcp(
     # PUBLISHED version instead of the one under test.
     entry = _launch_entry(launch, image)
 
-    if rel.endswith(".toml"):
+    if target.shape == SHAPE_TOML:
         text = path.read_text("utf-8") if path.exists() else ""
         if "[mcp_servers.ddflow]" in text:
             return f"{rel} already registers ddflow"
@@ -480,8 +743,82 @@ def _register_mcp(
             data = json.loads(path.read_text("utf-8") or "{}")
         except json.JSONDecodeError:
             return f"SKIPPED {rel}: it is not valid JSON; add the server by hand"
-    # Copilot/VS Code use "servers"; everyone else uses "mcpServers".
-    field = "servers" if key == "copilot" else "mcpServers"
-    data.setdefault(field, {})["ddflow"] = entry
+    place_server(data, target.shape, "ddflow", entry)
     path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
     return f"registered ddflow in {rel}"
+
+
+def server_entry_for(shape: str, entry: dict) -> dict:
+    """``entry`` rewritten the way THIS agent's config must store it.
+
+    Only opencode differs, and it differs in a way that fails silently: `command` is one
+    ARRAY including the arguments, the transport is named rather than inferred, and
+    `enabled` is explicit. Handing it the common `{"command": str, "args": [...]}` form
+    produces valid JSON that starts nothing.
+    """
+    if shape == SHAPE_OPENCODE:
+        out: dict = {
+            "type": "local",
+            "command": [entry["command"], *entry.get("args", [])],
+            "enabled": True,
+        }
+        if entry.get("env"):
+            out["environment"] = entry["env"]
+        return out
+    if shape == SHAPE_SERVERS:
+        # VS Code names the transport in the entry; its own documented example carries
+        # `"type": "stdio"`, so that is what is written rather than relying on it being
+        # inferred from the presence of `command`.
+        return {"type": "stdio", **entry}
+    if shape == SHAPE_COPILOT:
+        # Copilot CLI calls a stdio server "local", and `tools` is its allowlist -- absent,
+        # a server's tools are not offered. `["*"]` means "all of ddflow's tools", which is
+        # the only useful setting for a queue the agent is supposed to drive.
+        return {"type": "local", **entry, "tools": ["*"]}
+    return dict(entry)
+
+
+def _server_container(data: dict, shape: str, *, create: bool) -> dict | None:
+    """The dict inside ``data`` that maps server NAME -> entry, for this shape.
+
+    One place that knows where servers live in each file. There used to be three -- a
+    ternary in the adopter, `_json_field` in the companions writer and a
+    `SERVERS_FIELD_AGENTS` set beside it -- so adding an agent meant editing three
+    things that no test tied together, and only one of them could express nesting.
+    """
+    if shape == SHAPE_OPENCODE:
+        path: tuple[str, ...] = ("mcp",)
+    elif shape == SHAPE_MCP_DOT_SERVERS:
+        path = ("mcp", "servers")
+    elif shape in (SHAPE_MCP_SERVERS, SHAPE_COPILOT):
+        path = ("mcpServers",)
+    elif shape == SHAPE_SERVERS:
+        path = ("servers",)
+    else:
+        raise ValueError(f"unknown MCP config shape {shape!r}")
+    node = data
+    for part in path:
+        if create:
+            node = node.setdefault(part, {})
+        else:
+            node = node.get(part) or {}
+            if not isinstance(node, dict):
+                return None
+    return node
+
+
+def place_server(data: dict, shape: str, name: str, entry: dict) -> None:
+    """Put one server into ``data`` where ``shape`` says it belongs.
+
+    Mutates in place and preserves every sibling: these files hold the operator's other
+    servers, and a tool that stomps them is a tool nobody runs twice.
+    """
+    container = _server_container(data, shape, create=True)
+    assert container is not None  # create=True always yields one
+    container[name] = server_entry_for(shape, entry)
+
+
+def get_server(data: dict, shape: str, name: str) -> Any:
+    """What ``data`` currently stores for ``name``, or None. The read half of `place_server`."""
+    container = _server_container(data, shape, create=False)
+    return (container or {}).get(name)

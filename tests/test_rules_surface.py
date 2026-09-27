@@ -284,9 +284,9 @@ def test_cursors_own_rule_file_is_checked_because_it_is_what_binds(repo):
 
     _adopted_for(repo, "cursor")
     assert adopted_agents(repo) == ["cursor"]
-    mdc = repo / NATIVE_RULES["cursor"]
+    mdc = repo / NATIVE_RULES["cursor"].path
     assert mdc.is_file(), "adopt did not write the native rule"
-    assert _state(repo, str(NATIVE_RULES["cursor"])) == CURRENT
+    assert _state(repo, NATIVE_RULES["cursor"].path) == CURRENT
 
     original = mdc.read_text()
     mdc.unlink()

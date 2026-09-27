@@ -30,6 +30,7 @@ from ..core.model import GATE_OUTCOMES, fold
 from ..infra import worktree as W
 from ..services import gates as G
 from ..services import leases as L
+from ..services.adopt import AGENT_TARGETS
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
     _workflow_problems,
@@ -649,7 +650,11 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     ad.add_argument(
         "--agents",
         default="",
-        help="comma-separated: claude,gemini,codex,copilot,kilo,cursor (default: all)",
+        # GENERATED from the registry, never typed. A hand-kept list here drifted the
+        # moment `cursor` was added, and `test_every_supported_agent_is_named_where_a_user
+        # _would_look` exists because of it: a capability nobody can find is one nobody
+        # uses. Generating it means adding an agent cannot leave this behind.
+        help=f"comma-separated: {','.join(AGENT_TARGETS)} (default: all)",
     )
     ad.add_argument("--docs", default="docs/ddflow", help="where to write the drivers")
     ad.add_argument(

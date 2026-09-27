@@ -40,7 +40,13 @@ from pathlib import Path
 
 from ..infra import paths
 from ..infra import proc as P
-from .adopt import AGENT_TARGETS
+from .adopt import (
+    AGENT_TARGETS,
+    SHAPE_TOML,
+    get_server,
+    place_server,
+    server_entry_for,
+)
 
 #: How long a detection probe may take. These are `--version`/`--help` calls, but one
 #: of them is `npx`, which will happily spend a minute fetching a package the first
@@ -272,30 +278,17 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
 
 
 #: Agents whose MCP config keys servers under `servers` rather than `mcpServers`.
-#: Copilot / VS Code is the one; everyone else uses `mcpServers`.
-#:
-#: One list, consulted by BOTH the reader and the writer. They used to disagree: the
-#: reader checked both field names for every agent while the writer chose by comparing
-#: the agent name to the literal "copilot". Adding a seventh agent that uses `servers`
-#: would have had the reader find its entry while the writer created a second, dead
-#: `mcpServers` block beside it — and the symptom would be a companion that reports as
-#: registered and never launches.
-SERVERS_FIELD_AGENTS: frozenset[str] = frozenset({"copilot"})
-
-
-def _json_field(agent: str) -> str:
-    return "servers" if agent in SERVERS_FIELD_AGENTS else "mcpServers"
-
-
 def registered_in(repo: Path, cid: str) -> list[str]:
     """Which agents' MCP configs already name this server."""
     found = []
-    for key, (_delta, rel) in AGENT_TARGETS.items():
-        path = Path(repo) / rel
+    for key, target in AGENT_TARGETS.items():
+        if not target.config:
+            continue  # no project-level MCP file to look in
+        path = Path(repo) / target.config
         if not path.is_file():
             continue
         text = path.read_text("utf-8")
-        if rel.endswith(".toml"):
+        if target.shape == SHAPE_TOML:
             if f"[mcp_servers.{cid}]" in text:
                 found.append(key)
             continue
@@ -303,7 +296,13 @@ def registered_in(repo: Path, cid: str) -> list[str]:
             data = json.loads(text or "{}")
         except json.JSONDecodeError:
             continue
-        if cid in (data.get(_json_field(key)) or {}):
+        # `get_server` and `place_server` are ONE declaration of where servers live, so
+        # the reader cannot look somewhere the writer does not write. They used to
+        # disagree by construction: the reader checked both field names for every agent
+        # while the writer compared the agent name to the literal "copilot", so an agent
+        # using a third shape would have been reported as registered while the writer
+        # created a dead block beside its real entry.
+        if get_server(data, target.shape, cid) is not None:
             found.append(key)
     return found
 
@@ -433,7 +432,13 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     """
     if agent not in AGENT_TARGETS:
         raise ValueError(f"unknown agent {agent!r}; known: {', '.join(AGENT_TARGETS)}")
-    _delta, rel = AGENT_TARGETS[agent]
+    target = AGENT_TARGETS[agent]
+    if not target.config:
+        return "refused", (
+            f"{agent} has no project-level MCP config file; register {c.id} in its own "
+            f"settings. `ddflow companions show` prints the entry to paste."
+        )
+    rel = target.config
     path = Path(repo) / rel
 
     # ONE decision, made once, for both paths. The dry run used to re-derive the entry
@@ -441,7 +446,7 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     # newline the write prepends, and the JSON preview happily reported "WOULD add"
     # over a file the write would REFUSE as unparseable -- an operator signing off on a
     # change that could not happen, which is the failure the preview exists to prevent.
-    if rel.endswith(".toml"):
+    if target.shape == SHAPE_TOML:
         text = path.read_text("utf-8") if path.exists() else ""
         if f"[mcp_servers.{c.id}]" in text:
             return "unchanged", f"{rel} already registers {c.id}"
@@ -470,16 +475,15 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
             # Checked BEFORE the dry run reports, so a preview never promises a write
             # that the real call would decline.
             return "refused", f"SKIPPED {rel}: it is not valid JSON; add {c.id} by hand"
-    field = _json_field(agent)
-    want = c.entry()
-    if data.get(field, {}).get(c.id) == want:
+    want = server_entry_for(target.shape, c.entry())
+    if get_server(data, target.shape, c.id) == want:
         # IDENTICAL, not merely present. The previous version returned early whenever the
         # id existed at all, which lost the refresh the unconditional assignment used to
         # give: an entry whose command had changed in the registry stayed stale forever,
         # and re-running `companions add` -- the obvious remedy -- reported success and
         # did nothing.
         return "unchanged", f"{rel} already registers {c.id} with the same launch command"
-    data.setdefault(field, {})[c.id] = want
+    place_server(data, target.shape, c.id, c.entry())
     if dry_run:
         # The MERGED result, not a lone entry: the write merges into a file holding the
         # operator's other servers, and a preview showing only the addition misleads in

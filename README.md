@@ -10,7 +10,8 @@ the log is destroyed, the project's decision history rebuilds from the log alone
 
 **One dependency beyond `python3` and `git`** (Jinja2, for the prompt templates; see
 [Extending it by writing text, not code](#extending-it-by-writing-text-not-code)). Works with Claude Code, Gemini CLI,
-Codex, Copilot, Kilo/Cline, a CI job, a Makefile, or a human at a terminal — over a CLI
+Codex, Copilot, Cursor, Kimi, opencode, Aider, a CI job, a Makefile, or a human at a
+terminal — over a CLI
 and an MCP server that are the same implementation.
 
 ---
@@ -183,14 +184,8 @@ suite that never ran.
 `ddflow adopt` writes the launch entry into each agent's own config and leaves existing
 servers alone:
 
-| Agent | MCP config it writes | Also |
-|---|---|---|
-| Claude Code | `.mcp.json` | `CLAUDE.md` + `AGENTS.md` block |
-| Gemini CLI | `.gemini/settings.json` | `AGENTS.md` block |
-| Codex CLI | `.codex/config.toml` | `AGENTS.md` block |
-| GitHub Copilot | `.vscode/mcp.json` | `AGENTS.md` block |
-| Kilo / Cline | `.kilo/kilo.json` | `AGENTS.md` block |
-| Cursor | `.cursor/mcp.json` | `.cursor/rules/ddflow.mdc`, always applied |
+**22 agents are supported.** The full table, with what each one gets, is in
+[Wiring it into your agent](#wiring-it-into-your-agent).
 
 It also copies the driver to `docs/ddflow/drivers/`, and installs the pre-commit hook
 that enforces claim-before-you-edit.
@@ -354,7 +349,8 @@ how, and a second copy of that would drift from the one the model actually reads
 ```sh
 uv tool install ddflow-mcp        # or: pipx install ddflow-mcp
 cd /path/to/your/project
-ddflow adopt --agents claude,gemini,codex,copilot,kilo,cursor
+ddflow adopt            # every supported agent
+ddflow adopt --agents claude,cursor,vscode,kimi   # or name the ones you use
 ```
 
 `adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
@@ -784,14 +780,79 @@ install = "cargo install my-linter"
 `ddflow adopt --agents claude,cursor,codex` writes everything below. This table is what
 it writes, so you can check it or do it by hand.
 
-| Agent | MCP config it writes | Rules file it writes |
+| Agent | `--agents` | MCP config it writes | Rules |
+|---|---|---|---|
+| **Claude Code** | `claude` | `.mcp.json` | `CLAUDE.md` + `AGENTS.md` |
+| **Gemini CLI** | `gemini` | `.gemini/settings.json` | `AGENTS.md` |
+| **Codex CLI** | `codex` | `.codex/config.toml` | `AGENTS.md` |
+| **GitHub Copilot (CLI + cloud)** | `copilot` | `.github/mcp.json` | `AGENTS.md` |
+| **VS Code (any agent)** | `vscode` | `.vscode/mcp.json` | `AGENTS.md` |
+| **Kilo Code / Roo** | `kilo` | `.kilo/kilo.json` | `AGENTS.md` |
+| **Cursor** | `cursor` | `.cursor/mcp.json` | `.cursor/rules/ddflow.mdc` *+ `AGENTS.md`* |
+| **Kimi Code CLI** | `kimi` | `.kimi-code/mcp.json` | `AGENTS.md` |
+| **opencode** | `opencode` | `opencode.json` | `AGENTS.md` |
+| **ZCode (GLM / Zhipu)** | `glm` | `.zcode/config.json` | `AGENTS.md` |
+| **Qwen Code CLI** | `qwen` | `.qwen/settings.json` | `AGENTS.md` + pointer in `QWEN.md` |
+| **Google Antigravity** | `antigravity` | `.agents/mcp_config.json` | `AGENTS.md` |
+| **Devin CLI** | `devin` | `.devin/mcp_config.json` | `AGENTS.md` |
+| **Qodo Command** | `qodo` | `mcp.json` | `AGENTS.md` |
+| **Tabnine** | `tabnine` | `.tabnine/agent/settings.json` | `AGENTS.md` + pointer in `.tabnine/guidelines/` |
+
+**7 more are supported with no MCP file to write** — a *verified* absence, not an
+unresearched gap. `adopt` writes the delta doc and the `AGENTS.md` block and names the one
+manual step. Inventing a path would be worse: ddflow would write a file the agent never
+reads, and you would believe it was wired up.
+
+| Agent | `--agents` | Add the server here by hand | Rules |
+|---|---|---|---|
+| **Aider** | `aider` | no MCP client support at all — drive it from the CLI | `AGENTS.md`, loaded via `read:` in `.aider.conf.yml` |
+| **Cline** | `cline` | global settings only; add via its MCP Servers panel | `AGENTS.md` + pointer in `.clinerules/` |
+| **Windsurf / Cascade** | `windsurf` | global `~/.config/devin/mcp_config.json` | `AGENTS.md` |
+| **Replit Agent** | `replit` | web UI only, remote servers by URL — use the CLI here | `AGENTS.md` + pointer in `replit.md` |
+| **OpenHands** | `openhands` | *Settings → MCP* (its `config.toml` form is dev-only) | `AGENTS.md` |
+| **Goose** | `goose` | user YAML `~/.config/goose/config.yaml`, under `extensions:` | `AGENTS.md` |
+| **Sourcegraph Cody** | `cody` | the editor's `settings.json`, key `cody.mcpServers` | `AGENTS.md`  ⚠ its own convention is undocumented |
+
+### One set of rules, every agent
+
+`AGENTS.md` is the cross-agent convention and most of the 22 read it. **Seven do not read
+it first, or at all**, so `adopt` writes the same managed block into their own surface too:
+
+| Agent | Its own surface | Why `AGENTS.md` alone is not enough |
 |---|---|---|
-| **Claude Code** | `.mcp.json` | `AGENTS.md` |
-| **Cursor** | `.cursor/mcp.json` | `.cursor/rules/ddflow.mdc` *(plus `AGENTS.md`)* |
-| **Codex CLI** | `.codex/config.toml` | `AGENTS.md` |
-| **Gemini CLI** | `.gemini/settings.json` | `AGENTS.md` |
-| **GitHub Copilot** | `.vscode/mcp.json` | `AGENTS.md` |
-| **Kilo / Cline** | `.kilo/kilo.json` | `AGENTS.md` |
+| Cursor | `.cursor/rules/ddflow.mdc` | project rules **outrank** `AGENTS.md` |
+| Qwen Code | `QWEN.md` | `QWEN.md` is its DEFAULT context file |
+| Cline | `.clinerules/ddflow.md` | reads `.clinerules/`, not `AGENTS.md` |
+| Tabnine | `.tabnine/guidelines/ddflow.md` | reads `.tabnine/guidelines/*.md` |
+| Replit | `replit.md` | its own root-level convention |
+| Goose | `.goosehints` | `CONTEXT_FILE_NAMES` is configurable |
+| Aider | `.aider.conf.yml` `read:` | discovers **nothing** automatically |
+
+**The rules are inlined, not pointed at.** A one-line "see `AGENTS.md`" stub was the
+obvious design, and ddflow's own notes had already refuted it: *a link is only followed if
+the agent chooses to follow it*. A rule that binds only when the model feels like opening a
+file is not an enforced rule.
+
+That means several copies of one text, and the answer is that **a check owns them**: one
+generator, a managed `DDFLOW:BEGIN`/`END` block in each, and `ddflow doctor` comparing every
+copy against the generator. Five kinds of break are reported and each fails `doctor`:
+
+```console
+$ ddflow doctor
+note:    QWEN.md's ddflow section is from an older version and has drifted
+note:    .clinerules/ddflow.md exists but its ddflow section was removed
+PROBLEM: .goosehints does not exist — the agent has no project rules at all
+PROBLEM: .cursor/rules/ddflow.mdc exists but does not bind: `alwaysApply` is not
+         true, so the agent may never load it
+PROBLEM: .aider.conf.yml exists but does not bind: it does not list `AGENTS.md`
+         under `read:`, and Aider loads no instruction file it was not told to load
+```
+
+Files the project already owns — `QWEN.md`, `replit.md`, `.goosehints` — get a block
+**merged into** them; your own content stays. Aider's `read:` list is extended, not
+replaced. Adopting is idempotent: re-running never appends a second block.
+
+Every other agent reads `AGENTS.md` directly, which is the point of it being canonical.
 
 Cursor gets its own rules file because **its precedence puts project rules above
 `AGENTS.md`** — writing only `AGENTS.md` there would be writing to a file the agent

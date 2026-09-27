@@ -154,6 +154,91 @@ that it does not reproduce the source.
 
 ---
 
+## R15 — What config file does each coding agent actually read? (2026-09-27)
+
+**Claim.** ddflow can register itself automatically in every popular coding agent, so
+adopting a project takes one command per agent.
+
+**Falsifier.** An agent whose MCP config path or JSON shape differs from the one ddflow
+writes — because a wrong key is *valid JSON the agent silently ignores*, which is
+indistinguishable from success at every layer ddflow can see.
+
+**Probe.** Read each product's OWN documentation, fetched rather than summarised, for
+sixteen agents. Budget: ≤2h, no GPU. Four parallel searcher subagents; this synthesis and
+the verification are separate, per §Research-workflow rule 7.
+
+**Verdict: CONFIRMED in weakened form.** 15 of 22 agents have a project-level MCP config
+file ddflow can write. **7 do not, and that is a verified absence rather than a gap.**
+Five distinct JSON shapes are in use, and three of them are NOT the common `mcpServers`
+form:
+
+| shape | who | structure |
+|---|---|---|
+| `mcpServers` | Claude, Gemini, Cursor, Kilo, Kimi, Qwen, Antigravity, Devin, Qodo, Tabnine | `{"mcpServers": {"ddflow": {command, args}}}` |
+| `servers` | **VS Code** | `{"servers": {"ddflow": {"type": "stdio", ...}}}` |
+| `mcpServers` + `type`/`tools` | **Copilot CLI** | `type: "local"`, and `tools` is an ALLOWLIST |
+| `mcp` → `servers` | **ZCode (GLM)** | nested one level deeper |
+| `mcp` + array command | **opencode** | `command` is ONE array including the arguments |
+
+**Three findings worth more than the table.**
+
+1. **A search snippet is a pointer, and it was wrong.** Secondary write-ups state that
+   Kimi Code reads a repo-root `.mcp.json` "same as Claude Code". Its official docs say
+   the project config is `.kimi-code/mcp.json`. Had the snippet been trusted, ddflow would
+   have written Claude's file and reported success.
+2. **`.vscode/mcp.json` is VS Code's file, not Copilot's** — ddflow had it registered
+   under `copilot`, conflating an editor with a vendor. Copilot's own surfaces are the CLI
+   (`.github/mcp.json`, committed) and the cloud coding agent (repo *Settings*, no file at
+   all). They are now separate targets, `vscode` and `copilot`.
+3. **Windsurf is Devin Desktop.** `docs.windsurf.com` 307-redirects to `docs.devin.ai`
+   after the Cognition acquisition, and the current page states a **global config only** —
+   contradicting several third-party pages that still name
+   `~/.codeium/windsurf/mcp_config.json`. Recorded as `SHAPE_NONE`, not guessed.
+
+**The test that mattered.** The first version asserted a round trip: write with
+`place_server`, read back with `get_server`. Both go through one helper, so the test proved
+the writer and reader agree with *each other* — which they always will. Four planted
+mutations (VS Code given `mcpServers`, opencode given the common form, ZCode's nesting
+flattened, Copilot's `tools` dropped) left it **green**. Replaced with `DOCUMENTED_SHAPES`
+in `tests/test_adopt.py`: the expected JSON written out **literally**, as the external
+contract it is. All five mutations now fail. *Parity is not correctness — the fixture has
+to come from outside the code it checks.*
+
+**Instruction surfaces — the second half, and a design REFUTED before it shipped.**
+
+Nine of the 22 read something other than `AGENTS.md` first. The obvious fix is a one-line
+pointer stub in each native surface, and it is wrong: ddflow's own delta doc already
+recorded *"a link is only followed if the agent chooses to follow it"*
+(`templates/drivers/deltas/kilo-cline.md`). **REFUTED without a new probe — the evidence was
+already in the repository**, which is the cheapest rung of all and the one I nearly skipped
+by reasoning forward from "duplication is bad" instead of checking what had been learned.
+
+So the block is **inlined** into all seven surfaces, and the duplication is owned by a
+check: one generator (`project_section`), a managed block per surface, `rules_status()`
+comparing each against it, `doctor` failing on drift. Probed across five break modes — an
+edited block, stripped markers, a deleted file, a Cursor rule set to `alwaysApply: false`,
+and an `.aider.conf.yml` that stopped listing `AGENTS.md` — all five reported, `doctor`
+exit 1. Eight mutations verified in `tests/test_unified_rules.py`.
+
+Two findings from building it. **Aider is the one agent where doing nothing is silent total
+failure**: it discovers no instruction file, so without a `read:` entry the rules are in the
+repository and invisible. And **a substring assertion is not a semantic one** — appending a
+second `read:` key leaves both filenames in the file while YAML resolves duplicates to the
+last, so the operator's entry is present in the text and gone from the parsed config; the
+test now counts the keys and parses the list.
+
+**What remains per-agent.** Nine of the 22 read something other than
+`AGENTS.md` first — `QWEN.md`, `.clinerules/`, `.tabnine/guidelines/`, `replit.md`,
+`.goosehints`, `.cursor/rules/*.mdc`, Aider's `read:` list — and Cody's is undocumented.
+ddflow writes `AGENTS.md` plus a native rule for Cursor only, so for the rest the delta doc
+asks the operator to add a pointer by hand. That is prose where it should be a generated,
+drift-checked artefact; filed as **B170**.
+
+**Sources.** Every path and shape above traces to a fetched official page; the per-agent
+URLs are in the four research transcripts and quoted in each
+`ddflow/templates/drivers/deltas/*.md`.
+
+
 ## R3 — Is MCP sufficient to make this agent-agnostic?
 
 **Claim.** Shipping only an MCP server makes the workflow portable across agents.

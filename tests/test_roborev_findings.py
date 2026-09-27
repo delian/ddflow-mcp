@@ -196,20 +196,40 @@ def test_the_companion_reader_and_writer_agree_on_the_config_field(repo):
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
-    for agent in AGENT_TARGETS:
+    # Agents with NO project-level MCP file are exempt, and the exemption is checked
+    # rather than assumed: `register` must REFUSE and say so, not silently write nothing.
+    # Reading "nothing was written" as agreement would make this pass for an agent whose
+    # config path we simply forgot to fill in.
+    writers = [a for a, t in AGENT_TARGETS.items() if t.writes_config]
+    assert len(writers) >= 15, f"only {len(writers)} agents write a config; did the registry break?"
+    for agent in writers:
         CO.register(repo, comp, agent)
         assert agent in CO.registered_in(repo, comp.id), (
             f"register() wrote {comp.id} for {agent} somewhere registered_in() does not look"
         )
+    for agent, target in AGENT_TARGETS.items():
+        if target.writes_config:
+            continue
+        outcome, message = CO.register(repo, comp, agent)
+        assert outcome == "refused", f"{agent} has no project config but register said {outcome!r}"
+        assert "no project-level MCP config" in message, message
+        assert agent not in CO.registered_in(repo, comp.id)
 
 
-def test_copilot_gets_the_field_name_vs_code_actually_reads(repo):
+def test_each_agent_gets_the_field_name_it_actually_reads(repo):
     """Agreement between our reader and our writer is necessary, not sufficient.
 
     The property test above passes if BOTH sides are wrong in the same way, which is
-    exactly what the obvious mutation does. This pins the external contract: VS Code /
-    Copilot keys MCP servers under `servers`, everyone else under `mcpServers`, and
-    that is a fact about their config format rather than a choice of ours.
+    exactly what the obvious mutation does. This pins the EXTERNAL contract, which is a
+    fact about each product's config format rather than a choice of ours.
+
+    This test used to be named `test_copilot_gets_the_field_name_vs_code_actually_reads`
+    and asserted that `copilot` writes `servers` into `.vscode/mcp.json`. Both halves were
+    the same conflation: `.vscode/mcp.json` is **VS Code's** file, which any VS Code agent
+    reads, and GitHub Copilot's own surfaces are the CLI's `.github/mcp.json` (keyed
+    `mcpServers`, entries carrying `type: "local"`) and a cloud agent configured in
+    repository settings with no file at all. R15 has the doc links. The premise changed;
+    the point did not.
     """
     import json as _json
 
@@ -217,16 +237,29 @@ def test_copilot_gets_the_field_name_vs_code_actually_reads(repo):
 
     run_cli(repo, "init")
     comp = next(c for c in CO.load(repo) if c.id == "context7")
-    CO.register(repo, comp, "copilot")
-    CO.register(repo, comp, "claude")
+    for agent in ("vscode", "copilot", "claude", "opencode", "glm"):
+        CO.register(repo, comp, agent)
 
-    copilot = _json.loads((repo / ".vscode" / "mcp.json").read_text())
-    assert comp.id in copilot.get("servers", {}), copilot
-    assert "mcpServers" not in copilot, f"a second, dead block: {copilot}"
+    vscode = _json.loads((repo / ".vscode" / "mcp.json").read_text())
+    assert comp.id in vscode.get("servers", {}), vscode
+    assert "mcpServers" not in vscode, f"a second, dead block: {vscode}"
+
+    copilot = _json.loads((repo / ".github" / "mcp.json").read_text())
+    assert comp.id in copilot.get("mcpServers", {}), copilot
+    assert "servers" not in copilot, f"a second, dead block: {copilot}"
 
     claude = _json.loads((repo / ".mcp.json").read_text())
     assert comp.id in claude.get("mcpServers", {}), claude
     assert "servers" not in claude, f"a second, dead block: {claude}"
+
+    # The two shapes that nest differently, which a `servers`-vs-`mcpServers` check cannot
+    # see at all.
+    oc = _json.loads((repo / "opencode.json").read_text())
+    assert comp.id in oc.get("mcp", {}), oc
+    assert isinstance(oc["mcp"][comp.id]["command"], list), "opencode needs one command array"
+
+    glm = _json.loads((repo / ".zcode" / "config.json").read_text())
+    assert comp.id in glm.get("mcp", {}).get("servers", {}), glm
 
 
 # -- the architecture pass: two concrete defects --------------------------------------

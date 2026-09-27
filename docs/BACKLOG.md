@@ -222,6 +222,26 @@ closes an item mechanically and `ddflow import --verify` reports exactly this cl
   100k — growing 5.3x across a 5x span, i.e. still linear in the LOG, not in the tail. Wanted: an incrementally-maintained sorted order.
   *Successor to B86 alongside B166.*
 
+- **B170 — the instruction surface is per-agent prose where it should be generated.
+  ✅ CLOSED.** One canonical block is now inlined into all seven native surfaces
+  (`.cursor/rules/ddflow.mdc`, `QWEN.md`, `.clinerules/ddflow.md`,
+  `.tabnine/guidelines/ddflow.md`, `replit.md`, `.goosehints`, and Aider's `read:` list),
+  each in a managed block, all compared against one generator by `rules_status()` and
+  reported by `doctor`. The POINTER design was refuted by evidence already in the repo — *a
+  link is only followed if the agent chooses to follow it*. See R15 and
+  `tests/test_unified_rules.py` (13 tests, 8 mutations).
+  Nine of the 22 supported agents read something other than `AGENTS.md` first (`QWEN.md`,
+  `.clinerules/`, `.tabnine/guidelines/`, `replit.md`, `.goosehints`,
+  `.cursor/rules/*.mdc`, Aider's `read:` list; Cody's is undocumented). ddflow writes
+  `AGENTS.md` plus a native rule for Cursor only, and every other delta doc *asks the
+  operator* to add a one-line pointer by hand. So the single-source claim holds only for
+  the agents whose native surface ddflow happens to write, and nothing detects a pointer
+  that was never added or that drifted. Wanted: ONE canonical managed block, a GENERATED
+  pointer stub per native surface, and `rules_status()` generalised from Cursor to all of
+  them so `doctor` reports drift. *Found while adding sixteen agents (R15): the phrase
+  "add a pointer rather than a second copy, which would drift" appears in nine delta docs,
+  which is the tell that it should be mechanism rather than advice.*
+
 - **B7 — ddflow does not dogfood itself.** This backlog should be an ddflow queue, and
   this project's own development should run through its own gates. The reason it does
   not yet is bootstrapping order, not principle.

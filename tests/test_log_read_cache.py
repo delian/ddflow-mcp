@@ -398,44 +398,97 @@ def test_the_config_knob_is_honoured_by_the_real_entry_points(repo):
     seed = EventLog(repo, "a1", log_cfg=LogConfig(reuse_parsed=False))
     seed.append("task.added", "T1", {"title": "x", "kind": "task"})
 
+    def _footer() -> None:
+        """The MCP obligation footer, the third shipped site that built a bare EventLog.
+
+        Added because roborev mutation-tested the commit that fixed it and found only the
+        AST ratchet went red — so the commit message's claim that "both the behavioural
+        test and the ratchet go red" was true for the two API paths and false for this one.
+        A static guard cannot see a `log_cfg` threaded to the wrong object.
+        """
+        from ddflow.surfaces import mcp as M
+
+        server = M.Server(repo)
+        server._calls_since_footer = 10_000
+        server._last_footer_at = 0.0
+        M._obligation_footer(server)
+
     for label, call in (
         ("api.loops", lambda: reporting.loops(repo)),
         ("api.progress", lambda: reporting.progress(repo)),
+        ("mcp obligation footer", _footer),
     ):
         clear_parse_cache()
         call()
         assert not L._PARSE_CACHE, f"{label} ignored [log] reuse_parsed = false"
 
 
+def event_log_calls_without_config(src: str) -> list[int]:
+    """Line numbers of `EventLog(...)` constructions in ``src`` that omit `log_cfg`.
+
+    Injectable so the detector can be SHOWN to work. A scan whose only input is the live
+    tree passes identically once it has silently stopped looking — which is exactly what
+    happened here: the first version matched only a bare `ast.Name`, so mutating the name
+    it compares against changed nothing, because no qualified call existed to miss.
+    """
+    import ast
+
+    out = []
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.Call):
+            continue
+        # `EventLog(...)` and `L.EventLog(...)` alike. roborev found the Attribute form
+        # unguarded on 844bad2 while the docstring promised "every call site".
+        func = node.func
+        if isinstance(func, ast.Name):
+            called = func.id
+        elif isinstance(func, ast.Attribute):
+            called = func.attr
+        else:
+            continue
+        if called != "EventLog":
+            continue
+        if any(k.arg == "log_cfg" for k in node.keywords):
+            continue
+        out.append(node.lineno)
+    return out
+
+
+@pytest.mark.parametrize(
+    ("src", "offends"),
+    [
+        ("EventLog(repo)", True),
+        ("L.EventLog(repo)", True),
+        ("infra_log.EventLog(repo, agent)", True),
+        ('EventLog(repo, "a1", lock_timeout_s=5)', True),
+        ("EventLog(repo, log_cfg=cfg.log)", False),
+        ("L.EventLog(repo, log_cfg=cfg.log)", False),
+        ('EventLog(repo, "a1", log_cfg=LogConfig(reuse_parsed=False))', False),
+        ("SomethingElse(repo)", False),
+    ],
+)
+def test_the_call_site_detector_sees_both_call_forms(src, offends):
+    assert bool(event_log_calls_without_config(src)) is offends, src
+
+
 def test_every_event_log_call_site_passes_the_log_config():
     """A ratchet, because threading a knob through N call sites is how knobs get dropped.
 
-    Three of the eight sites were missed on the first pass and the behavioural test above
-    could not see them. This one names the offender directly, and the allowlist may only
-    shrink.
+    Three of the eight sites were missed on the first pass and the behavioural test could
+    not see them. This one names the offender directly, and the allowlist may only shrink.
     """
-    import ast
     import pathlib as _p
 
     #: Call sites that legitimately take no `log_cfg`, each with its reason.
-    allowed: dict[str, str] = {
-        # The default IS the config default (`LogConfig()`), and a test that wants the
-        # other setting passes it explicitly.
-    }
+    allowed: dict[str, str] = {}
 
     pkg = _p.Path(__file__).resolve().parents[1] / "ddflow"
     offenders = []
     for f in sorted(pkg.rglob("*.py")):
         if "__pycache__" in str(f):
             continue
-        for node in ast.walk(ast.parse(f.read_text("utf-8"), filename=str(f))):
-            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
-                continue
-            if node.func.id != "EventLog":
-                continue
-            if any(k.arg == "log_cfg" for k in node.keywords):
-                continue
-            where = f"{f.relative_to(pkg.parent)}:{node.lineno}"
+        for line in event_log_calls_without_config(f.read_text("utf-8")):
+            where = f"{f.relative_to(pkg.parent)}:{line}"
             if where not in allowed:
                 offenders.append(where)
     assert not offenders, (
