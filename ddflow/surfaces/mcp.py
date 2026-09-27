@@ -1789,12 +1789,19 @@ TOOLS: dict[str, dict[str, Any]] = {
             "job": ("string", "Job id.", True),
             "exit_code": ("integer", "Override the recorded exit code.", False),
             "note": ("string", "What came of it: metrics, where the output is.", False),
+            "force": (
+                "boolean",
+                "End a job that runs on ANOTHER host, after checking it there. Without it "
+                "such a job is refused: 'could not look' is not 'not running'.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().job_end(
             repo,
             a["job"],
             exit_code=a.get("exit_code"),
             note=a.get("note", "") or "",
+            force=bool(a.get("force")),
             agent=agent,
         ),
         "payload": ("id", "exit_code"),

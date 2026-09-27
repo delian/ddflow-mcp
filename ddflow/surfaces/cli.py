@@ -458,6 +458,9 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     je.add_argument("job")
     je.add_argument("--exit-code", type=int, default=None, help="default: the one its log recorded")
     je.add_argument("--note", default="")
+    je.add_argument(
+        "--force", action="store_true", help="end a job on another host you have checked there"
+    )
     je.set_defaults(fn=cmd_job)
 
     me = s.add_parser(

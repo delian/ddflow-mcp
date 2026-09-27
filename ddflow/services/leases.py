@@ -74,6 +74,7 @@ def _renew_in_place(
     branch: str,
     globs: list[str] | None,
     note: str,
+    resources: list[str] | None = None,
 ) -> Lease:
     """Re-acquire by the current holder: a renewal that CARRIES THROUGH attachments.
 
@@ -91,12 +92,18 @@ def _renew_in_place(
         upd["globs"] = list(globs)
     if note:
         upd["note"] = note
+    if resources is not None:
+        # Carried like globs. Dropped, a re-claim with `--resources gpu:8` exited 0
+        # while the lease kept its old reservation (roborev 828).
+        upd["resources"] = list(resources)
     log.append("lease.renewed", item_id, upd)
     existing.renewed_at = now
     existing.worktree = worktree or existing.worktree
     existing.branch = branch or existing.branch
     if globs is not None:
         existing.globs = list(globs)
+    if resources is not None:
+        existing.resources = list(resources)
     return existing
 
 
@@ -178,7 +185,7 @@ def acquire(
         if existing and not existing.expired(now, cfg.lease.grace_s):
             if existing.holder == holder:
                 return _renew_in_place(
-                    log, existing, item_id, holder, now, worktree, branch, globs, note
+                    log, existing, item_id, holder, now, worktree, branch, globs, note, resources
                 )
             raise LeaseError(
                 f"{item_id} is held by {existing.holder} for another "
@@ -247,7 +254,9 @@ def acquire(
                     exclude=item_id,
                 )
             except ValueError as exc:
-                short = str(exc)
+                # A CONFIG or declaration error, not a conflict: "wait for one to be
+                # released" cannot help (roborev 828).
+                raise LeaseError(f"{item_id}: {exc}", item=item_id) from exc
             if short:
                 raise LeaseError(
                     f"{item_id} {short}. Wait for one to be released, or take something "

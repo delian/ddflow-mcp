@@ -151,3 +151,42 @@ def test_a_job_can_only_be_started_under_the_callers_own_claim(repo):
     run_cli(repo, "claim", "TRAIN", "--no-worktree", agent="alice")
     code, _o, _e = run_cli(repo, "job", "run", "TRAIN", "sleep 5", agent="bob")
     assert code == REFUSED, "someone else's claim let bob start a job"
+
+
+# -- roborev 828 / 833 ------------------------------------------------------------------
+
+
+def test_job_add_refuses_without_the_callers_claim_too(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    p = subprocess.Popen(["sleep", "5"])
+    try:
+        code, _o, _e = run_cli(repo, "job", "add", "T", "--pid", str(p.pid))
+        assert code == REFUSED, "job add registered a process under nobody's claim"
+    finally:
+        p.kill()
+        p.wait()
+
+
+def test_the_refusal_says_WAIT_when_someone_else_holds_the_item(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "claim", "T", "--no-worktree", agent="alice")
+    code, out, err = run_cli(repo, "job", "run", "T", "sleep 1", agent="bob")
+    assert code == REFUSED
+    assert "held by alice" in out + err and "claim T` first" not in out + err
+
+
+def test_a_job_on_another_host_is_not_ended_without_force(repo):
+    from ddflow.infra.log import EventLog
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    EventLog(repo, "x").append(
+        "job.started", "J-remote", {"item": "T", "pid": 4242, "host": "other-box", "log": ""}
+    )
+    code, _o, _e = run_cli(repo, "job", "end", "J-remote")
+    assert code == REFUSED, "'could not look' was recorded as 'ended'"
+    code, out, err = run_cli(repo, "job", "end", "J-remote", "--force")
+    assert code == OK, err
+    assert "exit unknown" in out, "a job with no exit code printed 'exit None'"

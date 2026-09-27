@@ -422,11 +422,23 @@ def parse_resources(specs: list[str]) -> dict[str, int]:
 
 
 def capacities(cfg: Config) -> dict[str, int]:
-    """`[schedule] resources` as a dict. Undeclared resources are exclusive (capacity 1)."""
+    """`[schedule] resources` as a dict. Undeclared resources are exclusive (capacity 1).
+
+    Raises ValueError naming the knob for an entry that is not `name=integer`: written
+    in the ITEM syntax (`gpu:8`) it became a resource literally named "gpu:8" and left
+    `gpu` at capacity 1, and `mem=64GB` raised an int() error that the claim then
+    reported as a resource conflict (roborev 828).
+    """
     out: dict[str, int] = {}
     for spec in cfg.schedule.resources:
-        name, _, cap = spec.partition("=")
-        out[name.strip()] = int(cap) if cap.strip() else 1
+        name, sep, cap = spec.partition("=")
+        name, cap = name.strip(), cap.strip()
+        if not sep or not name or ":" in name or not cap.isdigit() or int(cap) < 1:
+            raise ValueError(
+                f"[schedule] resources entry {spec!r} is not `name=capacity` with a "
+                f'positive integer capacity (e.g. "gpu=8")'
+            )
+        out[name] = int(cap)
     return out
 
 

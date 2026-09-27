@@ -40,18 +40,27 @@ def _not_held(log, cfg, it) -> O.Outcome | None:
     A job is where the RESOURCES are actually used, so starting one must pass through
     the claim that checked them. Without this an agent refused `claim` for want of GPUs
     could `job run` the training anyway -- found by driving the MCP surface end to end.
+
+    "Live" under the same window `claim` uses (ttl + grace), and the remedy depends on
+    whose lease it is: telling an agent to `claim` an item someone else holds sends it
+    into a second refusal (roborev 833).
     """
     now = time.time()
     lease = it.lease
-    if lease and lease.holder == log.agent_id and not lease.expired(now, cfg.lease.grace_s):
+    live = lease is not None and not lease.expired(now, cfg.lease.grace_s)
+    if live and lease.holder == log.agent_id:
         return None
-    who = f" (held by {lease.holder})" if lease and not lease.expired(now, 0) else ""
-    return O.refused(
-        "job.started",
-        f"{it.id} is not claimed by you{who}. `ddflow claim {it.id}` first: the claim is "
-        f"what checks its files and resources against everyone else's.",
-        id="",
-    )
+    if live:
+        why = (
+            f"{it.id} is held by {lease.holder}, not you. Wait for it to be released, or "
+            f"take other work -- a job runs under the claim of whoever does the work."
+        )
+    else:
+        why = (
+            f"{it.id} is not claimed by you. `ddflow claim {it.id}` first: the claim is "
+            f"what checks its files and resources against everyone else's."
+        )
+    return O.refused("job.started", why, id="")
 
 
 def _record(log, item: str, command: str, pid: int, log_path: str, cwd: str) -> str:
@@ -151,7 +160,13 @@ def job_list(
 
 
 def job_end(
-    repo: Path, job: str, *, exit_code: int | None = None, note: str = "", agent: str = ""
+    repo: Path,
+    job: str,
+    *,
+    exit_code: int | None = None,
+    note: str = "",
+    force: bool = False,
+    agent: str = "",
 ) -> O.Outcome:
     """Record how a job ended. The exit code defaults to the one its log recorded.
 
@@ -171,6 +186,15 @@ def job_end(
         return O.refused(
             "job.ended",
             f"{job} is still running ({s.detail}). Stop it first, or wait.",
+            id=job,
+        )
+    if s.state == "elsewhere" and not force:
+        # "Could not look" is not "not running". Ended from another host, a run still
+        # writing drops out of every brief and invites a restart (roborev 828).
+        return O.refused(
+            "job.ended",
+            f"{job} runs on {j.host}, which cannot be checked from here. Check it there, "
+            f"then pass force if it has really ended.",
             id=job,
         )
     code = exit_code if exit_code is not None else s.exit_code

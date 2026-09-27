@@ -598,6 +598,8 @@ def _h_lease_renewed(st: State, ev: Event) -> None:
         it.branch = d["branch"] or it.branch
     if "globs" in d:
         it.lease.globs = list(d["globs"])
+    if "resources" in d:
+        it.lease.resources = list(d["resources"])
 
 
 def _h_lease_gone(st: State, ev: Event) -> None:

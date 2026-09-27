@@ -98,10 +98,17 @@ def cmd_job(a, c: Ctx) -> int:
         return out.exit
     if a.job_cmd == "end":
         out = AJ.job_end(
-            c.repo, a.job, exit_code=a.exit_code, note=a.note or "", agent=c.requested_agent
+            c.repo,
+            a.job,
+            exit_code=a.exit_code,
+            note=a.note or "",
+            force=a.force,
+            agent=c.requested_agent,
         )
+        code = out.data.get("exit_code")
+        shown = "unknown" if code is None else code
         c.out(
-            out.reason if out.exit else f"job {a.job} ended (exit {out.data['exit_code']})",
+            out.reason if out.exit else f"job {a.job} ended (exit {shown})",
             out.body(("id", "exit_code")),
         )
         return out.exit

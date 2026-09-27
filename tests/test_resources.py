@@ -101,3 +101,27 @@ def test_resources_are_read_from_the_plan_file(repo):
     assert code == OK, err
     _c, out, _e = run_cli(repo, "--json", "show", "T.1")
     assert json.loads(out)["resources"] == ["gpu:8"]
+
+
+# -- roborev 828 ------------------------------------------------------------------------
+
+
+def test_re_claiming_with_different_resources_updates_the_reservation(repo):
+    """The renewal path carried globs and dropped resources: `--resources gpu:8` on a
+    held item exited 0 while the lease kept its old reservation."""
+    _setup(repo)
+    run_cli(repo, "claim", "TRAIN", "--no-worktree", "--resources", "gpu:2", agent="alice")
+    code, _o, err = run_cli(
+        repo, "claim", "TRAIN", "--no-worktree", "--resources", "gpu:8", agent="alice"
+    )
+    assert code == OK, err
+    code, _o, err = run_cli(repo, "claim", "EVAL", "--no-worktree", agent="bob")
+    assert code == REFUSED, "the old 2-GPU reservation was still the one counted"
+
+
+def test_a_malformed_capacity_is_named_as_a_config_error_not_a_conflict(repo):
+    _setup(repo, caps='["gpu:8"]')
+    code, _o, err = run_cli(repo, "claim", "TRAIN", "--no-worktree")
+    assert code == REFUSED
+    assert "[schedule] resources entry 'gpu:8'" in err
+    assert "Wait for one to be released" not in err
