@@ -224,7 +224,7 @@ def import_project(
         ],
         "skipped_existing": plan.skipped_existing,
         "empty_sources": plan.empty_sources,
-        "notes": plan.notes,
+        "notes": plan.notes + plan.source_notes,
         "applied": False,
         "_render": {"plan": plan, "preview_rows": cfg.importer.preview_rows},
     }

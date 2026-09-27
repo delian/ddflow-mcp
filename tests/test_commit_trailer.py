@@ -96,3 +96,47 @@ def test_a_foreign_commit_msg_hook_is_left_alone_and_the_line_to_add_is_given(re
     assert "NOT INSTALLED" in out and "hooks check-msg" in out
     assert "pre-commit framework" in (hooks / "commit-msg").read_text()
     assert "DDFLOW-HOOK" in (hooks / "pre-commit").read_text()
+
+
+# -- roborev 827 ------------------------------------------------------------------------
+
+
+def test_a_trailer_in_the_BODY_is_not_a_trailer(repo):
+    """Git reads trailers only from the final paragraph, so `git log --format=
+    '%(trailers:key=Item)'` -- the reconciliation this check serves -- never sees one in
+    the body. Accepting it certified a commit the audit would miss."""
+    _setup(repo, "[enforce]\nrequire_item_trailer = true\n")
+    body_only = _commit(repo, "a.txt", "subject\n\nItem: T1\n\nmore body after")
+    assert body_only.returncode != 0, "a body line was accepted as a trailer"
+    ok = _commit(repo, "b.txt", "subject\n\nbody\n\nItem: T1")
+    assert ok.returncode == 0, ok.stderr
+    got = subprocess.run(
+        ["git", "-C", str(repo), "log", "-1", "--format=%(trailers:key=Item,valueonly)"],
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    assert got == "T1", "the check and git's own reading disagree"
+
+
+def test_a_refused_install_writes_NOTHING(repo):
+    run_cli(repo, "init")
+    hooks = repo / ".git" / "hooks"
+    hooks.mkdir(exist_ok=True)
+    (hooks / "pre-commit").write_text("#!/bin/sh\nexit 0\n")
+    code, out, err = run_cli(repo, "hooks", "install")
+    assert code != 0 and "REFUSED" in out + err
+    assert not (hooks / "commit-msg").exists(), "a refused install wrote half of itself"
+
+
+def test_status_says_when_a_required_trailer_has_no_hook_checking_it(repo):
+    import json as _json
+
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text("[enforce]\nrequire_item_trailer = true\n")
+    _c, out, _e = run_cli(repo, "--json", "hooks", "status")
+    assert _json.loads(out)["trailer_hook"] is False
+    _c, out, _e = run_cli(repo, "hooks", "status")
+    assert "NOTHING checks it" in out
+    run_cli(repo, "hooks", "install")
+    _c, out, _e = run_cli(repo, "--json", "hooks", "status")
+    assert _json.loads(out)["trailer_hook"] is True

@@ -443,12 +443,29 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         session_line = (
             "not installed (`ddflow hooks install --claude` puts the brief in every session)"
         )
+    msg_hook = E.installed(repo, "commit-msg")
+    trailer_line = f"commit-msg hook: {'installed' if msg_hook else 'NOT installed'}"
+    if cfg.enforce.require_item_trailer and not msg_hook:
+        # The rule lives in the commit-msg hook now; a required trailer with no hook
+        # to check it is a rule nothing applies (roborev 827).
+        trailer_line += (
+            " -- but [enforce].require_item_trailer is ON, so NOTHING checks it. "
+            'Run `ddflow hooks install`, or add `ddflow hooks check-msg "$1"` to '
+            "your own commit-msg hook."
+        )
     message = (
         f"pre-commit hook: {'installed' if on else 'NOT installed'}\n"
         f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
+        f"{trailer_line}\n"
         f"Claude Code SessionStart hook: {session_line}"
     )
-    data = {"installed": on, "policy": mode, "session_hook": session, "message": message}
+    data = {
+        "installed": on,
+        "policy": mode,
+        "session_hook": session,
+        "trailer_hook": msg_hook,
+        "message": message,
+    }
     if on or mode == "off":
         return O.ok("hooks", **data)
     return O.nothing("hooks", message, **data)

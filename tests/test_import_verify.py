@@ -530,3 +530,15 @@ def test_a_hand_written_decision_can_carry_its_source(repo):
     )
     _code, out, _ = run_cli(repo, "--json", "decision", "show", "D1")
     assert json.loads(out)["sources"] == ["docs/adr/0009-x.md"], out
+
+
+def test_an_empty_source_is_a_finding_once_not_a_finding_AND_a_note(repo):
+    """roborev 827: the proposal's empty-source note was kept out of verify's notes by
+    matching prose case-sensitively; it is now a separate field."""
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "todo.md").write_text("# Backlog\n\n- **B7 — prose, no checkbox.**\n")
+    (repo / "docs" / "lessons.md").write_text("# L\n\n## a rule\nx\n")
+    run_cli(repo, "import", "--apply")
+    _code, data = _verify(repo)
+    assert any("yielded nothing" in f for f in data["findings"])
+    assert not any("yielded" in n.lower() for n in data["notes"]), data["notes"]

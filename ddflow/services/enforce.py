@@ -177,9 +177,15 @@ def install(repo: Path, *, force: bool = False) -> str:
     enforces leases; a refused commit-msg hook is reported with the line to add."""
     d = hooks_dir(repo)
     d.mkdir(parents=True, exist_ok=True)
-    msgs = [_install_one(d, n, t, inv, force) for n, (t, inv) in _hooks().items()]
-    text = "\n".join(msgs)
-    return text if msgs[0].startswith("REFUSED") else text.replace("REFUSED:", "NOT INSTALLED:")
+    hooks = _hooks()
+    first = _install_one(d, "pre-commit", *hooks["pre-commit"], force)
+    if first.startswith("REFUSED"):
+        # Nothing else is written when the enforcing hook is refused: reporting a
+        # failure while having installed half of it is the partial-write class `adopt`
+        # was fixed for in the same change (roborev 827).
+        return first
+    rest = [_install_one(d, n, t, inv, force) for n, (t, inv) in hooks.items() if n != "pre-commit"]
+    return "\n".join([first, *rest]).replace("REFUSED:", "NOT INSTALLED:")
 
 
 def uninstall(repo: Path) -> str:
@@ -531,11 +537,24 @@ def check_item_trailer(message: str, keys: list[str], *, merging: bool = False) 
     Called by the commit-msg hook with the message being committed -- never with
     `COMMIT_EDITMSG` from pre-commit, which is the previous commit's. A merge commit is
     exempt: it carries the trailers of the commits it merges. A `#Item:` comment line
-    does not count, because its key is `#Item`.
+    does not count, because its key is `#Item`; nor does one anywhere but the final
+    paragraph, because git does not read it as a trailer there.
     """
     if merging:
         return 0, ""
-    for ln in message.splitlines():
+    # Git's OWN trailer parser, not a line scan. Git reads trailers only from the final
+    # paragraph, so `Item: X` in the body passed a line scan while
+    # `git log --format='%(trailers:key=Item)'` -- the reconciliation this exists for --
+    # found nothing (roborev 827). A check that disagrees with the query it serves
+    # certifies commits the audit will miss.
+    parsed = P.run(
+        ["git", "interpret-trailers", "--parse"],
+        input=message,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    for ln in parsed.stdout.splitlines() if parsed.returncode == 0 else []:
         key, sep, value = ln.partition(":")
         if sep and key.strip() in keys and value.strip():
             return 0, ""

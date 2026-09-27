@@ -38,6 +38,7 @@ import socket
 import subprocess
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -789,8 +790,52 @@ def digest(text: str) -> str:
     return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=8).hexdigest()
 
 
+def _run_ticking(
+    command: str,
+    cwd: str,
+    env: dict[str, str],
+    timeout_s: float,
+    on_tick: Callable[[], None],
+    tick_s: float,
+) -> subprocess.CompletedProcess:
+    """Run a shell command to completion, calling `on_tick` every `tick_s` meanwhile.
+
+    On THIS thread. The first keep-alive for long gates renewed the lease from a
+    background thread, and the event log's parse cache and lock bookkeeping are
+    process-global and unlocked because nothing in this process was concurrent -- a
+    renewal slower than the join timeout could race the caller's own write (roborev
+    827). Polling keeps the process single-threaded. Raises TimeoutExpired like
+    `subprocess.run`, after killing the command.
+    """
+    p = P.popen(
+        command,
+        shell=True,
+        cwd=cwd,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    deadline = time.time() + timeout_s
+    while True:
+        try:
+            out, err = p.communicate(timeout=max(0.05, min(tick_s, deadline - time.time())))
+            return subprocess.CompletedProcess(command, p.returncode, out, err)
+        except subprocess.TimeoutExpired:
+            if time.time() >= deadline:
+                p.kill()
+                p.communicate()
+                raise
+            on_tick()
+
+
 def run_command_gate(
-    gdef: GateDef, cwd: Path, *, env: dict[str, str] | None = None
+    gdef: GateDef,
+    cwd: Path,
+    *,
+    env: dict[str, str] | None = None,
+    on_tick: Callable[[], None] | None = None,
+    tick_s: float = 0,
 ) -> tuple[str, dict[str, Any]]:
     """Execute a command gate. Returns (outcome, evidence).
 
@@ -849,15 +894,18 @@ def run_command_gate(
         }
         start = time.time()
         try:
-            p = P.run(
-                gdef.command,
-                shell=True,
-                cwd=str(cwd),
-                env=full_env,
-                capture_output=True,
-                text=True,
-                timeout=gdef.timeout_s,
-            )
+            if on_tick is not None and tick_s > 0:
+                p = _run_ticking(gdef.command, str(cwd), full_env, gdef.timeout_s, on_tick, tick_s)
+            else:
+                p = P.run(
+                    gdef.command,
+                    shell=True,
+                    cwd=str(cwd),
+                    env=full_env,
+                    capture_output=True,
+                    text=True,
+                    timeout=gdef.timeout_s,
+                )
         except subprocess.TimeoutExpired:
             return "unavailable", {
                 "reason": f"timed out after {gdef.timeout_s}s",

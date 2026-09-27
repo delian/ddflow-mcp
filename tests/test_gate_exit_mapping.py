@@ -96,3 +96,29 @@ def test_a_gate_run_by_someone_else_does_not_renew_a_lease_it_does_not_hold(repo
     run_cli(repo, "gate", "run", "T1", "unit_tests", agent="bystander")
     renewed = [e for e in EventLog(repo).read_all() if e.kind == "lease.renewed"]
     assert not renewed, "a bystander's gate run renewed someone else's lease"
+
+
+def test_the_lease_is_renewed_on_the_CALLERS_thread(repo, monkeypatch):
+    """roborev 827: a background heartbeat thread raced the event log's process-global,
+    unlocked parse cache. Renewal now happens between polls, on the calling thread."""
+    import threading
+
+    from ddflow import api
+    from ddflow.services import leases as L
+
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text("[lease]\nheartbeat_s = 1\n")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "sleep 2.5"\ncwd = "repo"\n'
+    )
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1", "--no-worktree", agent="worker")
+    threads = []
+    real = L.renew
+    monkeypatch.setattr(
+        L, "renew", lambda *a, **k: (threads.append(threading.current_thread()), real(*a, **k))[1]
+    )
+    out = api.gate_run(repo, "T1", "unit_tests", agent="worker")
+    assert out.data["outcome"] == "passed"
+    assert threads, "nothing renewed the lease"
+    assert set(threads) == {threading.main_thread()}, "renewed from another thread"

@@ -240,7 +240,7 @@ def cmd_hooks(a, c: Ctx) -> int:
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
-    c.out(out.data["message"], out.body(("installed", "policy", "session_hook")))
+    c.out(out.data["message"], out.body(("installed", "policy", "session_hook", "trailer_hook")))
     return out.exit
 
 

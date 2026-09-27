@@ -1370,7 +1370,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         # body. `session_hook` was ADDED deliberately with the SessionStart hook -- a
         # wire change of its own, not part of the migration this comment once guarded
         # -- and is `null` when the settings file could not be read.
-        "payload": ("installed", "policy", "session_hook"),
+        "payload": ("installed", "policy", "session_hook", "trailer_hook"),
     },
     "ddflow_doctor": {
         "description": (

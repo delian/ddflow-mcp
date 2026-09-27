@@ -20,9 +20,7 @@ Two rules here are worth reading before changing anything:
 
 from __future__ import annotations
 
-import contextlib
-import threading
-from collections.abc import Iterator
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -209,37 +207,28 @@ def _order_gate(log, cfg, st, item: str, gate: str, *, recording: bool) -> O.Out
     return ahead
 
 
-@contextlib.contextmanager
-def _lease_kept_alive(log, cfg, it) -> Iterator[None]:
-    """Renew the caller's lease on `it` every `[lease] heartbeat_s` while a gate runs.
+def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
+    """A callback renewing the caller's lease on `it`, or None if the caller holds none.
 
-    A full test suite takes longer than a lease lives (25 minutes against 1800 s, on the
-    project this was built beside), and the caller cannot heartbeat while it is blocked
-    in the call -- over MCP the server answers one request at a time. Without this the
-    lease expired DURING the gate, the item read as abandoned, and `recover` would offer
-    a live agent's work to someone else. Only a lease the caller holds is renewed.
+    A full test suite outlives a lease (25 minutes against 1800 s on the project this
+    was built beside), and over MCP the caller cannot heartbeat while it is blocked in
+    the call. Called between polls of the running command, on this thread -- see
+    `gates._run_ticking` for why not a background thread. A failed renewal must not kill
+    the gate, so it is swallowed; the lease then expires as it would have anyway.
     """
     from ..services import leases as L
 
     if not (it.lease and it.lease.holder == log.agent_id):
-        yield
-        return
-    stop = threading.Event()
+        return None
+    holder = it.lease.holder
 
-    def beat() -> None:
-        while not stop.wait(max(1, cfg.lease.heartbeat_s)):
-            try:
-                L.renew(log, it.id, it.lease.holder)
-            except Exception:
-                pass
+    def renew() -> None:
+        try:
+            L.renew(log, it.id, holder)
+        except Exception:
+            pass
 
-    t = threading.Thread(target=beat, name=f"ddflow-heartbeat-{it.id}", daemon=True)
-    t.start()
-    try:
-        yield
-    finally:
-        stop.set()
-        t.join(timeout=5)
+    return renew
 
 
 def run(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
@@ -286,8 +275,10 @@ def run(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
 
     cwd = W.load_path(repo, it.worktree) if (gdef.cwd == "worktree" and it.worktree) else repo
     log.append("gate.started", item, {"gate": gate})
-    with _lease_kept_alive(log, cfg, it):
-        result, ev = G.run_command_gate(gdef, cwd)
+    keeper = _lease_keeper(log, cfg, it)
+    result, ev = G.run_command_gate(
+        gdef, cwd, on_tick=keeper, tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0
+    )
     reason = ev.get("reason", "")
     if not reason and result != "passed":
         # Synthesised from what actually happened. The requirement that a non-pass carries

@@ -147,7 +147,7 @@ def cmd_import(a, c: Ctx) -> int:
     plan = out.data["_render"]["plan"]
     if out.exit == NOTHING:
         print(out.reason)
-        for n in plan.notes:
+        for n in plan.notes + plan.source_notes:
             print(f"  {n}")
         return NOTHING
 
@@ -170,7 +170,7 @@ def cmd_import(a, c: Ctx) -> int:
             f"(this command is safe to re-run)."
         )
         lines.append("")
-    lines += [f"  NOTE: {n}" for n in plan.notes]
+    lines += [f"  NOTE: {n}" for n in plan.notes + plan.source_notes]
     lines += [
         "",
         "  `ddflow import --apply` writes these. Before you do:",

@@ -474,6 +474,10 @@ class ImportPlan:
     empty_sources: list[str] = field(default_factory=list)
     skipped_existing: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    #: Notes about the SOURCE FILES rather than the proposal (a file that yielded
+    #: nothing). Kept apart so `verify_import`, which reports empty sources as a finding
+    #: of its own, can leave them out by field rather than by matching prose.
+    source_notes: list[str] = field(default_factory=list)
 
     def by_kind(self, kind: str) -> list[Found]:
         return [f for f in self.found if f.kind == kind]
@@ -1452,7 +1456,7 @@ def _note_withheld(
         # printed that field, so pointing `todo_globs` at a backlog written as bold
         # bullets instead of checkboxes printed a clean-looking proposal with nothing
         # from it, and the footer still said "the headings became phases".
-        plan.notes.append(
+        plan.source_notes.append(
             f"{len(plan.empty_sources)} file(s) matched a source pattern and yielded "
             f"NOTHING — usually an unusual format (a plan with no `- [ ]` checkboxes, "
             f"lessons with no headings) rather than an empty file: "
@@ -1916,11 +1920,9 @@ def verify_import(
     plan = plan_import(repo, state, max_tasks=10**9, sources=sources, archive=archive)
     r.drift = list(plan.found)
     r.empty_sources = list(plan.empty_sources)
-    # Minus the two notes this report states in its own terms: history left out, and
-    # sources that yielded nothing (`findings`).
-    r.notes.extend(
-        n for n in plan.notes if "already-ticked" not in n and "yielded NOTHING" not in n
-    )
+    # Minus the note this report states in its own terms (history left out); the
+    # empty-source note is in `plan.source_notes` and never reaches here.
+    r.notes.extend(n for n in plan.notes if "already-ticked" not in n)
     r.notes.append(
         "Dependencies that do not resolve, duplicate globs and cycles are `ddflow "
         "doctor`'s job and it reports them in its own words -- this does not repeat "
