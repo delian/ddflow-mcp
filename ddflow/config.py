@@ -351,8 +351,15 @@ class ScheduleConfig:
     empty_phase: str = "note"  # note | problem | off
     #: `name=capacity` for each physical resource items may declare.
     resources: list[str] = field(default_factory=list)
+    #: `name=path` for sibling repositories whose items `needs` may name as `name:ID`.
+    repos: list[str] = field(default_factory=list)
 
 
+_doc(
+    "schedule",
+    "repos",
+    'Sibling repositories a dependency may point into, as `name=path` (relative to this repository\'s root): ["run_nemo_run=../run_nemo_run"]. Then `needs = ["run_nemo_run:132.D"]` waits for item 132.D THERE to be done. `ddflow external sync` reads their logs and records what it observed in this one, so readiness is decided from a dated fact and never by reaching into another repository mid-decision. An unobserved external dependency is unmet.',
+)
 _doc(
     "schedule",
     "resources",

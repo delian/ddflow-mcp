@@ -92,7 +92,7 @@ from .lifecycle import merge as merge_item
 from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
-from .operations import cadence, cleanup, import_project, import_verify
+from .operations import cadence, cleanup, external_sync, import_project, import_verify
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -166,6 +166,7 @@ __all__ = [
     "decision_show",
     "decision_supersede",
     "doctor",
+    "external_sync",
     "gate_record",
     "gate_run",
     "gate_status",

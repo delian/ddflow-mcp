@@ -1695,6 +1695,18 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id",),
     },
+    "ddflow_external_sync": {
+        "description": (
+            "Observe the items in SIBLING repositories that this queue depends on "
+            "(`needs = ['run_nemo_run:132.D']`, repositories named in [schedule] repos), "
+            "and record what changed in this log. An external dependency is met only "
+            "once it has been observed done here, so run this before `ddflow_next` when "
+            "work waits on another project. Reads the other repository; never writes it."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().external_sync(repo, agent=agent),
+        "payload": "observed",
+    },
     "ddflow_job_run": {
         "description": (
             "Launch a LONG-RUNNING command for an item -- a training run, a data "

@@ -208,6 +208,16 @@ def find_cycles(
     return sorted(uniq.values())
 
 
+def is_external(dep: str) -> bool:
+    """`run_nemo_run:132.D` -- an item in a sibling repository (`[schedule] repos`).
+
+    A colon cannot occur in a local id: every writer of ids here (the importer's id
+    grammar, auto ids, the CLI) produces letters, digits, `.`, `_` and `-`.
+    """
+    repo, sep, item = dep.partition(":")
+    return bool(sep and repo and item)
+
+
 def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
     """Is one dependency satisfied? Returns (satisfied, explanation).
 
@@ -215,6 +225,16 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
     ``needs`` surfaces as a blocked item rather than as an item that silently starts
     early. Treating unknown as satisfied is the vacuous-truth trap in its purest form.
     """
+    if is_external(dep):
+        seen = state.external.get(dep)
+        if seen is None:
+            return False, (
+                f"{dep} is in another repository and has not been observed yet: "
+                f"`ddflow external sync`"
+            )
+        if seen["state"] == DONE:
+            return True, ""
+        return False, f"{dep} is {seen['state'] or 'missing'} (observed {seen['at'][:16]})"
     it = state.items.get(dep)
     if it is None or it.removed:
         if cfg.schedule.unknown_dep_policy == "block":

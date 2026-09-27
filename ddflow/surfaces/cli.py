@@ -61,7 +61,7 @@ from .commands.lifecycle import (
     cmd_remove,
     cmd_unblock,
 )
-from .commands.operations import cmd_cadence, cmd_cleanup, cmd_import
+from .commands.operations import cmd_cadence, cmd_cleanup, cmd_external, cmd_import
 from .commands.queue import cmd_phase_add, cmd_split, cmd_task_add
 from .commands.reporting import (
     cmd_board,
@@ -429,6 +429,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--check-recovery", action="store_true", default=A_LIFECYCLE.DEFAULT_CHECK_RECOVERY
     )
     br.set_defaults(fn=cmd_brief)
+
+    ex = s.add_parser("external", help="dependencies on items in sibling repositories")
+    ex_s = ex.add_subparsers(dest="external_cmd", required=True)
+    ex_s.add_parser(
+        "sync", help="observe the sibling-repo items `needs` names; record what changed"
+    ).set_defaults(fn=cmd_external)
 
     jb = s.add_parser("job", help="long-running processes an item waits on: run, add, list, end")
     jb_s = jb.add_subparsers(dest="job_cmd", required=True)

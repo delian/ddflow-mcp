@@ -223,6 +223,29 @@ def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "")
     return O.ok("recover", **data)
 
 
+def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[str]) -> None:
+    """Dependencies that can never be met, and external ones not yet observed."""
+    from ..core.schedule import is_external
+    from ..services import external as EX
+
+    configured = EX.repos(cfg, repo)
+    for it in st.items.values():
+        problems += [
+            f"{it.id} needs unknown item {dep!r}"
+            for dep in it.needs
+            if dep not in st.items and not is_external(dep)
+        ]
+        for dep in (d for d in it.needs if is_external(d)):
+            name = dep.partition(":")[0]
+            if name not in configured:
+                problems.append(
+                    f"{it.id} needs {dep!r}, but {name!r} is not in [schedule] repos -- it "
+                    f"can never be observed, so {it.id} can never start"
+                )
+            elif dep not in st.external:
+                notes.append(f"{it.id} needs {dep!r}, not yet observed: `ddflow external sync`")
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -277,10 +300,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
 
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
-    for it in st.items.values():
-        problems += [
-            f"{it.id} needs unknown item {dep!r}" for dep in it.needs if dep not in st.items
-        ]
+    _dependency_findings(repo, cfg, st, problems, notes)
 
     # The workflow's own coherence. A pipeline naming a gate that has no definition is the
     # one config error that is both silent and permanent -- every item entering the

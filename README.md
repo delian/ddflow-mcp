@@ -499,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 87 knobs.
+cadences, and the rest of the 88 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1293,6 +1293,20 @@ to its log so a run nobody watched still says how it ended. Liveness is computed
 stored: a zombie is not alive, and a reused pid is caught by the process start time.
 `ddflow job add --pid` registers a process started some other way. Every `brief` lists
 jobs not yet recorded as ended — "WAIT, do not start it again" for a running one.
+
+## Dependencies on another repository
+
+```toml
+[schedule]
+repos = ["run_nemo_run=../run_nemo_run"]
+```
+
+`ddflow update GEN.4 --needs run_nemo_run:132.D` then waits for item `132.D` **there**
+to be done. `ddflow external sync` (and every session-start hook) reads the sibling's log
+— never writing it — and records what it observed in this one, only when it changed.
+Readiness is decided from that dated fact, so the fold stays pure and "why was this
+started?" is answerable later. An unobserved external dependency is unmet; one naming
+a repository that is not configured is a `doctor` problem, since it can never be met.
 
 ## Status, progress, and loops
 
@@ -2194,7 +2208,7 @@ declared once and persists — see
 
 ## Configuration
 
-87 knobs across 16 sections, every one documented in place:
+88 knobs across 16 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

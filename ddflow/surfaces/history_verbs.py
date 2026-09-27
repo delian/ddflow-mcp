@@ -35,6 +35,7 @@ HISTORY_VERBS: dict[str, str] = {
     "research.recorded": "research",
     "memory.recorded": "remembered",
     "job.started": "job started",
+    "external.observed": "observed in another repo",
     "job.ended": "job ended",
     "memory.forgotten": "forgot",
     "bug.found": "BUG found",

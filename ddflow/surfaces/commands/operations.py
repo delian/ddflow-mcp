@@ -183,3 +183,22 @@ def cmd_import(a, c: Ctx) -> int:
     ]
     print("\n".join(lines))
     return OK
+
+
+def cmd_external(a, c: Ctx) -> int:
+    from ...api import operations as AO
+
+    out = AO.external_sync(c.repo, agent=c.requested_agent)
+    if c.json:
+        print(json.dumps(out.body("observed"), indent=2, default=str))
+        return out.exit
+    if out.exit == NOTHING:
+        print(out.reason)
+        return NOTHING
+    for o in out.data["observed"]:
+        if o["error"]:
+            print(f"  {o['dep']}: NOT OBSERVED -- {o['error']}")
+        else:
+            mark = "  (changed)" if o["changed"] else ""
+            print(f"  {o['dep']}: {o['state']}{mark}  {o['title'][:70]}")
+    return out.exit

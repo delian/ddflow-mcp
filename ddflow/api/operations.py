@@ -195,3 +195,31 @@ def import_project(
     if not plan.found:
         return O.nothing("import", "Nothing to import.", **data)
     return O.ok("import", **data)
+
+
+def external_sync(repo: Path, *, agent: str = "") -> O.Outcome:
+    """Observe the sibling-repository items this queue depends on; record what changed.
+
+    Exit 2 when nothing depends on another repository; exit 1 when a referenced
+    repository could not be read -- its dependents stay unmet, which is the safe side,
+    but the operator has to hear why.
+    """
+    from ..services import external as EX
+
+    log, cfg, st = _load(repo, agent)
+    obs = EX.sync(log, cfg, repo, st)
+    rows = [
+        {"dep": o.dep, "state": o.state, "title": o.title, "changed": o.changed, "error": o.error}
+        for o in obs
+    ]
+    data: dict[str, Any] = {"observed": rows}
+    if not obs:
+        return O.nothing("external.sync", "No item depends on another repository.", **data)
+    errors = [o for o in obs if o.error]
+    if errors:
+        return O.failed(
+            "external.sync",
+            "; ".join(f"{o.dep}: {o.error}" for o in errors),
+            **data,
+        )
+    return O.ok("external.sync", **data)

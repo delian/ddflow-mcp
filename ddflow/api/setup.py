@@ -367,6 +367,23 @@ def _session_start(repo: Path, agent: str) -> O.Outcome:
     except Exception as exc:
         parts += [f"_(worktree drift check failed: {exc})_", ""]
     try:
+        # Work waiting on a sibling repository becomes ready the moment its dependency
+        # is observed done, and session start is when an agent decides what to take.
+        from .operations import external_sync
+
+        ext = external_sync(repo, agent=agent)
+        changed = [o for o in ext.data.get("observed", []) if o["changed"]]
+        if changed:
+            parts += [
+                "Observed in sibling repositories: "
+                + ", ".join(f"{o['dep']} is {o['state']}" for o in changed),
+                "",
+            ]
+        if ext.exit == O.FAIL:
+            parts += [f"_(external dependencies not observed: {ext.reason})_", ""]
+    except Exception as exc:
+        parts += [f"_(external sync failed: {exc})_", ""]
+    try:
         out = brief(repo, check_recovery=True, agent=agent)
         parts.append(out.data.get("text", "") or out.reason)
     except Exception as exc:

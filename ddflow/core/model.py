@@ -350,6 +350,11 @@ class State:
     decisions: dict[str, Decision] = field(default_factory=dict)
     memories: dict[str, Memory] = field(default_factory=dict)
     jobs: dict[str, Job] = field(default_factory=dict)
+    #: `repo:ID` -> what `ddflow external sync` last OBSERVED of an item in a sibling
+    #: repository: {"state", "title", "repo", "at"}. Recorded in this log, so a
+    #: dependency on another project is decided from a fact with a date on it, and the
+    #: fold stays pure -- nothing here reads another repository.
+    external: dict[str, dict[str, Any]] = field(default_factory=dict)
     sessions: dict[str, Session] = field(default_factory=dict)
     cadences: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     #: gate id -> how many times recording it fired the pipeline-order check, and how
@@ -858,6 +863,15 @@ def _h_job_ended(st: State, ev: Event) -> None:
     j.note = ev.data.get("note", "") or j.note
 
 
+def _h_external(st: State, ev: Event) -> None:
+    st.external[ev.subject] = {
+        "state": ev.data.get("state", ""),
+        "title": ev.data.get("title", ""),
+        "repo": ev.data.get("repo", ""),
+        "at": ev.ts,
+    }
+
+
 def _h_memory(st: State, ev: Event) -> None:
     """Merge, never replace -- a re-record that omits a field keeps the old one, and a
     re-record of a forgotten memory brings it back, which is what re-recording it means."""
@@ -1002,6 +1016,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "decision.superseded": _h_decision_superseded,
     "memory.recorded": _h_memory,
     "job.started": _h_job_started,
+    "external.observed": _h_external,
     "job.ended": _h_job_ended,
     "memory.forgotten": _h_memory_forgotten,
     "session.started": _h_session_started,
