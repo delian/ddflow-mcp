@@ -41,6 +41,7 @@ def _jobs(repo: Path, *extra: str) -> list[dict]:
 def test_a_job_is_launched_detached_watched_and_its_exit_code_collected(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "TRAIN", "--globs", "a.py")
+    run_cli(repo, "claim", "TRAIN", "--no-worktree")
     code, out, err = run_cli(repo, "--json", "job", "run", "TRAIN", "sleep 1.5; echo done; exit 3")
     assert code == OK, err
     job = json.loads(out)
@@ -64,6 +65,7 @@ def test_a_job_is_launched_detached_watched_and_its_exit_code_collected(repo):
 def test_a_killed_job_is_GONE_not_running_and_not_exited(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "GEN", "--globs", "a.py")
+    run_cli(repo, "claim", "GEN", "--no-worktree")
     _c, out, _e = run_cli(repo, "--json", "job", "run", "GEN", "sleep 30")
     pid = json.loads(out)["pid"]
     os.kill(pid, 9)
@@ -76,6 +78,7 @@ def test_the_job_survives_the_process_that_launched_it(repo):
     session being restarted mid-run."""
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "claim", "T", "--no-worktree")
     _c, out, _e = run_cli(repo, "--json", "job", "run", "T", "sleep 3")
     pid = json.loads(out)["pid"]
     assert J.alive(pid), "the job died with the process that launched it"
@@ -109,6 +112,7 @@ def test_a_job_on_another_host_is_not_guessed_at():
 def test_registering_a_process_requires_it_to_be_running(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T", "--globs", "a.py")
+    run_cli(repo, "claim", "T", "--no-worktree")
     p = subprocess.Popen(["sleep", "5"])
     try:
         code, _o, err = run_cli(
@@ -125,6 +129,7 @@ def test_registering_a_process_requires_it_to_be_running(repo):
 def test_the_brief_tells_the_next_session_to_wait(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "TRAIN", "--globs", "a.py")
+    run_cli(repo, "claim", "TRAIN", "--no-worktree")
     _c, out, _e = run_cli(repo, "--json", "job", "run", "TRAIN", "sleep 20")
     pid = json.loads(out)["pid"]
     try:
@@ -133,3 +138,16 @@ def test_the_brief_tells_the_next_session_to_wait(repo):
         assert "RUNNING" in brief and "do not start it again" in brief
     finally:
         os.kill(pid, 9)
+
+
+def test_a_job_can_only_be_started_under_the_callers_own_claim(repo):
+    """The claim is what checks files and resources; a job started around it runs on
+    GPUs nobody granted. Found driving the MCP surface: `claim` refused for want of
+    GPUs, and `job run` started the training anyway."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "TRAIN", "--globs", "a.py")
+    code, _o, err = run_cli(repo, "job", "run", "TRAIN", "sleep 5")
+    assert code == REFUSED and "claim TRAIN" in err + _o
+    run_cli(repo, "claim", "TRAIN", "--no-worktree", agent="alice")
+    code, _o, _e = run_cli(repo, "job", "run", "TRAIN", "sleep 5", agent="bob")
+    assert code == REFUSED, "someone else's claim let bob start a job"

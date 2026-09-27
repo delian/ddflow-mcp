@@ -34,6 +34,26 @@ def _row(job, st) -> dict[str, Any]:
     }
 
 
+def _not_held(log, cfg, it) -> O.Outcome | None:
+    """A refusal unless the caller holds a live lease on the item.
+
+    A job is where the RESOURCES are actually used, so starting one must pass through
+    the claim that checked them. Without this an agent refused `claim` for want of GPUs
+    could `job run` the training anyway -- found by driving the MCP surface end to end.
+    """
+    now = time.time()
+    lease = it.lease
+    if lease and lease.holder == log.agent_id and not lease.expired(now, cfg.lease.grace_s):
+        return None
+    who = f" (held by {lease.holder})" if lease and not lease.expired(now, 0) else ""
+    return O.refused(
+        "job.started",
+        f"{it.id} is not claimed by you{who}. `ddflow claim {it.id}` first: the claim is "
+        f"what checks its files and resources against everyone else's.",
+        id="",
+    )
+
+
 def _record(log, item: str, command: str, pid: int, log_path: str, cwd: str) -> str:
     from ..services import jobs as J
 
@@ -66,10 +86,13 @@ def job_run(
     from ..infra import worktree as W
     from ..services import jobs as J
 
-    log, _cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
     if it is None or it.removed:
         return O.failed("job.started", f"no such item {item!r}", id="")
+    refused = _not_held(log, cfg, it)
+    if refused is not None:
+        return refused
     if not command.strip():
         return O.failed("job.started", "a job needs a command", id="")
     where = Path(cwd) if cwd else (W.load_path(repo, it.worktree) if it.worktree else repo)
@@ -92,10 +115,13 @@ def job_add(
     """Register a process that was started some other way (a launcher script, torchrun)."""
     from ..services import jobs as J
 
-    log, _cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
     if it is None or it.removed:
         return O.failed("job.started", f"no such item {item!r}", id="")
+    refused = _not_held(log, cfg, it)
+    if refused is not None:
+        return refused
     if pid <= 0 or not J.alive(pid):
         return O.failed(
             "job.started",
