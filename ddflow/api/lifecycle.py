@@ -176,6 +176,7 @@ def claim(
         return O.refused("item.claimed", reason, id=item, alternatives=list(exc.alternatives or []))
 
     wt = None
+    ours = False  # a tree ddflow made (now or on an earlier claim), not one it adopted
     if cfg.worktree.enabled and not no_worktree:
         adopted = W.current(called_from or repo) if cfg.worktree.adopt_existing else None
         if adopted is not None:
@@ -208,6 +209,7 @@ def claim(
                     # production, or a dependency's unmerged branch when stacking.
                     base, branch = FS.fork_point(repo, cfg, st, st.items[item])
                 wt = W.create(repo, cfg, item, base=base, branch=branch)
+                ours = True
                 stored = W.store_path(repo, wt.path)
                 log.append(
                     "worktree.created",
@@ -220,8 +222,27 @@ def claim(
                     "item.claimed", f"lease held, but worktree creation failed: {exc}", id=item
                 )
     log.append("item.started", item, {})
+    # The first branch made is where the branching model starts to matter. An unmade
+    # choice is defaulted here, on the record, and followed from now on.
+    from ..services import choices as CH
+
+    CH.adopt_defaults(log, cfg, ["model", "integration"])
+    port: dict[str, Any] = {}
+    target_item = st.items.get(item)
+    if target_item is not None and target_item.port_from and not target_item.port:
+        from ..services import ports as PT
+
+        # Applied in a tree ddflow made -- also on a RE-claim, which is how a port claimed
+        # with --force before its source landed gets applied once it has. In an adopted
+        # tree, or with no tree, ddflow does not rewrite the agent's files: it says what
+        # to do instead of staying silent about it being a port at all.
+        port = (
+            PT.apply(repo, cfg, log, st, item, wt.path) if ours else PT.manual(repo, cfg, st, item)
+        )
     return O.ok(
         "item.claimed",
+        port=port,
+        port_advice=PT.advice(port, item) if port else "",
         item=item,
         holder=lz.holder,
         worktree=str(wt.path) if wt else "",
@@ -448,7 +469,7 @@ def merge(
         item=item,
         path=W.load_path(repo, it.worktree),
         branch=it.branch,
-        base=FS.target(repo, cfg, it),
+        base=FS.target(repo, cfg, it, st),
     )
     dirty = W.dirty(wt)
     if dirty and not allow_dirty:
@@ -465,12 +486,26 @@ def merge(
             dirty=list(dirty),
             path=str(wt.path),
         )
+    remote_base = f"{cfg.flow.remote}/{wt.base}"
+    if it.base and it.base not in (wt.base, remote_base) and FS.stacked_on(st, it) is None:
+        # The branch was forked from one line's base and would land on another's,
+        # carrying the first line's history along (RESEARCH R17 review).
+        return O.refused(
+            "worktree.merged",
+            f"{item}'s branch was forked from {it.base!r} but would land on {wt.base!r}. "
+            f"Merging would carry {it.base}'s history into {wt.base}. Re-file the work on "
+            f"the line it was forked for, or port it.",
+            id=item,
+            sha="",
+            dirty=[],
+        )
     if cfg.flow.integration == "pr":
         return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
     bad = F.problems(cfg)
     if bad:
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
     sha = W.head_sha(wt.path)
+    landed_before = W.rev(repo, wt.base)
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     if not r.ok:
         out = O.Outcome(
@@ -480,11 +515,21 @@ def merge(
             reason=r.err or r.out,
         )
         return out
-    log.append("worktree.merged", item, {"sha": sha, "branch": wt.branch})
+    log.append(
+        "worktree.merged",
+        item,
+        {
+            "sha": sha,
+            "branch": wt.branch,
+            # The target's range this merge added -- what a cherry-pick port re-applies.
+            "landed_before": landed_before,
+            "landed_after": W.rev(repo, wt.base),
+        },
+    )
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
     # rolled back: production has the fix, which was the urgent half.
     back_merged, back_failed = [], []
-    for extra in F.back_merge_targets(it, cfg, W.default_branch(repo)):
+    for extra in F.back_merge_targets(it, cfg, W.default_branch(repo), F.effective_line(st, it)):
         br = W.merge_into(repo, cfg, extra, wt.branch, message=f"back-merge {item} into {extra}")
         (back_merged if br.ok else back_failed).append(
             extra if br.ok else f"{extra}: {br.err or br.out}"
@@ -610,6 +655,11 @@ def brief(
         recovery=[r for r in recovery if r.salvageable],
         decisions=decisions,
     )
+    from ..services import choices as CH
+
+    undecided = CH.brief_block(cfg)
+    if undecided:
+        text = undecided + "\n" + text
     if item and item in st.items:
         pr = st.items[item].pr
         if pr is not None and pr.review == "changes_requested" and pr.feedback:

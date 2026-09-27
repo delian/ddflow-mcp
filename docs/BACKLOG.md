@@ -2208,3 +2208,15 @@ deliberately left:
   would let a reviewer see which comments were addressed.
 - **B177. `cleanup` knows only `worktree.branch_prefix`.** Under gitflow task branches are
   `feature/`, `bugfix/`, `hotfix/`, so `cleanup` does not classify them as ddflow's.
+- **B178. Rebase-merged requests have no exact landing range.** A forge's "rebase and
+  merge" lands N commits; `merge_sha^1` is then the second-to-last of them, not the old
+  target, so a cherry-pick port of it would carry only the last commit. Squash and merge
+  commits are exact. Needs the base sha at merge time (GitHub `baseRefOid` before merging).
+- **B179. `api.task_add` is a 12-argument function** (`# noqa: PLR0913`). The fix is the
+  one `api.decisions.Draft` shows: a named record used by argparse, the MCP schema and the
+  event payload.
+- **B180. A fix amended after its ports were generated.** A port carries what the fix
+  LANDED, which is right; but a follow-up fix to the same bug is a new item and needs its
+  own `--lines`. Consider `task add --port-of`.
+- **B181. Undecided workflow choices are listed in `brief`, not in the MCP handshake.**
+

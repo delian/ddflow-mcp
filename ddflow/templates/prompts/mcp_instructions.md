@@ -66,6 +66,11 @@ the request and parks the item IN REVIEW with your lease released: do not wait a
 completes, and an item with requested changes returns to the queue with the review at the
 top of its `ddflow_brief`.
 
+How THIS project works — branching model, release lines, how fixes reach older lines — is
+`ddflow_flow_show`. A choice nobody has made is listed in `ddflow_brief`: ask the operator,
+or choose what suits the project with `ddflow_flow_choose` and a reason. Left alone, the
+default is applied the first time it matters and followed from then on.
+
 **The pipeline every task passes through, in order:**
 {% for g in task_pipeline %} {{ g }} ·{% endfor %}
 

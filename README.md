@@ -87,6 +87,8 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [Human approval: a gate the agent cannot clear](#human-approval-a-gate-the-agent-cannot-clear)
 - [Parallelism and coordination](#parallelism-and-coordination)
 - [Gitflow, pull requests and version tags](#gitflow-pull-requests-and-version-tags)
+  - [Several release lines: fixes to older majors](#several-release-lines-fixes-to-older-majors)
+  - [Workflow choices: asked, recorded, defaulted on the record](#workflow-choices-asked-recorded-defaulted-on-the-record)
 - [Many agents, one server: identity, state and sharing](#many-agents-one-server-identity-state-and-sharing)
   - [Is it stateless?](#is-it-stateless)
   - [Who is calling?](#who-is-calling)
@@ -500,7 +502,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 96 knobs.
+cadences, and the rest of the 99 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1561,6 +1563,65 @@ pr_reviewers = ["alice"]
 
 The research behind this is [RESEARCH R16](docs/RESEARCH.md).
 
+### Several release lines: fixes to older majors
+
+Projects that keep older majors alive — `main` is 3.x while 2.x and 1.x still get fixes —
+declare them as **release lines**, oldest first. The newest line is always the *current*
+one and follows `model` as above; a maintenance line lands straight on its branch.
+
+```toml
+[flow]
+current_line = "3"
+port_strategy = "cherry-pick"      # or "forward-merge" (the default)
+
+[flow.lines]                        # oldest first
+"1" = "maint/1.x"
+"2" = "maint/2.x"
+```
+
+* **An item belongs to a line**: `task add T --line 2`, or `phase add P --line 2` and
+  every task in it inherits it. A line that does not exist is refused, never read as
+  "the current one".
+* **A fix for several lines** is one command: `task add FIX --lines 1,2,3`. ddflow writes
+  it where the strategy says and generates a **port** task `FIX@<line>` for each other
+  line — an ordinary task with its own branch, gates and merge or pull request. A port
+  starts only once what it carries has *landed* (review is not enough):
+
+  | `port_strategy` | the fix is written on | each port… | ports run |
+  |---|---|---|---|
+  | `forward-merge` (default) | the **oldest** line | merges the previous line's branch into its own (and passes through every line in between — a merge cannot skip one) | one after another |
+  | `cherry-pick` | the **newest** line | applies exactly what the fix landed (the target's before→after range, whatever the merge strategy) with a three-way apply | in parallel |
+
+* **A conflicting port is work, not a failure.** The claim leaves the conflict markers
+  in the port's tree and names the files; the agent resolves, commits and carries on.
+* **Lines never collide.** The same file on 2.x and on 3.x is two branches, so two agents
+  may hold them at once; on the same line the glob check applies as always.
+* **Versions per line.** `version show --line 2` reads the highest tag reachable from
+  `maint/2.x`; `version cut --line 2` tags it there, and refuses a bump that would leave
+  the 2.x major — a breaking change belongs on the current line.
+
+### Workflow choices: asked, recorded, defaulted on the record
+
+ddflow supports several ways of working and never picks one silently. Each decision —
+`model`, `integration`, `pr_merge`, `on_changes_requested`, `stack`, `port_strategy` — is a
+**choice**, and its value comes from, in order:
+
+1. **the operator's config** (`.ddflow/config.toml` or env), which always wins;
+2. **a recorded choice** — `ddflow flow choose port_strategy cherry-pick --reason "2.x has
+   diverged"`, by the operator or by an agent the operator left it to, attributed in the log;
+3. **the default** — applied the first time the choice matters (the first claim, the
+   first pull request, the first fix filed across lines) **and recorded**, so the project
+   keeps following it even if a later ddflow ships a different default.
+
+Until then, a relevant choice nobody made heads `ddflow brief` under *Open workflow
+choices*, so an agent asks at the start rather than discovering at the end that the
+project wanted something else. `ddflow flow show` lists every choice with its value, its
+options, and who decided — config, a named agent or person with their reason, or "DEFAULT
+(nobody chose)". A recorded choice that the config file overrides is shown as such, never
+silently ignored.
+
+Research: [RESEARCH R17](docs/RESEARCH.md).
+
 ---
 
 ## Many agents, one server: identity, state and sharing
@@ -2116,6 +2177,10 @@ ddflow pr sync [--item]         what reviewers did: complete / reopen / park / m
 ddflow pr status               every item's request, from the log (no forge call)
 ddflow version show            current and next version, why, release notes (2 = nothing new)
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
+ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
+ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
+ddflow flow show                how this project works: model, lines, every choice + who made it
+ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)
 ddflow block <id> --reason ..   mark blocked
 
@@ -2166,7 +2231,7 @@ declared once and persists — see
 
 ## Configuration
 
-96 knobs across 16 sections, every one documented in place:
+99 knobs across 16 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

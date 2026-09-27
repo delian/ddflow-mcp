@@ -149,7 +149,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             called_from=called_from,
             agent=agent,
         ),
-        "payload": ("item", "holder", "worktree", "branch", "base"),
+        "payload": ("item", "holder", "worktree", "branch", "base", "port", "port_advice"),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
         # worktree. The dispatcher passes it only to tools that ask.
@@ -396,9 +396,10 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "bump": ("string", "Force major | minor | patch instead of the computed bump.", False),
+            "line": ("string", "A maintenance line (default: the current one).", False),
         },
         "api": lambda repo, a, agent: _api().version_show(
-            repo, bump=a.get("bump", "") or "", agent=agent
+            repo, bump=a.get("bump", "") or "", line=a.get("line", "") or "", agent=agent
         ),
         "payload": "",
     },
@@ -414,6 +415,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "version": ("string", "Exact MAJOR.MINOR.PATCH.", False),
             "push": ("boolean", "Publish the tag (and gitflow branches) to the remote.", False),
             "dry_run": ("boolean", "Compute and report; write nothing.", False),
+            "line": (
+                "string",
+                "A maintenance line: tagged where it stands, and refused if the bump would "
+                "leave its major.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().version_cut(
             repo,
@@ -421,7 +428,38 @@ TOOLS: dict[str, dict[str, Any]] = {
             version=a.get("version", "") or "",
             push=bool(a.get("push")),
             dry_run=bool(a.get("dry_run")),
+            line=a.get("line", "") or "",
             agent=agent,
+        ),
+        "payload": "",
+    },
+    "ddflow_flow_show": {
+        "description": (
+            "How THIS project works: its branching model, release lines, and every workflow "
+            "choice (model, integration, pr_merge, port_strategy, ...) with its value, the "
+            "options, and who decided -- the operator's config, a recorded choice, or a "
+            "default nobody chose. `pending` lists relevant choices nobody has made: ask the "
+            "operator, or pick what suits the project with `ddflow_flow_choose`."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().flow_show(repo, agent=agent),
+        "payload": "",
+    },
+    "ddflow_flow_choose": {
+        "description": (
+            "Record a workflow choice for this project, attributed to you, with a reason the "
+            "next agent will read. Make it when the operator told you, or when they left it "
+            "to you -- a choice left unmade is defaulted at first use and followed from then "
+            "on. The operator's config file wins over a recorded choice; the result says "
+            "`in_effect: false` when it does."
+        ),
+        "properties": {
+            "knob": ("string", "The choice, e.g. port_strategy (see ddflow_flow_show).", True),
+            "value": ("string", "One of its options.", True),
+            "reason": ("string", "Why this suits the project.", False),
+        },
+        "api": lambda repo, a, agent: _api().flow_choose(
+            repo, a["knob"], a["value"], reason=a.get("reason", "") or "", agent=agent
         ),
         "payload": "",
     },
@@ -446,6 +484,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "body": ("string", "Detail, acceptance criteria, context.", False),
             "tags": ("string", "Comma-separated tags.", False),
             "priority": ("integer", "Lower is offered first (default 100).", False),
+            "line": (
+                "string",
+                "Release line this lands on (a name from [flow.lines], or the current "
+                "line). Omit for the current line; tasks inherit a phase's line.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().phase_add(
             repo,
@@ -456,6 +500,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             body=a.get("body", "") or "",
             tags=a.get("tags", "") or "",
             priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
+            line=a.get("line", "") or "",
             agent=agent,
         ),
         "payload": ("id",),
@@ -519,6 +564,20 @@ TOOLS: dict[str, dict[str, Any]] = {
             "body": ("string", "Detail and acceptance criteria.", False),
             "tags": ("string", "Comma-separated tags.", False),
             "priority": ("integer", "Lower is offered first (default 100).", False),
+            "line": (
+                "string",
+                "Release line this lands on (a name from [flow.lines], or the current "
+                "line). Omit for the current line; tasks inherit a phase's line.",
+                False,
+            ),
+            "lines": (
+                "string",
+                "Comma-separated release lines a FIX must reach, e.g. '1,2,3'. The task is "
+                "written on the line [flow].port_strategy dictates and a port task "
+                "`<id>@<line>` is generated for each other line; each starts once what it "
+                "carries has landed.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().task_add(
             repo,
@@ -530,9 +589,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             body=a.get("body", "") or "",
             tags=a.get("tags", "") or "",
             priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
+            line=a.get("line", "") or "",
+            lines=a.get("lines", "") or "",
             agent=agent,
         ),
-        "payload": ("id",),
+        "payload": ("id", "line", "ports", "port_strategy", "defaulted"),
     },
     "ddflow_lesson_verify": {
         "description": (
@@ -1622,6 +1683,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "body": ("string", "New detail / acceptance criteria.", False),
             "tags": ("string", "Comma-separated tags.", False),
             "priority": ("integer", "Lower is offered first (default 100).", False),
+            "line": ("string", "Move it to another release line.", False),
         },
         # Typed, and the argv lambda that used to sit here is GONE rather than kept
         # "in case". The `api` branch runs first, so it was unreachable -- a second
@@ -1642,6 +1704,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             globs=_list_or_none(a, "globs"),
             tags=_list_or_none(a, "tags"),
             priority=a.get("priority"),
+            line=a.get("line"),
         ),
     },
     "ddflow_abandon": {

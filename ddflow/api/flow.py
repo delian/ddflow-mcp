@@ -89,15 +89,16 @@ def _plan_data(vp) -> dict[str, Any]:
         "items": vp.items,
         "notes": vp.notes,
         "problems": vp.problems,
+        "line": vp.line,
     }
 
 
-def version_show(repo: Path, *, bump: str = "", agent: str = "") -> O.Outcome:
+def version_show(repo: Path, *, bump: str = "", line: str = "", agent: str = "") -> O.Outcome:
     """The current version, the next one, why, and the release notes. Reads only."""
     from ..services import flow as FS
 
     _log, cfg, st = _load(repo, agent)
-    vp = FS.plan_version(repo, cfg, st, bump=bump)
+    vp = FS.plan_version(repo, cfg, st, bump=bump, line=line)
     data = _plan_data(vp)
     if vp.problems:
         return O.refused("version.show", "; ".join(vp.problems), **data)
@@ -117,13 +118,14 @@ def version_cut(
     version: str = "",
     push: bool = False,
     dry_run: bool = False,
+    line: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Tag the next version (gitflow: through a release branch). Exit 2 = nothing to release."""
     from ..services import flow as FS
 
     log, cfg, _st = _load(repo, agent)
-    c = FS.cut(repo, cfg, log, bump=bump, version=version, push=push, dry_run=dry_run)
+    c = FS.cut(repo, cfg, log, bump=bump, version=version, push=push, dry_run=dry_run, line=line)
     data: dict[str, Any] = {
         "version": c.version,
         "tag": c.tag,
@@ -140,3 +142,61 @@ def version_cut(
     if c.unavailable or c.nothing:
         return O.nothing("version.cut", c.reason, **data)
     return O.ok("version.cut", **data)
+
+
+def flow_show(repo: Path, *, agent: str = "") -> O.Outcome:
+    """How this project works: the model, its release lines, and every workflow choice --
+    its value, who made it (config, a recorded choice, or a default nobody chose) and when."""
+    from ..core import flow as F
+    from ..services import choices as CH
+
+    _log, cfg, st = _load(repo, agent)
+    rows = CH.report(cfg, st)
+    lines = [
+        {"line": ln, "branch": cfg.flow.lines.get(ln, ""), "current": ln == cfg.flow.current_line}
+        for ln in F.line_order(cfg)
+    ]
+    return O.ok(
+        "flow.show",
+        choices=rows,
+        pending=[r["knob"] for r in rows if r["relevant"] and not r["decided"]],
+        lines=lines,
+        problems=F.problems(cfg),
+    )
+
+
+def flow_choose(
+    repo: Path, knob: str, value: str, *, reason: str = "", agent: str = ""
+) -> O.Outcome:
+    """Record a workflow choice, attributed. The config file still wins over it, and the
+    result says so when it does -- a choice that is not in effect must not look like one."""
+    from ..services import choices as CH
+
+    log, cfg, _st = _load(repo, agent)
+    bad = CH.validate(knob, value)
+    if bad:
+        return O.failed("flow.chosen", bad, knob=knob, value=value, in_effect=False)
+    CH.choose(log, knob, value, reason=reason)
+    source = cfg.sources.get(f"flow.{knob}", "default")
+    overridden = source in ("file", "env")
+    from ..core.model import REVIEW, RUNNING
+
+    in_flight = [i.id for i in _st.items.values() if i.state in (RUNNING, REVIEW)]
+    shift = (
+        f" {len(in_flight)} item(s) in flight ({', '.join(in_flight[:5])}) were started under "
+        f"the previous value and keep their branches; the new value applies to new work."
+        if in_flight and knob in ("model", "integration") and not overridden
+        else ""
+    )
+    return O.ok(
+        "flow.chosen",
+        knob=knob,
+        value=str(value).lower(),
+        in_effect=not overridden,
+        note=(
+            f"recorded, but NOT in effect: {knob} is set in the {source} config, which wins. "
+            f"Change it there."
+            if overridden
+            else shift.strip()
+        ),
+    )

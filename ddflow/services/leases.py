@@ -27,6 +27,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import schedule
+from ..core.flow import line_key
 from ..core.model import DONE, REVIEW, Lease, State, fold
 from ..core.schedule import conflicts, plan_blocker
 from ..infra import worktree as W
@@ -219,9 +220,13 @@ def acquire(
             )
 
         mine = list(globs if globs is not None else it.globs)
+        my_line = line_key(state, it, cfg)
         for other_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
             if other_id == item_id or lease.holder == holder:
                 continue
+            other = state.items.get(other_id)
+            if other is not None and line_key(state, other, cfg) != my_line:
+                continue  # different release lines: different branches, no collision
             pairs = conflicts(mine, lease.globs)
             if pairs and not force:
                 raise LeaseError(

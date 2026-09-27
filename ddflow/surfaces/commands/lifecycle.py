@@ -93,7 +93,9 @@ def cmd_claim(a, c: Ctx) -> int:
             f"\n  worktree: {d['worktree']}\n  branch:   {d['branch']} (from {d['base']})"
             f"\n  cd there and work."
         )
-    c.out(msg, out.body(("item", "holder", "worktree", "branch", "base")))
+    if d["port_advice"]:
+        msg += f"\n  {d['port_advice']}"
+    c.out(msg, out.body(("item", "holder", "worktree", "branch", "base", "port", "port_advice")))
     return OK
 
 

@@ -159,6 +159,9 @@ class FlowConfig:
     sync_on_next: bool = True
     tag_prefix: str = "v"
     initial_version: str = "0.1.0"
+    lines: dict[str, str] = field(default_factory=dict)  # maintenance line -> branch, OLDEST first
+    current_line: str = "current"
+    port_strategy: str = "forward-merge"  # forward-merge | cherry-pick
 
 
 _doc(
@@ -260,6 +263,21 @@ _doc(
     "flow",
     "tag_prefix",
     "Prefix of version tags: `v` makes `v1.4.0`. Tags without it are not versions to ddflow.",
+)
+_doc(
+    "flow",
+    "lines",
+    'Maintenance lines -- older majors still receiving fixes -- as name -> branch, OLDEST FIRST (e.g. `[flow.lines]` `"1" = "maint/1.x"`, `"2" = "maint/2.x"`). The newest line is always the current one, which follows `model` as usual. Empty (default): one line, today\'s behaviour. An item targets a line with `--line`; a fix that must reach several gets `--lines` and ports are generated per `port_strategy`.',
+)
+_doc(
+    "flow",
+    "current_line",
+    "The name of the newest line -- the one `model` governs (trunk, or gitflow's develop/production). Items with no `--line` belong to it.",
+)
+_doc(
+    "flow",
+    "port_strategy",
+    "How a fix reaches several lines. 'forward-merge' (default): it is written on the OLDEST line and each line is merged into the next newer one, so newer lines contain older ones by ancestry -- least bookkeeping, needs lines that have not diverged too far. 'cherry-pick': it is written on the NEWEST line and its landed change is applied to each older line independently -- the usual choice once lines have diverged. A choice, not a preference: see `ddflow flow show`; nobody choosing means the default is applied at first use and recorded, so the project keeps following it.",
 )
 _doc(
     "flow",

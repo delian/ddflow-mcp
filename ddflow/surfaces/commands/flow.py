@@ -57,7 +57,7 @@ def cmd_pr(a, c: Ctx) -> int:
 
 def cmd_version(a, c: Ctx) -> int:
     if a.version_cmd == "show":
-        out = A.version_show(c.repo, bump=a.bump or "", agent=c.requested_agent)
+        out = A.version_show(c.repo, bump=a.bump or "", line=a.line or "", agent=c.requested_agent)
         if c.json:
             return _emit_json(out)
         d = out.data
@@ -79,6 +79,7 @@ def cmd_version(a, c: Ctx) -> int:
         version=a.set_version or "",
         push=a.push,
         dry_run=a.dry_run,
+        line=a.line or "",
         agent=c.requested_agent,
     )
     if c.json:
@@ -91,4 +92,53 @@ def cmd_version(a, c: Ctx) -> int:
     if out.data["warning"]:
         print(f"WARNING: {out.data['warning']}", file=sys.stderr)
     print(f"{out.data['tag']}{' (dry run)' if out.data['dry_run'] else ''}")
+    return OK
+
+
+def _who(row) -> str:
+    src = row["source"]
+    rec = row["recorded"]
+    if src in ("file", "env"):
+        return f"set in the {src} config"
+    if src.startswith("log:"):
+        by = rec.get("agent") or rec.get("user") or "?"
+        how = "DEFAULT (nobody chose)" if rec.get("by") == "default" else "chosen"
+        why = f" — {rec['reason']}" if rec.get("reason") and rec.get("by") != "default" else ""
+        return f"{how} by {by} at {rec.get('at', '?')}{why}"
+    return "UNDECIDED — the default applies at first use"
+
+
+def cmd_flow(a, c: Ctx) -> int:
+    if a.flow_cmd == "choose":
+        out = A.flow_choose(c.repo, a.knob, a.value, reason=a.reason or "", agent=c.requested_agent)
+        if c.json:
+            return _emit_json(out)
+        if out.exit != OK:
+            print(out.reason, file=sys.stderr)
+            return out.exit
+        print(f"{out.data['knob']} = {out.data['value']} recorded")
+        if out.data["note"]:
+            print(out.data["note"], file=sys.stderr)
+        return OK
+    out = A.flow_show(c.repo, agent=c.requested_agent)
+    if c.json:
+        return _emit_json(out)
+    lines = out.data["lines"]
+    if len(lines) > 1:
+        print("release lines (oldest first):")
+        for ln in lines:
+            print(f"  {ln['line']:<10} {ln['branch'] or '(follows the model)'}")
+        print()
+    for row in out.data["choices"]:
+        mark = " " if row["relevant"] else "·"
+        print(f"{mark} {row['knob']:<22} {row['value']:<14} {_who(row)}")
+        if row.get("overridden"):
+            print(f"      {row['overridden']}")
+    if out.data["pending"]:
+        print(
+            f"\nundecided: {', '.join(out.data['pending'])}. Choose with "
+            f"`ddflow flow choose <knob> <value> --reason ...`."
+        )
+    for p in out.data["problems"]:
+        print(f"PROBLEM: {p}", file=sys.stderr)
     return OK

@@ -28,7 +28,7 @@ from fnmatch import fnmatch
 
 from ..config import Config
 from ..core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
-from .flow import stack_base
+from .flow import line_key, stack_base, unknown_line
 
 
 @dataclass
@@ -339,6 +339,25 @@ def plan_blocker(
             details.append(why if owner == it.id else f"{why} (inherited from {owner})")
     if unmet:
         return Blocked(it.id, "deps", "; ".join(details), unmet)
+    gone = unknown_line(state, it, cfg)
+    if gone:
+        return Blocked(
+            it.id,
+            "state",
+            f"its release line {gone!r} is not in [flow.lines] any more. Restore the line, "
+            f"or `ddflow update {it.id} --line <line>` deliberately.",
+            [],
+        )
+    src = state.items.get(it.port_from) if it.port_from else None
+    if src is not None and src.state != DONE:
+        # `needs` is satisfied by REVIEW when stacking; a port is not. It applies what its
+        # source LANDED, and nothing has landed until the request merges.
+        return Blocked(
+            it.id,
+            "deps",
+            f"a port of {it.port_of}: waits for {src.id} to land ({src.state})",
+            [src.id],
+        )
     stack = stack_base(state, it, cfg, [d for _, d in inherited_deps(state, it)])
     if stack.error:
         return Blocked(it.id, "deps", stack.error, [])
@@ -377,8 +396,14 @@ def item_blocker(
             f"leased by {held.holder} for another {held.remaining_s(now):.0f}s",
             [it.id],
         )
+    mine = line_key(state, it, cfg)
     for other_id, lease in live.items():
         if other_id == it.id or lease.holder == agent:
+            continue
+        other = state.items.get(other_id)
+        if other is not None and line_key(state, other, cfg) != mine:
+            # Different release lines are different branches: `src/x.py` on 2.x and on
+            # 3.x cannot collide, and refusing it would serialise every port behind its fix.
             continue
         pairs = conflicts(it.globs, lease.globs)
         if pairs:

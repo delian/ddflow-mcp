@@ -21,6 +21,7 @@ def update(
     globs: list[str] | None = None,
     tags: list[str] | None = None,
     priority: int | None = None,
+    line: str | None = None,
 ) -> O.Outcome:
     """Change an item's fields. `None` means "leave alone"; `[]` means "clear".
 
@@ -28,11 +29,19 @@ def update(
     into one empty string, and the surface had to carry a `clearable` flag to tell them
     apart — a distinction the type system expresses for free.
     """
-    log, _cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
         return O.failed("item.updated", f"no such item {item!r}{gone}", id=item)
+    if line:
+        bad = _bad_line(cfg, line)
+        if bad:
+            return O.failed("item.updated", bad, id=item)
+    if line is not None and line != it.line:
+        moved = _line_frozen(st, it)
+        if moved:
+            return O.refused("item.updated", moved, id=item)
 
     fields: dict[str, Any] = {}
     if title is not None:
@@ -47,6 +56,8 @@ def update(
         fields["tags"] = list(tags)
     if priority is not None:
         fields["priority"] = int(priority)
+    if line is not None:
+        fields["line"] = line
 
     if not fields:
         return O.nothing(
@@ -71,6 +82,49 @@ MIN_SPLIT_PARTS = 2
 DEFAULT_PRIORITY = 100
 
 
+def _line_frozen(st, it) -> str:
+    """Why ``it``'s line may not change now, or "".
+
+    Ports were planned from the lines as they were: moving a fix (or a port) re-aims a
+    forward-merge at another branch -- a whole newer major merged into an old line, found
+    by review. And an item already forked has a branch built on its old line's base;
+    merging it into another line carries that base's history along.
+    """
+    from ..core.model import ABANDONED, DONE
+
+    ports = [o.id for o in st.items.values() if o.port_from == it.id and not o.removed]
+    if it.port_from or ports:
+        return (
+            f"{it.id} is part of a planned port ({', '.join(ports) or 'from ' + it.port_from}); "
+            f"its lines were fixed when the port was planned. Abandon and re-file it with "
+            f"the lines you want."
+        )
+    if it.worktree or it.branch or it.state in (DONE, ABANDONED) or it.lease:
+        return (
+            f"{it.id} already has a branch forked from its current line's base; moving it "
+            f"would merge that history into another line. Abandon and re-file it on the "
+            f"line you want."
+        )
+    return ""
+
+
+def _bad_line(cfg, line: str) -> str:
+    """Why ``line`` names no release line, or "". A typo'd line must not silently mean
+    'the current line' -- the fix would land on the wrong major and nothing would say so."""
+    from ..core.flow import line_order
+
+    known = line_order(cfg)
+    if line in known:
+        return ""
+    if not cfg.flow.lines:
+        return (
+            f"no release lines are configured, so --line {line!r} names nothing. Add "
+            f"maintenance lines under [flow.lines] (oldest first), e.g. "
+            f'`"2" = "maint/2.x"`.'
+        )
+    return f"unknown release line {line!r}. Lines, oldest first: {', '.join(known)}"
+
+
 def phase_add(
     repo: Path,
     item: str,
@@ -81,10 +135,17 @@ def phase_add(
     body: str = "",
     tags: str = "",
     priority: int = DEFAULT_PRIORITY,
+    line: str = "",
     agent: str = "",
 ) -> O.Outcome:
-    """Add a phase — an umbrella that completes when its tasks do."""
-    log, _cfg, _st = _load(repo, agent)
+    """Add a phase — an umbrella that completes when its tasks do.
+
+    ``line`` puts the whole phase on a release line; its tasks inherit it.
+    """
+    log, cfg, _st = _load(repo, agent)
+    bad = _bad_line(cfg, line) if line else ""
+    if bad:
+        return O.failed("phase.added", bad, id=item)
     log.append(
         "phase.added",
         item,
@@ -95,12 +156,13 @@ def phase_add(
             "body": body,
             "tags": csv_list(tags),
             "priority": priority,
+            "line": line,
         },
     )
     return O.ok("phase.added", id=item)
 
 
-def task_add(
+def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions have
     repo: Path,
     item: str,
     *,
@@ -111,34 +173,81 @@ def task_add(
     body: str = "",
     tags: str = "",
     priority: int = DEFAULT_PRIORITY,
+    line: str = "",
+    lines: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Add a task. Its parent may be a phase OR another task (making it a sub-task).
+
+    ``line`` puts it on one release line. ``lines`` (comma-separated) files a fix that
+    must reach SEVERAL: the task is written on the line `port_strategy` dictates and a
+    port item is generated for each other line -- `<id>@<line>`, an ordinary task with
+    its own branch, gates and merge, which starts once what it carries has landed.
 
     Tasks can be added at ANY time, including while their parent is being worked: a task
     that turns out to contain two things is the normal case, not an exception, and a
     queue that cannot absorb that discovery pushes the work into someone's head.
     """
+    from ..core import flow as F
+    from ..services import choices as CH
     from ..services import leases as L
 
-    log, _cfg, st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     if parent and parent not in st.items:
         return O.failed(
             "task.added", f"no such parent {parent!r}. Add the phase or task first.", id=item
         )
+    wanted = csv_list(lines) or ([line] if line else [])
+    for ln in wanted:
+        bad = _bad_line(cfg, ln)
+        if bad:
+            return O.failed("task.added", bad, id=item)
+    plan = None
+    adopted: list[str] = []
+    if len(set(wanted)) > 1:
+        clash = [f"{item}@{ln}" for ln in wanted if f"{item}@{ln}" in st.items]
+        if clash:
+            return O.failed("task.added", f"{', '.join(clash)} already exist", id=item)
+        # The first fix filed across lines is where the strategy starts to matter: an
+        # unmade choice is defaulted HERE, on the record, and followed from now on.
+        adopted = CH.adopt_defaults(log, cfg, ["port_strategy"])
+        plan = F.plan_ports(cfg, wanted, cfg.flow.port_strategy)
+    base = {
+        "parent": parent,
+        "globs": csv_list(globs),
+        "body": body,
+        "tags": csv_list(tags),
+        "priority": priority,
+    }
     log.append(
         "task.added",
         item,
         {
-            "parent": parent,
+            **base,
             "title": title,
             "needs": csv_list(needs),
-            "globs": csv_list(globs),
-            "body": body,
-            "tags": csv_list(tags),
-            "priority": priority,
+            "line": plan.author if plan else (wanted[0] if wanted else ""),
         },
     )
+    ports: list[str] = []
+    for ln, frm in plan.ports if plan else []:
+        source = item if frm < 0 else ports[frm]
+        pid = f"{item}@{ln}"
+        log.append(
+            "task.added",
+            pid,
+            {
+                **base,
+                "title": f"{title or item} (port to {ln})",
+                "needs": [source],
+                "line": ln,
+                "port_of": item,
+                "port_from": source,
+                "port_strategy": plan.strategy,
+                "tags": [*csv_list(tags), "port"],
+            },
+        )
+        ports.append(pid)
     # Giving a task its first child turns it into an umbrella, and an umbrella is not the
     # thing being worked -- its children are. Holding its lease from here would put a live
     # claim on globs that overlap every child's, so a SECOND agent could not take one, and
@@ -149,7 +258,17 @@ def task_add(
     released = bool(parent_item and parent_item.kind == "task" and parent_item.lease)
     if released:
         L.release(log, parent, note=f"became an umbrella when {item} was added")
-    return O.ok("task.added", id=item, parent=parent, released_parent_lease=released)
+    return O.ok(
+        "task.added",
+        id=item,
+        parent=parent,
+        released_parent_lease=released,
+        line=plan.author if plan else (wanted[0] if wanted else ""),
+        ports=ports,
+        port_strategy=plan.strategy if plan else "",
+        port_note=plan.note if plan else "",
+        defaulted=adopted,
+    )
 
 
 def split(

@@ -38,8 +38,9 @@ def _state(log: EventLog) -> State:
     return fold(log.read_all(), strict=False)
 
 
-def target(repo: Path, cfg: Config, it: Item) -> str:
-    return F.target_branch(it, cfg, W.default_branch(repo))
+def target(repo: Path, cfg: Config, it: Item, st: State) -> str:
+    """Where ``it`` lands: its release line's branch, or what `model` says for the current one."""
+    return F.target_branch(it, cfg, W.default_branch(repo), F.effective_line(st, it))
 
 
 def stacked_on(st: State, it: Item) -> Item | None:
@@ -60,7 +61,7 @@ def fork_point(repo: Path, cfg: Config, st: State, it: Item) -> tuple[str, str]:
     stack = F.stack_base(st, it, cfg, [d for _, d in inherited_deps(st, it)])
     if stack.base:
         return stack.base, branch
-    base = target(repo, cfg, it)
+    base = target(repo, cfg, it, st)
     if cfg.flow.integration == "pr":
         # Fork from what the forge HAS, not from a local branch nobody pulls: in PR mode
         # every merge happens remotely, so the local base is stale by construction.
@@ -154,7 +155,7 @@ def open_request(
         out.unavailable, out.reason = True, str(exc)
         return out
     on = stacked_on(st, it)
-    out.base = on.branch if on is not None else target(repo, cfg, it)
+    out.base = on.branch if on is not None else target(repo, cfg, it, st)
     out.stacked_on = on.id if on is not None else ""
     path = W.load_path(repo, it.worktree)
     pushed = W.push(path, cfg.flow.remote, it.branch)
@@ -193,6 +194,11 @@ def open_request(
     data.update(kind=it.kind, author_model=model, review="pending")
     log.append("pr.opened", item_id, data)
     L.release(log, item_id, note=f"in review: {info.url}")
+    # The first request is where review policy starts to matter: record whatever was not
+    # chosen, so it is followed from here rather than re-decided by the next ddflow.
+    from . import choices as CH
+
+    CH.adopt_defaults(log, cfg, ["pr_merge", "on_changes_requested", "stack"])
     out.ok, out.number, out.url = True, info.number, info.url
     if cfg.flow.pr_merge == "auto" and on is None:
         try:
@@ -281,7 +287,18 @@ def _settle_merged(
     data["kind"] = it.kind
     log.append("pr.merged", it.id, data)
     sha = info.merge_sha or info.head_sha
-    log.append("worktree.merged", it.id, {"sha": sha, "branch": it.branch})
+    # What landed, as a range on the target -- a cherry-pick port applies exactly this.
+    # The forge merged remotely, so fetch first; a merge or squash commit's first parent
+    # is the target just before it. (A rebase-merge lands several commits and its first
+    # parent is not the old target: BACKLOG B178.)
+    W.fetch(repo, cfg.flow.remote, info.base)
+    landed = {}
+    if info.merge_sha and W.rev(repo, info.merge_sha):
+        landed = {
+            "landed_before": W.rev(repo, f"{info.merge_sha}^1"),
+            "landed_after": info.merge_sha,
+        }
+    log.append("worktree.merged", it.id, {"sha": sha, "branch": it.branch, **landed})
     G.record(
         log,
         cfg,
@@ -298,7 +315,8 @@ def _settle_merged(
         gates=G.load_gates(repo, cfg),
     )
     rep.changes.append(Change(it.id, "merged", f"into {info.base}", info.url))
-    for extra in F.back_merge_targets(it, cfg, W.default_branch(repo)):
+    line = F.effective_line(_state(log), it)
+    for extra in F.back_merge_targets(it, cfg, W.default_branch(repo), line):
         _back_merge(repo, cfg, forge, it, extra, rep)
     st = _state(log)
     model = it.pr.author_model if it.pr else ""
@@ -323,7 +341,7 @@ def _settle_merged(
     # Anything stacked on this branch now belongs on the real target.
     for other in st.items.values():
         if other.state == REVIEW and other.pr and other.pr.base == it.branch:
-            new_base = target(repo, cfg, other)
+            new_base = target(repo, cfg, other, st)
             try:
                 forge.set_base(other.pr.number, new_base)
             except (FG.ForgeError, FG.ForgeUnavailable) as exc:
@@ -444,7 +462,7 @@ def _landed(
     Settling it earlier recorded DONE for work the target does not have, unblocked its
     dependents against a base missing its code, and removed its tree.
     """
-    final = target(repo, cfg, it)
+    final = target(repo, cfg, it, _state(log))
     sha = info.merge_sha or info.head_sha
     remote = cfg.flow.remote
     W.fetch(repo, remote, final)
@@ -490,7 +508,9 @@ def _apply(
     data = info.event_data(forge.name)
     data["kind"] = it.kind
     if info.state == "merged":
-        if info.base != target(repo, cfg, it) and not _landed(repo, cfg, it, info, log, rep):
+        if info.base != target(repo, cfg, it, _state(log)) and not _landed(
+            repo, cfg, it, info, log, rep
+        ):
             return
         _settle_merged(repo, cfg, log, forge, it, info, rep)
         return
@@ -513,7 +533,7 @@ def _apply(
                 info.url,
             )
         )
-    final = target(repo, cfg, it)
+    final = target(repo, cfg, it, _state(log))
     ready = (
         cfg.flow.pr_merge == "on_approval"
         and info.review == "approved"
@@ -578,10 +598,14 @@ class VersionPlan:
     items: list[str] = field(default_factory=list)
     notes: str = ""
     problems: list[str] = field(default_factory=list)
+    line: str = ""
 
 
-def release_source(repo: Path, cfg: Config) -> str:
-    """The branch a release is cut FROM: develop under gitflow, else the base branch."""
+def release_source(repo: Path, cfg: Config, line: str = "") -> str:
+    """The branch a release is cut FROM: a maintenance line's branch, develop under
+    gitflow, else the base branch."""
+    if F.is_maintenance(cfg, line):
+        return cfg.flow.lines[line]
     if cfg.flow.model == F.GITFLOW:
         return cfg.flow.develop_branch
     return cfg.worktree.base_ref or W.default_branch(repo)
@@ -596,13 +620,47 @@ def _ref(repo: Path, cfg: Config, branch: str) -> str:
     return branch
 
 
+def _set_next(vp: VersionPlan, cfg: Config, version: str, line: str) -> None:
+    """The next version: given, else bumped from the current one, else the initial one."""
+    if version:
+        if F.parse_version(version) is None:
+            vp.problems.append(f"{version!r} is not MAJOR.MINOR.PATCH")
+            vp.next = version
+            return
+        if vp.current and F.parse_version(version) <= F.parse_version(vp.current):
+            vp.problems.append(f"{version} is not above the current {vp.current}")
+        vp.next = version
+    elif not vp.commits:
+        vp.next = ""
+    elif not vp.current:
+        vp.next = cfg.flow.initial_version
+    else:
+        vp.next = F.fmt(F.bump(F.parse_version(vp.current), vp.bump))
+    if (
+        F.is_maintenance(cfg, line)
+        and vp.current
+        and vp.next
+        and F.parse_version(vp.next)[0] != F.parse_version(vp.current)[0]
+    ):
+        # A maintenance line exists to KEEP its major. A breaking change released from it
+        # would claim the next major -- which a newer line already owns.
+        vp.problems.append(
+            f"{vp.next} leaves the {vp.current.split('.')[0]}.x major, and line {line!r} is a "
+            f"maintenance line: a breaking change belongs on the current line. Release "
+            f"with --bump minor or --bump patch, or --version."
+        )
+
+
 def plan_version(
-    repo: Path, cfg: Config, st: State, *, bump: str = "", version: str = ""
+    repo: Path, cfg: Config, st: State, *, bump: str = "", version: str = "", line: str = ""
 ) -> VersionPlan:
-    branch = release_source(repo, cfg)
+    branch = release_source(repo, cfg, line)
     ref = _ref(repo, cfg, branch)
     vp = VersionPlan(ref=ref)
     vp.problems = F.problems(cfg)
+    if line and line not in F.line_order(cfg):
+        vp.problems.append(f"unknown release line {line!r}; lines: {', '.join(F.line_order(cfg))}")
+        return vp
     if not W.rev(repo, ref):
         vp.problems.append(f"release source {ref!r} does not exist")
         return vp
@@ -615,7 +673,13 @@ def plan_version(
         if b:
             bumps.append(b)
             vp.reasons.append(f"{b}: {m.splitlines()[0][:80]}")
-    released = {i for r in st.releases for i in r.items}
+    # Released ON THIS LINE. A fix forward-merged from 1.x to 3.x ships in both a 1.x and
+    # a 3.x release; excluding it everywhere once either was cut dropped it from the other
+    # line's notes and bump (RESEARCH R17 review).
+    here = line or cfg.flow.current_line
+    released = {
+        i for r in st.releases if (r.line or cfg.flow.current_line) == here for i in r.items
+    }
     shipped: list[Item] = []
     for it in sorted(st.items.values(), key=lambda i: i.id):
         if it.removed or it.state != DONE or it.kind != "task" or it.id in released:
@@ -632,18 +696,8 @@ def plan_version(
             vp.reasons.append(f"{b}: item {it.id} ({', '.join(it.tags)})")
     vp.items = [i.id for i in shipped]
     vp.bump = bump or F.strongest(bumps) or (F.PATCH if vp.commits else "")
-    if version:
-        if F.parse_version(version) is None:
-            vp.problems.append(f"{version!r} is not MAJOR.MINOR.PATCH")
-        elif vp.current and F.parse_version(version) <= F.parse_version(vp.current):
-            vp.problems.append(f"{version} is not above the current {vp.current}")
-        vp.next = version
-    elif not vp.commits:
-        vp.next = ""
-    elif not vp.current:
-        vp.next = cfg.flow.initial_version
-    else:
-        vp.next = F.fmt(F.bump(F.parse_version(vp.current), vp.bump))
+    _set_next(vp, cfg, version, line)
+    vp.line = line or cfg.flow.current_line
     vp.notes = release_notes(vp, shipped, messages, cfg)
     return vp
 
@@ -693,6 +747,7 @@ def cut(
     version: str = "",
     push: bool = False,
     dry_run: bool = False,
+    line: str = "",
 ) -> Cut:
     """Tag the next version. Under gitflow, via a release branch.
 
@@ -704,7 +759,7 @@ def cut(
                        tag is cut by `pr sync` when a person merges it.
     """
     st = _state(log)
-    vp = plan_version(repo, cfg, st, bump=bump, version=version)
+    vp = plan_version(repo, cfg, st, bump=bump, version=version, line=line)
     out = Cut(plan=vp, version=vp.next)
     if bump and bump not in F.BUMPS:
         vp.problems.append(f"bump {bump!r} is not one of {', '.join(F.BUMPS)}")
@@ -732,7 +787,9 @@ def cut(
         out.ok = True
         out.steps.append("dry run: nothing written")
         return out
-    if cfg.flow.model != F.GITFLOW:
+    if cfg.flow.model != F.GITFLOW or F.is_maintenance(cfg, line):
+        # A maintenance line is tagged where it stands: it has no develop/production
+        # pair of its own, so there is no release branch to route through.
         out.sha = W.rev(repo, vp.ref)
         return _tag_and_push(repo, cfg, log, out, vp, branch=vp.ref, push=push)
     return _cut_gitflow(repo, cfg, log, out, vp, push=push)
@@ -849,6 +906,7 @@ def _tag_and_push(
             "branch": branch,
             "items": vp.items,
             "pushed": out.pushed,
+            "line": vp.line,
         },
     )
     out.ok = True

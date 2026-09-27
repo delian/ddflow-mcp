@@ -49,7 +49,7 @@ from .decisions import (
     decision_show,
     decision_supersede,
 )
-from .flow import pr_status, pr_sync, version_cut, version_show
+from .flow import flow_choose, flow_show, pr_status, pr_sync, version_cut, version_show
 from .gates import Evidence as GateEvidence
 from .gates import record as gate_record
 from .gates import run as gate_run
@@ -162,6 +162,8 @@ __all__ = [
     "decision_show",
     "decision_supersede",
     "doctor",
+    "flow_choose",
+    "flow_show",
     "gate_record",
     "gate_run",
     "gate_status",

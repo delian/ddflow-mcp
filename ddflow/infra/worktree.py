@@ -636,3 +636,19 @@ def log_messages(repo: Path, since: str, ref: str) -> list[str]:
 def tag(repo: Path, name: str, ref: str, message: str) -> GitResult:
     """An ANNOTATED tag: it records who and when, and `git describe` sees it by default."""
     return git(repo, "tag", "--annotate", name, "-m", message, ref)
+
+
+def apply_3way(tree: Path, patch: str) -> GitResult:
+    """`git apply --3way` a patch into ``tree``'s index and files.
+
+    Three-way, so a hunk that does not apply cleanly becomes a conflict in the file --
+    something an agent can resolve -- rather than a rejected patch it has to redo by hand.
+    """
+    p = P.run(
+        ["git", "-C", str(tree), "apply", "--3way", "--index", "-"],
+        input=patch,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    return GitResult(p.returncode, p.stdout.strip(), p.stderr.strip())

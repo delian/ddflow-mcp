@@ -148,6 +148,7 @@ class Release:
     items: list[str] = field(default_factory=list)
     at: str = ""
     pushed: bool = False
+    line: str = ""
 
 
 @dataclass
@@ -183,6 +184,23 @@ class Item:
     #: from its dependency's branch -- and the merge target is derived from it.
     base: str = ""
     pr: PullRequest | None = None
+    #: The release line this item lands on ("" = inherit from its parent, else the
+    #: current line). See `core.flow.effective_line`.
+    line: str = ""
+    #: Set on a generated PORT: the fix it carries (`port_of`), the item whose landing it
+    #: ports (`port_from` -- the fix itself for cherry-pick, the previous line's port for
+    #: forward-merge), and how. Frozen at creation, so changing `port_strategy` later
+    #: does not reinterpret ports already in the queue.
+    port_of: str = ""
+    port_from: str = ""
+    port_strategy: str = ""
+    #: What the port did when it was applied: {"status": clean|conflict|failed, ...}.
+    port: dict[str, Any] = field(default_factory=dict)
+    #: The target branch just before and just after this item landed. The difference is
+    #: exactly what landed, whatever the merge strategy -- which is what a cherry-pick
+    #: port applies elsewhere.
+    landed_before: str = ""
+    landed_after: str = ""
     blocked_reason: str = ""
     created_at: str = ""
     completed_at: str = ""
@@ -346,6 +364,10 @@ class State:
     #: version -> the release request awaiting approval (gitflow + pull requests), as
     #: {"branch", "number", "url", "base", "forge"}. Tagging it removes it.
     pending_releases: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: knob -> the recorded workflow CHOICE: {"value", "by", "agent", "user", "at",
+    #: "reason"}. `by` is "explicit" or "default" -- a default applied at first use is
+    #: recorded so the project keeps following it even if ddflow's default changes.
+    flow_choices: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_lamport: int = 0
     event_count: int = 0
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
@@ -513,13 +535,15 @@ def _h_added(st: State, ev: Event, kind: str) -> None:
     it.tags = list(d.get("tags", it.tags))
     it.priority = int(d.get("priority", it.priority))
     it.source = d.get("source", it.source)
+    for f in ("line", "port_of", "port_from", "port_strategy"):
+        setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
 
 
 def _h_updated(st: State, ev: Event, kind: str) -> None:
     it = _item(st, ev, kind)
     d = ev.data
-    for f in ("title", "parent", "body", "blocked_reason"):
+    for f in ("title", "parent", "body", "blocked_reason", "line"):
         if f in d:
             setattr(it, f, _safe_parent(st, it.id, d[f]) if f == "parent" else d[f])
     for f in ("needs", "globs", "tags"):
@@ -621,7 +645,10 @@ def _h_state(new_state: str):
             it.blocked_reason = ev.data.get("reason", "")
         elif new_state == DONE:
             it.completed_at = ev.ts
-            it.merged_sha = ev.data.get("sha", it.merged_sha)
+            # `or`, not a default: `complete` without --sha writes "sha": "", which used
+            # to ERASE the sha `merge` recorded -- so no finished item was ever found on
+            # any branch, and every version's item list and item-based bump were empty.
+            it.merged_sha = ev.data.get("sha") or it.merged_sha
             # The importer has always written this -- `{"imported": True, "evidence":
             # "ticked in docs/todo.md:41"}` -- and the fold has always thrown it away,
             # so the one record of WHY an item was closed without running a single gate
@@ -675,7 +702,27 @@ def _h_worktree_adopted(st: State, ev: Event) -> None:
 
 
 def _h_worktree_merged(st: State, ev: Event) -> None:
-    _item(st, ev, ev.data.get("kind", "task")).merged_sha = ev.data.get("sha", "")
+    it = _item(st, ev, ev.data.get("kind", "task"))
+    it.merged_sha = ev.data.get("sha", "")
+    it.landed_before = ev.data.get("landed_before", it.landed_before)
+    it.landed_after = ev.data.get("landed_after", it.landed_after)
+
+
+def _h_port_applied(st: State, ev: Event) -> None:
+    it = _item(st, ev, ev.data.get("kind", "task"))
+    it.port = dict(ev.data)
+
+
+def _h_flow_chosen(st: State, ev: Event) -> None:
+    d = ev.data
+    st.flow_choices[d.get("knob", ev.subject)] = {
+        "value": d.get("value"),
+        "by": d.get("by", "explicit"),
+        "agent": ev.agent,
+        "user": d.get("user", ""),
+        "at": ev.ts,
+        "reason": d.get("reason", ""),
+    }
 
 
 def _h_worktree_removed(st: State, ev: Event) -> None:
@@ -787,6 +834,7 @@ def _h_release_tagged(st: State, ev: Event) -> None:
             items=list(d.get("items", [])),
             at=ev.ts,
             pushed=bool(d.get("pushed")),
+            line=d.get("line", ""),
         )
     )
 
@@ -1027,6 +1075,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "pr.changes_requested": _h_pr_changes_requested,
     "pr.merged": _h_pr_merged,
     "pr.closed": _h_pr_closed,
+    "port.applied": _h_port_applied,
+    "flow.chosen": _h_flow_chosen,
     "release.opened": _h_release_opened,
     "release.tagged": _h_release_tagged,
     "release.closed": _h_release_closed,

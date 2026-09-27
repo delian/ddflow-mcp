@@ -351,6 +351,84 @@ not as individually resolvable threads.
 
 ---
 
+## R17 — Several release lines, and choices that belong to the operator (2026-09-27)
+
+**Operator question.** Support, besides gitflow, trunk-based development and GitHub flow,
+projects with several major trunks receiving fixes; make how a fix travels between them
+configurable per project; ASK the agent or operator which way they want, and when they do
+not care, start with a default and follow it. "The tool should be flexible enough for any
+flow and project, and let the operator or agent choose the most suitable."
+
+**Claim.** Release lines fit the existing model without a new kind of object: a line is a
+target branch, a fix for several lines is one item plus generated PORT items that are
+ordinary tasks, and a choice is an event in the same log as everything else.
+
+**Falsifiers.** (a) a port that starts before what it carries has landed, or that ports
+something other than what landed; (b) two agents refused on the same file on different
+lines, or allowed on the same file on one line; (c) a fix landing on a line nobody asked for,
+or a typo'd line silently read as "current"; (d) a choice made by ddflow with no record of
+it, or a recorded default that a later ddflow silently changes; (e) a maintenance line
+tagged into the next major.
+
+**Verdict: CONFIRMED against all five, by `tests/test_lines.py`** (real repositories;
+branch contents checked with `git show`).
+
+**Design decisions and why.**
+
+1. **Two strategies, because teams genuinely split.** Forward-merge (fix the oldest line,
+   merge each line into the next — git.git's own maint→master) keeps newer lines supersets
+   of older ones by ancestry and needs no per-fix bookkeeping, but it drags everything on
+   the older line along and conflicts grow as lines diverge. Cherry-pick (fix the newest,
+   backport) is what projects with diverged lines do. Neither is right for every project,
+   so it is a choice, and the default is the lower-maintenance one.
+2. **Forward-merge passes through every line between.** A merge cannot skip a line; the
+   plan includes the intermediates and says so.
+3. **A cherry-pick port applies what LANDED** — the target's `before..after` range recorded
+   at merge time — not the task branch's commits, which differ by merge strategy (a squash,
+   a no-ff merge, a fast-forward). A rebase-merge on a forge lands several commits whose
+   first parent is not the old target; that case is filed (B178), not guessed.
+4. **A conflicting port is work.** Markers are left in the port's own tree and the claim
+   names the files; only a port that cannot start is "failed", and then the tree is left
+   clean. A human is needed only if the agent cannot resolve it — like any task.
+5. **Choices are events, overlaid where the config is silent.** The config file is the
+   operator's and wins; a recorded choice (agent or person, with a reason) comes next; a
+   default is applied at the first moment it matters AND recorded, so it is followed from
+   then on and is visibly "a default nobody chose". A brief lists relevant undecided
+   choices, so the agent asks at the start, not after the work.
+
+**What the adversarial review of the first version found.** Five defects with running
+probes, two by reading; all fixed, each with a regression test that fails when reverted:
+
+* **"" and the current line's NAME compared unequal** — both land on main, so two agents
+  were allowed onto one file. Every port to the current line carries the name, so this was
+  the common case. Conflicts now compare the resolved line (`line_key`).
+* **Moving a fix re-aimed its forward-merge ports**: `update FIX --line 3` after ports were
+  planned made `FIX@2` merge all of main into `maint/2.x`. The line of a planned port, or of
+  an item already forked, can no longer change; `merge` also refuses a branch forked from
+  another line's base.
+* **`claim --force` on a port before its source landed recorded "clean"** — a
+  forward-merge of a branch without the fix is "Already up to date" — and the port was
+  never applied again. It is now not recorded until it can be applied, a re-claim applies
+  it, and a forward-merge verifies the source's landed commit is actually in what it merged
+  (which also catches a stale ref after a failed fetch in PR mode).
+* **A line removed from config silently became the current line.** Its items are now
+  held with the reason.
+* **A fix on two lines appeared in only one line's release notes**: releases now exclude
+  items only when released on the SAME line.
+* **A port in an adopted tree, or with no tree, was silent** — the claim now explains it
+  is a port and what to run.
+* And a **pre-existing** fold defect it led to: `complete` without `--sha` ERASED the sha
+  `merge` recorded, so no finished item was ever found on any branch — every version's item
+  list and item-based bump were empty (R16's own version test checked only commits).
+
+**Filed:** B178 (rebase-merge landing range), B179 (`task_add` wants a named record, as
+decisions have), B180 (a port's fix changed after the port was generated — the port
+carries the version that landed, which is right, but nothing re-offers a port when the fix
+is amended by a follow-up), B181 (the MCP handshake does not yet list undecided choices;
+`brief` does).
+
+---
+
 ## R3 — Is MCP sufficient to make this agent-agnostic?
 
 **Claim.** Shipping only an MCP server makes the workflow portable across agents.

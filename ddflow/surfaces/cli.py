@@ -21,7 +21,6 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any
 
 from ..api import items as A_ITEMS
 from ..api import lifecycle as A_LIFECYCLE
@@ -37,7 +36,7 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
     _write_config,
 )
 from .commands.decisions import cmd_decision
-from .commands.flow import cmd_pr, cmd_version
+from .commands.flow import cmd_flow, cmd_pr, cmd_version
 from .commands.gates import cmd_gate
 from .commands.knowledge import (
     cmd_bug,
@@ -95,24 +94,24 @@ from .context import (
 
 
 def cmd_item_update(a, c: Ctx) -> int:
-    st = c.state()
-    it = _require_item(c, a.id, st)
-    if it is None:
-        return FAIL
-    d: dict[str, Any] = {}
-    for f in ("title", "body"):
-        if getattr(a, f) is not None:
-            d[f] = getattr(a, f)
-    for f in ("needs", "globs", "tags"):
-        if getattr(a, f) is not None:
-            d[f] = _csv(getattr(a, f))
-    if a.priority is not None:
-        d["priority"] = a.priority
-    if not d:
-        print("nothing to update", file=sys.stderr)
-        return NOTHING
-    c.log.append("phase.updated" if it.kind == "phase" else "task.updated", a.id, d)
-    c.out(f"{a.id} updated: {', '.join(d)}", {"id": a.id, "changed": list(d)})
+    # Through the api, like `ddflow_update` -- this wrote the event itself, so a field
+    # the api validates (a release line that does not exist) went unchecked here.
+    out = A_ITEMS.update(
+        c.repo,
+        a.id,
+        agent=c.requested_agent,
+        title=a.title,
+        body=a.body,
+        needs=None if a.needs is None else _csv(a.needs),
+        globs=None if a.globs is None else _csv(a.globs),
+        tags=None if a.tags is None else _csv(a.tags),
+        priority=a.priority,
+        line=a.line,
+    )
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    c.out(f"{a.id} updated: {', '.join(out.data['changed'])}", out.body(("id", "changed")))
     return OK
 
 
@@ -283,6 +282,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         add.add_argument("--tags")
         add.add_argument("--body")
         add.add_argument("--priority", type=int, default=A_ITEMS.DEFAULT_PRIORITY)
+        add.add_argument("--line", default="", help="release line (default: the current one)")
         add.set_defaults(fn=fn)
         return add
 
@@ -294,6 +294,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         default="",
         help="owning phase OR task — a task parent makes this a SUB-TASK, which "
         "carries its own globs and dependencies like any other task",
+    )
+    tad.add_argument(
+        "--lines",
+        default="",
+        help="a FIX for several release lines, e.g. 1,2,3: written where [flow].port_strategy "
+        "says, with a port task <id>@<line> generated for each other line",
     )
 
     sp = s.add_parser(
@@ -311,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
 
     up = s.add_parser("update", help="change an item's fields")
     up.add_argument("id")
-    for f in ("title", "body", "needs", "globs", "tags"):
+    for f in ("title", "body", "needs", "globs", "tags", "line"):
         up.add_argument(f"--{f}")
     up.add_argument("--priority", type=int)
     up.set_defaults(fn=cmd_item_update)
@@ -432,6 +438,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     ver_s = ver.add_subparsers(dest="version_cmd", required=True)
     vsh = ver_s.add_parser("show", help="current version, next version, why, release notes")
     vsh.add_argument("--bump", default="", choices=["", "major", "minor", "patch"])
+    vsh.add_argument("--line", default="", help="a maintenance line (default: the current one)")
     vsh.set_defaults(fn=cmd_version)
     vct = ver_s.add_parser(
         "cut", help="tag the next version (gitflow: via a release branch, or a release request)"
@@ -442,7 +449,25 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--push", action="store_true", help="publish the tag (and branches) to the remote"
     )
     vct.add_argument("--dry-run", action="store_true")
+    vct.add_argument("--line", default="", help="a maintenance line (default: the current one)")
     vct.set_defaults(fn=cmd_version)
+
+    fl = s.add_parser(
+        "flow",
+        help="how this project works: branching model, release lines, and every workflow "
+        "choice with who made it",
+    )
+    fl_s = fl.add_subparsers(dest="flow_cmd", required=True)
+    fl_s.add_parser("show", help="every choice: value, options, and who decided").set_defaults(
+        fn=cmd_flow
+    )
+    fch = fl_s.add_parser(
+        "choose", help="record a workflow choice (the config file still wins over it)"
+    )
+    fch.add_argument("knob")
+    fch.add_argument("value")
+    fch.add_argument("--reason", default="", help="why — the next agent reads this")
+    fch.set_defaults(fn=cmd_flow)
 
     br = s.add_parser("brief", help="budgeted session-start pack")
     br.add_argument("--item", default="")

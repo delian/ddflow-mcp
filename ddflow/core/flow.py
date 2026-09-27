@@ -22,7 +22,9 @@ would make the combination nobody listed impossible to express.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
 from ..config import Config
 from .model import REVIEW, Item, State
@@ -35,6 +37,83 @@ ON_CHANGES = ("reopen", "block")
 FORGES = ("auto", "github", "gitlab")
 
 FEATURE, BUGFIX, HOTFIX = "feature", "bugfix", "hotfix"
+FORWARD_MERGE, CHERRY_PICK = "forward-merge", "cherry-pick"
+PORT_STRATEGIES = (FORWARD_MERGE, CHERRY_PICK)
+
+
+@dataclass(frozen=True)
+class Choice:
+    """A workflow decision that belongs to the operator or the agent, not to ddflow.
+
+    ddflow supports several ways of working and must not pick one silently. So each is a
+    CHOICE: it can be made in config (the operator's file, which wins), or recorded with
+    `flow choose` by an agent or operator, and when nobody makes it the default is applied
+    at the first moment it matters AND recorded -- so the project keeps following it,
+    even if a later ddflow ships a different default. `flow show` lists every one, with
+    who decided and when.
+    """
+
+    knob: str
+    options: tuple[str, ...]
+    question: str
+    #: Asked about only when this is true: `port_strategy` means nothing without lines,
+    #: and a brief that lists every conceivable decision gets skimmed.
+    relevant: Callable[[Config], bool]
+
+
+CHOICES: dict[str, Choice] = {
+    c.knob: c
+    for c in (
+        Choice(
+            "model",
+            MODELS,
+            "Branching model: one trunk, or gitflow (develop + production + release branches)?",
+            lambda cfg: True,
+        ),
+        Choice(
+            "integration",
+            INTEGRATIONS,
+            "Land work by merging locally, or through pull/merge requests a person approves?",
+            lambda cfg: True,
+        ),
+        Choice(
+            "pr_merge",
+            PR_MERGE,
+            "Who presses merge on an approved request: ddflow (on_approval), the forge "
+            "(auto), or only a person (human)?",
+            lambda cfg: cfg.flow.integration == "pr",
+        ),
+        Choice(
+            "on_changes_requested",
+            ON_CHANGES,
+            "When a reviewer requests changes: return the item to the queue for an agent "
+            "(reopen), or park it for a person (block)?",
+            lambda cfg: cfg.flow.integration == "pr",
+        ),
+        Choice(
+            "stack",
+            ("true", "false"),
+            "May work start on top of a dependency that is still in review (stacked "
+            "requests), or wait for its merge?",
+            lambda cfg: cfg.flow.integration == "pr",
+        ),
+        Choice(
+            "port_strategy",
+            PORT_STRATEGIES,
+            "How does a fix reach several release lines: written on the oldest and "
+            "merged forward (forward-merge), or written on the newest and cherry-picked "
+            "back (cherry-pick)?",
+            lambda cfg: bool(cfg.flow.lines),
+        ),
+    )
+}
+
+
+def choice_value(knob: str, raw: str) -> Any:
+    """A choice as the config holds it: `stack` is a bool, the rest are strings."""
+    if knob == "stack":
+        return str(raw).strip().lower() in ("true", "1", "yes", "on")
+    return str(raw)
 
 
 def problems(cfg: Config) -> list[str]:
@@ -55,6 +134,18 @@ def problems(cfg: Config) -> list[str]:
     ):
         if value not in allowed:
             out.append(f"[flow].{knob} = {value!r} is not one of {', '.join(allowed)}")
+    if fc.port_strategy not in PORT_STRATEGIES:
+        out.append(
+            f"[flow].port_strategy = {fc.port_strategy!r} is not one of {', '.join(PORT_STRATEGIES)}"
+        )
+    if fc.current_line in fc.lines:
+        out.append(
+            f"[flow].current_line {fc.current_line!r} is also a maintenance line in "
+            f"[flow.lines]; the current line is the newest and follows `model`"
+        )
+    empty = [n for n, b in fc.lines.items() if not str(b).strip()]
+    if empty:
+        out.append(f"[flow.lines] {', '.join(empty)} name no branch")
     if parse_version(cfg.flow.initial_version) is None:
         out.append(
             f"[flow].initial_version = {cfg.flow.initial_version!r} is not MAJOR.MINOR.PATCH"
@@ -101,8 +192,59 @@ def production(cfg: Config, default_branch: str) -> str:
     return cfg.flow.production_branch or default_branch
 
 
-def target_branch(it: Item, cfg: Config, default_branch: str) -> str:
-    """Where ``it``'s work finally lands (ignoring stacking, which is temporary)."""
+def line_order(cfg: Config) -> list[str]:
+    """Every line, oldest first; the current line is always last."""
+    return [*cfg.flow.lines, cfg.flow.current_line]
+
+
+def effective_line(state: State, it: Item) -> str:
+    """The line ``it`` lands on: its own, else its nearest ancestor's, else the current.
+
+    Inherited, so a phase filed for the 2.x line puts every task in it on 2.x without
+    each one saying so -- and a task that says otherwise wins.
+    """
+    if it.line:
+        return it.line
+    for anc in state.ancestors(it.id):
+        if anc.line:
+            return anc.line
+    return ""
+
+
+def line_key(state: State, it: Item, cfg: Config) -> str:
+    """The line ``it`` lands on, NAMED -- "" resolved to the current line.
+
+    What conflict checks compare. Comparing `effective_line` strings made "" (no line)
+    and "3" (the current line, by name) look like two lines while both land on the same
+    branch, so two agents were allowed onto one file -- and every generated port to the
+    current line carries the name.
+    """
+    return effective_line(state, it) or cfg.flow.current_line
+
+
+def unknown_line(state: State, it: Item, cfg: Config) -> str:
+    """``it``'s line when it names one the config no longer has; else "".
+
+    A line removed from [flow.lines] must not quietly become "the current line": the
+    item's work would land on the newest major, the one thing its line said it must not.
+    """
+    ln = effective_line(state, it)
+    return ln if ln and ln not in line_order(cfg) else ""
+
+
+def is_maintenance(cfg: Config, line: str) -> bool:
+    return bool(line) and line != cfg.flow.current_line and line in cfg.flow.lines
+
+
+def target_branch(it: Item, cfg: Config, default_branch: str, line: str = "") -> str:
+    """Where ``it``'s work finally lands (ignoring stacking, which is temporary).
+
+    A maintenance line lands directly on its branch; the current line follows `model`.
+    ``line`` is the EFFECTIVE line (see `effective_line`), passed in because resolving
+    inheritance needs the whole state.
+    """
+    if is_maintenance(cfg, line):
+        return cfg.flow.lines[line]
     if cfg.flow.model != GITFLOW:
         return cfg.worktree.base_ref or default_branch
     if branch_kind(it, cfg) == HOTFIX:
@@ -110,8 +252,10 @@ def target_branch(it: Item, cfg: Config, default_branch: str) -> str:
     return cfg.flow.develop_branch
 
 
-def back_merge_targets(it: Item, cfg: Config, default_branch: str) -> list[str]:
+def back_merge_targets(it: Item, cfg: Config, default_branch: str, line: str = "") -> list[str]:
     """Branches that must ALSO receive ``it`` after it lands. A gitflow hotfix only."""
+    if is_maintenance(cfg, line):
+        return []
     if cfg.flow.model == GITFLOW and branch_kind(it, cfg) == HOTFIX:
         dev = cfg.flow.develop_branch
         if dev != target_branch(it, cfg, default_branch):
@@ -140,7 +284,9 @@ def stack_base(state: State, it: Item, cfg: Config, deps: list[str]) -> Stack:
     one silently omits the other's code from the dependent's tree -- and its tests would
     then pass against a world that will not exist once both land.
     """
-    if not cfg.flow.stack:
+    if not cfg.flow.stack or it.port_from:
+        # A port applies what its source LANDED; stacked on an unlanded source there is
+        # nothing to apply yet.
         return Stack()
     pending: dict[str, str] = {}
     for dep in deps:
@@ -235,3 +381,43 @@ def strongest(bumps: list[str]) -> str:
         if kind in bumps:
             return kind
     return ""
+
+
+# -- ports across release lines ---------------------------------------------------------
+
+
+@dataclass
+class PortPlan:
+    author: str  # the line the fix is written on
+    ports: list[tuple[str, int]]  # (line, index into ports of what it ports FROM; -1 = the fix)
+    strategy: str
+    note: str = ""
+
+
+def plan_ports(cfg: Config, requested: list[str], strategy: str) -> PortPlan:
+    """Where a fix that must reach ``requested`` lines is written, and how it travels.
+
+    forward-merge: written on the OLDEST requested line and merged forward through EVERY
+    line up to the newest requested one. A merge cannot skip a line: 2.x merged into 3.x
+    after 1.x was merged straight into 3.x would bring the fix's absence on 2.x along
+    with everything else, so intermediate lines are included and the plan says so.
+
+    cherry-pick: written on the NEWEST requested line, then applied to each older one
+    independently -- so the ports run in parallel.
+    """
+    order = line_order(cfg)
+    wanted = sorted({r or cfg.flow.current_line for r in requested}, key=order.index)
+    if strategy == CHERRY_PICK:
+        return PortPlan(wanted[-1], [(ln, -1) for ln in reversed(wanted[:-1])], strategy)
+    chain = order[order.index(wanted[0]) : order.index(wanted[-1]) + 1]
+    extra = [ln for ln in chain if ln not in wanted]
+    return PortPlan(
+        chain[0],
+        [(ln, i - 1) for i, ln in enumerate(chain[1:])],
+        strategy,
+        note=(
+            f"forward-merge passes through {', '.join(extra)} as well: a merge cannot skip a line"
+            if extra
+            else ""
+        ),
+    )
