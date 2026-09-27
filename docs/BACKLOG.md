@@ -331,7 +331,9 @@ from this list); these are the rest, ranked as it ranked them.
   must equal what the log regenerates now, or the commit is refused with the file named
   and `ddflow render` + `git add` as the remedy. Knob `[enforce] generated_views` (block |
   warn | off, default block — it fires only on a commit that includes a view). Checks the
-  INDEX, not the working copy; finds views by marker, so `render --out` is covered. The
+  INDEX, not the working copy — and refuses when the event log has UNSTAGED changes, so
+  the log on disk is the log committed beside the view (roborev on 7216f5e: a view ahead
+  of its committed log passed). Finds views by marker, so `render --out` is covered. The
   views now come from ONE map, `VIEWS`/`render_views`: `sessions.bundle` held a copy while
   its docstring said it shared this one, and wrote different bytes. Tests:
   `tests/test_generated_views.py` (9), 6 mutations. **Not covered, deliberately:** the

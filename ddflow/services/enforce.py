@@ -28,6 +28,7 @@ where the agent is not the one running it.
 
 from __future__ import annotations
 
+import shlex
 import stat
 import sys
 import time
@@ -311,6 +312,28 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
         return 0, ""
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
+    # The view is committed WITH a log, and must agree with THAT log -- not with the
+    # one on disk. Staging a view rendered from events that are not themselves staged
+    # would commit a page describing work its own commit does not record (roborev on
+    # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
+    # be fully staged: then the log on disk IS the committed log, and the comparison
+    # below is exact.
+    unstaged = _unstaged_under(repo, log.dir)
+    if unstaged:
+        return _verdict(
+            mode,
+            [
+                f"ddflow: a generated view is staged, but the event log it is rendered from "
+                f"has {len(unstaged)} unstaged change(s):",
+                "",
+                *(f"  {p}" for p in unstaged[:MAX_LISTED_PATHS]),
+                "",
+                "A committed view must agree with the log committed beside it. Stage both:",
+                f"    git add {shlex.quote(_rel(repo, log.dir))}",
+                "    ddflow render" + _out_hint(sorted(staged)),
+                "    git add " + " ".join(shlex.quote(p) for p in sorted(staged)),
+            ],
+        )
     # Config from the FILES, as `ddflow render` writes with: env overrides belong to
     # whoever typed `git commit`, not to the view.
     want = render_views(fold(log.read_all(), strict=False), Config.load(repo, env={}))
@@ -319,23 +342,50 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     )
     if not wrong:
         return 0, ""
-    lines = [
-        f"ddflow: {len(wrong)} staged generated view(s) differ from what the event log "
-        "regenerates now:",
-        "",
-        *(f"  {p}" for p in wrong),
-        "",
-        "A view is regenerated from the log, never edited: either it was changed by hand,",
-        "or the queue moved after it was rendered. Regenerate it and stage the result:",
-        "    ddflow render" + _out_hint(wrong),
-        "    git add " + " ".join(wrong),
-        "",
-        f'Policy is [enforce].generated_views = "{mode}" in .ddflow/config.toml.',
-    ]
-    msg = "\n".join(lines)
+    return _verdict(
+        mode,
+        [
+            f"ddflow: {len(wrong)} staged generated view(s) differ from what the event log "
+            "regenerates now:",
+            "",
+            *(f"  {p}" for p in wrong),
+            "",
+            "A view is regenerated from the log, never edited: either it was changed by hand,",
+            "or the queue moved after it was rendered. Regenerate it and stage the result:",
+            "    ddflow render" + _out_hint(wrong),
+            "    git add " + " ".join(shlex.quote(p) for p in wrong),
+        ],
+    )
+
+
+def _verdict(mode: str, lines: list[str]) -> tuple[int, str]:
+    msg = "\n".join(
+        [*lines, "", f'Policy is [enforce].generated_views = "{mode}" in .ddflow/config.toml.']
+    )
     if mode == "warn":
         return 0, msg + '\n\n(warning only; set the policy to "block" to refuse)'
     return 1, msg
+
+
+def _rel(repo: Path, path: Path) -> str:
+    try:
+        return str(Path(path).resolve().relative_to(Path(repo).resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _unstaged_under(repo: Path, d: Path) -> list[str]:
+    """Paths under ``d`` whose working copy differs from the index: modified-but-not-
+    staged, or untracked and not ignored. A log directory a project chose to gitignore
+    reports nothing, and the check then compares against the working log as before."""
+    rel = _rel(repo, d)
+    out: list[str] = []
+    for argv in (["diff", "--name-only"], ["ls-files", "--others", "--exclude-standard"]):
+        r = P.run(
+            ["git", "-C", str(repo), *argv, "--", rel], capture_output=True, text=True, timeout=60
+        )
+        out += [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    return sorted(set(out))
 
 
 def _lf(data: bytes) -> bytes:
@@ -348,7 +398,7 @@ def _out_hint(paths: list[str]) -> str:
     """` --out DIR` when every wrong view lives outside the default directory together."""
     dirs = {str(Path(p).parent) for p in paths}
     if len(dirs) == 1 and (d := dirs.pop()) != "docs/ddflow":
-        return f" --out {d}"
+        return f" --out {shlex.quote(d)}"
     return ""
 
 

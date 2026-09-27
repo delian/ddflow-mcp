@@ -67,7 +67,11 @@ quietly omits them. Both happened on 2026-09-27.
 * `enforce._out_hint` names no `--out` when stale views span several directories.
 
 **Queue roborev on whatever you commit** — every run on this series has found something
-real.
+real. On `7216f5e` (job 817) it found two CONFIRMED defects the adversarial subagent had
+missed, both fixed in the commit after it: the view check compared the STAGED view with
+the log ON DISK (a view ahead of its committed log passed), and `adopt` printed "adopted"
+and exited 0 after SKIPPING an MCP registration — the wrote-nothing-reported-success class,
+reintroduced by the very commit that fixed it for Kilo.
 
 ## 3. What was finished in the previous session
 

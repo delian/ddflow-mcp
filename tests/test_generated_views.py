@@ -182,3 +182,47 @@ def test_an_env_override_at_commit_time_does_not_make_a_correct_view_stale(adopt
     monkeypatch.setenv("DDFLOW_GATES_TASK_PIPELINE", "tests,review")
     r = _commit(adopted, "docs/ddflow")
     assert r.returncode == 0, f"a correct render was refused over an env override:\n{r.stderr}"
+
+
+def test_a_view_rendered_from_unstaged_events_is_refused(adopted):
+    """roborev on 7216f5e, reproduced: the view came from the INDEX but the log it was
+    compared with came from DISK. Render after an event, stage only the view, and the
+    commit carried a QUEUE.md naming a task its own committed log never recorded."""
+    run_cli(adopted, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
+    assert run_cli(adopted, "render")[0] == 0
+    r = _commit(adopted, VIEW)  # the log is NOT staged
+    assert r.returncode != 0, "a view ahead of its committed log was committed"
+    assert "unstaged" in r.stderr and "git add .ddflow/events" in r.stderr, r.stderr
+    shown = _git(adopted, "show", "HEAD:" + VIEW)
+    assert "P1.T2" not in shown.stdout, "the ahead-of-log view reached HEAD"
+
+
+def test_the_view_and_its_log_staged_together_commit_cleanly(adopted):
+    run_cli(adopted, "task", "add", "P1.T2", "--phase", "P1", "--globs", "src/b.py")
+    assert run_cli(adopted, "render")[0] == 0
+    r = _commit(adopted, VIEW, ".ddflow/events")
+    assert r.returncode == 0, f"a view committed with its own log was refused:\n{r.stderr}"
+
+
+def test_the_remedy_is_copy_pasteable_for_a_directory_with_a_space(adopted):
+    """The remedy is the one thing the refusal exists to deliver. Unquoted, `--out hand
+    book` renders into `hand` and `git add` stages two wrong paths (roborev on 7216f5e)."""
+    assert run_cli(adopted, "render", "--out", "hand book")[0] == 0
+    view = adopted / "hand book" / "QUEUE.md"
+    view.write_text(view.read_text() + "\nhand edit\n")
+    r = _commit(adopted, "hand book/QUEUE.md")
+    assert r.returncode != 0
+    assert "ddflow render --out 'hand book'" in r.stderr, r.stderr
+    assert "git add 'hand book/QUEUE.md'" in r.stderr, r.stderr
+
+
+def test_a_crlf_view_is_still_checked_not_skipped(adopted):
+    """The other half of the CRLF test, which alone would pass if CRLF views were never
+    recognised as views at all (the cross-family critic's reading of `startswith`)."""
+    run_cli(adopted, "render")
+    view = adopted / VIEW
+    edited = view.read_text() + "\nhand edit\n"
+    view.write_bytes(edited.encode().replace(b"\n", b"\r\n"))
+    _git(adopted, "config", "core.autocrlf", "false")
+    r = _commit(adopted, VIEW)
+    assert r.returncode != 0, "a hand-edited CRLF view was committed unchecked"

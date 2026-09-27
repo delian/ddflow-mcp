@@ -278,9 +278,11 @@ def cmd_adopt(a, c: Ctx) -> int:
         ),
         agent=c.requested_agent,
     )
-    if out.exit == FAIL:
+    if out.exit == FAIL and not out.data.get("actions"):
         print(out.reason, file=sys.stderr)
         return FAIL
+    # A REFUSAL with actions is a partial adoption: everything else WAS written, so init
+    # and the report still happen -- and then the exit code says it is not done.
     # `cmd_init` lives HERE, not in `cli`: `adopt` calls it, and reaching back up into
     # the surface this module was extracted out of would recreate the module-level cycle
     # `test_no_mutually_importing_pair_has_a_module_level_edge` forbids.
@@ -289,6 +291,9 @@ def cmd_adopt(a, c: Ctx) -> int:
         out.data["text"],
         out.body(("actions", "agents", "companions_ready", "companions_absent")),
     )
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
     return OK
 
 

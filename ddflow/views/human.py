@@ -154,6 +154,13 @@ def setup(out) -> str:
             f"\n\nNot installed: {', '.join(d['companions_absent'])} — "
             f"`ddflow companions` has the commands."
         )
+    if out.exit != 0:
+        # A refusal: never "adopted for" -- that line is what a reader stops at.
+        return (
+            "\n".join(f"  {x}" for x in d.get("actions", []))
+            + f"\n\nddflow NOT fully adopted for: {', '.join(agents)} -- "
+            "finish the SKIPPED step(s) above by hand, then re-run `ddflow adopt`." + tail
+        )
     return (
         "\n".join(f"  {x}" for x in d.get("actions", []))
         + f"\n\nddflow adopted for: {', '.join(agents)}.\n"

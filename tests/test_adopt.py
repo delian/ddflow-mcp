@@ -324,6 +324,11 @@ def test_a_config_holding_a_non_object_is_skipped_not_crashed_or_clobbered(repo,
     cfg.write_text(existing)
     rc, out, err = run_cli(repo, "adopt", "--agents", "kilo")
     assert "Traceback" not in err, err
-    assert rc == 0, err
-    assert f"SKIPPED {'.kilo/kilo.json'}" in out, out
     assert cfg.read_text() == existing, "the operator's file was changed"
+    # A server that was not registered is not "adopted". This test first pinned rc == 0
+    # -- the wrote-nothing-reported-success class; roborev on 7216f5e.
+    assert rc != 0, f"a skipped registration exited 0:\n{out}"
+    assert "SKIPPED .kilo/kilo.json" in out + err, out + err
+    assert "ddflow adopted for" not in out, out
+    # ...while the rest of the adoption still happened.
+    assert (repo / "AGENTS.md").is_file() and (repo / ".ddflow" / "config.toml").is_file()

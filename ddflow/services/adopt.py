@@ -764,6 +764,15 @@ def _running_from_source() -> bool:
     return not any(part in ("site-packages", "dist-packages") for part in here.parts)
 
 
+class Refused(str):
+    """An action message that is a REFUSAL: nothing was written, and the operator must
+    act. A `str`, so `adopt`'s action list reads exactly as before; a distinct TYPE, so
+    `setup` can fail on it without sniffing the wording. It used to be a plain string,
+    and `adopt` printed "SKIPPED ..." then "ddflow adopted for: kilo" and exited 0 --
+    a server never registered, reported as done (roborev on 7216f5e). The same contract
+    `companions add` already keeps (`test_a_refusal_is_not_reported_as_success`)."""
+
+
 def _register_mcp(
     repo: Path, key: str, *, launch: str = "auto", image: str = "ghcr.io/OWNER/ddflow:latest"
 ) -> str:
@@ -803,11 +812,11 @@ def _register_mcp(
         try:
             data = json.loads(path.read_text("utf-8") or "{}")
         except json.JSONDecodeError:
-            return f"SKIPPED {rel}: it is not valid JSON; add the server by hand"
+            return Refused(f"SKIPPED {rel}: it is not valid JSON; add the server by hand")
     try:
         place_server(data, target.shape, "ddflow", entry)
     except UnplaceableConfig as exc:
-        return f"SKIPPED {rel}: {exc}; add the server by hand"
+        return Refused(f"SKIPPED {rel}: {exc}; add the server by hand")
     path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
     return f"registered ddflow in {rel}"
 

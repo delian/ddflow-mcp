@@ -496,15 +496,23 @@ def setup(repo: Path, plan: Adoption | None = None, *, agent: str = "") -> O.Out
         if not st.is_gap:
             continue
         (ready if st.state == "installed" else absent).append(st.companion.id)
+    from ..services.adopt import Refused
     from ..views import human
 
-    out = O.ok(
-        "setup",
-        actions=actions,
-        agents=agents,
-        companions_ready=ready,
-        companions_absent=absent,
-        text="",
-    )
+    data = {
+        "actions": actions,
+        "agents": agents,
+        "companions_ready": ready,
+        "companions_absent": absent,
+        "text": "",
+    }
+    refused = [a for a in actions if isinstance(a, Refused)]
+    if refused:
+        # Everything else was still written, so the actions are reported in full; but a
+        # step the operator must finish by hand is not "adopted", and the exit code is
+        # what a script or an agent reads.
+        out = O.failed("setup", "; ".join(refused), **data)
+    else:
+        out = O.ok("setup", **data)
     out.data["text"] = human.render(out)
     return out
