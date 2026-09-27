@@ -27,7 +27,6 @@ Notes on protocol handling:
 
 from __future__ import annotations
 
-import io
 import json
 import os
 import re
@@ -1100,7 +1099,10 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: ["--json", "help"] + ([a["topic"]] if a.get("topic") else []),
+        "api": lambda repo, a, agent: _api().help_topic(
+            repo, topic=a.get("topic", "") or "", tools=TOOLS, agent=agent
+        ),
+        "payload": ("topic", "text", "topics"),
     },
     "ddflow_import_verify": {
         "description": (
@@ -1139,9 +1141,10 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "no_probe": ("boolean", "Skip the detection probes (faster, less certain).", False),
         },
-        "argv": lambda a: (
-            ["--json", "companions", "list"] + (["--no-probe"] if a.get("no_probe") else [])
+        "api": lambda repo, a, agent: _api().companions_list(
+            repo, no_probe=bool(a.get("no_probe")), agent=agent
         ),
+        "payload": ("companions", "gate_coverage", "uncovered_gates"),
     },
     "ddflow_companions_add": {
         "description": (
@@ -1164,12 +1167,17 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "argv": lambda a: (
-            ["--json", "companions", "add"]
-            + (["--id", a["id"]] if a.get("id") else [])
-            + (["--agents", a["agents"]] if a.get("agents") else [])
-            + (["--dry-run"] if a.get("dry_run") else [])
+        "api": lambda repo, a, agent: _api().companions_add(
+            repo,
+            _api().Registration(
+                ids=a.get("id", "") or "",
+                agents=a.get("agents", "") or "",
+                force=bool(a.get("force")),
+                dry_run=bool(a.get("dry_run")),
+            ),
+            agent=agent,
         ),
+        "payload": ("actions", "applied", "written", "refused"),
     },
     "ddflow_bug_found": {
         "description": (
@@ -1252,11 +1260,17 @@ TOOLS: dict[str, dict[str, Any]] = {
             "action": ("string", "list (default), show, or eject.", False),
             "name": ("string", "Template name, for show/eject.", False),
         },
-        "argv": lambda a: (
-            ["--json", "prompts", "list"]
-            if a.get("action", "list") == "list"
-            else ["prompts", a["action"], *([a["name"]] if a.get("name") else [])]
+        "api": lambda repo, a, agent: _api().prompts(
+            repo,
+            action=a.get("action", "list") or "list",
+            name=a.get("name", "") or "",
+            agent=agent,
         ),
+        # Prose for SOME arguments, like `render`: `show` returns the template TEXT and
+        # `eject` the files it wrote, while `list` is a table callers parse.
+        "payload": lambda a: "text" if a.get("action") in ("show", "eject") else "rows",
+        "text": lambda a: a.get("action") in ("show", "eject"),
+        "kind": "prompts",
     },
     "ddflow_hooks": {
         "description": (
@@ -1267,7 +1281,13 @@ TOOLS: dict[str, dict[str, Any]] = {
             "with no hook installed enforces nothing."
         ),
         "properties": {"action": ("string", "status (default), install, uninstall.", False)},
-        "argv": lambda a: ["--json", "hooks", a.get("action", "status")],
+        "api": lambda repo, a, agent: _api().hooks(
+            repo, action=a.get("action", "status") or "status", agent=agent
+        ),
+        # The two FACTS. `message` is the prose rendering of them and stays OUT of the
+        # JSON body: `hooks status --json` has always emitted exactly these two, and
+        # adding a key is a wire change this migration does not get to make.
+        "payload": ("installed", "policy"),
     },
     "ddflow_doctor": {
         "description": (
@@ -1334,7 +1354,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             )
         },
-        "argv": lambda a: ["adopt", *_opt("--agents", a)],
+        "api": lambda repo, a, agent: _api().adopt_project(
+            repo,
+            _api().Adoption(agents=a.get("agents", "") or ""),
+            agent=agent,
+        ),
+        # PROSE: a checklist of what it wrote and what to do next.
+        "payload": "text",
+        "text": True,
+        "kind": "setup",
     },
     "ddflow_configure": {
         "description": (
@@ -1360,13 +1388,23 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "filter": ("string", "Only show knobs whose name contains this.", False),
         },
-        "argv": lambda a: (
-            ["config", "--set", a["set"], a.get("value", "")]
-            if a.get("set")
-            else ["config", "--append-toml", a["toml"]]
-            if a.get("toml")
-            else ["config", "--explain", *_opt("--filter", a)]
+        "api": lambda repo, a, agent: _api().configure(
+            repo,
+            _api().ConfigEdit(
+                set=a.get("set", "") or "",
+                value=a.get("value", "") or "",
+                append_toml=a.get("toml", "") or "",
+                filter=a.get("filter", "") or "",
+                explain=True,
+            ),
+            agent=agent,
         ),
+        # PROSE, and `explain=True`: the string path was `config --explain`, which is
+        # every knob with its documentation AND its source. The source is the half an
+        # operator debugging a setting cannot do without.
+        "payload": "text",
+        "text": True,
+        "kind": "config",
     },
     "ddflow_reviewers_detect": {
         "description": (
@@ -1744,51 +1782,6 @@ def _default_agent(repo: Path) -> tuple[str, str]:
     }[layer]
 
 
-def _run_cli(
-    repo: Path, argv: list[str], agent: str = "", called_from: Path | None = None
-) -> tuple[int, str]:
-    """Invoke the CLI in-process, capturing both streams.
-
-    In-process rather than subprocess: it is ~40x faster per call, and it guarantees
-    the MCP surface and the shell surface execute literally the same code, which is the
-    property that stops them drifting.
-    """
-    out, err = io.StringIO(), io.StringIO()
-    real_out, real_err = sys.stdout, sys.stderr
-    sys.stdout, sys.stderr = out, err
-    # Imported HERE, not at module scope. `cli` imports this module for the help
-    # inventory and this module imports `cli` to run it -- a cycle held apart only by
-    # both edges being function-local, which nothing checked until
-    # `test_no_module_level_import_cycles`. The edge disappears entirely when the last
-    # tool leaves the argv path: `_run_cli` is the only thing that needs `cli_main`.
-    from .cli import main as cli_main
-
-    # `--agent` BEFORE the subcommand: it is a top-level flag, and argparse puts a
-    # top-level flag appearing after the subcommand name into the subparser, where it
-    # does not exist. An identity silently dropped is worse than one never set -- the
-    # events would be attributed to the process default and look entirely plausible.
-    # `--repo` gets the CALLER's location, not the resolved primary. `Ctx` resolves the
-    # primary itself for the log and config, and keeps the unresolved path for the one
-    # decision that needs it. Passing the primary here is what made adoption a CLI-only
-    # feature.
-    where = called_from or repo
-    head = ["--repo", str(where)] + (["--agent", agent] if agent else [])
-    try:
-        code = cli_main([*head, *argv])
-    except SystemExit as exc:
-        code = int(exc.code or 0)
-    except Exception:
-        code = 1
-        err.write(traceback.format_exc())
-    finally:
-        sys.stdout, sys.stderr = real_out, real_err
-    body = out.getvalue()
-    tail = err.getvalue()
-    if tail:
-        body = (body + "\n" if body else "") + tail
-    return code, body.strip()
-
-
 class Server:
     """One connection. Which, deliberately, is not the same thing as one agent.
 
@@ -1975,14 +1968,19 @@ class Server:
                     payload = payload(args)
                 return _ok(mid, _outcome_result(result, payload, as_text=bool(wants_text)))
 
-            try:
-                argv = spec["argv"](args)
-            except (KeyError, TypeError) as exc:
-                return _ok(mid, _text(f"bad arguments: {exc}", error=True))
-            code, body = _run_cli(self.repo, argv, self.agent, self.called_from)
-            # Exit 2 ("nothing to do") and 3 ("coordination refused") are RESULTS, not
-            # errors: the model must read and act on them. Only 1 is a genuine failure.
-            return _ok(mid, _text(body or f"(exit {code})", error=(code == 1), meta={"exit": code}))
+            # No argv fallback. Every tool declares `api`, `ARGV_TOOLS_CEILING` is 0, and
+            # `test_every_tool_has_exactly_one_dispatch_mechanism` requires exactly one
+            # mechanism per tool — so a tool arriving here has NO dispatch, which is a
+            # packaging fault rather than a caller error. Said plainly instead of falling
+            # through to a path that no longer exists.
+            return _ok(
+                mid,
+                _text(
+                    f"{name} declares no dispatch mechanism. This is a ddflow bug, not a "
+                    f"problem with the call.",
+                    error=True,
+                ),
+            )
         if method == "resources/list":
             return _ok(
                 mid,
@@ -2025,15 +2023,21 @@ class Server:
             # above it shadowed, which is how a second path hides: nothing reads the
             # line, so nothing contradicts it.
             cmd = {
-                "ddflow://board": ["board"],
-                "ddflow://brief": ["brief"],
-                "ddflow://lessons": ["render", "--show", "lessons"],
-                "ddflow://research": ["render", "--show", "research"],
+                "ddflow://board": lambda repo: _api().board(repo).data["text"],
+                # Through the API, like every tool. This served the resources by invoking
+                # the CLI in-process and scraping its stdout, which was the last live user
+                # of `_run_cli` and therefore the last reason the process-global stream
+                # swap existed at all (B97).
+                "ddflow://brief": lambda repo: _api().brief(repo).data["text"],
+                "ddflow://lessons": lambda repo: _api().render(repo, show="lessons").data["text"],
+                "ddflow://research": lambda repo: _api().render(repo, show="research").data["text"],
             }.get(uri)
             if not cmd:
                 return _err(mid, -32602, f"unknown resource {uri!r}")
-            _, body = _run_cli(self.repo, cmd)
-            return _ok(mid, {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": body}]})
+            return _ok(
+                mid,
+                {"contents": [{"uri": uri, "mimeType": "text/markdown", "text": cmd(self.repo)}]},
+            )
         if method == "prompts/list":
             from ..services import prompts as P
 

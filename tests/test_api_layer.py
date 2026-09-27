@@ -30,7 +30,7 @@ OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
 #: Raising it means a new tool was added on the path this layer exists to replace.
-ARGV_TOOLS_CEILING = 7
+ARGV_TOOLS_CEILING = 0
 
 
 def _typed() -> list[str]:
@@ -277,6 +277,11 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_cleanup": (["cleanup"], {}),
     "ddflow_cadence": (["cadence"], {}),
     "ddflow_import_verify": (["import", "--verify"], {}),
+    "ddflow_companions": (["companions", "list"], {}),
+    "ddflow_hooks": (["hooks", "status"], {}),
+    "ddflow_help": (["help"], {}),
+    "ddflow_prompts": (["prompts", "list"], {}),
+    "ddflow_configure": (["config", "--explain"], {}),
     "ddflow_gate_verify": (
         ["gate", "verify", "T1", "unit_tests"],
         {"id": "T1", "gate": "unit_tests"},
@@ -298,6 +303,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
 #: markdown board as "no JSON body".
 TEXT_BODIED = {
     "ddflow_brief",
+    "ddflow_configure",
     "ddflow_reviewers_list",
     "ddflow_doctor",
     "ddflow_gate_status",
@@ -308,6 +314,7 @@ TEXT_BODIED = {
 
 WRITES_NOT_COMPARABLE = {
     "ddflow_update",
+    "ddflow_setup",
     "ddflow_workflow_pipeline",
     "ddflow_workflow_gate",
     "ddflow_workflow_drop",
@@ -338,6 +345,7 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_review",
     "ddflow_reviewers_detect",
     "ddflow_import",
+    "ddflow_companions_add",
 }
 
 
@@ -1565,3 +1573,28 @@ def test_the_out_of_order_warning_reaches_the_AGENT_too(repo):
     in_order = record(first)
     assert "warning" in in_order, in_order
     assert not in_order["warning"], in_order
+
+
+def test_setup_returns_its_checklist_as_PROSE(repo):
+    """`ddflow_setup` is text-bodied AND a write, so it has no wire-shape row: running it
+    twice adopts the project twice.
+
+    Its body is the checklist of what it wrote and the three steps that follow, which is
+    what the string path returned. Asserted directly, because the two lists it cannot be in
+    would each have skipped it.
+    """
+    from ddflow.surfaces.mcp import TOOLS, Server
+
+    assert TOOLS["ddflow_setup"].get("text") is True
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_setup", "arguments": {"agents": "claude"}},
+        }
+    )["result"]
+    body = reply["content"][0]["text"]
+    assert not body.lstrip().startswith(("{", "[")), f"prose expected, got JSON: {body[:120]}"
+    assert "ddflow adopted for" in body, body[:300]
+    assert "set your test command" in body, body[:300]

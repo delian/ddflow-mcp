@@ -23,7 +23,7 @@ def _refused(out) -> int:
 
 def cmd_next(a, c: Ctx) -> int:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable."""
-    out = A.next_(c.repo, kind=a.kind, phase=a.phase or "", agent=c.cfg.agent.id)
+    out = A.next_(c.repo, kind=a.kind, phase=a.phase or "", agent=c.requested_agent)
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
         return out.exit
@@ -65,7 +65,7 @@ def cmd_claim(a, c: Ctx) -> int:
         # caller was already standing in a worktree, and resolving to the repo root loses
         # exactly that fact.
         called_from=c.called_from,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit != OK:
         return _refused(out)
@@ -88,7 +88,7 @@ def cmd_claim(a, c: Ctx) -> int:
 
 
 def cmd_heartbeat(a, c: Ctx) -> int:
-    out = A.heartbeat(c.repo, a.id, agent=c.cfg.agent.id)
+    out = A.heartbeat(c.repo, a.id, agent=c.requested_agent)
     c.out(
         f"{'renewed' if out.data['renewed'] else 'no lease held'} {a.id}",
         out.body(("renewed",)),
@@ -97,7 +97,7 @@ def cmd_heartbeat(a, c: Ctx) -> int:
 
 
 def cmd_release(a, c: Ctx) -> int:
-    out = A.release(c.repo, a.id, note=a.note or "", agent=c.cfg.agent.id)
+    out = A.release(c.repo, a.id, note=a.note or "", agent=c.requested_agent)
     c.out(
         f"{'released' if out.data['released'] else 'no lease on'} {a.id}",
         out.body(("released",)),
@@ -107,7 +107,7 @@ def cmd_release(a, c: Ctx) -> int:
 
 def cmd_complete(a, c: Ctx) -> int:
     out = A.complete(
-        c.repo, a.id, sha=a.sha or "", force=a.force, model=a.model or "", agent=c.cfg.agent.id
+        c.repo, a.id, sha=a.sha or "", force=a.force, model=a.model or "", agent=c.requested_agent
     )
     for warning in out.data.get("warnings", []):
         print(f"NOTE: {warning}", file=sys.stderr)
@@ -126,7 +126,7 @@ def cmd_complete(a, c: Ctx) -> int:
 
 
 def cmd_abandon(a, c: Ctx) -> int:
-    out = A.abandon(c.repo, a.id, reason=a.reason, force=a.force, agent=c.cfg.agent.id)
+    out = A.abandon(c.repo, a.id, reason=a.reason, force=a.force, agent=c.requested_agent)
     if out.exit != OK:
         return _refused(out)
     c.out(f"{a.id} abandoned: {a.reason}", out.body(("id", "reason")))
@@ -134,7 +134,7 @@ def cmd_abandon(a, c: Ctx) -> int:
 
 
 def cmd_remove(a, c: Ctx) -> int:
-    out = A.remove(c.repo, a.id, reason=a.reason or "", force=a.force, agent=c.cfg.agent.id)
+    out = A.remove(c.repo, a.id, reason=a.reason or "", force=a.force, agent=c.requested_agent)
     if out.exit != OK:
         return _refused(out)
     c.out(f"{a.id} removed from the queue", out.body(("id",)))
@@ -142,7 +142,7 @@ def cmd_remove(a, c: Ctx) -> int:
 
 
 def cmd_block(a, c: Ctx) -> int:
-    out = A.block(c.repo, a.id, reason=a.reason, agent=c.cfg.agent.id)
+    out = A.block(c.repo, a.id, reason=a.reason, agent=c.requested_agent)
     if out.exit != OK:
         return _refused(out)
     c.out(f"{a.id} blocked: {a.reason}", out.body(("id",)))
@@ -156,7 +156,7 @@ def cmd_merge(a, c: Ctx) -> int:
         message=a.message or "",
         allow_dirty=a.allow_dirty,
         keep=a.keep,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit == REFUSED and out.data.get("dirty"):
         # The NAMES, truncated here rather than in the api: how many to show is a
@@ -194,7 +194,7 @@ def cmd_brief(a, c: Ctx) -> int:
         item=a.item or "",
         phase=a.phase or "",
         check_recovery=a.check_recovery,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if c.json:
         print(json.dumps(out.body(("brief", "item", "ready", "approx_tokens")), indent=2))

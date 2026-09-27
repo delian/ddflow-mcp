@@ -11,7 +11,7 @@ from ..context import FAIL, NOTHING, OK, Ctx
 
 def cmd_cleanup(a, c: Ctx) -> int:
     """Classify every ddflow worktree and branch; with --apply, land the safe ones."""
-    out = A.cleanup(c.repo, apply=a.apply, agent=c.cfg.agent.id)
+    out = A.cleanup(c.repo, apply=a.apply, agent=c.requested_agent)
     if c.json and not a.apply:
         print(json.dumps(out.body(("trees", "stale_branches")), indent=2, default=str))
         return out.exit
@@ -39,7 +39,7 @@ def cmd_cleanup(a, c: Ctx) -> int:
 
 
 def cmd_cadence(a, c: Ctx) -> int:
-    out = A.cadence(c.repo, ran=a.ran or "", note=a.note or "", agent=c.cfg.agent.id)
+    out = A.cadence(c.repo, ran=a.ran or "", note=a.note or "", agent=c.requested_agent)
     if a.ran:
         c.out(f"recorded cadence run: {a.ran}", out.body(("cadence",)))
         return OK
@@ -56,7 +56,7 @@ def cmd_cadence(a, c: Ctx) -> int:
 
 
 def _import_verify(c: Ctx) -> int:
-    out = A.import_verify(c.repo, agent=c.cfg.agent.id)
+    out = A.import_verify(c.repo, agent=c.requested_agent)
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
         return out.exit
@@ -129,7 +129,7 @@ def cmd_import(a, c: Ctx) -> int:
         apply=a.apply,
         include_done=a.include_done,
         max_tasks=a.max_tasks,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.data["applied"]:
         c.out(

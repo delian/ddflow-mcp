@@ -10,18 +10,22 @@ plus an exit code. Two costs are visible in the code itself:
   `ddflow update X --needs ""` cleared the field — and breaking a dependency cycle is
   exactly the operation that needs it, and the one the loop detector tells you to do.
   In a typed call `None` and `""` are simply different values and no helper is needed.
-* `mcp._run_cli` swaps process-global `sys.stdout`/`sys.stderr` for every call. That is
-  not reentrant: it forecloses concurrency in a server for a tool whose entire purpose
-  is parallel agents.
+* `mcp._run_cli` swapped process-global `sys.stdout`/`sys.stderr` for every call — not
+  reentrant, which forecloses concurrency in a server for a tool whose entire purpose is
+  parallel agents. **Both are gone.** The migration completed on 2026-09-27: every one of
+  the 63 tools dispatches through this layer, `ARGV_TOOLS_CEILING` is 0, and `_run_cli`
+  was deleted with the last tool that needed it (B97). `surfaces/mcp.py` no longer imports
+  `surfaces/cli.py` at all, so the latent `mcp <-> cli` cycle is structurally impossible
+  rather than merely guarded.
 
 Parity was held by ratchets where types would hold it structurally, and those ratchets
 catch a *missing* flag, never a *changed encoding*.
 
-**Migration, not a rewrite.** Each operation here is one a surface used to implement
-inline. A tool with an `api` entry is dispatched through this module; the rest still go
-through argv, and `tests/test_mcp_parity.py` counts the remainder and refuses to let it
-grow. A big-bang port of ~60 commands would be one unreviewable change against a suite
-that cannot tell which half broke.
+**Migration, not a rewrite — and it is finished.** Each operation here is one a surface
+used to implement inline, moved one family at a time across twelve slices, each with its
+own mutation-verified probes. `ARGV_TOOLS_CEILING` went 62 -> 0 and may never rise: a new
+tool goes through this layer. A big-bang port of ~60 commands would have been one
+unreviewable change against a suite that cannot tell which half broke.
 
 Every function takes plain values and returns an `Outcome` — one description of a
 result, from which both the machine view (`data`) and the human view are derived. It is
@@ -95,13 +99,25 @@ from .reporting import (
     show,
     status,
 )
+from .review import review as run_review
+from .review import reviewers_detect, reviewers_list
 
 # `run_review`, not `review`: a name re-exported here SHADOWS the submodule of the same
 # name, so `from ddflow.api import review` would bind the function and every
 # `review.reviewers_list` would raise `'function' object has no attribute`. Caught by
 # `test_no_reexport_shadows_a_submodule`, which exists because of this line.
-from .review import review as run_review
-from .review import reviewers_detect, reviewers_list
+from .setup import (
+    Adoption,
+    ConfigEdit,
+    Registration,
+    companions_add,
+    configure,
+    help_topic,
+    hooks,
+    prompts,
+)
+from .setup import companions as companions_list
+from .setup import setup as adopt_project
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -113,11 +129,15 @@ __all__ = [
     "DEFAULT_NEXT_KIND",
     "DEFAULT_PRIORITY",
     "DEFAULT_RENDER_DIR",
+    "Adoption",
+    "ConfigEdit",
     "GateEvidence",
+    "Registration",
     "ResearchFinding",
     "WorkflowGateEdit",
     "_load",
     "abandon",
+    "adopt_project",
     "block",
     "board",
     "brief",
@@ -126,8 +146,11 @@ __all__ = [
     "cadence",
     "claim",
     "cleanup",
+    "companions_add",
+    "companions_list",
     "complete",
     "completion_verdict",
+    "configure",
     "decision_add",
     "decision_applicable",
     "decision_list",
@@ -140,7 +163,9 @@ __all__ = [
     "gate_status",
     "gate_verify",
     "heartbeat",
+    "help_topic",
     "history",
+    "hooks",
     "import_project",
     "import_verify",
     "lesson_add",
@@ -150,6 +175,7 @@ __all__ = [
     "next_item",
     "phase_add",
     "progress",
+    "prompts",
     "rebuild",
     "recall",
     "recover",

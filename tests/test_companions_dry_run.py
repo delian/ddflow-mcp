@@ -158,7 +158,12 @@ def test_the_mcp_tool_exposes_dry_run_and_says_to_use_it_first(repo):
 
     spec = TOOLS["ddflow_companions_add"]
     assert "dry_run" in spec["properties"]
-    assert spec["argv"]({"id": "x", "dry_run": True})[-1] == "--dry-run"
+    # The DECLARATION is what an agent discovers, and the behaviour is checked by
+    # `test_the_dry_run_reaches_the_tool_over_real_json_rpc` below. This used to assert
+    # `argv(...)[-1] == "--dry-run"`, which described the dispatch mechanism and broke when
+    # the tool went typed — while saying nothing about whether dry_run withholds a write.
+    assert spec["properties"]["dry_run"][0] == "boolean", spec["properties"]["dry_run"]
+    assert "api" in spec, "a WRITE tool must go through the typed layer"
     desc = spec["description"]
     assert "WRITES" in desc, "a config-writing tool must say so in its description"
     assert "dry_run=true FIRST" in desc

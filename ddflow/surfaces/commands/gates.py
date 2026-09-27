@@ -16,7 +16,7 @@ from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
 
 
 def _gate_status(a, c: Ctx) -> int:
-    out = A.status(c.repo, a.id, agent=c.cfg.agent.id)
+    out = A.status(c.repo, a.id, agent=c.requested_agent)
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
@@ -34,7 +34,7 @@ def _gate_verify(a, c: Ctx) -> int:
     tree and restores it, and burying that in a chain of `if` arms is how a reader
     misses it.
     """
-    out = A.verify(c.repo, a.id, a.gate, agent=c.cfg.agent.id)
+    out = A.verify(c.repo, a.id, a.gate, agent=c.requested_agent)
     if c.json:
         print(json.dumps(out.body(("gate", "reason", "results", "verified")), indent=2))
         return out.exit
@@ -52,7 +52,7 @@ def _gate_verify(a, c: Ctx) -> int:
 
 
 def _gate_run(a, c: Ctx) -> int:
-    out = A.run(c.repo, a.id, a.gate, agent=c.cfg.agent.id)
+    out = A.run(c.repo, a.id, a.gate, agent=c.requested_agent)
     if out.exit == FAIL and not out.data.get("outcome"):
         print(out.reason, file=sys.stderr)
         return FAIL
@@ -91,7 +91,7 @@ def _gate_record(a, c: Ctx, *, skip: bool) -> int:
             model=a.model or "",
             output_file=a.output_file or "",
         ),
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit != OK:
         print(out.reason, file=sys.stderr)

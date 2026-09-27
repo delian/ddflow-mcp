@@ -326,6 +326,9 @@ PROSE_TOOLS: dict[str, str] = {
     # so it only ever saw the JSON branch. A tool whose shape depends on its arguments was
     # judged on the arguments the test happened to pass.
     "ddflow_render": "with --show it returns the rendered view itself, to read or commit",
+    # Prose for SOME arguments, like `render`: `show` returns the template TEXT and
+    # `eject` the list of files it wrote, while `list` is a table callers parse.
+    "ddflow_prompts": "with show it returns the template itself, which is the thing to read",
 }
 
 

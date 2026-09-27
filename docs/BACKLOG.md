@@ -905,8 +905,38 @@ acting on as bugs.
   the third instance this session of a comment promising what the code did not do.
   *Cross-family critic, THEORETICAL, correctly: it could not see the call site.*
 
-- **B97. `_run_cli` swaps process-global `sys.stdout`/`sys.stderr` per call. FILED,
-  THEORETICAL.** Non-reentrant by construction: two overlapping calls would interleave
+- **B97. ✅ CLOSED 2026-09-27. `_run_cli` is DELETED and `ARGV_TOOLS_CEILING` is 0.** The
+  entry's own prescription — "the fix is the migration already under way … keep lowering
+  `ARGV_TOOLS_CEILING`, not add a lock around a stream swap" — was followed exactly. All 63
+  tools dispatch through `api`; the last seven (companions ×2, configure, help, hooks,
+  prompts, setup) went in one slice, `api/setup.py` + `surfaces/commands/setup.py`.
+
+  What went with it, beyond the non-reentrant stream swap:
+
+  * **`surfaces/mcp.py` no longer imports `surfaces/cli.py` at all.** The latent
+    `mcp <-> cli` cycle (B38) is structurally impossible now rather than guarded by two
+    function-local imports.
+  * **`resources/read` was the last live caller** and was still scraping CLI stdout for
+    `ddflow://board|brief|lessons|research`. It goes through `api` too.
+  * **The argv fallback in `tools/call` is gone.** A tool arriving with no dispatch is a
+    packaging fault and says so, rather than falling through to a path that no longer
+    exists.
+
+  `cli.py` finished at **820 lines** (from 3,998 this session, 3,041 when B36 was filed,
+  4,314 at peak) — `build_parser` plus five commands.
+
+  Two findings while finishing:
+
+  * **`api._load` resolved the agent identity without writing it back**, so
+    `config --explain` reported `agent.id = "" [default]` from the typed path while argv
+    reported what the env var set. Third copy of that drift; `_load` now mirrors `Ctx`.
+  * **Every command module was passing `agent=c.cfg.agent.id`** — the already-RESOLVED
+    id — so `resolve_agent_id` saw it as an explicit `--agent` and reported `[explicit]`
+    for an identity nobody had set. `Ctx.requested_agent` now keeps what the caller ASKED
+    for distinct from what it resolved to, and all 52 call sites pass that.
+
+  Original: `_run_cli` swaps process-global `sys.stdout`/`sys.stderr` per call. FILED,
+  THEORETICAL. Non-reentrant by construction: two overlapping calls would interleave
   each other's captured output, and on a stdio transport the escaped writes would
   corrupt the protocol stream. Not reachable today — `serve()` is a strictly sequential
   `for raw in inp:` loop, one message fully handled before the next is read — and
@@ -1782,11 +1812,13 @@ the reason this is a gap rather than a hole:
 
 ## B36/B37 — eleven slices, 2026-09-26
 
-**B36: cli.py 3,998 -> 1,462.** Below the 3,041 it was filed at (peak 4,314). 556 of what
-remains is `build_parser`, which has a documented exemption; the rest is `init`, `approve`,
-`progress`, `loops`, `item_update` and the starter TOML.
+**B36: ✅ cli.py 3,998 -> 820.** Filed at 3,041, peaked at 4,314. What remains is
+`build_parser` (556 lines, with a documented exemption) plus `approve`, `progress`, `loops`
+and `item_update`.
 
-**B37: 56 of 64 tools typed. ARGV_TOOLS_CEILING 60 -> 7.** NOT closed.
+**B37: ✅ CLOSED. All 63 tools typed. ARGV_TOOLS_CEILING 62 -> 0**, and it may never rise:
+a new tool goes through the `api` layer. `_run_cli` is deleted, and `surfaces/mcp.py` no
+longer imports `surfaces/cli.py` at all — see B97.
 
 Seven tools remain, all in the configure/adopt family and all low-policy:
 `ddflow_companions`, `ddflow_companions_add`, `ddflow_configure`, `ddflow_help`,
@@ -1834,7 +1866,13 @@ Mechanisms added along the way, all of which the remaining seven will need:
   parser imports — and three of four mutations survived it;
   `test_each_default_VALUE_is_the_one_the_behaviour_needs` is the one that bites.
 
-- **B162. Four "reachable over MCP" tests asserted the DISPATCH MECHANISM.** ✅ CLOSED.
+- **B162. SIX "reachable over MCP" tests asserted the DISPATCH MECHANISM.** ✅ CLOSED.
+  Two more surfaced when the last seven tools migrated — `test_help.py::test_it_is_
+  reachable_over_mcp` compared two argv lists and `test_companions_dry_run.py` asserted
+  `argv(...)[-1] == "--dry-run"`. Neither had ever verified that `help` produces help or
+  that `dry_run` withholds a write. Both now assert behaviour, or the DECLARATION an agent
+  actually discovers. The count is the finding: a test written against the dispatch
+  mechanism looks like a test of the feature until the mechanism changes.
   `test_every_workflow_command_is_reachable_over_mcp`,
   `test_the_command_is_reachable_over_mcp` (import), `test_it_is_reachable_over_mcp`
   (import --verify) and `test_the_prose_list_only_describes_tools_that_exist` all read

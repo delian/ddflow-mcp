@@ -267,11 +267,24 @@ def _queue_with_an_inherited_dep(repo):
 
 
 def _ready_over_mcp(repo) -> list[str]:
-    """The MCP path, in-process, so a patch applied here actually reaches the code."""
-    from ddflow.surfaces.mcp import _run_cli
+    """The MCP path, in-process, so a patch applied here actually reaches the code.
 
-    _code, body = _run_cli(repo, ["--json", "next"])
-    return [r["id"] for r in json.loads(body)["ready"]]
+    Through the real `tools/call` dispatch. It used to call `_run_cli`, which flattened the
+    call to argv and scraped the CLI's stdout — that function is gone with the last argv
+    tool (B97), and going through the dispatcher is a closer reproduction of what a client
+    does anyway.
+    """
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_next", "arguments": {}},
+        }
+    )["result"]
+    return [r["id"] for r in json.loads(reply["content"][0]["text"])["ready"]]
 
 
 def test_the_mcp_surface_offers_only_what_the_inherited_rule_allows(repo):

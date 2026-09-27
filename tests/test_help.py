@@ -184,6 +184,32 @@ def test_the_json_surface_carries_the_text_and_the_topics(repo):
 
 
 def test_it_is_reachable_over_mcp(repo):
+    import json as _json
+
+    from ddflow.surfaces.mcp import Server
+
     assert "ddflow_help" in TOOLS
-    assert TOOLS["ddflow_help"]["argv"]({}) == ["--json", "help"]
-    assert TOOLS["ddflow_help"]["argv"]({"topic": "gates"}) == ["--json", "help", "gates"]
+
+    def call(arguments):
+        reply = Server(repo).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "ddflow_help", "arguments": arguments},
+            }
+        )["result"]
+        assert reply["isError"] is False, reply
+        return _json.loads(reply["content"][0]["text"])
+
+    # By CALLING it. This compared two argv lists, which checks the dispatch mechanism and
+    # broke with `KeyError: 'argv'` the moment the tool went typed — having never once
+    # verified that `help` produces help, or that a topic changes the answer.
+    overview = call({})
+    assert overview["topic"] == "index"
+    assert overview["text"].strip(), "the overview is empty"
+    assert "gates" in overview["topics"], overview["topics"]
+
+    topic = call({"topic": "gates"})
+    assert topic["topic"] == "gates"
+    assert topic["text"] != overview["text"], "the topic returned the overview"

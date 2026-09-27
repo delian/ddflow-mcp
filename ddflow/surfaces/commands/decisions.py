@@ -40,7 +40,7 @@ def _decision_add(a, c: Ctx, st) -> int:
             item=a.item or "",
             supersedes=a.supersedes or "",
         ),
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
@@ -59,7 +59,7 @@ def _decision_add(a, c: Ctx, st) -> int:
 
 def _decision_supersede(a, c: Ctx, st) -> int:
     out = A.decision_supersede(
-        c.repo, a.id, by=a.by or "", reason=a.reason or "", agent=c.cfg.agent.id
+        c.repo, a.id, by=a.by or "", reason=a.reason or "", agent=c.requested_agent
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)

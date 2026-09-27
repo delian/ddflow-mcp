@@ -32,7 +32,7 @@ def cmd_review(a, c: Ctx) -> int:
         # Streamed as it happens. Silence for two minutes reads as a hang, and an agent
         # watching a hung tool kills it.
         on_progress=lambda line: print(line, flush=True),
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit == FAIL or (out.exit == NOTHING and not out.data.get("reviewer")):
         print(out.reason, file=sys.stderr)
@@ -40,7 +40,7 @@ def cmd_review(a, c: Ctx) -> int:
 
 
 def _reviewers_detect(a, c: Ctx) -> int:
-    out = A.reviewers_detect(c.repo, write=a.write, agent=c.cfg.agent.id)
+    out = A.reviewers_detect(c.repo, write=a.write, agent=c.requested_agent)
     if out.exit == NOTHING:
         print(out.reason, file=sys.stderr)
         return NOTHING
@@ -49,7 +49,7 @@ def _reviewers_detect(a, c: Ctx) -> int:
 
 
 def _reviewers_list(a, c: Ctx) -> int:
-    out = A.reviewers_list(c.repo, agent=c.cfg.agent.id)
+    out = A.reviewers_list(c.repo, agent=c.requested_agent)
     if out.exit == NOTHING:
         print(out.reason)
         return NOTHING

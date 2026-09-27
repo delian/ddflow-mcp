@@ -18,7 +18,7 @@ def cmd_phase_add(a, c: Ctx) -> int:
         body=a.body or "",
         tags=a.tags or "",
         priority=a.priority,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     c.out(f"phase {a.id} added", out.body(("id",)))
     return out.exit
@@ -36,7 +36,7 @@ def cmd_task_add(a, c: Ctx) -> int:
         body=a.body or "",
         tags=a.tags or "",
         priority=a.priority,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
@@ -58,7 +58,7 @@ def cmd_split(a, c: Ctx) -> int:
         into=list(a.into or []),
         globs=a.globs or "",
         needs=a.needs or "",
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit != OK:
         print(out.reason, file=sys.stderr)

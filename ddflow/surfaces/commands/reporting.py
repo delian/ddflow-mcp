@@ -86,7 +86,7 @@ def cmd_status(a, c: Ctx) -> int:
     exemption — written for `build_parser` — had been covering this function's 16
     branches too.
     """
-    out = A.status(c.repo, agent=c.cfg.agent.id)
+    out = A.status(c.repo, agent=c.requested_agent)
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
         return out.exit
@@ -107,7 +107,7 @@ def cmd_status(a, c: Ctx) -> int:
 
 
 def cmd_show(a, c: Ctx) -> int:
-    out = A.show(c.repo, a.id, agent=c.cfg.agent.id)
+    out = A.show(c.repo, a.id, agent=c.requested_agent)
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
@@ -131,7 +131,7 @@ def cmd_show(a, c: Ctx) -> int:
 
 
 def cmd_recover(a, c: Ctx) -> int:
-    out = A.recover(c.repo, item=a.item or "", apply=a.apply, agent=c.cfg.agent.id)
+    out = A.recover(c.repo, item=a.item or "", apply=a.apply, agent=c.requested_agent)
     if c.json:
         print(json.dumps(out.body("found"), indent=2, default=str))
         return out.exit
@@ -153,7 +153,7 @@ def cmd_recover(a, c: Ctx) -> int:
 
 
 def cmd_rebuild(a, c: Ctx) -> int:
-    out = A.rebuild(c.repo, agent=c.cfg.agent.id)
+    out = A.rebuild(c.repo, agent=c.requested_agent)
     d = out.data
     c.out(
         f"rebuilt index from {d['events']} events in {d['seconds']:.2f}s "
@@ -170,7 +170,7 @@ def cmd_doctor(a, c: Ctx) -> int:
     report as its body, so a renderer in this module would mean one surface reaching into
     the other. `--json` gets the lists.
     """
-    out = A.doctor(c.repo, agent=c.cfg.agent.id)
+    out = A.doctor(c.repo, agent=c.requested_agent)
     if c.json:
         print(json.dumps(out.body(("problems", "notes", "events", "items")), indent=2))
         return out.exit
@@ -179,13 +179,13 @@ def cmd_doctor(a, c: Ctx) -> int:
 
 
 def cmd_board(a, c: Ctx) -> int:
-    print(A.board(c.repo, phase=a.phase or "", agent=c.cfg.agent.id).data["text"])
+    print(A.board(c.repo, phase=a.phase or "", agent=c.requested_agent).data["text"])
     return OK
 
 
 def cmd_render(a, c: Ctx) -> int:
     out = A.render(
-        c.repo, show=getattr(a, "show", "") or "", out_dir=a.out or "", agent=c.cfg.agent.id
+        c.repo, show=getattr(a, "show", "") or "", out_dir=a.out or "", agent=c.requested_agent
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
@@ -198,7 +198,7 @@ def cmd_render(a, c: Ctx) -> int:
 
 
 def cmd_replay(a, c: Ctx) -> int:
-    out = A.replay(c.repo, out_dir=a.out or "", verify=a.verify, agent=c.cfg.agent.id)
+    out = A.replay(c.repo, out_dir=a.out or "", verify=a.verify, agent=c.requested_agent)
     for p in out.data["problems"]:
         print(f"  ! {p}", file=sys.stderr)
     if out.data["problems"]:

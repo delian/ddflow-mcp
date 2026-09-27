@@ -108,3 +108,56 @@ def reviewers_detect(out) -> str:
         lines.append("\nAdd to .ddflow/config.toml (or re-run with --write):")
         lines.append(d["blocks"])
     return "\n".join(lines)
+
+
+@renders("config")
+def config(out) -> str:
+    """Every knob, its value, and WHERE that value came from.
+
+    The source is the whole point: an operator debugging why a setting is not taking
+    effect needs to know whether it came from the file, the environment or the default,
+    and `[default]` next to the value they thought they set is the answer.
+    """
+    d = out.data
+    lines: list[str] = []
+    for row in d.get("rows", []):
+        lines.append(f"{row['key']} = {row['value']!r}   [{row['source']}]")
+        if d.get("explain") and row.get("doc"):
+            import textwrap
+
+            lines += [f"    {ln}" for ln in textwrap.wrap(" ".join(row["doc"].split()), 76)]
+    if d.get("path") and not d.get("rows"):
+        # A WRITE: the answer is what changed and where.
+        return f"{d.get('key', '')} = {d.get('literal', '')}".strip() or f"appended to {d['path']}"
+    return "\n".join(lines)
+
+
+@renders("setup")
+def setup(out) -> str:
+    """What adoption wrote, and the three steps that follow.
+
+    The companion tail is the part worth having: a project that adopts ddflow and stops has
+    a `standards` gate with nothing behind it and a `rules` gate reading no memory, and
+    because an agent gate passes on an assertion that gap is invisible in exactly the way
+    this design exists to prevent.
+    """
+    d = out.data
+    agents = d.get("agents") or []
+    tail = ""
+    if d.get("companions_ready"):
+        tail += (
+            f"\n\nInstalled here but not wired up: {', '.join(d['companions_ready'])}.\n"
+            f"  ddflow companions add --agents {agents[0] if agents else 'claude'}"
+        )
+    if d.get("companions_absent"):
+        tail += (
+            f"\n\nNot installed: {', '.join(d['companions_absent'])} — "
+            f"`ddflow companions` has the commands."
+        )
+    return (
+        "\n".join(f"  {x}" for x in d.get("actions", []))
+        + f"\n\nddflow adopted for: {', '.join(agents)}.\n"
+        "  1. set your test command in .ddflow/gates.toml\n"
+        "  2. ddflow phase add P1 --title '...'\n"
+        "  3. tell your agent: implement phase P1" + tail
+    )

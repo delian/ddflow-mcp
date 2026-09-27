@@ -31,12 +31,12 @@ def cmd_lesson(a, c: Ctx) -> int:
             seen_in=a.seen_in or "",
             supersedes=a.supersedes or "",
             id=a.id or "",
-            agent=c.cfg.agent.id,
+            agent=c.requested_agent,
         )
         c.out(f"lesson {out.data['id']} recorded", out.body(("id",)))
         return OK
     if a.lesson_cmd == "search":
-        out = A.lesson_search(c.repo, a.query, limit=a.limit, agent=c.cfg.agent.id)
+        out = A.lesson_search(c.repo, a.query, limit=a.limit, agent=c.requested_agent)
         if c.json:
             print(json.dumps(out.body("hits"), indent=2, default=str))
             return out.exit
@@ -59,7 +59,7 @@ def cmd_recall(a, c: Ctx) -> int:
         sources=a.sources or "",
         limit=a.limit,
         max_chars=a.max_chars,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if c.json:
         print(json.dumps(out.body("results"), indent=2, default=str))
@@ -109,7 +109,7 @@ def cmd_research(a, c: Ctx) -> int:
             item=a.item or "",
             id=a.id or "",
         ),
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
@@ -124,7 +124,7 @@ def cmd_research(a, c: Ctx) -> int:
 def cmd_bug(a, c: Ctx) -> int:
     if a.bug_cmd == "found":
         out = A.bug_found(
-            c.repo, summary=a.summary, item=a.item or "", id=a.id or "", agent=c.cfg.agent.id
+            c.repo, summary=a.summary, item=a.item or "", id=a.id or "", agent=c.requested_agent
         )
         c.out(f"bug {out.data['id']} recorded", out.body(("id",)))
         return OK
@@ -135,7 +135,7 @@ def cmd_bug(a, c: Ctx) -> int:
         lesson=a.lesson or "",
         lesson_title=getattr(a, "lesson_title", "") or "",
         lesson_rule=getattr(a, "lesson_rule", "") or "",
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
@@ -146,14 +146,16 @@ def cmd_bug(a, c: Ctx) -> int:
 
 def cmd_session(a, c: Ctx) -> int:
     if a.session_cmd == "start":
-        out = A.session_start(c.repo, model=a.model or "", tool=a.tool or "", agent=c.cfg.agent.id)
+        out = A.session_start(
+            c.repo, model=a.model or "", tool=a.tool or "", agent=c.requested_agent
+        )
         c.out(out.data["session"], out.body(("session",)))
         return OK
     if a.session_cmd == "prompt":
         # stdin when no `--text`: the operator's prompt is frequently multi-line and
         # frequently contains the characters a shell would eat.
         text = a.text if a.text is not None else sys.stdin.read()
-        out = A.session_prompt(c.repo, a.session, text, item=a.item or "", agent=c.cfg.agent.id)
+        out = A.session_prompt(c.repo, a.session, text, item=a.item or "", agent=c.requested_agent)
         c.out(f"recorded ({out.data['redactions']} redaction(s))", out.body(("redactions",)))
         return OK
     if a.session_cmd == "note":
@@ -162,12 +164,12 @@ def cmd_session(a, c: Ctx) -> int:
             a.session,
             a.text or sys.stdin.read(),
             item=a.item or "",
-            agent=c.cfg.agent.id,
+            agent=c.requested_agent,
         )
         c.out("noted", {})
         return OK
     if a.session_cmd == "end":
-        A.session_end(c.repo, a.session, summary=a.summary or "", agent=c.cfg.agent.id)
+        A.session_end(c.repo, a.session, summary=a.summary or "", agent=c.requested_agent)
         c.out("ended", {})
         return OK
     return FAIL
@@ -209,7 +211,7 @@ def cmd_history(a, c: Ctx) -> int:
         kind=a.kind or "",
         since=a.since or "",
         limit=a.limit,
-        agent=c.cfg.agent.id,
+        agent=c.requested_agent,
     )
     if c.json:
         print(json.dumps(out.body(("total", "shown", "events")), indent=2, default=str))

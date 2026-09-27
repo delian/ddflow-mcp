@@ -70,7 +70,12 @@ class Ctx:
         # drifted the moment the second path existed: `api._load` built its log with
         # `EventLog(repo, "")`, which reads neither the env var nor the config, so the
         # two surfaces wrote the same connection's events under different identities.
-        resolved, layer = resolve_agent_id(self.repo, self.cfg, args.agent or "")
+        #: What the caller EXPLICITLY asked for, "" when it asked for nothing. Kept
+        #: separate from the resolved id because passing the resolved value back into
+        #: `resolve_agent_id` makes it look explicit — which is how `config --explain`
+        #: came to report `[explicit]` for an identity nobody had set anywhere.
+        self.requested_agent = args.agent or ""
+        resolved, layer = resolve_agent_id(self.repo, self.cfg, self.requested_agent)
         if resolved != self.cfg.agent.id:
             self.cfg.agent.id = resolved
             # The layer that actually won, not a guess from comparing values. With
@@ -137,6 +142,15 @@ def _csv(v: str | None) -> list[str]:
 #: not import a surface to get it, so the function moved down to `core/ids.py` and this
 #: name stays for the command modules that already call it.
 _auto_id = auto_id
+
+
+def _wrap(text: str, width: int) -> list[str]:
+    """Reflow a config knob's documentation to a column. Here rather than in `cli` because
+    `commands/setup.py` renders `config --explain` and may not import the surface it was
+    extracted out of."""
+    import textwrap
+
+    return textwrap.wrap(" ".join(text.split()), width)
 
 
 # -- commands --------------------------------------------------------------------------

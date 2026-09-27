@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core.model import State, fold
-from ..infra.log import EventLog, effective_agent_id
+from ..infra.log import EventLog, resolve_agent_id
 
 
 def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
@@ -22,5 +22,15 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
     two identities, two shards.
     """
     cfg = Config.load(repo)
-    log = EventLog(repo, effective_agent_id(repo, cfg, agent))
+    # Resolved AND written back, exactly as `surfaces/context.Ctx` does. Resolving without
+    # writing back is a third copy of the same drift: `config --explain` reported
+    # `agent.id = ""  [default]` from this path while the argv path reported the value the
+    # env var actually set. The identity is a fact about this invocation, and a config
+    # object that does not carry it is a config object two surfaces disagree about.
+    resolved, layer = resolve_agent_id(repo, cfg, agent)
+    if resolved != cfg.agent.id:
+        cfg.agent.id = resolved
+        # The layer that actually WON, not a guess from comparing values.
+        cfg.sources["agent.id"] = layer
+    log = EventLog(repo, resolved, lock_timeout_s=cfg.lease.acquire_timeout_s)
     return log, cfg, fold(log.read_all(), strict=False)
