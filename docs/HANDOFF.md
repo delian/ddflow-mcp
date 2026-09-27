@@ -35,8 +35,8 @@ caught a real defect during this session — see §6):
 
 ```
 branch: main          (a standalone repo; the parent run_nemo_run tree is unrelated)
-HEAD:   9234cdb       "B19 + B20 + B24 + B25: ddflow checks its own machinery"
-pushed: yes — origin/main == 9234cdb
+HEAD:   564a3ad       "roborev 816: five findings, one a defect in B25 itself"
+pushed: yes — origin/main == 564a3ad
 tree:   CLEAN — nothing uncommitted, nothing in flight
 ```
 
@@ -44,13 +44,17 @@ tree:   CLEAN — nothing uncommitted, nothing in flight
 
 ```sh
 uv run ruff check . && uv run ruff format --check .
-uv run pytest tests/ -q -m ""        # ~27 min. Expect 1280 passed, 1 skipped.
+uv run pytest tests/ -q -m ""        # ~27 min. Expect ~1285 passed, 1 skipped.
 uv run python demos/run_all.py       # ~2.5 min. Expect 6/6, 219 assertions.
 ```
 
-If any of that is red, the failure is **new information** — read it before assuming this
-document is wrong. Nothing was left half-finished, so a red suite means something changed
-after 9234cdb.
+**Run the full suite before trusting this tree.** It was green at **1280 passed** on
+`9234cdb`. The follow-up `564a3ad` was verified against ruff, the **eight test files it
+touches** (288 passed, 1 skipped) and the demos (6/6) — but the full `-m ""` run on that
+exact state was interrupted rather than completed. That is not a known failure; it is an
+unverified claim, and this file will not pretend otherwise.
+
+If anything is red, the failure is **new information**. Nothing was left half-finished.
 
 `roborev review 9234cdb` (job 816) found **five findings, all CONFIRMED, all fixed** in the
 commit after it — including a real defect in the B25 work: `expected = completed // every`
