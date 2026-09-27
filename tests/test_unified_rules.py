@@ -62,6 +62,13 @@ def _parse_read_list(text: str) -> list[str]:
             continue
         values = []  # a later `read:` REPLACES an earlier one
         inline = line.split(":", 1)[1].strip()
+        # A comment after the key is not the value. `read: # our docs` followed by a block
+        # list is valid YAML whose value is the list; treating the comment as a scalar made
+        # this helper report the entries as missing and blame the code for it.
+        if inline.startswith("#"):
+            inline = ""
+        elif "#" in inline and not inline.startswith("["):
+            inline = inline.split("#", 1)[0].strip()
         if inline.startswith("["):
             values = [v.strip().strip("'\"") for v in inline.strip("[]").split(",") if v.strip()]
             continue
@@ -224,3 +231,72 @@ def test_every_form_is_exercised_by_this_module():
     """A form with no surface using it is dead code; a form no test covers is worse."""
     forms = {r.form for r in NATIVE_RULES.values()}
     assert forms == {FORM_WHOLE, FORM_BLOCK, FORM_AIDER}, forms
+
+
+@pytest.mark.parametrize(
+    ("initial", "keeps"),
+    [
+        ("read: [CONVENTIONS.md]\n", "CONVENTIONS.md"),
+        ("read: [CONVENTIONS.md]  # our docs\n", "our docs"),
+        ("read: []\n", ""),
+        ("read: CONVENTIONS.md\n", "CONVENTIONS.md"),
+        ("read:\n  - CONVENTIONS.md\n", "CONVENTIONS.md"),
+        ("read:\n  - CONVENTIONS.md\nmodel: gpt-4\n", "model: gpt-4"),
+        ("model: gpt-4\n", "model: gpt-4"),
+    ],
+)
+def test_every_aider_read_form_is_handled_and_stays_idempotent(repo, initial, keeps):
+    """roborev, on 3040d4b: `adopt` wrote a file `doctor` immediately called broken.
+
+    The writer could emit an INLINE list (`read: [CONVENTIONS.md, AGENTS.md]`) while both
+    the writer's idempotency guard and `rules_status` matched only the block form. So a
+    correctly-adopted project failed `doctor`, and every re-adopt appended again — the file
+    grew without bound. Two worse variants: a trailing comment landed INSIDE the brackets
+    (`read: [CONVENTIONS.md]  # our docs, AGENTS.md]`, unparseable, taking the operator's
+    own entry down with it) and `read: []` became `read: [, AGENTS.md]`.
+
+    Every form now normalises to the block form, so the reader and the writer cannot
+    disagree about what they are looking at.
+    """
+    assert run_cli(repo, "init")[0] == 0
+    (repo / ".aider.conf.yml").write_text(initial)
+    for _ in range(3):  # idempotent: three adopts, one entry
+        assert run_cli(repo, "adopt", "--agents", "aider")[0] == 0
+
+    text = (repo / ".aider.conf.yml").read_text()
+    assert text.count(AIDER_READS) == 1, f"the entry was appended repeatedly:\n{text}"
+    assert _states(repo)[".aider.conf.yml"] == CURRENT, (
+        f"adopt wrote a file rules_status calls broken:\n{text}"
+    )
+    if keeps:
+        assert keeps in text, f"the operator's own content was lost:\n{text}"
+    # ...and what Aider will actually parse contains both.
+    values = _parse_read_list(text)
+    assert AIDER_READS in values, text
+    if keeps and keeps.endswith(".md"):
+        assert keeps in values, f"{keeps} survived as text but not as a parsed value: {values}"
+
+
+def test_an_inline_read_list_written_by_hand_is_recognised(repo):
+    """ddflow normalises what IT writes, but an operator may have written the inline form
+    themselves. Reporting that as broken would send them to fix valid config."""
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "adopt", "--agents", "aider")[0] == 0
+    (repo / ".aider.conf.yml").write_text("read: [AGENTS.md, CONVENTIONS.md]\n")
+    assert _states(repo)[".aider.conf.yml"] == CURRENT
+
+
+def test_the_agent_target_record_carries_no_unread_field():
+    """A field written by the registry and read by nothing is a second, unowned copy of a
+    fact — `NATIVE_RULES` already owns which surface an agent reads, and the two had already
+    drifted (`.tabnine/guidelines/ddflow.md` versus `.tabnine/guidelines/`) before anything
+    consumed either. Found by roborev on 3040d4b."""
+    import dataclasses
+
+    from ddflow.services.adopt import AgentTarget
+
+    names = {f.name for f in dataclasses.fields(AgentTarget)}
+    assert names == {"delta", "config", "shape"}, (
+        f"AgentTarget grew a field: {names}. Every one must have a reader — check with "
+        f"`grep -rn '\\.<field>' ddflow/` before adding it."
+    )

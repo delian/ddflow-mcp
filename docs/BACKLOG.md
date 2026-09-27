@@ -229,7 +229,8 @@ closes an item mechanically and `ddflow import --verify` reports exactly this cl
   each in a managed block, all compared against one generator by `rules_status()` and
   reported by `doctor`. The POINTER design was refuted by evidence already in the repo — *a
   link is only followed if the agent chooses to follow it*. See R15 and
-  `tests/test_unified_rules.py` (13 tests, 8 mutations).
+  `tests/test_unified_rules.py` (13 tests, 8 mutations). *The original filing, which
+  describes the state before this work, follows — it is superseded, not current.*
   Nine of the 22 supported agents read something other than `AGENTS.md` first (`QWEN.md`,
   `.clinerules/`, `.tabnine/guidelines/`, `replit.md`, `.goosehints`,
   `.cursor/rules/*.mdc`, Aider's `read:` list; Cody's is undocumented). ddflow writes
@@ -328,12 +329,33 @@ from this list); these are the rest, ranked as it ranked them.
   regenerated in pre-commit and must come back byte-identical. ddflow's own
   `docs/ddflow/*.md` views have exactly this hazard.
 
-- **B19 — pickability audit.** After filing a task, assert `ddflow next` can actually
-  offer it. On the source project 37 follow-ups — including four confirmed reviewer
+- **B19 — pickability audit. ✅ CLOSED.** `schedule.unpickable()` reports open work no
+  `next` call can offer, surfaced by `doctor`. TWO hypotheses about how a TASK could go
+  invisible were probed and both REFUTED: a task parented to a phase id that does not
+  exist is still reachable (`descendants()` walks the parent FIELD, not the items), and a
+  foreign `kind` is impossible (`_h_added` takes the kind from the event kind, ignoring
+  `data`). So for tasks the property already held, and `test_every_live_task_is_offerable`
+  pins it. What IS reachable is a PHASE with nothing pickable under it — an empty one
+  (note, `schedule.empty_phase`) or one whose tasks are all finished while it stays open
+  (always a problem: a queue held open by an item nobody can act on). 10 tests, 6
+  mutations. On the source project 37 follow-ups — including four confirmed reviewer
   findings — were filed where the picker could not see them, and nothing failed: the
   counts reconciled and the audits exited 0.
 
-- **B20 — inventory ratchets, not count ratchets.** When a lesson is filed, require a
+- **B20 — inventory ratchets, not count ratchets. ✅ CLOSED.** A lesson may declare the
+  `pattern` it forbids; filing it SCANS the repository and stores WHICH sites match, and
+  `ddflow lesson verify` re-scans and names the ones that reappeared. Three exit codes: 0
+  clean, 1 with the new sites listed, **2 when no lesson declares a pattern — explicitly
+  not a pass**, because reporting "all clear" for a corpus with zero ratchets is how a
+  project convinces itself it has checks it does not have. A site is `<path>: <matched
+  text>`, deliberately NOT `path:line`: a line number churns on every edit above a site and
+  would manufacture a matched pair of new/fixed findings out of an unrelated change, which
+  is how a ratchet earns the reputation that got the original one ignored. An uncompilable
+  pattern is REFUSED rather than stored with an empty inventory, which would read as "the
+  code is clean" and ratchet every real site away. 14 tests, 12 mutations — two of which
+  found real defects: `regressions()` was **dead code** (`lessons_verify` reimplemented its
+  filter), and the superseded guard existed twice with the inner copy unreachable.
+  *Original text below.* When a lesson is filed, require a
   scan and store *which sites*, not *how many*. A count-based clone ratchet on the source
   project sat red for ~350 commits: advisory, so it never blocked, and every reader
   learned to skip it — 24 new clones arrived through that gap. "A count says 'worse' and
@@ -358,11 +380,23 @@ from this list); these are the rest, ranked as it ranked them.
   project settled on: the session hook *informs* (always exit 0), the commit gate
   *blocks*.
 
-- **B24 — per-gate fire-rate tracking.** "A gate that fails on everything is worse than
+- **B24 — per-gate fire-rate tracking. ✅ CLOSED.** `rates.gate_rates()` counts outcomes
+  per gate from the raw log; `failing_gates()` reports one at or above
+  `gates.rate_max_fail` once it has `gates.rate_min_runs` decisive runs. A SKIP is not a
+  run — counting skips would make an unconfigured gate look like a broken one — and
+  neither `gate.started` nor `gate.out_of_order` is a verdict. A NOTE, not a problem: a
+  flaky gate is a defect in the checking machinery, and failing `doctor` on it would block
+  the work being checked. Original text below. 6 tests, 4 mutations. "A gate that fails on everything is worse than
   no gate: it trains the next reader to skip it." ddflow has the event log to compute
   this from; a gate firing on ~100% of changes should be auto-flagged for repair.
 
-- **B25 — cadence fired-vs-scheduled counter.** "The mechanism you did not measure is the
+- **B25 — cadence fired-vs-scheduled counter. ✅ CLOSED.** `rates.cadence_rates()` gives
+  `ran` against `expected`, and it is EXACT rather than estimated because a cadence here is
+  counted in completions, not wall-clock: `expected = completed // every` is a fact about
+  the log. `never_fired()` reports one that has fallen more than `cadence.max_missed`
+  periods behind — being merely DUE is not a finding, because `ddflow cadence` already says
+  that, and running EARLY is not one either (`missed` floors at zero). Original text below.
+  7 tests, 3 mutations. "The mechanism you did not measure is the
   one that is not running" — on the source project three wakeups were scheduled and zero
   ever fired, producing a 12-hour stall while an undesignated mechanism did the work.
   **PARTIAL.** The due-ness computation exists (`cli.py:2451`); what is missing is a fired-vs-scheduled counter, so the cadence's own hit rate still cannot be argued.

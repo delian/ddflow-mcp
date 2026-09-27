@@ -313,6 +313,10 @@ PROSE_TOOLS: dict[str, str] = {
     "ddflow_gate_status": "carries the next gate's INSTRUCTION, which is the useful half",
     "ddflow_replay": "the reconstruction narrative; the whole output is the deliverable",
     "ddflow_doctor": "a health report written to be read, with remedies in prose",
+    "ddflow_lesson_verify": (
+        "names the sites a forbidden pattern reappeared at; the list IS the finding, and the "
+        "point of B20 is that a caller reads which rather than parsing how many"
+    ),
     "ddflow_configure": "prints every knob with its documentation and its source",
     "ddflow_setup": "a checklist of what it wrote and what to do next",
     "ddflow_review": "reviewer findings, already formatted with their severities",

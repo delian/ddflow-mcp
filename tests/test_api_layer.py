@@ -272,6 +272,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_brief": (["brief"], {}),
     "ddflow_history": (["history"], {}),
     "ddflow_lesson_search": (["lesson", "search", "x"], {"query": "x"}),
+    "ddflow_lesson_verify": (["lesson", "verify"], {}),
     "ddflow_recall": (["recall", "x"], {"query": "x"}),
     "ddflow_reviewers_list": (["reviewers", "list"], {}),
     "ddflow_cleanup": (["cleanup"], {}),
@@ -303,6 +304,9 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
 #: markdown board as "no JSON body".
 TEXT_BODIED = {
     "ddflow_brief",
+    # The sites a forbidden pattern reappeared at ARE the finding (B20): a caller reads
+    # which, rather than parsing how many.
+    "ddflow_lesson_verify",
     "ddflow_configure",
     "ddflow_reviewers_list",
     "ddflow_doctor",

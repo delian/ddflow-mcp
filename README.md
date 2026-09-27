@@ -93,6 +93,8 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
   - [Locking, contention and measured cost](#locking-contention-and-measured-cost)
 - [Crash recovery](#crash-recovery)
 - [Reconstruction from logs alone](#reconstruction-from-logs-alone)
+- [Lessons that check themselves](#lessons-that-check-themselves)
+- [Checking that the checks are working](#checking-that-the-checks-are-working)
 - [Reading the log, and why it is never compacted](#reading-the-log-and-why-it-is-never-compacted)
 - [Lessons, research and bugs](#lessons-research-and-bugs)
 - [Cadences](#cadences)
@@ -497,7 +499,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 70 knobs.
+cadences, and the rest of the 74 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1643,6 +1645,76 @@ scrub at read time is a scrub that `git show` walks straight past.
 
 ---
 
+## Lessons that check themselves
+
+A lesson can name the mistake in **code**, not just in prose:
+
+```console
+$ ddflow lesson add --title "Never swallow a bare OSError" \
+      --rule "Catch the specific error; a broad except turns a loud failure into a silent one" \
+      --pattern "except OSError" --globs "*.py"
+lesson La0c745cc recorded — inventory: 2 site(s) now
+
+$ ddflow lesson verify          # later, after somebody adds a third
+La0c745cc: 1 NEW site(s): c.py: except OSError:
+```
+
+Exit `1` **names the file**. That is the whole design, and it comes from a failure worth
+repeating: on the project ddflow was extracted from, a count-based clone ratchet sat red for
+~350 commits. It was advisory so it never blocked, it reported a *number* so every reader
+learned to skip it, and **24 new clones arrived through that gap**.
+
+> A count says "worse" and never "which".
+
+A number cannot be acted on or reviewed. A list can: a new entry is a line somebody opens,
+and a disappeared entry is progress — reported, and never a failure, because the inventory
+may only shrink.
+
+Three details that decide whether a ratchet survives contact with a real repository:
+
+- **A site is `<path>: <matched text>`, not `path:line`.** Line numbers churn on every edit
+  above a site, which would invent a matching pair of "new site" and "fixed site" findings
+  out of an unrelated change — and a ratchet that cries wolf is one that gets switched off.
+- **An uncompilable pattern is refused, not stored.** An empty inventory reads exactly like
+  a clean repository, and would ratchet every real occurrence away the first time it ran.
+- **Exit 2 when no lesson declares a pattern.** Not a pass. A corpus with zero ratchets
+  should not be able to report "all clear".
+
+Vendored and untracked files are never sites — matches in code nobody owns are findings
+nobody will act on. Most lessons stay prose, and a prose lesson produces no findings at all.
+
+## Checking that the checks are working
+
+Three questions ddflow asks about itself, all derived from the log and all reported by
+`ddflow doctor`. They exist because **an unmeasured mechanism is indistinguishable from a
+missing one**.
+
+**Can the queue's work actually be picked up?** Every other check counts the items that are
+present; this one asks whether any of them can be started. An open phase with no task under
+it is work `ddflow next` will never offer — a note by default (`schedule.empty_phase`,
+since a project that files phases before breaking them down lives there on purpose) — and a
+phase whose tasks are *all finished* while the phase stays open is always a problem, because
+that is a queue held open by an item nobody can act on.
+
+Tasks cannot go missing here, and that is a property rather than an untested gap: two
+hypotheses about how one could were probed and both refuted, and a test now pins the
+invariant so a future filter cannot quietly reintroduce it.
+
+**Does a gate ever say yes?** *A gate that fails on everything is worse than no gate: it
+trains the next reader to skip it.* A gate at or above `gates.rate_max_fail` once it has
+`gates.rate_min_runs` decisive runs is reported as flaky or as measuring a moving target —
+re-running it will not converge. A **skipped** gate is not a run, because counting skips as
+failures would make an unconfigured gate look like a broken one.
+
+**Did the periodic passes ever fire?** *The mechanism you did not measure is the one that is
+not running.* Because a cadence here counts completions rather than wall-clock, fired versus
+scheduled is exact: `expected = completed // every`. A cadence more than
+`cadence.max_missed` periods behind is reported. Being merely *due* is not a finding —
+`ddflow cadence` already says that — and running early is not one either.
+
+All three are **notes, not problems**: a defect in the machinery that checks the work must
+not block the work.
+
 ## Reading the log, and why it is never compacted
 
 The log only grows, so every state-reading call used to re-read and re-parse all of it.
@@ -2020,7 +2092,7 @@ declared once and persists — see
 
 ## Configuration
 
-70 knobs across 15 sections, every one documented in place:
+74 knobs across 15 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

@@ -46,9 +46,12 @@ SERVER_INFO = {"name": "ddflow", "version": "0.1.1", "title": "ddflow work-queue
 def _AGENT_KEYS() -> list[str]:
     """Every supported harness, from the one registry that defines them.
 
-    A function rather than an import at module scope: `TOOLS` is built at import time and
-    `services.adopt` pulls in `infra.paths`, which this module must not require merely to
-    describe its own tools.
+    The import is inside the function only to keep it out of this module's header; it is
+    NOT deferred in any meaningful sense, because `TOOLS` calls this while it is being
+    built, so `services.adopt` is imported when this module is. An earlier version of this
+    docstring claimed the opposite — roborev checked `sys.modules` and disproved it. The
+    accurate statement is that the list has ONE source, and a hand-kept copy in the tool
+    description has drifted twice.
     """
     from ..services.adopt import AGENT_TARGETS
 
@@ -459,6 +462,18 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id",),
     },
+    "ddflow_lesson_verify": {
+        "description": (
+            "Re-scan every lesson that declared a code `pattern` and report the sites where "
+            "it has REAPPEARED. Exit 1 names them; exit 2 means no lesson declares a "
+            "pattern, which is NOT a pass — it means this project has no mechanical ratchet "
+            "on its lessons yet. Run after a change that touches code a lesson governs."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().lessons_verify(repo, agent=agent),
+        "payload": "text",
+        "text": True,
+    },
     "ddflow_lesson_add": {
         "description": (
             "Record a lesson so it is never re-learned. Use after any bug, any operator "
@@ -489,17 +504,36 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "record of what was once believed.",
                 False,
             ),
+            "pattern": (
+                "string",
+                "A regex naming the mistake in CODE. Supplying it scans the repository now "
+                "and stores WHICH sites match, so `ddflow_lesson_verify` can later name "
+                "the ones that reappeared. Prefer this to a remembered rule whenever the "
+                "pattern is mechanical: a count says 'worse' and never 'which', so nobody "
+                "can act on it or review it. Refused if the regex does not compile — an "
+                "empty inventory reads as 'the code is clean'.",
+                False,
+            ),
+            "globs": (
+                "string",
+                "Comma-separated globs to scan for `pattern`. Default: every tracked file.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().lesson_add(
             repo,
-            title=a.get("title", "") or "",
-            rule=a.get("rule", "") or "",
-            why=a.get("why", "") or "",
-            how=a.get("how", "") or "",
-            tags=a.get("tags", "") or "",
-            seen_in=a.get("seen_in", "") or "",
-            supersedes=a.get("supersedes", "") or "",
-            id=a.get("id", "") or "",
+            _api().LessonDraft(
+                title=a.get("title", "") or "",
+                rule=a.get("rule", "") or "",
+                why=a.get("why", "") or "",
+                how=a.get("how", "") or "",
+                tags=a.get("tags", "") or "",
+                seen_in=a.get("seen_in", "") or "",
+                supersedes=a.get("supersedes", "") or "",
+                pattern=a.get("pattern", "") or "",
+                globs=a.get("globs", "") or "",
+                id=a.get("id", "") or "",
+            ),
             agent=agent,
         ),
         "payload": ("id",),

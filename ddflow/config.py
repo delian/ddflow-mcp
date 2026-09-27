@@ -175,6 +175,8 @@ class GatesConfig:
     allow_skip_with_reason: bool = True
     require_outcome: bool = True
     enforce_order: str = "warn"
+    rate_min_runs: int = 5
+    rate_max_fail: float = 0.9
     evidence_required: list[str] = field(
         default_factory=lambda: [
             "unit_tests",
@@ -346,8 +348,14 @@ class ScheduleConfig:
     ready_policy: str = "deps_and_lease"  # deps_and_lease | deps_only
     cycle_policy: str = "error"  # error | warn
     unknown_dep_policy: str = "block"  # block | warn
+    empty_phase: str = "note"  # note | problem | off
 
 
+_doc(
+    "schedule",
+    "empty_phase",
+    "How to report an OPEN phase with no task under it — work in the queue that `ddflow next` can never offer. 'note' (default) mentions it, 'problem' fails `doctor`, 'off' stays silent. Configurable because a project that files phases before breaking them down lives in this state on purpose, while one that does not has found a planning gap. A phase whose tasks are all FINISHED while the phase stays open is always a problem and is not covered by this knob: it is not a workflow style, it is a queue held open by an item nobody can act on.",
+)
 _doc(
     "schedule",
     "max_parallel_tasks",
@@ -441,8 +449,24 @@ class CadenceConfig:
     mutation_tests_every_phases: int = 3
     dedupe_sweep_every_tasks: int = 4
     lessons_pass_every_phases: int = 4
+    max_missed: int = 1
 
 
+_doc(
+    "gates",
+    "rate_min_runs",
+    "How many DECISIVE runs a gate needs before its failure rate is judged. One failure out of one run is 100% and means nothing, so a low value turns a new gate's first red into a finding — which is the crying-wolf failure this check exists to prevent. A skipped gate is not a run.",
+)
+_doc(
+    "gates",
+    "rate_max_fail",
+    "Failure rate (0.0-1.0) at which a gate is reported as failing on nearly everything. 'A gate that fails on everything is worse than no gate: it trains the next reader to skip it.' At or above this, the gate is flaky or measuring a moving target and re-running it will not converge -- the remedy is to repair the gate, not the work.",
+)
+_doc(
+    "cadence",
+    "max_missed",
+    "How many scheduled runs a cadence may have skipped before `doctor` reports it. 1 (default) means 'being due is not a finding -- never firing is'. A cadence scheduled repeatedly that has fired zero times is the failure this measures: on the project ddflow was extracted from, three wakeups were scheduled, none fired, and the 12-hour stall was only noticed because an undesignated mechanism did the work instead.",
+)
 _doc(
     "reinstruct",
     "enabled",

@@ -426,7 +426,21 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     la.add_argument("--tags", default="")
     la.add_argument("--seen-in", default="")
     la.add_argument("--supersedes", default="")
+    la.add_argument(
+        "--pattern",
+        default="",
+        help="regex this lesson forbids. Scans NOW and stores WHICH sites match, so "
+        "`lessons verify` can name what reappeared — a count could only say it got worse",
+    )
+    la.add_argument(
+        "--globs", default="", help="comma-separated globs to scan (default: all tracked files)"
+    )
     la.set_defaults(fn=cmd_lesson)
+    lv = ls_s.add_parser(
+        "verify",
+        help="re-scan every lesson's pattern and name the sites that reappeared",
+    )
+    lv.set_defaults(fn=cmd_lesson)
     lse = ls_s.add_parser("search")
     lse.add_argument("query")
     lse.add_argument("--limit", type=int, default=None, help="default: [lessons].max_results")

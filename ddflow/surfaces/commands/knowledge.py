@@ -23,18 +23,31 @@ def cmd_lesson(a, c: Ctx) -> int:
     if a.lesson_cmd == "add":
         out = A.lesson_add(
             c.repo,
-            title=a.title,
-            rule=a.rule or "",
-            why=a.why or "",
-            how=a.how or "",
-            tags=a.tags or "",
-            seen_in=a.seen_in or "",
-            supersedes=a.supersedes or "",
-            id=a.id or "",
+            A.LessonDraft(
+                title=a.title,
+                rule=a.rule or "",
+                why=a.why or "",
+                how=a.how or "",
+                tags=a.tags or "",
+                seen_in=a.seen_in or "",
+                supersedes=a.supersedes or "",
+                pattern=a.pattern or "",
+                globs=a.globs or "",
+                id=a.id or "",
+            ),
             agent=c.requested_agent,
         )
-        c.out(f"lesson {out.data['id']} recorded", out.body(("id",)))
+        if out.exit:
+            c.out(out.reason, out.body())
+            return out.exit
+        n = out.data.get("sites", 0)
+        note = f" — inventory: {n} site(s) now" if a.pattern else ""
+        c.out(f"lesson {out.data['id']} recorded{note}", out.body(("id", "sites", "inventory")))
         return OK
+    if a.lesson_cmd == "verify":
+        out = A.lessons_verify(c.repo, agent=c.requested_agent)
+        c.out(out.data.get("text", "") or out.reason, out.body())
+        return out.exit
     if a.lesson_cmd == "search":
         out = A.lesson_search(c.repo, a.query, limit=a.limit, agent=c.requested_agent)
         if c.json:

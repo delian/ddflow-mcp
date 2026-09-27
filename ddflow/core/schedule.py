@@ -39,6 +39,79 @@ class Blocked:
 
 
 @dataclass
+class Unpickable:
+    """Work that EXISTS in the queue and that no `ddflow next` call can offer.
+
+    B19, from the source project: 37 follow-ups — including four confirmed reviewer
+    findings — were filed where the picker could not see them, and nothing failed. The
+    counts reconciled and every audit exited 0, because each of them measured the items
+    that were there rather than asking whether any of them could be picked up.
+    """
+
+    item: str
+    kind: str  #: empty_phase | finished_phase
+    detail: str
+    severity: str  #: note | problem
+
+    def render(self) -> str:
+        return f"{self.item}: {self.detail}"
+
+
+def unpickable(state: State, cfg: Config) -> list[Unpickable]:
+    """Every open item that `next` will never offer, with why.
+
+    **Tasks cannot appear here, and that is a property worth stating rather than a gap in
+    the check.** `plan()` with no phase walks `state.tasks()`, which returns every live
+    task, and puts each into exactly one of ready/running/blocked — so a filed task is
+    always reachable. Two probes went looking for a task the picker could miss: a task
+    parented to a phase id that does not exist is still reachable, because
+    `descendants()` is built from the parent FIELD rather than from the items; and a task
+    filed with a foreign `kind` is impossible, because `_h_added` takes the kind from the
+    event kind and ignores `data`. Both hypotheses REFUTED, and
+    `tests/test_pickability.py` pins the invariant so a future filter cannot quietly
+    reintroduce it.
+
+    What IS reachable is a PHASE nothing can be picked under, which `next` reports as an
+    empty queue.
+    """
+    out: list[Unpickable] = []
+    for ph in sorted(state.items.values(), key=lambda i: i.id):
+        if ph.kind != "phase" or ph.removed or ph.state in (DONE, ABANDONED):
+            continue
+        tasks = [t for t in state.tasks(ph.id) if not t.removed]
+        live = [t for t in tasks if t.state not in (DONE, ABANDONED)]
+        if live:
+            continue
+        if not tasks:
+            if cfg.schedule.empty_phase == "off":
+                continue
+            out.append(
+                Unpickable(
+                    ph.id,
+                    "empty_phase",
+                    "an open phase with no task under it, so `next` has nothing to offer "
+                    "for it — break it down, or remove it",
+                    "problem" if cfg.schedule.empty_phase == "problem" else "note",
+                )
+            )
+            continue
+        # Tasks exist and every one is finished. Always a problem, and deliberately NOT
+        # behind the knob: an open phase over finished work is not a workflow style, it is
+        # a queue held open by an item nobody can act on, and the remedy (`complete` it,
+        # or file what is left) is the same in every project.
+        out.append(
+            Unpickable(
+                ph.id,
+                "finished_phase",
+                f"all {len(tasks)} task(s) under it are finished but the phase is still "
+                f"open — `ddflow complete {ph.id}`, or file the work that remains",
+                "problem",
+            )
+        )
+    return out
+
+
+@dataclass
 class Plan:
     """What the scheduler decided, and everything it decided against."""
 

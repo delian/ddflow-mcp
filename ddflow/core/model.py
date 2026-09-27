@@ -174,6 +174,12 @@ class Lesson:
     tags: list[str] = field(default_factory=list)
     at: str = ""
     superseded_by: str = ""
+    #: B20. The pattern this lesson forbids, and WHICH sites it currently occurs at --
+    #: never how many. A count says "worse" and never "which", so it cannot be acted on or
+    #: reviewed; `services/inventory.py` diffs the list and names what appeared.
+    pattern: str = ""
+    globs: list[str] = field(default_factory=list)
+    sites: list[str] = field(default_factory=list)
 
     def text(self) -> str:
         return "\n".join(x for x in (self.title, self.rule, self.why, self.how) if x)
@@ -649,6 +655,12 @@ def _h_lesson(st: State, ev: Event) -> None:
         how=d.get("how", "") or (prev.how if prev else ""),
         seen_in=list(d.get("seen_in", [])),
         tags=list(d.get("tags", prev.tags if prev else [])),
+        # Merged like every other field, not replaced: a re-record that omits the pattern
+        # must not silently disarm the ratchet. Re-scanning and finding nothing is how an
+        # inventory shrinks; forgetting the pattern is how it disappears.
+        pattern=d.get("pattern", "") or (prev.pattern if prev else ""),
+        globs=list(d.get("globs", prev.globs if prev else [])),
+        sites=list(d.get("sites", prev.sites if prev else [])),
         at=prev.at if prev and prev.at else ev.ts,
         superseded_by=prev.superseded_by if prev else "",
     )

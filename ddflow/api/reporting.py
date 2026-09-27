@@ -246,6 +246,10 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     from ..views import human
 
     log, cfg, st = _load(repo, agent)
+    # `verify()` already reads the whole log, and the warm parse cache makes a second read
+    # a digest rather than a re-parse (see infra/log.py), so this costs a few ms and saves
+    # the gate-rate pass from folding again.
+    events = log.read_all()
     store = Store(repo, cfg)
     problems: list[str] = list(log.verify())
     notes: list[str] = []
@@ -256,6 +260,23 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
 
     p = plan(st, cfg, agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
+
+    # B19: work that EXISTS and that `next` can never offer. Every other check here
+    # measures the items that are present; this one asks whether any of them can be picked
+    # up, which is the question that went unasked while 37 filed follow-ups sat invisible
+    # on the source project with every audit exiting 0.
+    from ..core.schedule import unpickable
+
+    for u in unpickable(st, cfg):
+        (problems if u.severity == "problem" else notes).append(u.render())
+
+    # B24/B25: does ddflow's own machinery fire? Both are NOTES, not problems — a flaky
+    # gate and a stalled cadence are facts about the tooling, and failing `doctor` on them
+    # would block work on a defect in the thing that checks the work.
+    from ..services import rates as RT
+
+    notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
+    notes += [f"cadence never fired: {r.render()}" for r in RT.never_fired(st, cfg)]
     for it in st.items.values():
         problems += [
             f"{it.id} needs unknown item {dep!r}" for dep in it.needs if dep not in st.items

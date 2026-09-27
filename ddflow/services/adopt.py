@@ -66,10 +66,13 @@ class AgentTarget:
     delta: str  #: filename under `templates/drivers/deltas/`
     config: str  #: MCP config path relative to the repo root; "" when none exists
     shape: str  #: one of the SHAPE_* constants above
-    #: The instruction surface this agent ACTUALLY reads, when it is not `AGENTS.md`.
-    #: Empty means "not documented either way" — which is a different claim from
-    #: "AGENTS.md", and the README says so rather than guessing.
-    rules: str = "AGENTS.md"
+
+    # There is deliberately NO `rules` field here. One briefly existed, populated for six
+    # agents and read by nothing: `NATIVE_RULES` already owns which surface an agent reads
+    # and `adopt` is driven entirely by that, so the field was a second, unowned copy of the
+    # same fact -- `NATIVE_RULES["tabnine"].path` said `.tabnine/guidelines/ddflow.md` while
+    # it said `.tabnine/guidelines/`. The next maintainer would have filled it in believing
+    # `adopt` honoured it. Found by roborev on 3040d4b; the duplicate-then-drift class.
 
     @property
     def writes_config(self) -> bool:
@@ -81,7 +84,7 @@ class AgentTarget:
 #: resemblance between them, because a wrong key is valid JSON that the agent silently
 #: ignores, which looks exactly like success.
 AGENT_TARGETS: dict[str, AgentTarget] = {
-    "claude": AgentTarget("claude-code.md", ".mcp.json", SHAPE_MCP_SERVERS, "CLAUDE.md"),
+    "claude": AgentTarget("claude-code.md", ".mcp.json", SHAPE_MCP_SERVERS),
     "gemini": AgentTarget("gemini-cli.md", ".gemini/settings.json", SHAPE_MCP_SERVERS),
     "codex": AgentTarget("codex-cli.md", ".codex/config.toml", SHAPE_TOML),
     # GitHub Copilot's OWN surface, separate from VS Code's. The CLI searches upward for
@@ -105,7 +108,7 @@ AGENT_TARGETS: dict[str, AgentTarget] = {
     "glm": AgentTarget("zcode-glm.md", ".zcode/config.json", SHAPE_MCP_DOT_SERVERS),
     # Qwen Code CLI, a Gemini CLI fork: same settings shape, its own directory. Its
     # default context file is QWEN.md, and it reads AGENTS.md when present.
-    "qwen": AgentTarget("qwen-code.md", ".qwen/settings.json", SHAPE_MCP_SERVERS, "QWEN.md"),
+    "qwen": AgentTarget("qwen-code.md", ".qwen/settings.json", SHAPE_MCP_SERVERS),
     # Google Antigravity. Workspace MCP is `.agents/mcp_config.json`; rules may be
     # AGENTS.md, GEMINI.md, or `.agents/rules/`.
     "antigravity": AgentTarget("antigravity.md", ".agents/mcp_config.json", SHAPE_MCP_SERVERS),
@@ -117,9 +120,7 @@ AGENT_TARGETS: dict[str, AgentTarget] = {
     # its own per-user config, which is the manual half named in the delta.
     "qodo": AgentTarget("qodo.md", "mcp.json", SHAPE_MCP_SERVERS),
     # Tabnine Agent. Project scope SHALLOW-MERGES over user and system scopes.
-    "tabnine": AgentTarget(
-        "tabnine.md", ".tabnine/agent/settings.json", SHAPE_MCP_SERVERS, ".tabnine/guidelines/"
-    ),
+    "tabnine": AgentTarget("tabnine.md", ".tabnine/agent/settings.json", SHAPE_MCP_SERVERS),
     # --- Supported, but with NO project-level MCP file to write. -------------------
     # Each of these is a verified absence, not an unresearched gap: the delta doc says
     # where the operator must add the server by hand, and AGENTS.md still carries the
@@ -127,13 +128,13 @@ AGENT_TARGETS: dict[str, AgentTarget] = {
     #
     # Aider has no MCP client support at all, and no AGENTS.md convention -- it loads a
     # read-only context file named by `read:` in `.aider.conf.yml`.
-    "aider": AgentTarget("aider.md", "", SHAPE_NONE, ".aider.conf.yml `read:`"),
+    "aider": AgentTarget("aider.md", "", SHAPE_NONE),
     # Cline's MCP settings are a single GLOBAL file; its project surface is rules only.
-    "cline": AgentTarget("cline.md", "", SHAPE_NONE, ".clinerules/"),
+    "cline": AgentTarget("cline.md", "", SHAPE_NONE),
     # Windsurf/Cascade is now Devin Desktop; its docs state a global config only.
     "windsurf": AgentTarget("windsurf.md", "", SHAPE_NONE),
     # Replit configures MCP entirely in the web UI, and its instruction file is replit.md.
-    "replit": AgentTarget("replit.md", "", SHAPE_NONE, "replit.md"),
+    "replit": AgentTarget("replit.md", "", SHAPE_NONE),
     # OpenHands' primary path is Settings -> MCP in the UI. A `config.toml` `[mcp]`
     # `stdio_servers` array still exists and its own docs call it development-only, so
     # it is documented in the delta rather than written here.
@@ -143,7 +144,7 @@ AGENT_TARGETS: dict[str, AgentTarget] = {
     "goose": AgentTarget("goose.md", "", SHAPE_NONE),
     # Sourcegraph Cody is Enterprise-only since 2025-07-23 and is configured through the
     # editor's own settings, under a `cody.mcpServers` key rather than a repo file.
-    "cody": AgentTarget("cody.md", "", SHAPE_NONE, ""),
+    "cody": AgentTarget("cody.md", "", SHAPE_NONE),
 }
 
 
@@ -460,8 +461,8 @@ def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesStat
         got = path.read_text("utf-8", errors="replace")
         if rule.form == FORM_AIDER:
             # Not a rules file: the question is whether Aider is TOLD to load AGENTS.md.
-            found = re.search(rf"^\s*(-\s*)?{re.escape(AIDER_READS)}\s*$", got, re.M)
-            out.append(RulesState(rule.path, CURRENT if found else NOT_BINDING))
+            listed = _aider_lists_agents_md(got)
+            out.append(RulesState(rule.path, CURRENT if listed else NOT_BINDING))
             continue
         if rule.form == FORM_BLOCK:
             if BEGIN not in got or END not in got:
@@ -568,11 +569,30 @@ def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> s
 AIDER_READS = "AGENTS.md"
 
 
+#: Does this text list `AGENTS.md` under `read:`, in EITHER YAML form?
+#:
+#: One pattern, used by the writer's idempotency guard and by `rules_status`. They used to
+#: carry a line-anchored copy each while the writer could also emit an INLINE list, so
+#: `adopt` produced `read: [CONVENTIONS.md, AGENTS.md]` -- correct YAML that both then
+#: reported as not-binding. `doctor` failed a project that had just been adopted correctly,
+#: and each re-adopt appended again, growing the file without bound. Found by roborev on
+#: 3040d4b, reproduced end to end.
+_AIDER_LISTED = re.compile(
+    r"^\s*(?:-\s*)?AGENTS\.md\s*$"  # block form:  - AGENTS.md
+    r"|^read:.*?\[[^\]]*\bAGENTS\.md\b[^\]]*\]",  # inline form: read: [x, AGENTS.md]
+    re.M,
+)
+
+
+def _aider_lists_agents_md(text: str) -> bool:
+    return bool(_AIDER_LISTED.search(text))
+
+
 def _add_aider_read(path: Path) -> str:
     """Add `AGENTS.md` to `read:` in `.aider.conf.yml`.
 
-    Aider discovers no instruction file at all — not `AGENTS.md`, not a convention of its
-    own — so without this entry the rules are present in the repository and invisible to
+    Aider discovers no instruction file at all -- not `AGENTS.md`, not a convention of its
+    own -- so without this entry the rules are present in the repository and invisible to
     the agent. That makes this the one native surface where doing nothing is silent total
     failure rather than degraded behaviour.
 
@@ -580,28 +600,66 @@ def _add_aider_read(path: Path) -> str:
     comments and ordering that matter to them, and a dump-and-rewrite would quietly discard
     both. `yaml` is also not a dependency of this package and should not become one to add
     a line.
+
+    **Every form is normalised to the BLOCK form.** Writing an inline list back out was the
+    source of three bugs at once: the reader did not recognise it, a trailing comment landed
+    inside the brackets (`read: [CONVENTIONS.md]  # our docs, AGENTS.md]` -- unparseable,
+    and the operator's own entry lost with it), and `read: []` became `read: [, AGENTS.md]`.
+    One representation means the reader and the writer cannot disagree.
     """
     text = path.read_text("utf-8") if path.exists() else ""
-    if re.search(rf"^\s*(-\s*)?{re.escape(AIDER_READS)}\s*$", text, re.M):
+    if _aider_lists_agents_md(text):
         return f"{path.name} already loads {AIDER_READS}"
-    if re.search(r"^read:", text, re.M):
-        # An existing `read:` — append to it as a list item. A scalar form (`read: X`) is
-        # rewritten into a list so both entries survive; replacing it would drop theirs.
-        def _extend(m: re.Match) -> str:
-            value = m.group(2).strip()
-            if not value:
-                return f"{m.group(1)}\n  - {AIDER_READS}"
-            if value.startswith("["):
-                inner = value.rstrip("]").rstrip()
-                return f"{m.group(1)} {inner}, {AIDER_READS}]"
-            return f"read:\n  - {value}\n  - {AIDER_READS}"
+    m = re.search(r"^read:([^\n]*)$", text, re.M)
+    if m is None:
+        prefix = text.rstrip() + "\n" if text.strip() else ""
+        path.write_text(f"{prefix}read:\n  - {AIDER_READS}\n", "utf-8")
+        return f"{'added' if prefix else 'created'} read: {AIDER_READS} in {path.name}"
 
-        new_text = re.sub(r"^(read:)([^\n]*)", _extend, text, count=1, flags=re.M)
-        path.write_text(new_text, "utf-8")
-        return f"added {AIDER_READS} to read: in {path.name}"
-    prefix = text.rstrip() + "\n" if text.strip() else ""
-    path.write_text(f"{prefix}read:\n  - {AIDER_READS}\n", "utf-8")
-    return f"{'added' if prefix else 'created'} read: {AIDER_READS} in {path.name}"
+    existing, trailing = _aider_read_values(m.group(1))
+    # Any following block-form entries belong to this key too, and must survive.
+    rest = text[m.end() :]
+    # Past the newline that ENDS the `read:` line, or the first iteration below sees "\n"
+    # and stops before reading a single block entry -- which left the operator's entries in
+    # the file but moved below ours, a reordering with no reason behind it.
+    lead = len(rest) - len(rest.lstrip("\n"))
+    rest = rest[lead:]
+    consumed = 0
+    for line in rest.splitlines(keepends=True):
+        item = re.match(r"^\s+-\s*(.+?)\s*$", line)
+        if not item:
+            break
+        existing.append(item.group(1))
+        consumed += len(line)
+
+    values = [*dict.fromkeys([*existing, AIDER_READS])]  # de-duplicated, order kept
+    block = "read:" + trailing + "\n" + "".join(f"  - {v}\n" for v in values)
+    path.write_text(text[: m.start()] + block + rest[consumed:], "utf-8")
+    return f"added {AIDER_READS} to read: in {path.name}"
+
+
+def _aider_read_values(after_colon: str) -> tuple[list[str], str]:
+    """`(values, trailing-comment)` for whatever followed `read:` on its own line.
+
+    Handles the three forms an operator may have written -- an inline list, a bare scalar,
+    or nothing (a block list follows) -- and keeps any trailing comment OUTSIDE the values,
+    which is the bug that made `read: [x]  # note` unparseable when the comment was treated
+    as part of the list.
+    """
+    raw = after_colon.strip()
+    comment = ""
+    bracket = re.match(r"^\[([^\]]*)\](.*)$", raw)
+    if bracket:
+        inner, comment = bracket.group(1), bracket.group(2)
+        values = [v.strip().strip("'\"") for v in inner.split(",") if v.strip()]
+        return values, (" " + comment.strip() if comment.strip() else "")
+    if raw.startswith("#"):
+        return [], " " + raw
+    if "#" in raw:
+        raw, comment = raw.split("#", 1)
+        comment = " #" + comment
+    raw = raw.strip()
+    return ([raw] if raw else []), comment
 
 
 def _upsert_block(path: Path, section: str) -> str:
