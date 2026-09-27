@@ -9,6 +9,42 @@ markdown here because ddflow is not yet dogfooding itself — which is itself th
 item below.
 
 
+
+## B164 — the rules file was written once and never checked, 2026-09-27
+
+Operator question: is AGENTS.md always properly instructed, does MCP do it by instructing
+the agent with the operator's permission, and does the CLI do it itself at setup?
+
+**The last two were already true; the first was not.** `adopt` wrote the managed block
+idempotently and nothing ever looked again, while `adopted` is judged solely by
+`.ddflow/config.toml` existing. So a deleted `AGENTS.md`, a stripped block, or a block from
+an older ddflow all left the agent reading rules that were absent or wrong with every
+surface reporting the project as fine. Adoption is a config file; the INSTRUCTIONS are a
+separate fact, and nothing checked the second one.
+
+That is not cosmetic: the block is what tells an agent to CLAIM before editing, and an agent
+that does not claim has its work destroyed by a parallel one. The guarantee the whole
+coordination layer provides was resting on a file nobody verified.
+
+- **`adopt.rules_status(repo)`** → `current` / `stale` / `no_block` / `missing`, comparing
+  what is on disk against `project_section()` — which `adopt` now also uses, so there is ONE
+  generator. Two would be two answers to "what should be in there", drifting invisibly in
+  exactly the file that tells an agent how to behave.
+- **`doctor`**: `missing` is a PROBLEM (exit 1), `stale` a note. An upgrade that changes the
+  block must not turn the health check red — that trains people to ignore it.
+- **The MCP handshake**: a gated block naming the file, the fault, why it matters, and **ask
+  the operator first**. ddflow does not rewrite a file in their repository from an agent's
+  tool call; same rule as companions ("propose; never install").
+- **The footer**: reported mid-session too, since the handshake fires once.
+- **`init`**: REPORTS it, does not write. Writing prose into someone's AGENTS.md is
+  `adopt`'s job.
+
+Seven mutations verified. The seventh is the one worth keeping: disabling the
+replace-the-block branch does NOT lose the operator's prose — it appends a second block — so
+the prose test passed while every re-adopt grew the file. Two blocks is worse than one stale
+one, because the agent reads both and nothing says which is current. Probed by counting
+markers after four adopts.
+
 ## Audit, 2026-09-27 — 48 unmarked entries down to 23 genuinely open
 
 The closure markers had drifted badly: 25 of 48 unmarked entries were already DONE, five of

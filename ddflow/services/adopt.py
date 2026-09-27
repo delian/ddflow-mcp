@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..infra import paths
@@ -105,6 +106,99 @@ refused. Never treat `2` as `0`.
 _DRIVER_LINE = "Full driver: [`{driver}`]({driver}) · per-agent notes: `{deltas}/`"
 
 
+def project_section(docs_dir: str = "docs/ddflow") -> str:
+    """The managed block this version of ddflow would write.
+
+    Factored out of `adopt` so `rules_status` can compare what is ON DISK against what
+    SHOULD be there. Two generators would be two answers to the same question, and the
+    drift between them would be invisible in exactly the file that tells an agent how to
+    behave.
+    """
+    return _SECTION.format(
+        begin=BEGIN,
+        end=END,
+        driver_line=_DRIVER_LINE.format(
+            driver=f"{docs_dir}/drivers/implement-phase.md",
+            deltas=f"{docs_dir}/drivers/deltas",
+        ),
+    )
+
+
+#: The rules surfaces whose state `rules_status` reports. `AGENTS.md` is the one more than
+#: thirty agents read; `CLAUDE.md` only counts once it exists, because writing it into a
+#: project that does not use Claude Code would be noise.
+RULES_FILES = ("AGENTS.md", "CLAUDE.md")
+
+MISSING, NO_BLOCK, STALE, CURRENT = "missing", "no_block", "stale", "current"
+
+
+@dataclass
+class RulesState:
+    """One rules file, and whether it still says what this ddflow would say."""
+
+    path: str
+    state: str
+
+    @property
+    def needs_attention(self) -> bool:
+        return self.state != CURRENT
+
+    def render(self) -> str:
+        return {
+            MISSING: f"{self.path} does not exist — the agent has no project rules at all",
+            NO_BLOCK: f"{self.path} exists but its ddflow section was removed",
+            STALE: f"{self.path}'s ddflow section is from an older version and has drifted",
+            CURRENT: f"{self.path} is current",
+        }[self.state]
+
+
+def has_been_adopted(repo: Path, *, docs_dir: str = "docs/ddflow") -> bool:
+    """Has `adopt` ever run here — as distinct from `init`?
+
+    The distinction matters and `.ddflow/config.toml` cannot make it: `init` writes that file
+    too. So a project that only ran `init` has no `AGENTS.md`, CORRECTLY, and reporting its
+    absence would be reporting a rules file that was never asked for — on every tool call.
+    The drivers are the marker, because writing them is the first thing `adopt` does.
+    """
+    return (Path(repo) / docs_dir / "drivers" / "implement-phase.md").is_file()
+
+
+def rules_status(repo: Path, *, docs_dir: str = "docs/ddflow") -> list[RulesState]:
+    """Is every agent-facing rules file present and CURRENT?
+
+    Nothing checked this before. `adopt` writes the block idempotently and then nobody
+    looks again — so a deleted `AGENTS.md`, a block someone stripped, or a block written by
+    an older ddflow all left the agent reading rules that were absent, incomplete or wrong,
+    with every surface reporting the project as adopted because `.ddflow/config.toml`
+    existed. Adoption is judged by a config file; the INSTRUCTIONS are a separate fact.
+
+    `CLAUDE.md` is reported only if it already exists: creating it in a project that does
+    not use Claude Code would be noise, and its absence is not a defect.
+    """
+    # An UNADOPTED project has no rules file and should not be told it is missing one: that
+    # is what `setup_todo` and the handshake's adoption offer are for. Reporting it here
+    # would put "AGENTS.md does not exist" in front of an operator who has not asked for
+    # AGENTS.md — which is noise, and noise on every call.
+    if not has_been_adopted(repo, docs_dir=docs_dir):
+        return []
+    out: list[RulesState] = []
+    want = project_section(docs_dir).strip()
+    for name in RULES_FILES:
+        path = Path(repo) / name
+        if not path.exists():
+            if name != "AGENTS.md":
+                continue  # not a defect — see the docstring
+            out.append(RulesState(name, MISSING))
+            continue
+        text = path.read_text("utf-8", errors="replace")
+        if BEGIN not in text or END not in text:
+            out.append(RulesState(name, NO_BLOCK))
+            continue
+        block = text[text.index(BEGIN) : text.index(END) + len(END)].strip()
+        out.append(RulesState(name, CURRENT if block == want else STALE))
+    return out
+
+
 def adopt(
     repo: Path,
     agents: list[str],
@@ -142,14 +236,7 @@ def adopt(
         shutil.copy2(templates / "drivers" / "deltas" / delta, drivers_dst / "deltas" / delta)
         actions.append(f"wrote {docs_dir}/drivers/deltas/{delta}")
 
-    section = _SECTION.format(
-        begin=BEGIN,
-        end=END,
-        driver_line=_DRIVER_LINE.format(
-            driver=f"{docs_dir}/drivers/implement-phase.md",
-            deltas=f"{docs_dir}/drivers/deltas",
-        ),
-    )
+    section = project_section(docs_dir)
     for name in ("AGENTS.md", "CLAUDE.md"):
         path = repo / name
         if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:

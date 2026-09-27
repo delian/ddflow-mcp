@@ -38,10 +38,12 @@ class Obligation:
 MAX_REPORTED = 3
 
 
-def outstanding(state, cfg, *, limit: int = MAX_REPORTED) -> list[Obligation]:
+def outstanding(state, cfg, *, repo=None, limit: int = MAX_REPORTED) -> list[Obligation]:
     """Obligations this project has taken on and not discharged.
 
-    Reads the FOLDED state only — no disk, no git, no subprocess. That is what makes it
+    Reads the FOLDED state, plus — when `repo` is given — the rules files on disk. That is
+    the one check here that touches the filesystem, and it is two `read_text` calls on a
+    cadence rather than per call. That is what makes it
     affordable on a cadence: the caller has usually folded already, and where it has not,
     one fold every N calls is the budget.
 
@@ -53,6 +55,28 @@ def outstanding(state, cfg, *, limit: int = MAX_REPORTED) -> list[Obligation]:
     from ..core.model import DONE
 
     found: list[Obligation] = []
+
+    # 0. THE RULES FILE ITSELF, first because everything else assumes the agent read it.
+    #    `adopt` writes the managed block and nothing ever looked again: a deleted
+    #    AGENTS.md, a stripped block, or one from an older ddflow all left the agent
+    #    reading rules that were absent or wrong, while every surface reported the project
+    #    as adopted because `.ddflow/config.toml` existed. Adoption is a config file; the
+    #    INSTRUCTIONS are a separate fact, and this is the one that checks it.
+    try:
+        from .adopt import rules_status
+
+        stale = [r for r in rules_status(repo) if r.needs_attention] if repo else []
+    except Exception:
+        stale = []
+    if stale:
+        found.append(
+            Obligation(
+                "rules_drift",
+                ", ".join(r.path for r in stale),
+                "; ".join(r.render() for r in stale),
+                "ask the operator, then `ddflow_setup` (shell: `ddflow adopt`) rewrites it",
+            )
+        )
 
     # 1. A bug found and never closed. The most concrete of the lot: somebody wrote down
     #    that something was broken, and the record still says so.
@@ -107,13 +131,13 @@ def outstanding(state, cfg, *, limit: int = MAX_REPORTED) -> list[Obligation]:
     return found[:limit]
 
 
-def footer(state, cfg, *, limit: int = MAX_REPORTED) -> str:
+def footer(state, cfg, *, repo=None, limit: int = MAX_REPORTED) -> str:
     """The obligations as a block to append to a tool result, or "" when there are none.
 
     Empty is the common case and the important one: a footer that appears on every call is
     a banner, and this returns nothing at all when the project has nothing outstanding.
     """
-    items = outstanding(state, cfg, limit=limit)
+    items = outstanding(state, cfg, repo=repo, limit=limit)
     if not items:
         return ""
     lines = ["ddflow: left undone in this project —"]
@@ -121,9 +145,9 @@ def footer(state, cfg, *, limit: int = MAX_REPORTED) -> str:
     return "\n".join(lines)
 
 
-def summary(state, cfg) -> dict[str, Any]:
+def summary(state, cfg, *, repo=None) -> dict[str, Any]:
     """The machine view, for `ddflow doctor` and anything else that wants the counts."""
-    items = outstanding(state, cfg, limit=1000)
+    items = outstanding(state, cfg, repo=repo, limit=1000)
     return {
         "outstanding": [
             {"kind": o.kind, "subject": o.subject, "detail": o.detail, "remedy": o.remedy}

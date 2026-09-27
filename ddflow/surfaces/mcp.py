@@ -2155,7 +2155,7 @@ def _obligation_footer(server) -> str:
         if now - server._last_footer_at < cfg.reinstruct.every_seconds:
             return ""
         state = fold(EventLog(server.repo).read_all(), strict=False)
-        text = OB.footer(state, cfg, limit=cfg.reinstruct.max_items)
+        text = OB.footer(state, cfg, repo=server.repo, limit=cfg.reinstruct.max_items)
         if not text:
             # Nothing to say. The counters are NOT reset: a quiet project should not have
             # to wait another twelve calls once something does come up.
@@ -2223,6 +2223,10 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         # use (`{% if adopted %}`), but a guard is only as good as the engine's
         # willingness to short-circuit, and one of the two did not. Defaults do not
         # depend on which branch ran.
+        # The rules surface: present, stripped, drifted or gone. Seeded with its siblings
+        # so the unadopted path renders — the lesson B153 cost a broken handshake for every
+        # first-time user.
+        "rules_drift": [],
         "unchecked_companions": [],
         "actionable_companions": [],
         "gate_gaps": [],
@@ -2257,6 +2261,18 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         cfg = Config.load(repo)
     except Exception:
         return v
+    # Checked BEFORE the expensive blocks: two `read_text` calls, and it is the one fact
+    # that decides whether the agent has any project rules at all.
+    try:
+        from ..services.adopt import rules_status
+
+        v["rules_drift"] = [
+            {"path": r.path, "state": r.state, "detail": r.render()}
+            for r in rules_status(repo)
+            if r.needs_attention
+        ]
+    except Exception:
+        pass
     v["task_pipeline"] = list(cfg.gates.task_pipeline)
     v["require_outcome"] = bool(cfg.gates.require_outcome)
 

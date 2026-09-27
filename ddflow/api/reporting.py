@@ -279,6 +279,17 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         urls = []
     notes.extend(CT.warnings(repo, cfg, urls))
 
+    # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
+    # it must claim before editing, and every coordination guarantee here rests on that. A
+    # drifted or stripped block is a note — the agent has rules, they are just not current.
+    from ..services.adopt import MISSING, rules_status
+
+    for state in rules_status(repo):
+        if not state.needs_attention:
+            continue
+        line = f"{state.render()} — `ddflow adopt` rewrites it"
+        (problems if state.state == MISSING else notes).append(line)
+
     for f in PR.detect(log.read_all(), st, cfg):
         (problems if f.severity == "block" else notes).append(f.render())
     for r in L.scan(log, cfg, repo):

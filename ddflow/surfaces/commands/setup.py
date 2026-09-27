@@ -417,10 +417,28 @@ def cmd_init(a, c: Ctx) -> int:
             "the primary\n  checkout stays dirty and `ddflow merge` will refuse:\n"
             f"    git add {' '.join(touched)} && git commit -m 'ddflow: adopt'"
         )
+    # The rules surface, REPORTED not written. `init` creates `.ddflow/`; writing prose into
+    # someone's AGENTS.md is `adopt`'s job and needs to be asked for, because the file is
+    # theirs and usually has their own content in it. Reporting it here is what stops a
+    # repo sitting "initialised" with an agent that has no project rules — which nothing
+    # noticed before, since adoption is judged by the config file alone.
+    from ...services.adopt import rules_status
+
+    drift = [r for r in rules_status(c.repo) if r.needs_attention]
+    rules_hint = ""
+    if drift:
+        rules_hint = (
+            "\n\n  "
+            + "\n  ".join(r.render() for r in drift)
+            + (
+                "\n  `ddflow adopt` writes it — only the block between the DDFLOW markers, "
+                "leaving your own prose alone."
+            )
+        )
     c.out(
         f"Initialised ddflow in {d}\n"
         f"  config: {cfgp}\n"
-        f"  Next: `ddflow phase add P1 --title 'First phase'`" + commit_hint,
-        {"root": str(d), "config": str(cfgp)},
+        f"  Next: `ddflow phase add P1 --title 'First phase'`" + commit_hint + rules_hint,
+        {"root": str(d), "config": str(cfgp), "rules_drift": [r.state for r in drift]},
     )
     return OK

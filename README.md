@@ -1632,6 +1632,42 @@ sweep, lessons compression.
 
 ---
 
+## Keeping AGENTS.md true
+
+`ddflow adopt` writes a managed block into **AGENTS.md** (and **CLAUDE.md**, and each
+agent's native rules file). That block is what tells an agent it must **claim an item
+before editing** — and every coordination guarantee here rests on that, because an agent
+that does not claim has its work destroyed by a parallel one.
+
+Nothing used to check it again. Adoption is judged by `.ddflow/config.toml` existing, so a
+deleted `AGENTS.md`, a block someone stripped, or a block written by an older ddflow all
+left the agent reading rules that were absent or wrong while every surface reported the
+project as adopted. **Adoption is a config file; the instructions are a separate fact.**
+
+Four states are now detected — `current`, `stale` (drifted from what this version writes),
+`no_block` (file there, block gone), `missing` — and reported on three surfaces:
+
+| Surface | What it does |
+|---|---|
+| `ddflow doctor` | **missing** is a PROBLEM (exit 1) — the agent has no rules at all. **stale** is a note, so an upgrade does not turn the health check red. |
+| The MCP handshake | A block naming the file, what is wrong, and **ask the operator first**. |
+| The footer on tool results | Reports it mid-session, because the handshake fires once. |
+
+**The two surfaces repair it differently, on purpose.**
+
+- **From a shell**, the operator is right there: `ddflow adopt` rewrites the block. It
+  replaces only what is between the `DDFLOW:BEGIN`/`DDFLOW:END` markers and leaves the rest
+  of your file alone, and re-running it is a no-op. `ddflow init` **reports** the problem
+  and does not write — writing prose into your `AGENTS.md` is not what `init` was asked to
+  do.
+- **Over MCP**, ddflow does not touch it. The handshake tells the agent to show the operator
+  what is wrong and call `ddflow_setup` only if they agree. It is a file in their
+  repository, usually with their own prose around the block, and rewriting it is not a
+  decision a tool gets to make on their behalf — the same rule as companions ("propose;
+  never install") and the human-approval gate.
+
+---
+
 ## Surviving a compaction
 
 The instruction block reaches the model **once**, at connect. After a context compaction it

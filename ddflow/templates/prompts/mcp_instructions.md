@@ -21,6 +21,8 @@
     unregistered_companions list  installed here, no agent configured to launch it
     uninstalled_companions  list  known absent; `install` is the command
     unchecked_companions    list  nobody probed (the handshake does not) — NOT "absent"
+    rules_drift        list    {path, state, detail} for each rules file that is missing,
+                               stripped or drifted. Empty when they are current.
     gate_gaps          list    gate ids in the task pipeline with no companion behind them
     recoverable        int     crashed agents' worktrees waiting
     ready, running, blocked, open_bugs, loops   int
@@ -161,6 +163,24 @@ it serves, and exactly what installing it would run on their machine. Then:
 3. **Do not install anything without asking.** ddflow deliberately never installs on
    its own; running an install command on someone's machine is the operator's decision,
    and yours is to make the case for it clearly enough that they can decide.
+{% endif %}
+{% if rules_drift %}
+### This project's rules file needs the operator
+
+{% for r in rules_drift %}
+- {{ r.detail }}
+{% endfor %}
+
+`AGENTS.md` is what tells an agent it must claim an item before editing, and every
+coordination guarantee here rests on that. Adoption is judged by `.ddflow/config.toml`,
+which exists — so nothing else will report this as a problem.
+
+**Ask the operator before fixing it.** It is a file in their repository, very possibly
+with their own prose around the managed block, and rewriting it is not a decision a tool
+gets to make on their behalf. Show them which file and what is wrong, then — if they
+agree — call `ddflow_setup`, which replaces only the block between the DDFLOW markers and
+leaves everything else untouched.
+
 {% endif %}
 {% if gate_gaps %}
 Gates in this project's pipeline with no tool behind them:{% for g in gate_gaps %} `{{ g }}`{% endfor %}.
