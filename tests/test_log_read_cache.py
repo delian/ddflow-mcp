@@ -375,8 +375,19 @@ def test_reuse_parsed_false_does_not_read_a_cache_another_reader_filled(repo):
     )
 
 
-def test_the_config_knob_reaches_an_event_log_built_by_the_real_wiring(repo):
-    """`LogConfig` is wired through `Ctx`, not only reachable by hand in a test."""
+def test_the_config_knob_is_honoured_by_the_real_entry_points(repo):
+    """Drives the REAL commands, because the hand-built version proved nothing.
+
+    The first version of this test was named for the real wiring and then built the log
+    by hand — so it passed while three shipped call sites (`api.loops`, `api.progress`,
+    the MCP obligation footer) constructed `EventLog(repo)` with no `log_cfg` and ignored
+    `[log] reuse_parsed = false` entirely. Found by roborev on 8b3ce8f, after a subagent
+    reviewer and the cross-family critic both missed it: a test that asserts the thing it
+    is named for is the only thing that would have caught it.
+    """
+    from ddflow.api import reporting
+    from ddflow.infra import log as L
+
     cfgpath = repo / ".ddflow" / "config.toml"
     cfgpath.parent.mkdir(parents=True, exist_ok=True)
     cfgpath.write_text("[log]\nreuse_parsed = false\n")
@@ -384,12 +395,53 @@ def test_the_config_knob_reaches_an_event_log_built_by_the_real_wiring(repo):
     assert cfg.log.reuse_parsed is False
     assert cfg.sources["log.reuse_parsed"] == "file"
 
-    from ddflow.infra import log as L
+    seed = EventLog(repo, "a1", log_cfg=LogConfig(reuse_parsed=False))
+    seed.append("task.added", "T1", {"title": "x", "kind": "task"})
 
-    log = EventLog(repo, "a1", log_cfg=cfg.log)
-    log.append("task.added", "T1", {"title": "x", "kind": "task"})
-    log.read_all()
-    assert not L._PARSE_CACHE, "the config knob did not reach the read path"
+    for label, call in (
+        ("api.loops", lambda: reporting.loops(repo)),
+        ("api.progress", lambda: reporting.progress(repo)),
+    ):
+        clear_parse_cache()
+        call()
+        assert not L._PARSE_CACHE, f"{label} ignored [log] reuse_parsed = false"
+
+
+def test_every_event_log_call_site_passes_the_log_config():
+    """A ratchet, because threading a knob through N call sites is how knobs get dropped.
+
+    Three of the eight sites were missed on the first pass and the behavioural test above
+    could not see them. This one names the offender directly, and the allowlist may only
+    shrink.
+    """
+    import ast
+    import pathlib as _p
+
+    #: Call sites that legitimately take no `log_cfg`, each with its reason.
+    allowed: dict[str, str] = {
+        # The default IS the config default (`LogConfig()`), and a test that wants the
+        # other setting passes it explicitly.
+    }
+
+    pkg = _p.Path(__file__).resolve().parents[1] / "ddflow"
+    offenders = []
+    for f in sorted(pkg.rglob("*.py")):
+        if "__pycache__" in str(f):
+            continue
+        for node in ast.walk(ast.parse(f.read_text("utf-8"), filename=str(f))):
+            if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Name)):
+                continue
+            if node.func.id != "EventLog":
+                continue
+            if any(k.arg == "log_cfg" for k in node.keywords):
+                continue
+            where = f"{f.relative_to(pkg.parent)}:{node.lineno}"
+            if where not in allowed:
+                offenders.append(where)
+    assert not offenders, (
+        "these EventLog call sites drop `[log]` config, so `reuse_parsed` and "
+        f"`max_cached_events` silently do nothing there: {offenders}"
+    )
 
 
 def test_the_memory_ceiling_stops_the_cache_growing(repo):

@@ -27,10 +27,11 @@ def loops(repo: Path) -> O.Outcome:
     """
     from ..core import progress as PR
 
-    log = EventLog(repo)
+    # cfg BEFORE the log, not after: the log needs `[log]` to honour `reuse_parsed`.
+    cfg = Config.load(repo)
+    log = EventLog(repo, log_cfg=cfg.log)
     events = log.read_all()
     st = fold(events, strict=False)
-    cfg = Config.load(repo)
     findings = [f.__dict__ for f in PR.detect(events, st, cfg)]
     data: dict[str, Any] = {
         "findings": findings,
@@ -62,7 +63,7 @@ def progress(repo: Path, item: str = "") -> O.Outcome:
     """
     from ..core import progress as PR
 
-    log = EventLog(repo)
+    log = EventLog(repo, log_cfg=Config.load(repo).log)
     events = log.read_all()
     st = fold(events, strict=False)
     rows = [r for r in PR.work(events, st).values() if not item or r.item == item]

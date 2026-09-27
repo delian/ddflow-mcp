@@ -2154,7 +2154,7 @@ def _obligation_footer(server) -> str:
             return ""
         if now - server._last_footer_at < cfg.reinstruct.every_seconds:
             return ""
-        state = fold(EventLog(server.repo).read_all(), strict=False)
+        state = fold(EventLog(server.repo, log_cfg=cfg.log).read_all(), strict=False)
         text = OB.footer(state, cfg, repo=server.repo, limit=cfg.reinstruct.max_items)
         if not text:
             # Nothing to say. The counters are NOT reset: a quiet project should not have

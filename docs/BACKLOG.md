@@ -928,6 +928,18 @@ features worth taking.
   UNTESTED by mutation M5 and is now covered. *Beyond ~100k events the answer is an
   on-disk state snapshot; see B166.*
 
+  **Follow-up on `8b3ce8f`: roborev found a silent-knob-drop that two other reviewers
+  missed.** `api.loops`, `api.progress` and the MCP obligation footer built
+  `EventLog(repo)` with no `log_cfg`, so `[log] reuse_parsed = false` was honoured on
+  `status` and ignored on `progress`/`loops` — three of the eight call sites, and I had
+  seen them and judged the default good enough. The reason it stayed invisible is the
+  second finding: the wiring test was NAMED for the real wiring and built the log by
+  hand, so it passed while the shipped paths dropped the knob. A test that asserts what
+  its name claims is the only thing that would have caught it. Now driven through
+  `api.loops`/`api.progress`, plus an AST ratchet asserting every `EventLog(` call site
+  passes `log_cfg` (allowlist empty, may only shrink). Both mutation-verified.
+  *Fourth vacuous test in this change; the mutation runs caught the other three.*
+
 ## B87–B95 — what the two reviewers found on B79–B81, 2026-09-25
 
 Both reviewers ran on this round after a setup fix each: roborev had no repo-local
