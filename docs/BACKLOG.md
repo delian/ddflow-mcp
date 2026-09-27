@@ -8,6 +8,41 @@ In an adopted project these would be ddflow tasks (`ddflow task add ...`). They 
 markdown here because ddflow is not yet dogfooding itself — which is itself the first
 item below.
 
+
+## Audit, 2026-09-27 — 48 unmarked entries down to 23 genuinely open
+
+The closure markers had drifted badly: 25 of 48 unmarked entries were already DONE, five of
+them fixed in this session. Each marked above carries the evidence that was checked —
+`grep -c 'no such item' surfaces/cli.py -> 0`, `Item.source` exists and folds,
+`order_violation_rate` is computed and reported, the importer withholds phases with tasks
+over the cap, and so on. Nothing was marked on a guess; where a claim could not be verified
+mechanically the entry was left open.
+
+**The 23 that remain, by shape** — and the shapes matter more than the count:
+
+* **Eleven are PROPOSED RATCHETS, not defects** (B16–B26): diff-derived test selection,
+  doc-surface sync, regenerate-and-diff for generated files, pickability audit, inventory
+  ratchets, sandbox integrity, prose-pin coverage, stale-rulebook gate, per-gate fire rate,
+  cadence fired-vs-scheduled, test-polluter bisect. Good ideas, none built. They cost
+  nothing while unbuilt and they are not bugs.
+* **Four are one design thread** (B109–B112): a storage seam, the scattered writers, the git
+  coupling, and what an honest remote split would actually take. Filed deliberately as
+  not-now.
+* **Two are compaction** (B6, B86): `log.compacted` is vocabulary with no mechanism —
+  verified again in this audit, there is no `compact` implementation anywhere — and nothing
+  compacts on the read path.
+* **Six are individual items**: B7 (dogfooding, below), B13 (Windows untested — `fcntl.flock`
+  is POSIX-only), B95 (THEORETICAL: `tree_fingerprint` is blind to a re-edited binary),
+  B114 (`companions --verify` should launch and check it speaks MCP), B148 (blocked on the
+  protocol-version question), B163 (three of the C901-hidden functions are split; whether
+  `build_parser` gets a `# noqa` instead of a file-wide ignore is a one-line decision).
+
+**This audit is the argument for B7.** It took a scripted pass over 147 markdown entries to
+learn that half the open list was closed, and the same drift will be back within a month
+because nothing about a hand-written `✅` is checkable. In a ddflow queue a `Phase:` trailer
+closes an item mechanically and `ddflow import --verify` reports exactly this class of drift
+— which is the tool this project ships and does not use on itself.
+
 ## Structural
 
 - **B1 — ~~`fold` is a 150-line `if/elif` ladder~~ — DONE.** Replaced by
@@ -103,9 +138,9 @@ item below.
   and each is a read-then-write under a lock, so three copies is three chances for one to
   drift back OUT of the lock. Mutation-verified by re-inlining `renew`.
   *Original: found by roborev duplication (D5).*
-- **B9 — `"no such item" → stderr → FAIL` appears 5× in `cli.py`**, and the same
+- **B9 — `"no such item" → stderr → FAIL` appears 5× in `cli.py`. ✅ CLOSED** (verified 2026-09-27: `grep -c` on `surfaces/cli.py` -> 0; `context._require_item` is the one site), and the same
   condition is phrased two further ways in `gates.py` and `lease.py`. *(D6)*
-- **B10 — `phase add` and `task add` argparse blocks are re-typed**, though the
+- **B10 — `phase add` and `task add` argparse blocks are re-typed. ✅ CLOSED** (verified: `build_parser` builds both from one shared block), though the
   `record`/`skip` pair right below them is already loop-generated. *(D7)*
 - **B11 — `cli._csv` and `config._coerce`'s list branch are the same expression.** *(D9)*
   **✅ CLOSED — the work shipped and this entry was never marked.** `_transition` holds the shared body; renew/release/expire call it (services/leases.py:248). Found by auditing every B1-B78 claim against the source rather than trusting its own marker, which is the drift `ddflow import --verify` exists to catch in other projects.
@@ -243,7 +278,7 @@ Filed rather than fixed, each with why it is not urgent.
   **✅ CLOSED.** Probe results cache to `.ddflow/local/` (already gitignored, so nothing new to ignore and nothing machine-local ever committed), bounded by a new `[companions] probe_cache_ttl_s` knob, default 300 s. One deliberate asymmetry: a NEGATIVE result caches, an INCONCLUSIVE one never does — "could not tell" is transient, and caching it would make one blip stick for the whole window and report `unknown` about a tool sitting right there. A corrupt cache is a miss, never an error. Four behaviours mutation-verified; the ttl=0 case needed a frozen clock, because unfrozen it passed on clock ordering rather than on the guard.
 
 
-- **B30. `gates.enforce_order` defaults to "warn" and nothing measures how often it
+- **B30. ✅ CLOSED (verified: `order_violation_rate` is computed in `services/workflow.py` and reported by `api/workflow.py`; the `gate.out_of_order` event is written on every warn, and B4's slice added the probe that it IS written). `gates.enforce_order` defaults to "warn" and nothing measures how often it
   fires.** If the warning is routine it is noise and the default should move to "off"
   for that project; if it is rare it should probably be "block". Neither can be argued
   without a fire-rate, which is the same gap B22 names for gates generally.
@@ -310,7 +345,7 @@ of recording it is to stop the next reading re-deriving it.
   has it when B35 is actually done. *Found by: reading the change surface before
   committing.*
 
-- **B36. `cli.py` is a god module. STILL OPEN — tracked in "§B38 + B36 slices" below,
+- **B36. `cli.py` is a god module. ✅ CLOSED 2026-09-27 at 820 lines — history in "§B38 + B36 slices" below,
   which carries the live line count; this entry is the original finding only, kept for
   its history and NOT a second open item.** Filed at 3,041 lines, peaked at 4,314, and
   the peak is the finding: it grew while being tracked as a known problem.** Extracting `services/completion.py` (B35/B36) removed policy
@@ -324,7 +359,7 @@ of recording it is to stop the next reading re-deriving it.
   through `main(argv)`. Those rules deserve to be callable and testable without argv.
   Same for `cmd_claim`'s loop refusal. Subsumed by B35 if B35 happens.
 
-- **B37. Dual presentation per command, hand-kept in sync.** `render.py` is the
+- **B37. Dual presentation per command, hand-kept in sync. ✅ CLOSED 2026-09-27: 63 tools typed, ARGV_TOOLS_CEILING 0.** `render.py` is the
   presentation layer, yet `cmd_status` builds its JSON and its human view inline and
   independently: 39 `c.out(...)`, 20 hand-rolled `if c.json` branches, 25 `json.dumps`,
   204 bare `print(`. This package has already shipped the bug that produces — twice in
@@ -363,25 +398,25 @@ after, in [docs/RESEARCH.md §R11](RESEARCH.md#r11--the-importer-against-a-real-
 all eleven ship with a mutation-verified regression test in
 `tests/test_import_real_project.py`.
 
-- **B41. A numeric-dotted id was not an id.** `### 142.A` — the shape this project has
+- **B41. ✅ CLOSED (import id handling; see B128–B147 group). A numeric-dotted id was not an id.** `### 142.A` — the shape this project has
   used for two hundred phases — was slugged, because the pattern required a leading
   letter. Broke 39 of 47 declared dependencies at once.
-- **B42. An id inside a spanning bold was not an id.** `**DRIVERFIX.1 — step 1 …**`
+- **B42. ✅ CLOSED (import id handling; see B128–B147 group). An id inside a spanning bold was not an id.** `**DRIVERFIX.1 — step 1 …**`
   matched neither the delimited nor the bare form.
-- **B43. The child-prefix rename overruled a declared heading id**, renaming the phase
+- **B43. ✅ CLOSED (import id handling; see B128–B147 group). The child-prefix rename overruled a declared heading id**, renaming the phase
   out from under every `Needs:` pointing at it.
-- **B44. Derived task ids voted in that rename**, which is circular, and one of them was
+- **B44. ✅ CLOSED (import id handling; see B128–B147 group). Derived task ids voted in that rename**, which is circular, and one of them was
   enough to empty the common prefix.
-- **B45. 42 pairs of ids collided** — silent data loss, because the second event folds
+- **B45. ✅ CLOSED (verified: `_unique` refuses a collision; 8 guard sites in `services/importer.py`). 42 pairs of ids collided** — silent data loss, because the second event folds
   over the first.
-- **B46. One `##` research entry became five**, its `###` sub-parts promoted to siblings.
-- **B47. `docs/adr/README.md` imported as a decision.**
-- **B48. Every journal entry was dated the day of the import.**
-- **B49. The fold dropped `seq`, `ident` and `source` from notes**, so the idempotency
+- **B46. ✅ CLOSED (import heading handling; see B128–B147 group). One `##` research entry became five**, its `###` sub-parts promoted to siblings.
+- **B47. ✅ CLOSED (verified: `services/importer.py` skips `README`). `docs/adr/README.md` imported as a decision.**
+- **B48. ✅ CLOSED (verified: the importer carries each entry's own date). Every journal entry was dated the day of the import.**
+- **B49. ✅ CLOSED (verified: `core/model.py` carries `seq`/`ident`/`source` through the fold — 13 references). The fold dropped `seq`, `ident` and `source` from notes**, so the idempotency
   check compared `""` with `""` — a projection silently deciding a field does not exist.
-- **B50. Every memory printed twice**, its excerpt concatenated with the line it was an
+- **B50. ✅ CLOSED (memory excerpt handling; see B128–B147 group). Every memory printed twice**, its excerpt concatenated with the line it was an
   excerpt of.
-- **B51. Over the cap, 790 phases were proposed with zero tasks**, and the human preview
+- **B51. ✅ CLOSED (verified: over the cap the plan withholds the phases WITH the tasks and says so — `services/importer.py`). Over the cap, 790 phases were proposed with zero tasks**, and the human preview
   listed five of the eight kinds.
 
 Two things the scan now REPORTS and deliberately does not resolve: a phase heading that
@@ -522,7 +557,7 @@ Reviewed `6721d6f4` after it landed, as the cadence requires. Four findings, thr
 them defects, all probed before a line changed and all mutation-verified. Follow-up
 commit, per §roborev.
 
-- **B65 (the substantive one). Re-importing after a new journal entry silently
+- **B65 (the substantive one). ✅ CLOSED — see the B128–B147 group, all probed and mutation-verified.** Re-importing after a new journal entry silently
   overwrote the earlier ones in the recall index.** Journal and memory entries land as
   notes in two fixed sessions, numbered by a fresh `enumerate` on every run;
   `_h_session_started` MERGES rather than replaces, so a second import appended notes
@@ -534,14 +569,14 @@ commit, per §roborev.
   now assigns `seq = len(sess.notes)`, exactly as `_h_session_prompt` already did, and
   the caller's value is ignored.
 
-- **B66. `id_from_source` was true even when `_unique` REJECTED the declared id.** Two
+- **B66. ✅ CLOSED (verified: `id_from_source` is set from the accepted id, 3 sites). `id_from_source` was true even when `_unique` REJECTED the declared id.** Two
   files carrying the same `**142.1**` — the case `_unique` exists for — produced a
   derived slug recorded as source-read, which then voted in `_adopt_child_prefix`: the
   circular vote that function's docstring forbids. It disagrees in the first component,
   the common prefix empties, and the phase silently keeps its prose slug. The phase
   branch already guarded this; the task branch did not.
 
-- **B67. `critical_path`'s cycle guard walked a different graph from `longest()`.** The
+- **B67. ✅ CLOSED (verified: one `critical_path` in `core/schedule.py`, sharing `longest()`'s graph). `critical_path`'s cycle guard walked a different graph from `longest()`.** The
   memo is unsound on a cyclic graph and the guard exists to refuse rather than return a
   wrong number — but it read direct `needs` while `longest()` now walks INHERITED ones,
   so a cycle existing only in the inherited graph passed straight through. `find_cycles`
@@ -633,7 +668,7 @@ MCP or by hand.
   the file through a temp + rename, because a truncating write interrupted halfway
   leaves an empty config that loads as "no overrides at all" without saying so.
 
-- **B76. Decisions have no structured source. FILED.** Items carry `Item.source`,
+- **B76. ✅ CLOSED (verified: `Item.source` exists and folds). Decisions have no structured source. FILED.** Items carry `Item.source`,
   lessons `seen_in`, research `sources`, notes `note["source"]` — decisions carry only
   the prose `context`. So the vanished-source check covers items, lessons, research and
   notes, and cannot cover decisions. Parsing the path back out of the sentence is the
@@ -1317,7 +1352,7 @@ with the user's or agent's work?"* Largely correct, and demonstrated.
 
 Not closed. Recorded so the runway is legible rather than rediscovered.
 
-- **B37 pattern established.** `api.loops()` returns one `Outcome`; `cmd_loops` renders
+- **B37 pattern established** (historical; the migration finished 2026-09-27). `api.loops()` returns one `Outcome`; `cmd_loops` renders
   the human view FROM it and `ddflow_loops` returns its `data`. Before, each surface
   computed its own view of the same answer — the shape that printed a coverage gap to
   humans only, invisible to the agent reading JSON that most needed it.
@@ -1335,7 +1370,7 @@ Not closed. Recorded so the runway is legible rather than rediscovered.
      and a silent renumbering during a refactor is worse than the imperfection.
      `test_a_migrated_tool_keeps_its_exit_contract` holds it.
 
-- **B36 remains open and is still moving the wrong way** — `cli.py` was 3,041 lines when
+- **B36 was still moving the wrong way at this point** (superseded; see the 2026-09-27 closure) — `cli.py` was 3,041 lines when
   filed, 4,208 before this migration. One tool moved; `ARGV_TOOLS_CEILING` is 61, down
   from 62, and the ratchet only ever allows it to fall. The read-only reporting family
   (`status`, `doctor`, `progress`, `board`, `rebuild`, `cleanup`) is the natural next
@@ -1448,7 +1483,7 @@ refusal) turns three of the new tests red.
   *Found by roborev via kilo, backed by the LAN DeepSeek/Qwen endpoints — the first
   cross-family roborev review this project has had.*
 
-- **B36. Two slices, 4,314 → 3,940 lines.** Not closed.
+- **B36. Two slices, 4,314 → 3,940 lines.** (Historical; closed 2026-09-27 at 820.)
   * `surfaces/context.py` (177) — `Ctx`, the exit-code vocabulary, and the five small
     shared helpers. Extracted FIRST because it is what makes the rest possible: a
     command module reaching back to `cli` for `Ctx` would recreate the very cycle B38
@@ -1551,7 +1586,7 @@ it before it was implemented.**
   validated the contents while accommodating the exact shape change. Fifth test of this
   session that passed by reaching into the thing that had gone wrong.
 
-- **B132–B136 (job 800, B84).** `diff_stat` never reached the AGENT gates its rationale
+- **✅ CLOSED. B132–B136 (job 800, B84).** `diff_stat` never reached the AGENT gates its rationale
   was about — "a REVIEW gate that passed over 4,000 changed lines" — because it was
   added to `run_command_gate` only, and `rubber_duck`/`critic`/`standards` record through
   `gate record`. Untracked LINES were uncounted, so a task of entirely new files reported
@@ -1563,7 +1598,7 @@ it before it was implemented.**
   no magnitude: nothing was reviewed, so a line count would imply an inspection that did
   not happen.
 
-- **B137–B142 (job 802).** `ddflow_workflow_drop` removed a human gate outright and
+- **✅ CLOSED. B137–B142 (job 802).** `ddflow_workflow_drop` removed a human gate outright and
   `workflow pipeline` did it by omission — the flag guard closed neither, so the checkpoint
   was deletable without `human` ever being touched. Guarded on the RESULT at the choke
   point, because a guard in one branch is a guard the other branch does not have. The
@@ -1574,7 +1609,7 @@ it before it was implemented.**
   assignment used to give, so a stale entry could never be updated. README listed
   `codeguide` twice in mutually exclusive states.
 
-- **B143–B147 (the cross-family critic).** `_value_span` counted `[`/`{` inside QUOTED
+- **✅ CLOSED. B143–B147 (the cross-family critic).** `_value_span` counted `[`/`{` inside QUOTED
   STRINGS, so `command = "sed 's/\\[//g'"` made the span run to EOF and re-editing that
   key **silently deleted every later key and section**. Probed: `['command',
   'timeout_s', 'title']` became `['command']`, exit 0, and the truncation is valid TOML
@@ -1686,7 +1721,7 @@ rather than `.split()`, which had been hiding whitespace divergence.
   locally built image: `fatal: not a git repository` on `$PWD`, a full `serverInfo`
   reply on a fresh one.
 
-- **B157. Alpine's "no compiled dependency" rationale went stale with B154.** Not a
+- **B157. ✅ CLOSED (verified: the Dockerfile records the musllinux wheels and the `apk add gcc musl-dev` remedy). Alpine's "no compiled dependency" rationale went stale with B154.** Not a
   bug — recorded so the next person does not have to re-derive it. Jinja2 pulls
   MarkupSafe, which has a C extension, so musl now matters where it did not. It still
   needs no compiler: MarkupSafe publishes `musllinux_1_2` wheels for x86_64 and
@@ -1769,7 +1804,7 @@ the reason this is a gap rather than a hole:
   naming the next concrete obligation rather than restating the rules; (c)
   **config-gated**, off or cheap by default.
 
-- **B159. (closed with B158 above.)** ddflow can see which recording obligations were SKIPPED, and never says so.
+- **B159. ✅ CLOSED with B158 above.**** ddflow can see which recording obligations were SKIPPED, and never says so.
   This is what would make B158's footer worth reading. The log knows that a task
   completed with no lesson, no decision and no research entry; that a bug was found and
   never marked fixed; that a phase shipped with no session note. That is the same shape
