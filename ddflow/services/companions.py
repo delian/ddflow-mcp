@@ -278,19 +278,30 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
         return None, f"the probe could not be run at all ({exc}) — could not tell"
     if p.returncode != 0:
         return False, f"`{' '.join(c.detect)}` exited {p.returncode}"
-    said = [
-        line.strip()
-        for line in f"{p.stdout or ''}\n{p.stderr or ''}".splitlines()
-        if line.strip() and not _PROBE_NOISE.match(line.strip())
-    ]
+    said = [*_said(p.stdout or ""), *_said(p.stderr or "")]
     return True, (said[0][:80] if said else f"`{' '.join(c.detect)}` exited 0")
 
 
-#: Probe output that says nothing about the tool: JSON structure (`docker image inspect`
-#: leads with `[`) and the package manager's own diagnostics (`npx` prints npm's config
-#: warnings to stderr before a server that writes nothing to stdout). The first line was
-#: taken as the version whatever it was, so the report read `installed ([)`.
-_PROBE_NOISE = re.compile(r'[\[\]{}"]|npm (warn|notice|err)', re.IGNORECASE)
+#: The package manager's own diagnostics: `npx` prints npm's config warnings to stderr
+#: ahead of a server that writes nothing to stdout.
+_NPM_NOISE = re.compile(r"npm (warn|notice|err)", re.IGNORECASE)
+
+
+def _said(output: str) -> list[str]:
+    """The lines of a probe's output that say something about the tool.
+
+    The first line was taken as the version whatever it was, so `docker image inspect`
+    (a JSON document) read `installed ([)` and an `npx` probe read as an npm warning.
+    Structured output is dropped WHOLE, by parsing it rather than by its first
+    character: `[codeguide] v1.2` is a line worth showing, and a bracket rule loses it.
+    """
+    try:
+        if isinstance(json.loads(output), (dict, list)):
+            return []
+    except ValueError:
+        pass
+    lines = (line.strip() for line in output.splitlines())
+    return [line for line in lines if line and not _NPM_NOISE.match(line)]
 
 
 #: Agents whose MCP config keys servers under `servers` rather than `mcpServers`.
