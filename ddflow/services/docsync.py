@@ -48,8 +48,11 @@ TOKEN = re.compile(
 )
 
 #: `name = value` or `name: type = value`, as Python, TOML and most config files spell a
-#: default. The value is taken up to a trailing comment or comma.
-ASSIGN = re.compile(r"^\s*([A-Za-z_]\w*)\s*(?::[^=]*)?=\s*([^#,]+?)\s*,?\s*(?:#.*)?$")
+#: default. A quoted value is taken whole -- it may hold a `,` or `#` -- and any other value
+#: up to a trailing comment or comma.
+ASSIGN = re.compile(
+    r"""^\s*([A-Za-z_]\w*)\s*(?::[^=]*)?=\s*("[^"\n]*"|'[^'\n]*'|[^#,]+?)\s*,?\s*(?:#.*)?$"""
+)
 
 #: A default worth grepping for: a number, a quoted string or a boolean. `x = foo(bar)`
 #: is code, not a default a page would quote.
@@ -204,14 +207,16 @@ class _DiffReader:
         for name, old in self.old_assign.items():
             new = self.new_assign.get(name)
             if new is not None and new != old:
-                self.out.defaults[name] = old.strip("\"'")
+                self.out.defaults[name] = old
         return self.out
 
 
 def _assign(line: str, into: dict[str, str]) -> None:
+    """Record ``name -> value``, UNQUOTED, so `"x"` -> `'x'` is not a changed default."""
     m = ASSIGN.match(line)
     if m and TOKEN.fullmatch(m.group(1)) and SIMPLE_VALUE.match(m.group(2)):
-        into.setdefault(m.group(1), m.group(2))
+        value = m.group(2)
+        into.setdefault(m.group(1), value[1:-1] if value[0] in "\"'" else value)
 
 
 def _pathspec(globs: list[str], *, exclude: bool = False) -> list[str]:
@@ -333,5 +338,7 @@ def _default_hits(repo, docs: list[str], gone: Removed) -> list[Hit] | None:
         if (path, line) not in gone.added
         for name, old in sorted(gone.defaults.items())
         if re.search(rf"(?<![\w-]){re.escape(name)}(?![\w-])", text)
-        and re.search(rf"(?<![\w.]){re.escape(old)}(?![\w.])", text)
+        # A hyphen joins words (`foo-bar` does not hold `foo`), and a period does only when
+        # a word follows it: `30.5` does not hold `30`, the `30.` ending a sentence does.
+        and re.search(rf"(?<![\w.-]){re.escape(old)}(?![\w-]|\.\w)", text)
     ]
