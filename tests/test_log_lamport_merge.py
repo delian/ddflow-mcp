@@ -185,3 +185,35 @@ def test_explicit_and_env_ids_are_not_suffixed(repo: Path, monkeypatch):
     assert L.resolve_agent_id(repo) == ("alpha", "env")
     assert L.resolve_agent_id(repo, declared="beta") == ("beta", "explicit")
     assert os.listdir(repo / ".ddflow") == []
+
+
+def test_a_merge_that_inserts_a_line_mid_shard_is_seen_by_a_warm_clock(tmp_path: Path):
+    """Critic finding (B190): a warm parse cache reads a shard from its old EOF, so a
+    higher clock a union merge inserts BEFORE that offset would be missed. It is not:
+    the cached prefix is re-hashed on every read, and an insertion changes it."""
+    log = L.EventLog(tmp_path, "sameid")
+    for _ in range(2):
+        log.append("task.added", "T", {"title": "t"})
+    assert log._highest_lamport() == 2  # warms the cache at the old EOF
+    lines = log.shard.read_text().splitlines(keepends=True)
+    theirs = L.Event(kind="task.added", subject="S", data={}, agent="sameid", lamport=30, ts="x")
+    log.shard.write_text(lines[0] + theirs.to_json() + "\n" + lines[1])
+    assert log._highest_lamport() == 30
+    assert log.clock_regressions() == {"sameid.jsonl": (3, 30, 2)}
+
+
+def test_a_filesystem_without_hard_links_still_gets_a_suffix(repo: Path, monkeypatch):
+    """Falling back to the bare id there would be the collision again, silently."""
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    (repo / ".ddflow").mkdir()
+    monkeypatch.chdir(repo)
+
+    def no_links(*_a, **_k):
+        raise PermissionError("hard links not supported")
+
+    monkeypatch.setattr(L.os, "link", no_links)
+    ident = _derived(repo)
+    suffix = (repo / L.CLONE_ID_FILE).read_text().strip()
+    assert suffix and ident.endswith("-" + suffix), ident
+    # The temp file is gone either way.
+    assert {p.name for p in (repo / L.CLONE_ID_FILE).parent.iterdir()} == {".gitignore", "clone-id"}
