@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
-from .gates import GateDef, inert_requirements
+from .gates import GateDef, inert_requirements, parallel_test_advice
 
 #: A command gate with no registered mutation has never been shown able to go red.
 #: Advisory, not a defect: `ddflow gate verify` is how you find out, and a project may
@@ -119,8 +119,11 @@ RULE_KEYS: tuple[str, ...] = (
 )
 
 
-def check(cfg: Config, gates: dict[str, GateDef]) -> list[Finding]:
+def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> list[Finding]:
     """Every way this project's pipeline is incoherent. Empty means it hangs together.
+
+    ``root`` enables the checks that read the project itself (its manifests); without
+    it only the configuration is judged.
 
     Reported, never raised: a workflow that is wrong in one place should still let
     `ddflow workflow` and `ddflow doctor` run and explain themselves. Raising at load
@@ -228,6 +231,10 @@ def check(cfg: Config, gates: dict[str, GateDef]) -> list[Finding]:
                     f"red. `ddflow gate verify <item> {gid}` is how you find out.",
                 )
             )
+    tests = gates.get("unit_tests")
+    advice = parallel_test_advice(tests.command, root) if root and tests else ""
+    if advice:
+        out.append(Finding(ADVISORY, "unit_tests", advice))
     return out
 
 
@@ -308,5 +315,5 @@ def describe(
         v.order_violations += row.get("fired", 0)
         v.order_recordings += row.get("recorded", 0)
 
-    v.findings = check(cfg, gates)
+    v.findings = check(cfg, gates, repo)
     return v

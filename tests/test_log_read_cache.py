@@ -159,10 +159,10 @@ def test_a_shard_rewritten_in_place_is_re_parsed(repo):
 def test_a_git_checkout_between_DIVERGENT_branches_is_re_parsed(repo):
     """The real-world trigger, with git doing the writing — and it has to DIVERGE.
 
-    Git rewrites tracked files in place, so a long-lived MCP server hits this the moment
-    the operator switches branches. `Store.rebuild` would then persist the wrong events
-    into SQLite stamped with the CORRECT `head()` fingerprint, so a fresh process would
-    not rebuild them away: a transient cache bug becomes on-disk corruption.
+    A long-lived MCP server hits this the moment the operator switches branches.
+    `Store.rebuild` would then persist the wrong events into SQLite stamped with the
+    CORRECT `head()` fingerprint, so a fresh process would not rebuild them away: a
+    transient cache bug becomes on-disk corruption.
 
     Two earlier versions of this test were VACUOUS, each for its own reason, and both are
     why the assertions below are so specific:
@@ -205,9 +205,13 @@ def test_a_git_checkout_between_DIVERGENT_branches_is_re_parsed(repo):
     subprocess.run([*sh, "checkout", "-q", "long"], check=True, capture_output=True)
     big = log.shard.stat()
     assert big.st_size > small.st_size, "fixture: the shard must GROW or a shrink check hides it"
-    assert big.st_ino == small.st_ino, (
-        "git changed the inode on this filesystem, so this test cannot show the defect"
-    )
+    # Git REPLACES the file on checkout. The inode number usually comes back unchanged only
+    # because the filesystem hands the just-freed number straight back -- the reuse that
+    # fooled the old inode-keyed cache, and what lets this test tell a digest from a stat.
+    # A concurrent process (a parallel test worker) can take that number first; this used
+    # to FAIL the precondition under `pytest -n auto` (bug Befd838f4da). The re-parse below
+    # must be right either way: a new inode costs one run its discriminating power, not
+    # its correctness check.
     # The branches genuinely DIVERGE: the cached offset now lands mid-line, which is the
     # condition a digest catches and no stat can. Asserted, not assumed -- if `long` ever
     # became an append to `short`, this test would silently go back to proving nothing.

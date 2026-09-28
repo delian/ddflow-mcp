@@ -49,7 +49,10 @@ commit_without_lease = "warn"
 brief_max_tokens = 1200
 
 [gate.unit_tests]
-command = "uv run pytest tests/ -q --timeout=420"
+# -n 48, not -n auto: auto starts one worker per core (192 here), and up to
+# schedule.max_parallel_tasks = 4 agents run this gate at once, so 4 x 48 fills the
+# machine. Measured: serial 49 min; -n 16 107s, 32 86s, 48 57s, 64 50s, auto 48s.
+command = "uv run pytest tests/ -q --timeout=420 -n 48"
 
 [[reviewer]]
 name = "qwen3.8-flash-next-fp8"
