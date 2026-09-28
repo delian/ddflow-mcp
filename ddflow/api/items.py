@@ -8,6 +8,7 @@ from typing import Any
 
 from ..config import csv_list
 from ..core import outcome as O
+from ..services import leases as L
 from ._base import _load
 
 
@@ -76,8 +77,26 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             "or an empty list to clear it.",
             id=item,
         )
-    log.append(f"{it.kind}.updated", item, fields)
-    return O.ok("item.updated", id=item, changed=sorted(fields), fields=fields)
+    return O.ok(
+        "item.updated",
+        id=item,
+        changed=sorted(fields),
+        fields=fields,
+        lease_retargeted=_record_update(log, cfg, it, fields),
+    )
+
+
+def _record_update(log, cfg, it, fields: dict[str, Any]) -> bool:
+    """Append the edit; True if it also retargeted the item's live lease.
+
+    A claim's globs live on its LEASE, which the commit hook and the conflict checks
+    read -- so new globs on a claimed item go to the lease too, under the same lock.
+    """
+    with log.transaction():
+        log.append(f"{it.kind}.updated", it.id, fields)
+        if "globs" not in fields:
+            return False
+        return L.retarget_globs(log, cfg, it.id, fields["globs"])
 
 
 def _bad_id(item: str) -> str:
