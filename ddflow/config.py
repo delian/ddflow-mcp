@@ -519,6 +519,7 @@ class ScheduleConfig:
     cycle_policy: str = "error"  # error | warn
     unknown_dep_policy: str = "block"  # block | warn
     empty_phase: str = "note"  # note | problem | off
+    bugs_first: bool = True
     #: `name=capacity` for each physical resource items may declare.
     resources: list[str] = field(default_factory=list)
     #: `name=path` for sibling repositories whose items `needs` may name as `name:ID`.
@@ -541,6 +542,11 @@ _doc(
     "schedule",
     "empty_phase",
     "How to report an OPEN phase with no task under it — work in the queue that `ddflow next` can never offer. 'note' (default) mentions it, 'problem' fails `doctor`, 'off' stays silent. Configurable because a project that files phases before breaking them down lives in this state on purpose, while one that does not has found a planning gap. A phase whose tasks are all FINISHED while the phase stays open is always a problem and is not covered by this knob: it is not a workflow style, it is a queue held open by an item nobody can act on.",
+)
+_doc(
+    "schedule",
+    "bugs_first",
+    "Offer bug fixes before features (default true). A task is a bug fix when it carries one of `[flow] bugfix_tags` or `hotfix_tags`, or an OPEN bug record names it (`ddflow bug found --item`). Priority still orders bugs among themselves and features among themselves, and the parallelism cap hands its slots to bugs first -- so a standing bug is fixed before more features are built on it. `false` orders by priority alone.",
 )
 _doc(
     "schedule",
