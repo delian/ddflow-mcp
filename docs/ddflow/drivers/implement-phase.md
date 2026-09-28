@@ -139,6 +139,12 @@ Reviewers must be told to **refute, not review**: "find the input that makes thi
 if you are uncertain, report nothing." And a majority of reviewers may **kill** a
 finding; it may never **promote** one.
 
+Launch independent reviewers **concurrently**, and **wait for every one to report** before
+merging: a reviewer that has not reported yet is not a reviewer that found nothing. **No
+reviewer sees another's verdict** — each gets the diff, the intent and your research
+notes, nothing else. A reviewer shown a prior verdict stops being an independent sample
+and becomes a vote on someone else's hypothesis.
+
 ### 2d. Close the task
 
 ```sh

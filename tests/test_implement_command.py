@@ -58,14 +58,25 @@ def test_a_scope_is_rendered_into_the_loop_and_its_absence_means_the_whole_queue
         "exactly FOUR cases",  # the stop contract -- the reason this command exists
         "never a terminal stop",  # waiting is a wake-up, not a stop
         "disarm it before any deliberate stop",  # else the operator's own pause is undone
-        "wait for every one to report",  # a reviewer that has not reported found nothing?
-        "may never PROMOTE",
         "Termination checklist",
         "ddflow_recover",  # a crashed agent's finished work is salvaged first
     ],
 )
 def test_the_loop_carries_the_rules_an_unattended_run_depends_on(must_say):
     assert must_say in P.render(P.resolve_command("implement"), scope="")
+
+
+def test_the_reviewer_rules_live_once_in_the_driver_not_in_the_loop():
+    """A copied rule drifts. The loop defers to the driver for everything per-item."""
+    from ddflow.infra.paths import templates_dir
+
+    driver = (templates_dir() / "drivers" / "implement-phase.md").read_text()
+    loop = P.resolve_command("implement").text
+    for rule in ("wait for every one to report", "No\nreviewer sees another's verdict"):
+        assert rule in driver
+    assert "may never **promote**" in driver
+    assert "PROMOTE" not in loop and "wait for every one" not in loop
+    assert "`implement` workflow command" in driver  # and the driver points back
 
 
 def test_every_tool_the_loop_names_exists():
