@@ -489,7 +489,8 @@ def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
                 "ddflow: git could not report this commit's diff, or search the docs it may",
                 "have left stale, so the doc-sync check could not run.",
                 "",
-                "Refusing rather than guessing: an unchecked commit is not a clean one.",
+                "An unchecked commit is not a clean one: under 'block' this refuses, and",
+                "under 'warn' it is reported here rather than passed in silence.",
             ],
             "stale_docs",
         )
