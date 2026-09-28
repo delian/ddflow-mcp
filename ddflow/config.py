@@ -874,9 +874,7 @@ class EnforceConfig:
     item_trailer_keys: list[str] = field(default_factory=lambda: ["Item"])
     generated_views: str = "block"  # block | warn | off
     stale_docs: str = "warn"  # block | warn | off
-    doc_globs: list[str] = field(
-        default_factory=lambda: ["**/*.md", "**/*.rst", "**/*.adoc", "**/*.txt"]
-    )
+    doc_globs: list[str] = field(default_factory=lambda: ["**/*.md", "**/*.rst", "**/*.adoc"])
     doc_exclude: list[str] = field(
         default_factory=lambda: [
             "**/CHANGELOG*", "**/HISTORY*", "**/NEWS*", ".ddflow/**", "docs/ddflow/**",
@@ -917,7 +915,7 @@ _doc(
 _doc(
     "enforce",
     "doc_globs",
-    "Which tracked files are documentation for stale_docs, in git's glob pathspec syntax (`*` stops at `/`, `**/` is any depth). A matching file is searched for stale mentions, and its own removed lines are never taken as code removals.",
+    "Which tracked files are documentation for stale_docs, in git's glob pathspec syntax (`*` stops at `/`, `**/` is any depth). A matching file is searched for stale mentions, and its own removed lines are never taken as code removals. `*.txt` is deliberately NOT a default: CMakeLists.txt and requirements.txt are code, and calling them docs hid every name they removed; add a project's own text docs by path.",
 )
 _doc(
     "enforce",
