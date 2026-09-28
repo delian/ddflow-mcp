@@ -60,11 +60,13 @@ It is a queue, a set of rules the tools enforce, and a log of everything that ha
   dependency graph says which tasks are independent, worktrees keep them apart, and the
   merge step lands them without anyone switching the main checkout's branch.
 - **A team or a CI pipeline.** The log is committed with the code, so a fresh clone
-  knows the queue and its history. Every read command has a machine-readable `--json`
-  form and every command the same four exit codes, so a Makefile or a CI job can drive it exactly as an agent does.
+  knows the queue and its history. Read commands have a machine-readable `--json` form
+  and every command returns the same four exit codes, so a Makefile or a CI job can
+  drive it exactly as an agent does.
 
-It works with the agent you already use, because it speaks the two interfaces every
-agent has: a shell and MCP. Your workflow is text, not code — the gate pipeline, the
+It works with the agent you already use, because everything it does is reachable
+both ways: as a shell command and as an MCP tool. Use whichever your agent, script or CI
+job has. Your workflow is text, not code — the gate pipeline, the
 reviewer instructions and the agent-facing prompts are files in your repository that you
 can edit.
 
@@ -80,18 +82,26 @@ can edit.
 ### A first run
 
 ```sh
-uv tool install ddflow-mcp          # or: pipx install ddflow-mcp
+# ddflow-mcp is not on PyPI yet; until the first release, install from the repository:
+uv tool install git+https://github.com/delian/ddflow-mcp   # or: pipx install git+https://github.com/delian/ddflow-mcp
 cd /path/to/your/project
-ddflow adopt                         # registers the MCP server with your agents, writes .ddflow/ and a block in AGENTS.md
+ddflow adopt --launch python        # registers the MCP server with your agents, writes .ddflow/ and a block in AGENTS.md
 ddflow phase add P1 --title "Password reset"
 ddflow task add P1.T1 --phase P1 --title "Reset-token endpoint" --globs 'src/auth/**'
 ddflow next                          # what can start now, and why the rest is blocked
 ```
 
-Then tell your agent *"implement phase P1"*. It starts with `ddflow_brief`, claims the
-task, works in its own worktree, satisfies each gate and lands the change. You can watch
-it with `ddflow board`, and ask `ddflow doctor` at any point whether the project is
-healthy.
+`--launch python` points your agents at the interpreter you just installed into. Without
+it, `adopt` registers `uvx ddflow-mcp`, which fetches the package from PyPI and so cannot
+start until the first release is published.
+
+Then tell your agent *"implement phase P1"*. The driver `adopt` installed tells it to
+start with `ddflow_brief`, claim the task, work in its own worktree, satisfy each gate
+and land the change. ddflow cannot make an agent follow instructions, but it makes
+skipping them visible: the commit hook `adopt` installs flags a commit made without a
+lease (or refuses it, if you set `[enforce].commit_without_lease = "block"`), and
+`ddflow complete` refuses an item whose gates carry no outcome. Watch it with
+`ddflow board`, and ask `ddflow doctor` at any point whether the project is healthy.
 
 ---
 
@@ -405,6 +415,9 @@ The design decisions, with the probes that settled each, are in
 ## Install into any project
 
 **One line in your agent's MCP config. Nothing else.**
+
+> Until the first release is on PyPI, `uvx ddflow-mcp` has nothing to fetch: install from
+> the repository and run `ddflow adopt --launch python`, as in [A first run](#a-first-run).
 
 ```json
 { "mcpServers": { "ddflow": { "command": "uvx", "args": ["ddflow-mcp"] } } }
