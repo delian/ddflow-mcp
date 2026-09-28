@@ -231,3 +231,45 @@ def test_a_build_file_ending_in_txt_is_code_not_documentation(repo):
     r = _commit(repo, "CMakeLists.txt")
     assert r.returncode != 0 and "README.md:3" in r.stderr, r.stderr
     assert not D.is_doc("CMakeLists.txt", Config().enforce.doc_globs)
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "doc", "stale"),
+    [
+        # A sentence-ending period is punctuation, not part of the old value.
+        ("foo_bar = 30", "foo_bar = 40", "The foo_bar default is 30.", True),
+        ("foo_bar = 30", "foo_bar = 40", "foo_bar may also be 30.5", False),
+        # A quoted default may hold the characters that end an unquoted one.
+        ('foo_bar = "a,b"', 'foo_bar = "c"', 'Set foo_bar = "a,b" by default.', True),
+        ('foo_bar = "a#b"', 'foo_bar = "c"', 'Set foo_bar = "a#b" by default.', True),
+        # Changing only the quote style does not change the default.
+        ('foo_bar = "x"', "foo_bar = 'x'", 'Set foo_bar = "x".', False),
+        # A hyphen joins words: `foo` is not the value inside `foo-bar`.
+        ('foo_bar = "foo"', 'foo_bar = "bar"', "foo_bar and foo-bar are related.", False),
+        ('foo_bar = "foo"', 'foo_bar = "bar"', 'foo_bar is "foo" by default.', True),
+    ],
+)
+def test_a_changed_default_is_matched_as_a_value_not_a_substring(repo, before, after, doc, stale):
+    """Regressions (cross-family critic on B17): the old value's boundaries and the
+    default parser, each reproduced before the fix."""
+    (repo / "conf.py").write_text(before + "\n")
+    (repo / "README.md").write_text(doc + "\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "a", "--no-verify")
+    (repo / "conf.py").write_text(after + "\n")
+    _git(repo, "add", "conf.py")
+    hits = D.stale_mentions(repo, DOC_GLOBS, [])
+    assert hits is not None
+    assert bool(hits) is stale, hits
+
+
+def test_a_long_flag_is_found_by_a_word_grep(adopted):
+    """The critic's claim that `git grep -w` cannot match `--long-flag` was probed and is
+    false: the boundary git checks is the character BEFORE the leading dash."""
+    (adopted / "src" / "cli.py").write_text('ARGS = ["--long-flag"]\n')
+    (adopted / "docs" / "cli.md").write_text("Use `--long-flag` to enable it.\n")
+    _git(adopted, "add", "-A")
+    _git(adopted, "commit", "-qm", "cli", "--no-verify")
+    (adopted / "src" / "cli.py").write_text("ARGS = []\n")
+    r = _commit(adopted, "src")
+    assert r.returncode != 0 and "docs/cli.md:1" in r.stderr, r.stderr
