@@ -263,11 +263,11 @@ def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) 
     if v.may_complete:
         return detail
     fact = detail.split(" — ", 1)[0]
-    # The first sentence of each blocker is the fact; the rest is advice that
-    # `gate status` repeats in full, and one doctor line should stay one line.
-    why = "; ".join(b.split(". ", 1)[0].rstrip(".") for b in v.blockers)
+    # Quoted whole, not cut at a first ". ": that split is not sentence-aware, and a gate
+    # named `review. final` came out as `review`, a gate that does not exist.
+    why = " ".join(b.strip() for b in v.blockers)
     return (
-        f"{fact} — `ddflow complete {item}` would refuse: {why}. See "
+        f"{fact} — `ddflow complete {item}` would refuse: {why} See "
         f"`ddflow gate status {item}`, or file the work that remains"
     )
 
