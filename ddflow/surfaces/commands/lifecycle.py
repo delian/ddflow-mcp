@@ -126,7 +126,7 @@ def cmd_heartbeat(a, c: Ctx) -> int:
     # WHERE THE CALLER IS: the item's own tree renews its lease whoever claimed it.
     out = A.heartbeat(c.repo, a.id, agent=c.requested_agent, called_from=c.called_from)
     c.out(
-        f"{'renewed' if out.data['renewed'] else 'no lease held'} {a.id}",
+        f"renewed {a.id}" if out.data["renewed"] else out.reason,
         out.body(("renewed",)),
     )
     return out.exit
