@@ -157,28 +157,34 @@ def _recorded_tree(repo: Path, it) -> Path | None:
     if it is None or not it.worktree or not it.branch:
         return None
     path = W.load_path(repo, it.worktree).resolve()
-    if not (path.is_dir() and (path / ".git").exists()):
-        return None
-    # A directory at the recorded path is not proof it is still THIS item's tree: it can
-    # have been removed and re-added on an unrelated branch. Git must list it as a tree
-    # of this repository, with the item's branch checked out.
+    return path if _is_items_tree(repo, path, it.branch) else None
+
+
+def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
+    """Is the tree at `path` still the one that carries `branch`'s work?
+
+    ONE rule for every place a claim would bind an existing tree -- the item's recorded
+    tree and the one `W.create` finds at the default path. A directory there is not
+    proof: it can have been removed and re-added on something unrelated. Git must list
+    it as a worktree of this repository, with `branch` checked out -- or detached (a
+    rebase in progress, a checkout at a commit) with `branch` an ancestor of HEAD. Any
+    other branch, or a detached HEAD holding unrelated work, is someone else's tree.
+    """
+    path = Path(path).resolve()
+    if not branch or not (path.is_dir() and (path / ".git").exists()):
+        return False
     entry = next(
         (e for e in W.list_worktrees(repo) if Path(e.get("worktree", "")).resolve() == path),
         None,
     )
     if entry is None:
-        return None
-    if entry.get("branch") == f"refs/heads/{it.branch}":
-        return path
-    # Detached (a rebase in progress, or checked out at a commit): still the item's tree
-    # when HEAD carries the item's branch, i.e. the branch is an ancestor of HEAD. Any
-    # OTHER branch checked out there is someone else's tree.
-    if (
+        return False
+    if entry.get("branch") == f"refs/heads/{branch}":
+        return True
+    return bool(
         entry.get("detached")
-        and W.git(path, "merge-base", "--is-ancestor", f"refs/heads/{it.branch}", "HEAD").ok
-    ):
-        return path
-    return None
+        and W.git(path, "merge-base", "--is-ancestor", f"refs/heads/{branch}", "HEAD").ok
+    )
 
 
 def claim(
@@ -299,14 +305,16 @@ def claim(
                     # `W.create` reuses whatever tree sits at the default path. One on
                     # ANOTHER branch is not this item's: binding it recorded a branch
                     # that is not checked out there, and `merge` merged the wrong work.
-                    head = W.git(wt.path, "rev-parse", "--abbrev-ref", "HEAD")
-                    if head.ok and head.out not in (wt.branch, "HEAD"):
+                    if not _is_items_tree(repo, wt.path, wt.branch):
+                        head = W.git(wt.path, "rev-parse", "--abbrev-ref", "HEAD")
+                        there = head.out if head.ok else "something else"
+                        there = "a detached HEAD" if there == "HEAD" else there
                         L.release(log, item, note="claim refused: worktree path occupied")
                         return O.refused(
                             "item.claimed",
-                            f"{wt.path} already exists with {head.out} checked out, not "
-                            f"{wt.branch}. It is not {item}'s tree; move or remove it, "
-                            f"or claim from a tree of your own.",
+                            f"{wt.path} already exists with {there} checked out, which "
+                            f"does not carry {wt.branch}. It is not {item}'s tree; move or "
+                            f"remove it, or claim from a tree of your own.",
                             id=item,
                             path=str(wt.path),
                         )

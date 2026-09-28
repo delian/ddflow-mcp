@@ -238,6 +238,25 @@ def test_a_reclaim_from_the_primary_refuses_a_default_path_on_another_branch(rep
     assert not (lease and lease.holder), lease  # the refusal released it again
 
 
+def test_a_reclaim_from_the_primary_refuses_a_detached_default_path_of_unrelated_work(
+    repo,
+):
+    """Detached is only the item's tree when it carries the item's branch. An orphan
+    commit at the default path was bound as `ddflow/T1` over unrelated work."""
+    tree = _claimed_with_its_own_tree(repo)
+    assert run_cli(repo, "release", "T1", agent="lead")[0] == OK
+    _git(repo, "worktree", "remove", "--force", str(tree))
+    empty = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+    orphan = _git(repo, "commit-tree", empty, "-m", "unrelated").strip()
+    _git(repo, "worktree", "add", "-q", "--detach", str(tree), orphan)
+
+    code, out, err = run_cli(repo, "claim", "T1")
+    assert code == REFUSED, out + err
+    assert "detached" in err, err
+    lease = _item(repo).lease
+    assert not (lease and lease.holder), lease
+
+
 def test_a_detached_recorded_tree_carrying_the_items_branch_is_still_its_tree(repo):
     """Mid-rebase a tree is detached; its work is still the item's."""
     tree = _claimed_with_its_own_tree(repo)
