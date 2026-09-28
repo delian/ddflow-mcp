@@ -429,6 +429,36 @@ is amended by a follow-up), B181 (the MCP handshake does not yet list undecided 
 
 ---
 
+## R18 — GitLab flow's environment branches (2026-09-28)
+
+**Operator request.** Support GitLab flow's environment branches (`main -> pre-production
+-> production`), after R17 showed its release-branch variant was already covered by
+release lines with `port_strategy = "cherry-pick"`.
+
+**Claim.** Promotion is a special case of what already exists: a promotion is an ordinary
+task whose tree starts from the environment branch with the upstream branch merged in (the
+forward-merge port mechanism), landing by merge or merge request.
+
+**Falsifiers.** Production receiving anything pre-production does not have; a promotion
+landing somewhere other than its environment; two promotions to one environment at once;
+promotions blocked forever by gates meant for authored code; an environment silently
+auto-promoted that the operator did not list.
+
+**Verdict: CONFIRMED** by `tests/test_environments.py` and a PR-mode test in
+`tests/test_flow.py` (the request goes INTO the environment branch and is merged only after
+approval; checked on the forge's bare remote).
+
+**Found while building it.** The reviewer-independence check blocked every promotion: its
+pipeline rightly has no review gate, so no reviewer could ever satisfy it. A promotion
+authors nothing -- the work it moves passed that check as the tasks that produced it -- so
+promotions are exempt, and only promotions.
+
+**Not built:** B182 (a hotfix straight on an environment branch is not refused by the
+commit hook -- ddflow never targets one, but a person can), B183 (no "deployed at"
+timestamps beyond the promotion's completion time).
+
+---
+
 ## R3 — Is MCP sufficient to make this agent-agnostic?
 
 **Claim.** Shipping only an MCP server makes the workflow portable across agents.

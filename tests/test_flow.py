@@ -676,3 +676,37 @@ def test_abandoning_a_done_item_refuses_instead_of_crashing(repo):
     code, _out, err = run_cli(repo, "abandon", "T1", "--reason", "x")
     assert code == 3, err
     assert "already done" in err and "Traceback" not in err
+
+
+def test_a_promotion_in_pr_mode_is_a_request_into_the_environment(pr_repo):
+    """GitLab flow's deploy approval: the promotion's request, into the environment
+    branch, approved by a person -- and merged by ddflow only once it is."""
+    repo, forge, remote = pr_repo
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write('environments = ["production"]\n')
+    _git(repo, "branch", "production")
+    _git(repo, "push", "-q", "origin", "production")
+    _work(repo, "T1", "a.py", "a\n")
+    run_cli(repo, "merge", "T1", "--model", AUTHOR)
+    forge.merge_as_human(1)
+    run_cli(repo, "pr", "sync")
+    code, out, err = run_cli(repo, "--json", "promote", "add", "production")
+    assert code == 0, err
+    pid = json.loads(out)["id"]
+    code, out, err = run_cli(repo, "--json", "claim", pid)
+    assert code == 0, err
+    assert json.loads(out)["base"] == "origin/production"
+    assert json.loads(out)["port"]["status"] == "clean", json.loads(out)["port"]
+    pass_pipeline(repo, pid)
+    code, out, err = run_cli(repo, "--json", "merge", pid)
+    assert code == 0, err
+    assert forge.pr(2)["base"] == "production"
+    forge.approve(2)
+    run_cli(repo, "pr", "sync")
+    assert _state(repo).items[pid].state == "done"
+    assert (
+        subprocess.run(
+            ["git", "--git-dir", str(remote), "cat-file", "-e", "production:a.py"]
+        ).returncode
+        == 0
+    ), "the environment branch on the forge must have the work"

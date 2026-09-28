@@ -36,6 +36,8 @@ def cmd_next(a, c: Ctx) -> int:
     # full of work, and starting it from scratch loses that.
     for note in p.interrupted:
         print(f"INTERRUPTED: {note}", file=sys.stderr)
+    for pid in out.data["promoted"]:
+        print(f"auto_promote: filed {pid}", file=sys.stderr)
     for change in out.data["synced"].get("changes", []):
         print(f"pr sync: {change}", file=sys.stderr)
     for gap in out.data["synced"].get("unavailable", []):

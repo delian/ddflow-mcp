@@ -36,7 +36,7 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
     _write_config,
 )
 from .commands.decisions import cmd_decision
-from .commands.flow import cmd_flow, cmd_pr, cmd_version
+from .commands.flow import cmd_flow, cmd_pr, cmd_promote, cmd_version
 from .commands.gates import cmd_gate
 from .commands.knowledge import (
     cmd_bug,
@@ -487,6 +487,19 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     vct.add_argument("--dry-run", action="store_true")
     vct.add_argument("--line", default="", help="a maintenance line (default: the current one)")
     vct.set_defaults(fn=cmd_version)
+
+    pm = s.add_parser(
+        "promote",
+        help="environment branches: move work one step downstream ([flow].environments)",
+    )
+    pm_s = pm.add_subparsers(dest="promote_cmd", required=True)
+    pma = pm_s.add_parser("add", help="file a promotion to ENV from the branch just upstream of it")
+    pma.add_argument("env")
+    pma.add_argument("--force", action="store_true", help="file it even with nothing to carry")
+    pma.set_defaults(fn=cmd_promote)
+    pm_s.add_parser(
+        "status", help="each environment: head, commits behind upstream, open promotion"
+    ).set_defaults(fn=cmd_promote)
 
     fl = s.add_parser(
         "flow",

@@ -6,7 +6,7 @@ import json
 import sys
 
 from ...api import flow as A
-from ..context import OK, Ctx
+from ..context import NOTHING, OK, Ctx
 
 
 def _emit_json(out) -> int:
@@ -141,4 +141,35 @@ def cmd_flow(a, c: Ctx) -> int:
         )
     for p in out.data["problems"]:
         print(f"PROBLEM: {p}", file=sys.stderr)
+    return OK
+
+
+def cmd_promote(a, c: Ctx) -> int:
+    if a.promote_cmd == "add":
+        out = A.promote_add(c.repo, a.env, force=a.force, agent=c.requested_agent)
+        if c.json:
+            return _emit_json(out)
+        if out.exit != OK:
+            print(out.reason, file=sys.stdout if out.exit == NOTHING else sys.stderr)
+            return out.exit
+        d = out.data
+        print(
+            f"{d['id']}: promote {d['from']} to {d['env']} ({d['ahead']} commit(s)). "
+            f"Claim it like any task; it lands on {d['env']} after the promotion gates."
+        )
+        return OK
+    out = A.promote_status(c.repo, agent=c.requested_agent)
+    if c.json:
+        return _emit_json(out)
+    if out.exit != OK:
+        print(out.reason)
+        return out.exit
+    for r in out.data["rows"]:
+        if not r["exists"]:
+            print(f"  {r['env']:<16} MISSING — create it: git branch {r['env']} {r['from']}")
+            continue
+        behind = "up to date" if r["behind"] == 0 else f"{r['behind']} commit(s) behind {r['from']}"
+        extra = f"; open: {', '.join(r['open'])}" if r["open"] else ""
+        auto = " [auto]" if r["auto"] else ""
+        print(f"  {r['env']:<16} {r['head']}  {behind}{extra}{auto}")
     return OK

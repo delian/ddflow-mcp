@@ -201,6 +201,10 @@ class Item:
     port_of: str = ""
     port_from: str = ""
     port_strategy: str = ""
+    #: Set on a PROMOTION: the environment branch it moves work FROM and the one it lands
+    #: ON -- always adjacent in [flow].environments, upstream to downstream.
+    promote_from: str = ""
+    promote_to: str = ""
     #: What the port did when it was applied: {"status": clean|conflict|failed, ...}.
     port: dict[str, Any] = field(default_factory=dict)
     #: The target branch just before and just after this item landed. The difference is
@@ -615,7 +619,7 @@ def _h_added(st: State, ev: Event, kind: str) -> None:
     it.tags = list(d.get("tags", it.tags))
     it.priority = int(d.get("priority", it.priority))
     it.source = d.get("source", it.source)
-    for f in ("line", "port_of", "port_from", "port_strategy"):
+    for f in ("line", "port_of", "port_from", "port_strategy", "promote_from", "promote_to"):
         setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
 

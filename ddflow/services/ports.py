@@ -41,8 +41,16 @@ def apply(
 ) -> dict[str, Any]:
     """Apply the port for ``item_id`` in ``tree``. Idempotent: an applied port is not redone."""
     it = st.items[item_id]
-    if not it.port_from or it.port:
+    if it.port:
         return dict(it.port)
+    if it.promote_to:
+        from . import promotions as PM
+
+        out = PM.apply(repo, cfg, tree, it)
+        log.append("port.applied", item_id, out)
+        return out
+    if not it.port_from:
+        return {}
     src = st.items.get(it.port_from)
     if src is not None and src.state != DONE:
         # Reachable only through `claim --force`. Recording "clean" here -- which a
@@ -146,6 +154,13 @@ def _forward_merge(
 def manual(repo: Path, cfg: Config, st: State, item_id: str) -> dict[str, Any]:
     """What to do when ddflow will not touch the tree: adopted, or no tree at all."""
     it = st.items[item_id]
+    if it.promote_to:
+        return {
+            "status": MANUAL,
+            "reason": f"{item_id} promotes {it.promote_from} to {it.promote_to}, and this tree "
+            f"was not made by ddflow: `git merge --no-ff {it.promote_from}` on a branch from "
+            f"{it.promote_to}, commit, then run the promotion gates.",
+        }
     src = st.items.get(it.port_from)
     how = (
         f"`git merge --no-ff {FS.target(repo, cfg, src, st) if src else '<source line>'}`"

@@ -64,6 +64,16 @@ def next_(
     from ..core.schedule import critical_path, plan
 
     log, cfg, st = _load(repo, agent)
+    promoted: list[str] = []
+    if cfg.flow.auto_promote:
+        # Continuous delivery where the operator asked for it: an environment in
+        # auto_promote whose upstream moved gets its promotion filed here, and offered
+        # below like any other task.
+        from ..services import promotions as PM
+
+        promoted = PM.auto(repo, cfg, log, st)
+        if promoted:
+            log, cfg, st = _load(repo, agent)
     synced: dict[str, Any] = {}
     if (
         cfg.flow.integration == "pr"
@@ -86,6 +96,7 @@ def next_(
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
+        "promoted": promoted,
         "ready": [plain(i) for i in p.ready],
         "blocked": [plain(b) for b in p.blocked],
         "running": [i.id for i in p.running],
@@ -238,7 +249,11 @@ def claim(
     CH.adopt_defaults(log, cfg, ["model", "integration"])
     port: dict[str, Any] = {}
     target_item = st.items.get(item)
-    if target_item is not None and target_item.port_from and not target_item.port:
+    if (
+        target_item is not None
+        and (target_item.port_from or target_item.promote_to)
+        and not target_item.port
+    ):
         from ..services import ports as PT
 
         # Applied in a tree ddflow made -- also on a RE-claim, which is how a port claimed

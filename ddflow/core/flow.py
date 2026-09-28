@@ -143,6 +143,19 @@ def problems(cfg: Config) -> list[str]:
             f"[flow].current_line {fc.current_line!r} is also a maintenance line in "
             f"[flow.lines]; the current line is the newest and follows `model`"
         )
+    envs = list(fc.environments)
+    dup = sorted({e for e in envs if envs.count(e) > 1})
+    if dup:
+        out.append(f"[flow].environments lists {', '.join(dup)} twice; a chain has one order")
+    clash = sorted(set(envs) & ({*fc.lines.values(), fc.develop_branch}))
+    if clash:
+        out.append(
+            f"[flow].environments names {', '.join(clash)}, which is also a release line or "
+            f"develop: an environment branch receives work only by promotion"
+        )
+    stray = sorted(set(fc.auto_promote) - set(envs))
+    if stray:
+        out.append(f"[flow].auto_promote names {', '.join(stray)}, not in [flow].environments")
     empty = [n for n, b in fc.lines.items() if not str(b).strip()]
     if empty:
         out.append(f"[flow.lines] {', '.join(empty)} name no branch")
@@ -178,7 +191,7 @@ def branch_name(it: Item, cfg: Config) -> str:
     project that never sets ``[flow]`` sees no rename of anything already in flight.
     """
     name = safe_name(it.id)
-    if cfg.flow.model != GITFLOW:
+    if cfg.flow.model != GITFLOW or it.promote_to:
         return f"{cfg.worktree.branch_prefix}{name}"
     prefix = {
         FEATURE: cfg.flow.feature_prefix,
@@ -243,6 +256,8 @@ def target_branch(it: Item, cfg: Config, default_branch: str, line: str = "") ->
     ``line`` is the EFFECTIVE line (see `effective_line`), passed in because resolving
     inheritance needs the whole state.
     """
+    if it.promote_to:
+        return it.promote_to
     if is_maintenance(cfg, line):
         return cfg.flow.lines[line]
     if cfg.flow.model != GITFLOW:
@@ -254,7 +269,7 @@ def target_branch(it: Item, cfg: Config, default_branch: str, line: str = "") ->
 
 def back_merge_targets(it: Item, cfg: Config, default_branch: str, line: str = "") -> list[str]:
     """Branches that must ALSO receive ``it`` after it lands. A gitflow hotfix only."""
-    if is_maintenance(cfg, line):
+    if is_maintenance(cfg, line) or it.promote_to:
         return []
     if cfg.flow.model == GITFLOW and branch_kind(it, cfg) == HOTFIX:
         dev = cfg.flow.develop_branch
@@ -421,3 +436,36 @@ def plan_ports(cfg: Config, requested: list[str], strategy: str) -> PortPlan:
             else ""
         ),
     )
+
+
+# -- environment branches (GitLab flow) ---------------------------------------------------
+
+
+def env_chain(cfg: Config, default_branch: str) -> list[str]:
+    """The promotion chain: the current line's released branch, then each environment.
+
+    Trunk: the base branch. Gitflow: production -- what reaches an environment is what
+    was released, not develop's work in progress.
+    """
+    head = (
+        production(cfg, default_branch)
+        if cfg.flow.model == GITFLOW
+        else (cfg.worktree.base_ref or default_branch)
+    )
+    return [head, *cfg.flow.environments]
+
+
+def promotion_step(cfg: Config, default_branch: str, env: str) -> tuple[str, str]:
+    """``(from, env)`` for promoting to ``env``, or raises ValueError naming why not.
+
+    Always ONE step, from the branch immediately upstream: "upstream first" is the rule
+    that keeps production from receiving anything pre-production has not had.
+    """
+    chain = env_chain(cfg, default_branch)
+    if env not in cfg.flow.environments:
+        known = ", ".join(cfg.flow.environments) or "none are configured"
+        raise ValueError(f"{env!r} is not an environment ([flow].environments: {known})")
+    if env == chain[0]:
+        raise ValueError(f"{env!r} is where the chain STARTS, not an environment to promote to")
+    i = len(chain) - 1 - chain[::-1].index(env)
+    return chain[i - 1], env

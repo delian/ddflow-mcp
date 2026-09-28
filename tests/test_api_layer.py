@@ -295,6 +295,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     # --dry-run writes nothing, so both surfaces see the same state.
     "ddflow_version_cut": (["version", "cut", "--dry-run"], {"dry_run": True}),
     "ddflow_flow_show": (["flow", "show"], {}),
+    "ddflow_promote_status": (["promote", "status"], {}),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
@@ -325,6 +326,7 @@ TEXT_BODIED = {
 }
 
 WRITES_NOT_COMPARABLE = {
+    "ddflow_promote_add",
     "ddflow_flow_choose",
     "ddflow_update",
     # Releases held work: a second call finds nothing blocked and exits 2. Its behaviour

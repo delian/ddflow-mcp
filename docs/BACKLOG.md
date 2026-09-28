@@ -2219,4 +2219,16 @@ deliberately left:
   LANDED, which is right; but a follow-up fix to the same bug is a new item and needs its
   own `--lines`. Consider `task add --port-of`.
 - **B181. Undecided workflow choices are listed in `brief`, not in the MCP handshake.**
+- **B182. Commits made directly on an environment branch are not refused.** ddflow never
+  targets one except by promotion, but a person can commit there; the enforce hook could
+  refuse commits on a branch in [flow].environments, the way GitLab flow's "upstream first"
+  intends. A later promotion then conflicts, which surfaces it -- late.
+- **B183. Environment history is item-shaped.** `promote status` knows the last promotion
+  and its completion time, not the deploy itself; a deploy hook that records the deployed
+  sha would make "what is live" answerable exactly.
+- **B184. Two demo scenarios (`parallel-phase`, `mcp-orchestration`) failed intermittently
+  in full runs sharing the machine with other heavy test runs (2026-09-27/28): a
+  `gate record` exited 1 and step 14 of `mcp-orchestration` ran ~225 s instead of ~90 s.
+  Never reproduced in isolation or on a quiet machine. Suspected: the 30 s log-lock
+  timeout under load. Not investigated further.
 

@@ -327,6 +327,8 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
 
 
 def pipeline_for(item: Item, cfg: Config) -> list[str]:
+    if item.promote_to:
+        return list(cfg.gates.promotion_pipeline)
     return list(cfg.gates.phase_pipeline if item.kind == "phase" else cfg.gates.task_pipeline)
 
 

@@ -200,3 +200,32 @@ def flow_choose(
             else shift.strip()
         ),
     )
+
+
+def promote_add(repo: Path, env: str, *, force: bool = False, agent: str = "") -> O.Outcome:
+    """File a promotion to ``env`` from the branch immediately upstream of it.
+    Exit 2 = nothing to promote; exit 3 = refused (unknown, busy, missing branch)."""
+    from ..services import promotions as PM
+
+    log, cfg, st = _load(repo, agent)
+    try:
+        out = PM.add(repo, cfg, log, st, env, force=force)
+    except PM.PromotionError as exc:
+        return O.refused("promote.added", str(exc), id="", env=env, ahead=0)
+    data = {"id": out["id"], "env": out["to"], "from": out["from"], "ahead": out["ahead"]}
+    if not out["id"]:
+        return O.nothing(
+            "promote.added", f"{out['to']} already has everything on {out['from']}", **data
+        )
+    return O.ok("promote.added", **data)
+
+
+def promote_status(repo: Path, *, agent: str = "") -> O.Outcome:
+    """Each environment: where it stands, how far behind its upstream, what is open."""
+    from ..services import promotions as PM
+
+    _log, cfg, st = _load(repo, agent)
+    rows = PM.status(repo, cfg, st)
+    if not rows:
+        return O.nothing("promote.status", "no environments: set [flow].environments", rows=[])
+    return O.ok("promote.status", rows=rows)

@@ -88,6 +88,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [Parallelism and coordination](#parallelism-and-coordination)
 - [Gitflow, pull requests and version tags](#gitflow-pull-requests-and-version-tags)
   - [Several release lines: fixes to older majors](#several-release-lines-fixes-to-older-majors)
+  - [Environment branches: promoting downstream](#environment-branches-promoting-downstream)
   - [Workflow choices: asked, recorded, defaulted on the record](#workflow-choices-asked-recorded-defaulted-on-the-record)
 - [Many agents, one server: identity, state and sharing](#many-agents-one-server-identity-state-and-sharing)
   - [Is it stateless?](#is-it-stateless)
@@ -502,7 +503,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 113 knobs.
+cadences, and the rest of the 116 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1628,7 +1629,8 @@ Which workflow that makes, and what is not covered:
 | Trunk-based with reviews / GitHub flow | yes | `model = "trunk"`, `integration = "pr"` |
 | Gitflow (develop, feature/bugfix/hotfix, release branches, tags) | yes | `model = "gitflow"`, either integration |
 | Several major trunks, fixes carried between them | yes | `[flow.lines]` + `port_strategy` — see [below](#several-release-lines-fixes-to-older-majors) |
-| GitLab flow with environment branches (main → staging → production) | **no** | promotion between environment branches is not modelled |
+| GitLab flow with environment branches (main → pre-production → production) | yes | `[flow].environments` — see [below](#environment-branches-promoting-downstream) |
+| GitLab flow with release branches (upstream first, cherry-picked into stable branches) | yes | `[flow.lines]` + `port_strategy = "cherry-pick"` |
 
 Each of these is a [workflow choice](#workflow-choices-asked-recorded-defaulted-on-the-record):
 the operator sets it, or an agent records it, and when nobody does the default is applied
@@ -1725,6 +1727,37 @@ port_strategy = "cherry-pick"      # or "forward-merge" (the default)
 * **Versions per line.** `version show --line 2` reads the highest tag reachable from
   `maint/2.x`; `version cut --line 2` tags it there, and refuses a bump that would leave
   the 2.x major — a breaking change belongs on the current line.
+
+### Environment branches: promoting downstream
+
+GitLab flow's environment branches — each mirroring what is deployed there — are declared
+in order, downstream of the current line's target (the base branch; under gitflow,
+production, so an environment receives what was *released*):
+
+```toml
+[flow]
+environments = ["pre-production", "production"]
+auto_promote = ["pre-production"]   # optional: continuous delivery to staging
+```
+
+* **Work reaches an environment only by promotion, one step at a time.**
+  `ddflow promote add pre-production` files a task that merges `main` into
+  `pre-production`; `promote add production` merges `pre-production` into `production`.
+  So production only ever receives what the environment before it already has
+  ("upstream first"). Nothing else targets an environment branch.
+* **A promotion is an ordinary task**: claim it and its tree is made from the environment
+  branch with the upstream branch already merged in (a conflict is left for the agent,
+  like a port's). It runs `gates.promotion_pipeline` — `unit_tests` and `merge` by
+  default, since what it carries already passed its own pipeline; add a human gate there
+  for a person's sign-off on each deploy. It needs no cross-family reviewer: it authors
+  nothing.
+* **With `integration = "pr"`** the promotion lands through a merge request into the
+  environment branch — the approval *is* the deploy approval — and `pr sync` completes it.
+* **One open promotion per environment**, and none when there is nothing to carry (exit 2).
+* **`auto_promote`** lists environments `ddflow next` promotes to by itself when the
+  branch upstream moves. Empty by default: a deploy is the operator's call.
+* `ddflow promote status` shows each environment's head, how many commits it is behind
+  the branch upstream of it, and any open promotion.
 
 ### Workflow choices: asked, recorded, defaulted on the record
 
@@ -2309,6 +2342,8 @@ ddflow version show            current and next version, why, release notes (2 =
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
 ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
+ddflow promote add <env>        file a promotion one step downstream (2 = nothing to carry)
+ddflow promote status           each environment: head, behind upstream, open promotion
 ddflow flow show                how this project works: model, lines, every choice + who made it
 ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)
@@ -2361,7 +2396,7 @@ declared once and persists — see
 
 ## Configuration
 
-113 knobs across 17 sections, every one documented in place:
+116 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

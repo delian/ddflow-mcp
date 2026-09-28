@@ -162,6 +162,8 @@ class FlowConfig:
     lines: dict[str, str] = field(default_factory=dict)  # maintenance line -> branch, OLDEST first
     current_line: str = "current"
     port_strategy: str = "forward-merge"  # forward-merge | cherry-pick
+    environments: list[str] = field(default_factory=list)  # downstream branches, in order
+    auto_promote: list[str] = field(default_factory=list)
 
 
 _doc(
@@ -281,6 +283,16 @@ _doc(
 )
 _doc(
     "flow",
+    "environments",
+    'Environment branches downstream of the current line, IN ORDER -- e.g. ["pre-production", "production"] (GitLab flow). Each mirrors what is deployed there. Work reaches one only by PROMOTION (`ddflow promote add <env>`), one step at a time from the branch before it (the first from the current line\'s target), so production only ever receives what pre-production already has. Empty (default): no environment branches.',
+)
+_doc(
+    "flow",
+    "auto_promote",
+    "Environments `ddflow next` promotes to by itself: when the branch upstream of one is ahead and no promotion to it is open, a promotion task is filed and offered like any other work -- continuous delivery to, say, pre-production. Empty by default, because a deploy is the operator's call; list only the environments where it should happen without one.",
+)
+_doc(
+    "flow",
     "initial_version",
     "The version `version cut` proposes when no version tag exists yet.",
 )
@@ -327,6 +339,7 @@ class GatesConfig:
     allow_skip_with_reason: bool = True
     require_outcome: bool = True
     enforce_order: str = "warn"
+    promotion_pipeline: list[str] = field(default_factory=lambda: ["unit_tests", "merge"])
     rate_min_runs: int = 5
     rate_max_fail: float = 0.9
     evidence_required: list[str] = field(
@@ -348,6 +361,11 @@ _doc(
     "gates",
     "phase_pipeline",
     "Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point where member tasks run (in parallel where dependencies allow).",
+)
+_doc(
+    "gates",
+    "promotion_pipeline",
+    "Ordered gate ids a PROMOTION task passes through ([flow].environments). Short by default: a promotion carries work that already passed its own pipeline, so re-running research and review on it measures nothing. Add a human gate here to require a person's sign-off on a deploy.",
 )
 _doc(
     "gates",

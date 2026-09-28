@@ -128,10 +128,12 @@ def check(cfg: Config, gates: dict[str, GateDef]) -> list[Finding]:
     cannot start.
     """
     out: list[Finding] = []
-    for kind, pipeline in (
-        ("task", cfg.gates.task_pipeline),
-        ("phase", cfg.gates.phase_pipeline),
-    ):
+    pipelines = [("task", cfg.gates.task_pipeline), ("phase", cfg.gates.phase_pipeline)]
+    if cfg.flow.environments:
+        # Checked only where promotions exist: a project with no environments never
+        # runs this pipeline, and a problem in it there would be noise.
+        pipelines.append(("promotion", cfg.gates.promotion_pipeline))
+    for kind, pipeline in pipelines:
         if not pipeline:
             # The editor already refuses `workflow pipeline task ""` as "a project with
             # no checks at all". Saying nothing about the same state when READING it is

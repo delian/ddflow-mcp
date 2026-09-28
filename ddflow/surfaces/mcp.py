@@ -441,6 +441,34 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
+    "ddflow_promote_add": {
+        "description": (
+            "File a PROMOTION to an environment branch ([flow].environments, e.g. "
+            "pre-production, production): a task that merges the branch immediately "
+            "upstream into it, runs the promotion pipeline, and lands by merge or merge "
+            "request. Always one step downstream -- production receives only what the "
+            "environment before it has. Exit 2 = nothing to promote; exit 3 = refused "
+            "(unknown environment, one already open, a branch missing)."
+        ),
+        "properties": {
+            "env": ("string", "The environment to promote TO.", True),
+            "force": ("boolean", "File it even with nothing to carry.", False),
+        },
+        "api": lambda repo, a, agent: _api().promote_add(
+            repo, a["env"], force=bool(a.get("force")), agent=agent
+        ),
+        "payload": "",
+    },
+    "ddflow_promote_status": {
+        "description": (
+            "Each environment branch: its head, how many commits it is behind the branch "
+            "upstream of it, any open promotion, and whether ddflow promotes to it by "
+            "itself (auto_promote). Reads only."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().promote_status(repo, agent=agent),
+        "payload": "",
+    },
     "ddflow_flow_show": {
         "description": (
             "How THIS project works: its branching model, release lines, and every workflow "

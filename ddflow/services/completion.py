@@ -133,7 +133,11 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     ok, why = G.reviewer_independence(state, cfg, item_id, model)
     v.independence = why
-    if cfg.agent.reviewer_family_must_differ and not ok and it.kind == "task":
+    # Not for a PROMOTION: it authors nothing -- it moves work that was reviewed, with this
+    # very check, as the tasks that produced it. Demanding an independent reviewer of a
+    # merge between environment branches blocked every promotion, since its pipeline
+    # (rightly) has no review gate to satisfy it with.
+    if cfg.agent.reviewer_family_must_differ and not ok and it.kind == "task" and not it.promote_to:
         v.blockers.append(f"reviewer independence not satisfied: {why}")
 
     if s.unavailable:
