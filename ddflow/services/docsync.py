@@ -206,7 +206,9 @@ class _DiffReader:
         self.out.names = self.removed - self.added
         for name, old in self.old_assign.items():
             new = self.new_assign.get(name)
-            if new is not None and new != old:
+            # An empty old value is no evidence: no page quotes "", and as a pattern it
+            # matches everywhere, so every line naming the knob would read as stale.
+            if old and new is not None and new != old:
                 self.out.defaults[name] = old
         return self.out
 
