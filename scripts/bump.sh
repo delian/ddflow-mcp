@@ -8,12 +8,13 @@
 #
 # WHY A SCRIPT. The version lives in SIX places that must agree: `pyproject.toml`,
 # `server.json`'s `version`, its per-package `version`, the TAG inside every `oci`
-# identifier, `SERVER_INFO` in `surfaces/mcp.py` — which is what the server tells
-# every client it is — and `__version__` in `ddflow/__init__.py`, which is what
-# `ddflow --version` prints. Most are easy to forget, and the one that hurts is the OCI tag: a
-# `:0.1.0` left behind while everything else moved publishes a registry manifest pointing
-# at the PREVIOUS image — discoverable in an IDE marketplace, installable, and the wrong
-# build. `tests/test_packaging.py` catches the drift, but only after you have made it.
+# identifier, `SERVER_INFO` in `surfaces/mcp.py` — which is what the server tells every
+# client it is, and what `ddflow --version` prints — and `__version__` in
+# `ddflow/__init__.py`, the package attribute, kept equal to the rest. Most are easy to
+# forget, and the one that hurts is the OCI tag: a `:0.1.0` left behind while everything
+# else moved publishes a registry manifest pointing at the PREVIOUS image — discoverable
+# in an IDE marketplace, installable, and the wrong build. `tests/test_packaging.py`
+# catches the drift, but only after you have made it.
 #
 # The bump is also the RELEASE DECISION. `.github/workflows/publish.yml` publishes on a
 # push to main exactly when this number changes, so this is the one deliberate step in an
@@ -93,8 +94,9 @@ if mn != 1:
     sys.exit(f"surfaces/mcp.py: expected one SERVER_INFO version {cur!r}, replaced {mn}")
 mcp.write_text(mpatched)
 
-# The SIXTH place: `ddflow --version`. It sat at 0.1.0 through the 0.1.1 release because
-# this script did not know it existed.
+# The SIXTH place: `ddflow.__version__`, the package attribute. It sat at 0.1.0 through
+# the 0.1.1 release because this script did not know it existed. (`ddflow --version`
+# prints SERVER_INFO above, not this -- the CLI may not import the package root.)
 init = pathlib.Path("ddflow/__init__.py")
 itext = init.read_text()
 ipatched, n_init = re.subn(
