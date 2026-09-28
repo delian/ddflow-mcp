@@ -114,3 +114,16 @@ def test_silence_that_does_not_block_is_not_reported_as_blocking(repo):
     detail = _finished_phase(repo, config="[gates]\nrequire_outcome = false\nrequired = []\n")
     assert BARE in detail, detail
     assert "gate status" not in detail and "would refuse" not in detail, detail
+
+
+def test_every_blocker_is_quoted_whole(repo):
+    """Rubber-duck on f293315: cutting each blocker at its first `. ` truncated a gate
+    named `review. final` to `review` -- a gate that does not exist -- and lost every gate
+    named after it. The verdict's text is quoted as written, not parsed."""
+    detail = _finished_phase(
+        repo,
+        config='[gates]\nphase_pipeline = ["research", "review. final", "merge"]\n'
+        'required = ["review. final"]\n',
+    )
+    assert "review. final" in detail, detail
+    assert "merge" in detail.split("would refuse", 1)[1], detail
