@@ -132,3 +132,45 @@ def test_the_commit_hook_accepts_a_path_the_widened_claim_covers(repo):
     assert run_cli(repo, "update", "T1", "--globs", "src/a.py,docs/**", agent=HOLDER)[0] == 0
     code, msg = E.check_commit(repo, agent=HOLDER)
     assert (code, msg) == (0, ""), msg
+
+
+OTHER = "agent-b"
+
+
+def _two_claims(repo) -> None:
+    """T1 held by agent-a on src/a.py; T2 held by agent-b on docs/**."""
+    _claimed(repo)
+    code, out, err = run_cli(
+        repo, "task", "add", "T2", "--title", "t2", "--globs", "docs/**", agent=OTHER
+    )
+    assert code == 0, out + err
+    code, out, err = run_cli(repo, "claim", "T2", "--no-worktree", agent=OTHER)
+    assert code == 0, out + err
+
+
+def test_widening_into_another_live_lease_is_refused_and_records_nothing(repo):
+    """Before B209 an update never reached the lease; once it does, it is a way to take
+    paths, and must be refused exactly where `claim` would be."""
+    _two_claims(repo)
+    n = len(EventLog(repo, "reader").read_all())
+    code, out, err = run_cli(repo, "update", "T1", "--globs", "src/a.py,docs/x.md", agent=HOLDER)
+    assert code == 3, (code, out, err)
+    assert "T2" in out + err and OTHER in out + err, out + err
+    assert len(EventLog(repo, "reader").read_all()) == n, "a refused update recorded events"
+    st = fold(EventLog(repo, "reader").read_all(), strict=False)
+    assert st.items["T1"].globs == ["src/a.py"]
+    assert st.items["T1"].lease.globs == ["src/a.py"]
+
+
+def test_widening_clear_of_other_leases_still_works(repo):
+    _two_claims(repo)
+    code, out, err = run_cli(repo, "update", "T1", "--globs", "src/a.py,src/b.py", agent=HOLDER)
+    assert code == 0, out + err
+    assert _lease_globs(repo) == ["src/a.py", "src/b.py"]
+
+
+def test_an_unclaimed_items_globs_are_not_checked_against_leases(repo):
+    _two_claims(repo)
+    assert run_cli(repo, "task", "add", "T3", "--title", "t3", agent=HOLDER)[0] == 0
+    code, out, err = run_cli(repo, "update", "T3", "--globs", "docs/**", agent=HOLDER)
+    assert code == 0, out + err
