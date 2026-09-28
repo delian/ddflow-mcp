@@ -19,7 +19,7 @@ from conftest import run_cli
 
 from ddflow.services import docsync as D
 
-DOC_GLOBS = ["**/*.md", "**/*.rst", "**/*.adoc", "**/*.txt"]
+DOC_GLOBS = ["**/*.md", "**/*.rst", "**/*.adoc"]
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
@@ -209,3 +209,20 @@ def test_an_added_line_starting_with_pluses_does_not_derail_the_file(adopted):
     r = _commit(adopted, "src", "docs")
     assert r.returncode != 0, "the rename was cancelled out by a doc line read as code"
     assert "docs/guide.md:3" in r.stderr, r.stderr
+
+
+def test_a_build_file_ending_in_txt_is_code_not_documentation(repo):
+    """Bug hunt on B17: `**/*.txt` in the default doc globs made CMakeLists.txt a doc,
+    so a target it removed was never a removal and a README naming it stayed stale."""
+    from ddflow.config import Config
+
+    run_cli(repo, "adopt", "--agents", "claude")
+    _config(repo)
+    (repo / "CMakeLists.txt").write_text("add_executable(probe_runner main.c)\n")
+    (repo / "README.md").write_text("# proj\n\nBuild `probe_runner` first.\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "cmake", "--no-verify")
+    (repo / "CMakeLists.txt").write_text("add_executable(main_runner main.c)\n")
+    r = _commit(repo, "CMakeLists.txt")
+    assert r.returncode != 0 and "README.md:3" in r.stderr, r.stderr
+    assert not D.is_doc("CMakeLists.txt", Config().enforce.doc_globs)
