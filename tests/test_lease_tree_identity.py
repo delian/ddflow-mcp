@@ -257,6 +257,42 @@ def test_a_reclaim_from_the_primary_refuses_a_detached_default_path_of_unrelated
     assert not (lease and lease.holder), lease
 
 
+def test_a_refused_reclaim_keeps_the_lease_the_caller_already_held(repo):
+    """A refusal releases only what the refused claim acquired. The holder re-claiming
+    from a tree bound to another open item only RENEWED its lease -- releasing it made
+    the item claimable by anyone while the holder's work sat in it. A fresh claim that
+    is refused still leaks nothing."""
+    assert run_cli(repo, "init")[0] == OK
+    for iid, g in (("T1", "a.py"), ("T2", "b.py"), ("T3", "c.py")):
+        assert run_cli(repo, "task", "add", iid, "--globs", g)[0] == OK
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="lead")[0] == OK
+    bound = repo.parent / "bound-tree"
+    _git(repo, "worktree", "add", "-q", str(bound), "-b", "bound")
+    assert run_cli(bound, "claim", "T2", agent="other")[0] == OK
+
+    code, out, err = run_cli(bound, "claim", "T1", agent="lead")
+    assert code == REFUSED, out + err
+    lease = _item(repo, "T1").lease
+    assert lease and lease.holder == "lead", lease
+
+    code, out, err = run_cli(bound, "claim", "T3", agent="fresh")
+    assert code == REFUSED, out + err
+    lease = _item(repo, "T3").lease
+    assert not (lease and lease.holder), lease
+
+
+def test_a_refused_reclaim_at_an_occupied_default_path_keeps_the_held_lease(repo):
+    assert run_cli(repo, "init")[0] == OK
+    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
+    assert run_cli(repo, "claim", "T1", "--no-worktree", agent="lead")[0] == OK
+    _git(repo, "worktree", "add", "-q", str(repo.parent / ".ddflow-worktrees" / "T1"), "-b", "x")
+
+    code, out, err = run_cli(repo, "claim", "T1", agent="lead")
+    assert code == REFUSED, out + err
+    lease = _item(repo).lease
+    assert lease and lease.holder == "lead", lease
+
+
 def test_a_detached_recorded_tree_carrying_the_items_branch_is_still_its_tree(repo):
     """Mid-rebase a tree is detached; its work is still the item's."""
     tree = _claimed_with_its_own_tree(repo)
