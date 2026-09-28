@@ -262,3 +262,11 @@ def test_an_explicit_floor_is_honoured_and_one_below_1_is_refused(proj):  # noqa
         ],
     )
     assert r[0]["result"].get("isError"), r[0]["result"]
+
+
+def test_a_free_stretch_after_a_pin_that_ends_its_line_starts_on_the_next_line(repo):
+    """The run began on the collapsed newline and was reported a line early (B22-freeline)."""
+    doc = "The pinned rule sentence\nfree text on line two\n"
+    _project(repo, {"test_a.py": "X = 'The pinned rule sentence'\n"}, doc=doc)
+    [free] = pins(repo, "RULES.md").data["free"]
+    assert free["lines"] == [2, 2] and free["text"] == "free text on line two"
