@@ -8,7 +8,7 @@ A gate with no companion behind it passes on the agent's word alone. This closes
 
     ddflow_companions        — every known companion: state, kind, gates, install command, url
 
-**A companion is live exactly when its id appears in `gate_coverage`** under the gates it serves. That map is computed from whether an agent can actually reach the tool — an `mcp` server registered, a `cli` tool installed — so judge by it, not by `state` alone: a `cli` tool with a leftover entry in an agent's config reports `registered` while it is not installed at all.
+**A companion is live exactly when its id appears in `gate_coverage`** under the gates it serves. That map is computed from whether an agent can actually reach the tool — an `mcp` server registered, a `cli` tool installed — so judge by it. A `cli` tool is never `registered`: a leftover entry for it in an agent's config is ignored, and its state is what the probe found.
 
 Sort every companion that is NOT live into exactly one bucket:
 
@@ -16,7 +16,6 @@ Sort every companion that is NOT live into exactly one bucket:
 |---|---|---|
 | `mcp` | `installed` | **register** it (step 4) — one config entry away |
 | any | `missing` | **install** it (steps 2–3), then register it if it is `mcp` |
-| `cli` | `registered` | **install** it — the config entry is stale, and `detail` says what the probe found |
 | any | `unknown` | **check** — nobody probed. Re-run `ddflow_companions`; unknown is a question, never "absent" |
 
 {% if scope %}Work only on `{{ scope }}`. An id it names that the registry does not know is an error to report, not something to install by guesswork.{% else %}Start with the `default = true` companions, and the gates in `uncovered_gates` — those are the gaps that exist today. A `default = false` companion is opt-in: mention it in one line, install it only if the operator asks.{% endif %}

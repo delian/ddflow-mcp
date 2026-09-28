@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -248,6 +249,30 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
                 notes.append(f"{it.id} needs {dep!r}, not yet observed: `ddflow external sync`")
 
 
+def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) -> str:
+    """B5189cc5756: offer `ddflow complete` only when it would succeed.
+
+    `unpickable()` (core) states the fact and the default remedy; whether completion is
+    allowed is decided in exactly one place, `completion.verdict()`, so it is asked here
+    rather than re-derived. `model=""` is harmless: the reviewer-independence blocker is
+    applied to tasks only, never to a phase, so an unknown author model cannot put a
+    spurious blocker into this remedy.
+    """
+    from ..services.completion import verdict
+
+    v = verdict(st, cfg, item, repo=repo)
+    if v.may_complete:
+        return detail
+    fact = detail.split(" — ", 1)[0]
+    # Quoted whole, not cut at a first ". ": that split is not sentence-aware, and a gate
+    # named `review. final` came out as `review`, a gate that does not exist.
+    why = " ".join(b.strip() for b in v.blockers)
+    return (
+        f"{fact} — `ddflow complete {item}` would refuse: {why} See "
+        f"`ddflow gate status {item}`, or file the work that remains"
+    )
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -302,6 +327,8 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     from ..core.schedule import unpickable
 
     for u in unpickable(st, cfg):
+        if u.kind == "finished_phase":
+            u.detail = _finished_phase_remedy(u.detail, st, cfg, u.item, repo)
         (problems if u.severity == "problem" else notes).append(u.render())
 
     # B24/B25: does ddflow's own machinery fire? Both are NOTES, not problems — a flaky
@@ -360,6 +387,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
             and path not in known
         ):
             notes.append(f"worktree {path} exists but no item claims it")
+    notes += _untitled(st)
 
     data: dict[str, Any] = {
         "problems": problems,
@@ -378,6 +406,33 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     )
     out.data["text"] = human.render(out)
     return out
+
+
+def _only_ids(title: str) -> bool:
+    """Empty, or nothing but id-shaped tokens and punctuation: `B30`, `B30.`, `+ B159`,
+    `B62-B64`. A word without a digit is what makes a title say something."""
+    return all(any(c.isdigit() for c in word) for word in re.findall(r"\w+", title))
+
+
+#: How many untitled ids one note names before it counts the rest.
+_UNTITLED_SHOWN = 8
+
+
+def _untitled(st) -> list[str]:
+    """ONE note naming the items whose title says nothing but their id.
+
+    A migration that cannot find a title writes the id (bug B9e8ca361ea: 24 backlog
+    items were titled `B30`, `B157`...), and every board, brief and gate prompt then
+    shows a number. Nothing else here asks whether an item can be told apart from it.
+    """
+    ids = sorted(it.id for it in st.items.values() if not it.removed and _only_ids(it.title))
+    if not ids:
+        return []
+    shown = ", ".join(ids[:_UNTITLED_SHOWN]) + (" ..." if len(ids) > _UNTITLED_SHOWN else "")
+    return [
+        f"{len(ids)} item(s) have no title of their own, only the id: {shown} — "
+        f"`ddflow update <id> --title ...`"
+    ]
 
 
 def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:

@@ -252,6 +252,37 @@ def cmd_bug(a, c: Ctx) -> int:
     return OK
 
 
+def _misread_hint(a) -> str:
+    """The positional is the SESSION id; prose there means the words went in the wrong slot."""
+    if any(ch.isspace() for ch in a.session):
+        return (
+            f"\nthe first argument is the SESSION id, not the text -- got {a.session!r}. "
+            f"Pass the words with --text: "
+            f'ddflow session {a.session_cmd} <session-id> --text "..."'
+        )
+    return ""
+
+
+def _session_text(a) -> str | None:
+    """The words for `session prompt`/`note`: `--text`, else piped stdin.
+
+    stdin because the operator's prompt is frequently multi-line and frequently contains
+    the characters a shell would eat. A terminal on stdin is a person, not a pipe, and
+    reading it waits for them forever -- so that is refused before reading (None).
+    """
+    if a.text is not None:
+        return a.text
+    if sys.stdin is None or sys.stdin.isatty():
+        print(
+            f"refusing to read the {a.session_cmd} text from a terminal: pass it with --text "
+            f"(or pipe it on stdin). The positional argument is the session id, not the text."
+            + _misread_hint(a),
+            file=sys.stderr,
+        )
+        return None
+    return sys.stdin.read()
+
+
 def cmd_session(a, c: Ctx) -> int:
     if a.session_cmd == "start":
         out = A.session_start(
@@ -259,22 +290,25 @@ def cmd_session(a, c: Ctx) -> int:
         )
         c.out(out.data["session"], out.body(("session",)))
         return OK
-    if a.session_cmd == "prompt":
-        # stdin when no `--text`: the operator's prompt is frequently multi-line and
-        # frequently contains the characters a shell would eat.
-        text = a.text if a.text is not None else sys.stdin.read()
-        out = A.session_prompt(c.repo, a.session, text, item=a.item or "", agent=c.requested_agent)
-        c.out(f"recorded ({out.data['redactions']} redaction(s))", out.body(("redactions",)))
-        return OK
-    if a.session_cmd == "note":
-        A.session_note(
-            c.repo,
-            a.session,
-            a.text or sys.stdin.read(),
-            item=a.item or "",
-            agent=c.requested_agent,
-        )
-        c.out("noted", {})
+    if a.session_cmd in ("prompt", "note"):
+        text = _session_text(a)
+        if text is None:
+            return FAIL
+        if a.session_cmd == "prompt":
+            out = A.session_prompt(
+                c.repo, a.session, text, item=a.item or "", agent=c.requested_agent
+            )
+        else:
+            out = A.session_note(
+                c.repo, a.session, text, item=a.item or "", agent=c.requested_agent
+            )
+        if out.exit != OK:
+            print(out.reason + _misread_hint(a), file=sys.stderr)
+            return out.exit
+        if a.session_cmd == "prompt":
+            c.out(f"recorded ({out.data['redactions']} redaction(s))", out.body(("redactions",)))
+        else:
+            c.out("noted", {})
         return OK
     if a.session_cmd == "end":
         A.session_end(c.repo, a.session, summary=a.summary or "", agent=c.requested_agent)
