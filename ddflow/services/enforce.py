@@ -460,13 +460,61 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     )
 
 
-def _verdict(mode: str, lines: list[str]) -> tuple[int, str]:
-    msg = "\n".join(
-        [*lines, "", f'Policy is [enforce].generated_views = "{mode}" in .ddflow/config.toml.']
-    )
+def _verdict(mode: str, lines: list[str], knob: str = "generated_views") -> tuple[int, str]:
+    msg = "\n".join([*lines, "", f'Policy is [enforce].{knob} = "{mode}" in .ddflow/config.toml.'])
     if mode == "warn":
         return 0, msg + '\n\n(warning only; set the policy to "block" to refuse)'
     return 1, msg
+
+
+def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
+    """(exit_code, message) for B17: a commit that removes or renames an identifier, a
+    file or a default must not leave a doc line naming the old one.
+
+    The detection is `services/docsync.py`; this is only the policy around it, the same
+    shape as `check_views`. "Git could not tell" is never a pass: it reports, and under
+    'block' refuses, exactly like an unreadable staged set.
+    """
+    from . import docsync
+
+    cfg = cfg or Config.load(repo)
+    mode = cfg.enforce.stale_docs
+    if mode == "off":
+        return 0, ""
+    hits = docsync.stale_mentions(repo, cfg.enforce.doc_globs, cfg.enforce.doc_exclude)
+    if hits is None:
+        return _verdict(
+            mode,
+            [
+                "ddflow: git could not report this commit's diff, or search the docs it may",
+                "have left stale, so the doc-sync check could not run.",
+                "",
+                "Refusing rather than guessing: an unchecked commit is not a clean one.",
+            ],
+            "stale_docs",
+        )
+    if not hits:
+        return 0, ""
+    names = sorted({h.name for h in hits})
+    return _verdict(
+        mode,
+        [
+            f"ddflow: this commit removes {len(names)} name(s) that {len(hits)} doc line(s) "
+            "still mention:",
+            "",
+            *(f"  {h.path}:{h.line}  {h.name}" for h in hits[:MAX_LISTED_PATHS]),
+            *(
+                [f"  ... and {len(hits) - MAX_LISTED_PATHS} more"]
+                if len(hits) > MAX_LISTED_PATHS
+                else []
+            ),
+            "",
+            "A page naming a removed identifier or an old default is read and trusted.",
+            "Update those lines in this commit. A page whose job is to remember old names",
+            "(a changelog, a backlog) belongs in [enforce].doc_exclude.",
+        ],
+        "stale_docs",
+    )
 
 
 def _rel(repo: Path, path: Path) -> str:
