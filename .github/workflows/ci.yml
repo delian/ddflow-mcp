@@ -87,7 +87,9 @@ jobs:
         # declared on purpose (48aae97: the handshake rendered differently depending on
         # whose interpreter happened to have it), and the assertion was never updated --
         # unseen, because the build step before it failed on every run. A new dependency
-        # is a supply-chain decision: add it HERE, deliberately, or CI refuses it.
+        # is a supply-chain decision: add it to ALLOWED below, deliberately, or the
+        # allowlist check refuses it. NOTE the pip-audit line is ADVISORY: `|| echo`
+        # makes a known vulnerability a warning, never a failure. Only the allowlist gates.
         run: |
           uv run --no-project --with pip-audit pip-audit --strict --progress-spinner off -r <(
             uv export --no-hashes --no-emit-project 2>/dev/null || true

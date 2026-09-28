@@ -14,3 +14,6 @@ __pycache__/
 # The dependency it pins is also the one this project has already been bitten by: for
 # as long as Jinja2 was undeclared, the suite ran a different template engine depending
 # on whose interpreter it was (docs/BACKLOG.md B154).
+
+# ddflow task worktrees (git worktrees; never commit them)
+.ddflow-worktrees/
