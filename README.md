@@ -16,6 +16,96 @@ and an MCP server that are the same implementation.
 
 ---
 
+## Introduction
+
+### The problem it solves
+
+An AI coding agent is good at a task and weak at a project. One agent in one session
+mostly works. Run it for weeks, or run three at once, and the same failures come back:
+
+- **Work disappears.** A session crashes or is closed mid-task, and the half-finished
+  change sits in a directory nobody remembers.
+- **Agents collide.** Two of them edit the same file, and the second merge quietly
+  undoes the first.
+- **Checks that never ran look like checks that passed.** The linter was missing, the
+  reviewer endpoint was down, the tests were "run" in a summary. The agent reports
+  *done*, and nothing on record says otherwise.
+- **The project forgets.** Last week's hard-won lesson, the reason behind a design
+  choice, the bug that was already fixed once — gone at the next session, or at the next
+  context compaction in this one.
+- **Nobody can say what happened.** Which instruction led to which change, and which
+  review looked at it, lives in a chat transcript that no longer exists.
+
+ddflow is the layer between you and your agents that makes those failures structurally
+hard rather than a matter of discipline. It does not write code and it is not an agent.
+It is a queue, a set of rules the tools enforce, and a log of everything that happened.
+
+### What changes for you
+
+| Without it | With ddflow |
+|---|---|
+| You decide what each agent does next, and keep the plan in your head or a chat. | The plan is a queue of phases and tasks with dependencies. `ddflow next` says what can start now and **why everything else is blocked**. |
+| Parallel agents step on each other. | `ddflow claim` gives each task a lease and its own git worktree; tasks that declare overlapping files are refused, not merged over. |
+| "Done" means the agent said so. | Every task passes a gate pipeline you configure. A gate that could not run is recorded **unavailable, never passed**; at least one reviewer must come from a **different model family** than the author; a bug cannot be closed without a regression test that failed first. |
+| A crash loses work. | `ddflow recover` finds orphaned worktrees and reports what each holds. It never deletes work. |
+| Every session starts from zero. | Lessons, decisions, research verdicts, bugs and your own prompts are recorded as you go. `ddflow brief` hands the agent the ones relevant to *this* task in a bounded amount of context, and `ddflow recall` searches all of it. |
+| History is a transcript. | An append-only event log, committed in git. The board, the index and the reports are rebuilt from it; `ddflow replay` reconstructs the project's decisions from the log alone. |
+
+### Who it is for
+
+- **One developer with one agent.** A plan that survives the session, a memory that
+  survives compaction, and a record of which checks really ran. The queue is useful even
+  with no parallelism at all.
+- **Several agents in parallel** — subagents, several terminals, several vendors. The
+  dependency graph says which tasks are independent, worktrees keep them apart, and the
+  merge step lands them without anyone switching the main checkout's branch.
+- **A team or a CI pipeline.** The log is committed with the code, so a fresh clone
+  knows the queue and its history. Read commands have a machine-readable `--json` form
+  and every command returns the same four exit codes, so a Makefile or a CI job can
+  drive it exactly as an agent does.
+
+It works with the agent you already use, because everything it does is reachable
+both ways: as a shell command and as an MCP tool. Use whichever your agent, script or CI
+job has. Your workflow is text, not code — the gate pipeline, the
+reviewer instructions and the agent-facing prompts are files in your repository that you
+can edit.
+
+### What it is not
+
+- **Not an agent or a model.** Your agent does the work; ddflow decides what may start,
+  checks what was claimed, and remembers.
+- **Not a hosted service.** Everything is files in your repository and a disposable local
+  cache. No account, no server to run beyond the local MCP process.
+- **Not a replacement for your tests or CI.** It runs the commands you configure and
+  records their real exit codes and output.
+
+### A first run
+
+```sh
+# ddflow-mcp is not on PyPI yet; until the first release, install from the repository:
+uv tool install git+https://github.com/delian/ddflow-mcp   # or: pipx install git+https://github.com/delian/ddflow-mcp
+cd /path/to/your/project
+ddflow adopt --launch python        # registers the MCP server with your agents, writes .ddflow/ and a block in AGENTS.md
+ddflow phase add P1 --title "Password reset"
+ddflow task add P1.T1 --phase P1 --title "Reset-token endpoint" --globs 'src/auth/**'
+ddflow next                          # what can start now, and why the rest is blocked
+```
+
+`--launch python` writes the full path of the interpreter inside the environment you
+just installed into (plus its `PYTHONPATH`), not a bare `python`. Without it, `adopt`
+registers `uvx ddflow-mcp`, which fetches the package from PyPI and so cannot start until
+the first release is published.
+
+Then tell your agent *"implement phase P1"*. The driver `adopt` installed tells it to
+start with `ddflow_brief`, claim the task, work in its own worktree, satisfy each gate
+and land the change. ddflow cannot make an agent follow instructions, but it makes
+skipping them visible: the commit hook `adopt` installs flags a commit made without a
+lease (or refuses it, if you set `[enforce].commit_without_lease = "block"`), and
+`ddflow complete` refuses an item whose gates carry no outcome. Watch it with
+`ddflow board`, and ask `ddflow doctor` at any point whether the project is healthy.
+
+---
+
 ## How do I…?
 
 Every row is a command you can run in a terminal and a tool an agent can call over MCP —
@@ -53,6 +143,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 
 ## Table of contents
 
+- [Introduction](#introduction)
 - [How do I…?](#how-do-i)
 - [Help: what it can do, and the workflow](#help-what-it-can-do-and-the-workflow)
 - [Wiring it into your agent](#wiring-it-into-your-agent)
@@ -326,15 +417,18 @@ The design decisions, with the probes that settled each, are in
 
 **One line in your agent's MCP config. Nothing else.**
 
+> Until the first release is on PyPI, `uvx ddflow-mcp` has nothing to fetch: install from
+> the repository and run `ddflow adopt --launch python`, as in [A first run](#a-first-run).
+
 ```json
 { "mcpServers": { "ddflow": { "command": "uvx", "args": ["ddflow-mcp"] } } }
 ```
 
 `uvx` fetches and runs the published package in an ephemeral environment on first use —
 no clone, no virtualenv, no `PYTHONPATH`, no install step for an operator to forget, and
-no vendored copy to drift from upstream. ddflow has **zero runtime dependencies**
-beyond `python3` and `git`, which is what lets it install inside sandboxes, CI images
-and other tools' ephemeral containers.
+no vendored copy to drift from upstream. ddflow needs **one runtime dependency**
+beyond `python3` and `git` (Jinja2), which is what lets it install inside
+sandboxes, CI images and other tools' ephemeral containers.
 
 Then, from the agent, with no shell at all:
 
@@ -503,7 +597,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 119 knobs.
+cadences, and the rest of the 120 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1815,7 +1909,11 @@ Nothing errors. There is no signal that can tell them apart, so identity is **de
 | `ddflow_identify` (MCP) | An agent announcing itself on its own connection. Call it first. |
 | `DDFLOW_AGENT` env var | A harness that spawns agents and knows their names. Process-wide. |
 | `--agent` (CLI) | Scripts and one-off commands. |
-| tree-derived default | One agent per worktree. Reported as *undeclared*, so you can see it. |
+| tree-derived default | One agent per worktree. Reported as *undeclared*, so you can see it. `{host}-{tree}-{clone}`: the last part is a random suffix kept in `.ddflow/local/clone-id`, so two clones of one repository never write one shard even on same-named machines. |
+
+A name you set yourself is never suffixed, so the same `DDFLOW_AGENT` in two clones is
+still one agent to ddflow; `ddflow doctor` notes a shard whose clock goes backwards, which
+is what that leaves behind after a merge.
 
 Innermost wins. `ddflow_identify` is idempotent, persists for the connection, and
 refuses a name that could not be a log filename — it becomes one, and refusing at
@@ -2396,7 +2494,7 @@ declared once and persists — see
 
 ## Configuration
 
-119 knobs across 17 sections, every one documented in place:
+120 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2432,6 +2530,11 @@ part that matters.
 * **Conflicts are refused at claim time**, by glob overlap, with an alternative named.
 * **Dependencies gate readiness.** `ddflow next` withholds a task whose `needs` are open
   and says which.
+* **Bugs are offered before features.** A task tagged `bug`/`fix`/`hotfix` (the
+  `[flow]` bugfix and hotfix tags), or named by an open bug record, comes ahead of every
+  feature in `ddflow next` and gets a free slot first, so a standing bug is fixed before
+  more work is built on it. Priority orders each group; `[schedule] bugs_first = false`
+  orders by priority alone.
 * **Gate evidence records which tree and how much** — a working-tree fingerprint plus
   files/lines changed — so a pass names what it passed on. If the tree moves afterwards,
   `complete` warns that the evidence describes source nobody is shipping.
