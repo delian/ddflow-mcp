@@ -80,15 +80,47 @@ def test_every_tool_it_names_exists():
 
 
 def test_every_companion_field_it_reads_is_one_the_tool_returns(repo):
-    """The prompt sorts rows by `state` and `kind` and quotes `install`, `url`, `gates`
-    and `uncovered_gates`. A renamed field would leave it reading nothing."""
+    """The prompt sorts rows by `state` and `kind`, quotes `title`, `install`, `url`,
+    `gates` and `detail`, and judges liveness by `gate_coverage`. A field it names that
+    the tool does not return leaves it reading nothing (rubber-duck on B187: it quoted a
+    `why` that only the human renderer shows)."""
     code, out, err = run_cli(repo, "--json", "companions", "list")
     assert code in (0, 2), err
     data = json.loads(out)
     row = data["companions"][0]
-    for field in ("state", "kind", "install", "url", "gates"):
-        assert field in row, field
-    assert "uncovered_gates" in data
     text = P.resolve_command(NAME).text
+    quoted = set(re.findall(r"`([a-z_]+)`", text))
+    for field in quoted & {"why", "title", "install", "url", "gates", "detail", "kind", "state"}:
+        assert field in row, f"the prompt reads `{field}`, which the tool does not return"
+    for field in quoted & {"gate_coverage", "uncovered_gates"}:
+        assert field in data, field
     for state in ("registered", "installed", "missing", "unknown"):
         assert f"`{state}`" in text
+
+
+def test_a_stale_config_entry_for_a_cli_tool_is_not_called_live(repo):
+    """Rubber-duck on B187: `state` is `registered` for a cli companion with a leftover
+    MCP entry even when the tool is absent. The prompt must judge by `gate_coverage`,
+    and that must not list it."""
+    (repo / ".mcp.json").write_text(
+        json.dumps({"mcpServers": {"roborev": {"command": "roborev", "args": ["mcp"]}}})
+    )
+    import os
+    import shutil
+
+    git_dir = str(Path(shutil.which("git")).parent)
+    if shutil.which("roborev", path=git_dir):
+        pytest.skip("roborev shares git's directory; cannot hide it")
+    env_path = os.environ["PATH"]
+    try:
+        os.environ["PATH"] = git_dir  # git stays reachable; roborev does not
+        _code, out, err = run_cli(repo, "--json", "companions", "list")
+    finally:
+        os.environ["PATH"] = env_path
+    data = json.loads(out or err)
+    row = next(r for r in data["companions"] if r["id"] == "roborev")
+    assert row["state"] == "registered"  # the misleading field the prompt must not trust
+    assert "roborev" not in data["gate_coverage"].get("standards", [])
+    text = P.resolve_command(NAME).text
+    assert "live exactly when its id appears in `gate_coverage`" in text
+    assert "| `cli` | `registered` | **install** it" in text
