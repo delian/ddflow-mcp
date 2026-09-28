@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -381,6 +382,12 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     return out
 
 
+def _only_ids(title: str) -> bool:
+    """Empty, or nothing but id-shaped tokens and punctuation: `B30`, `B30.`, `+ B159`,
+    `B62-B64`. A word without a digit is what makes a title say something."""
+    return all(any(c.isdigit() for c in word) for word in re.findall(r"\w+", title))
+
+
 #: How many untitled ids one note names before it counts the rest.
 _UNTITLED_SHOWN = 8
 
@@ -392,9 +399,7 @@ def _untitled(st) -> list[str]:
     items were titled `B30`, `B157`...), and every board, brief and gate prompt then
     shows a number. Nothing else here asks whether an item can be told apart from it.
     """
-    ids = sorted(
-        it.id for it in st.items.values() if not it.removed and it.title.strip() in ("", it.id)
-    )
+    ids = sorted(it.id for it in st.items.values() if not it.removed and _only_ids(it.title))
     if not ids:
         return []
     shown = ", ".join(ids[:_UNTITLED_SHOWN]) + (" ..." if len(ids) > _UNTITLED_SHOWN else "")

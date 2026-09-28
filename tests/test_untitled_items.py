@@ -61,4 +61,24 @@ def test_many_are_one_note_not_a_wall(repo):
         run_cli(repo, "task", "add", f"B{n}", "--title", f"B{n}")
     lines = [n for n in _notes(repo) if "no title of their own" in n]
     assert len(lines) == 1, lines
+    assert "\n" not in lines[0], lines[0]
     assert lines[0].startswith("12 item(s)"), lines[0]
+
+
+def test_a_title_of_only_id_tokens_is_noted(repo):
+    """Critic on B212: the migration also wrote `+ B159` (for B158) and `B62-B64`-shaped
+    leftovers -- ids and punctuation, not a title -- and an exact-id test missed them."""
+    assert run_cli(repo, "init")[0] == 0
+    run_cli(repo, "task", "add", "B158", "--title", "+ B159")
+    run_cli(repo, "task", "add", "B62", "--title", "B62–B64")  # noqa: RUF001 -- the en dash the migration wrote
+    run_cli(repo, "task", "add", "B30", "--title", "B30.")
+    note = _untitled(repo)
+    for iid in ("B158", "B62", "B30"):
+        assert iid in note, note
+
+
+def test_a_short_real_title_with_a_number_is_not_noted(repo):
+    assert run_cli(repo, "init")[0] == 0
+    run_cli(repo, "task", "add", "T1", "--title", "Python 3.13 support")
+    run_cli(repo, "task", "add", "T2", "--title", "fix B159")
+    assert _untitled(repo) == ""
