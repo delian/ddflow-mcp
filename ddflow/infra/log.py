@@ -282,6 +282,16 @@ def _clone_suffix(root: Path) -> str:
             os.link(tmp, path)
         except FileExistsError:
             pass
+        except OSError:
+            # No hard links here (some FUSE and SMB mounts). An exclusive create still
+            # picks ONE winner; a reader racing it may see it empty for an instant, and
+            # an empty read is not cached, so that caller simply asks again.
+            with contextlib.suppress(FileExistsError):
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                try:
+                    os.write(fd, tmp.read_bytes())
+                finally:
+                    os.close(fd)
         finally:
             tmp.unlink()
         return path.read_text("utf-8").strip()
