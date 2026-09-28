@@ -525,10 +525,12 @@ def hooks(
         return O.ok("hooks", message=msg, installed=E.installed(repo))
     if action == "check-commit":
         code, msg = E.check_commit(repo, cfg)
-        if code == 0:
-            vcode, vmsg = E.check_views(repo, cfg)
-            msg = "\n".join(x for x in (msg, vmsg) if x)
-            code = vcode
+        for check in (E.check_views, E.check_docs):
+            if code != 0:
+                break
+            ccode, cmsg = check(repo, cfg)
+            msg = "\n".join(x for x in (msg, cmsg) if x)
+            code = ccode
         data = {
             "message": msg,
             "installed": E.installed(repo),
