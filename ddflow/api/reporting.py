@@ -249,6 +249,30 @@ def _dependency_findings(repo: Path, cfg, st, problems: list[str], notes: list[s
                 notes.append(f"{it.id} needs {dep!r}, not yet observed: `ddflow external sync`")
 
 
+def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) -> str:
+    """B5189cc5756: offer `ddflow complete` only when it would succeed.
+
+    `unpickable()` (core) states the fact and the default remedy; whether completion is
+    allowed is decided in exactly one place, `completion.verdict()`, so it is asked here
+    rather than re-derived. `model=""` is harmless: the reviewer-independence blocker is
+    applied to tasks only, never to a phase, so an unknown author model cannot put a
+    spurious blocker into this remedy.
+    """
+    from ..services.completion import verdict
+
+    v = verdict(st, cfg, item, repo=repo)
+    if v.may_complete:
+        return detail
+    fact = detail.split(" — ", 1)[0]
+    # Quoted whole, not cut at a first ". ": that split is not sentence-aware, and a gate
+    # named `review. final` came out as `review`, a gate that does not exist.
+    why = " ".join(b.strip() for b in v.blockers)
+    return (
+        f"{fact} — `ddflow complete {item}` would refuse: {why} See "
+        f"`ddflow gate status {item}`, or file the work that remains"
+    )
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -303,6 +327,8 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     from ..core.schedule import unpickable
 
     for u in unpickable(st, cfg):
+        if u.kind == "finished_phase":
+            u.detail = _finished_phase_remedy(u.detail, st, cfg, u.item, repo)
         (problems if u.severity == "problem" else notes).append(u.render())
 
     # B24/B25: does ddflow's own machinery fire? Both are NOTES, not problems — a flaky

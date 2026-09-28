@@ -99,9 +99,10 @@ def test_every_companion_field_it_reads_is_one_the_tool_returns(repo):
 
 
 def test_a_stale_config_entry_for_a_cli_tool_is_not_called_live(repo):
-    """Rubber-duck on B187: `state` is `registered` for a cli companion with a leftover
-    MCP entry even when the tool is absent. The prompt must judge by `gate_coverage`,
-    and that must not list it."""
+    """Rubber-duck on B187: `state` was `registered` for a cli companion with a leftover
+    MCP entry even when the tool is absent (bug B87d456f1cd, fixed in B207). It now
+    reports `missing`, `gate_coverage` must not list it, and the prompt must not teach
+    the old state."""
     (repo / ".mcp.json").write_text(
         json.dumps({"mcpServers": {"roborev": {"command": "roborev", "args": ["mcp"]}}})
     )
@@ -119,8 +120,9 @@ def test_a_stale_config_entry_for_a_cli_tool_is_not_called_live(repo):
         os.environ["PATH"] = env_path
     data = json.loads(out or err)
     row = next(r for r in data["companions"] if r["id"] == "roborev")
-    assert row["state"] == "registered"  # the misleading field the prompt must not trust
+    assert row["state"] == "missing", row
     assert "roborev" not in data["gate_coverage"].get("standards", [])
     text = P.resolve_command(NAME).text
     assert "live exactly when its id appears in `gate_coverage`" in text
-    assert "| `cli` | `registered` | **install** it" in text
+    assert "| `cli` | `registered` |" not in text
+    assert "A `cli` tool is never `registered`" in text
