@@ -837,7 +837,9 @@ def run_command_gate(
         try:
             p = P.run(
                 gdef.command,
-                shell=True,
+                # bandit B604: a command gate IS a shell command line the operator wrote in
+                # gates.toml.
+                shell=True,  # nosec B604
                 cwd=str(cwd),
                 env=full_env,
                 capture_output=True,

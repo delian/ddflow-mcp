@@ -249,7 +249,9 @@ def render(tmpl: Template | str, **vars: Any) -> str:
         import jinja2
     except ImportError:
         return _render_stdlib(text, vars)
-    env = jinja2.Environment(
+    # bandit B701: these templates render markdown/plain-text prompts, never HTML; escaping would
+    # corrupt them.
+    env = jinja2.Environment(  # nosec B701
         undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
     )
     try:

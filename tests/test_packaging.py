@@ -198,13 +198,17 @@ def test_the_declared_versions_agree():
     from the tree; the release workflow checks the same invariant.
     """
     sys.path.insert(0, str(ROOT))
+    import ddflow
     from ddflow.surfaces.mcp import SERVER_INFO
 
     proj = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
     srv = json.loads((ROOT / "server.json").read_text())
-    assert proj == srv["version"] == SERVER_INFO["version"], (
+    # `ddflow.__version__` too: it is what `ddflow --version` prints, and it sat at 0.1.0
+    # through the 0.1.1 release because neither this test nor `scripts/bump.sh` knew it
+    # existed -- the sixth place, found when CI's `ddflow --version` step was fixed.
+    assert proj == srv["version"] == SERVER_INFO["version"] == ddflow.__version__, (
         f"version drift: pyproject={proj} server.json={srv['version']} "
-        f"SERVER_INFO={SERVER_INFO['version']}"
+        f"SERVER_INFO={SERVER_INFO['version']} ddflow.__version__={ddflow.__version__}"
     )
     pypi = [k for k in srv["packages"] if k["registryType"] == "pypi"]
     assert len(pypi) == 1, f"expected exactly one pypi package, got {len(pypi)}"
@@ -346,3 +350,22 @@ def test_the_console_entry_points_resolve():
         mod_name, _, attr = target.partition(":")
         mod = importlib.import_module(mod_name)
         assert hasattr(mod, attr), f"entry point {name} = {target} does not resolve"
+
+
+def test_ddflow_version_runs_and_prints_the_declared_version():
+    """CI's build step runs `python -m ddflow --version` against the built wheel, and it
+    exited 2 ("the following arguments are required: cmd") on every run since the step
+    was written: the CLI had no `--version`, and the subcommand is required. Run exactly
+    that command here, so the first place it fails is not a CI job."""
+    import subprocess
+
+    proj = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    r = subprocess.run(
+        [sys.executable, "-m", "ddflow", "--version"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    assert r.returncode == 0, r.stderr
+    assert r.stdout.strip() == f"ddflow {proj}", r.stdout

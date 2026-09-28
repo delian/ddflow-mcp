@@ -9,4 +9,7 @@ Read `docs/ARCHITECTURE.md` for why, and `docs/RESEARCH.md` for the probes that
 decided each choice.
 """
 
-__version__ = "0.1.0"
+#: One of the SIX places the version is declared; `scripts/bump.sh` moves them together
+#: and `tests/test_packaging.py::test_the_declared_versions_agree` holds them equal.
+#: This one sat at 0.1.0 through the 0.1.1 release because neither knew it existed.
+__version__ = "0.1.1"

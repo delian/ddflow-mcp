@@ -264,6 +264,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     p.add_argument("--agent", help="agent identity (default: host-pid). Shards the log.")
     p.add_argument("--json", action="store_true", help="machine-readable output")
+    # argparse's `version` action exits before the required subcommand is checked. There
+    # was no such flag at all, and CI's build step -- `python -m ddflow --version` against
+    # the built wheel -- failed with "the following arguments are required: cmd".
+    from .. import __version__
+
+    p.add_argument("--version", action="version", version=f"ddflow {__version__}")
     s = p.add_subparsers(dest="cmd", required=True)
 
     s.add_parser("init", help="create .ddflow/ in this repository").set_defaults(fn=cmd_init)

@@ -345,6 +345,22 @@ def reviewers_for(reviewers: list[Reviewer], gate: str) -> list[Reviewer]:
 # -- probing ---------------------------------------------------------------------------
 
 
+def _open(target: str | urllib.request.Request, *, timeout: float):
+    """`urlopen`, for http(s) only. Every reviewer HTTP call goes through here.
+
+    `urlopen` follows any scheme it knows, `file:` included, and reviewer URLs come from
+    configuration: `base_url = "file:///..."` -- a typo, or a config someone else wrote --
+    made `probe_endpoint` read a local file and report its contents as model ids
+    (reproduced in tests/test_review_urls.py). Refused as a `URLError`, which every
+    caller already treats as "unreachable". Flagged by bandit B310.
+    """
+    url = target.full_url if isinstance(target, urllib.request.Request) else target
+    scheme = urllib.parse.urlsplit(url).scheme.lower()
+    if scheme not in ("http", "https"):
+        raise urllib.error.URLError(f"only http(s) reviewer endpoints; refusing {scheme!r}")
+    return urllib.request.urlopen(target, timeout=timeout)  # nosec B310 -- scheme checked above
+
+
 def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
     """Model ids served at ``base_url``, or [] if nothing answers.
 
@@ -355,7 +371,7 @@ def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
 
     url = rewrite_localhost(base_url).rstrip("/") + "/models"
     try:
-        with urllib.request.urlopen(url, timeout=timeout_s) as resp:
+        with _open(url, timeout=timeout_s) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
     except (urllib.error.URLError, OSError, ValueError, json.JSONDecodeError):
         return []
@@ -482,7 +498,8 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     try:
         p = P.run(
             cmd,
-            shell=True,
+            # bandit B604: a CLI reviewer IS a shell command line the operator configured.
+            shell=True,  # nosec B604
             input=f"{system}\n\n{user}",
             capture_output=True,
             text=True,
@@ -520,7 +537,7 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
         headers={"Content-Type": "application/json", **headers},
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        with _open(req, timeout=timeout_s) as resp:
             return json.loads(resp.read().decode("utf-8", "replace")), ""
     except urllib.error.HTTPError as exc:
         return None, f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
@@ -637,7 +654,7 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+        with _open(req, timeout=timeout_s) as resp:
             body = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
         return "", f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
@@ -779,7 +796,9 @@ def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
     try:
         proc = P.popen(
             cmd,
-            shell=True,
+            # bandit B604: a reviewer's start command IS a shell command line the operator
+            # configured.
+            shell=True,  # nosec B604
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
@@ -818,7 +837,7 @@ def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
     from ..infra.container import rewrite_localhost
 
     try:
-        with urllib.request.urlopen(rewrite_localhost(url), timeout=timeout_s) as r:
+        with _open(rewrite_localhost(url), timeout=timeout_s) as r:
             return _HTTP_OK_FLOOR <= r.status < _HTTP_SERVER_ERROR
     except urllib.error.HTTPError as exc:
         return exc.code < _HTTP_SERVER_ERROR

@@ -325,7 +325,9 @@ class Store:
                     return []
                 try:
                     rows = con.execute(
-                        f"select f.id as id, bm25({table}_fts) as score "
+                        # bandit B608: `table` is a fixed `cols` key (`cols[table]` raises
+                        # for anything else), and every value is a bound `?`.
+                        f"select f.id as id, bm25({table}_fts) as score "  # nosec B608
                         f"from {table}_fts f where {table}_fts match ? "
                         f"order by score limit ?",
                         (q, limit),
@@ -356,7 +358,10 @@ class Store:
                         out.sort(key=lambda r: scores.get(r["id"], 0.0))
                         return out
                     ph = ",".join("?" * len(ids))
-                    full = con.execute(f"select * from {table} where id in ({ph})", ids).fetchall()
+                    # bandit B608: only `?` placeholders are interpolated, and `table`
+                    # passed the `cols[table]` lookup above.
+                    sql = f"select * from {table} where id in ({ph})"  # nosec B608
+                    full = con.execute(sql, ids).fetchall()
                     out = [dict(r) for r in full]
                     out.sort(key=lambda r: scores.get(r["id"], 0.0))
                     return out
@@ -369,9 +374,10 @@ class Store:
                 return []
             where = " or ".join(f"{c} like ?" for c in cols for _ in terms)
             args = [f"%{t}%" for _ in cols for t in terms]
-            rows = con.execute(
-                f"select * from {table} where {where} limit ?", (*args, limit)
-            ).fetchall()
+            # bandit B608: `where` is built from the fixed `cols` names and `table` passed
+            # the `cols[table]` lookup; every VALUE is a bound `?`.
+            sql = f"select * from {table} where {where} limit ?"  # nosec B608
+            rows = con.execute(sql, (*args, limit)).fetchall()
             return [dict(r) for r in rows]
 
     def query(self, sql: str, args: tuple = ()) -> list[dict[str, Any]]:

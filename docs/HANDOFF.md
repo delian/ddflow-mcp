@@ -63,6 +63,11 @@ quietly omits them. Both happened on 2026-09-27.
   Kilo ignores it (probed); re-running `adopt --agents kilo` adds the working `mcp` entry
   but does not remove the dead one.
 * `enforce._out_hint` names no `--out` when stale views span several directories.
+* **CI's `quality` job had failed on every run since it was written**, three failures deep,
+  each hiding the next: `ddflow --version` did not exist; bandit had 12 unreviewed findings;
+  the "no runtime dependencies" assertion contradicted the deliberate Jinja2 dependency.
+  All three fixed 2026-09-28. **Only `gitleaks` was not run locally** (the binary is not
+  installed here) — it is the one step of that job still unverified.
 * **`demos/run_all.py` hardcodes `/tmp/ddflow-demos` and `rmtree`s it.** Two sessions
   running demos at once wipe each other's repos mid-scenario: on 2026-09-27 a combined-tree
   run failed `mcp-orchestration` (AGENTS.md vanished after `ddflow_setup` succeeded) while

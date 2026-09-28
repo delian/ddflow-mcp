@@ -82,17 +82,23 @@ jobs:
         run: uv run --no-project --with bandit bandit -q -r ddflow/ -ll
 
       - name: Dependency audit
-        # ddflow has NO runtime dependencies, which is the point — this asserts that
-        # stays true and audits the dev ones. A tree with nothing in it is the cheapest
-        # supply chain to secure.
+        # ddflow's runtime dependencies are an explicit ALLOWLIST, and this asserts no
+        # other one appears. It used to assert there were none at all; Jinja2 was then
+        # declared on purpose (48aae97: the handshake rendered differently depending on
+        # whose interpreter happened to have it), and the assertion was never updated --
+        # unseen, because the build step before it failed on every run. A new dependency
+        # is a supply-chain decision: add it HERE, deliberately, or CI refuses it.
         run: |
           uv run --no-project --with pip-audit pip-audit --strict --progress-spinner off -r <(
             uv export --no-hashes --no-emit-project 2>/dev/null || true
           ) || echo "::warning::pip-audit reported findings — see log"
           uv run --no-project python - <<'PY'
-          import tomllib, sys
+          import re, tomllib, sys
+          ALLOWED = {"jinja2"}
           deps = tomllib.load(open("pyproject.toml", "rb"))["project"].get("dependencies", [])
-          sys.exit(f"runtime dependencies appeared: {deps}" if deps else 0)
+          names = {re.split(r"[<>=!~;\[ ]", d, maxsplit=1)[0].strip().lower() for d in deps}
+          extra = sorted(names - ALLOWED)
+          sys.exit(f"runtime dependencies outside the allowlist: {extra}" if extra else 0)
           PY
 
   codeql:
