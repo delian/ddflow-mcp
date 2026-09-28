@@ -231,11 +231,14 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
                     f"red. `ddflow gate verify <item> {gid}` is how you find out.",
                 )
             )
+    return out + (_project_findings(gates, root) if root else [])
+
+
+def _project_findings(gates: dict[str, GateDef], root: Path) -> list[Finding]:
+    """What only the project's own files can show: a test gate using one core."""
     tests = gates.get("unit_tests")
-    advice = parallel_test_advice(tests.command, root) if root and tests else ""
-    if advice:
-        out.append(Finding(ADVISORY, "unit_tests", advice))
-    return out
+    advice = parallel_test_advice(tests.command, root) if tests else ""
+    return [Finding(ADVISORY, "unit_tests", advice)] if advice else []
 
 
 def _gate_kind(g) -> str:
