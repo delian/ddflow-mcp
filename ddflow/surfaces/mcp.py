@@ -1586,7 +1586,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             repo,
             a["document"],
             tests=tuple(t.strip() for t in (a.get("tests") or "").split(",") if t.strip()),
-            min_chars=int(a.get("min_needle") or 0),
+            min_chars=None if a.get("min_needle") is None else int(a["min_needle"]),
             top=int(a.get("top") if a.get("top") is not None else 10),
         ),
         "payload": "",

@@ -290,7 +290,7 @@ def pins(
     document: str,
     *,
     tests: tuple[str, ...] = (),
-    min_chars: int = 0,
+    min_chars: int | None = None,
     top: int = 10,
 ) -> O.Outcome:
     """Which text of an instruction file the test suite pins, and what is free (B22).
@@ -301,6 +301,10 @@ def pins(
     """
     from ..services import prosepin as PP
 
+    # `None` is "unset", never 0: using 0 for both made an explicit `--min-needle 0`
+    # the default 12, and short pins were reported free (B22-minzero).
+    if min_chars is not None and min_chars < 1:
+        return O.failed("pins", f"--min-needle must be at least 1, got {min_chars}")
     path = Path(document)
     if not path.is_absolute():
         path = repo / path
@@ -321,7 +325,11 @@ def pins(
         )
     rel = path.relative_to(repo).as_posix() if path.is_relative_to(repo) else str(path)
     rep = PP.coverage(
-        text, files, repo=repo, document=rel, min_chars=min_chars or PP.MIN_NEEDLE_CHARS
+        text,
+        files,
+        repo=repo,
+        document=rel,
+        min_chars=PP.MIN_NEEDLE_CHARS if min_chars is None else min_chars,
     )
     return O.ok(
         "pins",

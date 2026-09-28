@@ -798,7 +798,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     pn.add_argument(
         "--min-needle",
         type=int,
-        default=0,
+        default=None,
         help="shortest literal that counts as a pin (default 12)",
     )
     pn.add_argument("--top", type=int, default=10, help="how many free stretches to show")

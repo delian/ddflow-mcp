@@ -226,3 +226,39 @@ def test_the_driver_tells_an_agent_to_check_pins_before_compressing():
     driver = (ROOT / "ddflow/templates/drivers/implement-phase.md").read_text()
     assert "Before compressing or rewording an instruction file" in driver
     assert "ddflow pins <file>" in driver
+
+
+def test_an_unreadable_test_file_is_admitted_and_the_rest_still_reported(repo):
+    """A dangling symlink crashed the whole report (rubber-duck, B22-symlink): one bad
+    file hid every pin the readable ones hold."""
+    _project(repo, {"test_ok.py": "X = 'Claim before you edit'\n"})
+    (repo / "tests" / "test_gone.py").symlink_to(repo / "nowhere.py")
+    out = pins(repo, "RULES.md")
+    assert out.exit == OK
+    assert out.data["unparsed"] == ["tests/test_gone.py"]
+    assert [p["needle"] for p in out.data["pins"]] == ["Claim before you edit"]
+
+
+def test_an_explicit_floor_is_honoured_and_one_below_1_is_refused(proj):  # noqa: F811
+    """`--min-needle 0` became the default 12 because 0 doubled as 'unset'
+    (rubber-duck, B22-minzero): a lowered floor silently reported short pins free."""
+    doc = "Go here.\n"
+    _project(proj, {"test_r.py": "def test_x(doc):\n    assert 'Go' in doc\n"}, doc=doc)
+    assert [p["needle"] for p in pins(proj, "RULES.md", min_chars=1).data["pins"]] == ["Go"]
+    code, _, err = run_cli(proj, "pins", "RULES.md", "--min-needle", "0")
+    assert code == FAIL and "--min-needle" in err
+    r = rpc(
+        proj,
+        [
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "ddflow_pins",
+                    "arguments": {"document": "RULES.md", "min_needle": 0},
+                },
+            }
+        ],
+    )
+    assert r[0]["result"].get("isError"), r[0]["result"]
