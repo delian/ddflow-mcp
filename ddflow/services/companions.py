@@ -32,6 +32,7 @@ Two rules shape this file:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -131,7 +132,10 @@ class Status:
 
     @property
     def state(self) -> str:
-        if self.registered_in:
+        # Only an MCP server is registered. A cli companion named in an agent's MCP
+        # config is a leftover entry, and reporting it `registered` showed `[x]` beside
+        # a tool that was not on the PATH -- the goal state `usable` already refuses it.
+        if self.registered_in and self.companion.is_mcp:
             return "registered"
         if self.installed is None:
             return "unknown"
@@ -274,8 +278,19 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
         return None, f"the probe could not be run at all ({exc}) — could not tell"
     if p.returncode != 0:
         return False, f"`{' '.join(c.detect)}` exited {p.returncode}"
-    first = (p.stdout or p.stderr).strip().splitlines()
-    return True, (first[0][:80] if first else exe)
+    said = [
+        line.strip()
+        for line in f"{p.stdout or ''}\n{p.stderr or ''}".splitlines()
+        if line.strip() and not _PROBE_NOISE.match(line.strip())
+    ]
+    return True, (said[0][:80] if said else f"`{' '.join(c.detect)}` exited 0")
+
+
+#: Probe output that says nothing about the tool: JSON structure (`docker image inspect`
+#: leads with `[`) and the package manager's own diagnostics (`npx` prints npm's config
+#: warnings to stderr before a server that writes nothing to stdout). The first line was
+#: taken as the version whatever it was, so the report read `installed ([)`.
+_PROBE_NOISE = re.compile(r'[\[\]{}"]|npm (warn|notice|err)', re.IGNORECASE)
 
 
 #: Agents whose MCP config keys servers under `servers` rather than `mcpServers`.
