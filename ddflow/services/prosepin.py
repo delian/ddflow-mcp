@@ -61,7 +61,7 @@ def flatten(text: str) -> tuple[str, list[int]]:
     return "".join(out), where
 
 
-def fold(text: str) -> str:
+def lower_aligned(text: str) -> str:
     """Lowercase WITHOUT changing the length, so offsets stay aligned.
 
     `"İ".lower()` is two characters; a character whose lowercase expands is kept as is
@@ -153,7 +153,7 @@ def coverage(
     """
     name = Path(document).name if document else ""
     flat, where = flatten(text)
-    hay = fold(flat)
+    hay = lower_aligned(flat)
     mask = [False] * len(flat)
     held: dict[str, set[str]] = {}
     unparsed: list[str] = []
@@ -172,7 +172,7 @@ def coverage(
         if name and name in source:
             named.add(rel)
         for needle in needles:
-            key = fold(needle)
+            key = lower_aligned(needle)
             at = hay.find(key)
             while at >= 0:
                 held.setdefault(needle, set()).add(rel)
@@ -182,7 +182,7 @@ def coverage(
 
     pins = []
     for needle, tests in sorted(held.items()):
-        key = fold(needle)
+        key = lower_aligned(needle)
         lines, at = [], hay.find(key)
         while at >= 0:
             lines.append(_line_of(text, where[at]))
