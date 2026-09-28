@@ -14,6 +14,12 @@ never copies.
 Every command below is `ddflow ...`. If your harness exposes ddflow over MCP, the
 equivalent tool is named in brackets — they are the same implementation.
 
+**To run this unattended**, use the `implement` workflow command (the MCP prompt
+`implement`; `ddflow prompts show implement` in a shell). It drives this driver one item
+per iteration and adds what an unsupervised run needs: the only four cases in which the
+loop may stop, keeping it running across turns, when to ask the operator, and the
+termination checklist. Your delta says how your harness loops it.
+
 ---
 
 ## 0. Open the session (once)
@@ -132,6 +138,12 @@ Four rules bind across all of them:
 Reviewers must be told to **refute, not review**: "find the input that makes this wrong;
 if you are uncertain, report nothing." And a majority of reviewers may **kill** a
 finding; it may never **promote** one.
+
+Launch independent reviewers **concurrently**, and **wait for every one to report** before
+merging: a reviewer that has not reported yet is not a reviewer that found nothing. **No
+reviewer sees another's verdict** — each gets the diff, the intent and your research
+notes, nothing else. A reviewer shown a prior verdict stops being an independent sample
+and becomes a vote on someone else's hypothesis.
 
 ### 2d. Close the task
 

@@ -545,7 +545,42 @@ def adopt(
         actions.append(_register_mcp(repo, key, launch=launch, image=image))
         if key in NATIVE_RULES:
             actions.append(_write_native_rule(repo, key, docs_dir))
+        for dst, src in AGENT_COMMANDS.get(key, {}).items():
+            actions.append(_write_command(repo, dst, templates / src))
     return actions
+
+
+#: Slash-command files an agent reads from the project, keyed like `AGENT_TARGETS`:
+#: {repo-relative destination: source under `templates/`}. The MCP prompt of the same name
+#: already reaches every client; this is for a harness whose loop primitive (Claude Code's
+#: `/loop`) takes a slash command, so `/implement` can hand the workflow to it unattended.
+AGENT_COMMANDS: dict[str, dict[str, str]] = {
+    "claude": {".claude/commands/implement.md": "commands/claude/implement.md"},
+}
+
+#: The line that marks a command file as ddflow's own. A file without it is the operator's
+#: -- a project adopting mid-stream often has an `/implement` of its own already, and
+#: overwriting it would destroy the one workflow the project actually runs.
+MANAGED_MARK = "<!-- DDFLOW:MANAGED"
+
+
+def _write_command(repo: Path, rel: str, src: Path) -> str:
+    path = repo / rel
+    text = src.read_text("utf-8")
+    if path.exists() and not path.is_file():
+        return Refused(f"SKIPPED {rel}: it exists and is not a file; move it and re-run adopt")
+    if path.exists():
+        existing = path.read_text("utf-8")
+        if existing == text:
+            return f"{rel} is current"
+        if MANAGED_MARK not in existing:
+            return (
+                f"kept {rel}: it is the project's own, not ddflow's. The ddflow version is "
+                f"the MCP prompt `implement`. Delete the file and re-run adopt to take it"
+            )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, "utf-8")
+    return f"wrote {rel}"
 
 
 def _write_native_rule(repo: Path, key: str, docs_dir: str = "docs/ddflow") -> str:

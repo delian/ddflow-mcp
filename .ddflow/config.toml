@@ -50,3 +50,13 @@ brief_max_tokens = 1200
 
 [gate.unit_tests]
 command = "uv run pytest tests/ -q --timeout=420"
+
+[[reviewer]]
+name = "qwen3.8-flash-next-fp8"
+base_url = "http://127.0.0.1:8000/v1"
+model = "Qwen/Qwen3.8-Flash-Next-FP8"
+family = "alibaba"
+gates = ["critic"]
+# Measured 2026-09-28: 26k chars in one chunk spent all 32000 tokens reasoning.
+max_chunk_chars = 6000
+max_tokens = 64000
