@@ -567,6 +567,8 @@ MANAGED_MARK = "<!-- DDFLOW:MANAGED"
 def _write_command(repo: Path, rel: str, src: Path) -> str:
     path = repo / rel
     text = src.read_text("utf-8")
+    if path.exists() and not path.is_file():
+        return Refused(f"SKIPPED {rel}: it exists and is not a file; move it and re-run adopt")
     if path.exists():
         existing = path.read_text("utf-8")
         if existing == text:

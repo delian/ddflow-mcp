@@ -4,7 +4,7 @@ The per-item steps are the canonical driver, `docs/ddflow/drivers/implement-phas
 
 ## Scope
 
-{% if scope %}The operator named `{{ scope }}`. If it is a **phase** id, drive every task in it (`ddflow_next` with `phase`), then the phase close. If it is a **task** id, drive that one item; when `ddflow_next` does not offer it, `ddflow_show` says why — report that and stop under case 1 or 3 below, rather than working around its dependencies. Anything else is guidance for the first iteration. Do not wander outside the named scope.{% else %}No scope was named. **Do not ask which** — drive whatever `ddflow_next` offers, highest priority first. Ask only if the ready set is empty AND the blocked list shows a decision only the operator can make.{% endif %}
+{% if scope %}The operator named `{{ scope }}`. Its first word may be an item id; everything after it is guidance for the first iteration. If that word is a **phase** id, drive every task in it (`ddflow_next` with `phase`), then the phase close. If it is a **task** id, drive that one item. When `ddflow_next` does not offer it, `ddflow_show` says why: already completed → case 1; waiting on another agent's lease or on a dependency someone is working → a delayed wake-up, not a stop; waiting on the operator → case 3. Never work around its dependencies. If the first word is not an id, the whole scope is guidance. Do not wander outside the named scope.{% else %}No scope was named. **Do not ask which** — drive whatever `ddflow_next` offers, highest priority first. Ask only if the ready set is empty AND the blocked list shows a decision only the operator can make.{% endif %}
 
 ## Continuation contract — the prime directive
 
@@ -24,7 +24,7 @@ Everything else — a pending review, an asynchronous reviewer still running, a 
 
 ## Each iteration
 
-1. **Re-orient.** `ddflow_recover` first — a crashed agent's worktree often holds finished work that exists nowhere else; salvage it before starting anything new. Then `ddflow_brief`. Read any operator message that arrived since the last iteration BEFORE resuming.
+1. **Re-orient.** FIRST read any operator message that arrived since the last iteration — a "pause" or "stop" there ends the loop before anything else runs. Then `ddflow_recover` — a crashed agent's worktree often holds finished work that exists nowhere else; salvage it before starting anything new. Then `ddflow_brief`.
 2. **Pick.** `ddflow_next`{% if scope %}, within `{{ scope }}`{% endif %}. Exit 2 is a result, not an error: read the blocked list. Never take an item `ddflow_next` did not offer, and never the first unchecked box you happen to see.
 3. **Claim.** `ddflow_claim`. Exit 3 means coordination said no: take one of the alternatives it lists rather than waiting. Work ONLY in the worktree it returns. Heartbeat during long work.
 4. **Satisfy every gate**, in the order `ddflow_gate_status` gives, following its per-gate instruction. The driver's binding rules and its rules for combining reviewers apply without exception.
@@ -57,7 +57,7 @@ Complete and safe to stop only when ALL hold:
 - `ddflow_next` exits 2 for the scope, and the blocked list names only items that wait on the operator or on a declared dependency outside the scope.
 - Every item this run touched is completed, or released with a note saying why.
 - Every gate on each completed item carries an outcome — `unavailable` recorded as such, never as passed.
-- Every finding either changed source with a mutation-verified probe in the same commit, or is filed THEORETICAL.
+- Every finding either changed source with a mutation-verified probe in the same commit, or is filed — THEORETICAL when no probe exists, or as its own item or bug when it is real but out of scope.
 - Every due cadence ran and was recorded.
 - No lease of yours is held, no worktree of yours is dirty, and the continuation is disarmed.
 - The event log is committed.
