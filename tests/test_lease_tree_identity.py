@@ -122,3 +122,54 @@ def test_a_reclaim_from_the_primary_keeps_an_adopted_tree_it_did_not_make(repo):
     assert (repo / it.lease.worktree).resolve() == harness.resolve(), it.lease.worktree
     assert it.adopted  # still not ddflow's to remove on merge
     assert f"cd {harness.resolve()}" in out, out
+
+
+# -- the MCP surface ------------------------------------------------------------------
+
+
+def _mcp(start: Path, repo: Path, tool: str, **arguments) -> dict:
+    import json
+
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(repo, called_from=start).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": tool, "arguments": arguments},
+        }
+    )
+    result = reply["result"]
+    return {"exit": result.get("_meta", {}).get("exit"), **json.loads(result["content"][0]["text"])}
+
+
+def test_mcp_heartbeat_from_the_items_own_tree_renews_its_lease(repo):
+    """The harnesses this was written for drive MCP, where `called_from` is only passed
+    to tools that ask for it: the CLI fix alone left `ddflow_heartbeat` saying "no lease
+    held" from exactly the tree `claim` made."""
+    tree = _claimed_with_its_own_tree(repo)
+    res = _mcp(tree, repo, "ddflow_heartbeat", id="T1")
+    assert res["exit"] == OK and res["renewed"] is True, res
+    assert _item(repo).lease.holder == "lead"
+
+
+def test_mcp_heartbeat_from_an_unrelated_tree_still_refuses(repo):
+    _claimed_with_its_own_tree(repo)
+    other = repo.parent / "elsewhere"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "elsewhere")
+    res = _mcp(other, repo, "ddflow_heartbeat", id="T1")
+    assert res["exit"] == NOTHING and res["renewed"] is False, res
+
+
+def test_mcp_claim_says_the_item_kept_its_own_tree(repo):
+    """Over MCP the only way to learn "cd there" is the payload: without `rebound` and
+    `here`, an agent cannot tell its own tree was not the one bound."""
+    tree = _claimed_with_its_own_tree(repo)
+    assert run_cli(repo, "release", "T1", agent="lead")[0] == OK
+    other = repo.parent / "other-tree"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
+    res = _mcp(other, repo, "ddflow_claim", id="T1")
+    assert res["exit"] == OK, res
+    assert res.get("rebound") is True and res.get("here") is False, res
+    assert Path(res["worktree"]).resolve() == tree.resolve(), res
