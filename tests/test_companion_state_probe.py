@@ -122,3 +122,16 @@ def test_only_noise_falls_back_to_the_probe_that_succeeded(monkeypatch):
     _installed, detail = CO.is_installed(_companion(detect=["python3", "--help"]))
     assert "npm warn" not in detail, detail
     assert "`python3 --help` exited 0" == detail, detail
+
+
+def test_a_bracketed_tag_line_is_not_mistaken_for_json(monkeypatch):
+    """Rubber-duck on B207: a first-character rule dropped `[tool] v1.2.3` as noise."""
+    _ran(monkeypatch, "[codeguide] v1.2.3\n")
+    _installed, detail = CO.is_installed(_companion())
+    assert detail == "[codeguide] v1.2.3", detail
+
+
+def test_a_quoted_version_line_is_kept(monkeypatch):
+    _ran(monkeypatch, '"1.2.3"\n')
+    _installed, detail = CO.is_installed(_companion())
+    assert detail == '"1.2.3"', detail
