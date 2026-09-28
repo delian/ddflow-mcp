@@ -1563,6 +1563,34 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "due",
     },
+    "ddflow_pins": {
+        "description": (
+            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, "
+            "AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, "
+            "which suites to re-run afterwards, and the longest stretches no test holds. "
+            "A sentence that reads like rationale is often a rule some test asserts. "
+            "Exit 2 when there is no Python suite to read pins from: then treat ALL of "
+            "it as pinned. Free text is a lower bound, not permission -- read it first."
+        ),
+        "properties": {
+            "document": ("string", "Path of the instruction file, relative to the repo.", True),
+            "tests": ("string", "Comma-separated test dirs (default: tests,test).", False),
+            "min_needle": (
+                "integer",
+                "Shortest string literal that counts as a pin (default 12).",
+                False,
+            ),
+            "top": ("integer", "How many free stretches to return (default 10).", False),
+        },
+        "api": lambda repo, a, agent: _api().pins(
+            repo,
+            a["document"],
+            tests=tuple(t.strip() for t in (a.get("tests") or "").split(",") if t.strip()),
+            min_chars=None if a.get("min_needle") is None else int(a["min_needle"]),
+            top=int(a.get("top") if a.get("top") is not None else 10),
+        ),
+        "payload": "",
+    },
     "ddflow_session_prompt": {
         "description": (
             "Record the operator's prompt verbatim. This is what makes the project "

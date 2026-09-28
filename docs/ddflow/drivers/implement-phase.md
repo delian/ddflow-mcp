@@ -228,4 +228,7 @@ disposable on purpose.
   nothing to do · `3` coordination refused. Never treat 2 as 0.
 - **Prefer `ddflow brief` over reading the rule and lesson files.** That is what it is
   for, and what keeps a session's opening cost roughly constant as the project grows.
+- **Before compressing or rewording an instruction file**, run `ddflow pins <file>`
+  [ddflow_pins]. A sentence that reads like rationale is often a rule a test asserts; it
+  names the suites to re-run afterwards and the text no test holds.
 - If something goes sideways, **stop and re-plan**. Do not keep pushing.

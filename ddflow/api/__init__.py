@@ -102,7 +102,7 @@ from .lifecycle import merge as merge_item
 from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
-from .operations import cadence, cleanup, external_sync, import_project, import_verify
+from .operations import cadence, cleanup, external_sync, import_project, import_verify, pins
 from .reporting import (
     DEFAULT_RENDER_DIR,
     board,
@@ -204,6 +204,7 @@ __all__ = [
     "merge_item",
     "next_item",
     "phase_add",
+    "pins",
     "pr_status",
     "pr_sync",
     "progress",
