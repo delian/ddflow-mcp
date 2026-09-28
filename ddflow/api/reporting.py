@@ -278,6 +278,15 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     store = Store(repo, cfg)
     problems: list[str] = list(log.verify())
     notes: list[str] = []
+    # A NOTE, not a problem: the log is append-only, so a shard that once had two
+    # writers says so forever, and a doctor that can never pass again is one nobody
+    # reads. The clock already reads past it (B190); the shared identity is the fix.
+    for shard, (n, before, after) in log.clock_regressions().items():
+        notes.append(
+            f"{shard}: Lamport clock decreases at event {n} ({before} -> {after}) — two "
+            "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
+            "`[agent].id`, or drop both to derive a per-clone id)"
+        )
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     if store.stale(log):
