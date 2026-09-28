@@ -246,6 +246,18 @@ def cmd_mcp(a, c: Ctx) -> int:
     return OK
 
 
+class _PrintVersion(argparse.Action):
+    """`ddflow --version`. Reads `SERVER_INFO`, the version this layer already declares
+    (and `scripts/bump.sh` moves) -- not `ddflow.__version__`, because the package root
+    is not a layer `surfaces` may import (`tests/test_layering.py`)."""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        from .mcp import SERVER_INFO
+
+        print(f"ddflow {SERVER_INFO['version']}")
+        parser.exit()
+
+
 def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     # PLR0915 (statement count), suppressed HERE rather than for the whole file. argparse
     # construction is inherently one long sequence of near-identical statements, and
@@ -264,12 +276,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     p.add_argument("--agent", help="agent identity (default: host-pid). Shards the log.")
     p.add_argument("--json", action="store_true", help="machine-readable output")
-    # argparse's `version` action exits before the required subcommand is checked. There
-    # was no such flag at all, and CI's build step -- `python -m ddflow --version` against
-    # the built wheel -- failed with "the following arguments are required: cmd".
-    from .. import __version__
-
-    p.add_argument("--version", action="version", version=f"ddflow {__version__}")
+    # There was no such flag at all, and CI's build step -- `python -m ddflow --version`
+    # against the built wheel -- failed with "the following arguments are required: cmd".
+    # An Action rather than argparse's `version=` string: it runs, and exits, before the
+    # required subcommand is checked, and it imports the version only when asked -- the
+    # parser is built on every invocation and must not drag the MCP module in.
+    p.add_argument("--version", action=_PrintVersion, nargs=0, help="print the version and exit")
     s = p.add_subparsers(dest="cmd", required=True)
 
     s.add_parser("init", help="create .ddflow/ in this repository").set_defaults(fn=cmd_init)
