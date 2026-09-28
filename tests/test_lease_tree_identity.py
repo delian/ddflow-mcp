@@ -173,3 +173,83 @@ def test_mcp_claim_says_the_item_kept_its_own_tree(repo):
     assert res["exit"] == OK, res
     assert res.get("rebound") is True and res.get("here") is False, res
     assert Path(res["worktree"]).resolve() == tree.resolve(), res
+
+
+# -- review findings on the fixes above ------------------------------------------------
+
+
+def test_heartbeat_from_the_tree_does_not_resurrect_an_expired_lease(repo):
+    """Speaking for the lease that made this tree must not revive one that has lapsed:
+    that locked out the agent `recover` sent to take the item over."""
+    import time
+
+    assert run_cli(repo, "init")[0] == OK
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
+    assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
+    assert run_cli(repo, "claim", "T1", agent="lead")[0] == OK
+    tree = _resolved(repo, _item(repo).lease.worktree)
+    before = _item(repo).lease.renewed_at
+    time.sleep(2.2)
+
+    code, out, err = run_cli(tree, "heartbeat", "T1", agent="intruder")
+    assert code == NOTHING, out + err
+    assert "expired" in out + err, out + err
+    assert _item(repo).lease.renewed_at == before
+    # Still EXPIRED, so the recovery path applies -- not "held by lead", which a
+    # resurrected lease answered with.
+    code, out, err = run_cli(repo, "claim", "T1", agent="rescuer")
+    assert "EXPIRED" in out + err, out + err
+    code, out, err = run_cli(repo, "claim", "T1", "--force", agent="rescuer")
+    assert code == OK, out + err
+    assert _item(repo).lease.holder == "rescuer"
+
+
+def test_a_reclaim_ignores_a_recorded_path_now_holding_another_branch(repo):
+    """A directory at the recorded path is not the item's tree once it was removed and
+    re-added on an unrelated branch: binding to it reported `ddflow/T1` over a tree
+    where something else is checked out."""
+    tree = _claimed_with_its_own_tree(repo)
+    assert run_cli(repo, "release", "T1", agent="lead")[0] == OK
+    _git(repo, "worktree", "remove", "--force", str(tree))
+    _git(repo, "worktree", "add", "-q", str(tree), "-b", "unrelated")
+
+    other = repo.parent / "other-tree"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
+    code, out, err = run_cli(other, "claim", "T1")
+    assert code == OK, out + err
+    it = _item(repo)
+    assert _resolved(repo, it.lease.worktree) == other.resolve(), (it.lease.worktree, out)
+    assert it.branch == "other-work", (it.branch, out)
+
+
+def test_a_reclaim_from_the_primary_refuses_a_default_path_on_another_branch(repo):
+    """The same occupied path reached from the primary: `W.create` reused whatever tree
+    sat there and the claim reported the item's branch over someone else's."""
+    tree = _claimed_with_its_own_tree(repo)
+    assert run_cli(repo, "release", "T1", agent="lead")[0] == OK
+    _git(repo, "worktree", "remove", "--force", str(tree))
+    _git(repo, "worktree", "add", "-q", str(tree), "-b", "unrelated")
+
+    code, out, err = run_cli(repo, "claim", "T1")
+    assert code == REFUSED, out + err
+    assert "unrelated" in err, err
+    lease = _item(repo).lease
+    assert not (lease and lease.holder), lease  # the refusal released it again
+
+
+def test_a_detached_recorded_tree_carrying_the_items_branch_is_still_its_tree(repo):
+    """Mid-rebase a tree is detached; its work is still the item's."""
+    tree = _claimed_with_its_own_tree(repo)
+    assert run_cli(repo, "release", "T1", agent="lead")[0] == OK
+    _git(tree, "checkout", "-q", "--detach")
+    other = repo.parent / "other-tree"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
+    code, out, err = run_cli(other, "claim", "T1")
+    assert code == OK, out + err
+    assert _resolved(repo, _item(repo).lease.worktree) == tree.resolve(), out
+
+
+def _resolved(repo: Path, stored: str) -> Path:
+    p = Path(stored)
+    return (p if p.is_absolute() else repo / p).resolve()
