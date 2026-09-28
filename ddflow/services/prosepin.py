@@ -198,11 +198,15 @@ def coverage(
         elif pinned and start is not None:
             run = flat[start:i]
             if run.strip():
+                # Lines of the first and last NON-space characters: a run that begins on
+                # the newline after a pin would otherwise start a line early (B22-freeline).
+                first = start + len(run) - len(run.lstrip())
+                last = i - 1 - (len(run) - len(run.rstrip()))
                 free.append(
                     (
                         len(run.strip()),
-                        _line_of(text, where[start]),
-                        _line_of(text, where[i - 1]),
+                        _line_of(text, where[first]),
+                        _line_of(text, where[last]),
                         run.strip(),
                     )
                 )
