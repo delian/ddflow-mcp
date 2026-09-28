@@ -286,6 +286,10 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
 #: ahead of a server that writes nothing to stdout.
 _NPM_NOISE = re.compile(r"npm (warn|notice|err)", re.IGNORECASE)
 
+#: Terminal colour codes. `npm_config_color=always` wraps each word of a warning in them,
+#: and a filter matching the plain text then lets every coloured warning through.
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
 
 def _said(output: str) -> list[str]:
     """The lines of a probe's output that say something about the tool.
@@ -300,7 +304,7 @@ def _said(output: str) -> list[str]:
             return []
     except ValueError:
         pass
-    lines = (line.strip() for line in output.splitlines())
+    lines = (_ANSI.sub("", line).strip() for line in output.splitlines())
     return [line for line in lines if line and not _NPM_NOISE.match(line)]
 
 

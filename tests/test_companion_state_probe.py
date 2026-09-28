@@ -135,3 +135,23 @@ def test_a_quoted_version_line_is_kept(monkeypatch):
     _ran(monkeypatch, '"1.2.3"\n')
     _installed, detail = CO.is_installed(_companion())
     assert detail == '"1.2.3"', detail
+
+
+def test_a_coloured_npm_warning_is_still_noise(monkeypatch):
+    """Critic on B207: with `npm_config_color=always` npm wraps each word in ANSI codes,
+    and a filter over the plain text let the warning through. The line below is what
+    `npm_config_color=always npx --no-install ... --help` printed on 2026-09-28."""
+    _ran(
+        monkeypatch,
+        "",
+        "\x1b[1mnpm\x1b[22m \x1b[33mwarn\x1b[39m \x1b[94mUnknown user config "
+        '"email".\x1b[39m\nKnowledge Graph MCP Server running on stdio\n',
+    )
+    _installed, detail = CO.is_installed(_companion())
+    assert detail == "Knowledge Graph MCP Server running on stdio", detail
+
+
+def test_colour_codes_are_not_shown_in_the_detail(monkeypatch):
+    _ran(monkeypatch, "\x1b[32mtool v2.1.0\x1b[0m\n")
+    _installed, detail = CO.is_installed(_companion())
+    assert detail == "tool v2.1.0", repr(detail)
