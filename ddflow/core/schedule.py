@@ -28,7 +28,7 @@ from fnmatch import fnmatch
 
 from ..config import Config
 from ..core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
-from .flow import line_key, stack_base, unknown_line
+from .flow import FEATURE, branch_kind, line_key, stack_base, unknown_line
 
 
 @dataclass
@@ -538,6 +538,18 @@ def interrupted(state: State, it: Item, live: dict[str, Lease]) -> str:
     )
 
 
+def bug_items(state: State, cfg: Config) -> set[str]:
+    """Ids of the items that fix a bug, which `[schedule] bugs_first` offers first.
+
+    A bug fix is what `branch_kind` already calls one -- a `bugfix_tags` or `hotfix_tags`
+    tag, the same test gitflow names its branches by -- or an item an OPEN bug record
+    names. A fixed record stops counting: its item is ordinary work again.
+    """
+    ids = {i.id for i in state.items.values() if branch_kind(i, cfg) != FEATURE}
+    ids.update(b.item for b in state.bugs.values() if b.item and not b.fixed_at)
+    return ids
+
+
 def plan(
     state: State,
     cfg: Config,
@@ -573,7 +585,8 @@ def plan(
     in_cycle = {n for c in p.cycles for n in c}
     live = state.active_leases(now, grace)
 
-    for it in sorted(candidates, key=lambda x: (x.priority, x.id)):
+    bugs = bug_items(state, cfg) if cfg.schedule.bugs_first else set()
+    for it in sorted(candidates, key=lambda x: (x.id not in bugs, x.priority, x.id)):
         if it.state in (DONE, ABANDONED):
             continue
         if it.state == REVIEW:

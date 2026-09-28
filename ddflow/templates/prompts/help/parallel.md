@@ -32,6 +32,11 @@ Two caps, because they are two different statements:
 
 Both are counted across the WHOLE queue, not the slice you asked about.
 
+When the ready set is larger than the free slots, **bug fixes get them first**
+(`schedule.bugs_first`, on by default): a task tagged with one of `flow.bugfix_tags` or
+`flow.hotfix_tags`, or named by an open bug record, is offered before any feature, and
+priority orders each group. `bugs_first = false` orders by priority alone.
+
 ## The log never conflicts
 
 Each agent appends to its own shard, so two agents writing at the same moment produce no
