@@ -8,15 +8,16 @@ A gate with no companion behind it passes on the agent's word alone. This closes
 
     ddflow_companions        — every known companion: state, kind, gates, install command, url
 
-Sort each row into exactly one bucket:
+**A companion is live exactly when its id appears in `gate_coverage`** under the gates it serves. That map is computed from whether an agent can actually reach the tool — an `mcp` server registered, a `cli` tool installed — so judge by it, not by `state` alone: a `cli` tool with a leftover entry in an agent's config reports `registered` while it is not installed at all.
 
-| state | kind | what to do |
+Sort every companion that is NOT live into exactly one bucket:
+
+| kind | state | what to do |
 |---|---|---|
-| `registered` | any | nothing — it is live |
-| `installed` | `cli` | nothing — an agent shells out to it; there is no config to write |
-| `installed` | `mcp` | **register** it (step 4) — one config entry away |
-| `missing` | any | **install** it (steps 2–3), then register it if it is `mcp` |
-| `unknown` | any | **check** — nobody probed. Re-run `ddflow_companions`; unknown is a question, never "absent" |
+| `mcp` | `installed` | **register** it (step 4) — one config entry away |
+| any | `missing` | **install** it (steps 2–3), then register it if it is `mcp` |
+| `cli` | `registered` | **install** it — the config entry is stale, and `detail` says what the probe found |
+| any | `unknown` | **check** — nobody probed. Re-run `ddflow_companions`; unknown is a question, never "absent" |
 
 {% if scope %}Work only on `{{ scope }}`. An id it names that the registry does not know is an error to report, not something to install by guesswork.{% else %}Start with the `default = true` companions, and the gates in `uncovered_gates` — those are the gaps that exist today. A `default = false` companion is opt-in: mention it in one line, install it only if the operator asks.{% endif %}
 
@@ -24,7 +25,7 @@ Sort each row into exactly one bucket:
 
 For each companion to install, give the operator:
 
-- **what it buys**, in terms of the gates it serves (its `why`, not a marketing line);
+- **what it buys** — its `title`, in terms of the gates it serves (`ddflow companions` in a shell prints the full rationale);
 - **the exact command** that would run — the registry's `install` field, verbatim;
 - **what that executes** — a package manager fetching from a public registry, a container pull, a binary download;
 - **where to read about it first** — its `url`.
