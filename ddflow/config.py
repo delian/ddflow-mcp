@@ -856,7 +856,7 @@ _doc(
 _doc(
     "loops",
     "max_duplicate_items",
-    "How many live items may declare exactly the same file globs before that is reported. Two items writing one file cannot run in parallel anyway, and one is usually a re-description of the other.",
+    "How many live items may declare exactly the same file globs before that is reported. Two items writing one file cannot run in parallel; whether one re-describes the other is a question for their titles and bodies, not their globs.",
 )
 _doc(
     "loops",

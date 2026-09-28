@@ -28,7 +28,7 @@ from typing import Any
 from ..config import Config
 from ..core import schedule
 from ..core.flow import line_key
-from ..core.model import DONE, REVIEW, Lease, State, fold
+from ..core.model import DONE, REVIEW, Item, Lease, State, fold
 from ..core.schedule import capacities, conflicts, plan_blocker, resource_shortfall
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -137,6 +137,27 @@ def _still_current(log: EventLog, state: State, before: dict[str, int]) -> State
     return fold(log.read_all(), strict=False)
 
 
+def glob_clash(
+    state: State, cfg: Config, it: Item, holder: str, globs: list[str], now: float
+) -> tuple[str, Lease, tuple[str, str]] | None:
+    """The first OTHER live lease ``globs`` would overlap: (item id, lease, pair), or None.
+
+    One copy, asked by `claim` and by `update --globs` on a claimed item, so widening a
+    claim cannot take paths that claiming them would have been refused.
+    """
+    my_line = line_key(state, it, cfg)
+    for other_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
+        if other_id == it.id or lease.holder == holder:
+            continue
+        other = state.items.get(other_id)
+        if other is not None and line_key(state, other, cfg) != my_line:
+            continue  # different release lines: different branches, no collision
+        pairs = conflicts(globs, lease.globs)
+        if pairs:
+            return other_id, lease, pairs[0]
+    return None
+
+
 def acquire(
     log: EventLog,
     cfg: Config,
@@ -228,22 +249,16 @@ def acquire(
             )
 
         mine = list(globs if globs is not None else it.globs)
-        my_line = line_key(state, it, cfg)
-        for other_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
-            if other_id == item_id or lease.holder == holder:
-                continue
-            other = state.items.get(other_id)
-            if other is not None and line_key(state, other, cfg) != my_line:
-                continue  # different release lines: different branches, no collision
-            pairs = conflicts(mine, lease.globs)
-            if pairs and not force:
-                raise LeaseError(
-                    f"{item_id} writes {pairs[0][0]!r} which overlaps {pairs[0][1]!r} "
-                    f"held by {lease.holder} on {other_id}",
-                    holder=lease.holder,
-                    item=item_id,
-                    alternatives=_alternatives(state, cfg, item_id, holder, now),
-                )
+        clash = glob_clash(state, cfg, it, holder, mine, now)
+        if clash and not force:
+            other_id, lease, pair = clash
+            raise LeaseError(
+                f"{item_id} writes {pair[0]!r} which overlaps {pair[1]!r} "
+                f"held by {lease.holder} on {other_id}",
+                holder=lease.holder,
+                item=item_id,
+                alternatives=_alternatives(state, cfg, item_id, holder, now),
+            )
 
         # Resources: checked against EVERY live lease, the claimant's own included --
         # the same agent starting two 8-GPU runs on an 8-GPU box still overcommits it.
@@ -364,6 +379,54 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         holder=holder,
         payload=lambda _lease: {"at": time.time(), "holder": holder},
     )
+
+
+def plan_retarget(
+    log: EventLog, cfg: Config, item_id: str, globs: list[str]
+) -> tuple[Lease | None, str]:
+    """(the LIVE lease to point at ``globs`` or None, why that is refused or "").
+
+    Call with ``log.transaction()`` held, and append nothing if the reason is non-empty.
+
+    `update --globs` on a claimed item changed `item.globs` only, while the commit hook
+    and every conflict check read `lease.globs` -- so the remedy the hook prints for an
+    uncovered path did nothing (B3eda99e0fe / B5d98a4da0a). Once an update reaches the
+    lease it is a way to take paths, so it gets `claim`'s overlap check (`glob_clash`):
+    widening must not take what another agent's live lease covers.
+
+    A released lease has nothing to retarget, and an expired one -- marked, or past its
+    TTL and grace -- is left for recovery rather than touched, so no lease is brought
+    back by an edit. An unclaimed item's globs are not checked, as before.
+    """
+    now = time.time()
+    state = fold(log.read_all(), strict=False)
+    it = state.items.get(item_id)
+    lz = it.lease if it else None
+    if it is None or lz is None or lz.expired_at or lz.expired(now, cfg.lease.grace_s):
+        return None, ""
+    clash = glob_clash(state, cfg, it, lz.holder, globs, now)
+    if clash:
+        other_id, other, pair = clash
+        return lz, (
+            f"{item_id} is claimed, so its globs are its lease: {pair[0]!r} overlaps "
+            f"{pair[1]!r} held by {other.holder} on {other_id}. Nothing was recorded. "
+            f"Wait for {other_id} to finish, or keep {item_id} off those paths."
+        )
+    return lz, ""
+
+
+def retarget(log: EventLog, item_id: str, lease: Lease, globs: list[str]) -> None:
+    """Point ``lease`` (from `plan_retarget`, same lock) at ``globs``.
+
+    An explicit `lease.renewed`, rather than a fold that copies `task.updated` globs into
+    the lease: the log says when the claim changed shape, old logs replay exactly as they
+    were recorded, and the handler's holder guard drops it if shards reorder it after
+    someone else's re-acquisition. It must never be a renewal in disguise: the payload
+    names the CURRENT holder (an operator may widen a stuck agent's claim; it stays that
+    agent's) and carries no ``at``, so ``renewed_at`` stays put -- the lease's life is
+    not extended, and a heartbeat landing first cannot make it look stale.
+    """
+    log.append("lease.renewed", item_id, {"holder": lease.holder, "globs": list(globs)})
 
 
 def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bool:

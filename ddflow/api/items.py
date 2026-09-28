@@ -8,6 +8,7 @@ from typing import Any
 
 from ..config import csv_list
 from ..core import outcome as O
+from ..services import leases as L
 from ._base import _load
 
 
@@ -76,8 +77,33 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             "or an empty list to clear it.",
             id=item,
         )
-    log.append(f"{it.kind}.updated", item, fields)
-    return O.ok("item.updated", id=item, changed=sorted(fields), fields=fields)
+    return _record_update(log, cfg, it, fields)
+
+
+def _record_update(log, cfg, it, fields: dict[str, Any]) -> O.Outcome:
+    """Append the edit, and retarget the item's live lease when its globs change.
+
+    A claim's globs live on its LEASE, which the commit hook and the conflict checks
+    read -- so new globs on a claimed item go to the lease too. Decided and appended
+    under one lock, and a refusal (the new globs overlap another agent's live lease)
+    records NOTHING: not the edit, not the lease event.
+    """
+    with log.transaction():
+        lease, refusal = (
+            L.plan_retarget(log, cfg, it.id, fields["globs"]) if "globs" in fields else (None, "")
+        )
+        if refusal:
+            return O.refused("item.updated", refusal, id=it.id)
+        log.append(f"{it.kind}.updated", it.id, fields)
+        if lease is not None:
+            L.retarget(log, it.id, lease, fields["globs"])
+    return O.ok(
+        "item.updated",
+        id=it.id,
+        changed=sorted(fields),
+        fields=fields,
+        lease_retargeted=lease is not None,
+    )
 
 
 def _bad_id(item: str) -> str:
