@@ -6,6 +6,78 @@ the repository; nothing depends on remembering the conversation.
 
 ---
 
+## 0. The integration branch (`worktree-bridge-cse_01QyuNgytTMVWo5zwfbF8CNS`)
+
+A separate session, 2026-09-27, asked one question: can ddflow — over MCP — replace the
+hand-rolled agent workflows of **run_nemo_run** and **home-simulator** (tasks, lessons,
+lessons-summary, OptMem, journal, reviews, long runs), and if not, build what is missing.
+Both are driven by `claude remote-control` services (`~/.config/systemd/user/claude-rc@.service`).
+This branch is the answer. It is **not merged**; it branches from `4f54455` (main at the
+time) and every commit message states its own verification.
+
+**What it adds** (README sections of the same names; each MCP tool has its CLI twin):
+
+| Gap in those workflows | Now |
+|---|---|
+| Subagents share their parent's MCP connection; `ddflow_identify` renamed the parent, and one holder never conflicts with itself | `as_agent` on every tool but `ddflow_identify` |
+| Import offered every deferred/refuted/declined box as work (1,179 on run_nemo_run vs its picker's ~120) | dispositions (item, heading, `**STATUS**`), `archive_globs`, `unblock` (phase = section); `next` finds the same 120 actionable (ready, or withheld only by the parallelism cap) |
+| 176 numbered lessons imported as 24 date-groups; `docs/LOG.md` journal never read; no lessons-summary | `_id_entries`, `LOG.md` + Index skip, `Lesson.summary` + `LESSONS-SUMMARY.md`, `*_globs` knobs |
+| OptMem store (`scripts/memo`) read FIRST each session, by prose | `memory add/list/forget`, shown in `brief`, searched by `recall`, imported from `LOG.txt` |
+| Nothing puts the brief into a session after compaction | `hooks install --claude` (SessionStart; drift, due cadences, external deps) |
+| GPU runs, vLLM fleets, multi-hour jobs | `resources` on claims (`[schedule] resources`), `job run/add/list/end` |
+| home-simulator waits on trainer items in run_nemo_run | `needs = ["run_nemo_run:132.D"]`, `external sync` |
+| `Phase:` trailers; critic exit 2/3; roborev exit 0 with findings; post-merge review | commit-msg hook + `item_trailer_keys`; gate `unavailable_exits`/`partial_exits`/`require_output`/`fail_output`; `review --commit` |
+| "Weekly bug hunt" in prose | `[cadence] every_days` |
+
+**How it was checked.** Dry and applied imports of throwaway clones of both projects
+(`import --apply`, `next`, `brief`, `render`, a live MCP stdio session driving every new
+tool). All three reviewers of §5 ran: roborev on every commit (824–833, 835 on the whole
+branch), the cross-family critic on each feature commit, and a different-model
+rubber-duck; every CONFIRMED finding is fixed in a commit titled after it, two are kept
+deliberately and pinned by tests (`tests/test_rubber_duck_integration.py`). Verified on
+`4328648` in a clean snapshot worktree: ruff clean, `pytest tests/ -q -m ""` **1447 passed,
+3 skipped**, `demos/run_all.py` **6/6, 219 assertions**. The critic run on `afd9755`,
+`bdc8ddf`, `6093a1b`, `12487c8` had not reported when this was written (its logs were in the
+session's scratchpad) — those commits were reviewed by roborev and the rubber-duck only.
+
+**Integrating** (not done — it changes those repositories' workflows; operator decision):
+
+```toml
+# run_nemo_run/.ddflow/config.toml
+[importer]
+archive_globs = ["docs/todo.md", "docs/todo/archive/*.md"]   # legacy: driven only when named
+[enforce]
+require_item_trailer = true
+item_trailer_keys = ["Phase", "Phase-ships"]
+[schedule]
+resources = ["gpu=8"]
+max_parallel_tasks = 8   # both caps default to 4; `next` withholds the rest as "cap reached"
+[worktree]
+max_parallel = 8
+[cadence]
+every_days = ["bug_hunt=7", "dedupe_sweep=7"]
+[gate.critic_cmd]      # scripts/critic_review.py, as a command gate
+command = "scripts/critic_gate.sh"   # a wrapper passing --dirty and the item's intent
+unavailable_exits = [2, 143]
+partial_exits = [3]
+require_output = '^STATUS:'
+```
+
+home-simulator: defaults import it faithfully (`docs/LOG.md` is its journal); add
+`[schedule] repos = ["run_nemo_run=../run_nemo_run"]` and `resources = ["gpu=8"]`. Its
+lessons corpus has two duplicated ids (L52, L103): they import as `L52`, `L52-2`, and
+summary bullets citing them become consolidated lessons. Both: `ddflow adopt --agents
+claude`, `ddflow hooks install --claude`, and `ddflow import --max-tasks <n> --apply`
+(run_nemo_run needs `--max-tasks` > 1,125). The pre-commit framework both use owns their
+git hooks: add `ddflow hooks check-commit` / `check-msg "$1"` as local hooks there.
+
+**Dogfooding (B7) was evaluated, not done**: in a throwaway copy, `adopt` + the MCP
+surface work; `docs/BACKLOG.md` has no checkboxes, so it imports nothing until converted
+(~30 lines of conversion gave 23 open tasks, matching its audit). Seven defects that run
+found are fixed on this branch (`afd9755`). Still B7's operator decision (§8).
+
+---
+
 ## 1. Read these first, in this order
 
 | # | File | Why |
