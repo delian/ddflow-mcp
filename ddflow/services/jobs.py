@@ -41,7 +41,10 @@ _LAUNCH = (
 def _wrapped(command: str) -> str:
     """The command in a SUBSHELL, then its exit code. Without the subshell a command
     that says `exit 7` leaves before the code is written, and reads as killed."""
-    return f'(\n{command}\n)\nrc=$?; echo "{EXIT_MARK} $rc"; exit $rc\n'
+    # The marker starts on a line of its own: after output with no trailing newline,
+    # `echo` glued it mid-line, `logged_exit` (anchored at ^) missed it, and a clean
+    # exit read as "killed" (cross-family critic).
+    return f'(\n{command}\n)\nrc=$?; printf "\\n{EXIT_MARK} %s\\n" "$rc"; exit $rc\n'
 
 
 #: `starttime` (field 22 of /proc/<pid>/stat) counted from field 3, the first after the

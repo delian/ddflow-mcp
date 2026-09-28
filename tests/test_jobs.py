@@ -201,3 +201,12 @@ def test_two_launches_in_one_second_do_not_share_a_log(repo):
     # In-process and back to back: two CLI calls never land in the same second.
     logs = {AJ.job_run(repo, "T", "true", agent="w").data["log"] for _ in range(2)}
     assert len(logs) == 2, "two jobs wrote one log"
+
+
+def test_an_exit_code_is_read_even_when_the_output_has_no_final_newline(repo, tmp_path):
+    pid = J.launch("printf 'no newline'; exit 3", tmp_path, tmp_path / "j.log")
+    job = Job(
+        id="J", pid=pid, host=J.host(), proc_start=J.proc_start(pid), log=str(tmp_path / "j.log")
+    )
+    assert _wait(lambda: J.status(job).state != "running")
+    assert J.status(job).state == "exited" and J.status(job).exit_code == 3
