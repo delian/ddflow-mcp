@@ -1815,7 +1815,11 @@ Nothing errors. There is no signal that can tell them apart, so identity is **de
 | `ddflow_identify` (MCP) | An agent announcing itself on its own connection. Call it first. |
 | `DDFLOW_AGENT` env var | A harness that spawns agents and knows their names. Process-wide. |
 | `--agent` (CLI) | Scripts and one-off commands. |
-| tree-derived default | One agent per worktree. Reported as *undeclared*, so you can see it. |
+| tree-derived default | One agent per worktree. Reported as *undeclared*, so you can see it. `{host}-{tree}-{clone}`: the last part is a random suffix kept in `.ddflow/local/clone-id`, so two clones of one repository never write one shard even on same-named machines. |
+
+A name you set yourself is never suffixed, so the same `DDFLOW_AGENT` in two clones is
+still one agent to ddflow; `ddflow doctor` notes a shard whose clock goes backwards, which
+is what that leaves behind after a merge.
 
 Innermost wins. `ddflow_identify` is idempotent, persists for the connection, and
 refuses a name that could not be a log filename — it becomes one, and refusing at

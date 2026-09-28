@@ -1,8 +1,8 @@
 """The append-only log — the one place events are written and read.
 
-Serialised appends under `fcntl.flock` with an `fsync`, per-agent shards so two agents
-never write the same file, and a tail read for the Lamport clock so the cost of
-appending is O(shards) rather than O(events).
+Serialised appends under `fcntl.flock` with an `fsync`, and per-agent shards so two
+agents never write the same file. The Lamport clock is the max over every parsed event,
+not each shard's tail: a shard two clones wrote under one id is not monotone (B190).
 
 Reading exploits the same append-only property: `read_all` re-parses only the bytes
 APPENDED since the last read, because parsing is 84% of a read's cost (97 ms of 115 ms
@@ -21,6 +21,7 @@ import getpass
 import hashlib
 import json
 import os
+import secrets
 import socket
 import subprocess
 import time
@@ -208,6 +209,13 @@ def default_agent_id(fallback_root: Path | str | None = None) -> str:
 
     ``DDFLOW_AGENT`` overrides both, and a harness running several agents inside ONE
     tree must set it — there is no signal that can distinguish them otherwise.
+
+    Host and tree name are not unique ACROSS CLONES: two machines both called `ubuntu`
+    with the repository checked out as `ddflow` both derived `ubuntu-ddflow`, wrote one
+    shard between them, and `merge=union` then interleaved two writers' clocks in it
+    (B190). So once the project is adopted the id also carries this clone's random
+    suffix (:func:`_clone_suffix`) — shared by every worktree of the clone, because the
+    suffix lives in the primary checkout, so the claim and the commit hook still agree.
     """
     host = socket.gethostname().split(".")[0]
     root = str(fallback_root or "")
@@ -230,8 +238,65 @@ def default_agent_id(fallback_root: Path | str | None = None) -> str:
         except Exception:
             name = "agent"
     ident = f"{host}-{name}"
+    suffix = _clone_suffix(Path(root)) if root else ""
+    if not suffix:
+        # Not cached: an unadopted repo gains its suffix at `ddflow init`, and a
+        # long-lived MCP server must pick that up rather than keep the bare name.
+        return ident
+    ident = f"{ident}-{suffix}"
     _AGENT_ID_CACHE[key] = ident
     return ident
+
+
+#: Where a clone keeps its identity suffix. Under `.ddflow/local/`, which is gitignored:
+#: a committed suffix would be every clone's suffix, which is the collision again.
+CLONE_ID_FILE = Path(".ddflow") / "local" / "clone-id"
+
+
+def _clone_suffix(root: Path) -> str:
+    """This clone's random identity suffix, created on first use and never changed.
+
+    `root` is the PRIMARY checkout (`worktree.repo_root`), so every worktree of one
+    clone reads the same file. "" when the project is not adopted — deriving an id must
+    not create `.ddflow/` in someone's repository, or the "is this adopted?" check
+    answers yes about itself — and "" when the file cannot be written.
+
+    Created by hard-linking a fully written temp file into place, so two processes
+    racing to create it agree on ONE value and neither can read a half-written one.
+    The directory gets its own `.gitignore`: a project whose `.ddflow/.gitignore`
+    predates `local/` must not commit the suffix and hand it to every clone.
+    """
+    path = root / CLONE_ID_FILE
+    if not path.parent.parent.is_dir():
+        return ""
+    with contextlib.suppress(FileNotFoundError):
+        return path.read_text("utf-8").strip()
+    try:
+        path.parent.mkdir(exist_ok=True)
+        ignore = path.parent / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("*\n", "utf-8")
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}")
+        tmp.write_text(secrets.token_hex(3) + "\n", "utf-8")
+        try:
+            os.link(tmp, path)
+        except FileExistsError:
+            pass
+        except OSError:
+            # No hard links here (some FUSE and SMB mounts). An exclusive create still
+            # picks ONE winner; a reader racing it may see it empty for an instant, and
+            # an empty read is not cached, so that caller simply asks again.
+            with contextlib.suppress(FileExistsError):
+                fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+                try:
+                    os.write(fd, tmp.read_bytes())
+                finally:
+                    os.close(fd)
+        finally:
+            tmp.unlink()
+        return path.read_text("utf-8").strip()
+    except OSError:
+        return ""
 
 
 def resolve_agent_id(root: Path | str, cfg: Any = None, declared: str = "") -> tuple[str, str]:
@@ -343,7 +408,10 @@ class EventLog:
         self.log_cfg = log_cfg or LogConfig()
         self.root = Path(root)
         self.dir = self.root / ".ddflow" / "events"
-        self.agent_id = agent_id or default_agent_id(self.root)
+        # Derived on first USE, not here (bug B244aeaad5c): deriving can create this
+        # clone's `.ddflow/local/clone-id`, and a log built only to be read -- a sibling
+        # project's, in `external.sync` -- must not write into that repository.
+        self._agent_id = agent_id
         self.lock_path = self.root / ".ddflow" / "events.lock"
         self.lock_timeout_s = lock_timeout_s
         # NOT created here. Merely constructing a log -- which happens on every CLI
@@ -354,6 +422,12 @@ class EventLog:
         # The directory is created on the first append instead.
         self._lamport = 0
         self.skipped_lines = 0
+
+    @property
+    def agent_id(self) -> str:
+        if not self._agent_id:
+            self._agent_id = default_agent_id(self.root)
+        return self._agent_id
 
     # -- shard paths ---------------------------------------------------------------
     @property
@@ -473,23 +547,44 @@ class EventLog:
         return ev
 
     def _highest_lamport(self) -> int:
-        """Cheapest correct clock read: last line of each shard.
+        """The highest clock value in ANY event of any shard.
 
-        Lamport values are non-decreasing WITHIN a shard because a shard has exactly
-        one writer, so the tail carries that shard's maximum. Reading tails is O(shards)
-        rather than O(events) — on NFS, where a full re-read measured ~36x slower than
-        local, that difference is the difference between usable and not.
+        It used to read only each shard's last line, on the reasoning that a shard has
+        one writer so its tail carries its maximum. Two clones sharing an agent id break
+        that, and `merge=union` puts the other clone's suffix AFTER ours: the merged
+        shard read [1, 2, 3, 4, 2], the next append got 3, and `update --title v5`
+        folded before the v4 it was written after (bug B28589b8b26). Nothing on disk
+        says a shard had two writers, so the tail cannot be trusted for any shard.
+
+        Reading every event is affordable because `_read_shard` re-parses only what was
+        appended since the last read: measured 7.5 ms per append at 20,000 events warm,
+        against 0.04 ms for the tail read — and an append is almost always preceded by a
+        fold that warmed the cache.
         """
         high = 0
         for p in self.shards():
-            tail = _last_line(p)
-            if not tail:
-                continue
-            try:
-                high = max(high, int(json.loads(tail).get("lamport", 0)))
-            except (ValueError, TypeError):
-                continue
+            for e in self._read_shard(p)[0]:
+                high = max(high, e.lamport)
         return high
+
+    def clock_regressions(self) -> dict[str, tuple[int, int, int]]:
+        """Shards whose clock goes BACKWARDS in file order: name -> (event number, the
+        value before, the value after), for the first decrease in each.
+
+        One writer only ever increases its clock, so a decrease means two writers shared
+        the shard -- two clones resolving to one agent id, merged with `merge=union`.
+        The clock copes with it now; the shared identity is still worth fixing, since a
+        lease held under it is "mine" in both clones.
+        """
+        out: dict[str, tuple[int, int, int]] = {}
+        for p in self.shards():
+            prev = 0
+            for n, e in enumerate(self._read_shard(p)[0], 1):
+                if e.lamport < prev:
+                    out[p.name] = (n, prev, e.lamport)
+                    break
+                prev = e.lamport
+        return out
 
     def head(self) -> tuple[int, int, int]:
         """`(shards, highest_lamport, total_bytes)` — the cheap fingerprint of the log.
@@ -514,6 +609,11 @@ class EventLog:
         and its tail together makes the two components describe the same observation of
         that shard. (Raised THEORETICAL by the cross-family critic 2026-09-24; probe and
         regression test in `tests/test_rubber_duck_findings.py`.)
+
+        The Lamport component is the highest TAIL, not the highest clock: after a union
+        merge of a shard with two writers they differ (see `_highest_lamport`). That is
+        harmless here -- the merge changed the byte count -- but do not take a clock
+        from it.
         """
         total = 0
         shards = 0
