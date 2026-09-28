@@ -408,7 +408,10 @@ class EventLog:
         self.log_cfg = log_cfg or LogConfig()
         self.root = Path(root)
         self.dir = self.root / ".ddflow" / "events"
-        self.agent_id = agent_id or default_agent_id(self.root)
+        # Derived on first USE, not here (bug B244aeaad5c): deriving can create this
+        # clone's `.ddflow/local/clone-id`, and a log built only to be read -- a sibling
+        # project's, in `external.sync` -- must not write into that repository.
+        self._agent_id = agent_id
         self.lock_path = self.root / ".ddflow" / "events.lock"
         self.lock_timeout_s = lock_timeout_s
         # NOT created here. Merely constructing a log -- which happens on every CLI
@@ -419,6 +422,12 @@ class EventLog:
         # The directory is created on the first append instead.
         self._lamport = 0
         self.skipped_lines = 0
+
+    @property
+    def agent_id(self) -> str:
+        if not self._agent_id:
+            self._agent_id = default_agent_id(self.root)
+        return self._agent_id
 
     # -- shard paths ---------------------------------------------------------------
     @property

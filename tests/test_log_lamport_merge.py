@@ -217,3 +217,16 @@ def test_a_filesystem_without_hard_links_still_gets_a_suffix(repo: Path, monkeyp
     assert suffix and ident.endswith("-" + suffix), ident
     # The temp file is gone either way.
     assert {p.name for p in (repo / L.CLONE_ID_FILE).parent.iterdir()} == {".gitignore", "clone-id"}
+
+
+def test_reading_another_repositorys_log_writes_nothing_there(repo: Path, monkeypatch):
+    """Bug B244aeaad5c: the id was derived when a log was CONSTRUCTED, so a log built
+    only to be read -- `external.sync` folding a sibling project, documented as never
+    writing there -- created the sibling's clone-id. A log's id is now derived on first
+    use, and reading does not use it."""
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    (repo / ".ddflow" / "events").mkdir(parents=True)
+    L.EventLog(repo, "someone").append("task.added", "X1", {"title": "t"})
+    L._AGENT_ID_CACHE.clear()
+    L.EventLog(repo).read_all()
+    assert not (repo / ".ddflow" / "local").exists()
