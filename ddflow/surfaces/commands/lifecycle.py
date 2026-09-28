@@ -84,7 +84,22 @@ def cmd_claim(a, c: Ctx) -> int:
         return _refused(out)
     d = out.data
     msg = f"claimed {a.id} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
-    if d["worktree"] and d["adopted"]:
+    if d["worktree"] and d["rebound"] and not d["here"]:
+        # The item already had a tree from an earlier claim, possibly holding unmerged
+        # work. It stays the item's; the caller's own tree is left alone, so the one
+        # useful instruction is where to go.
+        msg += (
+            f"\n  worktree: {d['worktree']}  (the item's own tree, from an earlier claim)"
+            f"\n  branch:   {d['branch']}"
+            f"\n  It is not where you are, and yours was left alone: cd {d['worktree']} and"
+            f" work there."
+        )
+    elif d["worktree"] and d["rebound"]:
+        msg += (
+            f"\n  worktree: {d['worktree']}  (the item's own tree — you are already in it)"
+            f"\n  branch:   {d['branch']}\n  Carry on where you are."
+        )
+    elif d["worktree"] and d["adopted"]:
         # Do NOT say "cd there and work" -- the caller is already there, and telling an
         # agent to move is what the old behaviour did wrong.
         msg += (
@@ -98,12 +113,18 @@ def cmd_claim(a, c: Ctx) -> int:
         )
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
-    c.out(msg, out.body(("item", "holder", "worktree", "branch", "base", "port", "port_advice")))
+    c.out(
+        msg,
+        out.body(
+            ("item", "holder", "worktree", "branch", "base", "rebound", "port", "port_advice")
+        ),
+    )
     return OK
 
 
 def cmd_heartbeat(a, c: Ctx) -> int:
-    out = A.heartbeat(c.repo, a.id, agent=c.requested_agent)
+    # WHERE THE CALLER IS: the item's own tree renews its lease whoever claimed it.
+    out = A.heartbeat(c.repo, a.id, agent=c.requested_agent, called_from=c.called_from)
     c.out(
         f"{'renewed' if out.data['renewed'] else 'no lease held'} {a.id}",
         out.body(("renewed",)),
