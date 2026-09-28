@@ -101,6 +101,16 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
         "report, so the next session does not re-research it.",
         ["scope"],
     ),
+    "install-companions": (
+        "Install and register the companion tools the gates expect",
+        "Surveys the registry, sorts each companion into register / install / check / "
+        "nothing, asks the operator per install with the exact command and what it "
+        "executes, runs only what they approved, proves each by re-probing rather than "
+        "trusting the installer's exit code, registers the MCP ones (dry run first), and "
+        "records every decline so its gate is `unavailable`, never passed unaided. "
+        "Scope it to companion ids, or leave it empty for the defaults.",
+        ["scope"],
+    ),
     "bug-hunt": (
         "Hunt and fix bugs",
         "Bounded bug hunt under the empirical-repro rule: a finding may not change "
