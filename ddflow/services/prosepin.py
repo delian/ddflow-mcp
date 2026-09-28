@@ -164,7 +164,9 @@ def coverage(
         try:
             source = f.read_text(encoding="utf-8")
             needles = literals(source, min_chars)
-        except (SyntaxError, UnicodeDecodeError, ValueError):
+        # OSError: a dangling symlink or an unreadable file. One bad file must not hide
+        # every pin the readable ones hold (B22-symlink).
+        except (SyntaxError, UnicodeDecodeError, ValueError, OSError):
             unparsed.append(rel)
             continue
         if name and name in source:
