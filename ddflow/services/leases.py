@@ -366,6 +366,36 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
     )
 
 
+def retarget_globs(log: EventLog, cfg: Config, item_id: str, globs: list[str]) -> bool:
+    """Point a LIVE lease at ``globs``. True if a lease was retargeted.
+
+    `update --globs` on a claimed item changed `item.globs` only, while the commit hook
+    and every conflict check read `lease.globs` -- so the remedy the hook prints for an
+    uncovered path did nothing (B3eda99e0fe / B5d98a4da0a).
+
+    Done HERE, as an explicit `lease.renewed`, rather than by making the fold copy
+    `task.updated` globs into the lease: the log then says when the claim changed shape,
+    old logs replay exactly as they were recorded, and the existing holder guard in the
+    handler drops it if shards reorder it after someone else's re-acquisition.
+
+    It must never be a renewal in disguise. The payload names the CURRENT holder (an
+    operator may widen a stuck agent's claim; it stays that agent's) and carries no
+    ``at``, so the handler keeps ``renewed_at`` as it is: the lease's life is not
+    extended, and a heartbeat landing first cannot make it look stale and drop the
+    globs. A released lease has nothing to retarget, and an expired one -- marked, or
+    past its TTL and grace -- is left for recovery rather than touched, so no lease is
+    brought back by an edit.
+    """
+    now = time.time()
+    with log.transaction():
+        it = fold(log.read_all(), strict=False).items.get(item_id)
+        lz = it.lease if it else None
+        if lz is None or lz.expired_at or lz.expired(now, cfg.lease.grace_s):
+            return False
+        log.append("lease.renewed", item_id, {"holder": lz.holder, "globs": list(globs)})
+        return True
+
+
 def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bool:
     """Give up a lease. Records WHOSE it was and WHO released it, which can differ —
     an operator releasing a crashed agent's lease is the normal case."""
