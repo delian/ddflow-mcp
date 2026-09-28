@@ -185,3 +185,27 @@ def test_many_removed_names_are_all_checked_for_liveness(repo):
     (repo / "live.py").write_text("\n".join(f"x.{n} = {n}_v" for n in names) + "\n")
     _git(repo, "add", "-A")
     assert D._not_live(repo, names, DOC_GLOBS) == []
+
+
+def test_a_removed_line_starting_with_dashes_is_content_not_a_header(adopted):
+    """Regression (rubber-duck on B17): `-- purge_cache` removed in -U0 is the diff line
+    `--- purge_cache`, which the parser read as a file header and dropped."""
+    (adopted / "src" / "q.sql").write_text("SELECT 1;\n-- purge_cache helper\nSELECT 2;\n")
+    (adopted / "docs" / "sql.md").write_text("Run `purge_cache` nightly.\n")
+    _git(adopted, "add", "-A")
+    _git(adopted, "commit", "-qm", "sql", "--no-verify")
+    (adopted / "src" / "q.sql").write_text("SELECT 1;\nSELECT 2;\n")
+    r = _commit(adopted, "src")
+    assert r.returncode != 0 and "docs/sql.md:1" in r.stderr, r.stderr
+
+
+def test_an_added_line_starting_with_pluses_does_not_derail_the_file(adopted):
+    """Regression (rubber-duck on B17): an added `++ x` doc line is the diff line
+    `+++ x`, which re-ran the header logic mid-hunk and flipped the doc state -- the
+    doc's next line was then taken as CODE re-adding the removed name."""
+    _rename_function(adopted)
+    doc = adopted / "docs" / "guide.md"
+    doc.write_text(doc.read_text() + "++ a decoy line\nSee `renew_lease` above.\n")
+    r = _commit(adopted, "src", "docs")
+    assert r.returncode != 0, "the rename was cancelled out by a doc line read as code"
+    assert "docs/guide.md:3" in r.stderr, r.stderr

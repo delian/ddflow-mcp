@@ -132,56 +132,80 @@ def _stem_tokens(path: str | None) -> set[str]:
 
 def parse_diff(diff: str, doc_globs: list[str]) -> Removed:
     """What a `git diff -U0 -M` removes from code, and which doc lines it adds."""
-    out = Removed()
-    removed: set[str] = set()
-    added: set[str] = set()
-    old_assign: dict[str, str] = {}
-    new_assign: dict[str, str] = {}
-    old_path: str | None = None
-    new_path: str | None = None
-    doc = False
-    lineno = 0
+    reader = _DiffReader(doc_globs)
     for line in diff.splitlines():
+        reader.feed(line)
+    return reader.result()
+
+
+class _DiffReader:
+    """One pass over a unified diff, tracking which file and which line it is in.
+
+    Header lines (`--- `, `+++ `, `rename from `) are read ONLY between `diff --git` and
+    the file's first `@@`. Past that point a line starting `--- ` or `+++ ` is CONTENT --
+    a removed `-- comment`, an added `++ x` -- and reading it as a header dropped the
+    removed line and flipped the doc state mid-file (rubber-duck on B17, reproduced).
+    `diff --git` itself is unambiguous: hunk content always starts `+`, `-`, ` ` or `\\`.
+    """
+
+    def __init__(self, doc_globs: list[str]) -> None:
+        self.doc_globs = doc_globs
+        self.out = Removed()
+        self.removed: set[str] = set()
+        self.added: set[str] = set()
+        self.old_assign: dict[str, str] = {}
+        self.new_assign: dict[str, str] = {}
+        self.old_path: str | None = None
+        self.new_path: str | None = None
+        self.doc = False
+        self.header = False
+        self.lineno = 0
+
+    def feed(self, line: str) -> None:
         if line.startswith("diff --git "):
-            old_path = new_path = None
-            continue
+            self.old_path = self.new_path = None
+            self.doc, self.header = False, True
+        elif line.startswith("@@"):
+            self.header = False
+            m = re.match(r"@@ -\S+ \+(\d+)", line)
+            self.lineno = int(m.group(1)) if m else 0
+        elif self.header:
+            self._header(line)
+        elif line.startswith("+"):
+            if self.doc and self.new_path:
+                self.out.added.add((self.new_path, self.lineno))
+            elif not self.doc:
+                self.added |= set(TOKEN.findall(line[1:]))
+                _assign(line[1:], self.new_assign)
+            self.lineno += 1
+        elif line.startswith("-") and not self.doc:
+            self.removed |= set(TOKEN.findall(line[1:]))
+            _assign(line[1:], self.old_assign)
+
+    def _header(self, line: str) -> None:
         if line.startswith("--- "):
-            old_path = _header_path(line, "a/")
-            continue
-        if line.startswith("+++ "):
-            new_path = _header_path(line, "b/")
-            doc = is_doc(new_path or old_path or "", doc_globs)
-            if not doc and old_path != new_path:
+            self.old_path = _header_path(line, "a/")
+        elif line.startswith("+++ "):
+            self.new_path = _header_path(line, "b/")
+            self.doc = is_doc(self.new_path or self.old_path or "", self.doc_globs)
+            if not self.doc and self.old_path != self.new_path:
                 # A deleted or renamed-away file takes its name with it.
-                removed |= _stem_tokens(old_path)
-                added |= _stem_tokens(new_path)
-            continue
-        if line.startswith("rename from ") or line.startswith("rename to "):
+                self.removed |= _stem_tokens(self.old_path)
+                self.added |= _stem_tokens(self.new_path)
+        elif line.startswith(("rename from ", "rename to ")):
             # A pure rename (100% similar) has no ---/+++ lines at all.
             which = _unquote(line.split(" ", 2)[2])
-            if not is_doc(which, doc_globs):
-                (removed if line.startswith("rename from ") else added).update(_stem_tokens(which))
-            continue
-        if line.startswith("@@"):
-            m = re.match(r"@@ -\S+ \+(\d+)", line)
-            lineno = int(m.group(1)) if m else 0
-            continue
-        if line.startswith("+"):
-            if doc and new_path:
-                out.added.add((new_path, lineno))
-            elif not doc:
-                added |= set(TOKEN.findall(line[1:]))
-                _assign(line[1:], new_assign)
-            lineno += 1
-        elif line.startswith("-") and not doc:
-            removed |= set(TOKEN.findall(line[1:]))
-            _assign(line[1:], old_assign)
-    out.names = removed - added
-    for name, old in old_assign.items():
-        new = new_assign.get(name)
-        if new is not None and new != old:
-            out.defaults[name] = old.strip("\"'")
-    return out
+            if not is_doc(which, self.doc_globs):
+                bucket = self.removed if line.startswith("rename from ") else self.added
+                bucket |= _stem_tokens(which)
+
+    def result(self) -> Removed:
+        self.out.names = self.removed - self.added
+        for name, old in self.old_assign.items():
+            new = self.new_assign.get(name)
+            if new is not None and new != old:
+                self.out.defaults[name] = old.strip("\"'")
+        return self.out
 
 
 def _assign(line: str, into: dict[str, str]) -> None:
