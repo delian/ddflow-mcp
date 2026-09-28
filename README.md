@@ -503,7 +503,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 116 knobs.
+cadences, and the rest of the 119 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -2396,7 +2396,7 @@ declared once and persists — see
 
 ## Configuration
 
-116 knobs across 17 sections, every one documented in place:
+119 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2446,7 +2446,9 @@ part that matters.
   is gone.
 * **A commit hook** (`ddflow hooks install`) can refuse an unclaimed edit outright,
   and refuses a staged `ddflow render` view that the log no longer regenerates
-  byte-for-byte — hand-edited, or stale (`[enforce] generated_views`). Its commit-msg
+  byte-for-byte — hand-edited, or stale (`[enforce] generated_views`). It also reports
+  a doc line still naming an identifier, file or default the commit removes or renames
+  (`[enforce] stale_docs`, `doc_globs`, `doc_exclude`; warns by default). Its commit-msg
   sibling requires an `Item:` trailer when `[enforce] require_item_trailer` is on — or
   the project's own keys (`item_trailer_keys = ["Phase", "Phase-ships"]`); merges are
   exempt.
