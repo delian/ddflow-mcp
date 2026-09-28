@@ -247,6 +247,8 @@ def test_a_build_file_ending_in_txt_is_code_not_documentation(repo):
         # A hyphen joins words: `foo` is not the value inside `foo-bar`.
         ('foo_bar = "foo"', 'foo_bar = "bar"', "foo_bar and foo-bar are related.", False),
         ('foo_bar = "foo"', 'foo_bar = "bar"', 'foo_bar is "foo" by default.', True),
+        # An empty old value cannot be quoted by a page, and as a pattern it matches anywhere.
+        ('foo_bar = ""', 'foo_bar = "/x"', "The `foo_bar` knob joins paths.", False),
     ],
 )
 def test_a_changed_default_is_matched_as_a_value_not_a_substring(repo, before, after, doc, stale):
