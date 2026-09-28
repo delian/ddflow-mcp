@@ -99,24 +99,16 @@ def unpickable(state: State, cfg: Config) -> list[Unpickable]:
         # Tasks exist and every one is finished. Always a problem, and deliberately NOT
         # behind the knob: an open phase over finished work is not a workflow style, it is
         # a queue held open by an item nobody can act on, and the remedy (`complete` it,
-        # or file what is left) is the same in every project.
-        # B5189cc5756: `complete` refuses (exit 3) while the phase's OWN gates have no
-        # outcome, so offering it bare would be a remedy that cannot succeed.
-        silent = [g for g in cfg.gates.phase_pipeline if ph.gate_outcome(g) == ""]
-        if silent:
-            remedy = (
-                f"its own gates have no outcome yet ({', '.join(silent)}) — satisfy or "
-                f"skip each (`ddflow gate status {ph.id}`), then complete it, or file the "
-                f"work that remains"
-            )
-        else:
-            remedy = f"`ddflow complete {ph.id}`, or file the work that remains"
+        # or file what is left) is the same in every project. Whether `complete` would
+        # succeed is NOT decided here: that is `services.completion.verdict()`, which core
+        # may not import, so `doctor` replaces this remedy with the verdict's answer
+        # (B5189cc5756 -- a re-derived rule here missed failed gates and advisory silence).
         out.append(
             Unpickable(
                 ph.id,
                 "finished_phase",
                 f"all {len(tasks)} task(s) under it are finished but the phase is still "
-                f"open — {remedy}",
+                f"open — `ddflow complete {ph.id}`, or file the work that remains",
                 "problem",
             )
         )
