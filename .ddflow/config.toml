@@ -47,3 +47,6 @@ commit_without_lease = "warn"
 
 [session]
 brief_max_tokens = 1200
+
+[gate.unit_tests]
+command = "uv run pytest tests/ -q --timeout=420"
