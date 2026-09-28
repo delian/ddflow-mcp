@@ -2178,3 +2178,45 @@ Mechanisms added along the way, all of which the remaining seven will need:
   over the limit invisibly — each flagged the moment it moved out. The three are split.
   The remaining question is whether `build_parser` should get a `# noqa` on itself instead
   of a file-wide ignore; that is a one-line change and a separate decision.
+
+
+## B171–B176 — gitflow, pull requests and version tags (RESEARCH R16), 2026-09-27
+
+Built in this pass: `[flow]` (21 knobs), the REVIEW state, `pr sync` / `pr status`,
+`version show` / `version cut`, stacking, gitflow hotfix and release merges. What was
+deliberately left:
+
+- **B171. A hotfix's back-merge request is not tracked.** Under gitflow + PR, `pr sync`
+  opens the hotfix → develop request and reports it, but the item completes once
+  production has the fix; nothing re-checks that the back-merge landed. Needs a second
+  request per item in the model, or a synthetic "back-merge" item.
+- **B172. Merge queues.** `gh pr merge` on a queue-protected branch enqueues rather than
+  merges; ddflow sees "not merged yet", keeps the item in REVIEW and settles it on a later
+  sync. Correct, but it cannot report queue position or a queue ejection as such.
+- **B173. More forges.** Bitbucket, Gitea/Forgejo and Azure DevOps have no adapter. The
+  `Forge` interface is five methods; each needs a fake-CLI test like `tests/fakeforge.py`.
+- **B174. Version files and CHANGELOG.** `version cut` tags and writes notes into the
+  annotated tag; it bumps no `pyproject.toml`/`package.json` version and writes no
+  CHANGELOG.md. A `[flow] version_files` list with a regex per file is the likely shape —
+  and it must go through a request in PR mode, since it is a commit.
+- **B175. Release per phase.** A phase completing is the natural release point for
+  phase-by-phase autonomous work. `version cut` exists; wiring it to phase completion
+  (`[flow] release_on_phase`) is a policy decision for the operator — tags are outward-
+  facing and not reversible once pushed.
+- **B176. Review threads as data.** Feedback is carried as text (bodies + line comments,
+  clipped to 4 KB). Resolving individual threads, and replying on them from the agent,
+  would let a reviewer see which comments were addressed.
+- **B177. `cleanup` knows only `worktree.branch_prefix`.** Under gitflow task branches are
+  `feature/`, `bugfix/`, `hotfix/`, so `cleanup` does not classify them as ddflow's.
+- **B178. Rebase-merged requests have no exact landing range.** A forge's "rebase and
+  merge" lands N commits; `merge_sha^1` is then the second-to-last of them, not the old
+  target, so a cherry-pick port of it would carry only the last commit. Squash and merge
+  commits are exact. Needs the base sha at merge time (GitHub `baseRefOid` before merging).
+- **B179. `api.task_add` is a 12-argument function** (`# noqa: PLR0913`). The fix is the
+  one `api.decisions.Draft` shows: a named record used by argparse, the MCP schema and the
+  event payload.
+- **B180. A fix amended after its ports were generated.** A port carries what the fix
+  LANDED, which is right; but a follow-up fix to the same bug is a new item and needs its
+  own `--lines`. Consider `task add --port-of`.
+- **B181. Undecided workflow choices are listed in `brief`, not in the MCP handshake.**
+

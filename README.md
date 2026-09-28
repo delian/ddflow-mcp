@@ -86,6 +86,9 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [The phase pipeline](#the-phase-pipeline)
 - [Human approval: a gate the agent cannot clear](#human-approval-a-gate-the-agent-cannot-clear)
 - [Parallelism and coordination](#parallelism-and-coordination)
+- [Gitflow, pull requests and version tags](#gitflow-pull-requests-and-version-tags)
+  - [Several release lines: fixes to older majors](#several-release-lines-fixes-to-older-majors)
+  - [Workflow choices: asked, recorded, defaulted on the record](#workflow-choices-asked-recorded-defaulted-on-the-record)
 - [Many agents, one server: identity, state and sharing](#many-agents-one-server-identity-state-and-sharing)
   - [Is it stateless?](#is-it-stateless)
   - [Who is calling?](#who-is-calling)
@@ -499,7 +502,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 89 knobs.
+cadences, and the rest of the 113 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1608,6 +1611,131 @@ floor — adding a fifth agent to a phase whose runtime is a four-deep chain buy
 
 ---
 
+## Gitflow, pull requests and version tags
+
+Two independent axes in `[flow]`, because teams combine them freely:
+
+| | `integration = "merge"` (default) | `integration = "pr"` |
+|---|---|---|
+| **`model = "trunk"`** (default) | ddflow as it always was | GitHub flow / GitLab flow |
+| **`model = "gitflow"`** | gitflow, merged locally | gitflow behind approvals |
+
+**The agent's loop does not change.** `next` → `claim` → work → gates → `merge`. What
+`merge` *means* changes with the repository's policy:
+
+* **`merge` in PR mode pushes the branch and opens (or updates) a pull/merge request**,
+  then releases the lease and parks the item in **REVIEW**. The agent is free at once and
+  takes the next task — nobody waits for a human. It refuses to open a request for work
+  whose own pipeline is unfinished: a reviewer's time is the scarce resource, and a
+  refusal after the merge could no longer stop anything.
+* **`pr sync`** turns what reviewers did back into queue state. `next` runs it for you
+  while anything is in review (`sync_on_next`):
+
+  | the forge says | ddflow does |
+  |---|---|
+  | merged | passes the `merge` gate on the forge's evidence (URL, merge sha), completes the item, retargets anything stacked on it, removes its tree |
+  | changes requested | returns the item to the queue **with the review text** (bodies and line comments); `brief` leads with it; a re-claim resumes the same tree and a re-`merge` updates the same request |
+  | closed | parks it for a person — a "no" is not something to retry |
+  | approved, checks green | merges it (`pr_merge = "on_approval"`, pinned to the approved head) |
+
+* **Stacking keeps work moving through review.** While `T1` waits in review, a task that
+  needs it may start **on top of `T1`'s branch** (`stack = true`); its request targets
+  `T1`'s branch and is retargeted to the real base when `T1` merges. ddflow never merges
+  a stacked request first — that would land it unreviewed inside `T1`'s merge. A task
+  depending on two unmerged branches waits: one branch cannot sit on two.
+* **Who presses merge** is `pr_merge`: `on_approval` (default — a person's approval is
+  still required, and branch protection still applies), `auto` (ask the forge to
+  auto-merge when its own rules are met), or `human`.
+
+**Gitflow.** Tasks fork from `develop` as `feature/` or `bugfix/` branches (by tag); a
+task tagged `hotfix` forks from production and lands on production **and** develop.
+Merges never switch a checkout: a target that is not checked out is merged in a throwaway
+worktree, and one checked out in someone else's tree is refused.
+
+**Versions.** `version show` reads the highest `v1.2.3` tag reachable from the release
+branch and computes the next version from Conventional Commits (`feat` → minor, `fix` →
+patch, `!`/`BREAKING CHANGE` → major; below 1.0.0 a breaking change bumps minor) and from
+the tags of items finished since (`breaking`, `feature`, `bug`, `hotfix`). `version cut`
+tags it — annotated, with generated release notes. Under gitflow it cuts `release/X` from
+develop, merges it into production, tags it and merges the tag back into develop; in PR
+mode it opens the release request instead, and `pr sync` tags the merge commit once a
+person merges it and opens the back-merge request.
+
+ddflow holds no token: it drives `gh` or `glab`, logged in as the operator, so every
+permission question is answered by the forge. A forge that cannot be reached is exit 2 —
+"could not ask" is never reported as "nothing changed".
+
+```toml
+[flow]
+model = "gitflow"          # or "trunk"
+integration = "pr"         # or "merge"
+pr_merge = "on_approval"   # or "auto" | "human"
+pr_reviewers = ["alice"]
+```
+
+The research behind this is [RESEARCH R16](docs/RESEARCH.md).
+
+### Several release lines: fixes to older majors
+
+Projects that keep older majors alive — `main` is 3.x while 2.x and 1.x still get fixes —
+declare them as **release lines**, oldest first. The newest line is always the *current*
+one and follows `model` as above; a maintenance line lands straight on its branch.
+
+```toml
+[flow]
+current_line = "3"
+port_strategy = "cherry-pick"      # or "forward-merge" (the default)
+
+[flow.lines]                        # oldest first
+"1" = "maint/1.x"
+"2" = "maint/2.x"
+```
+
+* **An item belongs to a line**: `task add T --line 2`, or `phase add P --line 2` and
+  every task in it inherits it. A line that does not exist is refused, never read as
+  "the current one".
+* **A fix for several lines** is one command: `task add FIX --lines 1,2,3`. ddflow writes
+  it where the strategy says and generates a **port** task `FIX@<line>` for each other
+  line — an ordinary task with its own branch, gates and merge or pull request. A port
+  starts only once what it carries has *landed* (review is not enough):
+
+  | `port_strategy` | the fix is written on | each port… | ports run |
+  |---|---|---|---|
+  | `forward-merge` (default) | the **oldest** line | merges the previous line's branch into its own (and passes through every line in between — a merge cannot skip one) | one after another |
+  | `cherry-pick` | the **newest** line | applies exactly what the fix landed (the target's before→after range, whatever the merge strategy) with a three-way apply | in parallel |
+
+* **A conflicting port is work, not a failure.** The claim leaves the conflict markers
+  in the port's tree and names the files; the agent resolves, commits and carries on.
+* **Lines never collide.** The same file on 2.x and on 3.x is two branches, so two agents
+  may hold them at once; on the same line the glob check applies as always.
+* **Versions per line.** `version show --line 2` reads the highest tag reachable from
+  `maint/2.x`; `version cut --line 2` tags it there, and refuses a bump that would leave
+  the 2.x major — a breaking change belongs on the current line.
+
+### Workflow choices: asked, recorded, defaulted on the record
+
+ddflow supports several ways of working and never picks one silently. Each decision —
+`model`, `integration`, `pr_merge`, `on_changes_requested`, `stack`, `port_strategy` — is a
+**choice**, and its value comes from, in order:
+
+1. **the operator's config** (`.ddflow/config.toml` or env), which always wins;
+2. **a recorded choice** — `ddflow flow choose port_strategy cherry-pick --reason "2.x has
+   diverged"`, by the operator or by an agent the operator left it to, attributed in the log;
+3. **the default** — applied the first time the choice matters (the first claim, the
+   first pull request, the first fix filed across lines) **and recorded**, so the project
+   keeps following it even if a later ddflow ships a different default.
+
+Until then, a relevant choice nobody made heads `ddflow brief` under *Open workflow
+choices*, so an agent asks at the start rather than discovering at the end that the
+project wanted something else. `ddflow flow show` lists every choice with its value, its
+options, and who decided — config, a named agent or person with their reason, or "DEFAULT
+(nobody chose)". A recorded choice that the config file overrides is shown as such, never
+silently ignored.
+
+Research: [RESEARCH R17](docs/RESEARCH.md).
+
+---
+
 ## Many agents, one server: identity, state and sharing
 
 Several agents and subagents sharing one queue is the case this tool is for. Here is
@@ -2160,6 +2288,15 @@ ddflow approve .. --reject      ...or refuses it, with --reason
 ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 
 ddflow merge <id>               merge from the primary checkout, no checkout
+                                ([flow].integration=pr: push + open/update a PR instead)
+ddflow pr sync [--item]         what reviewers did: complete / reopen / park / merge (2 = forge unreachable)
+ddflow pr status               every item's request, from the log (no forge call)
+ddflow version show            current and next version, why, release notes (2 = nothing new)
+ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
+ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
+ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
+ddflow flow show                how this project works: model, lines, every choice + who made it
+ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)
 ddflow block <id> --reason ..   mark blocked
 
@@ -2210,7 +2347,7 @@ declared once and persists — see
 
 ## Configuration
 
-89 knobs across 16 sections, every one documented in place:
+113 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

@@ -227,22 +227,30 @@ def _this_worktree(repo: Path) -> Path | None:
     return Path(r.stdout.strip()).resolve()
 
 
-def staged_paths(repo: Path) -> list[str]:
+def staged_paths(repo: Path) -> list[str] | None:
     """Paths this commit will write.
 
     `--diff-filter=ACMR` over the INDEX, plus `--cached`, because a file the agent just
-    created is not in HEAD and a diff against HEAD alone would not see it.
+    created is not in HEAD and a diff against HEAD alone would not see it. Through
+    `W.git_paths`, so a non-ASCII or non-UTF-8 name is neither C-quoted past the lease
+    and view checks nor a crash of every commit.
+
+    None when git could not say. It used to collapse to `[]`, and "nothing staged" lets
+    every check pass: a damaged index (git exits 128, "index file smaller than expected")
+    turned the lease and view checks into clean passes (roborev on 18cae1a). Callers
+    refuse on None. NOT a held `index.lock`: these reads take no lock and succeed under
+    one (verified), so naming it would send an operator hunting for the wrong cause.
     """
-    r = P.run(
-        ["git", "-C", str(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    # `-z`, or a non-ASCII path comes back C-quoted and matches no lease glob and no view
-    # name -- escaping both checks (found in review of 7216f5e, recorded, fixed with the
-    # same bug in the log probe).
-    return [p for p in r.stdout.split("\0") if p]
+    return W.git_paths(repo, "diff", "--cached", "--name-only", "--diff-filter=ACMR")
+
+
+#: The refusal when the staged set itself is unknowable. Never a pass: "could not tell"
+#: is not "nothing to check".
+_UNKNOWN_STAGED = (
+    "ddflow: git could not report which paths this commit stages, so it cannot be "
+    "checked.\nRefusing rather than guessing. Check `git status`: a damaged or "
+    "truncated `.git/index` is the usual cause."
+)
 
 
 #: Paths ddflow's own bookkeeping writes. Requiring a lease for these would make it
@@ -262,9 +270,12 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     if mode == "off":
         return 0, ""
 
-    paths = [
-        p for p in staged_paths(repo) if not any(p.startswith(prefix) for prefix in SELF_MANAGED)
-    ]
+    staged = staged_paths(repo)
+    if staged is None:
+        return (
+            (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
+        )
+    paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
     if not paths:
         return 0, ""
 
@@ -350,8 +361,10 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     A file counts as a view when its name is in `VIEWS` AND its staged content carries
     the GENERATED marker -- so `render --out elsewhere` is still checked, while a
     project's own `QUEUE.md`, or a document that merely quotes the marker, is not.
-    Fires only when a view is STAGED: a commit that does not include one is never
-    blocked because the queue moved, which would teach everyone to bypass the hook.
+    Fires only when a view is STAGED -- or when git cannot report the staged set at all,
+    since "could not tell whether a view is staged" is not "no view is staged". A commit
+    that stages no view is never blocked because the queue moved, which would teach
+    everyone to bypass the hook.
     """
     from ..views.markdown import GENERATED, VIEWS, render_views
 
@@ -361,7 +374,10 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
         return 0, ""
     staged: dict[str, bytes] = {}
     names = {name for name, _ in VIEWS}
-    for p in staged_paths(repo):
+    listed = staged_paths(repo)
+    if listed is None:
+        return _verdict(mode, [_UNKNOWN_STAGED])
+    for p in listed:
         if Path(p).name not in names:
             continue
         data = staged_bytes(repo, p)
@@ -490,15 +506,7 @@ def _unstaged_under(repo: Path, d: Path) -> LogProbe:
         # `-z`: without it git C-quotes a non-ASCII path (`"caf\303\251.jsonl"`), and a
         # remedy built from that string names a file that does not exist -- `git add -f`
         # fails and the refusal never clears (roborev on 40950c9, reproduced).
-        r = P.run(
-            ["git", "-C", str(repo), *argv, "-z", "--", rel],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if r.returncode != 0:
-            return None
-        return [p for p in r.stdout.split("\0") if p]
+        return W.git_paths(repo, *argv, "--", rel)
 
     tracked = git("ls-files")
     modified = git("diff", "--name-only")

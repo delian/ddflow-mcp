@@ -49,12 +49,13 @@ from .decisions import (
     decision_show,
     decision_supersede,
 )
+from .flow import flow_choose, flow_show, pr_status, pr_sync, version_cut, version_show
 from .gates import Evidence as GateEvidence
 from .gates import record as gate_record
 from .gates import run as gate_run
 from .gates import status as gate_status
 from .gates import verify as gate_verify
-from .items import DEFAULT_PRIORITY, phase_add, split, task_add, update
+from .items import DEFAULT_PRIORITY, ItemEdit, phase_add, split, task_add, update
 from .jobs import job_add, job_end, job_list, job_run
 from .knowledge import (
     Finding as ResearchFinding,
@@ -139,6 +140,7 @@ __all__ = [
     "Adoption",
     "ConfigEdit",
     "GateEvidence",
+    "ItemEdit",
     "LessonDraft",
     "Registration",
     "ResearchFinding",
@@ -167,6 +169,8 @@ __all__ = [
     "decision_supersede",
     "doctor",
     "external_sync",
+    "flow_choose",
+    "flow_show",
     "gate_record",
     "gate_run",
     "gate_status",
@@ -191,6 +195,8 @@ __all__ = [
     "merge_item",
     "next_item",
     "phase_add",
+    "pr_status",
+    "pr_sync",
     "progress",
     "prompts",
     "rebuild",
@@ -214,6 +220,8 @@ __all__ = [
     "task_add",
     "unblock",
     "update",
+    "version_cut",
+    "version_show",
     "workflow_drop",
     "workflow_gate",
     "workflow_pipeline",

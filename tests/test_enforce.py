@@ -311,3 +311,47 @@ def test_a_lease_is_mine_if_it_created_the_tree_i_am_committing_in(repo, cfg):
     assert r.returncode == 0, (
         f"the hook refused a commit inside the very worktree the lease created:\n{r.stderr}"
     )
+
+
+def test_staged_paths_survives_a_filename_that_is_not_utf8(repo):
+    """With `-z` git emits RAW filename bytes, and `text=True` decoded them strictly as
+    UTF-8: one latin-1-named file anywhere in the commit raised UnicodeDecodeError out of
+    the hook, and the repository could not commit at all (roborev on 4f54455). Text mode
+    also rewrote a `\\r` in a name to `\\n`. `os.fsdecode` round-trips both."""
+    import os as _os
+
+    weird = [b"caf\xe9.txt", b"a\rb.txt"]
+    for name in weird:
+        (repo / _os.fsdecode(name)).write_bytes(b"x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    got = E.staged_paths(repo)
+    for name in weird:
+        assert _os.fsdecode(name) in got, (name, got)
+        assert (repo / _os.fsdecode(name)).exists(), "the returned path names no file"
+    # ...and the whole hook path, which formats these names into its message.
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "block"\n')
+    code, msg = E.check_commit(repo)
+    assert code == 1 and "a\rb.txt" in msg, msg
+    E.check_views(repo)  # must not raise either
+
+
+@pytest.mark.parametrize("policy", ["block", "warn"])
+def test_an_unreadable_index_is_refused_not_read_as_nothing_staged(repo, policy):
+    """`staged_paths` collapsed git's failure into `[]`, and "nothing staged" passed every
+    check: a damaged index or a held lock turned the lease and view checks into clean
+    passes (roborev on 18cae1a). Planted with a real corrupt index -- `git diff --cached`
+    exits 128 on it."""
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text(f'[enforce]\ncommit_without_lease = "{policy}"\n')
+    (repo / ".git" / "index").write_bytes(b"garbage")
+    assert E.staged_paths(repo) is None
+    code, msg = E.check_commit(repo)
+    assert "could not report" in msg, msg
+    assert code == (1 if policy == "block" else 0), (code, msg)
+    # No view is staged here (nothing is readable at all): refused anyway, because "could
+    # not tell whether a view is staged" is not "no view is staged". generated_views
+    # defaults to block, independently of the lease policy above.
+    vcode, vmsg = E.check_views(repo)
+    assert vcode == 1 and "could not report" in vmsg, vmsg
+    assert "index.lock" not in msg + vmsg, "names a cause that cannot trigger this"

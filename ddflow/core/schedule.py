@@ -27,7 +27,8 @@ from dataclasses import dataclass, field
 from fnmatch import fnmatch
 
 from ..config import Config
-from ..core.model import ABANDONED, BLOCKED, DONE, RUNNING, Item, Lease, State
+from ..core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, Lease, State
+from .flow import line_key, stack_base, unknown_line
 
 
 @dataclass
@@ -62,7 +63,7 @@ def unpickable(state: State, cfg: Config) -> list[Unpickable]:
 
     **Tasks cannot appear here, and that is a property worth stating rather than a gap in
     the check.** `plan()` with no phase walks `state.tasks()`, which returns every live
-    task, and puts each into exactly one of ready/running/blocked — so a filed task is
+    task, and puts each into exactly one of ready/running/blocked/review — so a filed task is
     always reachable. Two probes went looking for a task the picker could miss: a task
     parented to a phase id that does not exist is still reachable, because
     `descendants()` is built from the parent FIELD rather than from the items; and a task
@@ -122,6 +123,9 @@ class Plan:
     #: Items the log says are RUNNING with nobody holding them — see `interrupted`.
     #: Offered as ready (someone must resume them) but never silently.
     interrupted: list[str] = field(default_factory=list)
+    #: Waiting on a pull request. Not running (nobody holds it), not blocked (nothing is
+    #: wrong), not ready (there is nothing for an agent to do until a reviewer acts).
+    review: list[Item] = field(default_factory=list)
 
     def summary(self) -> str:
         parts = [
@@ -133,6 +137,8 @@ class Plan:
             parts.append(f"{len(self.cycles)} CYCLE(S)")
         if self.interrupted:
             parts.append(f"{len(self.interrupted)} INTERRUPTED")
+        if self.review:
+            parts.append(f"{len(self.review)} in review")
         return ", ".join(parts)
 
 
@@ -242,6 +248,13 @@ def dep_status(state: State, dep: str, cfg: Config) -> tuple[bool, str]:
         return True, f"unknown dependency {dep!r} ignored by policy"
     if it.state == DONE:
         return True, ""
+    if it.state == REVIEW:
+        # Satisfied only for STACKING, which `plan_blocker` then checks is possible --
+        # the dependent forks from this branch. Without stacking, work waits for the merge.
+        where = f" ({it.pr.url})" if it.pr and it.pr.url else ""
+        if cfg.flow.stack and it.branch:
+            return True, f"{dep} is in review{where}; stacking on {it.branch}"
+        return False, f"{dep} is awaiting review{where}"
     if it.kind == "phase":
         kids = [t for t in state.tasks(it.id) if t.state != DONE]
         if not kids and it.state != DONE:
@@ -346,6 +359,28 @@ def plan_blocker(
             details.append(why if owner == it.id else f"{why} (inherited from {owner})")
     if unmet:
         return Blocked(it.id, "deps", "; ".join(details), unmet)
+    gone = unknown_line(state, it, cfg)
+    if gone:
+        return Blocked(
+            it.id,
+            "state",
+            f"its release line {gone!r} is not in [flow.lines] any more. Restore the line, "
+            f"or `ddflow update {it.id} --line <line>` deliberately.",
+            [],
+        )
+    src = state.items.get(it.port_from) if it.port_from else None
+    if src is not None and src.state != DONE:
+        # `needs` is satisfied by REVIEW when stacking; a port is not. It applies what its
+        # source LANDED, and nothing has landed until the request merges.
+        return Blocked(
+            it.id,
+            "deps",
+            f"a port of {it.port_of}: waits for {src.id} to land ({src.state})",
+            [src.id],
+        )
+    stack = stack_base(state, it, cfg, [d for _, d in inherited_deps(state, it)])
+    if stack.error:
+        return Blocked(it.id, "deps", stack.error, [])
     return None
 
 
@@ -381,8 +416,14 @@ def item_blocker(
             f"leased by {held.holder} for another {held.remaining_s(now):.0f}s",
             [it.id],
         )
+    mine = line_key(state, it, cfg)
     for other_id, lease in live.items():
         if other_id == it.id or lease.holder == agent:
+            continue
+        other = state.items.get(other_id)
+        if other is not None and line_key(state, other, cfg) != mine:
+            # Different release lines are different branches: `src/x.py` on 2.x and on
+            # 3.x cannot collide, and refusing it would serialise every port behind its fix.
             continue
         pairs = conflicts(it.globs, lease.globs)
         if pairs:
@@ -534,6 +575,9 @@ def plan(
 
     for it in sorted(candidates, key=lambda x: (x.priority, x.id)):
         if it.state in (DONE, ABANDONED):
+            continue
+        if it.state == REVIEW:
+            p.review.append(it)
             continue
         if it.state == RUNNING and it.id in live:
             # Running and leased. Always reported as running; never offered as ready,

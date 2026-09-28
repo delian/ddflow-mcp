@@ -27,7 +27,8 @@ from typing import Any
 
 from ..config import Config
 from ..core import schedule
-from ..core.model import DONE, Lease, State, fold
+from ..core.flow import line_key
+from ..core.model import DONE, REVIEW, Lease, State, fold
 from ..core.schedule import capacities, conflicts, plan_blocker, resource_shortfall
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -227,9 +228,13 @@ def acquire(
             )
 
         mine = list(globs if globs is not None else it.globs)
+        my_line = line_key(state, it, cfg)
         for other_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
             if other_id == item_id or lease.holder == holder:
                 continue
+            other = state.items.get(other_id)
+            if other is not None and line_key(state, other, cfg) != my_line:
+                continue  # different release lines: different branches, no collision
             pairs = conflicts(mine, lease.globs)
             if pairs and not force:
                 raise LeaseError(
@@ -438,7 +443,10 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
             )
             _measure(rec, repo, cfg)
             out.append(rec)
-        elif not lease and it.worktree:
+        elif not lease and it.worktree and it.state != REVIEW:
+            # REVIEW is excluded: its tree is held open ON PURPOSE, for the round of
+            # changes a reviewer may request, and the request is its custodian. Reported
+            # as an orphan it led every brief as "salvage this" (RESEARCH R16).
             rec = Recovery(
                 item=it.id,
                 holder="(none)",

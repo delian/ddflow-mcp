@@ -59,7 +59,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "Setting up",
         ("setup", "configure", "companions", "hooks", "prompts", "adopt", "identify"),
     ),
-    ("The rules this project runs by", ("workflow",)),
+    ("The rules this project runs by", ("workflow", "flow")),
     ("Shaping the work", ("phase", "task", "split", "update", "remove", "import", "external")),
     (
         "Doing the work",
@@ -76,7 +76,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("Gates and review", ("gate", "review", "reviewers")),
-    ("Landing it", ("merge", "cleanup")),
+    ("Landing it", ("merge", "pr", "version", "cleanup")),
     (
         "What the project remembers",
         ("recall", "memory", "lesson", "decision", "research", "bug", "session"),

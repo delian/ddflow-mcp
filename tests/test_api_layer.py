@@ -81,9 +81,9 @@ def test_every_api_function_returns_an_outcome(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     for result in (
-        api.update(repo, "T1", title="x"),
-        api.update(repo, "NOPE", title="x"),
-        api.update(repo, "T1"),
+        api.update(repo, "T1", api.ItemEdit(title="x")),
+        api.update(repo, "NOPE", api.ItemEdit(title="x")),
+        api.update(repo, "T1", api.ItemEdit()),
         api.completion_verdict(repo, "T1"),
     ):
         assert isinstance(result, O.Outcome), result
@@ -105,11 +105,11 @@ def test_clearing_a_field_is_distinguishable_from_not_touching_it(repo):
     run_cli(repo, "task", "add", "A", "--globs", "a.py")
     run_cli(repo, "task", "add", "B", "--globs", "b.py", "--needs", "A")
 
-    api.update(repo, "B", title="renamed")  # needs untouched
+    api.update(repo, "B", api.ItemEdit(title="renamed"))  # needs untouched
     _code, out, _ = run_cli(repo, "--json", "show", "B")
     assert json.loads(out)["needs"] == ["A"], "an unrelated update cleared needs"
 
-    api.update(repo, "B", needs=[])  # explicitly cleared
+    api.update(repo, "B", api.ItemEdit(needs=[]))  # explicitly cleared
     _code, out, _ = run_cli(repo, "--json", "show", "B")
     assert json.loads(out)["needs"] == [], "an explicit clear did nothing"
 
@@ -178,7 +178,7 @@ def test_an_update_that_changes_nothing_says_so(repo):
     success for it hides a caller that forgot to pass a field."""
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    result = api.update(repo, "T1")
+    result = api.update(repo, "T1", api.ItemEdit())
     assert result.exit == NOTHING, result
     assert not result.ok
 
@@ -289,6 +289,12 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
         ["gate", "verify", "T1", "unit_tests"],
         {"id": "T1", "gate": "unit_tests"},
     ),
+    "ddflow_pr_status": (["pr", "status"], {}),
+    "ddflow_pr_sync": (["pr", "sync"], {}),
+    "ddflow_version_show": (["version", "show"], {}),
+    # --dry-run writes nothing, so both surfaces see the same state.
+    "ddflow_version_cut": (["version", "cut", "--dry-run"], {"dry_run": True}),
+    "ddflow_flow_show": (["flow", "show"], {}),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
@@ -319,6 +325,7 @@ TEXT_BODIED = {
 }
 
 WRITES_NOT_COMPARABLE = {
+    "ddflow_flow_choose",
     "ddflow_update",
     # Releases held work: a second call finds nothing blocked and exits 2. Its behaviour
     # is pinned by tests/test_import_fidelity.py.

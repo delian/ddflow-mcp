@@ -29,6 +29,11 @@ from .events import Event
 # events about it. A state field that can be set directly is a field that can drift
 # from the events that produced it, which is the whole defect class this design closes.
 OPEN, RUNNING, BLOCKED, DONE, ABANDONED = "open", "running", "blocked", "done", "abandoned"
+#: Waiting on a pull request (RESEARCH R16). Distinct from RUNNING because nobody holds
+#: it: the lease is released when the request opens, so the agent can take the next
+#: task. As RUNNING-without-a-lease it would read as a crash to `recover` and as
+#: interrupted work to `next`, and every parked review would be offered to a second agent.
+REVIEW = "review"
 
 #: The single source for gate outcomes. Everything that validates, renders or maps an
 #: outcome imports from here. Previously this tuple existed and nothing referenced it,
@@ -101,6 +106,55 @@ class Lease:
 
 
 @dataclass
+class PullRequest:
+    """The forge's pull/merge request for an item, as last observed.
+
+    A SNAPSHOT, written by `pr.*` events, never polled at fold time: `fold` is pure, and
+    the forge is the one thing in this system that changes without an event. So the
+    projection can be stale, and says when it was last looked at (`synced_at`) instead
+    of pretending otherwise.
+    """
+
+    number: int = 0
+    url: str = ""
+    forge: str = ""
+    base: str = ""  # the branch it merges INTO -- a dependency's branch while stacked
+    head: str = ""
+    state: str = "open"  # open | merged | closed
+    review: str = ""  # approved | changes_requested | pending | ""
+    checks: str = ""  # passing | failing | pending | ""
+    head_sha: str = ""
+    merge_sha: str = ""
+    feedback: str = ""
+    #: The AUTHOR's model, given at `merge`. Completion runs at `pr sync`, possibly in
+    #: another session by another agent, and the reviewer-independence check needs the
+    #: author's family -- which that later caller does not know.
+    author_model: str = ""
+    synced_at: str = ""
+    #: The head a change request was recorded against. A forge keeps saying "changes
+    #: requested" until the reviewer looks again, so after a push the same request must
+    #: not send the item back a second time.
+    requested_head: str = ""
+    #: How many times it went back for changes. Read by the loop detector's reader
+    #: (`pr status`), because a request that bounces five times is not converging.
+    rounds: int = 0
+
+
+@dataclass
+class Release:
+    """One version tag ddflow cut."""
+
+    version: str
+    tag: str = ""
+    sha: str = ""
+    branch: str = ""
+    items: list[str] = field(default_factory=list)
+    at: str = ""
+    pushed: bool = False
+    line: str = ""
+
+
+@dataclass
 class Item:
     """A phase or a task. One class, because every rule about scheduling,
     leasing, gating and recovery is identical for both — only the pipeline differs.
@@ -132,6 +186,28 @@ class Item:
     #: safety property the adoption commit claimed was never actually implemented.
     adopted: bool = False
     merged_sha: str = ""
+    #: The branch the worktree forked from. Recorded because under gitflow and stacking it
+    #: is no longer "the base branch" -- a hotfix forks from production, a stacked task
+    #: from its dependency's branch -- and the merge target is derived from it.
+    base: str = ""
+    pr: PullRequest | None = None
+    #: The release line this item lands on ("" = inherit from its parent, else the
+    #: current line). See `core.flow.effective_line`.
+    line: str = ""
+    #: Set on a generated PORT: the fix it carries (`port_of`), the item whose landing it
+    #: ports (`port_from` -- the fix itself for cherry-pick, the previous line's port for
+    #: forward-merge), and how. Frozen at creation, so changing `port_strategy` later
+    #: does not reinterpret ports already in the queue.
+    port_of: str = ""
+    port_from: str = ""
+    port_strategy: str = ""
+    #: What the port did when it was applied: {"status": clean|conflict|failed, ...}.
+    port: dict[str, Any] = field(default_factory=dict)
+    #: The target branch just before and just after this item landed. The difference is
+    #: exactly what landed, whatever the merge strategy -- which is what a cherry-pick
+    #: port applies elsewhere.
+    landed_before: str = ""
+    landed_after: str = ""
     blocked_reason: str = ""
     created_at: str = ""
     completed_at: str = ""
@@ -363,6 +439,14 @@ class State:
     #: so neither "make it block" nor "turn it off" could be argued, only asserted.
     #: A rate needs a numerator AND a denominator; both are counted here.
     gate_order: dict[str, dict[str, int]] = field(default_factory=dict)
+    releases: list[Release] = field(default_factory=list)
+    #: version -> the release request awaiting approval (gitflow + pull requests), as
+    #: {"branch", "number", "url", "base", "forge"}. Tagging it removes it.
+    pending_releases: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: knob -> the recorded workflow CHOICE: {"value", "by", "agent", "user", "at",
+    #: "reason"}. `by` is "explicit" or "default" -- a default applied at first use is
+    #: recorded so the project keeps following it even if ddflow's default changes.
+    flow_choices: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_lamport: int = 0
     event_count: int = 0
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
@@ -531,13 +615,15 @@ def _h_added(st: State, ev: Event, kind: str) -> None:
     it.tags = list(d.get("tags", it.tags))
     it.priority = int(d.get("priority", it.priority))
     it.source = d.get("source", it.source)
+    for f in ("line", "port_of", "port_from", "port_strategy"):
+        setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
 
 
 def _h_updated(st: State, ev: Event, kind: str) -> None:
     it = _item(st, ev, kind)
     d = ev.data
-    for f in ("title", "parent", "body", "blocked_reason"):
+    for f in ("title", "parent", "body", "blocked_reason", "line"):
         if f in d:
             setattr(it, f, _safe_parent(st, it.id, d[f]) if f == "parent" else d[f])
     for f in ("needs", "globs", "tags", "resources"):
@@ -642,7 +728,10 @@ def _h_state(new_state: str):
             it.blocked_reason = ev.data.get("reason", "")
         elif new_state == DONE:
             it.completed_at = ev.ts
-            it.merged_sha = ev.data.get("sha", it.merged_sha)
+            # `or`, not a default: `complete` without --sha writes "sha": "", which used
+            # to ERASE the sha `merge` recorded -- so no finished item was ever found on
+            # any branch, and every version's item list and item-based bump were empty.
+            it.merged_sha = ev.data.get("sha") or it.merged_sha
             # The importer has always written this -- `{"imported": True, "evidence":
             # "ticked in docs/todo.md:41"}` -- and the fold has always thrown it away,
             # so the one record of WHY an item was closed without running a single gate
@@ -702,6 +791,7 @@ def _h_worktree_created(st: State, ev: Event) -> None:
     it = _item(st, ev, ev.data.get("kind", "task"))
     it.worktree = ev.data.get("path", "")
     it.branch = ev.data.get("branch", "")
+    it.base = ev.data.get("base", "")
 
 
 def _h_worktree_adopted(st: State, ev: Event) -> None:
@@ -710,13 +800,141 @@ def _h_worktree_adopted(st: State, ev: Event) -> None:
 
 
 def _h_worktree_merged(st: State, ev: Event) -> None:
-    _item(st, ev, ev.data.get("kind", "task")).merged_sha = ev.data.get("sha", "")
+    it = _item(st, ev, ev.data.get("kind", "task"))
+    it.merged_sha = ev.data.get("sha", "")
+    it.landed_before = ev.data.get("landed_before", it.landed_before)
+    it.landed_after = ev.data.get("landed_after", it.landed_after)
+
+
+def _h_port_applied(st: State, ev: Event) -> None:
+    it = _item(st, ev, ev.data.get("kind", "task"))
+    it.port = dict(ev.data)
+
+
+def _h_flow_chosen(st: State, ev: Event) -> None:
+    d = ev.data
+    st.flow_choices[d.get("knob", ev.subject)] = {
+        "value": d.get("value"),
+        "by": d.get("by", "explicit"),
+        "agent": ev.agent,
+        "user": d.get("user", ""),
+        "at": ev.ts,
+        "reason": d.get("reason", ""),
+    }
 
 
 def _h_worktree_removed(st: State, ev: Event) -> None:
     it = st.items.get(ev.subject)
     if it:
         it.worktree = ""
+
+
+_PR_FIELDS = (
+    "number",
+    "url",
+    "forge",
+    "base",
+    "head",
+    "state",
+    "review",
+    "checks",
+    "head_sha",
+    "merge_sha",
+    "feedback",
+    "author_model",
+)
+
+
+def _pr(st: State, ev: Event) -> tuple[Item, PullRequest]:
+    it = _item(st, ev, ev.data.get("kind", "task"))
+    if it.pr is None:
+        it.pr = PullRequest()
+    for key in _PR_FIELDS:
+        if key in ev.data:
+            setattr(it.pr, key, ev.data[key])
+    it.pr.synced_at = ev.ts
+    return it, it.pr
+
+
+def _h_pr_opened(st: State, ev: Event) -> None:
+    """Opened OR re-pushed: either way the work is now the reviewers' to judge.
+
+    Feedback from an earlier round is cleared, because it was answered by this push --
+    carrying it forward would hand the next agent a list of things already fixed.
+    """
+    it, pr = _pr(st, ev)
+    pr.state = "open"
+    pr.review = ev.data.get("review", "pending")
+    pr.feedback = ""
+    it.state = REVIEW
+    it.blocked_reason = ""
+
+
+def _h_pr_synced(st: State, ev: Event) -> None:
+    _pr(st, ev)
+
+
+def _h_pr_changes_requested(st: State, ev: Event) -> None:
+    """Back to the queue, WITH the review attached -- or parked, if the operator said so.
+
+    OPEN rather than RUNNING: nobody holds it, and RUNNING-without-a-lease is the shape
+    of a crash. The branch and worktree stay on the item, so the next claim adopts the
+    same tree and a push updates the same request.
+    """
+    it, pr = _pr(st, ev)
+    pr.review = "changes_requested"
+    pr.requested_head = pr.head_sha
+    pr.rounds += 1
+    if ev.data.get("block"):
+        it.state = BLOCKED
+        it.blocked_reason = f"changes requested on {pr.url or 'its pull request'}"
+    else:
+        it.state = OPEN
+
+
+def _h_pr_merged(st: State, ev: Event) -> None:
+    it, pr = _pr(st, ev)
+    pr.state = "merged"
+    it.merged_sha = pr.merge_sha or it.merged_sha
+
+
+def _h_pr_closed(st: State, ev: Event) -> None:
+    """Closed without merging is a reviewer's NO, and a no is for a person to read.
+
+    Parked, never silently reopened: re-offering it would send an agent to redo work a
+    human just declined, which is a loop with a person in it.
+    """
+    it, pr = _pr(st, ev)
+    pr.state = "closed"
+    it.state = BLOCKED
+    it.blocked_reason = f"pull request closed without merging: {pr.url}"
+
+
+def _h_release_opened(st: State, ev: Event) -> None:
+    st.pending_releases[ev.subject] = {
+        k: ev.data.get(k, "") for k in ("branch", "number", "url", "base", "forge")
+    }
+
+
+def _h_release_closed(st: State, ev: Event) -> None:
+    st.pending_releases.pop(ev.subject, None)
+
+
+def _h_release_tagged(st: State, ev: Event) -> None:
+    d = ev.data
+    st.pending_releases.pop(d.get("version", ev.subject), None)
+    st.releases.append(
+        Release(
+            version=d.get("version", ev.subject),
+            tag=d.get("tag", ""),
+            sha=d.get("sha", ""),
+            branch=d.get("branch", ""),
+            items=list(d.get("items", [])),
+            at=ev.ts,
+            pushed=bool(d.get("pushed")),
+            line=d.get("line", ""),
+        )
+    )
 
 
 def _h_bug_found(st: State, ev: Event) -> None:
@@ -1010,6 +1228,16 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "worktree.adopted": _h_worktree_adopted,
     "worktree.merged": _h_worktree_merged,
     "worktree.removed": _h_worktree_removed,
+    "pr.opened": _h_pr_opened,
+    "pr.synced": _h_pr_synced,
+    "pr.changes_requested": _h_pr_changes_requested,
+    "pr.merged": _h_pr_merged,
+    "pr.closed": _h_pr_closed,
+    "port.applied": _h_port_applied,
+    "flow.chosen": _h_flow_chosen,
+    "release.opened": _h_release_opened,
+    "release.tagged": _h_release_tagged,
+    "release.closed": _h_release_closed,
     "bug.found": _h_bug_found,
     "bug.fixed": _h_bug_fixed,
     "lesson.recorded": _h_lesson,

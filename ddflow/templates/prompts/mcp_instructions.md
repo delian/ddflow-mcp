@@ -60,6 +60,17 @@ own worktree, skip it.
 **The loop:** `ddflow_next` → `ddflow_claim` → work in the worktree →
 `ddflow_gate_status` and satisfy each gate → `ddflow_merge` → `ddflow_complete`.
 
+Where merges go through pull requests (`[flow].integration = "pr"`), `ddflow_merge` opens
+the request and parks the item IN REVIEW with your lease released: do not wait and do not
+`ddflow_complete` it — take the next item. `ddflow_next` syncs reviews itself: merged work
+completes, and an item with requested changes returns to the queue with the review at the
+top of its `ddflow_brief`.
+
+How THIS project works — branching model, release lines, how fixes reach older lines — is
+`ddflow_flow_show`. A choice nobody has made is listed in `ddflow_brief`: ask the operator,
+or choose what suits the project with `ddflow_flow_choose` and a reason. Left alone, the
+default is applied the first time it matters and followed from then on.
+
 **The pipeline every task passes through, in order:**
 {% for g in task_pipeline %} {{ g }} ·{% endfor %}
 

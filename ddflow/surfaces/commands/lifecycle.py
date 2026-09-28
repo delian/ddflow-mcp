@@ -36,6 +36,16 @@ def cmd_next(a, c: Ctx) -> int:
     # full of work, and starting it from scratch loses that.
     for note in p.interrupted:
         print(f"INTERRUPTED: {note}", file=sys.stderr)
+    for change in out.data["synced"].get("changes", []):
+        print(f"pr sync: {change}", file=sys.stderr)
+    for gap in out.data["synced"].get("unavailable", []):
+        print(f"pr sync UNAVAILABLE: {gap}", file=sys.stderr)
+    if p.review:
+        print(
+            f"In review ({len(p.review)}): {', '.join(i.id for i in p.review)} — "
+            f"waiting on people, not on you.",
+            file=sys.stderr,
+        )
     if not p.ready:
         print(out.reason)
         for b in p.blocked[:10]:
@@ -84,7 +94,9 @@ def cmd_claim(a, c: Ctx) -> int:
             f"\n  worktree: {d['worktree']}\n  branch:   {d['branch']} (from {d['base']})"
             f"\n  cd there and work."
         )
-    c.out(msg, out.body(("item", "holder", "worktree", "branch")))
+    if d["port_advice"]:
+        msg += f"\n  {d['port_advice']}"
+    c.out(msg, out.body(("item", "holder", "worktree", "branch", "base", "port", "port_advice")))
     return OK
 
 
@@ -174,6 +186,7 @@ def cmd_merge(a, c: Ctx) -> int:
         message=a.message or "",
         allow_dirty=a.allow_dirty,
         keep=a.keep,
+        model=a.model or "",
         agent=c.requested_agent,
     )
     if out.exit == REFUSED and out.data.get("dirty"):
@@ -197,13 +210,30 @@ def cmd_merge(a, c: Ctx) -> int:
         return REFUSED
     if out.exit != OK:
         return _refused(out)
+    if out.data.get("pr"):
+        for w in out.data["warnings"]:
+            print(f"  {w}", file=sys.stderr)
+        stacked = f", stacked on {out.data['stacked_on']}" if out.data["stacked_on"] else ""
+        c.out(
+            f"{'opened' if out.data['created'] else 'updated'} {out.data['pr']} into "
+            f"{out.data['base']}{stacked}. {a.id} is IN REVIEW and its lease is released — "
+            f"take the next item; `ddflow pr sync` completes it once merged.",
+            out.body(MERGE_PAYLOAD),
+        )
+        return OK
     if out.data["kept_reason"]:
         print(f"  {out.data['kept_reason']}", file=sys.stderr)
+    for extra in out.data["back_merged"]:
+        print(f"  back-merged into {extra}", file=sys.stderr)
     c.out(
         f"merged {a.id} ({out.data['sha'][:8]}) into {out.data['base']}",
-        out.body(("id", "sha")),
+        out.body(MERGE_PAYLOAD),
     )
     return OK
+
+
+#: The wire body of `merge` on both surfaces. `pr` is empty for a local merge.
+MERGE_PAYLOAD = ("id", "sha", "base", "pr")
 
 
 def cmd_brief(a, c: Ctx) -> int:

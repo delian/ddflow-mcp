@@ -135,6 +135,16 @@ quietly omits them. Both happened on 2026-09-27.
   Kilo ignores it (probed); re-running `adopt --agents kilo` adds the working `mcp` entry
   but does not remove the dead one.
 * `enforce._out_hint` names no `--out` when stale views span several directories.
+* **`demos/run_all.py` hardcodes `/tmp/ddflow-demos` and `rmtree`s it.** Two sessions
+  running demos at once wipe each other's repos mid-scenario: on 2026-09-27 a combined-tree
+  run failed `mcp-orchestration` (AGENTS.md vanished after `ddflow_setup` succeeded) while
+  another session's two demo runs were live; re-run with a private base dir it passed 6/6.
+  A per-run base (env var or `tempfile.mkdtemp`) fixes it. Until then, run demos alone.
+* **Seven git path listings still read without `-z`**, so a non-ASCII name comes back
+  C-quoted (wrong, not a crash): `services/gates.py:610,707,763` (the gate TREE
+  FINGERPRINT — B21's `tree_sha` — hashes paths from these), `infra/worktree.py:246,378,407`,
+  `surfaces/commands/setup.py:416`. The reader to use is `infra.worktree.git_paths`
+  (`--porcelain` needs `-z` too, but its records are `XY path`, so it wants its own parse).
 
 **Queue roborev on whatever you commit** — every run on this series has found something
 real. On `7216f5e` (job 817) it found two CONFIRMED defects the adversarial subagent had
@@ -148,7 +158,18 @@ had no MCP parity test. On THAT (`8b167e9`, job 819): the printed remedy for an 
 shard (`git add`) stages nothing, so following it was refused forever — fixed, and the test
 now RUNS the printed `git add` lines and commits. **Test a remedy by executing it.** On
 THAT (`40950c9`, job 820): git C-quotes non-ASCII paths unless given `-z`, so the new
-`git add -f` named no file. Every git path listing in `enforce.py` now uses `-z`.
+`git add -f` named no file. Every git path listing in `enforce.py` now uses `-z`. On THAT
+(`4f54455`, job 821): `-z` emits RAW bytes, and `text=True` decoded them strictly, so one
+non-UTF-8 filename made every commit raise. Read `-z` output as bytes and `os.fsdecode` it
+(`W.git_paths`). On THAT (`e8543f9`, job 822): a THIRD caller, `inventory._candidates`,
+had the identical bug, and my test of the log-probe decode never reached the probe. All
+three now share `infra.worktree.git_paths`; each call site is pinned by its own test.
+**Correction to `18cae1a`'s commit message:** it says its full run was on a snapshot
+"identical to this tree". Another session landed R16 (`165b84b`) on `main` while that run
+was going, so `18cae1a` sits on a base the run never saw. The commit after it was run on
+the COMBINED tree. **Before committing, check `git log -1` is still the base you tested.**
+On `18cae1a` (job 823): `staged_paths` collapsed git's failure into `[]` — "nothing staged"
+— so a damaged index passed the lease and view checks. It now returns None and both refuse.
 
 ## 3. What was finished in the previous session
 
