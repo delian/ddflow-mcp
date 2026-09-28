@@ -412,9 +412,9 @@ The design decisions, with the probes that settled each, are in
 
 `uvx` fetches and runs the published package in an ephemeral environment on first use —
 no clone, no virtualenv, no `PYTHONPATH`, no install step for an operator to forget, and
-no vendored copy to drift from upstream. ddflow has **zero runtime dependencies**
-beyond `python3` and `git`, which is what lets it install inside sandboxes, CI images
-and other tools' ephemeral containers.
+no vendored copy to drift from upstream. ddflow needs **one runtime dependency**
+beyond `python3` and `git` (Jinja2), which is what lets it install inside
+sandboxes, CI images and other tools' ephemeral containers.
 
 Then, from the agent, with no shell at all:
 
