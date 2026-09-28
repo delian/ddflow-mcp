@@ -89,3 +89,27 @@ def test_ddflow_workflow_shows_the_advice_end_to_end(repo):
     assert run_cli(repo, "config", "--set", "gate.unit_tests.command", "pytest -q")[0] == 0
     _, out, _ = run_cli(repo, "workflow")
     assert "runs pytest on ONE core: declare pytest-xdist" in out, out
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [
+        '[dependency-groups]\ndev = ["pytest>=9"]\n# "pytest-xdist>=3",  disabled\n',
+        '[dependency-groups]\ndev = ["pytest>=9", "pytest-xdist-foo>=1"]\n',
+    ],
+)
+def test_a_comment_or_a_longer_name_does_not_declare_xdist(tmp_path, manifest):
+    """Regression (rubber-duck on B-parallel-tests): a substring match proposed `-n auto`
+    for a project whose only mention of xdist was commented out, or another package."""
+    (tmp_path / "pyproject.toml").write_text(manifest)
+    assert not G.declares_xdist(tmp_path)
+    assert G.suggested_test_command(tmp_path) == "pytest -q"
+
+
+def test_a_python_project_that_does_not_use_pytest_is_not_told_to(tmp_path):
+    """Regression (rubber-duck on B-parallel-tests): any Python manifest got `pytest -q`,
+    including a unittest-only project."""
+    (tmp_path / "tox.ini").write_text("[testenv]\ncommands = python -m unittest discover\n")
+    assert G.suggested_test_command(tmp_path) == ""
+    (tmp_path / "conftest.py").write_text("")
+    assert G.suggested_test_command(tmp_path) == "pytest -q", "conftest.py is pytest's own"
