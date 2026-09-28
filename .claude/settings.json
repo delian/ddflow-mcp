@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "PYTHONPATH=\"/home/delian/src/ddflow${PYTHONPATH:+:$PYTHONPATH}\" \"/home/delian/src/ddflow/.venv/bin/python\" -m ddflow hooks session-start"
+          }
+        ]
+      }
+    ]
+  }
+}
