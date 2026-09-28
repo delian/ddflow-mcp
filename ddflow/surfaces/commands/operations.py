@@ -206,3 +206,38 @@ def cmd_external(a, c: Ctx) -> int:
             mark = "  (changed)" if o["changed"] else ""
             print(f"  {o['dep']}: {o['state']}{mark}  {o['title'][:70]}")
     return out.exit
+
+
+def cmd_pins(a, c: Ctx) -> int:
+    """Which text of an instruction file is pinned by a test, and which is free."""
+    tests = tuple(t.strip() for t in (a.tests or "").split(",") if t.strip())
+    out = A.pins(c.repo, a.document, tests=tests, min_chars=a.min_needle, top=a.top)
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
+    if c.json:
+        print(json.dumps(out.body(), indent=2))
+        return out.exit
+    if out.exit == NOTHING:
+        print(out.reason)
+        return NOTHING
+    d = out.data
+    print(
+        f"{d['document']}: {d['chars']} chars, {d['pinned_chars']} pinned by "
+        f"{len(d['pins'])} needle(s), {d['free_chars']} free ({d['scanned']} test file(s) read)"
+    )
+    if d["unparsed"]:
+        print(
+            f"  NOTE: {len(d['unparsed'])} test file(s) did not parse and were read by a "
+            f"lexer instead (all their quoted text counts as pinned), or could not be read "
+            f"at all: {', '.join(d['unparsed'])}"
+        )
+    if d["tests"]:
+        print("\nAfter editing it, re-run the suites that pin it:")
+        print(f"  pytest {' '.join(d['tests'])}")
+    for f in d["free"]:
+        a_, b_ = f["lines"]
+        where = f"line {a_}" if a_ == b_ else f"lines {a_}-{b_}"
+        print(f"\n--- {f['chars']} chars free, {where} ---\n{f['text']}")
+    print("\nFree means no test holds it, not that it is not a rule. Read what you delete.")
+    return OK
