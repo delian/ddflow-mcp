@@ -526,6 +526,12 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "line). Omit for the current line; tasks inherit a phase's line.",
                 False,
             ),
+            "readd": (
+                "boolean",
+                "File a REMOVED item's id again with this definition. An id still in the "
+                "queue is always refused -- change that item with ddflow_update.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().phase_add(
             repo,
@@ -537,6 +543,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             tags=a.get("tags", "") or "",
             priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
             line=a.get("line", "") or "",
+            readd=bool(a.get("readd")),
             agent=agent,
         ),
         "payload": ("id",),
@@ -614,6 +621,12 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "carries has landed.",
                 False,
             ),
+            "readd": (
+                "boolean",
+                "File a REMOVED item's id again with this definition. An id still in the "
+                "queue is always refused -- change that item with ddflow_update.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().task_add(
             repo,
@@ -627,6 +640,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
             line=a.get("line", "") or "",
             lines=a.get("lines", "") or "",
+            readd=bool(a.get("readd")),
             agent=agent,
         ),
         "payload": ("id", "line", "ports", "port_strategy", "defaulted"),
