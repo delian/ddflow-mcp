@@ -91,9 +91,10 @@ ddflow task add P1.T1 --phase P1 --title "Reset-token endpoint" --globs 'src/aut
 ddflow next                          # what can start now, and why the rest is blocked
 ```
 
-`--launch python` points your agents at the interpreter you just installed into. Without
-it, `adopt` registers `uvx ddflow-mcp`, which fetches the package from PyPI and so cannot
-start until the first release is published.
+`--launch python` writes the full path of the interpreter inside the environment you
+just installed into (plus its `PYTHONPATH`), not a bare `python`. Without it, `adopt`
+registers `uvx ddflow-mcp`, which fetches the package from PyPI and so cannot start until
+the first release is published.
 
 Then tell your agent *"implement phase P1"*. The driver `adopt` installed tells it to
 start with `ddflow_brief`, claim the task, work in its own worktree, satisfy each gate
