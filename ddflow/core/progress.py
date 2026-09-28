@@ -410,7 +410,12 @@ def _reopened(tracked: dict[str, ItemWork], lc, sev: str) -> list[LoopFinding]:
 
 
 def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
-    """Two live items that write the same files. A queue re-describing its own work."""
+    """Two live items that declare exactly the same files: a conflict, not a duplicate.
+
+    Identical globs say the items cannot run at once. They do not say the work is the
+    same (Bf84cccbaa6: three distinct features shared coarse imported globs), so the
+    finding asks for a comparison rather than asserting a re-description.
+    """
     out = []
     by_globs: dict[tuple[str, ...], list[str]] = defaultdict(list)
     for it in state.items.values():
@@ -430,8 +435,11 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
                 detail=(
                     f"{len(ids)} open items declare exactly the same files "
                     f"({', '.join(globs)}): {', '.join(sorted(ids))}. They cannot run "
-                    f"in parallel (the conflict detector will refuse), and one of them "
-                    f"is probably a re-description of another."
+                    f"in parallel (the conflict detector will refuse). Sharing files "
+                    f"says nothing about whether the work is the same: compare their "
+                    f"titles and bodies, narrow the globs if they are coarser than the "
+                    f"work, and `ddflow remove <id>` only if one really re-describes "
+                    f"another."
                 ),
             )
         )
