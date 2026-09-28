@@ -503,7 +503,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 119 knobs.
+cadences, and the rest of the 120 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -2396,7 +2396,7 @@ declared once and persists — see
 
 ## Configuration
 
-119 knobs across 17 sections, every one documented in place:
+120 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2432,6 +2432,11 @@ part that matters.
 * **Conflicts are refused at claim time**, by glob overlap, with an alternative named.
 * **Dependencies gate readiness.** `ddflow next` withholds a task whose `needs` are open
   and says which.
+* **Bugs are offered before features.** A task tagged `bug`/`fix`/`hotfix` (the
+  `[flow]` bugfix and hotfix tags), or named by an open bug record, comes ahead of every
+  feature in `ddflow next` and gets a free slot first, so a standing bug is fixed before
+  more work is built on it. Priority orders each group; `[schedule] bugs_first = false`
+  orders by priority alone.
 * **Gate evidence records which tree and how much** — a working-tree fingerprint plus
   files/lines changed — so a pass names what it passed on. If the tree moves afterwards,
   `complete` warns that the evidence describes source nobody is shipping.
