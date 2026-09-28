@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -386,6 +387,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
             and path not in known
         ):
             notes.append(f"worktree {path} exists but no item claims it")
+    notes += _untitled(st)
 
     data: dict[str, Any] = {
         "problems": problems,
@@ -404,6 +406,33 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     )
     out.data["text"] = human.render(out)
     return out
+
+
+def _only_ids(title: str) -> bool:
+    """Empty, or nothing but id-shaped tokens and punctuation: `B30`, `B30.`, `+ B159`,
+    `B62-B64`. A word without a digit is what makes a title say something."""
+    return all(any(c.isdigit() for c in word) for word in re.findall(r"\w+", title))
+
+
+#: How many untitled ids one note names before it counts the rest.
+_UNTITLED_SHOWN = 8
+
+
+def _untitled(st) -> list[str]:
+    """ONE note naming the items whose title says nothing but their id.
+
+    A migration that cannot find a title writes the id (bug B9e8ca361ea: 24 backlog
+    items were titled `B30`, `B157`...), and every board, brief and gate prompt then
+    shows a number. Nothing else here asks whether an item can be told apart from it.
+    """
+    ids = sorted(it.id for it in st.items.values() if not it.removed and _only_ids(it.title))
+    if not ids:
+        return []
+    shown = ", ".join(ids[:_UNTITLED_SHOWN]) + (" ..." if len(ids) > _UNTITLED_SHOWN else "")
+    return [
+        f"{len(ids)} item(s) have no title of their own, only the id: {shown} — "
+        f"`ddflow update <id> --title ...`"
+    ]
 
 
 def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
