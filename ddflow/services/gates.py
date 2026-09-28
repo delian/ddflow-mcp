@@ -809,7 +809,8 @@ def _run_ticking(
     """
     p = P.popen(
         command,
-        shell=True,
+        # bandit B604: the same operator-written gate command `run_command_gate` runs.
+        shell=True,  # nosec B604
         cwd=cwd,
         env=env,
         stdout=subprocess.PIPE,
@@ -899,7 +900,9 @@ def run_command_gate(
             else:
                 p = P.run(
                     gdef.command,
-                    shell=True,
+                    # bandit B604: a command gate IS a shell command line the operator wrote
+                    # in gates.toml.
+                    shell=True,  # nosec B604
                     cwd=str(cwd),
                     env=full_env,
                     capture_output=True,

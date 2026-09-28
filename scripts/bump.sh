@@ -6,10 +6,11 @@
 #   scripts/bump.sh major     # 0.1.0 -> 1.0.0
 #   scripts/bump.sh 0.4.2     # ...or say it exactly
 #
-# WHY A SCRIPT. The version lives in FIVE places that must agree: `pyproject.toml`,
+# WHY A SCRIPT. The version lives in SIX places that must agree: `pyproject.toml`,
 # `server.json`'s `version`, its per-package `version`, the TAG inside every `oci`
-# identifier, and `SERVER_INFO` in `surfaces/mcp.py` — which is what the server tells
-# every client it is. Most are easy to forget, and the one that hurts is the OCI tag: a
+# identifier, `SERVER_INFO` in `surfaces/mcp.py` — which is what the server tells
+# every client it is — and `__version__` in `ddflow/__init__.py`, which is what
+# `ddflow --version` prints. Most are easy to forget, and the one that hurts is the OCI tag: a
 # `:0.1.0` left behind while everything else moved publishes a registry manifest pointing
 # at the PREVIOUS image — discoverable in an IDE marketplace, installable, and the wrong
 # build. `tests/test_packaging.py` catches the drift, but only after you have made it.
@@ -92,7 +93,18 @@ if mn != 1:
     sys.exit(f"surfaces/mcp.py: expected one SERVER_INFO version {cur!r}, replaced {mn}")
 mcp.write_text(mpatched)
 
-# Re-read and assert, rather than trusting the writes above. Five places is exactly the
+# The SIXTH place: `ddflow --version`. It sat at 0.1.0 through the 0.1.1 release because
+# this script did not know it existed.
+init = pathlib.Path("ddflow/__init__.py")
+itext = init.read_text()
+ipatched, n_init = re.subn(
+    rf'^(__version__ = ")({re.escape(cur)})(")', rf'\g<1>{new}\g<3>', itext, count=1, flags=re.M
+)
+if n_init != 1:
+    sys.exit(f"ddflow/__init__.py: expected one __version__ {cur!r}, replaced {n_init}")
+init.write_text(ipatched)
+
+# Re-read and assert, rather than trusting the writes above. Six places is well past the
 # number where "I updated them all" stops being checkable by eye.
 import tomllib
 
@@ -107,6 +119,11 @@ import importlib
 import ddflow.surfaces.mcp as _mcp
 
 importlib.reload(_mcp)
+import ddflow as _pkg
+
+importlib.reload(_pkg)
+if _pkg.__version__ != new:
+    problems.append(f"ddflow.__version__ is {_pkg.__version__}")
 if _mcp.SERVER_INFO["version"] != new:
     problems.append(f"SERVER_INFO is {_mcp.SERVER_INFO['version']}")
 if got_proj != new:
@@ -117,7 +134,7 @@ if stale:
     problems.append(f"stale OCI tags: {stale}")
 if problems:
     sys.exit("bump did not take: " + "; ".join(problems))
-print(f"{cur} -> {new}  (pyproject.toml, server.json + {len(got['packages'])} packages, SERVER_INFO)")
+print(f"{cur} -> {new}  (pyproject.toml, server.json + {len(got['packages'])} packages, SERVER_INFO, __version__)")
 PY
 
 cat <<EOF

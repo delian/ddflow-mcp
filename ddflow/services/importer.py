@@ -929,7 +929,9 @@ def _scan_sections(
                     title=title[:120],
                     source=f"{rel}:{line}",
                     body=body[:body_chars],
-                    extra=extra(title, body, rel) if extra else {},
+                    # bandit B610: `extra` is this function's own parameter, not Django's
+                    # QuerySet.extra().
+                    extra=extra(title, body, rel) if extra else {},  # nosec B610
                 )
             )
     return found, empty

@@ -1617,8 +1617,22 @@ Two independent axes in `[flow]`, because teams combine them freely:
 
 | | `integration = "merge"` (default) | `integration = "pr"` |
 |---|---|---|
-| **`model = "trunk"`** (default) | ddflow as it always was | GitHub flow / GitLab flow |
+| **`model = "trunk"`** (default) | ddflow as it always was | GitHub flow |
 | **`model = "gitflow"`** | gitflow, merged locally | gitflow behind approvals |
+
+Which workflow that makes, and what is not covered:
+
+| Workflow | Supported | Configure |
+|---|---|---|
+| Trunk-based development | yes | `model = "trunk"`, `integration = "merge"` — short-lived task branches landed straight on trunk |
+| Trunk-based with reviews / GitHub flow | yes | `model = "trunk"`, `integration = "pr"` |
+| Gitflow (develop, feature/bugfix/hotfix, release branches, tags) | yes | `model = "gitflow"`, either integration |
+| Several major trunks, fixes carried between them | yes | `[flow.lines]` + `port_strategy` — see [below](#several-release-lines-fixes-to-older-majors) |
+| GitLab flow with environment branches (main → staging → production) | **no** | promotion between environment branches is not modelled |
+
+Each of these is a [workflow choice](#workflow-choices-asked-recorded-defaulted-on-the-record):
+the operator sets it, or an agent records it, and when nobody does the default is applied
+at first use and followed from then on.
 
 **The agent's loop does not change.** `next` → `claim` → work → gates → `merge`. What
 `merge` *means* changes with the repository's policy:
