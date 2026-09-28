@@ -151,6 +151,11 @@ def test_git_failing_is_not_a_pass(adopted, monkeypatch):
     monkeypatch.setattr(D, "staged_diff", lambda repo: None)
     code, msg = E.check_docs(adopted, Config.load(adopted))
     assert code == 1 and "could not run" in msg
+    # Under 'warn' it is allowed, but REPORTED -- and must not claim to refuse (critic on
+    # B17: the message said "Refusing" while the exit code allowed the commit).
+    _config(adopted, mode="warn")
+    code, msg = E.check_docs(adopted, Config.load(adopted))
+    assert code == 0 and "could not run" in msg and "Refusing" not in msg
 
 
 @pytest.mark.parametrize(
