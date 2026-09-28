@@ -1071,12 +1071,26 @@ _PYTEST = re.compile(r"(?:^|[\s/])(?:py\.test|pytest)(?:\s|$)")
 _XDIST_CHOSEN = re.compile(r"(?:^|\s)(?:-n\s*\S|--numprocesses\b|--dist\b|-p\s*no:xdist\b)")
 
 
+#: A `#` comment in TOML, INI, requirements and Python alike -- at line start or after
+#: whitespace, so the `#egg=` fragment of a requirement URL is not taken for one.
+_COMMENT = re.compile(r"(?:^|\s)#.*$", re.MULTILINE)
+
+#: Whole package names: `pytest-xdist-foo` is not pytest-xdist, `pytest-cov` is not
+#: pytest; `[tool.pytest.ini_options]` IS pytest configuration, so `.` may border it.
+_XDIST_NAME = re.compile(r"(?<![\w.-])pytest[-_]xdist(?![\w-])", re.IGNORECASE)
+_PYTEST_NAME = re.compile(r"(?<![\w-])pytest(?![\w-])", re.IGNORECASE)
+
+
 def _manifest_texts(root: Path) -> list[str]:
+    """Each Python manifest's text with comments removed: a commented-out dependency is
+    not a declared one."""
     names = [*_PY_MANIFESTS, *sorted(p.name for p in root.glob("requirements*.txt"))]
     out = []
     for name in names:
         try:
-            out.append((root / name).read_text(encoding="utf-8", errors="replace"))
+            out.append(
+                _COMMENT.sub("", (root / name).read_text(encoding="utf-8", errors="replace"))
+            )
         except OSError:
             continue
     return out
@@ -1084,7 +1098,14 @@ def _manifest_texts(root: Path) -> list[str]:
 
 def declares_xdist(root: Path) -> bool:
     """Whether the project's manifests declare pytest-xdist."""
-    return any(re.search(r"pytest[-_]xdist", t, re.IGNORECASE) for t in _manifest_texts(root))
+    return any(_XDIST_NAME.search(t) for t in _manifest_texts(root))
+
+
+def uses_pytest(root: Path) -> bool:
+    """Evidence the project's tests run under pytest: its own files, or a manifest naming it."""
+    if (root / "conftest.py").is_file() or (root / "pytest.ini").is_file():
+        return True
+    return any(_PYTEST_NAME.search(t) for t in _manifest_texts(root))
 
 
 def runs_pytest_serially(command: str) -> bool:
@@ -1092,8 +1113,8 @@ def runs_pytest_serially(command: str) -> bool:
 
 
 def suggested_test_command(root: Path) -> str:
-    """The unit_tests command to propose for a Python project, or "" for any other."""
-    if not _manifest_texts(root):
+    """The unit_tests command to propose for a pytest project, or "" for any other."""
+    if not uses_pytest(root):
         return ""
     return "pytest -q -n auto" if declares_xdist(root) else "pytest -q"
 
