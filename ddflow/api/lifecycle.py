@@ -187,6 +187,18 @@ def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
     )
 
 
+def _undo_claim(log, item: str, held_before: bool, note: str) -> None:
+    """Take back what a refused claim acquired -- and ONLY that.
+
+    A fresh claim that is refused releases its lease, or the refusal itself creates the
+    stuck claim `recover` exists to clean up. But a caller that already held a live lease
+    on the item got a renewal, not a new lease: releasing it would hand an item whose
+    tree holds that caller's work to anyone who asks.
+    """
+    if not held_before:
+        L.release(log, item, note=note)
+
+
 def claim(
     repo: Path,
     item: str,
@@ -236,6 +248,15 @@ def claim(
             looping=[f.__dict__ for f in looping],
         )
     want = csv_list(globs) or None
+    # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
+    # then take away a lease the caller already had, with its tree full of work.
+    prior = st.items[item].lease if item in st.items else None
+    held_before = bool(
+        prior
+        and prior.holder == log.agent_id
+        and not prior.expired_at
+        and not prior.expired(time.time(), cfg.lease.grace_s)
+    )
     try:
         lz = L.acquire(
             log,
@@ -276,7 +297,7 @@ def claim(
             held = _worktree_held_by(st, stored, item)
             if held:
                 # RELEASE before refusing -- see the module docstring.
-                L.release(log, item, note="claim refused: worktree conflict")
+                _undo_claim(log, item, held_before, "claim refused: worktree conflict")
                 return O.refused(
                     "item.claimed",
                     f"this worktree is already bound to {held}, which is still open. "
@@ -309,7 +330,7 @@ def claim(
                         head = W.git(wt.path, "rev-parse", "--abbrev-ref", "HEAD")
                         there = head.out if head.ok else "something else"
                         there = "a detached HEAD" if there == "HEAD" else there
-                        L.release(log, item, note="claim refused: worktree path occupied")
+                        _undo_claim(log, item, held_before, "claim refused: worktree path occupied")
                         return O.refused(
                             "item.claimed",
                             f"{wt.path} already exists with {there} checked out, which "
