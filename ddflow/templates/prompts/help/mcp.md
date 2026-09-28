@@ -17,7 +17,8 @@ entry into each agent's own config: `.mcp.json` (Claude Code), `.gemini/settings
 - **Resources** — `ddflow://board`, `ddflow://brief`, `ddflow://lessons`,
   `ddflow://research`, as markdown.
 - **Prompts** — the workflow commands, which a client turns into slash commands:
-  `implement`, `import-existing-project`, `research-companions`, `bug-hunt`,
+  `implement`, `import-existing-project`, `research-companions`,
+  `install-companions`, `bug-hunt`,
   `code-deduplication`, `code-clean`, `all-tests`. **Tools are things an agent calls;
   prompts are things you invoke.** `implement` is the unattended one: it drives the queue
   to completion, and for Claude Code `ddflow adopt` also writes `/implement`, which runs it
