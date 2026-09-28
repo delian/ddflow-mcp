@@ -213,7 +213,11 @@ def test_the_shipped_loop_command_reports_the_pins_its_own_suite_holds():
         "Termination checklist",
     ):
         assert "tests/test_implement_command.py" in by_needle.get(rule, []), rule
-    assert out.data["tests"][0] == "tests/test_implement_command.py"
+    # Among the suites to re-run, and ahead of every suite that does not name the file.
+    # Not "first": this file names it too, and ordering among those is by path (critic).
+    suites = out.data["tests"]
+    assert "tests/test_implement_command.py" in suites
+    assert suites.index("tests/test_implement_command.py") < suites.index("tests/test_api_layer.py")
 
 
 def test_flatten_maps_back_to_source_offsets():
@@ -270,3 +274,27 @@ def test_a_free_stretch_after_a_pin_that_ends_its_line_starts_on_the_next_line(r
     _project(repo, {"test_a.py": "X = 'The pinned rule sentence'\n"}, doc=doc)
     [free] = pins(repo, "RULES.md").data["free"]
     assert free["lines"] == [2, 2] and free["text"] == "free text on line two"
+
+
+def test_a_suite_this_python_cannot_parse_still_holds_its_quoted_text(repo):
+    """A file with newer syntax than ddflow's interpreter is still a live suite for the
+    project's own. Its pins were reported FREE, behind a warning nobody acts on
+    (critic, B22-unparsed). Quoted text is read from it by a lexer instead."""
+    _project(
+        repo,
+        {
+            "test_new.py": (
+                "match (:\n"  # no interpreter parses this; stands in for newer syntax
+                "def test_x(doc):\n    assert 'The duplicate is bookkeeping' in doc\n"
+            )
+        },
+    )
+    out = pins(repo, "RULES.md")
+    assert out.data["unparsed"] == ["tests/test_new.py"]
+    assert "The duplicate is bookkeeping" not in _free_text(out)
+    assert [p["needle"] for p in out.data["pins"]] == ["The duplicate is bookkeeping"]
+
+
+def test_where_even_the_tokenizer_gives_up_quoted_text_is_still_read():
+    """An unterminated triple quote swallows the rest of the file for the tokenizer."""
+    assert "held text here" in PP.quoted('"""oops\nx = \'held text here\'\n', 5)

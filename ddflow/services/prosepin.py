@@ -25,7 +25,9 @@ would hold text no test checks.
 from __future__ import annotations
 
 import ast
+import io
 import re
+import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -97,6 +99,43 @@ def literals(source: str, min_chars: int = MIN_NEEDLE_CHARS) -> set[str]:
     return out
 
 
+#: A quoted string, for a file even the tokenizer gives up on. Over-matches (a quote
+#: inside a comment starts one), which only holds more text: the safe direction.
+_QUOTED = re.compile(
+    r'"""[\s\S]*?"""' + r"|'''[\s\S]*?'''" + r'|"(?:\\.|[^"\\\n])*"' + r"|'(?:\\.|[^'\\\n])*'"
+)
+
+
+def quoted(source: str, min_chars: int = MIN_NEEDLE_CHARS) -> set[str]:
+    """String literals of a module that does NOT parse, docstrings included.
+
+    A file with newer syntax than this interpreter is still a live suite under the
+    project's own, and its pins were reported FREE behind a warning (B22-unparsed). The
+    tokenizer needs no grammar, so it reads such a file; where it too stops, a quote
+    regex covers the rest. Both over-count, never under-count.
+    """
+    raw: list[str] = []
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(source).readline):
+            if tok.type == tokenize.STRING or tok.type == getattr(tokenize, "FSTRING_MIDDLE", -1):
+                raw.append(tok.string)
+    except (tokenize.TokenError, SyntaxError):
+        raw += _QUOTED.findall(source)
+    out: set[str] = set()
+    for text in raw:
+        try:
+            value = ast.literal_eval(text)
+        except (ValueError, SyntaxError, TypeError, MemoryError, RecursionError):
+            value = text.strip("rRbBuUfF").strip("\"'")
+        if isinstance(value, bytes):
+            value = value.decode("utf-8", "replace")
+        if isinstance(value, str):
+            needle = flatten(value)[0].strip()
+            if len(needle) >= min_chars:
+                out.add(needle)
+    return out
+
+
 @dataclass
 class Pin:
     """One needle found in the document, and the suites that hold it."""
@@ -163,12 +202,17 @@ def coverage(
         rel = f.relative_to(repo).as_posix() if f.is_relative_to(repo) else str(f)
         try:
             source = f.read_text(encoding="utf-8")
-            needles = literals(source, min_chars)
         # OSError: a dangling symlink or an unreadable file. One bad file must not hide
         # every pin the readable ones hold (B22-symlink).
-        except (SyntaxError, UnicodeDecodeError, ValueError, OSError):
+        except (UnicodeDecodeError, OSError):
             unparsed.append(rel)
             continue
+        try:
+            needles = literals(source, min_chars)
+        except (SyntaxError, ValueError):
+            # Still listed, so the operator knows its pins were LEXED, not parsed.
+            unparsed.append(rel)
+            needles = quoted(source, min_chars)
         if name and name in source:
             named.add(rel)
         for needle in needles:

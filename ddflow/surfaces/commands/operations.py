@@ -228,8 +228,9 @@ def cmd_pins(a, c: Ctx) -> int:
     )
     if d["unparsed"]:
         print(
-            f"  WARNING: {len(d['unparsed'])} test file(s) did not parse, so any text they "
-            f"pin is counted FREE below: {', '.join(d['unparsed'])}"
+            f"  NOTE: {len(d['unparsed'])} test file(s) did not parse and were read by a "
+            f"lexer instead (all their quoted text counts as pinned), or could not be read "
+            f"at all: {', '.join(d['unparsed'])}"
         )
     if d["tests"]:
         print("\nAfter editing it, re-run the suites that pin it:")
