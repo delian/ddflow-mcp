@@ -70,6 +70,15 @@ class Template:
 #: invokes, and these four are operator workflows, not primitives.
 #: name -> (title, one-line description, [argument names])
 COMMANDS: dict[str, tuple[str, str, list[str]]] = {
+    "implement": (
+        "Drive the queue to completion, unattended",
+        "The autonomous loop: one item per iteration — recover, pick, claim, every gate, "
+        "merge, complete, capture, cadences — until nothing actionable is left. Carries "
+        "what the per-item driver does not: the four cases in which the loop may stop, "
+        "keeping it running across turns, when to ask the operator, and the termination "
+        "checklist. Scope it to a phase or task id, or leave it empty for the whole queue.",
+        ["scope"],
+    ),
     "import-existing-project": (
         "Import an existing project's work into the queue",
         "For a project that adopts ddflow mid-stream. Reads its todo checklists, "
