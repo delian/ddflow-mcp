@@ -14,6 +14,12 @@ never copies.
 Every command below is `ddflow ...`. If your harness exposes ddflow over MCP, the
 equivalent tool is named in brackets — they are the same implementation.
 
+**To run this unattended**, use the `implement` workflow command (the MCP prompt
+`implement`; `ddflow prompts show implement` in a shell). It drives this driver one item
+per iteration and adds what an unsupervised run needs: the only four cases in which the
+loop may stop, keeping it running across turns, when to ask the operator, and the
+termination checklist. Your delta says how your harness loops it.
+
 ---
 
 ## 0. Open the session (once)
