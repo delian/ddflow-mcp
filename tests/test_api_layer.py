@@ -279,6 +279,9 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_reviewers_list": (["reviewers", "list"], {}),
     "ddflow_cleanup": (["cleanup"], {}),
     "ddflow_cadence": (["cadence"], {}),
+    # The fixture repository has no suite, so this is the exit-2 body; the OK body is compared
+    # against the CLI's in tests/test_prose_pins.py.
+    "ddflow_pins": (["pins", "README.md"], {"document": "README.md"}),
     "ddflow_import_verify": (["import", "--verify"], {}),
     "ddflow_companions": (["companions", "list"], {}),
     "ddflow_hooks": (["hooks", "status"], {}),

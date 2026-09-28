@@ -283,3 +283,65 @@ def external_sync(repo: Path, *, agent: str = "") -> O.Outcome:
             **data,
         )
     return O.ok("external.sync", **data)
+
+
+def pins(
+    repo: Path,
+    document: str,
+    *,
+    tests: tuple[str, ...] = (),
+    min_chars: int | None = None,
+    top: int = 10,
+) -> O.Outcome:
+    """Which text of an instruction file the test suite pins, and what is free (B22).
+
+    Exit 2 when no Python test file was found: with nothing to read the pins from, every
+    sentence is of unknown status, and reporting it all as free is the failure this
+    exists to prevent.
+    """
+    from ..services import prosepin as PP
+
+    # `None` is "unset", never 0: using 0 for both made an explicit `--min-needle 0`
+    # the default 12, and short pins were reported free (B22-minzero).
+    if min_chars is not None and min_chars < 1:
+        return O.failed("pins", f"--min-needle must be at least 1, got {min_chars}")
+    path = Path(document)
+    if not path.is_absolute():
+        path = repo / path
+    if not path.is_file():
+        return O.failed("pins", f"no such document: {document}")
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return O.failed("pins", f"cannot read {document}: {exc}")
+    dirs = tests or PP.DEFAULT_TEST_DIRS
+    files = PP.test_files(repo, dirs)
+    if not files:
+        return O.nothing(
+            "pins",
+            f"No Python test files under {', '.join(dirs)}: nothing says which text of "
+            f"{document} is pinned, so treat all of it as pinned.",
+            document=document,
+        )
+    rel = path.relative_to(repo).as_posix() if path.is_relative_to(repo) else str(path)
+    rep = PP.coverage(
+        text,
+        files,
+        repo=repo,
+        document=rel,
+        min_chars=PP.MIN_NEEDLE_CHARS if min_chars is None else min_chars,
+    )
+    return O.ok(
+        "pins",
+        document=rep.document,
+        chars=rep.chars,
+        pinned_chars=rep.pinned_chars,
+        free_chars=rep.chars - rep.pinned_chars,
+        scanned=rep.scanned,
+        unparsed=rep.unparsed,
+        tests=rep.tests,
+        pins=[{"needle": p.needle, "tests": p.tests, "lines": p.lines} for p in rep.pins],
+        free=[
+            {"chars": n, "lines": [a, b], "text": t[:240]} for n, a, b, t in rep.free[: max(top, 0)]
+        ],
+    )
