@@ -362,12 +362,27 @@ def session_start(repo: Path, *, model: str = "", tool: str = "", agent: str = "
     return O.ok("session.started", session=S.start(log, cfg, model=model, agent_tool=tool))
 
 
+#: Why an empty session record is refused rather than written.
+_EMPTY_SESSION_TEXT = (
+    "refusing an empty {what}: the text is empty or whitespace-only, and nothing was "
+    "recorded. Pass the words with --text (or pipe them on stdin)."
+)
+
+
 def session_prompt(
     repo: Path, session: str, text: str, *, item: str = "", agent: str = ""
 ) -> O.Outcome:
-    """Record the operator's own words, with credentials redacted before they touch disk."""
+    """Record the operator's own words, with credentials redacted before they touch disk.
+
+    Empty or whitespace-only text is refused, recording nothing: an empty prompt in the
+    log is a hole `ddflow replay` cannot see as one.
+    """
     from ..services import sessions as S
 
+    if not (text or "").strip():
+        return O.failed(
+            "session.prompt", _EMPTY_SESSION_TEXT.format(what="prompt"), session=session
+        )
     log, cfg, _st = _load(repo, agent)
     return O.ok(
         "session.prompt", redactions=S.prompt(log, cfg, session, text, item=item), session=session
@@ -379,6 +394,8 @@ def session_note(
 ) -> O.Outcome:
     from ..services import sessions as S
 
+    if not (text or "").strip():
+        return O.failed("session.note", _EMPTY_SESSION_TEXT.format(what="note"), session=session)
     log, cfg, _st = _load(repo, agent)
     S.note(log, cfg, session, text, item=item)
     return O.ok("session.note", session=session)
