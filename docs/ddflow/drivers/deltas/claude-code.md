@@ -7,7 +7,8 @@ canonical driver here, don't — fix the canonical driver instead; every harness
 1. **Iteration.** `/implement [phase or task id]` — written to `.claude/commands/` by
    `ddflow adopt` — runs `/loop` (self-paced) on the `implement` workflow command, which
    drives this driver until nothing actionable is left. `/mcp__ddflow__implement` is the
-   same command as one supervised pass. The continuation, each turn: a backgrounded
+   same command without `/loop`: it drives as far as one turn allows, with no wake-up to
+   carry it on. The continuation, each turn: a backgrounded
    command that *finishes* (e.g. `sleep 600`), then `ScheduleWakeup` re-passing the same
    `/loop` prompt. A timer alone is not a continuation mechanism; a completing background
    task re-invokes reliably. Kill the armed heartbeat before any deliberate stop —

@@ -130,3 +130,13 @@ def test_adopt_upgrades_its_own_managed_copy_and_is_idempotent(repo):
     code, out, _ = run_cli(repo, "adopt", "--agents", "claude")
     assert code == 0 and f"{CMD} is current" in out
     assert (repo / CMD).read_text() == first
+
+
+def test_a_directory_where_the_command_goes_is_refused_not_a_crash(repo):
+    """Regression for the critic's finding on B185: `read_text` on a directory raised
+    IsADirectoryError and aborted the whole adoption."""
+    (repo / CMD).mkdir(parents=True)
+    code, out, err = run_cli(repo, "adopt", "--agents", "claude")
+    assert "Traceback" not in err, err
+    assert code != 0 and f"SKIPPED {CMD}" in out + err
+    assert (repo / "docs/ddflow/drivers/implement-phase.md").is_file()  # the rest landed
