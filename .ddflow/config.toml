@@ -1,0 +1,49 @@
+# ddflow configuration — everything in one file.
+# `ddflow config --explain` documents every knob. Only what you change needs to be
+# here; everything else keeps its default.
+
+# ---------------------------------------------------------------------------------
+# THE ONE THING YOU MUST SET: how this project runs its tests.
+# ---------------------------------------------------------------------------------
+# [gate.unit_tests]
+# command = "pytest -q"     # or "npm test" · "cargo test" · "go test ./..." · "make check"
+#
+# Set it with:   ddflow config --set gate.unit_tests.command "pytest -q"
+# Until it is set, the unit_tests gate reports UNAVAILABLE — which is honest, and
+# blocks completion, rather than passing vacuously.
+#
+# Left COMMENTED on purpose: an empty table here would collide with the block that
+# `ddflow config --append-toml` writes, since TOML forbids a duplicate table, and the
+# documented way to configure the project would fail on a fresh install.
+
+# ---------------------------------------------------------------------------------
+# A cross-family reviewer makes the `critic` gate real rather than self-reported.
+# `ddflow reviewers detect --write` finds a local model server and fills this in.
+# ---------------------------------------------------------------------------------
+# [[reviewer]]
+# name     = "local"
+# base_url = "http://127.0.0.1:11434/v1"
+# model    = "qwen3:8b"
+# family   = "alibaba"            # must differ from the authoring model's family
+# gates    = ["critic"]
+# api_key_env = "MY_API_KEY"      # the NAME of an env var, never the key itself
+
+[lease]
+ttl_s = 1800            # how long a claim survives without a heartbeat
+heartbeat_s = 300
+
+[worktree]
+enabled = true
+max_parallel = 4
+
+[schedule]
+max_parallel_tasks = 4
+
+[enforce]
+# "block" makes the pre-commit hook REFUSE a commit touching paths no lease of yours
+# covers — the only layer of this workflow that does not rely on the agent agreeing.
+# Starts at "warn" so adopting ddflow never breaks an existing repo on day one.
+commit_without_lease = "warn"
+
+[session]
+brief_max_tokens = 1200

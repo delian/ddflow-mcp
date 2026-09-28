@@ -4,9 +4,13 @@ Each entry is a real finding from the review stack that was judged out of scope 
 initial build. None is a silent TODO in the source: they are all here, with the analysis
 that produced them, so the next session does not rediscover them.
 
-In an adopted project these would be ddflow tasks (`ddflow task add ...`). They live in
-markdown here because ddflow is not yet dogfooding itself — which is itself the first
-item below.
+**Migrated to the ddflow queue on 2026-09-28 — this file is now history.** All 166 entries
+are items in `.ddflow/events/` (`ddflow board`, `ddflow next`, `ddflow show B17`), each
+recording the line here it came from: 131 closed entries as completed items with the
+marker that closed them, 7 held (THEORETICAL, the remote split, B175's policy decision)
+and 28 open, with globs and the HANDOFF priority order (B17, B22, B16, B23, B26). File
+new findings with `ddflow task add`, not here: a hand-written `✅` is exactly the drift
+the 2026-09-27 audit below had to clean up by script.
 
 
 
