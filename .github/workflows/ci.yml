@@ -35,7 +35,7 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
       - name: Unit and integration tests
-        run: uv run pytest tests/ -q --timeout=420
+        run: uv run pytest tests/ -q --timeout=420 -n auto
 
   quality:
     # Fast gates, separate from `tests` so a lint failure and a behaviour failure are
