@@ -61,7 +61,7 @@ from .commands.lifecycle import (
     cmd_remove,
     cmd_unblock,
 )
-from .commands.operations import cmd_cadence, cmd_cleanup, cmd_external, cmd_import
+from .commands.operations import cmd_cadence, cmd_cleanup, cmd_external, cmd_import, cmd_pins
 from .commands.queue import cmd_phase_add, cmd_split, cmd_task_add
 from .commands.reporting import (
     cmd_board,
@@ -788,6 +788,21 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     cd.add_argument("--ran", default="")
     cd.add_argument("--note", default="")
     cd.set_defaults(fn=cmd_cadence)
+
+    pn = s.add_parser(
+        "pins",
+        help="which text of an instruction file a test pins, before you compress it",
+    )
+    pn.add_argument("document", help="the instruction file, e.g. AGENTS.md")
+    pn.add_argument("--tests", default="", help="comma-separated test dirs (default: tests,test)")
+    pn.add_argument(
+        "--min-needle",
+        type=int,
+        default=None,
+        help="shortest literal that counts as a pin (default 12)",
+    )
+    pn.add_argument("--top", type=int, default=10, help="how many free stretches to show")
+    pn.set_defaults(fn=cmd_pins)
 
     rv = s.add_parser("reviewers", help="find, list and test cross-family reviewers")
     rv_s = rv.add_subparsers(dest="reviewers_cmd", required=True)

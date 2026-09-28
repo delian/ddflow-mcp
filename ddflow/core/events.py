@@ -21,13 +21,15 @@ from typing import Any
 
 SCHEMA_VERSION = 1
 
-#: Initial bytes read when seeking a shard's last line, doubled until a full line is
-#: found. One page: large enough that a single read almost always suffices, small
-#: enough that the tail read stays cheap on NFS (measured ~36x local I/O cost).
+#: Initial bytes read when seeking a shard's last line (`EventLog.head`'s fingerprint),
+#: doubled until a full line is found. One page: large enough that a single read almost
+#: always suffices, small enough that the tail read stays cheap on NFS (measured ~36x
+#: local I/O cost). The Lamport clock no longer reads tails -- see
+#: `EventLog._highest_lamport` for why a tail is not a shard's maximum.
 TAIL_WINDOW_BYTES = 4096
 
 #: Ceiling on that search. An event larger than this is a bug elsewhere, and the bound
-#: is what keeps the Lamport clock read O(shards) rather than O(bytes).
+#: is what keeps the fingerprint O(shards) rather than O(bytes).
 TAIL_MAX_BYTES = 65536
 
 
