@@ -27,10 +27,7 @@ Everything else — a pending review, an asynchronous reviewer still running, a 
 1. **Re-orient.** `ddflow_recover` first — a crashed agent's worktree often holds finished work that exists nowhere else; salvage it before starting anything new. Then `ddflow_brief`. Read any operator message that arrived since the last iteration BEFORE resuming.
 2. **Pick.** `ddflow_next`{% if scope %}, within `{{ scope }}`{% endif %}. Exit 2 is a result, not an error: read the blocked list. Never take an item `ddflow_next` did not offer, and never the first unchecked box you happen to see.
 3. **Claim.** `ddflow_claim`. Exit 3 means coordination said no: take one of the alternatives it lists rather than waiting. Work ONLY in the worktree it returns. Heartbeat during long work.
-4. **Satisfy every gate**, in the order `ddflow_gate_status` gives, following its per-gate instruction. The driver's four binding rules apply without exception: unavailable is never passed; evidence or it did not happen; a different-family reviewer; no source change from a finding without a mutation-verified probe.
-   - Launch independent reviewers CONCURRENTLY, and **wait for every one to report** before merging. A reviewer that has not reported yet is not a reviewer that found nothing.
-   - **No reviewer sees another's verdict.** Each gets the diff, the intent and your research notes — nothing else.
-   - A majority of reviewers may KILL a finding; it may never PROMOTE one. Only a probe promotes.
+4. **Satisfy every gate**, in the order `ddflow_gate_status` gives, following its per-gate instruction. The driver's binding rules and its rules for combining reviewers apply without exception.
    - Out-of-scope findings become new items (`ddflow_task_add`, `ddflow_bug_found`), never silent TODOs and never this item's commit.
 5. **Land it.** Commit explicit paths only (never `add -A`, never `--no-verify`, never a quiet commit that hides a failing hook), then `ddflow_merge`, then `ddflow_complete`. Where `ddflow_flow_show` says integration is `pr`, `ddflow_merge` parks the item IN REVIEW and releases your lease: do not wait for approval and do not complete it — take the next item; `ddflow_next` syncs it later.
 6. **Capture.** A bug found → `ddflow_bug_found` before fixing it. A surprise → `ddflow_lesson_add`. A settled design choice → `ddflow_decision_add`.
