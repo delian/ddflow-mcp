@@ -32,6 +32,7 @@ Two rules shape this file:
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -131,7 +132,10 @@ class Status:
 
     @property
     def state(self) -> str:
-        if self.registered_in:
+        # Only an MCP server is registered. A cli companion named in an agent's MCP
+        # config is a leftover entry, and reporting it `registered` showed `[x]` beside
+        # a tool that was not on the PATH -- the goal state `usable` already refuses it.
+        if self.registered_in and self.companion.is_mcp:
             return "registered"
         if self.installed is None:
             return "unknown"
@@ -274,8 +278,34 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
         return None, f"the probe could not be run at all ({exc}) — could not tell"
     if p.returncode != 0:
         return False, f"`{' '.join(c.detect)}` exited {p.returncode}"
-    first = (p.stdout or p.stderr).strip().splitlines()
-    return True, (first[0][:80] if first else exe)
+    said = [*_said(p.stdout or ""), *_said(p.stderr or "")]
+    return True, (said[0][:80] if said else f"`{' '.join(c.detect)}` exited 0")
+
+
+#: The package manager's own diagnostics: `npx` prints npm's config warnings to stderr
+#: ahead of a server that writes nothing to stdout.
+_NPM_NOISE = re.compile(r"npm (warn|notice|err)", re.IGNORECASE)
+
+#: Terminal colour codes. `npm_config_color=always` wraps each word of a warning in them,
+#: and a filter matching the plain text then lets every coloured warning through.
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+
+
+def _said(output: str) -> list[str]:
+    """The lines of a probe's output that say something about the tool.
+
+    The first line was taken as the version whatever it was, so `docker image inspect`
+    (a JSON document) read `installed ([)` and an `npx` probe read as an npm warning.
+    Structured output is dropped WHOLE, by parsing it rather than by its first
+    character: `[codeguide] v1.2` is a line worth showing, and a bracket rule loses it.
+    """
+    try:
+        if isinstance(json.loads(output), (dict, list)):
+            return []
+    except ValueError:
+        pass
+    lines = (_ANSI.sub("", line).strip() for line in output.splitlines())
+    return [line for line in lines if line and not _NPM_NOISE.match(line)]
 
 
 #: Agents whose MCP config keys servers under `servers` rather than `mcpServers`.
