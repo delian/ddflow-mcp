@@ -228,7 +228,7 @@ def render(p: Proposal) -> str:
     stacks = ", ".join(sorted(p.stacks)) or "none detected"
     lines = [
         "# Proposed by `ddflow precommit` for this repository's stacks: " + stacks + ".",
-        "# Review it, then `pre-commit install` (installs the pre-commit and commit-msg hooks).",
+        "# Review it, then `pre-commit install` (installs the hook types listed below).",
         "# `pre-commit autoupdate` moves the pinned revisions forward.",
         f"default_install_hook_types: [{', '.join(p.hook_types)}]",
         "repos:",

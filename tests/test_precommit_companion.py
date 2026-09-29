@@ -246,3 +246,11 @@ def test_yaml_is_fully_loaded_unless_the_project_uses_custom_tags(repo):
     _commit(repo, {"mkdocs.yml": "site_name: x\n"})
     args = {h.id: h for r in PC.propose(repo).repos for h in r.hooks}["check-yaml"].fields["args"]
     assert "--unsafe" in args, "MkDocs configs use !!python/name tags"
+
+
+def test_the_activation_hint_names_the_hook_types_the_config_declares(repo):
+    """Bug Bed4fd7ba0c: the hint said "the pre-commit and commit-msg hooks" whatever the
+    config declared, and a Go project's config also installs pre-push."""
+    _commit(repo, {"go.mod": "module x\n"})
+    out = OPS.precommit(repo, where=repo)
+    assert out.data["hook_types"] == ["pre-commit", "commit-msg", "pre-push"]

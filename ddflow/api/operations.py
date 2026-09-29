@@ -485,6 +485,7 @@ def precommit(
         "ddflow_cmd_found": _command_found(ddflow_cmd, tree),
         # Programs the proposed hooks run from PATH that this machine does not have.
         "missing": [prog for prog in prop.requires if shutil.which(prog) is None],
+        "hook_types": prop.hook_types,  #: the git hooks `pre-commit install` sets up
         "stacks": prop.stacks,
         "repos": [
             {"repo": r.url, "rev": r.rev, "hooks": [h.id for h in r.hooks], "why": r.why}

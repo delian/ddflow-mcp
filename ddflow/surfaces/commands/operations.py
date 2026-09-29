@@ -307,5 +307,9 @@ def cmd_precommit(a, c: Ctx) -> int:
     elif not d["installed"]:
         print("# pre-commit is not installed: ask the operator, then `pipx install pre-commit`.")
     elif d["written"]:
-        print("Activate it with `pre-commit install` (the pre-commit and commit-msg hooks).")
+        print(
+            "Activate it with `pre-commit install`, which installs the "
+            + ", ".join(d["hook_types"])
+            + " hooks the config declares."
+        )
     return out.exit
