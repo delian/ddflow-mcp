@@ -14,6 +14,7 @@ exists because the record is worthless without it:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -329,13 +330,31 @@ def bug_fixed(
     agent: str = "",
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again."""
-    log, cfg, _st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     if not regression_test and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
             "a bug may not be closed without --regression-test naming the test that "
             "would catch it again. Write the test, watch it FAIL against the unfixed "
             "code, then close.",
+            id=item,
+        )
+    # An unknown id used to be closed anyway, folding a phantom bug while the real one
+    # stayed open -- typically the TASK id, passed because `bug found --item` links one.
+    if item not in st.bugs:
+        linked = sorted(b.id for b in st.bugs.values() if b.item == item and not b.fixed_at)
+        hint = (
+            f" Open bugs linked to {item}: {', '.join(linked)} -- close those ids."
+            if linked
+            else " `ddflow recall` or `ddflow status` lists the open bugs."
+        )
+        return O.refused("bug.fixed", f"no bug {item} is recorded in this log.{hint}", id=item)
+    missing, unchecked = _unresolved_tests(repo, regression_test)
+    if missing:
+        return O.failed(
+            "bug.fixed",
+            f"--regression-test names a test that exists in no worktree of this "
+            f"repository: {', '.join(missing)}. Name the test that now guards this bug.",
             id=item,
         )
     log.append("bug.fixed", item, {"regression_test": regression_test, "lesson": lesson})
@@ -352,7 +371,50 @@ def bug_fixed(
                 "tags": ["bug"],
             },
         )
-    return O.ok("bug.fixed", id=item, regression_test=regression_test, lesson_captured=captured)
+    return O.ok(
+        "bug.fixed",
+        id=item,
+        regression_test=regression_test,
+        lesson_captured=captured,
+        unchecked=unchecked,
+    )
+
+
+def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
+    """Split a `--regression-test` list into (missing, unchecked) pytest node ids.
+
+    A node id (`path.py::name[...]`, `path.py::Class::name`) is looked up in EVERY
+    worktree, because a bug is closed from the fix branch before its test reaches the
+    base. Only names are checked, statically: whether the test FAILS without the fix is
+    B-bugfix-verified's job. Anything that is not a Python node id -- a spec, a shell
+    command -- cannot be resolved here and is returned as unchecked, not refused.
+    """
+    from ..infra import worktree as W
+
+    trees = [Path(t["worktree"]) for t in W.list_worktrees(repo) if t.get("worktree")] or [repo]
+    missing: list[str] = []
+    unchecked: list[str] = []
+    for entry in (e.strip() for e in spec.split(",")):
+        path, _, names = entry.partition("::")
+        if not entry or not path.endswith(".py"):
+            if entry:
+                unchecked.append(entry)
+            continue
+        wanted = [n.split("[", 1)[0] for n in names.split("::") if n]
+        if not any(_defines(tree / path, wanted) for tree in trees):
+            missing.append(entry)
+    return missing, unchecked
+
+
+def _defines(source: Path, names: list[str]) -> bool:
+    """Does `source` exist and define every class/function in `names`?"""
+    try:
+        text = source.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        return False
+    return all(
+        re.search(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(n)}\b", text, re.M) for n in names
+    )
 
 
 def session_start(repo: Path, *, model: str = "", tool: str = "", agent: str = "") -> O.Outcome:
