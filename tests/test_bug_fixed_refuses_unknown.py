@@ -176,3 +176,40 @@ def test_a_test_file_outside_the_repository_does_not_count(repo, tmp_path):
         out = api.bug_fixed(repo, "B1", regression_test=ref)
         assert out.exit == FAIL, (ref, out)
     assert _open_bugs(repo) == 1
+
+
+def test_a_node_id_is_resolved_as_a_chain_not_as_names_anywhere(repo):
+    """Each name used to be matched anywhere in the file, so a method passed for a
+    module-level test and a function outside the class passed for Class::method
+    (critic on 34f6c53, B-bfu-structure)."""
+    run_cli(repo, "init")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_x.py").write_text(
+        "class TestA:\n    pass\n\n\nclass TestB:\n    def test_method(self):\n        pass\n\n\n"
+        "def test_free():\n    pass\n\n\n"
+        "if True:\n    def test_guarded():\n        pass\n"
+    )
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    for bogus in ("tests/test_x.py::test_method", "tests/test_x.py::TestA::test_free"):
+        out = api.bug_fixed(repo, "B1", regression_test=bogus)
+        assert out.exit == FAIL, (bogus, out)
+    out = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test=(
+            "tests/test_x.py::TestB::test_method, tests/test_x.py::test_free, "
+            "tests/test_x.py::test_guarded"
+        ),
+    )
+    assert out.exit == OK, out
+
+
+def test_a_file_this_python_cannot_parse_is_matched_by_name(repo):
+    """Newer syntax than ddflow's interpreter is still a real suite for the project; the
+    close must not be refused for it (the lesson from B22-unparsed)."""
+    run_cli(repo, "init")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_new.py").write_text("match (:\n\ndef test_z():\n    pass\n")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    assert api.bug_fixed(repo, "B1", regression_test="tests/test_new.py::test_z").exit == OK
+    assert api.bug_fixed(repo, "B1", regression_test="tests/test_new.py::test_q").exit == FAIL

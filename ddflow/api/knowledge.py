@@ -14,6 +14,7 @@ exists because the record is worthless without it:
 
 from __future__ import annotations
 
+import ast
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -432,16 +433,50 @@ def _inside(tree: Path, path: str) -> Path | None:
 
 
 def _defines(source: Path | None, names: list[str]) -> bool:
-    """Does `source` exist and define every class/function in `names`?"""
+    """Does `source` exist and define the node `names` -- module, then class, then method?
+
+    Resolved as a CHAIN: matching each name anywhere in the file accepted a method for a
+    module-level test and a function outside the class for `Class::method`
+    (B-bfu-structure). A file that does not parse under THIS interpreter may still be
+    valid under the project's own, so it falls back to finding each name defined
+    somewhere -- the permissive side, since refusing a real test locks the bug open.
+    """
     if source is None:
         return False
     try:
         text = source.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):
         return False
-    return all(
-        re.search(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(n)}\b", text, re.M) for n in names
-    )
+    try:
+        scope: list[ast.stmt] = ast.parse(text).body
+    except (SyntaxError, ValueError):
+        return all(
+            re.search(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(n)}\b", text, re.M)
+            for n in names
+        )
+    for name in names:
+        found = next((d for d in _definitions(scope) if d.name == name), None)
+        if found is None:
+            return False
+        scope = found.body
+    return True
+
+
+def _definitions(
+    body: list[ast.stmt],
+) -> list[ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Classes and functions defined directly in `body`, including under `if`/`try`/`with`
+    at the same level, but not inside another definition."""
+    out: list[ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef] = []
+    for node in body:
+        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            out.append(node)
+        elif isinstance(node, ast.If | ast.Try | ast.With | ast.AsyncWith):
+            for block in (node.body, getattr(node, "orelse", []), getattr(node, "finalbody", [])):
+                out += _definitions(block)
+            for handler in getattr(node, "handlers", []):
+                out += _definitions(handler.body)
+    return out
 
 
 def session_start(repo: Path, *, model: str = "", tool: str = "", agent: str = "") -> O.Outcome:
