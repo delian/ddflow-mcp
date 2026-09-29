@@ -415,6 +415,10 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
     Identical globs say the items cannot run at once. They do not say the work is the
     same (Bf84cccbaa6: three distinct features shared coarse imported globs), so the
     finding asks for a comparison rather than asserting a re-description.
+
+    A pair that `needs` already orders is not a finding (Bd1c601896f): the scheduler
+    will never hand both out at once, so "they cannot run in parallel" asks the
+    operator to act on nothing. Only members of some UNORDERED pair are named.
     """
     out = []
     by_globs: dict[tuple[str, ...], list[str]] = defaultdict(list)
@@ -422,28 +426,85 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
         if it.removed or it.state in (DONE, ABANDONED) or not it.globs:
             continue
         by_globs[tuple(sorted(it.globs))].append(it.id)
+    waits: dict[str, set[str]] = {}
     for globs, ids in by_globs.items():
         if len(ids) < lc.max_duplicate_items:
             continue
+        for i in ids:
+            if i not in waits:
+                waits[i] = _waits_on(state, i)
+        loose = sorted(
+            {
+                x
+                for a, b in itertools.combinations(ids, 2)
+                if b not in waits[a] and a not in waits[b]
+                for x in (a, b)
+            }
+        )
+        # The threshold was met by the group above; ordering may only REMOVE a
+        # finding, so it is not re-applied to the unordered members.
+        if not loose:
+            continue
+        ordered = sorted(set(ids) - set(loose))
+        aside = (
+            f" ({', '.join(ordered)} {'is' if len(ordered) == 1 else 'are'} already "
+            f"ordered against the others by `needs`, so not listed.)"
+            if ordered
+            else ""
+        )
         out.append(
             LoopFinding(
                 kind="duplicate_work",
-                item=sorted(ids)[0],
-                count=len(ids),
+                item=loose[0],
+                count=len(loose),
                 threshold=lc.max_duplicate_items,
                 severity=sev,
                 detail=(
-                    f"{len(ids)} open items declare exactly the same files "
-                    f"({', '.join(globs)}): {', '.join(sorted(ids))}. They cannot run "
-                    f"in parallel (the conflict detector will refuse). Sharing files "
-                    f"says nothing about whether the work is the same: compare their "
-                    f"titles and bodies, narrow the globs if they are coarser than the "
-                    f"work, and `ddflow remove <id>` only if one really re-describes "
-                    f"another."
+                    f"{len(loose)} open items declare exactly the same files "
+                    f"({', '.join(globs)}): {', '.join(loose)}.{aside} They cannot run "
+                    f"in parallel (the conflict detector will refuse), and no `needs` "
+                    f"chain orders them. Sharing files says nothing about whether the "
+                    f"work is the same: compare their titles and bodies, narrow the "
+                    f"globs if they are coarser than the work, add a `needs` edge if "
+                    f"one must follow the other, and `ddflow remove <id>` only if one "
+                    f"really re-describes another."
                 ),
             )
         )
     return out
+
+
+def _waits_on(state: State, item_id: str) -> set[str]:
+    """Every live item whose work must come before ``item_id``'s, transitively.
+
+    The graph readiness uses, not a re-derived one: ``inherited_deps`` (an item's own
+    `needs` plus its ancestors'), and a dependency on an item also waits for everything
+    beneath it, since a phase cannot finish while a task in it is open. The walk stops
+    at a dependency that cannot sequence anything: one that is done, removed or in
+    another repository holds nothing back, and one that is abandoned or unknown holds
+    back forever -- neither puts one item's work after the other's. A dependency in
+    REVIEW still orders, even when `flow.stack` lets the dependent start: its work is
+    finished and the dependent forks from it. Iterative with a visited set: a `needs`
+    cycle (reported by ``_static_cycles``) must not hang it.
+    """
+    from ..core.schedule import inherited_deps
+
+    def live(i: str) -> bool:
+        it = state.items.get(i)
+        return bool(it and not it.removed and it.state not in (DONE, ABANDONED))
+
+    seen: set[str] = set()
+    stack = [item_id]
+    while stack:
+        it = state.items[stack.pop()]
+        for _owner, dep in inherited_deps(state, it):
+            if not live(dep):
+                continue
+            for n in (dep, *sorted(state.descendants(dep))):
+                if n not in seen and live(n):
+                    seen.add(n)
+                    stack.append(n)
+    return seen
 
 
 def _no_progress(events: list[Event], lc, sev: str) -> list[LoopFinding]:
