@@ -169,6 +169,10 @@ def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str,
     out["blocked"] = [plain(b)]
     if b.reason == "expired":
         return {**out, "status": "hopeless", "why": b.detail}
+    # No "cap reached" blocker arrives here: the parallelism cap trims `plan`'s ready
+    # LIST and `claim` does not apply it to a named item, so `_claim_blocker` never
+    # returns it (pinned by test_a_cap_blocked_item_wait_agrees_with_claim). Only the
+    # any-wait meets the cap, in `_blocking_leases`.
     if b.reason not in WAITABLE:
         return {
             **out,
