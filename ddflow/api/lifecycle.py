@@ -22,6 +22,7 @@ and cost something:
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Any
 
@@ -130,6 +131,74 @@ def _worktree_held_by(st, stored: str, me: str) -> str:
     return ""
 
 
+def _tree_of(start: Path) -> Path | None:
+    """The git working tree `start` lies in (primary or linked), resolved; None if none.
+
+    The same question `services.enforce._this_worktree` asks of the hook's cwd, asked of
+    an explicit start instead: `--repo` is resolved to the primary, so the cwd of this
+    process is not where the caller is standing.
+    """
+    top = W.git(start, "rev-parse", "--show-toplevel", timeout=30)
+    return Path(top.out).resolve() if top.ok and top.out else None
+
+
+def _in_leased_tree(repo: Path, stored: str, here: Path | None) -> bool:
+    """Is `here` the tree a lease records? The same test `check_commit` applies."""
+    return bool(here and stored and W.load_path(repo, stored).resolve() == here)
+
+
+def _recorded_tree(repo: Path, it) -> Path | None:
+    """The item's own tree from an earlier claim, if it is still on disk; else None.
+
+    Such a tree may hold commits nothing has merged yet. A re-claim must bind to it,
+    not to wherever the caller happens to stand, or `merge` merges an empty branch and
+    the salvage is orphaned.
+    """
+    if it is None or not it.worktree or not it.branch:
+        return None
+    path = W.load_path(repo, it.worktree).resolve()
+    return path if _is_items_tree(repo, path, it.branch) else None
+
+
+def _is_items_tree(repo: Path, path: Path, branch: str) -> bool:
+    """Is the tree at `path` still the one that carries `branch`'s work?
+
+    ONE rule for every place a claim would bind an existing tree -- the item's recorded
+    tree and the one `W.create` finds at the default path. A directory there is not
+    proof: it can have been removed and re-added on something unrelated. Git must list
+    it as a worktree of this repository, with `branch` checked out -- or detached (a
+    rebase in progress, a checkout at a commit) with `branch` an ancestor of HEAD. Any
+    other branch, or a detached HEAD holding unrelated work, is someone else's tree.
+    """
+    path = Path(path).resolve()
+    if not branch or not (path.is_dir() and (path / ".git").exists()):
+        return False
+    entry = next(
+        (e for e in W.list_worktrees(repo) if Path(e.get("worktree", "")).resolve() == path),
+        None,
+    )
+    if entry is None:
+        return False
+    if entry.get("branch") == f"refs/heads/{branch}":
+        return True
+    return bool(
+        entry.get("detached")
+        and W.git(path, "merge-base", "--is-ancestor", f"refs/heads/{branch}", "HEAD").ok
+    )
+
+
+def _undo_claim(log, item: str, held_before: bool, note: str) -> None:
+    """Take back what a refused claim acquired -- and ONLY that.
+
+    A fresh claim that is refused releases its lease, or the refusal itself creates the
+    stuck claim `recover` exists to clean up. But a caller that already held a live lease
+    on the item got a renewal, not a new lease: releasing it would hand an item whose
+    tree holds that caller's work to anyone who asks.
+    """
+    if not held_before:
+        L.release(log, item, note=note)
+
+
 def claim(
     repo: Path,
     item: str,
@@ -179,6 +248,15 @@ def claim(
             looping=[f.__dict__ for f in looping],
         )
     want = csv_list(globs) or None
+    # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
+    # then take away a lease the caller already had, with its tree full of work.
+    prior = st.items[item].lease if item in st.items else None
+    held_before = bool(
+        prior
+        and prior.holder == log.agent_id
+        and not prior.expired_at
+        and not prior.expired(time.time(), cfg.lease.grace_s)
+    )
     try:
         lz = L.acquire(
             log,
@@ -197,14 +275,29 @@ def claim(
 
     wt = None
     ours = False  # a tree ddflow made (now or on an earlier claim), not one it adopted
-    if cfg.worktree.enabled and not no_worktree:
+    rebound = False  # bound to the item's OWN recorded tree from an earlier claim
+    was_adopted = False
+    recorded = _recorded_tree(repo, st.items.get(item))
+    if cfg.worktree.enabled and not no_worktree and recorded is not None:
+        # The item already has a tree, and it still exists: that tree -- and its branch,
+        # with whatever unmerged work is on it -- is the item's, wherever the caller is
+        # standing. Adopting the caller's tree instead made `merge` merge nothing.
+        it = st.items[item]
+        branch = it.branch
+        stored = W.store_path(repo, recorded)
+        wt = W.Worktree(item=item, path=recorded, branch=branch, base=it.base, created=False)
+        L.acquire(log, cfg, item, worktree=stored, branch=branch, globs=want, force=True)
+        rebound = True
+        was_adopted = bool(it.adopted)
+        ours = not it.adopted
+    elif cfg.worktree.enabled and not no_worktree:
         adopted = W.current(called_from or repo) if cfg.worktree.adopt_existing else None
         if adopted is not None:
             stored = W.store_path(repo, adopted.path)
             held = _worktree_held_by(st, stored, item)
             if held:
                 # RELEASE before refusing -- see the module docstring.
-                L.release(log, item, note="claim refused: worktree conflict")
+                _undo_claim(log, item, held_before, "claim refused: worktree conflict")
                 return O.refused(
                     "item.claimed",
                     f"this worktree is already bound to {held}, which is still open. "
@@ -229,6 +322,23 @@ def claim(
                     # production, or a dependency's unmerged branch when stacking.
                     base, branch = FS.fork_point(repo, cfg, st, st.items[item])
                 wt = W.create(repo, cfg, item, base=base, branch=branch)
+                if not wt.created:
+                    # `W.create` reuses whatever tree sits at the default path. One on
+                    # ANOTHER branch is not this item's: binding it recorded a branch
+                    # that is not checked out there, and `merge` merged the wrong work.
+                    if not _is_items_tree(repo, wt.path, wt.branch):
+                        head = W.git(wt.path, "rev-parse", "--abbrev-ref", "HEAD")
+                        there = head.out if head.ok else "something else"
+                        there = "a detached HEAD" if there == "HEAD" else there
+                        _undo_claim(log, item, held_before, "claim refused: worktree path occupied")
+                        return O.refused(
+                            "item.claimed",
+                            f"{wt.path} already exists with {there} checked out, which "
+                            f"does not carry {wt.branch}. It is not {item}'s tree; move or "
+                            f"remove it, or claim from a tree of your own.",
+                            id=item,
+                            path=str(wt.path),
+                        )
                 ours = True
                 stored = W.store_path(repo, wt.path)
                 log.append(
@@ -271,19 +381,44 @@ def claim(
         holder=lz.holder,
         worktree=str(wt.path) if wt else "",
         branch=wt.branch if wt else "",
-        adopted=bool(wt and not wt.created),
+        adopted=was_adopted if rebound else bool(wt and not wt.created and not ours),
+        rebound=rebound,
+        # Whether the caller already stands in the tree it was given: a rebound tree
+        # is usually somewhere else, and the caller has to be told to go there.
+        here=bool(wt and _tree_of(called_from or repo) == Path(wt.path).resolve()),
         ttl_s=cfg.lease.ttl_s,
         heartbeat_s=cfg.lease.heartbeat_s,
         base=wt.base if wt else "",
     )
 
 
-def heartbeat(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
-    log, _cfg, _st = _load(repo, agent)
+def heartbeat(
+    repo: Path, item: str, *, agent: str = "", called_from: Path | None = None
+) -> O.Outcome:
+    """Renew a lease: one I hold, or the one that made the tree I am standing in.
+
+    Identity is derived from the tree, so an agent working in the tree `claim` made for
+    an item is usually NOT the identity that claimed it -- and was told "no lease held"
+    by the one command it runs from where it works. `check_commit` already counts the
+    lease that created this tree as mine; so does this. It renews on behalf of the
+    holder, never taking the lease over, and standing in some OTHER tree renews nothing.
+    """
+    log, cfg, st = _load(repo, agent)
     renewed = L.renew(log, item)
+    hint = ""
+    if not renewed:
+        it = st.items.get(item)
+        lease = it.lease if it else None
+        if lease and _in_leased_tree(repo, lease.worktree, _tree_of(called_from or repo)):
+            # Only a LIVE lease. Speaking for an expired one would resurrect a claim its
+            # holder abandoned, and lock out whoever `recover` sent to take it over.
+            if lease.expired_at or lease.expired(time.time(), cfg.lease.grace_s):
+                hint = f"; its lease (held by {lease.holder}) has expired -- `claim {item}` again"
+            else:
+                renewed = L.renew(log, item, holder=lease.holder)
     if renewed:
         return O.ok("lease.renewed", id=item, renewed=True)
-    return O.nothing("lease.renewed", f"no lease held {item}", id=item, renewed=False)
+    return O.nothing("lease.renewed", f"no lease held {item}{hint}", id=item, renewed=False)
 
 
 def release(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outcome:
