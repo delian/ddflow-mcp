@@ -416,6 +416,25 @@ def _caller_tree(repo: Path, where: Path | None) -> Path:
     return Path(top.out) if top is not None and top.ok and top.out else repo
 
 
+def _command_found(command: str, tree: Path) -> bool:
+    """Whether the program ``command`` starts with can be run from ``tree`` -- where
+    pre-commit runs a hook's entry, so a relative path is read against it."""
+    import os
+    import shlex
+    import shutil
+
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    if not words:
+        return False
+    if "/" in words[0]:
+        prog = Path(words[0]) if Path(words[0]).is_absolute() else tree / words[0]
+        return prog.is_file() and os.access(prog, os.X_OK)
+    return shutil.which(words[0]) is not None
+
+
 def precommit(
     repo: Path,
     *,
@@ -435,6 +454,9 @@ def precommit(
     from ..services import precommit as PC
 
     _load(repo, agent)
+    ddflow_cmd = ddflow_cmd.strip()
+    if not ddflow_cmd:
+        return O.refused("precommit", "ddflow_cmd is empty: the local hooks would run nothing")
     tree = _caller_tree(repo, where)
     prop = PC.propose(tree, ddflow_cmd=ddflow_cmd)
     if prop is None:
@@ -442,9 +464,14 @@ def precommit(
     path = PC.config_path(tree)
     data: dict[str, Any] = {
         "path": str(path),
-        "exists": path.is_file(),
+        # A symlink counts, dangling or not: writing through one lands somewhere else.
+        "exists": path.exists() or path.is_symlink(),
         "written": False,
         "installed": shutil.which("pre-commit") is not None,
+        # The local hooks run `ddflow_cmd` with git's environment, not this one: a
+        # command missing from PATH fails every commit, which reads like a refusal.
+        "ddflow_cmd": ddflow_cmd,
+        "ddflow_cmd_found": _command_found(ddflow_cmd, tree),
         "stacks": prop.stacks,
         "repos": [
             {"repo": r.url, "rev": r.rev, "hooks": [h.id for h in r.hooks], "why": r.why}
@@ -461,6 +488,12 @@ def precommit(
                 "merge by hand what you want",
                 **data,
             )
-        path.write_text(prop.text, encoding="utf-8")
+        try:
+            with path.open("x", encoding="utf-8") as fh:  # never over one made meanwhile
+                fh.write(prop.text)
+        except FileExistsError:
+            return O.refused("precommit", f"{path} appeared meanwhile; not replaced", **data)
+        except OSError as e:
+            return O.failed("precommit", f"could not write {path}: {e}")
         data["written"] = True
     return O.ok("precommit", **data)

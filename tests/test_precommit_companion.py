@@ -126,3 +126,66 @@ def test_the_catalogue_recommends_it():
     comp = {c.id: c for c in C.load(Path(__file__).resolve().parents[1])}["pre-commit"]
     assert comp.kind == "cli" and "standards" in comp.gates and comp.default is True
     assert "ddflow precommit" in comp.note, "the recommendation names how to get the config"
+
+
+def test_a_python_and_docker_repository_gets_ruff_hadolint_and_both_ddflow_hooks(repo):
+    """The spec's own example."""
+    (repo / "app.py").write_text("x = 1\n")
+    (repo / "Dockerfile").write_text("FROM python:3.13-slim\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "py+docker")
+    text = PC.propose(repo).text
+    for needle in ("id: ruff-check", "id: ruff-format", "id: hadolint-docker",
+                   "id: ddflow-check-commit", "id: ddflow-check-msg"):  # fmt: skip
+        assert needle in text, needle
+
+
+def test_json_with_comments_is_not_checked_as_strict_json():
+    """tsconfig.json and editor settings carry comments; strict check-json refuses them,
+    so a TypeScript project would fail its first commit."""
+    import re
+
+    for jsonc in ("tsconfig.json", "web/tsconfig.base.json", "jsconfig.json",
+                  ".vscode/settings.json", ".devcontainer/devcontainer.json"):  # fmt: skip
+        assert re.search(PC.JSONC, jsonc), jsonc
+    for strict in ("package.json", "data/config.json", "vscode.json"):
+        assert not re.search(PC.JSONC, strict), strict
+
+
+def test_check_json_excludes_jsonc_and_check_yaml_accepts_multi_document_files(mixed):
+    hooks = {h.id: h for r in PC.propose(mixed).repos for h in r.hooks}
+    assert hooks["check-json"].fields["exclude"] == PC.JSONC
+    assert "--allow-multiple-documents" in hooks["check-yaml"].fields["args"]
+
+
+def test_gofmt_rewrites_so_pre_commit_sees_the_change(repo):
+    """gofmt's exit status does not report unformatted files; pre-commit fails a hook
+    that modifies one. `-l -d` alone would pass everything."""
+    (repo / "go.mod").write_text("module x\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "go")
+    gofmt = {h.id: h for r in PC.propose(repo).repos for h in r.hooks}["gofmt"]
+    assert "-w" in gofmt.fields["entry"].split()
+
+
+def test_a_ddflow_command_that_cannot_be_found_is_reported(mixed):
+    missing = OPS.precommit(mixed, where=mixed, ddflow_cmd="no-such-ddflow-xyz")
+    assert missing.exit == 0 and missing.data["ddflow_cmd_found"] is False
+    script = mixed / "scripts" / "ddflow_hook.sh"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    local = OPS.precommit(mixed, where=mixed, ddflow_cmd="scripts/ddflow_hook.sh")
+    assert local.data["ddflow_cmd_found"] is True, "a relative entry is read from the repo"
+    assert 'entry: "scripts/ddflow_hook.sh hooks check-msg"' in local.data["text"]
+
+
+def test_an_empty_ddflow_command_is_refused(mixed):
+    out = OPS.precommit(mixed, where=mixed, ddflow_cmd="  ")
+    assert out.exit == REFUSED
+
+
+def test_write_never_follows_a_dangling_symlink(mixed, tmp_path):
+    target = tmp_path / "elsewhere.yaml"
+    (mixed / ".pre-commit-config.yaml").symlink_to(target)
+    out = OPS.precommit(mixed, where=mixed, write=True)
+    assert out.exit == REFUSED and not target.exists()

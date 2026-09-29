@@ -280,6 +280,9 @@ def cmd_precommit(a, c: Ctx) -> int:
         print(json.dumps(out.body(), indent=2))
         return out.exit
     d = out.data
+    if "stacks" not in d:  # refused before anything was proposed
+        print(out.reason, file=sys.stderr)
+        return out.exit
     stacks = ", ".join(sorted(d["stacks"])) or "none detected"
     if d["written"]:
         print(f"Wrote {d['path']} for: {stacks}.")
@@ -289,6 +292,11 @@ def cmd_precommit(a, c: Ctx) -> int:
         print(d["text"], end="")
         where = "exists -- compare, and merge by hand" if d["exists"] else "does not exist yet"
         print(f"\n# {d['path']} {where}. --write creates it; it never replaces one.")
+    if not d["ddflow_cmd_found"]:
+        print(
+            f"# NOTE: `{d['ddflow_cmd']}` is not found from here, and the ddflow hooks run it "
+            "on every commit: pass --ddflow-cmd with a command that reaches ddflow."
+        )
     if not d["installed"]:
         print("# pre-commit is not installed: ask the operator, then `pipx install pre-commit`.")
     elif d["written"]:

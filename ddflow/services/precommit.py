@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
 from ..infra import worktree as W
 
@@ -30,6 +30,9 @@ PINS = {
     "https://github.com/shellcheck-py/shellcheck-py": "v0.11.0.1",
     "https://github.com/hadolint/hadolint": "v2.15.1",
 }
+
+#: JSON files that are JSON-with-comments by convention, which check-json would refuse.
+JSONC = r"(?:^|/)(?:[tj]sconfig[^/]*|\.?devcontainer)\.json$|(?:^|/)\.vscode/"
 
 #: What marks a stack as present, by path.
 _STACKS: dict[str, re.Pattern[str]] = {
@@ -115,7 +118,17 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
         Hook("check-added-large-files"),
         Hook("detect-private-key"),
     ]
-    hygiene += [Hook(h) for h, sfx in (("check-yaml", (".yaml", ".yml")), ("check-toml", (".toml",)), ("check-json", (".json",))) if _has(paths, *sfx)]  # fmt: skip
+    if _has(paths, ".yaml", ".yml"):
+        # Kubernetes/Helm manifests hold several documents, and CloudFormation or MkDocs
+        # use custom tags: without these the hook refuses valid files. --unsafe still
+        # parses, so a syntax error is still caught.
+        hygiene.append(Hook("check-yaml", {"args": ["--allow-multiple-documents", "--unsafe"]}))
+    if _has(paths, ".toml"):
+        hygiene.append(Hook("check-toml"))
+    if _has(paths, ".json"):
+        # tsconfig/jsconfig and editor settings are JSON WITH COMMENTS, which strict JSON
+        # refuses: every TypeScript project would fail its first commit.
+        hygiene.append(Hook("check-json", {"exclude": JSONC}))
     repos = [
         Repo("https://github.com/pre-commit/pre-commit-hooks", tuple(hygiene),
              "whitespace, merge markers, oversized files, private keys, config files that do not parse"),
@@ -143,7 +156,9 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
                 )
     if "go" in stacks:
         local += [
-            _local("gofmt", "gofmt", "gofmt -l -d", files=r"\.go$"),
+            # -w, not -d: gofmt's exit status does not report unformatted files, but
+            # pre-commit fails any hook that MODIFIES a file -- as it does ruff-format.
+            _local("gofmt", "gofmt", "gofmt -l -w", files=r"\.go$"),
             _local("go-vet", "go vet", "go vet ./...", pass_filenames=False, types=["go"]),
         ]
     if "rust" in stacks:
@@ -203,10 +218,3 @@ def render(p: Proposal) -> str:
 
 def config_path(root: Path) -> Path:
     return Path(root) / ".pre-commit-config.yaml"
-
-
-def stacks_summary(p: Proposal) -> str:
-    return "; ".join(
-        f"{s} ({', '.join(PurePosixPath(x).name for x in ev)})"
-        for s, ev in sorted(p.stacks.items())
-    )
