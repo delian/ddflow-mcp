@@ -286,7 +286,7 @@ _ANNOTATION_CHARS = 160
 _SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED")
 #: `### P42.8 — Future work (deliberately not in this phase)`: a heading whose title IS
 #: "future work" holds; `## Phase 5 — Future work planning` is a phase about it.
-_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[—:]|\s-+\s|$)", re.I)
+_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[\u2014\u2013:]|\s-+\s|$)", re.I)
 #: A heading that says its own section is LIVE: `### Phase 39 follow-ups (not started)`
 #: filed under a `## Phase 38` whose STATUS is SHIPPED. Inheriting the ancestor's verdict
 #: dropped both of its open items as history (home-simulator, 2026-09-29).
@@ -383,8 +383,24 @@ def _disposition(raw: str) -> tuple[str, str]:
     body = raw.lstrip()
     if body.startswith("~~"):
         return "closed", "STRUCK THROUGH"
+    # `**C11** consumable-triggered chains (... deferred notify) — 34.1`: the bold is only
+    # the id and the TITLE follows it with no separator, so it is read like an unbolded
+    # line, and a hold word in its asides must lead its clause (home-simulator's shape;
+    # `**A.3** — a finding (DEFERRED)` keeps the separator and stays annotation).
+    id_then_title = False
     if body.startswith("**"):
         close = body.find("**", 2)
+        inner, rest = (body[2:close].strip(), body[close + 2 :]) if close != -1 else ("", "")
+        id_then_title = (
+            bool(inner)
+            and " " not in inner
+            and _is_id(inner)
+            and bool(rest.strip())
+            and not re.match(r"\s*[\u2014\u2013:(\-]", rest)
+        )
+        if id_then_title:
+            body = rest.strip()
+    if body.startswith("**"):
         title, annotation = (body[2:close], body[close + 2 :]) if close != -1 else (body[2:], "")
     else:
         # No bold run to say where the title ends. Reading the WHOLE line as annotation
@@ -398,21 +414,25 @@ def _disposition(raw: str) -> tuple[str, str]:
         if lead.upper() not in (*_CLOSED_MARKERS, *_HOLD_MARKERS):
             lead = ""
         annotation = f"{lead} {annotation}".strip()
+    # Asides are judged WHOLE, before the window is cut: a cut inside one leaves it
+    # unclosed, and its prose would count as a verdict.
+    held_text = _verdict_asides(annotation, _HOLD_MARKERS)[:_ANNOTATION_CHARS]
     annotation = annotation[:_ANNOTATION_CHARS]
     # Closed asides, and one left OPEN at the end of the line -- a `(Deferred to ...`
     # whose closing paren sits on the item's next line.
-    aside = " ".join([*_TITLE_ASIDE.findall(title), *_OPEN_ASIDE.findall(title)])
-    # Inside the title's own asides any marker counts, as measured; in the ANNOTATION an
-    # aside counts only when it leads with its verdict (`_verdict_asides`).
+    asides = [*_TITLE_ASIDE.findall(title), *_OPEN_ASIDE.findall(title)]
+    aside = " ".join(asides)
     # A CLOSED word disposes anywhere in the annotation ("operator declined", "now
-    # superseded by X.9"); only a HOLD word must lead its aside clause (`_verdict_asides`).
-    closed = _marker_in(annotation, _CLOSED_MARKERS) or (_marker_in(aside, _CLOSED_MARKERS))
+    # superseded by X.9") and in the title's asides; a HOLD word in an annotation aside
+    # must lead its clause (`_verdict_asides`), and so must one in the title's asides
+    # when the title is prose after an id-only bold.
+    closed = _marker_in(annotation, _CLOSED_MARKERS) or _marker_in(aside, _CLOSED_MARKERS)
     if closed:
         return "closed", closed
     hold_aside = tuple(m for m in _HOLD_MARKERS if m not in _ASIDE_NOT_DISPOSITIONS)
-    hold = _marker_in(_verdict_asides(annotation, _HOLD_MARKERS), _HOLD_MARKERS) or (
-        _marker_in(aside, hold_aside)
-    )
+    if id_then_title:
+        aside = _verdict_asides(" ".join(f"({a})" for a in asides), hold_aside)
+    hold = _marker_in(held_text, _HOLD_MARKERS) or _marker_in(aside, hold_aside)
     return ("hold", hold) if hold else ("", "")
 
 
@@ -435,7 +455,7 @@ def _heading_disposition(heading: str) -> tuple[str, str] | None:
 
 #: What a heading's title follows: `Phase 14 — `, `4. `, `P42.8 — `.
 _HEADING_LEAD = re.compile(
-    r"^\W*(?:(?:phase|session|stage|milestone|sprint)\s+[A-Za-z]?\d[\w.]*\s*[—:\-]+\s*"
+    r"^\W*(?:(?:phase|session|stage|milestone|sprint)\s+[A-Za-z]?\d[\w.]*\s*[\u2014\u2013:\-]+\s*"
     r"|\d+(?:\.\d+)*\.?\s+)",
     re.I,
 )
@@ -942,7 +962,7 @@ def _date_hint(*texts: str) -> str:
 #: and its items (`38.9`, `38.10`) are what the project calls Phase 38's leftovers.
 _HEADING_NUMBER = re.compile(
     r"^\W*(?:phase|session|stage|milestone|sprint)\s+([A-Za-z]?\d[\w.]*?)"
-    r"\.?(?:\s*[—:(]|\s+-+\s|\s*\*\*|\s*$)",
+    r"\.?(?:\s*[\u2014\u2013:(]|\s+-+\s|\s*\*\*|\s*$)",
     re.I,
 )
 
@@ -960,7 +980,7 @@ def _agrees(prefix: str, number: str) -> bool:
 
     def lead(ident: str) -> str:
         m = re.search(r"\d+", ident.split(".", maxsplit=1)[0])
-        return m.group(0).lstrip("0") if m else ""
+        return (m.group(0).lstrip("0") or "0") if m else ""
 
     # A prefix with no number (`DRIVERFIX`, `B`) is the project's NAME for the phase,
     # not the id of another one: it agrees with any number.
@@ -1890,7 +1910,7 @@ def plan_import(
     # it leaves the open one blocked on an id the queue has never heard of — and an
     # unknown dependency is treated as unmet, deliberately, so the import would land
     # permanently stuck work and look like it had succeeded.
-    done_pulled, _closed_pulled = _pull_in_needed(plan, deferred_done, held)
+    done_pulled, _ = _pull_in_needed(plan, deferred_done, held)
     pulled = {f.ident for f in plan.found}
     _note_withheld(plan, done_skipped - done_pulled, [i for i in closed if i not in pulled], held)
 

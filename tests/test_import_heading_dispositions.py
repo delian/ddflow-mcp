@@ -255,3 +255,36 @@ def test_future_work_is_the_title_not_a_compound_and_not_over_a_live_verdict(rep
     tasks = _by_id(_plan(repo), "task")
     assert tasks["A.2"].extra["disposition"] == ""
     assert tasks["A.3"].extra["disposition"] == ""
+
+
+def test_an_en_dash_separates_like_an_em_dash(repo):
+    _write(
+        repo,
+        "## Phase 34 \u2013 done ✅ CLOSED\n**STATUS**: CLOSED\n- [x] **34.1** x\n\n"
+        "## Phase 40 \u2013 Phase 34 follow-ups\n- [ ] **34.6e** a\n- [ ] **34.8f** b\n\n"
+        "## Phase 14 \u2013 Future work\n- [ ] **14.1** c\n",
+    )
+    plan = _plan(repo)
+    assert "40" in _by_id(plan, "phase") and "34" not in _by_id(plan, "phase")
+    assert _by_id(plan, "task")["14.1"].extra["disposition"] == "hold"
+
+
+def test_a_zero_numbered_prefix_is_a_number_not_a_name(repo):
+    _write(repo, "## Phase 5 — x\n- [ ] **P0.1** a\n- [ ] **P0.2** b\n")
+    assert "P0" not in _by_id(_plan(repo), "phase")
+
+
+def test_title_prose_after_an_id_only_bold_is_not_a_verdict(repo):
+    """`**C14** add deferred notifications to the chain`: no separator after the id, so
+    the words are the title. A verdict after it still counts."""
+    long_aside = "(inventory " + "-> step " * 25 + "-> deferred notify)"
+    _write(
+        repo,
+        "## S\n\n- [ ] **C14** add deferred notifications to the chain\n"
+        f"- [ ] **C15** chains {long_aside} - 34.1\n"
+        "- [ ] **C16** retry skipped batches. DEFERRED: waits for the vendor\n",
+    )
+    tasks = _by_id(_plan(repo), "task")
+    assert tasks["C14"].extra["disposition"] == ""
+    assert tasks["C15"].extra["disposition"] == "", "a truncated aside read as a verdict"
+    assert tasks["C16"].extra["disposition"] == "hold"
