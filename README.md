@@ -640,7 +640,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 126 knobs.
+cadences, and the rest of the 127 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -2544,7 +2544,7 @@ declared once and persists — see
 
 ## Configuration
 
-126 knobs across 17 sections, every one documented in place:
+127 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
