@@ -422,3 +422,134 @@ def test_resolve_settles_a_three_way_contest_on_a_real_log(repo: Path):
     it = fold(log.read_all()).items["T"]
     assert it.lease_contest == [] and it.lease.holder == "alice"
     assert items.resolve(repo, "T", keep="alice", agent="op").exit == 3
+
+
+# -- claims are claims, not holder names; intervals on both ends; every live contestant --
+
+
+def _write(repo: Path, events: list[Event]) -> EventLog:
+    log = EventLog(repo, "op")
+    log.shard.parent.mkdir(parents=True, exist_ok=True)
+    log.shard.write_text("".join(ev.to_json() + "\n" for ev in events))
+    return log
+
+
+def _alice_twice(first: int, second: int) -> list[Event]:
+    """alice -> bob -> alice -> carol, each a TTL takeover; then two late renewals by
+    Alice, one from each of her claims, at Lamport ``first`` and ``second``."""
+    return [
+        _ev("task.added", "T", 1, title="t"),
+        _acq(2, "alice", 1000.0, ttl=1800),
+        _acq(3, "bob", 3000.0, ttl=1800),
+        _acq(4, "alice", 6000.0, ttl=1800),
+        _acq(5, "carol", 9000.0, ttl=1800),
+        _ev("lease.renewed", "T", first, "alice", holder="alice", at=1500.0),
+        _ev("lease.renewed", "T", second, "alice", holder="alice", at=8000.0),
+    ]
+
+
+def _contest_events(events: list[Event]) -> set[str]:
+    return {h["event"] for h in fold(sorted(events, key=Event.sort_key)).items["T"].lease_contest}
+
+
+def test_each_of_one_holders_claims_is_contested_on_its_own():
+    """FAILED before the fix: the first late renewal erased every displaced entry named
+    'alice', so the second -- proving Carol took Alice's SECOND claim live -- was lost."""
+    events = _alice_twice(50, 51)
+    alice2 = events[3].id
+    assert alice2 in _contest_events(events)
+    assert "still live when carol claimed" in fold(events).items["T"].contest_summary()
+
+
+def test_which_late_renewal_folds_first_does_not_change_the_contest():
+    assert _contest_events(_alice_twice(50, 51)) == _contest_events(_alice_twice(51, 50))
+
+
+def test_a_claim_that_ended_before_the_current_one_began_is_not_its_rival():
+    """FAILED before the fix: folded second (higher Lamport), Alice's long-over claim
+    read as Bob's rival and replaced his live lease."""
+    old, new = _acq(3, "alice", 1000.0, ttl=100), _acq(2, "bob", 5000.0, ttl=1800)
+    for evs in ([old, new], [new, old]):
+        it = fold([_ev("task.added", "T", 1, title="t"), *sorted(evs, key=Event.sort_key)])
+        assert it.items["T"].lease_contest == [] and it.items["T"].lease.holder == "bob"
+
+
+def test_a_claim_is_weighed_against_every_live_contestant_not_only_the_displayed_one():
+    """FAILED before the fix: Bob's recorded expiry made Carol's claim a clean takeover,
+    though Alice -- still in the contest -- was live when Carol claimed."""
+    it = fold(
+        [
+            _ev("task.added", "T", 1, title="t"),
+            _acq(2, "alice", 1000.0, ttl=1800),
+            _ev("lease.acquired", "T", 2, "bob", holder="bob", at=1100.0, ttl_s=1800),
+            _ev("lease.expired", "T", 3, holder="bob"),
+            _acq(4, "carol", 2000.0, ttl=1800),
+        ]
+    ).items["T"]
+    assert {h["holder"] for h in it.lease_contest} >= {"alice", "carol"}
+
+
+def test_a_recorded_expiry_takes_a_contestant_out_of_later_collisions():
+    it = fold(
+        [
+            _ev("task.added", "T", 1, title="t"),
+            _acq(2, "alice", 1000.0, ttl=1800),
+            _ev("lease.acquired", "T", 2, "bob", holder="bob", at=1100.0, ttl_s=1800),
+            _ev("lease.expired", "T", 3, holder="alice"),
+            _ev("lease.expired", "T", 3, "x2", holder="bob"),
+            _acq(4, "carol", 2000.0, ttl=1800),
+        ]
+    ).items["T"]
+    assert "carol" not in {h["holder"] for h in it.lease_contest}
+
+
+def test_the_claim_left_standing_takes_the_item_and_its_worktree():
+    """FAILED before the fix: Alice's claim was promoted but the item still pointed at
+    Bob's released tree."""
+    it = fold(
+        [
+            _ev("task.added", "T", 1, title="t"),
+            _ev("lease.acquired", "T", 2, "alice", holder="alice", at=1000.0, worktree="wt-a"),
+            _ev("lease.acquired", "T", 2, "bob", holder="bob", at=1001.0, worktree="wt-b"),
+            _ev("lease.released", "T", 3, "bob", holder="bob"),
+        ]
+    ).items["T"]
+    assert it.lease.holder == "alice" and it.worktree == "wt-a" and it.lease_contest == []
+
+
+def test_resolve_refuses_a_keep_that_names_a_definition_and_a_claim(repo: Path):
+    """FAILED before the fix: `--keep alice` settled both at once, silently."""
+    from ddflow.api import items
+
+    events = [
+        _ev("task.added", "T", 1, "alice", title="A"),
+        _ev("task.added", "T", 1, "bob", title="B"),
+        _ev("lease.acquired", "T", 2, "alice", holder="alice", at=1000.0),
+        _ev("lease.acquired", "T", 2, "bob", holder="bob", at=1001.0),
+    ]
+    log = _write(repo, events)
+    out = items.resolve(repo, "T", keep="alice", agent="op")
+    assert out.exit == 3 and events[0].id in out.reason and events[2].id in out.reason
+    assert items.resolve(repo, "T", keep=events[0].id, agent="op").exit == 0
+    it = fold(log.read_all()).items["T"]
+    assert it.contested == [] and it.lease_contest != []
+    assert items.resolve(repo, "T", keep=events[2].id, agent="op").exit == 0
+    assert fold(log.read_all()).items["T"].lease.holder == "alice"
+
+
+def test_the_fold_is_the_same_whatever_order_the_shards_are_read_in():
+    import random
+
+    from ddflow.core.plain import plain
+
+    events = [
+        *_alice_twice(50, 51),
+        _ev("task.added", "T", 60, "zed", title="rival"),
+        _ev("lease.released", "T", 61, "bob", holder="bob"),
+    ]
+    want = plain(fold(sorted(events, key=Event.sort_key)).items["T"])
+    rng = random.Random(191)
+    for _ in range(20):
+        shuffled = events[:]
+        rng.shuffle(shuffled)
+        assert plain(fold(sorted(shuffled, key=Event.sort_key)).items["T"]) == want
