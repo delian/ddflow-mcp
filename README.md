@@ -26,8 +26,9 @@ build. Work is phases and tasks with dependencies and declared file globs. Each 
 a lease and its own git worktree, then passes a gate pipeline: a check that could not run
 is `unavailable`, never `passed`; one reviewer must be from another model family; a bug
 closes only with a regression test that failed first. Everything is recorded in an
-append-only log in `.ddflow/events/`, committed with the code. ddflow writes no code —
-you do. Every operation is both a shell command (`ddflow …`) and an MCP tool (`ddflow_…`).
+append-only log in `.ddflow/events/`, committed with the code. ddflow writes none of your
+project's code — you do; it adds only its own config, a rules block and git hooks.
+Every operation is both a shell command (`ddflow …`) and an MCP tool (`ddflow_…`).
 
 **If the project already uses it** (`.ddflow/` exists): call `ddflow_brief` (or run
 `ddflow brief`) first and follow it. It replaces reading the project's rule and lesson
