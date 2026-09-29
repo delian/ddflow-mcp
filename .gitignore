@@ -23,4 +23,6 @@ __pycache__/
 # they are never committed, so the repository stays generic.
 .ddflow/reviewers.toml
 .ddflow/gates.toml
+# roborev's agent/model/reasoning (decision D-roborev-local); git carries .roborev.toml.example.
+.roborev.toml
 
