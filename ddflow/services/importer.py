@@ -1984,7 +1984,9 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
             if "imported" not in getattr(rec, "tags", []):
                 continue
             for src in getattr(rec, attr, []) or []:
-                rel = _MARKUP_AROUND_PATH.sub("", str(src).split(":", 1)[0])
+                link = _MD_LINK.match(str(src))
+                text = link.group(1) if link else str(src)
+                rel = _MARKUP_AROUND_PATH.sub("", text.split(":", 1)[0])
                 # Parenthesised, and narrow on purpose: `and` binds tighter than `or`,
                 # so the unbracketed form accepted `git:foo.md`. A lesson's `seen_in`
                 # also holds bug pins like "review-inverted-severity", which are not
@@ -2002,6 +2004,10 @@ _MAX_SOURCE_PATH = 1024
 #: is the file `nemorun/cli/export.py`, and reporting it vanished while it exists is a
 #: false finding. A leading `.` is left alone -- `.ddflow/x.md` is a path.
 _MARKUP_AROUND_PATH = re.compile(r"^[`'\"(\[<*]+|[`'\")\]>*.,;]+$")
+#: A whole markdown link, `[docs/a.md](docs/a.md)`: its TARGET is the path.
+_MD_LINK = re.compile(r"^\[[^\]]*\]\(([^)\s]+)\)[.,;]?$")
+#: Markup still inside a token once the wrapping is gone: not one path, but pieces.
+_MARKUP_INSIDE = frozenset("`[]()<>*")
 
 
 def _path_shaped(rel: str) -> bool:
@@ -2014,7 +2020,7 @@ def _path_shaped(rel: str) -> bool:
     file, a long one crashed the stat. Item, note and memory sources are not filtered
     here: the importer writes them from real file names, which may contain spaces.
     """
-    return len(rel) <= _MAX_SOURCE_PATH and not any(c.isspace() for c in rel)
+    return len(rel) <= _MAX_SOURCE_PATH and not any(c.isspace() or c in _MARKUP_INSIDE for c in rel)
 
 
 def _has_open_child(state, phase) -> bool:

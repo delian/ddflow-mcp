@@ -98,3 +98,17 @@ def test_a_real_missing_path_is_still_vanished_and_a_bug_pin_still_is_not(repo):
     assert "docs/gone.md" in gone, gone
     assert "review-inverted-severity" not in gone, gone
     assert "docs/lessons.md" not in gone, gone
+
+
+def test_a_markdown_link_is_checked_as_its_target(repo):
+    """Rubber-duck finding: `[docs/a.md](docs/a.md)` lost only its outer bracket and
+    paren to the unwrap and was stat-ed as `docs/a.md](docs/a.md`, so an existing file
+    was reported vanished."""
+    _corpus(
+        repo,
+        ["[docs/lessons.md](docs/lessons.md)", "[the gone file](docs/gone.md).", "`a.md`,`b.md`"],
+    )
+    gone = _vanished(_verify(repo))
+    assert not any("lessons.md" in s for s in gone), gone
+    assert "docs/gone.md" in gone, gone
+    assert not any("a.md" in s for s in gone), gone
