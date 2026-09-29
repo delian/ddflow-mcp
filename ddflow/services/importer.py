@@ -864,10 +864,12 @@ def _heading_number(heading: str) -> str:
 def _agrees(prefix: str, number: str) -> bool:
     """Whether a child prefix spells the heading's own number: `P21` or `21.A` for
     `Phase 21`, never `34` for `Phase 40`."""
-    head = prefix.split(".")[0]
-    if len(head) > 1 and head[0] in "Pp" and head[1].isdigit():
-        head = head[1:]
-    return head.lower() == number.split(".")[0].lstrip("Pp").lower()
+
+    def lead(ident: str) -> str:
+        head = ident.split(".", maxsplit=1)[0].lower()
+        return head[1:] if head[:1] == "p" and head[1:2].isdigit() else head
+
+    return lead(prefix) == lead(number)
 
 
 def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
@@ -1609,9 +1611,7 @@ def _pull_in_needed(
     return done, closed
 
 
-def _note_withheld(
-    plan: ImportPlan, done_skipped: int, closed: list[str], held: list[str]
-) -> None:
+def _note_withheld(plan: ImportPlan, done_skipped: int, closed: list[str], held: list[str]) -> None:
     """Say what the import deliberately did not offer as work, and how to get it."""
     if done_skipped:
         plan.notes.append(
@@ -1797,9 +1797,7 @@ def plan_import(
     # permanently stuck work and look like it had succeeded.
     done_pulled, _closed_pulled = _pull_in_needed(plan, deferred_done, held)
     pulled = {f.ident for f in plan.found}
-    _note_withheld(
-        plan, done_skipped - done_pulled, [i for i in closed if i not in pulled], held
-    )
+    _note_withheld(plan, done_skipped - done_pulled, [i for i in closed if i not in pulled], held)
 
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:

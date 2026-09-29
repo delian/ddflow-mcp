@@ -88,7 +88,7 @@ LIVE_UNDER_SHIPPED = """\
 - [ ] **38.10 Cross-device pack scenarios.** broad but shallow
 
 ### P42.8 — Future work (deliberately not in this phase)
-- [ ] Give base room-blueprint devices transports so gateway fan-outs exceed 3–5 nodes
+- [ ] Give base room-blueprint devices transports so gateway fan-outs exceed 3-5 nodes
 - [x] Multi-gateway homes. ✅ Closed by P41.6
 """
 
