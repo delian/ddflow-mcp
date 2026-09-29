@@ -211,5 +211,8 @@ def test_a_file_this_python_cannot_parse_is_matched_by_name(repo):
     (repo / "tests").mkdir()
     (repo / "tests" / "test_new.py").write_text("match (:\n\ndef test_z():\n    pass\n")
     run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "y")
+    # A separate open bug for the negative case: reusing the closed B1 would let the
+    # assertion pass for a reason other than the missing name (critic on 5ced6c7).
+    assert api.bug_fixed(repo, "B2", regression_test="tests/test_new.py::test_q").exit == FAIL
     assert api.bug_fixed(repo, "B1", regression_test="tests/test_new.py::test_z").exit == OK
-    assert api.bug_fixed(repo, "B1", regression_test="tests/test_new.py::test_q").exit == FAIL
