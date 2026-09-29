@@ -582,6 +582,35 @@ def _out_hint(paths: list[str]) -> str:
     return ""
 
 
+def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
+    """Refuse a message carrying any of `keys` as a `<key>:` line. `[enforce].forbidden_trailers`.
+
+    A LINE scan, deliberately stricter than `check_item_trailer`'s use of git's parser:
+    git reads trailers only from the final paragraph, while a forge credits a co-author
+    from such a line wherever it sits, and the preference being enforced is about the
+    line. Case-insensitive, because git and forges treat trailer keys so. Prose that
+    merely names the key (`a Co-author line`) is not a `<key>:` line and passes.
+    """
+    wanted = {k.strip().lower() for k in keys if k.strip()}
+    if not wanted:
+        return 0, ""
+    found = sorted(
+        {
+            ln.split(":", 1)[0].strip()
+            for ln in message.splitlines()
+            if ":" in ln and ln.split(":", 1)[0].strip().lower() in wanted
+        }
+    )
+    if not found:
+        return 0, ""
+    return 1, (
+        f"ddflow: this commit message carries {', '.join(f'`{k}:`' for k in found)}, which "
+        f"[enforce].forbidden_trailers refuses.\n\n"
+        f"Remove the line and commit again. The rule is enforced here, by git, so it holds "
+        f"for every agent and for `git commit -F` and the editor alike."
+    )
+
+
 def check_item_trailer(message: str, keys: list[str], *, merging: bool = False) -> tuple[int, str]:
     """Require one of `keys` as a trailer (`Item: P1.T3`) in the commit MESSAGE.
 

@@ -328,12 +328,22 @@ def _check_msg(cfg, msg_file: str) -> O.Outcome:
     from ..services import enforce as E
 
     data: dict[str, Any] = {"message": "", "installed": True, "policy": ""}
-    if not cfg.enforce.require_item_trailer:
+    forbidden = list(cfg.enforce.forbidden_trailers)
+    if not cfg.enforce.require_item_trailer and not forbidden:
         return O.ok("hooks", **data)
     path = Path(msg_file)
     if not msg_file or not path.is_file():
         # git always passes the file; no file means we were not called by git, and
         # inventing a failure from missing input is the vacuous-FAIL mirror.
+        return O.ok("hooks", **data)
+    text = path.read_text("utf-8", errors="replace")
+    # Before the merge exemption, on purpose: a merge message is written by whoever
+    # concludes the merge, which is exactly who adds an attribution line.
+    code, msg = E.check_forbidden_trailers(text, forbidden)
+    if code:
+        data["message"] = msg
+        return O.Outcome(kind="hooks", data=data, exit=code, reason=msg)
+    if not cfg.enforce.require_item_trailer:
         return O.ok("hooks", **data)
     # A merge really in progress: MERGE_HEAD resolves AND is not already contained in
     # HEAD. A stale or planted MERGE_HEAD pointing at HEAD exempted every ordinary
@@ -354,7 +364,7 @@ def _check_msg(cfg, msg_file: str) -> O.Outcome:
         != 0
     )
     code, msg = E.check_item_trailer(
-        path.read_text("utf-8", errors="replace"),
+        text,
         list(cfg.enforce.item_trailer_keys) or ["Item"],
         merging=merging,
     )
