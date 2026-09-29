@@ -339,3 +339,29 @@ def test_mcp_wait_returns_what_the_holder_side_reports(proj):
     WT.register(proj, WT.Waiter(agent=WAITER, item="T2", waiting_on=["T1"], until=time.time() + 60))
     hb = _json.loads(call("ddflow_heartbeat", {"id": "T1"}, HOLDER)["content"][0]["text"])
     assert [w["agent"] for w in hb["waiters"]] == [WAITER]
+
+
+def test_an_any_wait_names_only_the_holders_that_block_it(proj):
+    """With no item, the waiter is waiting on what blocks the queue -- not on every lease
+    in flight. Registering against all of them told an unrelated holder, at every
+    heartbeat, that it was holding someone up."""
+    run_cli(proj, "task", "add", "U1", "--globs", "docs/unrelated.md")
+    assert A.claim(proj, "U1", no_worktree=True, agent="agent-other").ok
+    out = A.wait(proj, timeout_s=0, agent=WAITER)
+    assert out.exit == O.NOTHING and out.data["waitable"]
+    assert out.data["waiting_on"] == ["T1"], out.data["waiting_on"]
+
+
+def test_a_full_parallelism_cap_waits_on_every_holder(proj):
+    """Any release frees a slot, so every holder is one the waiter is waiting on. Pins the
+    scheduler's "cap reached" wording that `_blocking_leases` keys on."""
+    cfg = proj / ".ddflow" / "config.toml"
+    assert "max_parallel_tasks = 4" in cfg.read_text()
+    cfg.write_text(cfg.read_text().replace("max_parallel_tasks = 4", "max_parallel_tasks = 2"))
+    run_cli(proj, "task", "add", "U1", "--globs", "docs/u1.md")
+    run_cli(proj, "task", "add", "U2", "--globs", "docs/u2.md")
+    assert A.claim(proj, "U1", no_worktree=True, agent="agent-other").ok
+    out = A.wait(proj, timeout_s=0, agent=WAITER)
+    assert out.exit == O.NOTHING and out.data["waitable"], out.reason
+    assert any("cap reached" in b["detail"] for b in out.data["blocked"])
+    assert out.data["waiting_on"] == ["T1", "U1"]

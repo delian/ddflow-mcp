@@ -245,13 +245,35 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, others) -> d
             "so no release is coming to wake you. `ddflow next` says what blocks the "
             "queue — it needs someone to act, not to wait.",
         }
+    blocking = _blocking_leases(st, p.blocked, others)
     return {
         **out,
         "status": "blocked",
         "why": f"nothing is ready ({p.summary()}); waiting on "
-        + ", ".join(f"{i} ({lz.holder})" for i, lz in sorted(others.items())),
-        "waiting_on": sorted(others),
+        + ", ".join(f"{i} ({others[i].holder})" for i in blocking),
+        "waiting_on": blocking,
     }
+
+
+def _blocking_leases(st, blocked, others) -> list[str]:
+    """The held items whose release could free something in ``blocked``.
+
+    What the waiter registers against, and so which holders are told someone waits on
+    them. Every lease in flight was the first answer, and it told an unrelated holder at
+    each heartbeat that it was holding someone up. A full cap or a resource shortfall is
+    freed by ANY release, and when nothing names a holder the answer stays "all of them":
+    over-reporting a waiter is harmless, under-reporting hides one.
+    """
+    named: set[str] = set()
+    for b in blocked:
+        if b.reason == "resources" or (b.reason == "state" and "cap reached" in b.detail):
+            return sorted(others)
+        for w in b.waiting_on:
+            if w in others:
+                named.add(w)
+            elif w in st.items:
+                named.update(k.id for k in st.open_descendants(w) if k.id in others)
+    return sorted(named) or sorted(others)
 
 
 def _claim_blocker(st, cfg, it, me: str, live, now: float):
