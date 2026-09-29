@@ -44,6 +44,9 @@ max_parallel_tasks = 4
 # covers — the only layer of this workflow that does not rely on the agent agreeing.
 # Starts at "warn" so adopting ddflow never breaks an existing repo on day one.
 commit_without_lease = "warn"
+# Operator 2026-09-29 (decision D-strip-coauthor-history): no commit in this
+# repository credits a tool. The commit-msg hook refuses it for every agent.
+forbidden_trailers = ["Co-Authored-By"]
 
 [session]
 brief_max_tokens = 1200
