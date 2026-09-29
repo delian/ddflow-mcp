@@ -1279,6 +1279,9 @@ def test_a_bug_cannot_be_closed_without_a_regression_test(repo):
     _code, shown, _ = run_cli(repo, "--json", "status")
     assert json.loads(shown)["open_bugs"] == 1, "a refused close marked the bug fixed"
 
+    # The named test must exist (B855e3cac54): an invented node id no longer closes a bug.
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_events.py").write_text("def test_seq():\n    pass\n")
     closed = api.bug_fixed(repo, bug, regression_test="tests/test_events.py::test_seq")
     assert closed.exit == OK, closed
     _code, shown, _ = run_cli(repo, "--json", "status")
