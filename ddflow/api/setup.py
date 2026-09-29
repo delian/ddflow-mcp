@@ -314,8 +314,13 @@ def _worktree_drift(repo: Path, here: Path) -> str:
     return msg
 
 
-def _check_msg(cfg, msg_file: str) -> O.Outcome:
-    """The commit-msg hook's check: the trailer, read from the message being committed."""
+def _check_msg(repo: Path, cfg, msg_file: str) -> O.Outcome:
+    """The commit-msg hook's check: the trailer, read from the message being committed.
+
+    `repo` is the primary checkout, resolved from wherever git runs the hook exactly as
+    for `check-commit`, so a commit in a linked worktree is checked against the one
+    queue every worktree shares.
+    """
     from ..infra import proc as P
     from ..services import enforce as E
 
@@ -358,6 +363,8 @@ def _check_msg(cfg, msg_file: str) -> O.Outcome:
     code, msg = E.check_item_trailer(
         text,
         list(cfg.enforce.item_trailer_keys) or ["Item"],
+        ids=lambda: E.queue_ids(repo, cfg),
+        waivers=dict(cfg.enforce.trailer_waivers),
         merging=merging,
     )
     data["message"] = msg
@@ -534,9 +541,15 @@ def hooks(
 
     if action == "session-start":
         return _session_start(repo, agent)
-    _log, cfg, _st = _load(repo, agent)
     if action == "check-msg":
-        return _check_msg(cfg, msg_file)
+        # The config alone, not `_load`: this runs on EVERY commit, and folding the whole
+        # log up front cost ~120 ms on a 5k-event log whether or not a trailer needed the
+        # queue. `queue_ids` reads it only when a trailer names an item, from the index
+        # when that is current. Nothing here needs the resolved identity.
+        from ..config import Config
+
+        return _check_msg(repo, Config.load(repo), msg_file)
+    _log, cfg, _st = _load(repo, agent)
     if claude and action in ("install", "uninstall"):
         try:
             if action == "install":
