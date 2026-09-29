@@ -386,3 +386,15 @@ def test_the_payload_says_the_file_exists_once_it_was_written(mixed):
     """Bug B5f0c501ba4: `exists` was probed before the write and never updated."""
     out = OPS.precommit(mixed, where=mixed, write=True)
     assert out.data["written"] is True and out.data["exists"] is True
+
+
+def test_every_run_with_a_config_in_place_says_how_to_activate_it(mixed):
+    """Bug B287c338cf9: the hint appeared only on the run that wrote the file with
+    pre-commit present; written first and pre-commit installed later, nothing ever said
+    `pre-commit install`, and the config ran nothing."""
+    from conftest import run_cli
+
+    (mixed / ".pre-commit-config.yaml").write_text("repos: []\n")
+    code, out, err = run_cli(mixed, "precommit")
+    assert code == 0, err
+    assert "pre-commit install" in out.split("exists --", 1)[1]

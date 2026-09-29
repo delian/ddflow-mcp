@@ -302,14 +302,16 @@ def cmd_precommit(a, c: Ctx) -> int:
             f"# NOTE: the proposed hooks run {', '.join(d['missing'])}, not found here: "
             "each would fail every commit until installed (or drop its hook)."
         )
+    # Said on EVERY run, not only the one that wrote the file: a config nobody activated
+    # runs nothing, and the run after installing pre-commit is when this is needed.
+    activate = (
+        "`pre-commit install` activates it (the "
+        + ", ".join(d["hook_types"])
+        + " hooks the config declares)."
+    )
     if d["installed"] is None:
         print("# Could not tell whether pre-commit is installed: its probe did not answer.")
     elif not d["installed"]:
         print("# pre-commit is not installed: ask the operator, then `pipx install pre-commit`.")
-    elif d["written"]:
-        print(
-            "Activate it with `pre-commit install`, which installs the "
-            + ", ".join(d["hook_types"])
-            + " hooks the config declares."
-        )
+    print(f"# {activate}")
     return out.exit
