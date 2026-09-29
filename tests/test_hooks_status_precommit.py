@@ -200,6 +200,7 @@ repos:
         ("", "check-msg", "    pass_filenames: false", "commit-msg", False),
         # `language: fail` never runs its entry
         ("", "check-commit", "    language: fail", "pre-commit", False),
+        ("", "check-commit", "    language: pygrep", "pre-commit", False),
         # a hook whose filters match no staged file is SKIPPED ("no files to check"); at
         # commit-msg the file is the message file, which `types: [python]` never matches
         ("", "check-commit", "    files: ^src/", "pre-commit", False),
@@ -215,7 +216,7 @@ repos:
 )
 def test_the_stage_decides(repo, top, check, extra, name, want):
     config = _ONE_HOOK.format(top=top, check=check, extra=extra)
-    if "language: fail" in extra:
+    if "language: " in extra:
         config = config.replace("    language: system\n", "")
     a = _armed(repo, config, name)
     assert bool(a.via) is want, (config, a)

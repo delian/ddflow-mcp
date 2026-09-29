@@ -388,8 +388,10 @@ def _filters(d: dict, keys) -> bool:
 
 def _runs_check(hook: dict, check: str) -> bool:
     """Whether this configured hook's command (`entry` + `args`) is `... hooks <check>`."""
-    if not isinstance(hook.get("entry"), str) or hook.get("language") == "fail":
-        return False  # a remote hook's entry is in its manifest; `fail` prints its entry
+    if not isinstance(hook.get("entry"), str) or hook.get("language") in ("fail", "pygrep"):
+        # A remote hook's entry is in its manifest; `fail` prints its entry and `pygrep`
+        # greps for it -- neither runs it.
+        return False
     if check == "check-msg" and _false(hook.get("pass_filenames")):
         # check-msg reads the message FILE pre-commit passes as its argument; given no
         # file it has nothing to check and allows the commit.
