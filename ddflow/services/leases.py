@@ -592,6 +592,12 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
             f"{rec.unmerged_commits} unmerged commit(s). "
             f"`git -C {wt} diff {base}` then salvage"
             + (f", then `ddflow release {rec.item} --note salvaged`." if held else ".")
+            + (
+                " The tree is adopted: the agent harness's own working tree, not "
+                "ddflow's -- salvage from it and leave the tree to the harness."
+                if rec.adopted
+                else ""
+            )
         )
     elif rec.adopted:
         rec.advice = (

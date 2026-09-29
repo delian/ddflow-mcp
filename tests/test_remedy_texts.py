@@ -15,6 +15,8 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_help import _cli_leaves, unknown_cli_mentions, unknown_mentions
@@ -29,27 +31,52 @@ from ddflow.services import leases as L
 
 PACKAGE = Path(__file__).resolve().parents[1] / "ddflow"
 
-#: Offenders already filed as bugs, outside this item's files, keyed by path under
-#: ddflow/ and the mention as `unknown_mentions` reports it. Listed so the ratchet can
-#: go in now. SHRINK-ONLY: an entry that no longer occurs fails the ratchet, so fixing
-#: the bug forces deleting its line and the list cannot rot into a blanket pass.
+#: Offenders already filed as bugs, outside this item's files. Keyed by
+#: `(path under ddflow/, mention as unknown_mentions reports it, snippet)`, where the
+#: snippet is text from the very string (in code) or line (in a template) that holds
+#: the mention. The snippet is what makes an entry approve ONE occurrence: keyed by
+#: file and mention alone, an entry written for one sentence also passed any later,
+#: unrelated bad mention in that file that reduced to the same word.
+#: SHRINK-ONLY: an entry must match exactly one occurrence -- none means the bug was
+#: fixed and the line must go; several means the snippet is too loose to say which.
 KNOWN_OPEN = {
-    ("services/companions.py", "companions show"): "B67ba6899c7",
-    ("services/gates.py", "item update"): "B84b48b9f71",
-    ("templates/prompts/mcp_instructions.md", "ddflow_prompts_show"): "B237495b8a5",
-    ("templates/prompts/commands/research-companions.md", "ddflow_decision"): "B3d596abd95",
+    (
+        "services/companions.py",
+        "companions show",
+        "`ddflow companions show` prints the entry to paste",
+    ): "B67ba6899c7",
+    ("services/gates.py", "item update", "`ddflow item update <id> --globs ...` FIRST"): (
+        "B84b48b9f71"
+    ),
+    (
+        "templates/prompts/mcp_instructions.md",
+        "ddflow_prompts_show",
+        "this list cannot know about.** `ddflow_prompts_show` with",
+    ): "B237495b8a5",
+    (
+        "templates/prompts/commands/research-companions.md",
+        "ddflow_decision",
+        "a `ddflow_decision` for anything the operator actually chooses",
+    ): "B3d596abd95",
 }
 
 #: Not defects: PROSE that `command_mentions` reads as code because a markdown list
-#: continuation is indented ("...that is what ddflow writes."). Same shrink-only rule.
+#: continuation is indented ("...that is what ddflow writes."). Same key, same
+#: exactly-one rule.
 PROSE = {
-    ("templates/drivers/deltas/antigravity.md", "writes"),
-    ("templates/drivers/deltas/devin.md", "writes"),
-    ("templates/drivers/deltas/qodo.md", "writes"),
-    ("templates/drivers/deltas/zcode-glm.md", "writes"),
-    ("templates/drivers/implement-phase.md", "can tell"),
-    ("templates/prompts/commands/code-clean.md", "worktree and branch"),
+    ("templates/drivers/deltas/antigravity.md", "writes", "rules. ddflow writes `AGENTS.md`."),
+    ("templates/drivers/deltas/devin.md", "writes", "and that is what ddflow writes. **Cloud"),
+    ("templates/drivers/deltas/qodo.md", "writes", "what ddflow writes. The **Qodo Gen** IDE"),
+    ("templates/drivers/deltas/zcode-glm.md", "writes", "so `AGENTS.md` is what ddflow writes."),
+    ("templates/drivers/implement-phase.md", "can tell", "on every review so ddflow can tell."),
+    (
+        "templates/prompts/commands/code-clean.md",
+        "worktree and branch",
+        "ddflow_cleanup     — every ddflow worktree and branch, classified",
+    ),
 }
+
+ALLOWED = {**dict.fromkeys(PROSE, "prose"), **KNOWN_OPEN}
 
 
 def _unresolved(text: str) -> list[str]:
@@ -186,15 +213,21 @@ def test_a_zero_coverage_figure_is_shown_and_a_missing_one_is_named(repo, cfg):
 # -- B930f5c6b7c: an adopted tree is the harness's, never ours to remove -----------------
 
 
-def _adopted(repo: Path, cfg, *, released: bool) -> L.Recovery:
+def _adopted(repo: Path, cfg, *, released: bool, work: str = "") -> L.Recovery:
     """What `claim` records from inside a tree the harness made (test_worktree_adoption):
-    `worktree.adopted`, then a lease on that tree. Clean and fully merged."""
+    `worktree.adopted`, then a lease on that tree. Clean and fully merged unless `work`
+    is "dirty" (an uncommitted file) or "unmerged" (a commit not on main)."""
     agent_tree = repo.parent / "agent-tree"
-    subprocess.run(
-        ["git", "-C", str(repo), "worktree", "add", "-q", str(agent_tree), "-b", "agent-work"],
-        check=True,
-        capture_output=True,
-    )
+
+    def git(where: Path, *args: str) -> None:
+        subprocess.run(["git", "-C", str(where), *args], check=True, capture_output=True)
+
+    git(repo, "worktree", "add", "-q", str(agent_tree), "-b", "agent-work")
+    if work:
+        (agent_tree / "a.py").write_text("the agent's work\n")
+    if work == "unmerged":
+        git(agent_tree, "add", "a.py")
+        git(agent_tree, "commit", "-qm", "the agent's work")
     log = EventLog(repo, "a")
     _seed(log)
     stored = W.store_path(repo, agent_tree)
@@ -204,7 +237,7 @@ def _adopted(repo: Path, cfg, *, released: bool) -> L.Recovery:
         L.release(log, "T1", holder="harness")
     assert fold(log.read_all()).items["T1"].adopted
     [rec] = L.scan(log, cfg, repo, now=time.time() + 10**6)
-    assert rec.salvageable is False, rec
+    assert rec.salvageable is bool(work), rec
     return rec
 
 
@@ -224,6 +257,19 @@ def test_an_adopted_orphan_is_never_advised_for_removal_or_release(repo, cfg):
     assert rec.kind == "orphan_worktree"
     assert "remove" not in rec.advice and "safe to" not in rec.advice, rec.advice
     assert "release" not in rec.advice and "adopted" in rec.advice, rec.advice
+
+
+@pytest.mark.parametrize("work", ["dirty", "unmerged"])
+@pytest.mark.parametrize("released", [False, True])
+def test_an_adopted_tree_with_work_is_framed_as_the_harness_tree(repo, cfg, work, released):
+    """Salvageable work in an adopted tree: inspect and salvage, yes -- but the advice
+    must say whose tree it is, and never suggest removing it."""
+    rec = _adopted(repo, cfg, released=released, work=work)
+    assert "INSPECT FIRST" in rec.advice, rec.advice
+    assert "adopted" in rec.advice and "harness" in rec.advice, rec.advice
+    assert "remove" not in rec.advice and "safe to" not in rec.advice, rec.advice
+    assert ("`ddflow release T1 --note salvaged`" in rec.advice) is not released, rec.advice
+    assert not _unresolved(rec.advice), rec.advice
 
 
 # -- the ratchet -----------------------------------------------------------------------
@@ -272,22 +318,51 @@ def _strings(source: str) -> list[tuple[int, str]]:
     return out
 
 
-def _scan() -> dict[tuple[str, str], list[str]]:
-    """Every unresolved mention in printed strings and shipped templates -> where."""
-    leaves = _cli_leaves()
-    found: dict[tuple[str, str], list[str]] = {}
-    for path in sorted(PACKAGE.rglob("*.py")):
-        rel = path.relative_to(PACKAGE).as_posix()
-        for lineno, text in _strings(path.read_text("utf-8")):
+#: One unresolved mention: (path under ddflow/, mention, where, the text holding it).
+Occurrence = tuple[str, str, str, str]
+
+
+def _occurrences(rel: str, source: str, leaves: set[str]) -> list[Occurrence]:
+    """Unresolved mentions in one file, each with the string or line that holds it."""
+    out: list[Occurrence] = []
+    if rel.endswith(".py"):
+        for lineno, text in _strings(source):
             for m in unknown_mentions(H.command_mentions(text), leaves):
-                found.setdefault((rel, m), []).append(f"{rel}:{lineno}")
+                out.append((rel, m, f"{rel}:{lineno}", text))
+        return out
+    # Markdown: `command_mentions` must see the whole page (a fenced block changes what
+    # counts as code), so a line's mentions are what the page up to it adds -- its
+    # results only ever extend as lines are appended.
+    lines = source.splitlines()
+    seen = 0
+    for i, line in enumerate(lines):
+        upto = H.command_mentions("\n".join(lines[: i + 1]))
+        for m in unknown_mentions(upto[seen:], leaves):
+            out.append((rel, m, f"{rel}:{i + 1}", line.strip()))
+        seen = len(upto)
+    return out
+
+
+def _scan() -> list[Occurrence]:
+    """Every unresolved mention in printed strings and shipped templates."""
+    leaves = _cli_leaves()
+    files = sorted(PACKAGE.rglob("*.py"))
     # Templates are rendered to agents verbatim -- the MCP instructions, the command
     # prompts, the drivers. `test_help` reads the help pages; this reads the rest too.
-    for path in sorted((PACKAGE / "templates").rglob("*.md")):
-        rel = path.relative_to(PACKAGE).as_posix()
-        for m in unknown_mentions(H.command_mentions(path.read_text("utf-8")), leaves):
-            found.setdefault((rel, m), []).append(rel)
-    return found
+    files += sorted((PACKAGE / "templates").rglob("*.md"))
+    out: list[Occurrence] = []
+    for path in files:
+        out += _occurrences(path.relative_to(PACKAGE).as_posix(), path.read_text("utf-8"), leaves)
+    return out
+
+
+def _judge(found: list[Occurrence], allowed) -> tuple[list[str], list[str]]:
+    """(occurrences no entry approves, entries that do not approve exactly one)."""
+    hits = {key: [o for o in found if o[:2] == key[:2] and key[2] in o[3]] for key in allowed}
+    approved = {id(o) for matched in hits.values() if len(matched) == 1 for o in matched}
+    unknown = [f"{o[2]}: `{o[1]}`" for o in found if id(o) not in approved]
+    bad = [f"{k} [{allowed[k]}] matches {len(v)}" for k, v in hits.items() if len(v) != 1]
+    return unknown, bad
 
 
 def test_every_command_printed_advice_names_exists():
@@ -295,22 +370,35 @@ def test_every_command_printed_advice_names_exists():
     context in a string the package can print, or in a template it renders, must
     resolve -- in the argparse tree or the MCP tool table. A future remedy naming a
     command that does not exist fails here, the way a help page does in `test_help`."""
-    found = _scan()
-    unknown = [
-        f"{where[0]}: `{m}`"
-        for (rel, m), where in sorted(found.items())
-        if (rel, m) not in KNOWN_OPEN and (rel, m) not in PROSE
-    ]
+    unknown, _ = _judge(_scan(), ALLOWED)
     assert not unknown, "printed advice names commands that do not exist:\n" + "\n".join(unknown)
 
 
 def test_the_allowlists_only_shrink():
-    """An allowlist entry whose mention is gone is a fixed bug nobody crossed off --
-    and, left there, a pass waiting for the next offender at the same spot."""
-    found = _scan()
-    stale = [f"{k} ({v})" for k, v in KNOWN_OPEN.items() if k not in found]
-    stale += [str(k) for k in PROSE if k not in found]
-    assert not stale, "delete these allowlist entries, they no longer occur:\n" + "\n".join(stale)
+    """Every entry approves exactly one occurrence. None: a fixed bug nobody crossed off
+    -- left there, a pass waiting for the next offender at the same spot. Several: the
+    snippet no longer says which occurrence it was written for."""
+    _, bad = _judge(_scan(), ALLOWED)
+    assert not bad, "fix or delete these allowlist entries:\n" + "\n".join(bad)
+
+
+def test_an_entry_approves_only_the_occurrence_it_names():
+    """The loophole a re-review CONFIRMED: keyed by (file, mention), an entry approved
+    for one sentence also swallowed a second, unrelated `ddflow writes` in that file."""
+    src = 'a = "that is `ddflow writes` here"\n\n\nb = "and later `ddflow writes` again"\n'
+    found = _occurrences("fake.py", src, _cli_leaves())
+    assert [o[1] for o in found] == ["writes", "writes"], found
+    entry = {("fake.py", "writes", "that is `ddflow writes` here"): "prose"}
+    unknown, bad = _judge(found, entry)
+    assert unknown == ["fake.py:4: `writes`"] and not bad, (unknown, bad)
+    # A snippet that fits both approves neither, and is itself reported.
+    unknown, bad = _judge(found, {("fake.py", "writes", "`ddflow writes`"): "prose"})
+    assert len(unknown) == 2 and len(bad) == 1, (unknown, bad)
+    # The same holds per LINE in a template.
+    md = "  that is what ddflow writes.\n\n  and so ddflow writes.\n"
+    found = _occurrences("fake.md", md, _cli_leaves())
+    unknown, _ = _judge(found, {("fake.md", "writes", "that is what ddflow writes."): "p"})
+    assert unknown == ["fake.md:3: `writes`"], unknown
 
 
 def test_the_ratchet_catches_a_fake_command():
