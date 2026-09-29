@@ -368,10 +368,7 @@ def relevant_tests(
     from ..services.gates import load_gates, parallel_test_advice
 
     _log, cfg, st = _load(repo, agent)
-    top = W.git(where, "rev-parse", "--show-toplevel") if where else None
-    # The caller's OWN checkout: a linked worktree stays itself, where the repo root
-    # (and so `repo`) is the primary -- whose diff is not the change being worked on.
-    tree = Path(top.out) if top is not None and top.ok and top.out else repo
+    tree = _caller_tree(repo, where)
     if item:
         it = st.items.get(item)
         if it is None:
@@ -407,3 +404,63 @@ def relevant_tests(
             **data,
         )
     return O.ok("tests", **data)
+
+
+def _caller_tree(repo: Path, where: Path | None) -> Path:
+    """The checkout the caller is standing in. A linked worktree stays itself, where the
+    repo root (and so `repo`) is the PRIMARY -- whose files and diff are not the ones the
+    caller is working on."""
+    from ..infra import worktree as W
+
+    top = W.git(where, "rev-parse", "--show-toplevel") if where else None
+    return Path(top.out) if top is not None and top.ok and top.out else repo
+
+
+def precommit(
+    repo: Path,
+    *,
+    where: Path | None = None,
+    ddflow_cmd: str = "ddflow",
+    write: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """A `.pre-commit-config.yaml` proposed for this repository's stacks.
+
+    Proposes; installs nothing. ``write`` creates the file and REFUSES (exit 3) to replace
+    one that exists: which checks gate somebody's commits is theirs to decide, and a
+    config they already have is exactly that decision.
+    """
+    import shutil
+
+    from ..services import precommit as PC
+
+    _load(repo, agent)
+    tree = _caller_tree(repo, where)
+    prop = PC.propose(tree, ddflow_cmd=ddflow_cmd)
+    if prop is None:
+        return O.failed("precommit", f"git could not list the files of {tree}")
+    path = PC.config_path(tree)
+    data: dict[str, Any] = {
+        "path": str(path),
+        "exists": path.is_file(),
+        "written": False,
+        "installed": shutil.which("pre-commit") is not None,
+        "stacks": prop.stacks,
+        "repos": [
+            {"repo": r.url, "rev": r.rev, "hooks": [h.id for h in r.hooks], "why": r.why}
+            for r in prop.repos
+        ],
+        "skipped": prop.skipped,
+        "text": prop.text,
+    }
+    if write:
+        if data["exists"]:
+            return O.refused(
+                "precommit",
+                f"{path} exists and is not replaced: compare it with the proposal and "
+                "merge by hand what you want",
+                **data,
+            )
+        path.write_text(prop.text, encoding="utf-8")
+        data["written"] = True
+    return O.ok("precommit", **data)
