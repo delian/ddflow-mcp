@@ -193,9 +193,10 @@ def _is_id(token: str) -> bool:
 
 
 def _titled(text: str) -> bool:
-    """Whether `text` carries its id in the TITLED shape (`**38.9 Free-text ...**`)."""
+    """Whether `text` carries its id in the TITLED shape (`**38.9 Free-text ...**`) --
+    by the same rule `_split_id` applies, so `**L2 cache misses**` is prose to both."""
     m = _ITEM_ID.match(text)
-    return bool(m and m.group(5) and not any(m.group(i) for i in (1, 2, 3, 4)))
+    return bool(m and m.group(5) and _split_id(text)[0])
 
 
 def _split_id(text: str) -> tuple[str, str]:
@@ -404,6 +405,7 @@ def _disposition(raw: str) -> tuple[str, str]:
         if id_then_title:
             body = rest.strip()
     if body.startswith("**"):
+        close = body.find("**", 2)
         title, annotation = (body[2:close], body[close + 2 :]) if close != -1 else (body[2:], "")
     else:
         # No bold run to say where the title ends. Reading the WHOLE line as annotation
@@ -452,13 +454,16 @@ def _heading_disposition(heading: str) -> tuple[str, str] | None:
     if _marker_in(heading, _SECTION_LIVE):
         return "", ""
     if _FUTURE_WORK.match(_heading_title(heading)):
-        return "hold", "under a FUTURE WORK heading"
+        # Not "under a ..." -- that prefix is what `_push_heading` refuses to let a live
+        # sub-heading override, and a `(in progress)` item filed under "Future work" is
+        # the operator saying this one has started.
+        return "hold", "its heading files it as FUTURE WORK"
     return None
 
 
 #: What a heading's title follows: `Phase 14 — `, `4. `, `P42.8 — `.
 _HEADING_LEAD = re.compile(
-    r"^\W*(?:(?:phase|session|stage|milestone|sprint)\s+[A-Za-z]?\d[\w.]*\s*[\u2014\u2013:\-]+\s*"
+    r"^\W*(?:(?:phase|session|stage|milestone|sprint)\s+[A-Za-z]?\d[\w.]*?(?:\.\s+|\s*[\u2014\u2013:\-]+\s*)"
     r"|\d+(?:\.\d+)*\.?\s+)",
     re.I,
 )
@@ -984,7 +989,7 @@ def _date_hint(*texts: str) -> str:
 #: and its items (`38.9`, `38.10`) are what the project calls Phase 38's leftovers.
 _HEADING_NUMBER = re.compile(
     r"^\W*(?:phase|session|stage|milestone|sprint)\s+([A-Za-z]?\d[\w.]*?)"
-    r"\.?(?:\s*[\u2014\u2013:(]|\s+-+\s|\s*\*\*|\s*$)",
+    r"(?:\.\s|\.?(?:\s*[\u2014\u2013:(]|\s+-+\s|\s*\*\*|\s*$))",
     re.I,
 )
 

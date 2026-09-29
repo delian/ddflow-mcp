@@ -288,3 +288,31 @@ def test_title_prose_after_an_id_only_bold_is_not_a_verdict(repo):
     assert tasks["C14"].extra["disposition"] == ""
     assert tasks["C15"].extra["disposition"] == "", "a truncated aside read as a verdict"
     assert tasks["C16"].extra["disposition"] == "hold"
+
+
+# -- the cross-family critic's findings ------------------------------------------------------
+
+
+def test_a_second_bold_run_after_the_id_is_read_whole(repo):
+    """The bold after the id is the TITLE; cut at the first bold's offset, its words
+    leaked into the annotation and `DEFERRED` in the title held live work."""
+    _write(repo, "## S\n\n- [ ] **C11** **the retry path for DEFERRED batches** now\n")
+    assert _by_id(_plan(repo), "task")["C11"].extra["disposition"] == ""
+
+
+def test_a_period_after_the_heading_number_separates(repo):
+    _write(repo, "## Phase 40. Consolidation\n- [ ] **34.6e** a\n- [ ] **34.8f** b\n")
+    phases = set(_by_id(_plan(repo), "phase"))
+    assert "40" in phases and "34" not in phases
+
+
+def test_an_explicit_live_verdict_beats_future_work_on_the_heading_and_below_it(repo):
+    _write(
+        repo,
+        "## S\n### Future work (not started)\n- [ ] **A.1** a\n\n"
+        "### Future work\n#### Retry path (in progress)\n- [ ] **A.2** b\n- [ ] **A.3** c\n",
+    )
+    t = _by_id(_plan(repo), "task")
+    assert t["A.1"].extra["disposition"] == ""
+    assert t["A.2"].extra["disposition"] == ""
+    assert t["A.3"].extra["disposition"] == ""
