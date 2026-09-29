@@ -826,11 +826,47 @@ def _this_worktree(repo: Path) -> Path | None:
     return Path(r.stdout.strip()).resolve()
 
 
+def _committing_tree(repo: Path) -> Path | None:
+    """The tree the commit being checked is made in: `_this_worktree`, but only when it
+    is a checkout of ``repo``'s own repository; None otherwise.
+
+    ``repo`` is the PRIMARY checkout (the CLI resolves it so), which is the wrong place
+    to ask what a commit in a linked worktree stages. A cwd outside git, or in some
+    other repository, says nothing about this commit (bug Bba366d9893).
+    """
+    here = _this_worktree(repo)
+    if here is None:
+        return None
+    if here == Path(repo).resolve():
+        return here
+    try:
+        same = W.repo_root(here).resolve() == W.repo_root(Path(repo)).resolve()
+    except W.GitError:
+        return None
+    return here if same else None
+
+
+def _index_tree(repo: Path) -> Path:
+    """Where to run a read of THIS commit's index: the committing tree, else ``repo``.
+
+    `git -C <primary> diff --cached` inside a linked worktree compared the index git
+    hands the hook (`GIT_INDEX_FILE`, the worktree's) with the PRIMARY's HEAD, so every
+    file main changed since the branch point, and every change the branch had already
+    committed, read as staged (bug Bba366d9893). Run in the committing tree, the read
+    gets that tree's HEAD, and its own index -- or, when git set one, the temporary
+    index of a `commit -a` or `commit <paths>`, which is inherited, never dropped.
+    Falling back to ``repo`` keeps the old behaviour where no tree of this repository
+    is in sight.
+    """
+    return _committing_tree(repo) or repo
+
+
 def staged_paths(repo: Path) -> list[str] | None:
     """Paths this commit will write.
 
     `--diff-filter=ACMR` over the INDEX, plus `--cached`, because a file the agent just
-    created is not in HEAD and a diff against HEAD alone would not see it. Through
+    created is not in HEAD and a diff against HEAD alone would not see it. Read in the
+    committing tree (`_index_tree`), against its own HEAD. Through
     `W.git_paths`, so a non-ASCII or non-UTF-8 name is neither C-quoted past the lease
     and view checks nor a crash of every commit.
 
@@ -840,7 +876,7 @@ def staged_paths(repo: Path) -> list[str] | None:
     refuse on None. NOT a held `index.lock`: these reads take no lock and succeed under
     one (verified), so naming it would send an operator hunting for the wrong cause.
     """
-    return W.git_paths(repo, "diff", "--cached", "--name-only", "--diff-filter=ACMR")
+    return W.git_paths(_index_tree(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR")
 
 
 #: The refusal when the staged set itself is unknowable. Never a pass: "could not tell"
@@ -882,7 +918,7 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     state = fold(log.read_all(), strict=False)
     now = time.time()
     me = log.agent_id
-    here = _this_worktree(repo)
+    here = _committing_tree(repo)
     mine: list[str] = []
     others: dict[str, str] = {}
     for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
@@ -941,9 +977,12 @@ def staged_bytes(repo: Path, path: str) -> bytes | None:
     """The INDEX copy of ``path`` -- what the commit will actually write.
 
     Not the working copy: a file fixed on disk but not re-staged would pass a check of
-    the disk while the commit carried the broken bytes.
+    the disk while the commit carried the broken bytes. Read in the committing tree, the
+    same index `staged_paths` listed ``path`` from.
     """
-    r = P.run(["git", "-C", str(repo), "show", f":{path}"], capture_output=True, timeout=60)
+    r = P.run(
+        ["git", "-C", str(_index_tree(repo)), "show", f":{path}"], capture_output=True, timeout=60
+    )
     return r.stdout if r.returncode == 0 else None
 
 
@@ -1080,7 +1119,8 @@ def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
     mode = cfg.enforce.stale_docs
     if mode == "off":
         return 0, ""
-    hits = docsync.stale_mentions(repo, cfg.enforce.doc_globs, cfg.enforce.doc_exclude)
+    # The committing tree: the diff is this commit's, against that tree's own HEAD.
+    hits = docsync.stale_mentions(_index_tree(repo), cfg.enforce.doc_globs, cfg.enforce.doc_exclude)
     if hits is None:
         return _verdict(
             mode,
@@ -1275,7 +1315,7 @@ def check_drift(
             f"ddflow: [enforce].max_behind = {e.max_behind!r} is invalid: it must be >= 1.\n"
             'To stop the behind-count check, set [enforce].behind = "off" instead.'
         )
-    here = here or _this_worktree(repo)
+    here = here or _committing_tree(repo)
     if here is None:
         return 0, (
             "ddflow: could not tell which working tree this commit is in, so its drift "
@@ -1357,14 +1397,27 @@ def _unstaged_under(repo: Path, d: Path) -> LogProbe:
     A git failure is `failed`, never an empty list: an empty stdout from a command that
     failed is not evidence of a clean log, and reading it as one would silently reopen
     the exact false pass this exists to close (roborev on 43c2034).
+
+    The files are ``repo``'s -- the log the view is rendered from -- and the index is the
+    COMMITTING tree's, the log this commit records. A hook in a linked worktree gets that
+    pairing from the `GIT_DIR` git exports to it; it is spelled out here so a check with
+    no git environment (run by hand from the worktree) compares the same two things,
+    rather than the primary's own index (bug Bba366d9893).
     """
     rel = _rel(repo, d)
+    via: list[str] = []
+    tree = _index_tree(repo)
+    if tree.resolve() != Path(repo).resolve():
+        gitdir = W.git(tree, "rev-parse", "--absolute-git-dir", timeout=30)
+        if not gitdir.ok or not gitdir.out:
+            return LogProbe([], [], failed=True)
+        via = [f"--git-dir={gitdir.out}", f"--work-tree={Path(repo).resolve()}"]
 
     def git(*argv: str) -> list[str] | None:
         # `-z`: without it git C-quotes a non-ASCII path (`"caf\303\251.jsonl"`), and a
         # remedy built from that string names a file that does not exist -- `git add -f`
         # fails and the refusal never clears (roborev on 40950c9, reproduced).
-        return W.git_paths(repo, *argv, "--", rel)
+        return W.git_paths(repo, *via, *argv, "--", rel)
 
     tracked = git("ls-files")
     modified = git("diff", "--name-only")
