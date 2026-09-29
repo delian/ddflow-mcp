@@ -59,6 +59,10 @@ def test_a_custom_phase_pipeline_without_docs_is_advised_against():
     cfg.gates.phase_pipeline = [g for g in cfg.gates.phase_pipeline if g != "docs"]
     found = [f for f in WF.check(cfg, G.DEFAULT_GATES) if f.subject == "phase_pipeline"]
     assert [f.level for f in found] == [WF.ADVISORY] and "'docs' gate" in found[0].detail
+    # Present but after the merge is the same failure (LAN DeepSeek on B-docs-phase-gate).
+    cfg.gates.phase_pipeline = ["unit_tests", "merge", "docs"]
+    found = [f for f in WF.check(cfg, G.DEFAULT_GATES) if f.subject == "phase_pipeline"]
+    assert len(found) == 1 and "after 'merge'" in found[0].detail
 
 
 def test_the_driver_tells_the_agent_to_record_it():

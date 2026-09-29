@@ -236,15 +236,21 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
 
 
 def _policy_findings(cfg: Config) -> list[Finding]:
-    """What a coherent pipeline can still be missing: a phase that never reviews its docs."""
-    if "docs" in cfg.gates.phase_pipeline:
+    """What a coherent pipeline can still be missing: a phase that never reviews its docs,
+    or reviews them only after it has merged."""
+    pipe = cfg.gates.phase_pipeline
+    if "docs" not in pipe:
+        why = "has no 'docs' gate"
+    elif "merge" in pipe and pipe.index("docs") > pipe.index("merge"):
+        why = "runs 'docs' after 'merge'"
+    else:
         return []
     return [
         Finding(
             ADVISORY,
             "phase_pipeline",
-            "has no 'docs' gate, so a phase can merge with the README and docs describing "
-            "the code before it. Add 'docs' before 'merge' unless the project keeps no "
+            f"{why}, so a phase can merge with the README and docs describing the code "
+            "before it. Put 'docs' before 'merge' unless the project keeps no "
             "user-facing documentation.",
         )
     ]
