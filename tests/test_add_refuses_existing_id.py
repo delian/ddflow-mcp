@@ -88,8 +88,10 @@ def test_a_removed_id_may_be_filed_again_with_readd(repo):
     assert (it.title, it.removed) == ("back", False)
     run_cli(repo, "phase", "add", "P1", "--title", "p")
     assert run_cli(repo, "remove", "P1", "--reason", "x")[0] == 0
+    assert run_cli(repo, "phase", "add", "P1", "--title", "p2")[0] == REFUSED
     assert run_cli(repo, "phase", "add", "P1", "--title", "p2", "--readd")[0] == 0
-    assert _item(repo, "P1").title == "p2"
+    ph = _item(repo, "P1")
+    assert (ph.title, ph.removed) == ("p2", False)
 
 
 def test_readd_does_not_unlock_a_live_item(repo):
@@ -120,4 +122,4 @@ def test_the_api_and_mcp_refuse_too(repo):
     assert api.remove_item(repo, "T1", reason="x")
     out = mcp.TOOLS["ddflow_task_add"]["api"](repo, {"id": "T1", "title": "x", "readd": True}, "")
     assert out.exit == 0, out.reason
-    assert _item(repo, "T1").title == "x"
+    assert (_item(repo, "T1").title, _item(repo, "T1").removed) == ("x", False)
