@@ -151,6 +151,11 @@ _CHECK = re.compile(r"^(\s*)[-*]\s+\[( |x|X)\]\s+(.*)$")
 #:               instead of `DRIVERFIX.1`. A queue whose ids do not match the ids the
 #:               project has been using in commit trailers for months is not an import.
 #:
+#:   TITLED    — `**38.9 Free-text arg vocabulary.** detail`: the bold wraps a DOTTED id
+#:               and the title with no separator between them (home-simulator writes
+#:               this). Dotted only -- `**L2 cache misses**` is prose -- and the dot is
+#:               checked in `_split_id`, since `_ID` also matches `L2`.
+#:
 #: The optional `(...)` is an annotation projects put between the id and the separator
 #: ("(DECISION)", "(BLOCKED)"); it is bounded so it cannot swallow a sentence.
 #: A permissive TOKEN. What counts as an id is decided by `_is_id`, in code, because
@@ -168,6 +173,7 @@ _ITEM_ID = re.compile(
     rf"\*\*({_ID})\s*\([^)]{{0,80}}\)\*\*"
     r")\s*[—\-:]?\s*"
     rf"|^(?:\*\*)?({_ID})(?:\s*\([^)]{{0,30}}\))?\s*[—:]\s+"
+    rf"|^\*\*({_ID})\s+(?=[^\s*])"
 )
 
 
@@ -187,6 +193,13 @@ def _split_id(text: str) -> tuple[str, str]:
     if not m:
         return "", text
     token = m.group(1) or m.group(2) or m.group(3) or m.group(4) or ""
+    if not token and m.group(5):
+        token = m.group(5)
+        if "." not in token.strip("."):
+            return "", text
+        # The bold still wraps the title: keep its opening `**`, so the title reads
+        # `Free-text arg vocabulary.` rather than ending in a stray `**`.
+        return token, "**" + text[m.end() :]
     if not _is_id(token):
         return "", text
     return token, text[m.end() :]
@@ -262,7 +275,11 @@ _ASIDE_NOT_DISPOSITIONS = ("PRE-EXISTING",)
 #: reaches prose that merely DESCRIBES a deferral.
 _ANNOTATION_CHARS = 160
 #: A heading that disposes everything under it: `### Deferred`, `## DECLINED items`.
-_SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED")
+_SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED", "FUTURE WORK")
+#: A heading that says its own section is LIVE: `### Phase 39 follow-ups (not started)`
+#: filed under a `## Phase 38` whose STATUS is SHIPPED. Inheriting the ancestor's verdict
+#: dropped both of its open items as history (home-simulator, 2026-09-29).
+_SECTION_LIVE = ("NOT STARTED", "NOT YET STARTED", "IN PROGRESS", "REOPENED", "RE-OPENED")
 _SECTION_CLOSED = ("DECLINED", "OPTED OUT", "DESCOPED")
 #: A section's own `**STATUS**:` line. Its VERDICT is the leading token, never the whole
 #: line: `IN PROGRESS -- 373 of 534 (B.5 CLOSED 2026-08-17)` is live, and matching the
@@ -348,12 +365,17 @@ def _disposition(raw: str) -> tuple[str, str]:
     return ("hold", hold) if hold else ("", "")
 
 
-def _heading_disposition(heading: str) -> tuple[str, str]:
+def _heading_disposition(heading: str) -> tuple[str, str] | None:
+    """What a heading says about its own section: a disposition, `("", "")` for an
+    explicitly LIVE section (which overrides an ancestor's verdict), or None when it
+    says nothing and the section inherits."""
     m = _marker_in(heading, _SECTION_CLOSED)
     if m:
         return "closed", f"under a {m} heading"
     m = _marker_in(heading, _SECTION_HOLD)
-    return ("hold", f"under a {m} heading") if m else ("", "")
+    if m:
+        return "hold", f"under a {m} heading"
+    return ("", "") if _marker_in(heading, _SECTION_LIVE) else None
 
 
 #: A negation in a STATUS verdict. Not an `UN-` prefix: `UNSHIPPED` already fails the
@@ -704,8 +726,7 @@ def scan_todos(
                 level = len(h.group(1))
                 while stack and stack[-1][0] >= level:
                     stack.pop()
-                own = _heading_disposition(heading)
-                stack.append((level, own if own[0] else None))
+                stack.append((level, _heading_disposition(heading)))
                 continue
             m = _CHECK.match(line)
             if not m:
@@ -759,7 +780,10 @@ def scan_todos(
                         # `142.1`, `142.2` has a child prefix of `142`, and taking it
                         # renamed the phase out from under every `Needs: 142.A` in the
                         # file.
-                        extra={"id_from_heading": bool(declared) and declared == phase_ident},
+                        extra={
+                            "id_from_heading": bool(declared) and declared == phase_ident,
+                            "heading_number": _heading_number(heading),
+                        },
                     )
                 )
             chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(body, 20)}", taken)
@@ -821,6 +845,31 @@ def _date_hint(*texts: str) -> str:
     return ""
 
 
+#: `## Phase 40 — Phase 34 follow-ups`: the number a heading gives its own section. A
+#: separator must follow it -- `### Phase 39 follow-ups` is a heading ABOUT Phase 39,
+#: and its items (`38.9`, `38.10`) are what the project calls Phase 38's leftovers.
+_HEADING_NUMBER = re.compile(
+    r"^\W*(?:phase|session|stage|milestone|sprint)\s+([A-Za-z]?\d[\w.]*?)"
+    r"\.?(?:\s*[—:(]|\s+-+\s|\s*\*\*|\s*$)",
+    re.I,
+)
+
+
+def _heading_number(heading: str) -> str:
+    """The number `Phase <N>` gives its section, "" when the heading names none."""
+    m = _HEADING_NUMBER.match(heading)
+    return m.group(1) if m else ""
+
+
+def _agrees(prefix: str, number: str) -> bool:
+    """Whether a child prefix spells the heading's own number: `P21` or `21.A` for
+    `Phase 21`, never `34` for `Phase 40`."""
+    head = prefix.split(".")[0]
+    if len(head) > 1 and head[0] in "Pp" and head[1].isdigit():
+        head = head[1:]
+    return head.lower() == number.split(".")[0].lstrip("Pp").lower()
+
+
 def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
     """Rename a phase to the id prefix its own tasks already use.
 
@@ -841,6 +890,11 @@ def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
     evidence too, and a stronger one. `### 142.A` has children `142.1`, `142.2`, so the
     child prefix is `142` and taking it renames the phase out from under every
     `Needs: 142.A` in the file.
+
+    So is a heading that NUMBERS itself: `## Phase 40 — Phase 34 follow-ups` holds
+    `34.6e`, `34.8f`, and their prefix is the id of a different, closed phase. Such a
+    phase takes its own number instead; a prefix that agrees with it (`P21.7` under
+    `## Phase 21`) is still adopted, since it is the project's spelling of that number.
     """
     by_phase: dict[str, list[Found]] = {}
     for f in found:
@@ -852,7 +906,12 @@ def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
         kids = by_phase.get(phase.ident, [])
         voters = [t.ident for t in kids if t.extra.get("id_from_source")]
         best = _common_dotted_prefix(voters)
-        if not best or len(voters) < _PREFIX_QUORUM or best in taken:
+        if not best or len(voters) < _PREFIX_QUORUM:
+            continue
+        number = phase.extra.get("heading_number", "")
+        if number and not _agrees(best, number):
+            best = number
+        if best in taken:
             continue
         old_ident = phase.ident
         taken.discard(old_ident)
@@ -1551,7 +1610,7 @@ def _pull_in_needed(
 
 
 def _note_withheld(
-    plan: ImportPlan, done_skipped: int, closed_skipped: int, held: list[str]
+    plan: ImportPlan, done_skipped: int, closed: list[str], held: list[str]
 ) -> None:
     """Say what the import deliberately did not offer as work, and how to get it."""
     if done_skipped:
@@ -1559,12 +1618,16 @@ def _note_withheld(
             f"{done_skipped} already-ticked task(s) were NOT imported. They are history, "
             f"not a queue — pass include_done to bring them in as completed items."
         )
-    if closed_skipped:
+    if closed:
+        # Named, like the held ones below: a bare count hid that two items under a
+        # `(not started)` heading had been dropped with the history around them.
         plan.notes.append(
-            f"{closed_skipped} open task(s) were NOT imported because the source disposes "
+            f"{len(closed)} open task(s) were NOT imported because the source disposes "
             f"of them (declined, refuted, superseded, struck through, or in a section whose "
             f"STATUS says it is closed). They are history — pass include_done to bring them "
-            f"in as abandoned items."
+            f"in as abandoned items. E.g. {', '.join(closed[:_NOTE_EXAMPLES])}"
+            + (", ..." if len(closed) > _NOTE_EXAMPLES else "")
+            + "."
         )
     if held:
         plan.notes.append(
@@ -1684,7 +1747,7 @@ def plan_import(
     sources = sources or {}
 
     done_skipped = 0
-    closed_skipped = 0
+    closed: list[str] = []
     held: list[str] = []
     deferred_done: dict[str, Found] = {}
     proposed: set[str] = set()
@@ -1722,7 +1785,7 @@ def plan_import(
             # Declined, refuted, superseded: history, the same as a ticked box -- and
             # brought in the same way when open work depends on it.
             deferred_done[f.ident] = f
-            closed_skipped += 1
+            closed.append(f.ident)
             continue
         if f.kind == "task" and f.extra.get("disposition") == "hold":
             held.append(f.ident)
@@ -1732,8 +1795,11 @@ def plan_import(
     # it leaves the open one blocked on an id the queue has never heard of — and an
     # unknown dependency is treated as unmet, deliberately, so the import would land
     # permanently stuck work and look like it had succeeded.
-    done_pulled, closed_pulled = _pull_in_needed(plan, deferred_done, held)
-    _note_withheld(plan, done_skipped - done_pulled, closed_skipped - closed_pulled, held)
+    done_pulled, _closed_pulled = _pull_in_needed(plan, deferred_done, held)
+    pulled = {f.ident for f in plan.found}
+    _note_withheld(
+        plan, done_skipped - done_pulled, [i for i in closed if i not in pulled], held
+    )
 
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:
