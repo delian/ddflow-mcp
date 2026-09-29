@@ -458,12 +458,57 @@ def _defines(source: Path | None, names: list[str]) -> bool:
             re.search(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(n)}\b", text, re.M)
             for n in names
         )
+    module = _definitions(scope)
+    node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef | None = None
     for name in names:
-        found = next((d for d in _definitions(scope) if d.name == name), None)
+        found = (
+            next((d for d in module if d.name == name), None)
+            if node is None
+            else _member(node, name, module, set())
+        )
         if found is None:
             return False
-        scope = found.body
+        if found is True:
+            return True
+        node = found
     return True
+
+
+def _member(
+    cls: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+    name: str,
+    module: list[ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef],
+    seen: set[str],
+) -> ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef | bool | None:
+    """`name` defined in `cls` or, as pytest collects it, inherited from a base.
+
+    Bases are followed when they are classes of the same module (Bd671110650). A base
+    defined elsewhere cannot be read here, so its members are unknown: True, the
+    permissive side, since refusing a real test locks the bug open.
+    """
+    own = next((d for d in _definitions(cls.body) if d.name == name), None)
+    if own is not None or not isinstance(cls, ast.ClassDef):
+        return own
+    seen.add(cls.name)
+    unknown = False
+    for base in cls.bases:
+        if isinstance(base, ast.Name) and base.id == "object":
+            continue  # defines no tests; treating it as unknown would accept any name
+        local = next(
+            (
+                d
+                for d in module
+                if isinstance(base, ast.Name) and isinstance(d, ast.ClassDef) and d.name == base.id
+            ),
+            None,
+        )
+        if local is None:
+            unknown = True
+        elif local.name not in seen:
+            hit = _member(local, name, module, seen)
+            if hit is not None:
+                return hit
+    return True if unknown else None
 
 
 def _definitions(

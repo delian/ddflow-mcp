@@ -244,3 +244,34 @@ def test_a_source_with_a_coding_cookie_is_read_in_its_own_encoding(repo):
     assert api.bug_fixed(repo, "B2", regression_test="tests/test_latin.py::test_gone").exit == FAIL
     out = api.bug_fixed(repo, "B1", regression_test="tests/test_latin.py::test_accent")
     assert out.exit == OK, out
+
+
+def test_an_inherited_test_method_is_found_through_its_base_class(repo):
+    """pytest collects `Sub::test_common` when `test_common` is defined on a base class;
+    only the subclass body was searched, so the real test was refused (critic on
+    dc0d264, Bd671110650). A base ddflow cannot see (imported) is not a reason to refuse."""
+    run_cli(repo, "init")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_inh.py").write_text(
+        "from somewhere import Mixin\n\n\n"
+        "class TestBase:\n    def test_common(self):\n        pass\n\n\n"
+        "class TestMid(TestBase):\n    pass\n\n\n"
+        "class TestCase(TestMid):\n    pass\n\n\n"
+        "class TestMixed(Mixin):\n    pass\n\n\n"
+        "class TestAlone(object):\n    pass\n"
+    )
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "y")
+    for bogus in (
+        "tests/test_inh.py::TestAlone::test_common",
+        "tests/test_inh.py::TestCase::test_gone",
+    ):
+        assert api.bug_fixed(repo, "B2", regression_test=bogus).exit == FAIL, bogus
+    out = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test=(
+            "tests/test_inh.py::TestCase::test_common, tests/test_inh.py::TestMixed::test_any"
+        ),
+    )
+    assert out.exit == OK, out
