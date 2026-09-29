@@ -1,7 +1,8 @@
 # roborev for this repository -- copy to .roborev.toml (git-ignored) and choose the
 # review agent YOU have. This file carries only what is true of the project itself: the
 # review guidelines. Which agent reviews, and which model it runs, belongs to whoever
-# runs roborev here, so it is never committed (decision D-no-own-services-committed).
+# runs roborev here, so it is never committed (decisions D-no-own-services-committed,
+# D-roborev-local).
 #
 # Pin an agent in your copy: without one, roborev falls back to the machine-global
 # default_agent, and if that agent is not installed roborev says "no review agent

@@ -15,15 +15,16 @@ from __future__ import annotations
 import ipaddress
 import re
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: Not scanned, each for its reason. EXACT paths and directory prefixes are kept apart,
-#: so an exemption for one file never covers its neighbours (`.roborev.toml.example`).
-#: - the event log is history, and verbatim operator words; session-prompt redaction
-#:   covers it going forward (B-local-config), and history is not rewritten here;
+#: Not scanned: the event log is history, and verbatim operator words; session-prompt
+#: redaction covers it going forward (B-local-config), and history is not rewritten here.
+#: A FILE exemption, if one is ever needed, goes in EXEMPT_FILES as an exact path -- an
+#: exemption for one file never covers its neighbours.
 EXEMPT_DIRS = (".ddflow/events/",)
 EXEMPT_FILES: frozenset[str] = frozenset()
 
@@ -128,9 +129,13 @@ def test_the_address_check_can_see_one():
     assert _private_addresses(":" + ":1 is loopback, 12:30:45 is a time") == set()
 
 
-def test_an_exemption_is_exactly_the_path_it_names():
+def test_an_exemption_is_exactly_the_path_it_names(monkeypatch):
     fixture = _ip(10, 0, 0, 5)
     assert _private_addresses(fixture, path="tests/test_container.py") == set()
     assert _private_addresses(fixture, path=".ddflow/config.toml") == {fixture}
-    assert _scanned(".roborev.toml.example") is True
     assert _scanned(".ddflow/events/x.jsonl") is False
+    # With no file exemption today, drive the rule through a test-local one: it must
+    # cover exactly its path, never a neighbour that shares the prefix.
+    monkeypatch.setattr(sys.modules[__name__], "EXEMPT_FILES", frozenset({"local.toml"}))
+    assert _scanned("local.toml") is False
+    assert _scanned("local.toml.example") is True
