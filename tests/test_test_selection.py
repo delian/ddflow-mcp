@@ -167,3 +167,65 @@ def test_the_agent_is_told_to_run_relevant_tests_in_parallel_and_all_at_the_gate
     assert "Never record `unit_tests` from a selection." in driver
     prompt = G.DEFAULT_GATES["unit_tests"].prompt
     assert "WHOLE suite" in prompt and "-n auto" in prompt and "ddflow tests" in prompt
+
+
+# -- regressions from the rubber-duck review of B16 ----------------------------------
+
+
+def test_an_options_value_is_kept_even_when_it_names_a_file(tmp_path):
+    """`-c pytest.ini` lost its value: every existing path was stripped as if it were a
+    test location, so the test file became the config file."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "pytest.ini").write_text("[pytest]\n")
+    got = T.run_command("pytest -c pytest.ini tests/ -q", ["tests/test_a.py"], tmp_path)
+    assert got == "pytest -c pytest.ini -q tests/test_a.py"
+    got = T.run_command("pytest tests/test_old.py::test_x -q", ["tests/test_a.py"], tmp_path)
+    assert got == "pytest -q tests/test_a.py", "a node id is a test location too"
+
+
+def test_the_mcp_tool_diffs_the_checkout_the_agent_is_standing_in(proj, tmp_path):
+    """Without `item`, MCP diffed the PRIMARY checkout: a live change in the agent's
+    worktree read as 'nothing changed'."""
+    from ddflow.surfaces.mcp import Server
+
+    tree = tmp_path / "agent-tree"
+    _git(proj, "worktree", "add", "-q", "-b", "agent", str(tree))
+    (tree / "pkg/a.py").write_text("def one():\n    return 1  # in the worktree\n")
+    reply = Server(proj, called_from=tree / "pkg").handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_tests", "arguments": {}},
+        }
+    )
+    body = json.loads(reply["result"]["content"][0]["text"])
+    assert Path(body["tree"]).resolve() == tree.resolve()
+    assert {t["path"] for t in body["tests"]} == {"tests/test_a.py", "tests/test_b.py"}
+
+
+def test_importers_of_a_deleted_module_are_selected(proj):
+    """A deleted module's importers are now BROKEN -- the tests most worth running -- and
+    were missed because only surviving modules seeded the graph."""
+    _git(proj, "rm", "-q", "pkg/a.py")
+    got = _picked(proj)
+    assert got.get("tests/test_a.py") == "imports pkg.a"
+    assert got.get("tests/test_b.py") == "imports pkg.b, which imports pkg.a"
+
+
+def test_importers_of_a_renamed_module_are_selected(proj):
+    """`git diff --name-only` reports a rename as its NEW path only; the old module's
+    importers still name the old one."""
+    _git(proj, "mv", "pkg/a.py", "pkg/renamed.py")
+    got = _picked(proj)
+    assert "tests/test_a.py" in got and "tests/test_b.py" in got
+
+
+def test_a_name_match_is_a_whole_word_not_a_substring(tmp_path, repo):
+    for path in ("pkg/cli.py", "tests/test_client.py", "tests/test_cli_parity.py"):
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text("X = 1\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "names")
+    (repo / "pkg/cli.py").write_text("X = 2\n")
+    assert _picked(repo) == {"tests/test_cli_parity.py": "named after cli"}

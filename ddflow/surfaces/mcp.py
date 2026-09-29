@@ -1640,10 +1640,17 @@ TOOLS: dict[str, dict[str, Any]] = {
             "item": ("string", "The item whose worktree and base to use.", False),
             "base": ("string", "Compare against this ref instead of the item's base.", False),
         },
-        "api": lambda repo, a, agent: _api().relevant_tests(
-            repo, item=a.get("item", "") or "", base=a.get("base", "") or "", agent=agent
+        "api": lambda repo, a, agent, called_from=None: _api().relevant_tests(
+            repo,
+            item=a.get("item", "") or "",
+            where=called_from,
+            base=a.get("base", "") or "",
+            agent=agent,
         ),
         "payload": "",
+        # Without `item`, the diff is the caller's own checkout -- the worktree it is
+        # standing in, not the primary the server was started on.
+        "wants_called_from": True,
     },
     "ddflow_session_prompt": {
         "description": (

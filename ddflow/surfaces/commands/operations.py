@@ -245,7 +245,7 @@ def cmd_pins(a, c: Ctx) -> int:
 
 def cmd_tests(a, c: Ctx) -> int:
     """The tests the change reaches, and the parallel command to run them (B16)."""
-    out = A.relevant_tests(c.repo, item=a.item, where=_toplevel(c.called_from), base=a.base)
+    out = A.relevant_tests(c.repo, item=a.item, where=c.called_from, base=a.base)
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
@@ -268,14 +268,3 @@ def cmd_tests(a, c: Ctx) -> int:
     if d["advice"]:
         print(f"  NOTE: that command {d['advice']}")
     return out.exit
-
-
-def _toplevel(start):
-    """The checkout the caller is standing in -- a linked worktree stays itself, where
-    `repo_root` would resolve it to the primary -- or None outside any checkout."""
-    from pathlib import Path
-
-    from ...infra import worktree as W
-
-    r = W.git(start, "rev-parse", "--show-toplevel") if start else None
-    return Path(r.out) if r is not None and r.ok and r.out else None

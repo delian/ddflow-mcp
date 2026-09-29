@@ -48,6 +48,12 @@ def is_test_file(path: str) -> bool:
     return bool(_TEST_FILE.search(path))
 
 
+def _named(stem: str, test_name: str) -> bool:
+    """``stem`` as a whole word of ``test_name`` (a plural allowed): `cli` names
+    `test_cli_parity` and not `test_client`."""
+    return bool(re.search(rf"(?:^|[_.-]){re.escape(stem)}s?(?:$|[_.-])", test_name))
+
+
 @dataclass(frozen=True)
 class Selected:
     path: str
@@ -69,8 +75,10 @@ def changed_files(tree: Path, base: str) -> list[str] | None:
     if mb.code != 0:
         return None
     parts = [
-        W.git_paths(tree, "diff", "--name-only", f"{mb.out}..HEAD"),
-        W.git_paths(tree, "diff", "--name-only", "HEAD"),
+        # `--no-renames`: a rename is its OLD path too. The old module's importers are the
+        # ones a rename breaks, and `--name-only` alone reports only the new path.
+        W.git_paths(tree, "diff", "--name-only", "--no-renames", f"{mb.out}..HEAD"),
+        W.git_paths(tree, "diff", "--name-only", "--no-renames", "HEAD"),
         W.git_paths(tree, "ls-files", "--others", "--exclude-standard"),
     ]
     if any(p is None for p in parts):
@@ -162,7 +170,7 @@ def select(tree: Path, base: str) -> Selection | None:
     stems.discard("conftest")
     for t in tests:
         name = PurePosixPath(t).stem
-        hit = next((s for s in sorted(stems) if len(s) >= _MIN_STEM and s in name), "")
+        hit = next((s for s in sorted(stems) if len(s) >= _MIN_STEM and _named(s, name)), "")
         if hit:
             pick(t, f"named after {hit}")
 
@@ -182,7 +190,10 @@ def _import_reach(tree: Path, py: list[str], changed: list[str], sel: Selection)
     """File -> why, for every .py file within `MAX_HOPS` imports of a changed module,
     breadth first so the reason names the nearest changed module and the path to it."""
     known = {module_name(p): p for p in py}
-    names_known = set(known)
+    # A deleted (or renamed-away) module is still a name its importers use -- and they are
+    # now broken, the tests most worth running -- so it resolves like a live one.
+    gone = {module_name(c) for c in changed if c.endswith(".py") and c not in py}
+    names_known = set(known) | gone
     importers: dict[str, set[str]] = {}
     for p in py:
         try:
@@ -192,12 +203,12 @@ def _import_reach(tree: Path, py: list[str], changed: list[str], sel: Selection)
             continue
         for n in names:
             mod = _resolve(n, names_known)
-            if mod and known[mod] != p:
+            if mod and known.get(mod) != p:
                 importers.setdefault(mod, set()).add(p)
 
     roots = [module_name(c) for c in changed if c.endswith(".py")]
     # (module, the changed module it leads to, the reason so far, hops taken)
-    queue = deque((m, m, f"imports {m}", 0) for m in roots if m in known)
+    queue = deque((m, m, f"imports {m}", 0) for m in roots if m in names_known)
     seen_mod: set[str] = {m for m, *_ in queue}
     reach: dict[str, str] = {}
     while queue:
@@ -236,8 +247,7 @@ def run_command(configured: str, tests: list[str], root: Path) -> str:
         -1,
     )
     if at >= 0:
-        opts = [t for t in tokens[at + 1 :] if t.startswith("-") or not (root / t).exists()]
-        cmd = [*tokens[: at + 1], *opts]
+        cmd = [*tokens[: at + 1], *_without_test_locations(tokens[at + 1 :], root)]
     elif G.uses_pytest(root):
         cmd = ["pytest", "-q"]
     else:
@@ -245,3 +255,25 @@ def run_command(configured: str, tests: list[str], root: Path) -> str:
     if G.runs_pytest_serially(shlex.join(cmd)) and G.declares_xdist(root):
         cmd += ["-n", "auto"]
     return shlex.join([*cmd, *py_tests])
+
+
+#: pytest options whose value is the NEXT token. A value is never a test location, even
+#: when it names a directory (`--rootdir tests`).
+_VALUE_FLAGS = frozenset(
+    {"-c", "-p", "-k", "-m", "-o", "-W", "-n", "--rootdir", "--confcutdir", "--basetemp",
+     "--ignore", "--ignore-glob", "--deselect", "--timeout", "--maxfail", "--numprocesses",
+     "--dist", "--durations", "--junitxml", "--cov", "--cov-report", "--log-level"}
+)  # fmt: skip
+
+
+def _without_test_locations(args: list[str], root: Path) -> list[str]:
+    """``args`` minus the TEST LOCATIONS it names (`tests/`, `tests/test_x.py`,
+    `tests/test_x.py::test_y`), so the selected files replace them. Everything else is
+    kept -- an option's value above all, even one naming a file (`-c pytest.ini`)."""
+    out: list[str] = []
+    for i, t in enumerate(args):
+        value_of_flag = i > 0 and args[i - 1] in _VALUE_FLAGS
+        location = "::" in t or (root / t).is_dir() or (is_test_file(t) and (root / t).exists())
+        if t.startswith("-") or value_of_flag or not location:
+            out.append(t)
+    return out

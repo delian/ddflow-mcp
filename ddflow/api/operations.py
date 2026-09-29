@@ -368,7 +368,10 @@ def relevant_tests(
     from ..services.gates import load_gates, parallel_test_advice
 
     _log, cfg, st = _load(repo, agent)
-    tree = where or repo
+    top = W.git(where, "rev-parse", "--show-toplevel") if where else None
+    # The caller's OWN checkout: a linked worktree stays itself, where the repo root
+    # (and so `repo`) is the primary -- whose diff is not the change being worked on.
+    tree = Path(top.out) if top is not None and top.ok and top.out else repo
     if item:
         it = st.items.get(item)
         if it is None:
