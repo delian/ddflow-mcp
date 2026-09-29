@@ -34,7 +34,7 @@ Until `unit_tests` has a command, it reports `unavailable`, honestly, and blocks
 
 - Find how the project runs its tests (its CI config, `pyproject.toml`, `package.json`, `Makefile`, the rulebook).
 - Measure a **baseline** in a tree nobody is editing — a fresh clone or a detached worktree of the default branch — never in the one you are changing: how many pass, how many fail, how long it takes.
-- A suite over a minute or two runs in parallel (`pytest-xdist` and `-n <workers>` for Python; size the workers so several agents can run the gate at once — `auto` on a many-core machine is usually slower). Adding a dev dependency changes the project: ask.
+- A suite over a minute or two runs in parallel (`pytest-xdist` and `-n <workers>` for Python; size the workers so several agents can run the gate at once — `auto` on a many-core machine is usually slower). A worker count sized to one machine belongs in `.ddflow/gates.toml` (git-ignored, it wins over the committed config) when other machines run this repository. Adding a dev dependency changes the project: ask.
 - Tests already failing at the baseline would make the gate red for every item for reasons no item caused. Propose a shrink-only known-failures list, tracked as its own phase, rather than a gate everyone learns to ignore.
 - A phase-end `live_test`: the smallest real end-to-end run of the project's own entry point (a few seconds), as a script that fails when it produces nothing.
 - Set them with `ddflow_configure`.
