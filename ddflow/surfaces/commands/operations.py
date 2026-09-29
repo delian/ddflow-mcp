@@ -304,11 +304,10 @@ def cmd_precommit(a, c: Ctx) -> int:
         )
     # Said on EVERY run, not only the one that wrote the file: a config nobody activated
     # runs nothing, and the run after installing pre-commit is when this is needed.
-    activate = (
-        "`pre-commit install` activates it (the "
-        + ", ".join(d["hook_types"])
-        + " hooks the config declares)."
-    )
+    # Each hook type named, because the file on disk may be the operator's own, without
+    # the default_install_hook_types that makes a plain `pre-commit install` enough.
+    flags = " ".join(f"--hook-type {t}" for t in d["hook_types"])
+    activate = f"`pre-commit install {flags}` activates it."
     if d["installed"] is None:
         print("# Could not tell whether pre-commit is installed: its probe did not answer.")
     elif not d["installed"]:

@@ -398,3 +398,14 @@ def test_every_run_with_a_config_in_place_says_how_to_activate_it(mixed):
     code, out, err = run_cli(mixed, "precommit")
     assert code == 0, err
     assert "pre-commit install" in out.split("exists --", 1)[1]
+
+
+def test_the_activation_line_names_each_hook_type_whatever_the_file_on_disk_says(mixed):
+    """Bug Bd6e6d40f1e: an operator's own config may lack default_install_hook_types, and then a
+    plain `pre-commit install` sets up only the pre-commit hook -- check-msg never runs."""
+    from conftest import run_cli
+
+    (mixed / ".pre-commit-config.yaml").write_text("repos: []\n")
+    code, out, err = run_cli(mixed, "precommit")
+    assert code == 0, err
+    assert "pre-commit install --hook-type pre-commit --hook-type commit-msg" in out
