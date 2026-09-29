@@ -28,9 +28,9 @@ def _add(log, iid: str, kind: str = "task", **data) -> None:
     log.append(f"{kind}.added", iid, {"title": iid, "kind": kind, **data})
 
 
-def _dupes(log) -> list[PR.LoopFinding]:
+def _dupes(log, cfg: Config | None = None) -> list[PR.LoopFinding]:
     evs = log.read_all()
-    found = PR.detect(evs, fold(evs, strict=False), Config())
+    found = PR.detect(evs, fold(evs, strict=False), cfg or Config())
     return [f for f in found if f.kind == "duplicate_work"]
 
 
@@ -79,6 +79,19 @@ def test_a_mixed_group_names_only_the_members_that_are_unordered(log):
     [f] = _dupes(log)
     assert f.item == "B" and f.count == 2, f
     assert "B, C" in f.detail and "A, B" not in f.detail, f.detail
+
+
+def test_the_threshold_counts_the_group_not_just_its_unordered_members(log):
+    """Critic finding: with a threshold of 3, A-needs-B-and-C left only B, C unordered,
+    and counting those two against the threshold silently dropped a real unordered pair
+    that the old code reported. Ordering may only remove a finding, never raise the bar."""
+    cfg = Config()
+    cfg.loops.max_duplicate_items = 3
+    _add(log, "A", globs=["x.py"], needs=["B", "C"])
+    _add(log, "B", globs=["x.py"])
+    _add(log, "C", globs=["x.py"])
+    [f] = _dupes(log, cfg)
+    assert f.item == "B" and f.count == 2 and "B, C" in f.detail, f
 
 
 def test_a_dependency_that_no_longer_waits_orders_nothing(log):

@@ -441,7 +441,9 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
                 for x in (a, b)
             }
         )
-        if len(loose) < lc.max_duplicate_items:
+        # The threshold was met by the group above; ordering may only REMOVE a
+        # finding, so it is not re-applied to the unordered members.
+        if not loose:
             continue
         ordered = sorted(set(ids) - set(loose))
         aside = (
