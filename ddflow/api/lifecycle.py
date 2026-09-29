@@ -146,7 +146,7 @@ def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str,
     live = st.active_leases(now, cfg.lease.grace_s)
     others = {i: lz for i, lz in live.items() if lz.holder != me}
     if not item:
-        return _judge_any(st, cfg, me, phase, kind, now, others)
+        return _judge_any(st, cfg, me, phase, kind, now, live)
     it = st.items.get(item)
     out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
     if it is None or it.removed:
@@ -224,10 +224,11 @@ def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str,
     return {**out, "status": "blocked", "why": f"{item}: deps — {b.detail}", "waiting_on": moving}
 
 
-def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, others) -> dict[str, Any]:
+def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dict[str, Any]:
     """`_judge_wait` for "anything": the same ready set `next` offers."""
     from ..core.schedule import plan
 
+    others = {i: lz for i, lz in live.items() if lz.holder != me}
     p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me)
     out: dict[str, Any] = {
         "why": "",
@@ -235,8 +236,14 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, others) -> d
         "ready": [],
         "blocked": [plain(b) for b in p.blocked],
     }
-    if p.ready:
-        return {**out, "status": "ready", "ready": [i.id for i in p.ready]}
+    # Only what `claim` would grant: under `ready_policy = deps_only` the plan offers
+    # items another agent's lease or globs still cover.
+    refused = [(i, _claim_blocker(st, cfg, i, me, live, now)) for i in p.ready]
+    ready = [i.id for i, b in refused if b is None]
+    if ready:
+        return {**out, "status": "ready", "ready": ready}
+    p.blocked.extend(b for _i, b in refused)
+    out["blocked"] = [plain(b) for b in p.blocked]
     if not others:
         return {
             **out,
@@ -279,27 +286,44 @@ def _blocking_leases(st, blocked, others) -> list[str]:
 def _claim_blocker(st, cfg, it, me: str, live, now: float):
     """Why `claim` would refuse ``it`` for ``me`` right now, as a `Blocked`; None if not.
 
-    The scheduler's predicate plus the glob check `claim` applies unconditionally:
-    `item_blocker` skips lease questions under `ready_policy = deps_only`, and waking on
-    a verdict `claim` then refuses would spin.
+    The scheduler's predicate plus the three checks `claim` applies unconditionally --
+    another holder's live lease on the item, overlapping globs, resource capacity.
+    `item_blocker` skips all three under `ready_policy = deps_only`, and waking on a
+    verdict `claim` then refuses would spin (roborev: it did, for a held item).
     """
-    from ..core.schedule import Blocked, find_cycles, item_blocker
+    from ..core.schedule import (
+        Blocked,
+        capacities,
+        find_cycles,
+        item_blocker,
+        resource_shortfall,
+    )
 
     cycles = find_cycles({i.id: i for i in st.items.values() if not i.removed})
     in_cycle = {n for c in cycles for n in c}
     b = item_blocker(st, cfg, it, live, agent=me, now=now, in_cycle=in_cycle, cycles=cycles)
     if b is not None:
         return b
+    held = live.get(it.id)
+    if held is not None and held.holder != me:
+        return Blocked(it.id, "conflict", f"leased by {held.holder}", [it.id])
     clash = L.glob_clash(st, cfg, it, me, list(it.globs), now)
-    if clash is None:
-        return None
-    other_id, lz, pair = clash
-    return Blocked(
-        it.id,
-        "conflict",
-        f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})",
-        [other_id],
-    )
+    if clash is not None:
+        other_id, lz, pair = clash
+        return Blocked(
+            it.id,
+            "conflict",
+            f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})",
+            [other_id],
+        )
+    if it.resources and it.id not in live:
+        try:
+            short = resource_shortfall(it.resources, live, capacities(cfg), exclude=it.id)
+        except ValueError:
+            short = ""  # a declaration error: claim reports it, and waiting cannot fix it
+        if short:
+            return Blocked(it.id, "resources", short, [])
+    return None
 
 
 def _in_motion(st, dep: str, others: dict) -> bool:
@@ -621,10 +645,15 @@ def claim(
         reason = str(exc)
         if exc.alternatives:
             reason += "\n\nYou could take instead: " + ", ".join(exc.alternatives)
-        if exc.holder and exc.holder != log.agent_id:
+        own = prior if prior is not None and prior.holder == exc.holder else None
+        lapsed = own is not None and bool(
+            own.expired_at or own.expired(time.time(), cfg.lease.grace_s)
+        )
+        if exc.holder and exc.holder != log.agent_id and not lapsed:
             # The refusal is the moment an agent decides between idling, polling and
             # asking a person. None of the three is needed when the block is a live
-            # holder: `wait` wakes it when that holder lets go.
+            # holder: `wait` wakes it when that holder lets go. Not for an EXPIRED lease,
+            # which `wait` refuses at once -- that one is `recover`'s.
             reason += (
                 f"\n\nOr `ddflow wait --item {item}`: it sleeps until {exc.holder} lets "
                 f"go and returns the moment the item can be claimed."

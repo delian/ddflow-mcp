@@ -365,3 +365,41 @@ def test_a_full_parallelism_cap_waits_on_every_holder(proj):
     assert out.exit == O.NOTHING and out.data["waitable"], out.reason
     assert any("cap reached" in b["detail"] for b in out.data["blocked"])
     assert out.data["waiting_on"] == ["T1", "U1"]
+
+
+def _deps_only(repo: Path) -> None:
+    cfg = repo / ".ddflow" / "config.toml"
+    text = cfg.read_text()
+    assert "[schedule]" in text
+    cfg.write_text(text.replace("[schedule]", '[schedule]\nready_policy = "deps_only"', 1))
+
+
+def test_under_deps_only_a_held_item_is_not_ready_to_wait_on(proj):
+    """`item_blocker` skips every lease question under `ready_policy = deps_only`;
+    `claim` never does. Found by roborev: wait said ready, claim refused, and the
+    refusal pointed back at wait -- the spin `_claim_blocker` exists to prevent."""
+    _deps_only(proj)
+    out = A.wait(proj, item="T1", timeout_s=0, agent=WAITER)
+    assert out.exit == O.NOTHING and out.data["waiting_on"] == ["T1"], out.data
+    assert A.claim(proj, "T1", no_worktree=True, agent=WAITER).exit == O.REFUSED
+
+
+def test_under_deps_only_an_any_wait_does_not_offer_what_claim_refuses(proj):
+    _deps_only(proj)
+    out = A.wait(proj, timeout_s=0, agent=WAITER)
+    for item in out.data["ready"]:
+        refused = A.claim(proj, item, no_worktree=True, agent=WAITER)
+        assert refused.ok, f"wait offered {item} and claim refused it: {refused.reason}"
+        A.release(proj, item, agent=WAITER)
+
+
+def test_a_claim_refused_for_an_EXPIRED_lease_does_not_point_at_wait(repo):
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
+    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
+    time.sleep(1.5)
+    out = A.claim(repo, "T1", no_worktree=True, agent=WAITER)
+    assert out.exit == O.REFUSED and "EXPIRED" in out.reason
+    assert "ddflow wait" not in out.reason, "wait refuses this case at once"
