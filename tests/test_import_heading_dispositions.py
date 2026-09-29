@@ -324,8 +324,14 @@ def test_future_work_with_a_period_holds(repo):
 
 
 def test_a_word_that_merely_starts_with_a_hold_marker_does_not_lead(repo):
-    _write(repo, "## S\n\n- [ ] **C20** watchdog (parkedcar detector) - x\n")
-    assert _by_id(_plan(repo), "task")["C20"].extra["disposition"] == ""
+    _write(
+        repo,
+        "## S\n\n- [ ] **C20** watchdog (parkedcar detector) - x\n"
+        "- [ ] **C21** chains (deferred_from P21.4 wiring) - x\n",
+    )
+    tasks = _by_id(_plan(repo), "task")
+    assert tasks["C20"].extra["disposition"] == ""
+    assert tasks["C21"].extra["disposition"] == ""
 
 
 def test_a_live_sub_heading_under_future_work_under_declined_stays_declined(repo):

@@ -317,11 +317,11 @@ _VERDICT_FILLER = re.compile(
 
 
 def _leads_with(clause: str, markers: tuple[str, ...]) -> bool:
-    """Whether `clause` BEGINS with a marker -- the whole word, so `watchdog` and
-    `parkedcar` do not -- past emphasis, emoji and filler words in front of it."""
+    """Whether `clause` BEGINS with a marker -- the whole word, so `watchdog`,
+    `parkedcar` and `deferred_from` do not -- past emphasis, emoji and filler words in front of it."""
     head = re.sub(r"^[^A-Za-z0-9]+", "", clause).upper()
     head = _VERDICT_FILLER.sub("", head)
-    return any(re.match(rf"{re.escape(m)}(?![A-Z0-9])", head) for m in markers)
+    return any(re.match(rf"{re.escape(m)}(?!\w)", head) for m in markers)
 
 
 def _verdict_asides(text: str, markers: tuple[str, ...]) -> str:
