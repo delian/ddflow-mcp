@@ -96,18 +96,28 @@ def test_the_threshold_counts_the_group_not_just_its_unordered_members(log):
     assert f.item == "B" and f.count == 2 and "B, C" in f.detail, f
 
 
-def test_a_dependency_that_no_longer_waits_orders_nothing(log):
-    """A done, removed or unknown link cannot hold B back, so A and B can run together."""
+@pytest.mark.parametrize(
+    "end", [("item.completed", {"sha": "x"}), ("task.removed", {}), ("item.abandoned", {})]
+)
+def test_a_link_that_is_done_removed_or_abandoned_orders_nothing(log, end):
+    """B needs L, and L needs A. Once L is done or removed it holds B back no longer, and
+    abandoned it holds B back forever: either way B's work does not follow A's. Each case
+    stands alone, so a walk through the dead link would silence this pair."""
     _add(log, "A", globs=["x.py"])
-    _add(log, "Done", globs=["d.py"], needs=["A"])
-    log.append("item.completed", "Done", {"sha": "x"})
-    _add(log, "Gone", globs=["g.py"], needs=["A"])
-    log.append("task.removed", "Gone", {"reason": "test"})
-    _add(log, "B1", globs=["x.py"], needs=["Done"])
-    _add(log, "B2", globs=["x.py"], needs=["Gone"])
-    _add(log, "B3", globs=["x.py"], needs=["NO-SUCH-ITEM", "other-repo:A"])
+    _add(log, "L", globs=["l.py"], needs=["A"])
+    log.append(end[0], "L", end[1])
+    _add(log, "B", globs=["x.py"], needs=["L"])
     [f] = _dupes(log)
-    assert f.count == 4 and "A, B1, B2, B3" in f.detail, f.detail
+    assert f.count == 2 and "A, B" in f.detail, f.detail
+
+
+@pytest.mark.parametrize("dep", ["NO-SUCH-ITEM", "other-repo:A"])
+def test_an_unknown_or_external_dependency_orders_nothing(log, dep):
+    """`other-repo:A` is A in ANOTHER repository, not the local A."""
+    _add(log, "A", globs=["x.py"])
+    _add(log, "B", globs=["x.py"], needs=[dep])
+    [f] = _dupes(log)
+    assert f.count == 2 and "A, B" in f.detail, f.detail
 
 
 def test_a_cycle_terminates_and_is_left_to_the_cycle_detector(log):
