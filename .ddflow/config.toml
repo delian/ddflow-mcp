@@ -55,12 +55,15 @@ brief_max_tokens = 1200
 command = "uv run pytest tests/ -q --timeout=420 -n 48"
 
 [[reviewer]]
-name = "qwen3.8-flash-next-fp8"
-base_url = "http://127.0.0.1:8000/v1"
-model = "Qwen/Qwen3.8-Flash-Next-FP8"
+# Operator 2026-09-29 (decision Da2df1ab39d): the LAN Qwen3.8-27B. vLLM serves it under
+# the name "google/gemma-4-31B-it" (its /v1/models `root` is Qwen/Qwen3.8-27B), so the
+# family is DECLARED: inferred from the name it would read as google.
+name = "lan-qwen3.8-27b"
+base_url = "http://10.220.230.8:8000/v1"
+model = "google/gemma-4-31B-it"
 family = "alibaba"
 gates = ["critic"]
-# Measured 2026-09-28: 26k chars in one chunk spent all 32000 tokens reasoning;
-# at 6000 chars/chunk it still exhausted 64000 on 1/5, 2/4 and 3/3 chunks.
+# Kept from the previous reviewer until measured on this one: 3000 chars per chunk
+# stopped Qwen3.8-Flash-Next exhausting 64000 reasoning tokens on most chunks.
 max_chunk_chars = 3000
 max_tokens = 64000
