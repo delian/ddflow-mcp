@@ -323,9 +323,11 @@ def _starter_config() -> str:
 # THE ONE THING YOU MUST SET: how this project runs its tests.
 # ---------------------------------------------------------------------------------
 # [gate.unit_tests]
-# command = "pytest -q"     # or "npm test" · "cargo test" · "go test ./..." · "make check"
+# command = "pytest -q -n auto"   # or "npm test" · "cargo test" · "go test ./..." · "make check"
 #
-# Set it with:   ddflow config --set gate.unit_tests.command "pytest -q"
+# Set it with:   ddflow config --set gate.unit_tests.command "pytest -q -n auto"
+# Run it in PARALLEL: `-n auto` needs pytest-xdist (`uv add --dev pytest-xdist`); without
+# it, drop the flag. A serial run of a large suite is the slowest step of every item.
 # Until it is set, the unit_tests gate reports UNAVAILABLE — which is honest, and
 # blocks completion, rather than passing vacuously.
 #
