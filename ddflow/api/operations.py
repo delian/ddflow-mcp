@@ -459,6 +459,7 @@ def precommit(
     config they already have is exactly that decision.
     """
     import os
+    import shlex
     import shutil
     import tempfile
 
@@ -468,6 +469,10 @@ def precommit(
     ddflow_cmd = ddflow_cmd.strip()
     if not ddflow_cmd:
         return O.refused("precommit", "ddflow_cmd is empty: the local hooks would run nothing")
+    try:
+        shlex.split(ddflow_cmd)
+    except ValueError as e:  # pre-commit splits an entry the same way, on every commit
+        return O.refused("precommit", f"ddflow_cmd {ddflow_cmd!r} cannot be split: {e}")
     tree = _caller_tree(repo, where)
     prop = PC.propose(tree, ddflow_cmd=ddflow_cmd)
     if prop is None:

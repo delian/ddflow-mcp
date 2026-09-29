@@ -372,3 +372,11 @@ def test_a_temp_file_left_by_a_killed_run_does_not_block_the_write(mixed):
     out = OPS.precommit(mixed, where=mixed, write=True)
     assert out.exit == 0 and out.data["written"] is True, out.reason
     assert (mixed / ".pre-commit-config.yaml").read_text() == out.data["text"]
+
+
+def test_a_ddflow_command_the_shell_cannot_split_is_refused(mixed):
+    """Bug B1235a05ba2: pre-commit shlex-splits an entry, so an unbalanced quote
+    would make every commit error; it was proposed (and written) with only a note."""
+    out = OPS.precommit(mixed, where=mixed, ddflow_cmd='a "b', write=True)
+    assert out.exit == REFUSED
+    assert not (mixed / ".pre-commit-config.yaml").exists()
