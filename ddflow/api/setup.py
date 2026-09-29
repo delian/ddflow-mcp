@@ -287,38 +287,30 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     return out
 
 
-#: Rulebooks whose change between a worktree and its base means the agent is working to
-#: rules that are no longer the project's.
-_RULEBOOKS = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/config.toml")
-
-
 def _worktree_drift(repo: Path, here: Path) -> str:
     """A warning when `here` is a worktree behind the base branch, else "".
 
     INFORMS, never refuses: this runs at session start, where the only useful thing is
     to say so. The source project's `check_worktree_sync.py --hook` did the same job; a
     rulebook changed on the base branch since this tree forked is the case that bit it.
+    Only a renderer: the drift itself is `enforce.drift`, the one computation the commit
+    gate (`enforce.check_drift`, which BLOCKS) reads too -- two copies of "behind" and
+    "which rules" would disagree about the same tree.
     """
     from ..infra import worktree as W
+    from ..services import enforce as E
 
-    # Any checkout, the primary included: a primary left on a stale branch is working
-    # to old rules just the same.
-    top = W.git(here, "rev-parse", "--show-toplevel")
-    if not top.ok:
+    # Outside any git tree there is no branch to be behind, and nothing to say.
+    if not W.git(here, "rev-parse", "--show-toplevel").ok:
         return ""
-    base = W.default_branch(repo)
-    n = W.git(here, "rev-list", "--count", f"HEAD..{base}")
-    if not n.ok or not n.out.isdigit():
-        # "Could not tell" is not "not behind" (roborev 826): an unborn HEAD, an
-        # unrelated history or an unresolvable base all land here.
-        return f"Could not tell whether this checkout is behind `{base}`: {n.err or n.out}"
-    if int(n.out) == 0:
+    d = E.drift(repo, here)
+    if d.behind is None:
+        return f"Could not tell whether this checkout is behind `{d.base}`: {d.detail}"
+    if d.behind == 0:
         return ""
-    changed = W.git(here, "diff", "--name-only", f"HEAD...{base}", "--", *_RULEBOOKS)
-    rules = [p for p in changed.out.splitlines() if p] if changed.ok else []
-    msg = f"This worktree is {n.out} commit(s) behind `{base}`: `git merge {base}` before starting."
-    if rules:
-        msg += f" The rules changed there: {', '.join(rules)} -- re-read them after merging."
+    msg = f"This worktree is {d.behind} commit(s) behind `{d.base}`: `git merge {d.base}` before starting."
+    if d.rules:
+        msg += f" The rules changed there: {', '.join(d.rules)} -- re-read them after merging."
     return msg
 
 
@@ -328,12 +320,22 @@ def _check_msg(cfg, msg_file: str) -> O.Outcome:
     from ..services import enforce as E
 
     data: dict[str, Any] = {"message": "", "installed": True, "policy": ""}
-    if not cfg.enforce.require_item_trailer:
+    forbidden = list(cfg.enforce.forbidden_trailers)
+    if not cfg.enforce.require_item_trailer and not forbidden:
         return O.ok("hooks", **data)
     path = Path(msg_file)
     if not msg_file or not path.is_file():
         # git always passes the file; no file means we were not called by git, and
         # inventing a failure from missing input is the vacuous-FAIL mirror.
+        return O.ok("hooks", **data)
+    text = path.read_text("utf-8", errors="replace")
+    # Before the merge exemption, on purpose: a merge message is written by whoever
+    # concludes the merge, which is exactly who adds an attribution line.
+    code, msg = E.check_forbidden_trailers(text, forbidden)
+    if code:
+        data["message"] = msg
+        return O.Outcome(kind="hooks", data=data, exit=code, reason=msg)
+    if not cfg.enforce.require_item_trailer:
         return O.ok("hooks", **data)
     # A merge really in progress: MERGE_HEAD resolves AND is not already contained in
     # HEAD. A stale or planted MERGE_HEAD pointing at HEAD exempted every ordinary
@@ -354,7 +356,7 @@ def _check_msg(cfg, msg_file: str) -> O.Outcome:
         != 0
     )
     code, msg = E.check_item_trailer(
-        path.read_text("utf-8", errors="replace"),
+        text,
         list(cfg.enforce.item_trailer_keys) or ["Item"],
         merging=merging,
     )
@@ -525,7 +527,7 @@ def hooks(
         return O.ok("hooks", message=msg, installed=E.installed(repo))
     if action == "check-commit":
         code, msg = E.check_commit(repo, cfg)
-        for check in (E.check_views, E.check_docs):
+        for check in (E.check_views, E.check_docs, E.check_drift):
             if code != 0:
                 break
             ccode, cmsg = check(repo, cfg)

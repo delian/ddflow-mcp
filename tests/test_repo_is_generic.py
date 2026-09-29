@@ -15,18 +15,18 @@ from __future__ import annotations
 import ipaddress
 import re
 import subprocess
+import sys
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-#: Not scanned, each for its reason. EXACT paths and directory prefixes are kept apart,
-#: so an exemption for one file never covers its neighbours (`.roborev.toml.example`).
-#: - the event log is history, and verbatim operator words; session-prompt redaction
-#:   covers it going forward (B-local-config), and history is not rewritten here;
-#: - .roborev.toml leaves the index in B-local-roborev -- remove this entry there.
+#: Not scanned: the event log is history, and verbatim operator words; session-prompt
+#: redaction covers it going forward (B-local-config), and history is not rewritten here.
+#: A FILE exemption, if one is ever needed, goes in EXEMPT_FILES as an exact path -- an
+#: exemption for one file never covers its neighbours.
 EXEMPT_DIRS = (".ddflow/events/",)
-EXEMPT_FILES = frozenset({".roborev.toml"})
+EXEMPT_FILES: frozenset[str] = frozenset()
 
 #: Made-up addresses, each allowed ONLY in the file that uses it as a fixture: the same
 #: address anywhere else is a host like any other.
@@ -89,7 +89,7 @@ def test_no_tracked_file_names_a_private_network_host():
     assert not hits, (
         f"private-network hosts in committed files: {hits}. A host is somebody's own "
         "service: put it in a git-ignored local file (.ddflow/reviewers.toml, "
-        ".ddflow/gates.toml, an untracked .roborev.toml)."
+        ".ddflow/gates.toml, the git-ignored .roborev.toml)."
     )
 
 
@@ -102,7 +102,7 @@ def test_the_committed_config_names_no_reviewer():
 
 
 def test_the_local_files_are_ignored():
-    for path in (".ddflow/reviewers.toml", ".ddflow/gates.toml"):
+    for path in (".ddflow/reviewers.toml", ".ddflow/gates.toml", ".roborev.toml"):
         r = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", path])
         assert r.returncode == 0, f"{path} is not git-ignored, so it would be committed"
 
@@ -129,10 +129,13 @@ def test_the_address_check_can_see_one():
     assert _private_addresses(":" + ":1 is loopback, 12:30:45 is a time") == set()
 
 
-def test_an_exemption_is_exactly_the_path_it_names():
+def test_an_exemption_is_exactly_the_path_it_names(monkeypatch):
     fixture = _ip(10, 0, 0, 5)
     assert _private_addresses(fixture, path="tests/test_container.py") == set()
     assert _private_addresses(fixture, path=".ddflow/config.toml") == {fixture}
-    assert _scanned(".roborev.toml") is False
-    assert _scanned(".roborev.toml.example") is True, "an exemption is a path, not a prefix"
     assert _scanned(".ddflow/events/x.jsonl") is False
+    # With no file exemption today, drive the rule through a test-local one: it must
+    # cover exactly its path, never a neighbour that shares the prefix.
+    monkeypatch.setattr(sys.modules[__name__], "EXEMPT_FILES", frozenset({"local.toml"}))
+    assert _scanned("local.toml") is False
+    assert _scanned("local.toml.example") is True
