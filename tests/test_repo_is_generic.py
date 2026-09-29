@@ -66,12 +66,17 @@ def _private_addresses(text: str, *, path: str = "") -> set[str]:
         except ValueError:
             continue
         # Loopback is the documented default for a local endpoint; the unspecified
-        # address ("any interface") is not a host.
-        if ip.is_loopback or ip.is_unspecified or raw in allowed:
+        # address ("any interface") is not a host, and neither is the rest of 0.0.0.0/8
+        # ("this network"), where four-part version tags land (B22d5dde6b9).
+        if ip.is_loopback or ip.is_unspecified or raw in allowed or _this_network(ip):
             continue
         if ip.is_private or ip.is_link_local:
             found.add(raw)
     return found
+
+
+def _this_network(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return ip.version == 4 and ip.packed[0] == 0
 
 
 def test_no_tracked_file_names_a_private_network_host():
@@ -139,3 +144,12 @@ def test_an_exemption_is_exactly_the_path_it_names(monkeypatch):
     monkeypatch.setattr(sys.modules[__name__], "EXEMPT_FILES", frozenset({"local.toml"}))
     assert _scanned("local.toml") is False
     assert _scanned("local.toml.example") is True
+
+
+def test_a_four_part_version_is_not_a_host():
+    """Bug B22d5dde6b9: shellcheck-py's release tag parses as an address in 0.0.0.0/8,
+    which `ipaddress` calls private -- but "this network" is never a service's address,
+    so pinning that hook failed the suite. Real private hosts are still caught."""
+    tag = "v" + _ip(0, 11, 0, 1)
+    assert _private_addresses(f"rev: {tag}") == set()
+    assert _private_addresses(f"rev: {tag}, host {_ip(10, 0, 0, 7)}") == {_ip(10, 0, 0, 7)}
