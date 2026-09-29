@@ -288,6 +288,7 @@ def test_a_write_that_fails_partway_leaves_no_config_behind(mixed, monkeypatch):
     """Bug B985505b520: a truncated file pre-commit would run, and that every later
     --write refuses to replace because it exists."""
     import errno
+    import os
 
     real_open = Path.open
 
@@ -310,7 +311,15 @@ def test_a_write_that_fails_partway_leaves_no_config_behind(mixed, monkeypatch):
         fh = real_open(self, mode, *a, **k)
         return HalfWriter(fh) if "x" in mode or "w" in mode else fh
 
+    real_fdopen = os.fdopen
+
+    def failing_fdopen(fd, mode="r", *a, **k):
+        fh = real_fdopen(fd, mode, *a, **k)
+        return HalfWriter(fh) if "w" in mode else fh
+
+    # Whichever way the file is opened for writing, the write fails halfway.
     monkeypatch.setattr(Path, "open", failing_open)
+    monkeypatch.setattr(os, "fdopen", failing_fdopen)
     out = OPS.precommit(mixed, where=mixed, write=True)
     monkeypatch.undo()
     assert out.exit == 1 and "No space" in out.reason
@@ -351,3 +360,15 @@ def test_pre_commit_itself_keeps_an_unstaged_hook_out_of_commit_msg(repo, tmp_pa
         cwd=repo, capture_output=True, text=True, timeout=300,
     )  # fmt: skip
     assert r.returncode == 0 and "always fails" not in r.stdout, r.stdout + r.stderr
+
+
+def test_a_temp_file_left_by_a_killed_run_does_not_block_the_write(mixed):
+    """Bug B43c097b9b9: the temp name was derived from the pid, so a leftover from a killed run
+    with the same pid (PID 1 in a container) was reported as the config appearing."""
+    import os
+
+    (mixed / f"..pre-commit-config.yaml.{os.getpid()}.tmp").write_text("stale")
+    (mixed / f".pre-commit-config.yaml.{os.getpid()}.tmp").write_text("stale")
+    out = OPS.precommit(mixed, where=mixed, write=True)
+    assert out.exit == 0 and out.data["written"] is True, out.reason
+    assert (mixed / ".pre-commit-config.yaml").read_text() == out.data["text"]

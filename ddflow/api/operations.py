@@ -460,6 +460,7 @@ def precommit(
     """
     import os
     import shutil
+    import tempfile
 
     from ..services import precommit as PC
 
@@ -506,10 +507,16 @@ def precommit(
         # Written aside and LINKED into place: the link is atomic and refuses a file made
         # meanwhile, and a write failing partway never leaves a truncated config that
         # pre-commit would run and a later --write would refuse to replace.
-        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+        # mkstemp: a name no earlier run (killed, same pid) can have left behind.
         try:
-            with tmp.open("x", encoding="utf-8") as fh:
+            fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        except OSError as e:
+            return O.failed("precommit", f"could not write {path}: {e}")
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
                 fh.write(prop.text)
+            os.chmod(tmp, 0o644)  # mkstemp makes it 0600; a config is read by everyone
             os.link(tmp, path)
         except FileExistsError:
             return O.refused("precommit", f"{path} appeared meanwhile; not replaced", **data)
