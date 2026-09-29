@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..config import Config
 from ..core.model import ABANDONED, DONE, OPEN
 from ..core.schedule import is_external
 from ..infra import proc as P
@@ -2068,7 +2069,8 @@ def plan_import(
             # AFTER the tasks are in the plan: a phase is finished or not by what is
             # under it once this import has run, not by what was under it before.
             if events is None and state is not None:
-                events = EventLog(repo).read_all()
+                # The same `[log]` config every other reader honours (the parse cache).
+                events = EventLog(repo, log_cfg=Config.load(repo).log).read_all()
             _settle_phases(plan, state, touched_since_import(events or ()), existing_phases)
     for f in scan_branches(repo):
         f.ident = _unique("", f.ident, proposed)
