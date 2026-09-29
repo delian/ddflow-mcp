@@ -121,7 +121,8 @@ def contest_block(it) -> str:
         lines += [f"    | {ln}" for ln in (d["body"] or "").splitlines()]
     for h in it.lease_contest:
         where = h["lease"].get("worktree") or "-"
-        lines.append(f"  claim {h['event']} by {h['holder']} (worktree {where})")
+        met = " and ".join(g["holder"] for g in it.lease_clashes(h)) or "none of them"
+        lines.append(f"  claim {h['event']} by {h['holder']} (worktree {where}), overlapped {met}")
     return "\n".join(lines)
 
 
