@@ -352,7 +352,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     # one config error that is both silent and permanent -- every item entering the
     # pipeline blocks on an outcome that can never be recorded -- so it belongs in the
     # command an operator runs when something is wrong, not only in `ddflow workflow`.
-    for f in WF.check(cfg, load_gates(repo, cfg)):
+    for f in WF.check(cfg, load_gates(repo, cfg), repo):
         # `f.subject: f.detail`, not `f.render()` -- doctor prefixes its own severity, and
         # "PROBLEM: [problem] ..." reads like a bug in the tool reporting the bug.
         (problems if f.level == WF.PROBLEM else notes).append(f"{f.subject}: {f.detail}")
