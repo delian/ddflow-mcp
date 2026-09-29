@@ -10,8 +10,10 @@ capability inventory is generated from the live registry rather than typed.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
@@ -43,6 +45,78 @@ def _cli_leaves() -> set[str]:
 
     walk(build_parser(), ())
     return out
+
+
+#: `H.COMMAND_MENTION` with hyphenated words captured whole. That one stops at a
+#: hyphen, so `ddflow hooks check-msg` reached the checker as `hooks check` -- and no
+#: rule over the truncated word can tell it from a literal `ddflow hooks check`
+#: (Bf3819cdb35). The fix belongs in services/help.py; until it lands there, the
+#: checks judge what was really written through this. A word must still START with a
+#: letter, so `ddflow cleanup --apply` stays `cleanup`.
+HYPHENATED_MENTION = re.compile(r"\bddflow([_ ])([a-z][a-z_-]*(?: [a-z][a-z_-]*){0,2})\b")
+
+
+def mentions(text: str) -> list[tuple[str, str]]:
+    """`H.command_mentions` -- same code-context rules, not a copy of them -- with
+    hyphenated words kept whole."""
+    with mock.patch.object(H, "COMMAND_MENTION", HYPHENATED_MENTION):
+        return H.command_mentions(text)
+
+
+def unknown_cli_mentions(mentions: list[str], leaves: set[str] | None = None) -> list[str]:
+    """The CLI mentions (`gate run`, `lease release`) that do not resolve in argparse.
+
+    Shared with the remedy-text ratchet, so help pages and printed advice are held to
+    one definition of "names a real command" rather than two that can drift.
+    """
+    leaves = _cli_leaves() if leaves is None else leaves
+    tops = {leaf.split()[0] for leaf in leaves}
+    #: A top-level command that HAS subcommands. Naming one without a valid subcommand
+    #: is the failure this catches -- `ddflow gate check` reads as real and is not.
+    parents = {t for t in tops if any(leaf.startswith(f"{t} ") for leaf in leaves)}
+    unknown: list[str] = []
+    for mention in mentions:
+        if mention in leaves:
+            continue  # an exactly-runnable path, parent or leaf
+        words = mention.split()
+        head = words[0]
+        if head not in tops or (
+            head in parents and (len(words) < 2 or f"{head} {words[1]}" not in leaves)
+        ):
+            unknown.append(mention)
+    return unknown
+
+
+def unknown_mentions(mentions: list[tuple[str, str]], leaves: set[str] | None = None) -> list[str]:
+    """Which `(separator, command)` pairs from `mentions` name nothing real.
+
+    Checked against BOTH registries. `_` is an MCP tool, looked up in the tool table,
+    not the parser: `ddflow_import_verify` is one tool and `ddflow import --verify` is
+    a flag, and neither registry knows the other's spelling. A tool name has no
+    spaces, so only its first word counts, and is what is reported --
+    `ddflow_cleanup with apply=true` names `ddflow_cleanup`. ` ` is a CLI path, looked
+    up in argparse.
+    """
+    tools = {t.removeprefix("ddflow_") for t in TOOLS}
+    names = [m.split()[0] for sep, m in mentions if sep == "_"]
+    bad = [f"ddflow_{name}" for name in names if name not in tools]
+    return bad + unknown_cli_mentions([m for sep, m in mentions if sep == " "], leaves)
+
+
+def test_a_hyphenated_command_is_judged_as_written():
+    """`hooks check-msg` exists; `hooks check` does not. The capture stopped at the
+    hyphen, and an escape that accepted any leaf extending the truncated word with
+    `-` then passed a literal `ddflow hooks check` (critic, Bf3819cdb35)."""
+    assert unknown_mentions(mentions("run `ddflow hooks check` now")) == ["hooks check"]
+    assert unknown_mentions(mentions('add `ddflow hooks check-msg "$1"` there')) == []
+    # A flag after a command is not part of it.
+    assert unknown_mentions(mentions("`ddflow cleanup --apply`")) == []
+
+
+def test_a_missing_tool_is_reported_by_its_name_alone():
+    """Only the first word of a `ddflow_` mention is checked, so only it is reported:
+    one missing tool is one entry, however the sentence around it continues."""
+    assert unknown_mentions(mentions("`ddflow_nosuch with apply=true`")) == ["ddflow_nosuch"]
 
 
 # -- it answers the question -----------------------------------------------------------
@@ -116,31 +190,10 @@ def test_every_command_a_help_page_names_exists():
     Checked against BOTH registries: the argparse tree and the MCP tool table.
     """
     leaves = _cli_leaves()
-    tools = {t.removeprefix("ddflow_") for t in TOOLS}
-    tops = {leaf.split()[0] for leaf in leaves}
-    #: A top-level command that HAS subcommands. Naming one without a valid subcommand
-    #: is the failure this catches -- `ddflow gate check` reads as real and is not.
-    parents = {t for t in tops if any(leaf.startswith(f"{t} ") for leaf in leaves)}
-
     unknown: list[tuple[str, str]] = []
     pages = {"index": H.render_index(tools=TOOLS), **{t: H.render_topic(t) for t in H.TOPICS}}
     for page, text in pages.items():
-        for sep, mention in H.command_mentions(text):
-            if sep == "_":
-                # An MCP tool name. Checked against the tool table, not the parser:
-                # `ddflow_import_verify` is one tool and `ddflow import --verify` is
-                # a flag, and neither registry knows about the other's spelling.
-                if mention not in tools:
-                    unknown.append((page, f"ddflow_{mention}"))
-                continue
-            if mention in leaves:
-                continue  # an exactly-runnable path, parent or leaf
-            words = mention.split()
-            head = words[0]
-            if head not in tops:
-                unknown.append((page, mention))
-            elif head in parents and (len(words) < 2 or f"{head} {words[1]}" not in leaves):
-                unknown.append((page, mention))
+        unknown.extend((page, m) for m in unknown_mentions(mentions(text), leaves))
     assert not unknown, f"help pages name commands that do not exist: {unknown}"
 
 
