@@ -316,3 +316,18 @@ def test_an_explicit_live_verdict_beats_future_work_on_the_heading_and_below_it(
     assert t["A.1"].extra["disposition"] == ""
     assert t["A.2"].extra["disposition"] == ""
     assert t["A.3"].extra["disposition"] == ""
+
+
+def test_future_work_with_a_period_holds(repo):
+    _write(repo, "## S\n### Future work.\n- [ ] **A.1** a\n")
+    assert _by_id(_plan(repo), "task")["A.1"].extra["disposition"] == "hold"
+
+
+def test_a_word_that_merely_starts_with_a_hold_marker_does_not_lead(repo):
+    _write(repo, "## S\n\n- [ ] **C20** watchdog (parkedcar detector) - x\n")
+    assert _by_id(_plan(repo), "task")["C20"].extra["disposition"] == ""
+
+
+def test_a_live_sub_heading_under_future_work_under_declined_stays_declined(repo):
+    _write(repo, "## Declined\n### Future work\n#### (not started) later\n- [ ] **D.1** a\n")
+    assert "D.1" not in _by_id(_plan(repo), "task")

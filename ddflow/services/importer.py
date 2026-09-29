@@ -290,7 +290,7 @@ _ANNOTATION_CHARS = 160
 _SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED")
 #: `### P42.8 — Future work (deliberately not in this phase)`: a heading whose title IS
 #: "future work" holds; `## Phase 5 — Future work planning` is a phase about it.
-_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[\u2014\u2013:]|\s-+\s|$)", re.I)
+_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[\u2014\u2013:]|\s-+\s|\.(?:\s|$)|$)", re.I)
 #: A heading that says its own section is LIVE: `### Phase 39 follow-ups (not started)`
 #: filed under a `## Phase 38` whose STATUS is SHIPPED. Inheriting the ancestor's verdict
 #: dropped both of its open items as history (home-simulator, 2026-09-29).
@@ -317,11 +317,11 @@ _VERDICT_FILLER = re.compile(
 
 
 def _leads_with(clause: str, markers: tuple[str, ...]) -> bool:
-    """Whether `clause` BEGINS with a marker, past emphasis, emoji and filler words in
-    front of it. `RETRACT` still leads `RETRACTED by the operator`."""
+    """Whether `clause` BEGINS with a marker -- the whole word, so `watchdog` and
+    `parkedcar` do not -- past emphasis, emoji and filler words in front of it."""
     head = re.sub(r"^[^A-Za-z0-9]+", "", clause).upper()
     head = _VERDICT_FILLER.sub("", head)
-    return any(re.match(rf"{re.escape(m)}[A-Z]*\b", head) for m in markers)
+    return any(re.match(rf"{re.escape(m)}(?![A-Z0-9])", head) for m in markers)
 
 
 def _verdict_asides(text: str, markers: tuple[str, ...]) -> str:
@@ -487,10 +487,16 @@ def _push_heading(
     ancestor HEADING that declines or defers: `## Declined ideas / ### Idea A (not
     started)` is the operator's word about everything below it."""
     own = _heading_disposition(heading)
-    if own == ("", "") and any(
-        d is not None and d[0] and d[1].startswith(_BY_HEADING) for _lvl, d in stack
-    ):
-        own = None
+    if own == ("", ""):
+        # The nearest blocking ancestor is PUSHED again, not merely inherited: a
+        # "Future work" hold between it and this heading would otherwise be the
+        # nearest verdict, and a declined section would come back as merely held.
+        blocking = next(
+            (d for _lvl, d in reversed(stack) if d and d[0] and d[1].startswith(_BY_HEADING)),
+            None,
+        )
+        if blocking:
+            own = blocking
     stack.append((level, own))
 
 
@@ -2152,7 +2158,7 @@ def plan_import(
     known = _known_ids(state)
     sources = sources or {}
 
-    closed: list[str] = []
+    closed: list[Found] = []
     held: list[str] = []
     deferred_done: dict[str, Found] = {}
     proposed: set[str] = set()
@@ -2192,7 +2198,7 @@ def plan_import(
             # Declined, refuted, superseded: history, the same as a ticked box -- and
             # brought in the same way when open work depends on it.
             deferred_done[f.ident] = f
-            closed.append(f.ident)
+            closed.append(f)
             continue
         if f.kind == "task" and f.extra.get("disposition") == "hold":
             held.append(f.ident)
@@ -2206,8 +2212,7 @@ def plan_import(
     in_plan = {id(f) for f in plan.found}
     ticked = [f for f in deferred_done.values() if f.done and id(f) not in in_plan]
     plan.ticked_left_out = len(ticked)
-    pulled = {f.ident for f in plan.found}
-    _note_withheld(plan, ticked, [i for i in closed if i not in pulled], held)
+    _note_withheld(plan, ticked, [f.ident for f in closed if id(f) not in in_plan], held)
 
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:
