@@ -316,6 +316,12 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         problems.append("no .ddflow directory — run `ddflow init`")
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
+    # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.
+    problems += [
+        f"unknown config key {k} in .ddflow/config.toml: a typo, or written by a newer "
+        "ddflow than this checkout runs (merge main)"
+        for k in cfg.unknown_knobs
+    ]
 
     p = plan(st, cfg, agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
