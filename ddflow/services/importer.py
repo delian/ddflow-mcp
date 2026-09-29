@@ -41,7 +41,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..core.model import ABANDONED, DONE
+from ..config import Config
+from ..core.model import ABANDONED, DONE, OPEN
 from ..core.schedule import is_external
 from ..infra import proc as P
 from ..infra.log import EventLog
@@ -623,6 +624,10 @@ LEGACY_MEMORY_SESSION = "s-imported-memory"
 KINDS = (
     "phase",
     "task",
+    # Not a scanned thing but an ACTION on one already in the queue: an imported phase
+    # that `--include-done` finds finished. Its own kind so the preview lists it apart
+    # from the phases being ADDED, and `--apply` writes a completion, never a re-add.
+    "completion",
     "branch",
     "lesson",
     "decision",
@@ -664,6 +669,10 @@ class ImportPlan:
     #: nothing). Kept apart so `verify_import`, which reports empty sources as a finding
     #: of its own, can leave them out by field rather than by matching prose.
     source_notes: list[str] = field(default_factory=list)
+    #: Ticked tasks a plain import left out. A count the apply report states, because a
+    #: board reading "0/3" for a phase whose other boxes shipped is otherwise read as
+    #: "nothing shipped" (B45d5aa72fa).
+    ticked_left_out: int = 0
 
     def by_kind(self, kind: str) -> list[Found]:
         return [f for f in self.found if f.kind == kind]
@@ -813,6 +822,10 @@ def scan_todos(
         heading = ""
         heading_line = 0
         phase_ident = ""
+        #: The phase this heading became, and its OWN `**STATUS**:` verdict -- which may
+        #: sit above the first checkbox, before the phase exists.
+        phase_found: Found | None = None
+        heading_status: tuple[str, str] | None = None
         #: The task an annotation line attaches to. None until this file has produced
         #: one, so nothing leaks across a file or a heading boundary.
         anchor: Found | None = None
@@ -832,6 +845,8 @@ def scan_todos(
                 heading = h.group(2).strip()
                 heading_line = n
                 phase_ident = ""
+                phase_found = None
+                heading_status = None
                 anchor = None
                 level = len(h.group(1))
                 while stack and stack[-1][0] >= level:
@@ -843,6 +858,9 @@ def scan_todos(
                 status = _status_disposition(line)
                 if status is not None and stack:
                     stack[-1] = (stack[-1][0], status)
+                    heading_status = status
+                    if phase_found is not None:
+                        phase_found.extra["status"] = status
                     continue
                 # Annotations live on the lines under their item -- and `anchor` is
                 # reset per FILE, because `found` is not. A `**Globs:**` line at the top
@@ -883,23 +901,25 @@ def scan_todos(
                 # treated as unmet, so the work imported permanently blocked.
                 declared, rest = _split_id(heading)
                 phase_ident = _unique(declared, _slug(heading, 24).upper(), taken)
-                found.append(
-                    Found(
-                        kind="phase",
-                        ident=phase_ident,
-                        title=_clean_title(rest if declared else heading),
-                        source=f"{rel}:{heading_line}",
-                        # Whether the id was READ or DERIVED. `_adopt_child_prefix`
-                        # must not overrule a read one: `### 142.A` whose tasks are
-                        # `142.1`, `142.2` has a child prefix of `142`, and taking it
-                        # renamed the phase out from under every `Needs: 142.A` in the
-                        # file.
-                        extra={
-                            "id_from_heading": bool(declared) and declared == phase_ident,
-                            "heading_number": _heading_number(heading),
-                        },
-                    )
+                phase_found = Found(
+                    kind="phase",
+                    ident=phase_ident,
+                    title=_clean_title(rest if declared else heading),
+                    source=f"{rel}:{heading_line}",
+                    # Whether the id was READ or DERIVED. `_adopt_child_prefix`
+                    # must not overrule a read one: `### 142.A` whose tasks are
+                    # `142.1`, `142.2` has a child prefix of `142`, and taking it
+                    # renamed the phase out from under every `Needs: 142.A` in the
+                    # file.
+                    extra={
+                        "id_from_heading": bool(declared) and declared == phase_ident,
+                        # Its own section STATUS, for `_phase_verdict`: every box
+                        # ticked under "STATUS: PARTIAL" is not a finished phase.
+                        "status": heading_status,
+                        "heading_number": _heading_number(heading),
+                    },
                 )
+                found.append(phase_found)
             chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(unsplit or body, 20)}", taken)
             anchor = Found(
                 kind="task",
@@ -1728,12 +1748,26 @@ def _pull_in_needed(
     return done, closed
 
 
-def _note_withheld(plan: ImportPlan, done_skipped: int, closed: list[str], held: list[str]) -> None:
+def _note_withheld(
+    plan: ImportPlan, ticked: list[Found], closed: list[str], held: list[str]
+) -> None:
     """Say what the import deliberately did not offer as work, and how to get it."""
-    if done_skipped:
+    if ticked:
+        # Per phase, worst first: the total alone left "Phase 103: 0/3" on the board
+        # reading as "nothing shipped" about a phase whose 103.A and 103.C had (B45d5aa72fa).
+        per_phase: dict[str, int] = {}
+        for f in ticked:
+            key = f.extra.get("phase") or "(no phase)"
+            per_phase[key] = per_phase.get(key, 0) + 1
+        worst = sorted(per_phase.items(), key=lambda kv: -kv[1])
         plan.notes.append(
-            f"{done_skipped} already-ticked task(s) were NOT imported. They are history, "
-            f"not a queue — pass include_done to bring them in as completed items."
+            f"{len(ticked)} already-ticked task(s) were NOT imported, so the board counts "
+            f"only the work left: a phase reading 0/3 may have shipped most of itself. "
+            f"Most left out: "
+            + ", ".join(f"{p} ({n})" for p, n in worst[:_NOTE_EXAMPLES])
+            + (f", ... ({len(worst)} phases)" if len(worst) > _NOTE_EXAMPLES else "")
+            + ". Re-run with --include-done (include_done over MCP) to bring them in as "
+            "completed items -- which also completes every phase they finish."
         )
     if closed:
         # Named, like the held ones below: a bare count hid that two items under a
@@ -1766,6 +1800,250 @@ def _note_withheld(plan: ImportPlan, done_skipped: int, closed: list[str], held:
             f"lessons with no headings) rather than an empty file: "
             f"{', '.join(plan.empty_sources[:_NOTE_EXAMPLES])}"
             + (", ..." if len(plan.empty_sources) > _NOTE_EXAMPLES else "")
+        )
+
+
+#: What the importer itself writes about an item: the add, carrying its source, and the
+#: state the source gave it, flagged `imported`. Anything else on an item's subject is
+#: somebody acting on it after the import.
+_IMPORT_ADDS = frozenset({"phase.added", "task.added"})
+_IMPORT_STATES = frozenset({"item.completed", "item.abandoned", "item.blocked"})
+#: Every event that sets an item's state (see `core.model.HANDLERS`).
+_STATE_EVENTS = _IMPORT_STATES | {"item.started", "item.unblocked"}
+
+
+@dataclass
+class Touched:
+    """What somebody other than the importer did to the queue, per item id."""
+
+    #: Any event at all on it that the importer did not write: claimed, gated, updated,
+    #: blocked and released, completed -- or created by hand in the first place.
+    items: set[str] = field(default_factory=set)
+    #: Items whose CURRENT state was set by such an event: the last state change on
+    #: them is somebody's, not the import's.
+    state: set[str] = field(default_factory=set)
+
+
+def _by_import(ev) -> bool:
+    if ev.kind in _IMPORT_ADDS:
+        return bool(ev.data.get("source"))
+    return ev.kind in _IMPORT_STATES and bool(ev.data.get("imported"))
+
+
+def touched_since_import(events) -> Touched:
+    """Who acted on each item after (or instead of) an import, read from the log.
+
+    What "already in the queue, left alone" has to mean once a re-run may COMPLETE an
+    imported phase: the import may finish what it wrote and nobody has touched since, and
+    nothing else. The fold cannot tell "open because nobody got to it" from "open because
+    somebody reopened it"; the log can. `events` in log order, as `read_all` returns them.
+    """
+    t = Touched()
+    for ev in events:
+        mine = _by_import(ev)
+        if not mine:
+            t.items.add(ev.subject)
+        if ev.kind in _STATE_EVENTS:
+            (t.state.discard if mine else t.state.add)(ev.subject)
+    return t
+
+
+#: Words in a phase HEADING that say work remains, matched as whole words (`WIP` is not
+#: `WIPE`). Two strengths. A STALLED word yields to a done marker in the same heading --
+#: `Close the long-context PARTIAL ✅ SHIPPED` is finished, `DEFERRED` often says where
+#: the work came from. A LIVE word does not: `Tooling (IN PROGRESS) ✅` contradicts
+#: itself, and the side that hides work is the one not to pick (rubber-duck).
+_HEADING_LIVE = re.compile(
+    r"(?<![A-Z0-9])(IN PROGRESS|WIP|RE-?OPENED|UNFINISHED)(?![A-Z0-9])", re.I
+)
+_HEADING_STALLED = re.compile(
+    r"(?<![A-Z0-9])(PARTIAL(?:LY)?|DEFERRED|ON HOLD|PARKED|BLOCKED)(?![A-Z0-9])", re.I
+)
+#: A done marker the heading itself negates: `NOT DONE`, `not yet shipped`.
+_NEGATED_DONE = re.compile(r"\bNOT\s+(?:YET\s+)?(?:DONE|SHIPPED|CLOSED|COMPLETE[D]?)\b", re.I)
+
+
+def _says_unfinished(phase: Found) -> str:
+    """Why the phase's own words say work remains, or "" when they do not.
+
+    Every box ticked is not the whole story: the project writes the rest in prose, and a
+    real plan has `## Phase 1 — Tooling (IN PROGRESS)` and `**STATUS**: PARTIAL -- 11 of
+    12` over nothing but ticked boxes. Completing those hides the one item left.
+    """
+    status = phase.extra.get("status")
+    if status is not None and status[0] != "closed":
+        return f"its STATUS says {status[1] or 'it is live'}"
+    m = _NEGATED_DONE.search(phase.title) or _HEADING_LIVE.search(phase.title)
+    if not m and not _DONE_MARKER.search(phase.title):
+        m = _HEADING_STALLED.search(phase.title)
+    return f"its heading says {m.group(0).upper()}" if m else ""
+
+
+def _phase_verdict(
+    phase: Found, pid: str, source: str, new_kids: list[Found], state, touched: Touched
+) -> tuple[str, str]:
+    """`(verdict, detail)` for one phase: `done`, `by_hand`, `unfinished` or `open`.
+
+    Over EVERY task under it once this import has run: the ones it adds and the ones
+    already in the queue. Done when each is done or closed; a phase with no task at all
+    only when its own heading says finished. A queued task finished by somebody in
+    ddflow rather than by the source makes it `by_hand`: closing the phase then is
+    ddflow's own `complete`, with the phase gates, not the importer's. Boxes that all say
+    finished under a heading or STATUS that says otherwise make it `unfinished`.
+    """
+    done = closed = 0
+    by_hand = False
+    for f in new_kids:
+        if f.done:
+            done += 1
+        elif f.extra.get("disposition") == "closed":
+            closed += 1
+        else:
+            return "open", ""
+    for it in state.children(pid) if state is not None else ():
+        if it.removed:
+            continue
+        if it.state not in (DONE, ABANDONED):
+            return "open", ""
+        if it.id in touched.state:
+            by_hand = True
+        elif it.state == DONE:
+            done += 1
+        else:
+            closed += 1
+    if by_hand:
+        return "by_hand", ""
+    if done + closed and _says_unfinished(phase):
+        return "unfinished", _says_unfinished(phase)
+    if done + closed:
+        return "done", (
+            f"every task under it is done or closed in the source ({done} done, "
+            f"{closed} closed) -- phase imported from {source}"
+        )
+    if _DONE_MARKER.search(phase.title) and not _says_unfinished(phase):
+        return "done", f"its heading at {source} marks it finished, and no task is filed under it"
+    return "open", ""
+
+
+@dataclass
+class _Settled:
+    """What `_settle_phases` decided, kept for the notes that say so."""
+
+    new_done: int = 0
+    completions: list[Found] = field(default_factory=list)
+    left_alone: list[str] = field(default_factory=list)
+    by_hand: list[str] = field(default_factory=list)
+    unfinished: list[str] = field(default_factory=list)
+    under_done: list[str] = field(default_factory=list)
+
+
+def _is_imported_phase(it) -> bool:
+    """A phase the IMPORTER wrote -- the only kind it may ever complete."""
+    return it is not None and it.kind == "phase" and not it.removed and bool(it.source)
+
+
+def _settle_existing(
+    s: _Settled, existing: dict[str, Found], kids: dict[str, list[Found]], state, touched: Touched
+) -> None:
+    items = getattr(state, "items", {}) if state is not None else {}
+    for pid, f in existing.items():
+        it = items.get(pid)
+        if not _is_imported_phase(it):
+            continue
+        if it.state == DONE:
+            if any(
+                not (k.done or k.extra.get("disposition") == "closed") for k in kids.get(pid, [])
+            ):
+                s.under_done.append(pid)
+            continue
+        if it.state != OPEN:
+            continue
+        verdict, detail = _phase_verdict(f, pid, it.source, kids.get(pid, []), state, touched)
+        if verdict == "by_hand":
+            s.by_hand.append(pid)
+        elif verdict == "unfinished":
+            s.unfinished.append(f"{pid} ({detail})")
+        elif verdict == "done" and pid in touched.items:
+            s.left_alone.append(pid)
+        elif verdict == "done":
+            s.completions.append(
+                Found(
+                    kind="completion",
+                    ident=pid,
+                    title=it.title,
+                    source=it.source,
+                    done=True,
+                    extra={"evidence": detail},
+                )
+            )
+
+
+def _settle_phases(plan: ImportPlan, state, touched: Touched, existing: dict[str, Found]) -> None:
+    """Complete the phases the source says are finished -- decided AFTER the tasks.
+
+    New phases in the plan are marked done in place. A phase already in the queue gets a
+    `completion` entry, and only if the import wrote it, it is still OPEN and nobody has
+    touched it since (`touched_since_import`); one that would qualify but was touched is
+    NAMED, not completed. A task under it counts as finished by the SOURCE only while its
+    state is still the one the import gave it. Never reopens anything.
+    """
+    kids: dict[str, list[Found]] = {}
+    for f in plan.found:
+        if f.kind == "task" and f.extra.get("phase"):
+            kids.setdefault(f.extra["phase"], []).append(f)
+    s = _Settled()
+    for f in plan.by_kind("phase"):
+        verdict, detail = _phase_verdict(
+            f, f.ident, f.source, kids.get(f.ident, []), state, touched
+        )
+        if verdict == "done":
+            f.done = True
+            f.extra["evidence"] = detail
+            s.new_done += 1
+        elif verdict == "by_hand":
+            s.by_hand.append(f.ident)
+        elif verdict == "unfinished":
+            s.unfinished.append(f"{f.ident} ({detail})")
+    _settle_existing(s, existing, kids, state, touched)
+    plan.found.extend(s.completions)
+    # Completed, so no longer "left alone": the preview's count of those stays true.
+    completed = {c.ident for c in s.completions}
+    plan.skipped_existing = [i for i in plan.skipped_existing if i not in completed]
+    _note_settled(plan, s)
+
+
+def _note_settled(plan: ImportPlan, s: _Settled) -> None:
+    def named(ids: list[str]) -> str:
+        return ", ".join(ids[:_NOTE_EXAMPLES]) + (", ..." if len(ids) > _NOTE_EXAMPLES else "")
+
+    if s.new_done or s.completions:
+        plan.notes.append(
+            f"{s.new_done} new phase(s) and {len(s.completions)} already in the queue are "
+            f"finished in the source -- every task under them done or closed, or no task "
+            f"and a heading that says so -- and import COMPLETED, with that as evidence."
+        )
+    if s.left_alone:
+        plan.notes.append(
+            f"{len(s.left_alone)} imported phase(s) are finished in the source but were left "
+            f"open because someone changed them after the import: {named(s.left_alone)}. "
+            f"`ddflow complete <id>` if they are done."
+        )
+    if s.by_hand:
+        plan.notes.append(
+            f"{len(s.by_hand)} phase(s) have every task finished, some of them in ddflow "
+            f"rather than in the source, so the import does not close them -- that is "
+            f"`ddflow complete <phase>`, with its phase gates: {named(s.by_hand)}."
+        )
+    if s.unfinished:
+        plan.notes.append(
+            f"{len(s.unfinished)} phase(s) have every box ticked or closed while their own "
+            f"heading or STATUS says work remains, so they stay OPEN: {named(s.unfinished)}. "
+            f"Ask the operator which is stale; `ddflow complete <id>` if they are done."
+        )
+    if s.under_done:
+        plan.notes.append(
+            f"{len(s.under_done)} phase(s) are DONE in the queue while this import adds open "
+            f"work under them: {named(s.under_done)}. Reopen the phase or re-home the work."
         )
 
 
@@ -1833,6 +2111,7 @@ def plan_import(
     max_tasks: int = 200,
     sources: dict[str, tuple[str, ...]] | None = None,
     archive: tuple[str, ...] = (),
+    events: list | None = None,
 ) -> ImportPlan:
     """Read everything importable. Writes NOTHING.
 
@@ -1858,16 +2137,21 @@ def plan_import(
     family absent from it reads its defaults. `sources_from(cfg)` builds it from config.
     ``archive`` names todo files whose open items are history until released: they import
     as BLOCKED (`[importer] archive_globs`).
+
+    With ``include_done`` a phase whose every task is done or closed is proposed DONE --
+    and an imported phase already in the queue gets a `completion` once the re-run has
+    filled it in (`_settle_phases`). ``events`` is the log ``state`` was folded from, which
+    says whether somebody touched such a phase since; read from ``repo`` when omitted.
     """
     plan = ImportPlan()
     known = _known_ids(state)
     sources = sources or {}
 
-    done_skipped = 0
     closed: list[str] = []
     held: list[str] = []
     deferred_done: dict[str, Found] = {}
     proposed: set[str] = set()
+    existing_phases: dict[str, Found] = {}
     scanned: list[Found] = []
     for family, scan, default in _scanners():
         globs = sources.get(family) or default
@@ -1893,10 +2177,11 @@ def plan_import(
         f.ident = _unique("", f.ident, proposed)
         if f.ident in known:
             plan.skipped_existing.append(f.ident)
+            if f.kind == "phase":
+                existing_phases[f.ident] = f
             continue
         if f.kind == "task" and f.done and not include_done:
             deferred_done[f.ident] = f
-            done_skipped += 1
             continue
         if f.kind == "task" and f.extra.get("disposition") == "closed" and not include_done:
             # Declined, refuted, superseded: history, the same as a ticked box -- and
@@ -1912,9 +2197,12 @@ def plan_import(
     # it leaves the open one blocked on an id the queue has never heard of — and an
     # unknown dependency is treated as unmet, deliberately, so the import would land
     # permanently stuck work and look like it had succeeded.
-    done_pulled, _ = _pull_in_needed(plan, deferred_done, held)
+    _pull_in_needed(plan, deferred_done, held)
+    in_plan = {id(f) for f in plan.found}
+    ticked = [f for f in deferred_done.values() if f.done and id(f) not in in_plan]
+    plan.ticked_left_out = len(ticked)
     pulled = {f.ident for f in plan.found}
-    _note_withheld(plan, done_skipped - done_pulled, [i for i in closed if i not in pulled], held)
+    _note_withheld(plan, ticked, [i for i in closed if i not in pulled], held)
 
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:
@@ -1950,6 +2238,13 @@ def plan_import(
                 f"imported. They are finished or already in the queue; an empty phase "
                 f"is a container, not work."
             )
+        if include_done:
+            # AFTER the tasks are in the plan: a phase is finished or not by what is
+            # under it once this import has run, not by what was under it before.
+            if events is None and state is not None:
+                # The same `[log]` config every other reader honours (the parse cache).
+                events = EventLog(repo, log_cfg=Config.load(repo).log).read_all()
+            _settle_phases(plan, state, touched_since_import(events or ()), existing_phases)
     for f in scan_branches(repo):
         f.ident = _unique("", f.ident, proposed)
         if f.ident not in known:
@@ -2388,6 +2683,15 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
         )
         bump("task")
         _apply_state(log, f, bump)
+    # Phases LAST: finished by what is under them, so only once that is written -- a
+    # reader of the log never sees a phase done over tasks that do not exist yet.
+    for f in [p for p in plan.by_kind("phase") if p.done] + plan.by_kind("completion"):
+        log.append(
+            "item.completed",
+            f.ident,
+            {"kind": "phase", "imported": True, "evidence": f.extra.get("evidence", "")},
+        )
+        bump("phase_done" if f.kind == "phase" else "completion")
     for f in plan.by_kind("lesson"):
         data: dict[str, Any] = {
             "title": f.title,
@@ -2486,4 +2790,8 @@ def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
             },
         )
         bump("branch")
+    if plan.ticked_left_out:
+        # Not written -- LEFT OUT, and said in the one line `--apply` prints, because
+        # otherwise the report of what landed is read as the whole story (B45d5aa72fa).
+        counts["ticked task(s) left out, see --include-done"] = plan.ticked_left_out
     return counts
