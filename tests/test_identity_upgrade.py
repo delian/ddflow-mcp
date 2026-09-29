@@ -102,7 +102,10 @@ def test_a_bare_id_lease_taken_AFTER_this_clone_had_a_suffix_is_not_taken(repo, 
     past = time.time() - 60
     os.utime(repo / L.CLONE_ID_FILE, (past, past))
     bare = _bare(repo)
-    assert api.claim(repo, "T1", no_worktree=True, agent=bare).exit == 0
+    # WITH a worktree registered here, so only the time rule can spare it (critic, B205:
+    # a no-worktree claim is never moved anyway, which made this test vacuous).
+    assert api.claim(repo, "T1", agent=bare).exit == 0
+    assert _lease(repo, "T1").worktree
     api.heartbeat(repo, "T1")
     assert _lease(repo, "T1").holder == bare
     assert me != bare
@@ -173,3 +176,12 @@ def test_a_lease_without_a_worktree_is_left_alone(repo, monkeypatch):
     api.status(repo)
     assert _lease(repo, "T1").holder == bare
     assert api.heartbeat(repo, "T1", agent=bare).exit == 0
+
+
+def test_an_empty_clone_id_is_no_suffix_for_the_cut_off_either(repo):
+    """`_clone_suffix` treats an empty file as no suffix; the cut-off must agree."""
+    (repo / L.CLONE_ID_FILE).parent.mkdir(parents=True)
+    (repo / L.CLONE_ID_FILE).write_text("\n")
+    assert L.clone_suffix_since(repo) == 0.0
+    (repo / L.CLONE_ID_FILE).write_text("abc123\n")
+    assert L.clone_suffix_since(repo) > 0
