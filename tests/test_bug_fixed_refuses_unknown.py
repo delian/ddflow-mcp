@@ -309,3 +309,20 @@ def test_a_test_defined_under_a_module_level_loop_or_match_is_found(repo):
         ),
     )
     assert out.exit == OK, out
+
+
+def test_a_node_id_with_an_empty_name_is_refused(repo):
+    """`path::` (an empty `$TEST` in a script) left no name to check, so any readable
+    file closed the bug (critic on 556c3d5)."""
+    run_cli(repo, "init")
+    _suite(repo)
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    for empty in (
+        "tests/test_fix.py::",
+        "tests/test_fix.py::[1]",
+        "tests/test_fix.py::::test_boundary",
+        "tests/test_fix.py::TestGroup::",
+    ):
+        out = api.bug_fixed(repo, "B1", regression_test=empty)
+        assert out.exit == FAIL, (empty, out)
+    assert _open_bugs(repo) == 1

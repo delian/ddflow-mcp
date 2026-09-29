@@ -396,7 +396,7 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
     missing: list[str] = []
     unchecked: list[str] = []
     for entry in _split_outside_brackets(spec):
-        path, _, names = entry.partition("::")
+        path, sep, names = entry.partition("::")
         # A command (`pytest tests/test_x.py`) can end in `.py` too; a path has no
         # whitespace (B65bbe327c7).
         if not path.endswith(".py") or any(c.isspace() for c in path):
@@ -404,8 +404,9 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
             continue
         # The parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
         # `[...]`, and splitting them refused a real test (B-bfu-param-sep).
-        wanted = [n for n in names.split("[", 1)[0].split("::") if n]
-        if not any(_defines(_inside(tree, path), wanted) for tree in trees):
+        wanted = names.split("[", 1)[0].split("::") if sep else []
+        # `path::` or `path::[p]` names no test; an empty part must not pass for one.
+        if "" in wanted or not any(_defines(_inside(tree, path), wanted) for tree in trees):
             missing.append(entry)
     return missing, unchecked
 
