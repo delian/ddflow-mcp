@@ -414,12 +414,15 @@ def _broken(hook: dict, check: str, top_filters: bool) -> tuple[str, str] | None
             "Set `pass_filenames: false` on it",
         )
     if check == "check-msg" and not passes_files:
-        # check-msg reads the message FILE pre-commit passes as its argument; given no
-        # file it has nothing to check and allows the commit.
-        return (
-            "has `pass_filenames: false`, so check-msg is given no message file and checks nothing",
-            "Remove `pass_filenames: false` from it",
+        # check-msg reads the message FILE pre-commit passes as its argument. Without
+        # file names pre-commit skips the hook ("no files to check") -- unless it is
+        # `always_run`, when check-msg runs without its required argument and exits 2.
+        why = (
+            "runs check-msg with no message file, a usage error (exit 2) that refuses every commit"
+            if _true(hook.get("always_run"))
+            else "passes no message file, so pre-commit skips it and nothing checks the message"
         )
+        return f"has `pass_filenames: false`: it {why}", "Remove `pass_filenames: false` from it"
     if (top_filters or _filters(hook, tuple(_NO_FILTER))) and not _true(hook.get("always_run")):
         return (
             "runs only when a file matches its filters (files/exclude/types), and is "

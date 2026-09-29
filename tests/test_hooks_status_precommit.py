@@ -243,6 +243,20 @@ def test_pass_filenames_must_fit_the_check(repo):
     msg = _ONE_HOOK.format(top="", check="check-msg", extra="    pass_filenames: false")
     a = _armed(repo, msg, "commit-msg")
     assert a.via == "" and "pass_filenames" in a.remedy, a
+    assert "skips it" in a.detail, a
+    # with always_run, check-msg runs WITHOUT its required argument: every commit refused
+    a = _armed(repo, msg + "    always_run: true\n", "commit-msg")
+    assert a.via == "" and "refuses every commit" in a.detail, a
+
+
+def test_a_block_policy_over_a_framework_hook_does_not_say_no_hook(repo):
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[enforce]\ncommit_without_lease = "block"\n')
+    _framework(repo, _NO_DDFLOW_CONFIG)
+    code, out, _ = run_cli(repo, "hooks", "status")
+    assert code == 2, out
+    assert "NO HOOK IS INSTALLED" not in out, out
+    assert "the pre-commit framework's hook does not" in out, out
 
 
 def test_only_local_hooks_count(repo):

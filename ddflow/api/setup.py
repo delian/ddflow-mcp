@@ -465,8 +465,15 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             "allows. Set it to 'block' to refuse."
         )
     elif not on and mode == "block":
+        # Over a pre-commit-framework hook a hook IS installed; what is missing is ddflow's
+        # check in it, and "no hook" would send the operator to reinstall the framework.
+        missing = (
+            "NO HOOK RUNS ddflow's check (the pre-commit framework's hook does not)"
+            if commit_hook.framework
+            else "NO HOOK IS INSTALLED"
+        )
         note = (
-            "\n\nNOTE: the policy is 'block' but NO HOOK IS INSTALLED, so nothing enforces "
+            f"\n\nNOTE: the policy is 'block' but {missing}, so nothing enforces "
             f"it. {_hook_remedy(commit_hook, 'check-commit')}."
         )
     session, unreadable = CH.state(repo)
