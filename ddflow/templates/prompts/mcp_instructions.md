@@ -211,7 +211,9 @@ several things in flight, and you will believe it.
 Call `ddflow_import` (it writes nothing) and put what it found to the operator. The
 `import-existing-project` prompt walks through the half that needs judgement: which
 open items are actually live, what the branches mean, which lessons still apply, and
-the globs and dependencies nobody wrote down.
+the globs and dependencies nobody wrote down. If the project's rulebook still tells
+agents to write those files, the `onboard` prompt also cuts the workflow over and
+verifies it — offer it rather than importing alone.
 {% endif %}{% endif %}
 {% if imported_no_globs or imported_shipped_drift %}
 ## The import here was never finished
@@ -260,6 +262,14 @@ its remedy. A ring is broken by removing one edge: `ddflow_update <id> --needs "
 {% endif %}
 {% else %}
 This repository does not use ddflow yet.
+
+**If the user wants ddflow to manage this project, offer the `onboard` prompt** (your
+client lists it as a slash command; `ddflow_prompts` with `action: show`, `name: onboard`
+fetches it otherwise). It is the whole path in one conversation with the operator:
+what is already in flight in git, setup, a measured test gate, importing the project's
+history, cutting its rulebook over from its old todo, lessons and journal files, freezing
+those, and an end-to-end check. The steps below are the same path without the
+judgement, for a project with nothing to carry over.
 
 If the user wants a managed work queue — phases and tasks with dependencies, parallel
 agents in isolated git worktrees, a quality pipeline that refuses to pass a step nobody

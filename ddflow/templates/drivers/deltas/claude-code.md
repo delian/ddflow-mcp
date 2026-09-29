@@ -13,13 +13,22 @@ canonical driver here, don't — fix the canonical driver instead; every harness
    `/loop` prompt. A timer alone is not a continuation mechanism; a completing background
    task re-invokes reliably. Kill the armed heartbeat before any deliberate stop —
    `ScheduleWakeup` with `stop: true` — or the stop is undone.
-2. **Subagents.** `Agent` tool with `isolation: "worktree"`. Pass `model:` explicitly on
+2. **Blocked behind another agent.** When `claim` is refused because another agent
+   holds the item or overlapping files, or `next` has nothing ready while work is in
+   flight, do not poll and do not ask the operator to tell you when to retry. Run
+   `ddflow wait --item <id>` (or `ddflow wait` for "anything") with Bash
+   `run_in_background: true`: it sleeps on the event log and exits the moment the
+   holder completes, releases or lets its lease expire, and the harness re-invokes you
+   when it exits. Exit 0 means claim now; exit 2 means the deadline passed or waiting
+   cannot help, and its message says which and what to do instead. Take other ready
+   work meanwhile if there is any.
+3. **Subagents.** `Agent` tool with `isolation: "worktree"`. Pass `model:` explicitly on
    every dispatch — a reviewer must never inherit the author's model. Route cheap sweeps
    to a small model, reviews to a *different family*, and the merge decision to a
    frontier model.
-3. **Asking the operator.** `AskUserQuestion`.
-4. **File references.** `@path`.
-5. **Rules files.** Keep `CLAUDE.md` pointing at the canonical driver rather than
+4. **Asking the operator.** `AskUserQuestion`.
+5. **File references.** `@path`.
+6. **Rules files.** Keep `CLAUDE.md` pointing at the canonical driver rather than
    restating it. `ddflow brief` supplies the per-task lesson retrieval that
    `CLAUDE.md` would otherwise have to mandate by prose.
 

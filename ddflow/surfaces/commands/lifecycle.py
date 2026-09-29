@@ -122,12 +122,29 @@ def cmd_claim(a, c: Ctx) -> int:
     return OK
 
 
+def _waiting(rows: list, head: str) -> str:
+    """One line per registered waiter, under `head`; "" when nobody waits."""
+    if not rows:
+        return ""
+    lines = [head]
+    for w in rows:
+        what = w["item"] or (f"anything in {w['phase']}" if w["phase"] else "anything ready")
+        lines.append(f"  {w['agent']} — for {what}, {w['waiting_s'] // 60}m so far")
+    return "\n" + "\n".join(lines)
+
+
 def cmd_heartbeat(a, c: Ctx) -> int:
     # WHERE THE CALLER IS: the item's own tree renews its lease whoever claimed it.
     out = A.heartbeat(c.repo, a.id, agent=c.requested_agent, called_from=c.called_from)
+    waiters = out.data.get("waiters", [])
     c.out(
-        f"renewed {a.id}" if out.data["renewed"] else out.reason,
-        out.body(("renewed",)),
+        (f"renewed {a.id}" if out.data["renewed"] else out.reason)
+        + _waiting(
+            waiters,
+            f"{len(waiters)} agent(s) are waiting on {a.id}. Finishing, narrowing its "
+            f"globs, or releasing it wakes them:",
+        ),
+        out.body(("renewed", "waiters")),
     )
     return out.exit
 
@@ -135,10 +152,38 @@ def cmd_heartbeat(a, c: Ctx) -> int:
 def cmd_release(a, c: Ctx) -> int:
     out = A.release(c.repo, a.id, note=a.note or "", agent=c.requested_agent)
     c.out(
-        f"{'released' if out.data['released'] else 'no lease on'} {a.id}",
-        out.body(("released",)),
+        f"{'released' if out.data['released'] else 'no lease on'} {a.id}"
+        + _waiting(out.data.get("woke", []), "woke:"),
+        out.body(("released", "woke")),
     )
     return out.exit
+
+
+def cmd_wait(a, c: Ctx) -> int:
+    """Sleep until the item (or anything) can be claimed. Progress goes to stderr, so a
+    harness watching the process -- a background shell, a monitor -- sees it move."""
+    out = A.wait(
+        c.repo,
+        item=a.item or "",
+        phase=a.phase or "",
+        kind=a.kind,
+        timeout_s=a.timeout,
+        poll_s=a.poll,
+        agent=c.requested_agent,
+        on_progress=lambda msg: print(msg, file=sys.stderr, flush=True),
+    )
+    if c.json:
+        print(json.dumps(out.body(), indent=2, default=str))
+        return out.exit
+    if out.exit != OK:
+        print(out.reason)
+        return out.exit
+    d = out.data
+    print(f"READY: {', '.join(d['ready'])} (after {d['waited_s']}s)")
+    for f in d["freed_by"]:
+        print(f"  {f}")
+    print(d["advice"])
+    return OK
 
 
 def cmd_complete(a, c: Ctx) -> int:
@@ -155,8 +200,9 @@ def cmd_complete(a, c: Ctx) -> int:
     c.out(
         f"{a.id} completed"
         + (f" as {a.sha}" if a.sha else "")
-        + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else ""),
-        out.body(("id", "sha", "independence", "forced", "coverage_gaps", "note")),
+        + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
+        + _waiting(out.data.get("woke", []), "woke:"),
+        out.body(("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke")),
     )
     return OK
 

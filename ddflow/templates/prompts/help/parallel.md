@@ -22,6 +22,19 @@ item's globs overlap something already in flight, or when the parallelism caps a
 **The refusal is the feature** — it names the conflicting item and its holder, so the
 answer is "take a different one", not "wait and hope".
 
+When there is no different one, wait on the event rather than on a timer:
+
+    ddflow wait --item <id>        sleeps until <id> can be claimed; exit 0 = claim now
+    ddflow wait                    ... until anything is ready
+
+It watches the log and returns the moment the holder completes, releases or lets its
+lease lapse, naming what freed it. Run it as a background process and the harness wakes
+the agent when it exits — no polling, and no person saying "try again". Exit 2 means
+the deadline passed, or that waiting cannot help (a cycle, an operator's hold, a
+dependency nobody is working on), with what to do instead. The holder hears about it
+too: `heartbeat` lists who is waiting on its item, and `release` / `complete` name the
+agents they woke.
+
 Two caps, because they are two different statements:
 
 - `schedule.max_parallel_tasks` — how many items may be in flight at once. Every live
