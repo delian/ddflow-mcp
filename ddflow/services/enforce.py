@@ -518,6 +518,216 @@ def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
     )
 
 
+# -- B23: drift from the base branch ------------------------------------------------------
+
+
+def rulebooks() -> tuple[str, ...]:
+    """The files whose change on the base branch means an agent is working to old rules.
+
+    A session loads these ONCE, at start; an edit that lands on the base afterwards is
+    silently ignored by every branch forked before it, and the drift compounds -- in the
+    source project a branch 98 commits behind had to be hand-ported. The native rules
+    files are DERIVED from `adopt.NATIVE_RULES`, never retyped: a second hand-kept list
+    is the duplicate-then-drift class, and an agent added there would go unwatched here.
+    The driver directory is `adopt`'s default `--docs` location, which the rules point at.
+    """
+    from .adopt import NATIVE_RULES
+
+    fixed = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md", ".ddflow/config.toml")
+    native = tuple(r.path for r in NATIVE_RULES.values())
+    return tuple(dict.fromkeys((*fixed, "docs/ddflow/drivers/", *native)))
+
+
+@dataclass(frozen=True)
+class Drift:
+    """How far a tree is behind the branch its work merges into. ONE computation, read by
+    the session hook (which informs) and the commit gate (which blocks)."""
+
+    base: str
+    #: commits on `base` that HEAD lacks; None = could not tell, which is NEVER "0".
+    behind: int | None
+    #: rulebooks changed ON `base` since this branch forked (the three-dot diff), so a
+    #: rulebook edited on this branch itself is not staleness.
+    rules: tuple[str, ...] = ()
+    #: why `behind` is None; empty otherwise.
+    detail: str = ""
+
+
+def _item_base(repo: Path, here: Path, cfg: Config | None) -> str:
+    """The recorded `Item.base` of the item whose worktree IS ``here``, or "".
+
+    Found by where the item's worktree resolves -- the `same_tree` test `check_commit`
+    uses for leases: the tree is the robust key, whichever identity string made it. A
+    live item wins over a finished one whose tree still happens to sit at the path. A
+    log that cannot be read is "" -- the caller then measures against the default
+    branch, which is still a check, not a pass.
+    """
+    from ..core.model import ABANDONED, DONE
+
+    try:
+        cfg = cfg or Config.load(repo)
+        state = fold(EventLog(repo, cfg.agent.id or "", log_cfg=cfg.log).read_all(), strict=False)
+    except Exception:
+        return ""
+    here = here.resolve()
+    found = [
+        it
+        for it in state.items.values()
+        if it.worktree and it.base and not it.removed
+        if W.load_path(repo, it.worktree).resolve() == here
+    ]
+    found.sort(key=lambda it: it.state in (DONE, ABANDONED))
+    return found[0].base if found else ""
+
+
+def drift_base(repo: Path, here: Path, cfg: Config | None = None) -> str:
+    """The branch ``here``'s work merges into: its item's recorded base, else the
+    repository's default branch.
+
+    Not simply the default branch: under stacking or gitflow a task forks from its
+    dependency's branch or from a release line, and measuring it against `main` would
+    report everything that line has not taken yet as drift -- and tell the agent to
+    merge a branch its work must not carry. `Item.base` is what the merge itself checks
+    against. A recorded base that no longer resolves (a stacked dependency's branch
+    deleted after it landed) falls back to the default branch rather than leaving the
+    tree at "could not tell" forever.
+    """
+    base = _item_base(repo, here, cfg)
+    if base and W.git(here, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
+        return base
+    return W.default_branch(repo)
+
+
+def drift(repo: Path, here: Path, base: str = "", cfg: Config | None = None) -> Drift:
+    """How far ``here``'s HEAD is behind ``base`` (default: `drift_base`), and which
+    rulebooks changed there since the fork.
+
+    Any checkout, the primary included: a primary left on a stale branch works to old
+    rules just the same, and the primary ON the base branch is simply 0 behind.
+    """
+    base = base or drift_base(repo, here, cfg)
+    n = W.git(here, "rev-list", "--count", f"HEAD..{base}")
+    if not n.ok or not n.out.isdigit():
+        # "Could not tell" is not "not behind" (roborev 826): an unborn HEAD, an
+        # unrelated history or an unresolvable base all land here.
+        return Drift(base, None, detail=n.err or n.out or "git rev-list failed")
+    if int(n.out) == 0:
+        return Drift(base, 0)
+    # Three dots: what changed on `base` since the merge base -- NOT this branch's own
+    # edits, which are the new rules rather than stale ones.
+    changed = W.git_paths(here, "diff", "--name-only", f"HEAD...{base}", "--", *rulebooks())
+    if changed is None:
+        return Drift(base, None, detail=f"git could not diff HEAD...{base}")
+    if changed:
+        # ...AND still different here. "Changed on base since the fork" alone refused a
+        # branch that had already taken the change by `cherry-pick -x` or by hand, its
+        # rulebook byte-identical to base's, and told it to `git merge` for nothing
+        # (reviewer, reproduced). Content is the question: a rulebook this branch ALSO
+        # changed, differently, still differs and still must merge. Only the paths
+        # already flagged are compared, literally -- they are names, not globs.
+        differ = W.git_paths(
+            here, "--literal-pathspecs", "diff", "--name-only", "HEAD", base, "--", *changed
+        )
+        if differ is None:
+            return Drift(base, None, detail=f"git could not diff HEAD {base}")
+        changed = [p for p in changed if p in set(differ)]
+    return Drift(base, int(n.out), tuple(changed))
+
+
+def _concludes_merge_of(here: Path, base: str) -> bool:
+    """Is the commit being made the conclusion of `git merge <base>`?
+
+    MERGE_HEAD exists and the base tip is contained in it (or is it). That commit IS the
+    remedy this gate asks for: refusing it would make the refusal impossible to clear,
+    and a conflicting merge is exactly the case that needs a commit. HEAD still reads as
+    behind until the commit lands, so this is asked before the drift is judged. A stale
+    MERGE_HEAD opens no hole: if it contains the base tip and HEAD contains it, HEAD is
+    not behind in the first place.
+    """
+    head = W.git(here, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+    if not head.ok or not head.out:
+        return False
+    return W.git(here, "merge-base", "--is-ancestor", base, head.out).ok
+
+
+def check_drift(
+    repo: Path, cfg: Config | None = None, *, here: Path | None = None
+) -> tuple[int, str]:
+    """(exit_code, message) for B23: refuse a commit on a branch whose base changed the
+    rules since it forked, and warn when it has fallen far behind.
+
+    The asymmetry is the source project's, settled after a 98-commits-behind branch had
+    to be hand-ported: the session hook INFORMS (it cannot unload rules a session has
+    already read), the commit gate BLOCKS (the one point where the agent must stop and
+    merge). Rulebook staleness blocks by default because it is precise and the fix is one
+    command; a bare behind-count only warns, because being behind is not by itself wrong.
+    "Could not tell" warns with the reason and never blocks: a gate that refuses on
+    missing evidence teaches `--no-verify`, and one that passes in silence lies.
+    """
+    cfg = cfg or Config.load(repo)
+    e = cfg.enforce
+    if e.stale_rules == "off" and e.behind == "off":
+        return 0, ""
+    if e.behind != "off" and (not isinstance(e.max_behind, int) or e.max_behind < 1):
+        # Refused, not read as "off": a 0 that quietly disabled the check would be the
+        # silent-knob-drop class. Turning the check off is the policy knob's job. The
+        # loader refuses it too; this catches a Config built in code.
+        return 1, (
+            f"ddflow: [enforce].max_behind = {e.max_behind!r} is invalid: it must be >= 1.\n"
+            'To stop the behind-count check, set [enforce].behind = "off" instead.'
+        )
+    here = here or _this_worktree(repo)
+    if here is None:
+        return 0, (
+            "ddflow: could not tell which working tree this commit is in, so its drift "
+            "from the base branch was not checked.\n\n(warning only)"
+        )
+    d = drift(repo, here, cfg=cfg)
+    if d.behind is None:
+        return 0, (
+            f"ddflow: could not tell whether this branch is behind `{d.base}`: {d.detail}\n"
+            "Its rulebooks were not compared, so this is NOT a pass.\n\n(warning only)"
+        )
+    if d.behind == 0 or _concludes_merge_of(here, d.base):
+        return 0, ""
+    code, parts = 0, []
+    if d.rules and e.stale_rules != "off":
+        c, m = _verdict(
+            e.stale_rules,
+            [
+                f"ddflow: `{d.base}` changed the project's rules since this branch forked, "
+                "and this branch has not merged them:",
+                "",
+                *(f"  {p}" for p in d.rules[:MAX_LISTED_PATHS]),
+                *(
+                    [f"  ... and {len(d.rules) - MAX_LISTED_PATHS} more"]
+                    if len(d.rules) > MAX_LISTED_PATHS
+                    else []
+                ),
+                "",
+                "A session loads its rules once; edits landing on the base afterwards are",
+                "silently ignored here. Merge the base, then RE-READ the files named above:",
+                f"    git merge {shlex.quote(d.base)}",
+                "(the commit concluding that merge is never refused)",
+            ],
+            "stale_rules",
+        )
+        code, parts = max(code, c), [*parts, m]
+    if d.behind > e.max_behind and e.behind != "off":
+        c, m = _verdict(
+            e.behind,
+            [
+                f"ddflow: this branch is {d.behind} commits behind `{d.base}` (more than "
+                f"[enforce].max_behind = {e.max_behind}).",
+                "Drift compounds: merging now is cheaper than porting later.",
+                f"    git merge {shlex.quote(d.base)}",
+            ],
+            "behind",
+        )
+        code, parts = max(code, c), [*parts, m]
+    return code, "\n\n".join(parts)
+
+
 def _rel(repo: Path, path: Path) -> str:
     try:
         return str(Path(path).resolve().relative_to(Path(repo).resolve()))
