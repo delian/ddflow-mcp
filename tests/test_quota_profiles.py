@@ -153,9 +153,14 @@ def test_forget_makes_the_subject_undeclared_again(repo):
 
 
 def test_account_tags_hide_the_raw_id():
+    """Pinned to the exact digest prefix (critic): a length check alone passed
+    `raw[:12]`, which leaks the id's first twelve characters."""
+    import hashlib
+
     raw = "d9c6b4dc-101d-4597-bf2a-96e954f2057c"
     tag = Q.account_tag(raw)
-    assert len(tag) == 12 and raw not in tag and tag == Q.account_tag(raw)
+    assert tag == hashlib.sha256(raw.encode("utf-8")).hexdigest()[:12]
+    assert not raw.startswith(tag) and tag not in raw
 
 
 def test_an_agent_cannot_forget_the_operator_either(repo):

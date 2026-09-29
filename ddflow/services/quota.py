@@ -7,7 +7,10 @@ log would hand one account's limits to every clone and let two projects disagree
 one account.
 
 A SUBJECT is `agent:<harness>/<account>` (a coding agent logged in to a plan) or
-`llm:<base_url>` (a model endpoint). Its PROFILE is exactly one of:
+`llm:<base_url>` (a model endpoint). `<account>` is any label without spaces -- `local`
+for an agent with no account at all. Where it would be a real account id, use
+:func:`account_tag` so the subject never carries the id itself. Its PROFILE is exactly
+one of:
 
 * **unlimited** -- a self-hosted model, a flat-rate endpoint: no quota applies, ever;
 * **unknown** -- the agent was asked and could not tell, so the OPERATOR must be asked.
