@@ -60,6 +60,7 @@ from .commands.lifecycle import (
     cmd_release,
     cmd_remove,
     cmd_unblock,
+    cmd_wait,
 )
 from .commands.operations import (
     cmd_cadence,
@@ -403,6 +404,25 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rl.add_argument("id")
     rl.add_argument("--note")
     rl.set_defaults(fn=cmd_release)
+
+    wt = s.add_parser(
+        "wait",
+        help="sleep until an item (or anything) can be claimed; exit 2 = deadline, or waiting "
+        "cannot help",
+    )
+    wt.add_argument("--item", default="", help="the item to wait for (default: anything ready)")
+    wt.add_argument("--phase", default="", help="with no --item: anything ready in this phase")
+    wt.add_argument("--kind", default=A_LIFECYCLE.DEFAULT_NEXT_KIND, choices=["task", "phase"])
+    # None = unset, so an explicit 0 ("just ask, do not sleep") is not taken as the default.
+    wt.add_argument(
+        "--timeout",
+        type=float,
+        default=None,
+        help=f"seconds to wait (default {A_LIFECYCLE.DEFAULT_WAIT_TIMEOUT_S}; 0 asks without "
+        f"waiting)",
+    )
+    wt.add_argument("--poll", type=float, default=None, help="seconds between log checks")
+    wt.set_defaults(fn=cmd_wait)
 
     ap = s.add_parser(
         "approve",
