@@ -838,8 +838,8 @@ def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
 
     try:
         return WT.waiting_on(repo, item)
-    except OSError:
-        return []
+    except (OSError, ValueError, TypeError, AttributeError):
+        return []  # advisory: a waiter's bad file must never stop a holder releasing
 
 
 def release(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outcome:

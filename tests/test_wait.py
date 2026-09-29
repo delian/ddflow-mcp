@@ -474,3 +474,17 @@ def test_a_malformed_registration_is_skipped_not_raised(repo, body):
     (d / "foreign.json").write_text(body)
     assert WT.live_waiters(repo) == []
     assert WT.waiting_on(repo, "T1") == []
+
+
+def test_a_mistyped_live_registration_never_breaks_the_holder(proj):
+    """critic (second pass): `_waiters` caught only OSError, so a LIVE registration whose
+    `waiting_on` is not a list raised TypeError out of heartbeat and release -- a holder
+    unable to let go because of a waiter's leftover file."""
+    import json as _json
+
+    d = proj / WT.WAITS_DIR
+    d.mkdir(parents=True)
+    body = {"agent": "x", "waiting_on": 5, "pid": os.getpid(), "until": time.time() + 60}
+    (d / "odd.json").write_text(_json.dumps(body))
+    assert A.heartbeat(proj, "T1", agent=HOLDER).ok
+    assert A.release(proj, "T1", agent=HOLDER).ok

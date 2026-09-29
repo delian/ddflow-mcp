@@ -162,6 +162,10 @@ def live_waiters(repo: Path, now: float | None = None) -> list[Waiter]:
             if not isinstance(raw, dict):
                 continue  # foreign: valid JSON, but not a registration
             w = Waiter(**{k: v for k, v in raw.items() if k in Waiter.__dataclass_fields__})
+            if not isinstance(w.waiting_on, list) or not all(
+                isinstance(i, str) for i in w.waiting_on
+            ):
+                continue  # mistyped: every holder-side reader tests `item in waiting_on`
             live = w.live(now)  # a mistyped field (an older format) raises here
         except (OSError, ValueError, TypeError):
             continue  # torn or foreign; not ours to delete
