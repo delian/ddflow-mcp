@@ -19,12 +19,14 @@ Before anything is written, find the work that exists only in git:
 ## 1. Setup, from the durable place
 
 - ddflow keeps its state in the PRIMARY checkout (every worktree's agent writes the same `.ddflow/events/`), so setup writes there wherever you call it from. Do this stage when no other agent is editing the primary checkout, and commit the result on the default branch.
-- `ddflow_setup` writes `.ddflow/`, the driver, the `AGENTS.md` / `CLAUDE.md` block and the MCP launch entry, and installs the git hooks unless `[enforce] install_hooks_on_setup` is off. Check that `.ddflow/config.toml` exists afterwards; if it does not, run `ddflow adopt` from a shell (a known gap of the MCP path) rather than writing it by hand. Read the launch entry it wrote (`.mcp.json` for Claude Code): its command and `PYTHONPATH` must point at a ddflow that will still exist next week — an installed package, or the operator's main ddflow checkout. A path inside a git worktree is removed when that worktree is, and then the server cannot start and every git hook fails closed.
+- From a shell, `ddflow adopt --agents <yours>` does all of setup: `.ddflow/` with its config and `.gitignore`, the driver, the `AGENTS.md` / `CLAUDE.md` block, the MCP launch entry and the git hooks. Over MCP, `ddflow_setup` does all but the first — it does NOT create `.ddflow/config.toml` or `.ddflow/.gitignore` (bug B185ec008b4) — so prefer the shell command, and never write those two by hand. Read the launch entry it wrote (`.mcp.json` for Claude Code): its command and `PYTHONPATH` must point at a ddflow that will still exist next week — an installed package, or the operator's main ddflow checkout. A path inside a git worktree is removed when that worktree is, and then the server cannot start and every git hook fails closed.
 - `ddflow_hooks` (`action: install`, `claude: true`) puts the brief into every Claude Code session start.
 - `ddflow_companions` reports what the gates expect; the `install-companions` prompt installs, with the operator's consent per install. A companion that is installed but not registered is registered with `ddflow_companions_add`.
 - **The harness must be allowed to start the servers.** Claude Code only launches a project `.mcp.json` server it has been told to trust: add each registered name to `enabledMcpjsonServers` in `.claude/settings.json` (committed, so worktree sessions get it too).
 - **The shell must reach the same ddflow.** The driver and the brief say `ddflow <command>`. If the agent sessions' `PATH` has no `ddflow`, tell the operator and offer a one-line wrapper that runs the same code the MCP entry runs.
-- Reviewers: `ddflow_reviewers_detect` finds a local model server; endpoints on a LAN are machine-local, so they go in `.ddflow/reviewers.toml` (git-ignored), never in the committed config. A sibling project on this machine that already has one is the fastest answer — ask before copying it.
+- Reviewers: `ddflow_reviewers_detect` finds a local model server; endpoints on a LAN are machine-local, so they go in `.ddflow/reviewers.toml`, never in the committed config. A sibling project on this machine that already has one is the fastest answer — ask before copying it.
+
+- **`.ddflow/reviewers.toml` and `.ddflow/gates.toml` are machine-local, and nothing ignores them yet**: add both names to `.ddflow/.gitignore` the moment you create either, before anything under `.ddflow/` is staged.
 
 **Ask:** which companions to install; which reviewer endpoints to use.
 
@@ -34,7 +36,7 @@ Until `unit_tests` has a command, it reports `unavailable`, honestly, and blocks
 
 - Find how the project runs its tests (its CI config, `pyproject.toml`, `package.json`, `Makefile`, the rulebook).
 - Measure a **baseline** in a tree nobody is editing — a fresh clone or a detached worktree of the default branch — never in the one you are changing: how many pass, how many fail, how long it takes.
-- A suite over a minute or two runs in parallel (`pytest-xdist` and `-n <workers>` for Python; size the workers so several agents can run the gate at once — `auto` on a many-core machine is usually slower). A worker count sized to one machine belongs in `.ddflow/gates.toml` (git-ignored, it wins over the committed config) when other machines run this repository. Adding a dev dependency changes the project: ask.
+- A suite over a minute or two runs in parallel (`pytest-xdist` and `-n <workers>` for Python; size the workers so several agents can run the gate at once — `auto` on a many-core machine is usually slower). A worker count sized to one machine belongs in `.ddflow/gates.toml` (it wins over the committed config) when other machines run this repository. Adding a dev dependency changes the project: ask.
 - Tests already failing at the baseline would make the gate red for every item for reasons no item caused. Propose a shrink-only known-failures list, tracked as its own phase, rather than a gate everyone learns to ignore.
 - A phase-end `live_test`: the smallest real end-to-end run of the project's own entry point (a few seconds), as a script that fails when it produces nothing.
 - Set them with `ddflow_configure`.
@@ -47,7 +49,7 @@ Follow the `import-existing-project` prompt (fetch it with `ddflow_prompts`, `ac
 
 - **Point the importer at the right files first.** The `[importer]` globs decide what is history. A user-facing `CHANGELOG.md` that stays live is documentation, not a journal: leave it out of `journal_globs`, or `ddflow_import_verify` reports drift on every release.
 - **Read every note of the dry run**, especially the open items it did NOT import ("disposes of them", with examples) and the ones it holds. Check each against the project's own handoff or status document: a box the importer dropped as history may be the work the team thinks is next. File what was wrongly dropped by hand (`ddflow_task_add`, then `ddflow_block` if it waits on something), and release what was wrongly held with `ddflow_unblock` and a note saying why.
-- **Order is not a dependency, but gates are.** A section's own verification tasks ("ratchet green", "docs + CHANGELOG") depend on the work they verify: `ddflow_update <id> --needs ...`. Where a handoff document states an order, encode it as `--priority` (lower goes first) so `ddflow_next` offers the work in that order.
+- **Order is not a dependency, but gates are.** A section's own verification tasks ("ratchet green", "docs + CHANGELOG") depend on the work they verify: `ddflow_update <id> --needs ...`. Where a handoff document states an order, encode it as `--priority` (lower goes first) so `ddflow_next` offers the work in that order. An open bug item still outranks every priority (`[schedule] bugs_first`).
 
 Then `ddflow_next` must offer the item the team would start with. If it does not, you are not done.
 
@@ -80,7 +82,7 @@ Nothing here is done because a command exited 0. Prove each:
 - `ddflow_hooks` (`action: status`): pre-commit, commit-msg and the SessionStart hook installed; if a trailer is forbidden, feed the commit-msg hook a message carrying it and see it refused.
 - `ddflow_brief` and `ddflow_next` offer the work the team would start with; `ddflow_doctor` is healthy; `ddflow_import_verify` has nothing left owed that you did not report.
 - The whole suite passes with the gate's own command, including the freeze ratchet.
-- Commit the cutover on the default branch with explicit paths — `.ddflow/` (config, `.gitignore`, your event file), the rulebook, the hooks' config, the ratchet, the MCP config — never `git add -A`. Push only if the operator says so.
+- Commit the cutover on the default branch with explicit paths — `.ddflow/config.toml`, `.ddflow/.gitignore`, your own `.ddflow/events/<agent>.jsonl`, and nothing machine-local — the rulebook, the hooks' config, the ratchet, the MCP config — never `git add -A`. Push only if the operator says so.
 
 ## Report
 

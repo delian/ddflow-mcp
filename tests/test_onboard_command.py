@@ -68,6 +68,8 @@ def test_the_cli_shows_it_too(repo):
         "initialize",  # the server is proven to start from the REGISTERED entry
         "never `git add -A`",
         "ddflow_bug_found",  # a defect in ddflow hit on the way is filed, not worked around
+        "add both names to `.ddflow/.gitignore`",  # LAN endpoints are never committed
+        "does NOT create `.ddflow/config.toml`",  # the MCP setup path's real behaviour
     ],
 )
 def test_the_steps_learned_by_hand_are_in_the_prompt(must_say):
@@ -99,3 +101,19 @@ def test_an_unadopted_repository_is_offered_it_at_the_handshake(tmp_path):
     text = _instructions(tmp_path)
     assert "does not use ddflow yet" in text
     assert "`onboard` prompt" in text
+
+
+def test_an_adopted_project_with_unimported_history_is_offered_it_too(tmp_path):
+    """Adopted, history on disk, nothing in the queue: the import alone leaves the
+    rulebook telling agents to write files nothing reads any more."""
+    import subprocess
+
+    from ddflow.surfaces.mcp import _instructions
+
+    subprocess.run(["git", "init", "-q", "-b", "main", str(tmp_path)], check=True)
+    assert run_cli(tmp_path, "init")[0] == 0
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "todo.md").write_text("## P1\n\n- [ ] **P1.1** — work\n")
+    text = _instructions(tmp_path)
+    assert "the queue is empty" in text
+    assert "the `onboard` prompt also cuts the workflow over" in text
