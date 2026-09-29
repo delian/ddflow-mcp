@@ -1,5 +1,7 @@
-Onboard this project onto ddflow{% if scope %} — {{ scope }}{% endif %}: from "the MCP server is attached" to a workflow ddflow manages, verified end to end, WITH the operator.
-
+Onboard this project onto ddflow: from "the MCP server is attached" to a workflow ddflow manages, verified end to end, WITH the operator.
+{% if scope %}
+**Scope: {{ scope }}.** Do only the stage(s) it names (by number or name below: 0 preflight … 6 verify), and say at the end which stages you did not run. The operator widens it by asking.
+{% endif %}
 This is the whole path, in order. Each stage ends in something you can show the operator, and each has the question only they can answer. Do not batch the questions into one wall of text at the end: ask each where it arises, because the answer changes what the next stage does. A stage that does not apply is reported as skipped and why, never silently dropped.
 
 Record the operator's words as you go (`ddflow_session_start`, then `ddflow_session_prompt` with their text verbatim), and every structural choice you make together with `ddflow_decision_add`. The next agent reconstructs this onboarding from those records, not from your transcript.
@@ -8,8 +10,9 @@ Record the operator's words as you go (`ddflow_session_start`, then `ddflow_sess
 
 Before anything is written, find the work that exists only in git:
 
-- `git worktree list`, `git branch -a`, `git stash list` in the primary checkout.
-- For each worktree and branch: `git merge-base --is-ancestor <branch> <default>` is the only honest answer to "is it merged?" A matching commit message is not evidence. A worktree is also unmerged if `git -C <tree> status --porcelain` shows anything beyond caches.
+- `git worktree list`, `git branch --format='%(refname:short)'` (LOCAL branches), `git stash list` in the primary checkout.
+- **Never the default branch itself**: it is its own ancestor, so the check below calls it "merged". Remote-tracking branches (`git branch -r`) are not yours to delete either: report the ones not in the default branch, and leave them.
+- For each other worktree and local branch: `git merge-base --is-ancestor <branch> <default>` is the only honest answer to "is it merged?" A matching commit message is not evidence. A worktree is also unmerged if `git -C <tree> status --porcelain` shows anything beyond caches.
 - **Merged and clean** → propose removing the worktree and deleting the branch. A tree that is `locked` belongs to an agent harness (Claude Code locks the worktrees it spawns): check whether the process named in its lock is alive, and say so — removing it ends that session's working directory.
 - **Holding unique work** → it is not yours to delete. Show the operator the commits (`git log <default>..<branch>`) and the uncommitted files, and ask: land it, import it as an item (`ddflow_import` proposes unmerged branches), or leave it.
 - Stashes are shared by every worktree: never pop or drop one you did not create.

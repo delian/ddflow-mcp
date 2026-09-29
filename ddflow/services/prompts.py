@@ -86,7 +86,8 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
         "the durable place, a measured test gate, the history import, cutting the "
         "project's rulebook over from its old todo/lessons/journal files to ddflow, "
         "freezing those files, and an end-to-end verification before the commit. Asks "
-        "the operator at each decision rather than in one list at the end.",
+        "the operator at each decision rather than in one list at the end. Scope it to "
+        "one stage (`preflight`, `verify`, ...) or leave it empty for the whole path.",
         ["scope"],
     ),
     "import-existing-project": (

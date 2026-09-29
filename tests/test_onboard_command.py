@@ -44,7 +44,7 @@ def test_it_is_an_mcp_prompt_with_a_scope(proj):  # noqa: F811
         ],
     )
     text = r[0]["result"]["messages"][0]["content"]["text"]
-    assert "skip the import" in text and "{{" not in text and "{%" not in text
+    assert "Scope: skip the import" in text and "{{" not in text and "{%" not in text
 
 
 def test_the_cli_shows_it_too(repo):
@@ -56,6 +56,7 @@ def test_the_cli_shows_it_too(repo):
     "must_say",
     [
         "--is-ancestor",  # "merged" is proven, not read off a commit message
+        "Never the default branch itself",  # main is its own ancestor (critic)
         "never pop or drop",  # the stash is shared by every worktree
         "removed when that worktree is",  # the launch entry must outlive the tree
         "enabledMcpjsonServers",  # the harness must be allowed to start the server
@@ -117,3 +118,7 @@ def test_an_adopted_project_with_unimported_history_is_offered_it_too(tmp_path):
     text = _instructions(tmp_path)
     assert "the queue is empty" in text
     assert "the `onboard` prompt also cuts the workflow over" in text
+
+
+def test_an_unscoped_run_names_no_scope():
+    assert "**Scope:" not in _text() and "Scope: verify" in _text("verify")
