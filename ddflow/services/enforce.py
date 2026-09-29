@@ -861,12 +861,13 @@ def _index_tree(repo: Path) -> Path:
     return _committing_tree(repo) or repo
 
 
-def staged_paths(repo: Path) -> list[str] | None:
+def staged_paths(repo: Path, *, tree: Path | None = None) -> list[str] | None:
     """Paths this commit will write.
 
     `--diff-filter=ACMR` over the INDEX, plus `--cached`, because a file the agent just
     created is not in HEAD and a diff against HEAD alone would not see it. Read in the
-    committing tree (`_index_tree`), against its own HEAD. Through
+    committing tree (`_index_tree`, or ``tree`` when the caller already resolved it),
+    against its own HEAD. Through
     `W.git_paths`, so a non-ASCII or non-UTF-8 name is neither C-quoted past the lease
     and view checks nor a crash of every commit.
 
@@ -876,7 +877,9 @@ def staged_paths(repo: Path) -> list[str] | None:
     refuse on None. NOT a held `index.lock`: these reads take no lock and succeed under
     one (verified), so naming it would send an operator hunting for the wrong cause.
     """
-    return W.git_paths(_index_tree(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR")
+    return W.git_paths(
+        tree or _index_tree(repo), "diff", "--cached", "--name-only", "--diff-filter=ACMR"
+    )
 
 
 #: The refusal when the staged set itself is unknowable. Never a pass: "could not tell"
@@ -973,7 +976,7 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     return 1, msg
 
 
-def staged_bytes(repo: Path, path: str) -> bytes | None:
+def staged_bytes(repo: Path, path: str, *, tree: Path | None = None) -> bytes | None:
     """The INDEX copy of ``path`` -- what the commit will actually write.
 
     Not the working copy: a file fixed on disk but not re-staged would pass a check of
@@ -981,7 +984,9 @@ def staged_bytes(repo: Path, path: str) -> bytes | None:
     same index `staged_paths` listed ``path`` from.
     """
     r = P.run(
-        ["git", "-C", str(_index_tree(repo)), "show", f":{path}"], capture_output=True, timeout=60
+        ["git", "-C", str(tree or _index_tree(repo)), "show", f":{path}"],
+        capture_output=True,
+        timeout=60,
     )
     return r.stdout if r.returncode == 0 else None
 
@@ -1012,13 +1017,15 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
         return 0, ""
     staged: dict[str, bytes] = {}
     names = {name for name, _ in VIEWS}
-    listed = staged_paths(repo)
+    # Resolved once: the same tree for the listing, each staged view's bytes and the log.
+    tree = _index_tree(repo)
+    listed = staged_paths(repo, tree=tree)
     if listed is None:
         return _verdict(mode, [_UNKNOWN_STAGED])
     for p in listed:
         if Path(p).name not in names:
             continue
-        data = staged_bytes(repo, p)
+        data = staged_bytes(repo, p, tree=tree)
         if data is not None and data.startswith(GENERATED.encode("utf-8")):
             staged[p] = data
     if not staged:
@@ -1031,7 +1038,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
     # be fully staged: then the log on disk IS the committed log, and the comparison
     # below is exact.
-    probe = _unstaged_under(repo, log.dir)
+    probe = _unstaged_under(repo, log.dir, tree=tree)
     if probe.failed:
         return _verdict(
             mode,
@@ -1383,7 +1390,7 @@ class LogProbe:
     failed: bool = False  #: git could not say -- never read as "clean"
 
 
-def _unstaged_under(repo: Path, d: Path) -> LogProbe:
+def _unstaged_under(repo: Path, d: Path, *, tree: Path | None = None) -> LogProbe:
     """Paths under ``d`` whose working copy is not what the commit will record:
     modified-but-not-staged, or not in the index at all.
 
@@ -1410,7 +1417,7 @@ def _unstaged_under(repo: Path, d: Path) -> LogProbe:
     """
     rel = _rel(repo, d)
     via: list[str] = []
-    tree = _index_tree(repo)
+    tree = tree or _index_tree(repo)
     if tree.resolve() != Path(repo).resolve():
         gitdir = W.git(tree, "rev-parse", "--absolute-git-dir", timeout=30)
         if not gitdir.ok or not gitdir.out:
