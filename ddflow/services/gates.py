@@ -262,6 +262,23 @@ DEFAULT_GATES: dict[str, GateDef] = {
             "unit suite and a working feature are different claims."
         ),
     ),
+    "docs": GateDef(
+        id="docs",
+        title="Documentation",
+        applies_to="phase",
+        evidence=True,
+        description="The README and docs describe what this phase changed, before it merges.",
+        prompt=(
+            "Read the phase's whole diff (the phase base..HEAD) and list every change a "
+            "user or an agent can see: commands and MCP tools, flags, config knobs and "
+            "their defaults, output, install and setup steps. Check each against the "
+            "README and the project's documentation, and update what is missing or wrong "
+            "in this phase -- a stale page is worse than a missing one, because a reader "
+            "trusts it. Check counts and examples the README states (knob counts, command "
+            "samples) still hold. Record the files you changed, or 'no user-visible "
+            "change' with the reason; an unexplained pass is not evidence."
+        ),
+    ),
     "corrections": GateDef(
         id="corrections",
         title="Corrections",
@@ -1139,7 +1156,7 @@ def parallel_test_advice(command: str, root: Path) -> str:
     )
 
 
-def record(
+def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements are kept apart on purpose
     log: EventLog,
     cfg: Config,
     item_id: str,
@@ -1151,8 +1168,14 @@ def record(
     evidence: dict[str, Any] | None = None,
     gates: dict[str, GateDef] | None = None,
     human: bool = False,
+    measured: dict[str, Any] | None = None,
 ) -> None:
     """Write a gate outcome to the log, enforcing the evidence contract.
+
+    ``evidence`` is what the CALLER supplied; ``measured`` is what ddflow determined
+    itself (the tree fingerprint, the diff size). Only the first can satisfy the
+    contract: the measured fields are always present, so counting them made every bare
+    pass look evidenced (bug Bbc9a7ee3f2). Both are recorded.
 
     Rejecting a bare pass at the API boundary is deliberate. If the only thing standing
     between "I ran the tests" and a recorded pass is the agent's honesty, then over a
@@ -1188,7 +1211,12 @@ def record(
     log.append(
         f"gate.{outcome}",
         item_id,
-        {"gate": gate, "by": by or log.agent_id, "reason": reason, "evidence": evidence or {}},
+        {
+            "gate": gate,
+            "by": by or log.agent_id,
+            "reason": reason,
+            "evidence": {**(measured or {}), **(evidence or {})},
+        },
     )
 
 

@@ -640,7 +640,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 125 knobs.
+cadences, and the rest of the 126 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1620,8 +1620,14 @@ abandoned work.
 
 ```
 research → [ task, task, task … ] → unit_tests → bug_hunt → dedupe
-         → live_test → corrections → merge
+         → live_test → corrections → docs → merge
 ```
+
+`docs` runs once per phase, before it merges: every user-visible change the phase made
+(commands, MCP tools, flags, knobs and defaults, output, setup) is checked against the
+README and the docs and updated there, with the files changed as its evidence. The
+per-commit stale-docs check catches a renamed or removed name; this catches the new
+feature nobody wrote down.
 
 `live_test` is the one most often skipped and the one most worth keeping: **a green unit
 suite and a working feature are different claims.** Run the real thing on a small input
@@ -2538,7 +2544,7 @@ declared once and persists — see
 
 ## Configuration
 
-125 knobs across 17 sections, every one documented in place:
+126 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

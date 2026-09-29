@@ -52,7 +52,7 @@ def redact(text: str, cfg: Config) -> tuple[str, int]:
     """
     n = 0
     out = text
-    for pat in cfg.session.redact_patterns:
+    for pat in [*cfg.session.redact_patterns, *cfg.session.redact_extra]:
         try:
             compiled = re.compile(pat)
         except re.error as exc:

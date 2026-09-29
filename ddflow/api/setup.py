@@ -426,12 +426,34 @@ def _session_start(repo: Path, agent: str) -> O.Outcome:
     return O.ok("hooks", message="\n".join(parts), installed=True, policy="")
 
 
+def _hook_line(name: str, armed) -> str:
+    """`<name> hook: installed|NOT installed`, and how -- or why not -- when it is not
+    ddflow's own hook file, where an operator would otherwise look for it."""
+    line = f"{name} hook: {'installed' if armed.via else 'NOT installed'}"
+    return f"{line} -- {armed.detail}" if armed.detail else line
+
+
+def _hook_remedy(armed, check: str) -> str:
+    """How to arm `ddflow hooks <check>`. Over a pre-commit-framework hook, `armed.remedy`
+    is about the config: `hooks install` refuses a foreign hook, and an edit to the
+    generated file is lost at the next `pre-commit install` (B259fd32dbd)."""
+    if armed.remedy:
+        return armed.remedy
+    if check == "check-msg":
+        return (
+            'Run `ddflow hooks install`, or add `ddflow hooks check-msg "$1"` to '
+            "your own commit-msg hook"
+        )
+    return "Run `ddflow hooks install`"
+
+
 def _hooks_status(repo: Path, cfg) -> O.Outcome:
     """What is installed, and whether the installed hook and the policy agree."""
     from ..services import claudehooks as CH
     from ..services import enforce as E
 
-    on = E.installed(repo)
+    commit_hook = E.armed(repo, "pre-commit")
+    on = bool(commit_hook.via)
     mode = cfg.enforce.commit_without_lease
     # The two halves must AGREE or neither enforces anything, and each mismatch reads
     # differently: a hook with a `warn` policy reports and allows, while a `block` policy
@@ -443,9 +465,16 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
             "allows. Set it to 'block' to refuse."
         )
     elif not on and mode == "block":
+        # Over a pre-commit-framework hook a hook IS installed; what is missing is ddflow's
+        # check in it, and "no hook" would send the operator to reinstall the framework.
+        missing = (
+            "NO HOOK RUNS ddflow's check (the pre-commit framework's hook does not)"
+            if commit_hook.framework
+            else "NO HOOK IS INSTALLED"
+        )
         note = (
-            "\n\nNOTE: the policy is 'block' but NO HOOK IS INSTALLED, so nothing enforces "
-            "it. Run `ddflow hooks install`."
+            f"\n\nNOTE: the policy is 'block' but {missing}, so nothing enforces "
+            f"it. {_hook_remedy(commit_hook, 'check-commit')}."
         )
     session, unreadable = CH.state(repo)
     if session is None:
@@ -456,18 +485,18 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         session_line = (
             "not installed (`ddflow hooks install --claude` puts the brief in every session)"
         )
-    msg_hook = E.installed(repo, "commit-msg")
-    trailer_line = f"commit-msg hook: {'installed' if msg_hook else 'NOT installed'}"
+    msg_armed = E.armed(repo, "commit-msg")
+    msg_hook = bool(msg_armed.via)
+    trailer_line = _hook_line("commit-msg", msg_armed)
     if cfg.enforce.require_item_trailer and not msg_hook:
         # The rule lives in the commit-msg hook now; a required trailer with no hook
         # to check it is a rule nothing applies (roborev 827).
         trailer_line += (
             " -- but [enforce].require_item_trailer is ON, so NOTHING checks it. "
-            'Run `ddflow hooks install`, or add `ddflow hooks check-msg "$1"` to '
-            "your own commit-msg hook."
+            f"{_hook_remedy(msg_armed, 'check-msg')}."
         )
     message = (
-        f"pre-commit hook: {'installed' if on else 'NOT installed'}\n"
+        f"{_hook_line('pre-commit', commit_hook)}\n"
         f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
         f"{trailer_line}\n"
         f"Claude Code SessionStart hook: {session_line}"
@@ -477,6 +506,8 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         "policy": mode,
         "session_hook": session,
         "trailer_hook": msg_hook,
+        # How each is armed: "ddflow", "pre-commit", "pre-commit legacy", or "".
+        "armed_via": {"pre-commit": commit_hook.via, "commit-msg": msg_armed.via},
         "message": message,
     }
     if on or mode == "off":
