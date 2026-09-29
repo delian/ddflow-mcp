@@ -60,7 +60,19 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ("setup", "configure", "companions", "hooks", "prompts", "adopt", "identify"),
     ),
     ("The rules this project runs by", ("workflow", "flow")),
-    ("Shaping the work", ("phase", "task", "split", "update", "remove", "import", "external")),
+    (
+        "Shaping the work",
+        (
+            "phase",
+            "task",
+            "split",
+            "update",
+            "resolve",
+            "remove",
+            "import",
+            "external",
+        ),
+    ),
     (
         "Doing the work",
         (
