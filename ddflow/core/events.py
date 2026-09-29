@@ -68,6 +68,10 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         "decision.superseded",
         "phase.added",
         "task.added",
+        # B191: which of two rival adds an item IS. It carries the kept definition, so
+        # a log that kept the adds and dropped this would fold the contest back open.
+        # (No replay renderer yet: `replay` skips it, as it does any kind without one.)
+        "item.resolved",
     }
 )
 
