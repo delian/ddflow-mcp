@@ -211,3 +211,34 @@ def test_a_prefix_spelling_the_heading_number_is_adopted(repo):
 def test_a_heading_that_only_MENTIONS_future_work_does_not_hold(repo):
     _write(repo, "## Phase 5 — Future work planning\n- [ ] **5.1** plan it\n")
     assert _by_id(_plan(repo), "task")["5.1"].extra["disposition"] == ""
+
+
+def test_natural_language_verdicts_in_an_aside_still_dispose(repo):
+    """A CLOSED word anywhere in an aside disposes, as it always did; a HOLD word must
+    lead its clause, allowing filler ('marked deferred') -- `deferred notify` is prose."""
+    _write(
+        repo,
+        "## S\n\n- [ ] **X.1** (operator declined)\n- [ ] **X.2** (now superseded by X.9)\n"
+        "- [ ] **X.3** (was refuted in review)\n- [ ] **X.4** (marked deferred)\n"
+        "- [ ] **X.5** (explicitly out of scope)\n- [ ] **X.8** (decision: operator DECLINED)\n",
+    )
+    tasks = _by_id(_plan(repo), "task")
+    assert not {"X.1", "X.2", "X.3", "X.5", "X.8"} & set(tasks), sorted(tasks)
+    assert tasks["X.4"].extra["disposition"] == "hold"
+
+
+def test_a_prefix_with_no_number_is_the_projects_name_for_the_phase(repo):
+    _write(
+        repo,
+        "## Phase 3 — B track\n- [ ] **B.1** x\n- [ ] **B.2** y\n\n"
+        "## Session 7 — DRIVERFIX defects\n- [ ] **DRIVERFIX.1** x\n- [ ] **DRIVERFIX.2** y\n",
+    )
+    phases = set(_by_id(_plan(repo), "phase"))
+    assert {"B", "DRIVERFIX"} <= phases, phases
+
+
+def test_a_numbered_future_work_heading_holds(repo):
+    _write(repo, "## Phase 14 — Future work\n- [ ] **14.1** a\n\n### 4. Future work\n- [ ] **4.9** b\n")
+    tasks = _by_id(_plan(repo), "task")
+    assert tasks["14.1"].extra["disposition"] == "hold"
+    assert tasks["4.9"].extra["disposition"] == "hold"

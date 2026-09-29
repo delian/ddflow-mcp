@@ -154,7 +154,9 @@ _CHECK = re.compile(r"^(\s*)[-*]\s+\[( |x|X)\]\s+(.*)$")
 #:   TITLED    — `**38.9 Free-text arg vocabulary.** detail`: the bold wraps a DOTTED id
 #:               and the title with no separator between them (home-simulator writes
 #:               this). Dotted only -- `**L2 cache misses**` is prose -- and the dot is
-#:               checked in `_split_id`, since `_ID` also matches `L2`.
+#:               checked in `_split_id`, since `_ID` also matches `L2`. Prose that
+#:               opens with a dotted number (`**3.5 million users**`) is read as an id
+#:               too: the shape cannot tell them apart.
 #:
 #: The optional `(...)` is an annotation projects put between the id and the separator
 #: ("(DECISION)", "(BLOCKED)"); it is bounded so it cannot swallow a sentence.
@@ -303,10 +305,18 @@ _TITLE_ASIDE = re.compile(r"\(([^)]*)\)")
 _ASIDE_CLAUSE = re.compile(r"[,;:\u2014\u2013]|\s-{1,2}\s")
 
 
+#: Words that may stand before a verdict without making it prose: `(marked deferred)`,
+#: `(now on hold)`, `(operator: deferred)`.
+_VERDICT_FILLER = re.compile(
+    r"^(?:(?:NOW|WAS|IS|BEEN|BEING|MARKED|EXPLICITLY|OPERATOR|ALSO|STATUS|THE)\W+)*"
+)
+
+
 def _leads_with(clause: str, markers: tuple[str, ...]) -> bool:
-    """Whether `clause` BEGINS with a marker, past any emphasis or emoji in front of it.
-    `RETRACT` still leads `RETRACTED by the operator`."""
+    """Whether `clause` BEGINS with a marker, past emphasis, emoji and filler words in
+    front of it. `RETRACT` still leads `RETRACTED by the operator`."""
     head = re.sub(r"^[^A-Za-z0-9]+", "", clause).upper()
+    head = _VERDICT_FILLER.sub("", head)
     return any(re.match(rf"{re.escape(m)}[A-Z]*\b", head) for m in markers)
 
 
@@ -394,9 +404,9 @@ def _disposition(raw: str) -> tuple[str, str]:
     aside = " ".join([*_TITLE_ASIDE.findall(title), *_OPEN_ASIDE.findall(title)])
     # Inside the title's own asides any marker counts, as measured; in the ANNOTATION an
     # aside counts only when it leads with its verdict (`_verdict_asides`).
-    closed = _marker_in(_verdict_asides(annotation, _CLOSED_MARKERS), _CLOSED_MARKERS) or (
-        _marker_in(aside, _CLOSED_MARKERS)
-    )
+    # A CLOSED word disposes anywhere in the annotation ("operator declined", "now
+    # superseded by X.9"); only a HOLD word must lead its aside clause (`_verdict_asides`).
+    closed = _marker_in(annotation, _CLOSED_MARKERS) or (_marker_in(aside, _CLOSED_MARKERS))
     if closed:
         return "closed", closed
     hold_aside = tuple(m for m in _HOLD_MARKERS if m not in _ASIDE_NOT_DISPOSITIONS)
@@ -416,9 +426,23 @@ def _heading_disposition(heading: str) -> tuple[str, str] | None:
     m = _marker_in(heading, _SECTION_HOLD)
     if m:
         return "hold", f"under a {m} heading"
-    if _FUTURE_WORK.match(_clean_title(_split_id(heading)[1] or heading)):
+    if _FUTURE_WORK.match(_heading_title(heading)):
         return "hold", "under a FUTURE WORK heading"
     return ("", "") if _marker_in(heading, _SECTION_LIVE) else None
+
+
+#: What a heading's title follows: `Phase 14 — `, `4. `, `P42.8 — `.
+_HEADING_LEAD = re.compile(
+    r"^\W*(?:(?:phase|session|stage|milestone|sprint)\s+[A-Za-z]?\d[\w.]*\s*[—:\-]+\s*"
+    r"|\d+(?:\.\d+)*\.?\s+)",
+    re.I,
+)
+
+
+def _heading_title(heading: str) -> str:
+    """The heading with any id or `Phase N —` lead removed."""
+    rest = _split_id(heading)[1] or heading
+    return _clean_title(_HEADING_LEAD.sub("", _clean_title(rest)))
 
 
 #: The reason a HEADING (not a STATUS line) gave: `under a DECLINED heading`.
@@ -934,9 +958,11 @@ def _agrees(prefix: str, number: str) -> bool:
 
     def lead(ident: str) -> str:
         m = re.search(r"\d+", ident.split(".", maxsplit=1)[0])
-        return m.group(0).lstrip("0") if m else ident.lower()
+        return m.group(0).lstrip("0") if m else ""
 
-    return lead(prefix) == lead(number)
+    # A prefix with no number (`DRIVERFIX`, `B`) is the project's NAME for the phase,
+    # not the id of another one: it agrees with any number.
+    return not lead(prefix) or lead(prefix) == lead(number)
 
 
 def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
