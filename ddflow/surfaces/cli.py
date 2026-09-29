@@ -62,7 +62,7 @@ from .commands.lifecycle import (
     cmd_unblock,
 )
 from .commands.operations import cmd_cadence, cmd_cleanup, cmd_external, cmd_import, cmd_pins
-from .commands.queue import cmd_phase_add, cmd_split, cmd_task_add
+from .commands.queue import cmd_phase_add, cmd_resolve, cmd_split, cmd_task_add
 from .commands.reporting import (
     cmd_board,
     cmd_doctor,
@@ -344,6 +344,25 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     sp.add_argument("--needs", default="", help="dependencies for the FIRST child")
     sp.set_defaults(fn=cmd_split)
+
+    rs = s.add_parser(
+        "resolve",
+        help="settle a CONTESTED item (rival adds or claims from two clones), on the record",
+    )
+    rs.add_argument("id")
+    rs.add_argument(
+        "--keep",
+        required=True,
+        help="the definition's event id (or a 6+ character prefix), or the agent / lease "
+        "holder, to keep — `ddflow show <id>` lists them",
+    )
+    rs.add_argument(
+        "--refile-as",
+        default="",
+        help="re-add each definition NOT kept under these new ids (comma-separated, in "
+        "`show` order) in the same transaction",
+    )
+    rs.set_defaults(fn=cmd_resolve)
 
     up = s.add_parser("update", help="change an item's fields")
     up.add_argument("id")

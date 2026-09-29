@@ -375,6 +375,137 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     )
 
 
+def _contestants(records: list[dict[str, Any]], keep: str, who: str) -> list[dict[str, Any]]:
+    """The records ``keep`` names: by event id, by agent or holder, or by an event-id
+    prefix long enough not to be a guess."""
+    exact = [r for r in records if keep in (r["event"], r[who])]
+    if exact or len(keep) < _MIN_EVENT_PREFIX:
+        return exact
+    return [r for r in records if r["event"].startswith(keep)]
+
+
+#: The shortest event-id prefix `resolve --keep` accepts. `e` plus five hex digits.
+_MIN_EVENT_PREFIX = 6
+
+
+def _options(it) -> str:
+    rows = [f"{d['event']} ({d['agent']}: {d['title']!r})" for d in it.contested]
+    rows += [f"{h['holder']} (claim {h['event']})" for h in it.lease_contest]
+    return "; ".join(rows)
+
+
+def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str = "") -> O.Outcome:
+    """Settle a contested item: keep one definition and/or one claim, recorded as an event.
+
+    B191. A merge can bring in a rival `<kind>.added` or a rival claim, and the fold
+    records the contest instead of letting the later lamport silently win. This is the
+    way out, and it is an EVENT (`item.resolved`, carrying what was kept) so every clone
+    folds to the same answer. A losing definition is not dropped silently either:
+    ``refile_as`` re-adds it under new ids (one per loser, in the order `show` lists
+    them), and without it the result says how to. A losing CLAIM is released in the same
+    transaction. An item that is not contested is refused.
+
+    For a lease contest, ``keep`` may name ANY contestant, not only the one the fold
+    displays: every other contestant gets a `lease.released` (the current holder
+    included), and the resolution then reinstates the kept claim with its TTL running
+    from now. Keeping the current holder therefore just records the others as released;
+    keeping a displaced one hands the item back to it. Either way one call settles the
+    whole contest, however many holders it names.
+    """
+    import time
+
+    log, _cfg, _st = _load(repo, agent)
+    with log.transaction():
+        st = _fresh(log)
+        it = st.items.get(item)
+        if it is None or it.removed:
+            gone = " (it was removed from the queue)" if it is not None else ""
+            return O.failed("item.resolved", f"no such item {item!r}{gone}", id=item)
+        if not it.contest_summary():
+            return O.refused(
+                "item.resolved",
+                f"{item} is not contested: there is nothing to resolve. `ddflow update` "
+                f"changes an item; `ddflow release` gives up a claim.",
+                id=item,
+            )
+        defs = _contestants(it.contested, keep, "agent")
+        claims = _contestants(it.lease_contest, keep, "holder")
+        if not defs and not claims:
+            return O.failed(
+                "item.resolved",
+                f"--keep {keep!r} names none of {item}'s contestants: {_options(it)}",
+                id=item,
+            )
+        if len(defs) > 1 or len(claims) > 1:
+            return O.failed(
+                "item.resolved",
+                f"--keep {keep!r} names more than one contestant; give an event id: {_options(it)}",
+                id=item,
+            )
+        if defs and claims:
+            # One token naming a definition AND a claim -- an agent that both filed and
+            # claimed it, or a prefix of both ids -- would settle two separate questions
+            # at once. Only a full event id says which one was meant.
+            if keep == defs[0]["event"]:
+                claims = []
+            elif keep == claims[0]["event"]:
+                defs = []
+            else:
+                return O.refused(
+                    "item.resolved",
+                    f"--keep {keep!r} names both a definition ({defs[0]['event']}) and a "
+                    f"claim ({claims[0]['event']}) of {item}. Settle them one at a time: "
+                    f"`--keep {defs[0]['event']}` keeps that definition, "
+                    f"`--keep {claims[0]['event']}` keeps that claim.",
+                    id=item,
+                )
+        lost = [d for d in it.contested if defs and d["event"] != defs[0]["event"]]
+        new_ids = csv_list(refile_as)
+        if new_ids and len(new_ids) != len(lost):
+            return O.failed(
+                "item.resolved",
+                f"--refile-as gives {len(new_ids)} id(s) for {len(lost)} losing "
+                f"definition(s) of {item}; give one per definition not kept.",
+                id=item,
+            )
+        for nid in new_ids:
+            bad = _bad_id(nid) or _taken(st, nid, readd=False)
+            if bad:
+                return O.failed("item.resolved", bad, id=item)
+        losers = [h for h in it.lease_contest if claims and h["event"] != claims[0]["event"]]
+        data: dict[str, Any] = {"kind": it.kind, "keep": keep, "at": time.time()}
+        if defs:
+            data["definition"] = defs[0]
+        if claims:
+            data["claim"] = claims[0]
+        # Releases FIRST: folded before the resolution, each withdraws a losing claim,
+        # and the resolution then re-applies the kept one whichever was displayed.
+        for h in losers:
+            log.append(
+                "lease.released",
+                item,
+                {
+                    "holder": h["holder"],
+                    "event": h["event"],
+                    "by": log.agent_id,
+                    "note": f"lost the contest for {item}: {claims[0]['holder']} keeps it",
+                },
+            )
+        log.append("item.resolved", item, data)
+        for nid, d in zip(new_ids, lost if new_ids else [], strict=True):
+            log.append(f"{it.kind}.added", nid, d["data"])
+    return O.ok(
+        "item.resolved",
+        id=item,
+        item_kind=it.kind,
+        kept_definition={k: v for k, v in defs[0].items() if k != "data"} if defs else None,
+        kept_holder=claims[0]["holder"] if claims else "",
+        lost=[{k: d[k] for k in ("event", "agent", "title", "body")} for d in lost],
+        refiled=new_ids,
+        released=[h["holder"] for h in losers],
+    )
+
+
 def split(
     repo: Path,
     item: str,

@@ -439,7 +439,14 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
         "lease.released",
         mine=False,
         holder=by,
-        payload=lambda lease: {"holder": lease.holder, "by": by, "note": note},
+        # `event` names WHICH claim ends: one holder can have held the item twice, and a
+        # fold that merges clones must not end the wrong one (B191).
+        payload=lambda lease: {
+            "holder": lease.holder,
+            "event": lease.event,
+            "by": by,
+            "note": note,
+        },
     )
 
 
@@ -457,6 +464,7 @@ def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
         holder="",
         payload=lambda lease: {
             "holder": lease.holder,
+            "event": lease.event,
             "reason": reason,
             "worktree": lease.worktree,
         },

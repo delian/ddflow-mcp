@@ -358,6 +358,8 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_phase_add",
     "ddflow_task_add",
     "ddflow_split",
+    # Settles a contest: a second call finds nothing contested and is refused (exit 3).
+    "ddflow_resolve",
     "ddflow_claim",
     "ddflow_heartbeat",
     "ddflow_release",
