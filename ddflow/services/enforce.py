@@ -618,6 +618,19 @@ def drift(repo: Path, here: Path, base: str = "", cfg: Config | None = None) -> 
     changed = W.git_paths(here, "diff", "--name-only", f"HEAD...{base}", "--", *rulebooks())
     if changed is None:
         return Drift(base, None, detail=f"git could not diff HEAD...{base}")
+    if changed:
+        # ...AND still different here. "Changed on base since the fork" alone refused a
+        # branch that had already taken the change by `cherry-pick -x` or by hand, its
+        # rulebook byte-identical to base's, and told it to `git merge` for nothing
+        # (reviewer, reproduced). Content is the question: a rulebook this branch ALSO
+        # changed, differently, still differs and still must merge. Only the paths
+        # already flagged are compared, literally -- they are names, not globs.
+        differ = W.git_paths(
+            here, "--literal-pathspecs", "diff", "--name-only", "HEAD", base, "--", *changed
+        )
+        if differ is None:
+            return Drift(base, None, detail=f"git could not diff HEAD {base}")
+        changed = [p for p in changed if p in set(differ)]
     return Drift(base, int(n.out), tuple(changed))
 
 

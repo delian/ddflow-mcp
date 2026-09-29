@@ -303,3 +303,34 @@ def test_a_recorded_base_that_no_longer_resolves_falls_back_to_the_default_branc
         "worktree.created", "T2", {"path": str(wt), "branch": "feat", "base": "gone-branch"}
     )
     assert E.drift_base(repo, wt) == "main"
+
+
+# -- already carried: the content is what counts, not the history ---------------------------
+
+
+def test_a_cherry_picked_rulebook_change_is_not_stale(forked):
+    """FAILS before the content check: `cherry-pick -x` of base's CLAUDE.md change left
+    the branch byte-identical to base, and the gate still said `git merge main`."""
+    repo, wt = forked
+    _land(repo, "CLAUDE.md", "# rules v2\n")
+    sha = _git(repo, "rev-parse", "HEAD").stdout.strip()
+    assert _git(wt, "cherry-pick", "-x", sha).returncode == 0
+    assert E.drift(repo, wt).rules == ()
+    assert E.check_drift(repo, _cfg(), here=wt) == (0, "")
+
+
+def test_a_hand_ported_identical_rulebook_is_not_stale(forked):
+    """FAILS before the content check."""
+    repo, wt = forked
+    _land(repo, "AGENTS.md", "# rules v2: never do X\n")
+    _land(wt, "AGENTS.md", "# rules v2: never do X\n", "port the rule by hand")
+    assert E.check_drift(repo, _cfg(), here=wt) == (0, "")
+
+
+def test_a_rulebook_changed_differently_on_both_sides_is_still_stale(forked):
+    """Passes before and after: the content check must not excuse a DIFFERENT edit."""
+    repo, wt = forked
+    _land(repo, "AGENTS.md", "# rules v2 from main\n")
+    _land(wt, "AGENTS.md", "# rules v2 from the branch\n")
+    code, msg = E.check_drift(repo, _cfg(), here=wt)
+    assert code == 1 and "AGENTS.md" in msg, msg
