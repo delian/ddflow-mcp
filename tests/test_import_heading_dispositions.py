@@ -238,7 +238,20 @@ def test_a_prefix_with_no_number_is_the_projects_name_for_the_phase(repo):
 
 
 def test_a_numbered_future_work_heading_holds(repo):
-    _write(repo, "## Phase 14 — Future work\n- [ ] **14.1** a\n\n### 4. Future work\n- [ ] **4.9** b\n")
+    _write(
+        repo, "## Phase 14 — Future work\n- [ ] **14.1** a\n\n### 4. Future work\n- [ ] **4.9** b\n"
+    )
     tasks = _by_id(_plan(repo), "task")
     assert tasks["14.1"].extra["disposition"] == "hold"
     assert tasks["4.9"].extra["disposition"] == "hold"
+
+
+def test_future_work_is_the_title_not_a_compound_and_not_over_a_live_verdict(repo):
+    _write(
+        repo,
+        "## S\n### Future work-related cleanup\n- [ ] **A.2** z\n\n"
+        "### Phase 39 — Future work (IN PROGRESS)\n- [ ] **A.3** y\n",
+    )
+    tasks = _by_id(_plan(repo), "task")
+    assert tasks["A.2"].extra["disposition"] == ""
+    assert tasks["A.3"].extra["disposition"] == ""

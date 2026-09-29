@@ -286,7 +286,7 @@ _ANNOTATION_CHARS = 160
 _SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED")
 #: `### P42.8 — Future work (deliberately not in this phase)`: a heading whose title IS
 #: "future work" holds; `## Phase 5 — Future work planning` is a phase about it.
-_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[—:\-]|$)", re.I)
+_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[—:]|\s-+\s|$)", re.I)
 #: A heading that says its own section is LIVE: `### Phase 39 follow-ups (not started)`
 #: filed under a `## Phase 38` whose STATUS is SHIPPED. Inheriting the ancestor's verdict
 #: dropped both of its open items as history (home-simulator, 2026-09-29).
@@ -426,9 +426,11 @@ def _heading_disposition(heading: str) -> tuple[str, str] | None:
     m = _marker_in(heading, _SECTION_HOLD)
     if m:
         return "hold", f"under a {m} heading"
+    if _marker_in(heading, _SECTION_LIVE):
+        return "", ""
     if _FUTURE_WORK.match(_heading_title(heading)):
         return "hold", "under a FUTURE WORK heading"
-    return ("", "") if _marker_in(heading, _SECTION_LIVE) else None
+    return None
 
 
 #: What a heading's title follows: `Phase 14 — `, `4. `, `P42.8 — `.
