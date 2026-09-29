@@ -307,6 +307,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         add.add_argument("--body")
         add.add_argument("--priority", type=int, default=A_ITEMS.DEFAULT_PRIORITY)
         add.add_argument("--line", default="", help="release line (default: the current one)")
+        add.add_argument(
+            "--readd",
+            action="store_true",
+            help="file a REMOVED item's id again. An id still in the queue is always "
+            "refused: change it with `ddflow update`",
+        )
         add.set_defaults(fn=fn)
         return add
 
