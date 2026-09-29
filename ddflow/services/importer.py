@@ -33,7 +33,9 @@ Three rules hold this together:
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
+import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1940,7 +1942,14 @@ def _scan_queue(state, r: VerifyReport) -> tuple[list[str], dict[str, list[str]]
         rel = m.source.split(":", 1)[0]
         if rel:
             paths.setdefault(rel, []).append(m.id)
-    _memory_sources(state, paths)
+    prose = _memory_sources(state, paths)
+    if prose:
+        # A NOTE: nobody looked at these, and a clean report must not read as if they
+        # were checked and found present.
+        r.notes.append(
+            f"{prose} imported source(s) are prose that mentions a path rather than a "
+            f"path, so they were not checked for a vanished file."
+        )
     return ats, paths
 
 
@@ -1966,8 +1975,9 @@ def _note_sources(state, r: VerifyReport, paths: dict[str, list[str]]) -> None:
                 paths.setdefault(rel, []).append(f"{sid}#{n.get('ident', n.get('seq', '?'))}")
 
 
-def _memory_sources(state, paths: dict[str, list[str]]) -> None:
-    """Source files named by imported lessons and research notes.
+def _memory_sources(state, paths: dict[str, list[str]]) -> int:
+    """Source files named by imported lessons and research notes; returns how many
+    sources mentioned a path but were prose, so were not checked.
 
     All three carry a STRUCTURED source -- `Lesson.seen_in`, `ResearchNote.sources`,
     `Decision.sources` -- so there is no reason for the vanished-source check to cover
@@ -1975,6 +1985,7 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
     in the prose `context`, and parsing a path back out of a sentence is the
     anti-pattern this whole check exists to replace.
     """
+    prose = 0
     for holder, attr in (
         (getattr(state, "lessons", {}), "seen_in"),
         (getattr(state, "research", {}), "sources"),
@@ -1993,8 +2004,13 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
                 # paths -- reporting those as vanished files would be a false positive
                 # in the check whose whole value is that its findings are real.
                 looks_like_a_path = "/" in rel or rel.endswith(".md")
-                if rel and not rel.startswith("git:") and looks_like_a_path and _path_shaped(rel):
+                if not rel or rel.startswith("git:") or not looks_like_a_path:
+                    continue
+                if _path_shaped(rel):
                     paths.setdefault(rel, []).append(rec.id)
+                else:
+                    prose += 1
+    return prose
 
 
 #: Longest free-form source still taken for a path. Far above any repository-relative
@@ -2005,8 +2021,11 @@ _MAX_SOURCE_PATH = 1024
 #: false finding. A leading `.` is left alone -- `.ddflow/x.md` is a path.
 _MARKUP_AROUND_PATH = re.compile(r"^[`'\"(\[<*]+|[`'\")\]>*.,;]+$")
 #: A whole markdown link, `[docs/a.md](docs/a.md)`: its TARGET is the path -- also with
-#: a title, `[a](docs/a.md "t")`, or inside code/bold markup, `` `[a](docs/a.md)` ``.
-_MD_LINK = re.compile(r"""^[`*]*\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)[`*]*[.,;]?$""")
+#: a title in any of CommonMark's three forms, and inside code/bold/emphasis markup with
+#: punctuation on either side of it, `` `[a](docs/a.md 't').` ``.
+_MD_LINK = re.compile(
+    r"""^[`*_]*\[[^\]]*\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)[`*_.,;]*$"""
+)
 #: Markup still inside a token once the wrapping is gone: not one path, but pieces.
 _MARKUP_INSIDE = frozenset("`[]()<>*")
 
@@ -2068,12 +2087,17 @@ def verify_import(
 
     unstatable: list[str] = []
     for rel, ids in sorted(paths.items()):
+        # os.stat, not Path.is_file: 3.11-3.13 RAISE on ENAMETOOLONG, 3.14 returns False
+        # for every OSError -- a crash on one, an "unstatable" reported as vanished on
+        # the other. Only "no such file" is a vanished file.
         try:
-            present = (repo / rel).is_file()
-        except OSError:
-            # ENAMETOOLONG and kin: the filesystem refuses the string as a path at all.
-            # Not a vanished file -- nothing ever existed under that name -- and never a
-            # crash: one odd record must not cost the whole report.
+            present = stat.S_ISREG(os.stat(repo / rel).st_mode)
+        except (FileNotFoundError, NotADirectoryError):
+            present = False
+        except (OSError, ValueError):
+            # ENAMETOOLONG, an embedded NUL and kin: the filesystem refuses the string as
+            # a path at all. Not a vanished file -- nothing ever existed under that name
+            # -- and never a crash: one odd record must not cost the whole report.
             unstatable.append(rel)
             continue
         if not present:

@@ -72,12 +72,25 @@ def test_a_short_prose_seen_in_that_mentions_a_path_is_not_a_vanished_file(repo)
     _corpus(repo, [SHORT_PROSE])
     data = _verify(repo)
     assert not any("Phase 12" in s for s in _vanished(data)), _vanished(data)
+    # ...and the report says it did not look, rather than reading as checked-and-present.
+    assert any("prose that mentions a path" in n for n in data["notes"]), data["notes"]
 
 
 def test_a_path_shaped_source_that_cannot_be_stat_ed_is_neither_a_crash_nor_vanished(repo):
     _corpus(repo, [UNSTATABLE])
     data = _verify(repo)
     assert UNSTATABLE not in _vanished(data), _vanished(data)
+    assert any("could not be checked" in n for n in data["notes"]), data["notes"]
+
+
+def test_a_source_the_filesystem_refuses_is_never_reported_vanished(repo):
+    """roborev 847: `Path.is_file()` answers False, not an exception, for a name the
+    filesystem refuses outright -- on 3.14 for ENAMETOOLONG too, on every version for
+    an embedded NUL. "Could not tell" must not be reported as "gone"."""
+    refused = "docs/a\x00b.md"
+    _corpus(repo, [refused])
+    data = _verify(repo)
+    assert refused not in _vanished(data), _vanished(data)
     assert any("could not be checked" in n for n in data["notes"]), data["notes"]
 
 
@@ -124,9 +137,13 @@ def test_a_titled_or_wrapped_markdown_link_is_checked_as_its_target(repo):
             '[gone one](docs/gone1.md "the title")',
             "`[gone two](docs/gone2.md)`",
             "**[gone three](docs/gone3.md)**.",
+            "[gone four](docs/gone4.md 'single-quoted title')",
+            "[gone five](docs/gone5.md (parenthesised title))",
+            "__[gone six](docs/gone6.md)__",
+            "**[gone seven](docs/gone7.md).**",
             '[here](docs/lessons.md "exists")',
         ],
     )
     gone = _vanished(_verify(repo))
-    assert {"docs/gone1.md", "docs/gone2.md", "docs/gone3.md"} <= gone, gone
+    assert {f"docs/gone{i}.md" for i in range(1, 8)} <= gone, gone
     assert not any("lessons.md" in s for s in gone), gone
