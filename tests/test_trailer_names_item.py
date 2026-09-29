@@ -227,7 +227,9 @@ def test_a_commit_in_a_linked_worktree_reads_the_primary_checkouts_queue(repo):
         ["git", "-C", str(repo), "commit", "-q", "--no-verify", "-m", "queue"], check=True
     )
     wt = repo.parent / "wt"
-    subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", "-b", "w", str(wt)], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "worktree", "add", "-q", "-b", "w", str(wt)], check=True
+    )
     # An item added AFTER the worktree forked exists only in the primary's log.
     assert run_cli(repo, "task", "add", "160.D.6", "--phase", "160.D", "--title", "x")[0] == 0
     (wt / "x.txt").write_text("x")

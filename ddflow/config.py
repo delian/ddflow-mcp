@@ -894,6 +894,7 @@ class EnforceConfig:
     require_item_trailer: bool = False
     item_trailer_keys: list[str] = field(default_factory=lambda: ["Item"])
     forbidden_trailers: list[str] = field(default_factory=list)
+    trailer_waivers: dict[str, list[str]] = field(default_factory=dict)
     generated_views: str = "block"  # block | warn | off
     stale_docs: str = "warn"  # block | warn | off
     doc_globs: list[str] = field(default_factory=lambda: ["**/*.md", "**/*.rst", "**/*.adoc"])
@@ -920,18 +921,23 @@ _doc(
 _doc(
     "enforce",
     "require_item_trailer",
-    "Require every commit to carry an `Item: <id>` git trailer (or another key from item_trailer_keys), checked by the commit-msg hook `ddflow hooks install` adds. Makes commits reconcilable against the queue by `git log --format='%(trailers:key=Item)'` instead of by parsing prose. Off by default because it is noisy on a repo with non-agent contributors.",
+    "Require every commit to carry an `Item: <id>` git trailer (or another key from item_trailer_keys) whose value is the id of an item in the queue -- a phase or task in any state but removed -- checked by the commit-msg hook `ddflow hooks install` adds. A mistyped id is refused, naming it and the nearest real ids; a queue the hook cannot read is exit 2 (could not run), never a pass. Makes commits reconcilable against the queue by `git log --format='%(trailers:key=Item)'` instead of by parsing prose. Off by default because it is noisy on a repo with non-agent contributors.",
 )
 _doc(
     "enforce",
     "item_trailer_keys",
-    'Trailer keys that satisfy require_item_trailer; any one of them will do. A project that has written `Phase: <id>` (or `Phase-ships: none` for a commit that ships no item) in every commit for months keeps its convention: set ["Phase", "Phase-ships"]. Checked by the commit-msg hook on the message being committed; merge commits are exempt.',
+    'Trailer keys that satisfy require_item_trailer; any one of them will do, and each must name an item in the queue unless trailer_waivers gives its key a vocabulary. A project that has written `Phase: <id>` (or `Phase-ships: none` for a commit that ships no item) in every commit for months keeps its convention: set ["Phase", "Phase-ships"] and declare Phase-ships in trailer_waivers. Matched case-insensitively, as git\'s `%(trailers:key=...)` does; every accepted trailer on a commit must be valid, not just one. Checked by the commit-msg hook on the message being committed; merge commits are exempt.',
 )
 _doc(
     "enforce",
     "forbidden_trailers",
     'Trailer keys the commit-msg hook REFUSES, e.g. ["Co-'
     + "Authored-By\"] for a project that never credits a tool in its history. Case-insensitive; any line starting with `<key>:` counts, not only git's final-paragraph trailers, and merge commits are NOT exempt. Enforced by git's commit-msg hook, so it holds for every agent and every route that runs git hooks (`git commit -F`, the editor, merges), which a harness-side hook reading only the command text cannot see; `--no-verify` and plumbing skip it, as they skip every hook. Empty by default.",
+)
+_doc(
+    "enforce",
+    "trailer_waivers",
+    'Trailer keys that mark a commit shipping NO item, each with the only words its value may take: `{ "Phase-ships" = ["none", "filing", "recon", "evidence", "followup"] }`. A trailer whose key is here AND in item_trailer_keys passes only with one of its words (`Phase-ships: bogus` is refused, listing them); every other item_trailer_keys trailer must carry an item id. A key not in item_trailer_keys is ignored. Empty by default: every accepted key names an item. From the environment, as JSON: DDFLOW_ENFORCE_TRAILER_WAIVERS=\'{"Phase-ships": ["none"]}\'.',
 )
 _doc(
     "enforce",
@@ -1207,6 +1213,22 @@ class Config:
         return rows
 
 
+def _waivers_problem(v: Any) -> str:
+    """`[enforce].trailer_waivers`: key -> a non-empty list of non-empty words. An empty
+    list would refuse every use of its key while reading like a waiver."""
+    shape = 'must be a table of trailer key -> list of words, e.g. { "Phase-ships" = ["none"] }'
+    if not isinstance(v, dict):
+        return shape
+    for key, words in v.items():
+        if not isinstance(words, list):
+            return f"{key!r}: {shape}"
+        if not words:
+            return f"{key!r} has no words, which would refuse every use of the key; list them"
+        if not all(isinstance(w, str) and w.strip() == w and w for w in words):
+            return f"{key!r}: every word must be a non-empty string with no surrounding spaces"
+    return ""
+
+
 #: Knobs whose TYPE is not the whole contract: "" means valid, else why not. Checked on
 #: load and by `Config.check`, so `config set` refuses the value instead of writing it.
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
@@ -1216,6 +1238,7 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
         "" if isinstance(v, int) and not isinstance(v, bool) and v >= 1
         else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
     ),
+    "enforce.trailer_waivers": _waivers_problem,
 }  # fmt: skip
 
 
@@ -1259,6 +1282,8 @@ def _coerce(raw: Any, typ: Any) -> Any:
     ts = typ if isinstance(typ, str) else getattr(typ, "__name__", str(typ))
     if not isinstance(raw, str):
         return raw
+    if ts.startswith("dict"):
+        return _coerce_dict(raw, ts)
     if "bool" in ts:
         low = raw.strip().lower()
         if low in ("1", "true", "yes", "on"):
@@ -1281,18 +1306,34 @@ def _coerce(raw: Any, typ: Any) -> Any:
         if "," not in raw:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
-    if "dict" in ts:
-        parsed = _maybe_json(raw, dict)
-        if parsed is not None:
-            return {str(k): str(v) for k, v in parsed.items()}
-        pairs = [p for p in raw.split(",") if p.strip()]
-        bad = [p for p in pairs if "=" not in p]
-        if bad:
-            # Silently dropping a malformed pair weakens whatever reads the map -- for
-            # `agent.families` that is the reviewer-independence check itself.
-            raise ValueError(
-                f"malformed dict entry {bad[0]!r}: expected key=value. "
-                f"Use JSON for values containing commas or '='."
-            )
-        return dict(p.split("=", 1) for p in pairs)
     return raw
+
+
+def _coerce_dict(raw: str, ts: str) -> dict[str, Any]:
+    """A dict knob from its env string: JSON, or `k=v,k=v` for string values.
+
+    Checked by the declared type BEFORE `_coerce`'s list branch: `dict[str, list[str]]`
+    contains "list", and was comma-split into a list of strings. A list-valued map has
+    no comma notation that would not tear its words, so it takes JSON only.
+    """
+    parsed = _maybe_json(raw, dict)
+    if parsed is not None:
+        if "list" in ts:
+            return {
+                str(k): [str(x) for x in v] if isinstance(v, list) else v for k, v in parsed.items()
+            }
+        return {str(k): str(v) for k, v in parsed.items()}
+    if "list" in ts:
+        raise ValueError(
+            f'expected a JSON object of lists, e.g. {{"Phase-ships": ["none"]}}; got {raw!r}'
+        )
+    pairs = [p for p in raw.split(",") if p.strip()]
+    bad = [p for p in pairs if "=" not in p]
+    if bad:
+        # Silently dropping a malformed pair weakens whatever reads the map -- for
+        # `agent.families` that is the reviewer-independence check itself.
+        raise ValueError(
+            f"malformed dict entry {bad[0]!r}: expected key=value. "
+            f"Use JSON for values containing commas or '='."
+        )
+    return dict(p.split("=", 1) for p in pairs)

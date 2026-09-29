@@ -2608,7 +2608,10 @@ part that matters.
   `git merge <base>` is exempt, and the session hook only informs. Its commit-msg
   sibling requires an `Item:` trailer when `[enforce] require_item_trailer` is on — or
   the project's own keys (`item_trailer_keys = ["Phase", "Phase-ships"]`); merges are
-  exempt. It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
+  exempt. The value must be the id of an item in the queue (any state but removed): a
+  mistyped id is refused with the nearest real ones, and a queue the hook cannot read is
+  exit 2, never a pass. A key that marks a commit shipping no item takes only its declared
+  words instead (`trailer_waivers = { "Phase-ships" = ["none", "recon"] }`). It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
   tool-attribution line), merges included, for every agent and every route that runs
   git hooks -- which a harness-side hook reading only the command text cannot promise.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
