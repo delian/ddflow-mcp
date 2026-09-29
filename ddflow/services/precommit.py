@@ -51,6 +51,9 @@ _STACKS: dict[str, re.Pattern[str]] = {
 class Hook:
     id: str
     fields: dict = field(default_factory=dict)  #: name, entry, language, args, stages...
+    #: Programs the hook runs from THIS machine's PATH. A remote hook's own environment
+    #: is built by pre-commit (it even fetches Go for gitleaks); these it cannot build.
+    needs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -70,6 +73,18 @@ class Proposal:
     repos: list[Repo]
     skipped: list[str]  #: what was NOT proposed, and why -- so a gap is not silent
     text: str = ""
+
+    @property
+    def requires(self) -> list[str]:
+        """Every program the proposed hooks run from PATH (ddflow's own excepted: the
+        caller checks the command it chose)."""
+        return sorted({n for r in self.repos for h in r.hooks for n in h.needs})
+
+    @property
+    def hook_types(self) -> list[str]:
+        """The git hooks `pre-commit install` must set up for these hooks to run."""
+        staged = {s for r in self.repos for h in r.hooks for s in h.fields.get("stages", ())}
+        return ["pre-commit", "commit-msg"] + (["pre-push"] if "pre-push" in staged else [])
 
 
 #: How many paths to cite as evidence for a stack.
@@ -91,8 +106,10 @@ def _has(paths: list[str], *suffixes: str) -> bool:
     return any(p.endswith(suffixes) for p in paths)
 
 
-def _local(hook_id: str, name: str, entry: str, **extra) -> Hook:
-    return Hook(hook_id, {"name": name, "entry": entry, "language": "system", **extra})
+def _local(hook_id: str, name: str, entry: str, *, needs: tuple[str, ...] | None = None, **extra) -> Hook:  # fmt: skip
+    """A `language: system` hook, which runs ``entry``'s program from PATH."""
+    fields = {"name": name, "entry": entry, "language": "system", **extra}
+    return Hook(hook_id, fields, entry.split()[:1] if needs is None else needs)
 
 
 def _package_json_declares(root: Path, tool: str) -> bool:
@@ -102,6 +119,16 @@ def _package_json_declares(root: Path, tool: str) -> bool:
         return False
     deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
     return tool in deps
+
+
+def _yaml_args(paths: list[str]) -> list[str]:
+    """Kubernetes/Helm manifests hold several documents. MkDocs configs carry custom
+    tags (`!!python/name:`) a full load refuses; only there is the check reduced to a
+    syntax parse (--unsafe), which no longer catches duplicate keys."""
+    args = ["--allow-multiple-documents"]
+    if any(re.search(r"(?:^|/)mkdocs\.ya?ml$", p) for p in paths):
+        args.append("--unsafe")
+    return args
 
 
 def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
@@ -119,10 +146,7 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
         Hook("detect-private-key"),
     ]
     if _has(paths, ".yaml", ".yml"):
-        # Kubernetes/Helm manifests hold several documents, and CloudFormation or MkDocs
-        # use custom tags: without these the hook refuses valid files. --unsafe still
-        # parses, so a syntax error is still caught.
-        hygiene.append(Hook("check-yaml", {"args": ["--allow-multiple-documents", "--unsafe"]}))
+        hygiene.append(Hook("check-yaml", {"args": _yaml_args(paths)}))
     if _has(paths, ".toml"):
         hygiene.append(Hook("check-toml"))
     if _has(paths, ".json"):
@@ -143,7 +167,7 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
         repos.append(Repo("https://github.com/shellcheck-py/shellcheck-py",
                           (Hook("shellcheck"),), "shell scripts"))  # fmt: skip
     if "docker" in stacks:
-        repos.append(Repo("https://github.com/hadolint/hadolint", (Hook("hadolint-docker"),),
+        repos.append(Repo("https://github.com/hadolint/hadolint", (Hook("hadolint-docker", needs=("docker",)),),
                           "Dockerfiles (runs hadolint's image; needs docker)"))  # fmt: skip
     local: list[Hook] = []
     if "javascript" in stacks:
@@ -159,20 +183,28 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
             # -w, not -d: gofmt's exit status does not report unformatted files, but
             # pre-commit fails any hook that MODIFIES a file -- as it does ruff-format.
             _local("gofmt", "gofmt", "gofmt -l -w", files=r"\.go$"),
-            _local("go-vet", "go vet", "go vet ./...", pass_filenames=False, types=["go"]),
+            # Whole-project checks: before a push, not on every commit.
+            _local(
+                "go-vet",
+                "go vet",
+                "go vet ./...",
+                pass_filenames=False,
+                types=["go"],
+                stages=["pre-push"],
+            ),
         ]
     if "rust" in stacks:
         local += [
             _local("cargo-fmt", "cargo fmt", "cargo fmt --check", pass_filenames=False, types=["rust"]),
-            _local("cargo-clippy", "cargo clippy", "cargo clippy -- -D warnings", pass_filenames=False, types=["rust"]),
+            _local("cargo-clippy", "cargo clippy", "cargo clippy -- -D warnings", pass_filenames=False, types=["rust"], stages=["pre-push"]),
         ]  # fmt: skip
     # ddflow's own checks, INSIDE the framework rather than beside it.
     local += [
         _local("ddflow-check-commit", "ddflow: claim before you edit; generated views current",
                f"{ddflow_cmd} hooks check-commit", pass_filenames=False, always_run=True,
-               stages=["pre-commit"]),
+               stages=["pre-commit"], needs=()),
         _local("ddflow-check-msg", "ddflow: the commit message carries what the project requires",
-               f"{ddflow_cmd} hooks check-msg", stages=["commit-msg"]),
+               f"{ddflow_cmd} hooks check-msg", stages=["commit-msg"], needs=()),
     ]  # fmt: skip
     repos.append(
         Repo("local", tuple(local), "tools the project already has, and ddflow's own checks")
@@ -198,7 +230,7 @@ def render(p: Proposal) -> str:
         "# Proposed by `ddflow precommit` for this repository's stacks: " + stacks + ".",
         "# Review it, then `pre-commit install` (installs the pre-commit and commit-msg hooks).",
         "# `pre-commit autoupdate` moves the pinned revisions forward.",
-        "default_install_hook_types: [pre-commit, commit-msg]",
+        f"default_install_hook_types: [{', '.join(p.hook_types)}]",
         "repos:",
     ]
     for repo in p.repos:

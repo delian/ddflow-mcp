@@ -297,7 +297,14 @@ def cmd_precommit(a, c: Ctx) -> int:
             f"# NOTE: `{d['ddflow_cmd']}` is not found from here, and the ddflow hooks run it "
             "on every commit: pass --ddflow-cmd with a command that reaches ddflow."
         )
-    if not d["installed"]:
+    if d["missing"]:
+        print(
+            f"# NOTE: the proposed hooks run {', '.join(d['missing'])}, not found here: "
+            "each would fail every commit until installed (or drop its hook)."
+        )
+    if d["installed"] is None:
+        print("# Could not tell whether pre-commit is installed: its probe did not answer.")
+    elif not d["installed"]:
         print("# pre-commit is not installed: ask the operator, then `pipx install pre-commit`.")
     elif d["written"]:
         print("Activate it with `pre-commit install` (the pre-commit and commit-msg hooks).")

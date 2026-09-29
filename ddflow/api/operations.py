@@ -435,6 +435,16 @@ def _command_found(command: str, tree: Path) -> bool:
     return shutil.which(words[0]) is not None
 
 
+def _precommit_installed(repo: Path) -> bool | None:
+    from ..services import companions as C
+
+    try:
+        entry = next((c for c in C.load(repo) if c.id == "pre-commit"), None)
+    except ValueError:  # a malformed project catalogue: it cannot say
+        return None
+    return C.is_installed(entry)[0] if entry is not None else None
+
+
 def precommit(
     repo: Path,
     *,
@@ -460,18 +470,22 @@ def precommit(
     tree = _caller_tree(repo, where)
     prop = PC.propose(tree, ddflow_cmd=ddflow_cmd)
     if prop is None:
-        return O.failed("precommit", f"git could not list the files of {tree}")
+        # Could not run: nothing was proposed, so nothing about the proposal failed.
+        return O.nothing("precommit", f"git could not list the files of {tree}")
     path = PC.config_path(tree)
     data: dict[str, Any] = {
         "path": str(path),
         # A symlink counts, dangling or not: writing through one lands somewhere else.
         "exists": path.exists() or path.is_symlink(),
         "written": False,
-        "installed": shutil.which("pre-commit") is not None,
+        # The catalogue's own probe, so both say the same -- including "could not tell".
+        "installed": _precommit_installed(repo),
         # The local hooks run `ddflow_cmd` with git's environment, not this one: a
         # command missing from PATH fails every commit, which reads like a refusal.
         "ddflow_cmd": ddflow_cmd,
         "ddflow_cmd_found": _command_found(ddflow_cmd, tree),
+        # Programs the proposed hooks run from PATH that this machine does not have.
+        "missing": [prog for prog in prop.requires if shutil.which(prog) is None],
         "stacks": prop.stacks,
         "repos": [
             {"repo": r.url, "rev": r.rev, "hooks": [h.id for h in r.hooks], "why": r.why}

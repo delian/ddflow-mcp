@@ -189,3 +189,60 @@ def test_write_never_follows_a_dangling_symlink(mixed, tmp_path):
     (mixed / ".pre-commit-config.yaml").symlink_to(target)
     out = OPS.precommit(mixed, where=mixed, write=True)
     assert out.exit == REFUSED and not target.exists()
+
+
+# -- findings of the rubber_duck review ----------------------------------------------------
+
+
+def _commit(repo: Path, files: dict[str, str]) -> Path:
+    for path, text in files.items():
+        (repo / path).parent.mkdir(parents=True, exist_ok=True)
+        (repo / path).write_text(text)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "files")
+    return repo
+
+
+def test_git_unable_to_list_the_files_is_could_not_run(repo, monkeypatch):
+    """Bug B4894725af0: exit 1 said the proposal FAILED; nothing was proposed at all."""
+    monkeypatch.setattr(PC, "propose", lambda *a, **k: None)
+    assert OPS.precommit(repo, where=repo).exit == 2
+
+
+def test_whole_project_checks_run_before_a_push_not_every_commit(repo):
+    """Bug Be21580696b: `go vet ./...` and `cargo clippy -D warnings` re-check the whole
+    project, and at pre-commit they block every commit of a repo with old warnings."""
+    _commit(repo, {"go.mod": "module x\n", "Cargo.toml": "[package]\nname='x'\n"})
+    p = PC.propose(repo)
+    hooks = {h.id: h for r in p.repos for h in r.hooks}
+    assert hooks["go-vet"].fields["stages"] == ["pre-push"]
+    assert hooks["cargo-clippy"].fields["stages"] == ["pre-push"]
+    assert "stages" not in hooks["gofmt"].fields, "a per-file check stays at pre-commit"
+    assert "default_install_hook_types: [pre-commit, commit-msg, pre-push]" in p.text
+
+
+def test_no_pre_push_hook_is_installed_when_nothing_runs_there(mixed):
+    assert "default_install_hook_types: [pre-commit, commit-msg]\n" in PC.propose(mixed).text
+
+
+def test_a_program_a_proposed_hook_needs_and_this_machine_lacks_is_named(mixed, monkeypatch, tmp_path):  # fmt: skip
+    """Bug B3d0cdb15f3: hadolint-docker needs docker, eslint needs npx; absent, every
+    commit fails and it reads like a refusal."""
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(bin_))
+    out = OPS.precommit(mixed, where=mixed)
+    assert {"docker", "npx"} <= set(out.data["missing"]), out.data["missing"]
+    assert "git" not in out.data["missing"]
+
+
+def test_yaml_is_fully_loaded_unless_the_project_uses_custom_tags(repo):
+    """Bug B7159db7e82: --unsafe parses only, losing what a full load catches (duplicate
+    keys) -- for every repository, to suit the few whose YAML carries custom tags."""
+    plain = _commit(repo, {"config.yaml": "a: 1\n"})
+    args = {h.id: h for r in PC.propose(plain).repos for h in r.hooks}["check-yaml"].fields["args"]
+    assert "--unsafe" not in args and "--allow-multiple-documents" in args
+    _commit(repo, {"mkdocs.yml": "site_name: x\n"})
+    args = {h.id: h for r in PC.propose(repo).repos for h in r.hooks}["check-yaml"].fields["args"]
+    assert "--unsafe" in args, "MkDocs configs use !!python/name tags"
