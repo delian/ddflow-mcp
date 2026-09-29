@@ -43,7 +43,7 @@ def test_a_declared_profile_round_trips(repo, user_config):
 
 
 def test_an_unlimited_llm_has_no_windows(repo):
-    out = A.quota_declare(repo, "llm:http://10.220.230.8:8000/v1", unlimited=True)
+    out = A.quota_declare(repo, "llm:http://llm.example:8000/v1", unlimited=True)
     assert out.exit == OK, out.reason
     assert out.data["profile"]["state"] == "unlimited"
     assert out.data["profile"]["windows"] == []
