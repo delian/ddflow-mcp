@@ -6,9 +6,10 @@ comparison afterwards -- renew, release, complete, merge, the gate lease-keeper,
 scheduler -- saw someone else's lease: heartbeat said "no lease held", complete refused,
 and the agent's own item was offered to it as blocked by a stranger.
 
-The fix re-homes such a lease to the suffixed id, once, on the record. Only a lease the
-bare id acquired BEFORE this clone had a suffix qualifies: after that moment this clone
-derives the suffixed id, so a bare-id claim made later is another clone's.
+The fix re-homes such a lease to the suffixed id, once, on the record -- but only with
+local evidence that it is this clone's: acquired BEFORE this clone had a suffix, and its
+worktree registered in this clone's git on the lease's branch. Two clones sharing a
+hostname and directory name derived the same bare id, so the id alone proves nothing.
 """
 
 from __future__ import annotations
@@ -48,9 +49,9 @@ def _claimed_before_the_upgrade(repo: Path, monkeypatch) -> str:
     assert run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")[0] == 0
     (repo / L.CLONE_ID_FILE).unlink(missing_ok=True)
     bare = _bare(repo)
-    out = api.claim(repo, "T1", no_worktree=True, agent=bare)
+    out = api.claim(repo, "T1", agent=bare)
     assert out.exit == 0, out.reason
-    assert _lease(repo, "T1").holder == bare
+    assert _lease(repo, "T1").holder == bare and _lease(repo, "T1").worktree
     time.sleep(0.01)  # the suffix is created strictly after the claim
     return bare
 
@@ -125,3 +126,50 @@ def test_re_homing_happens_once(repo, monkeypatch):
     api.status(repo)
     kinds = [e.kind for e in L.EventLog(repo, "r").read_all()[n:]]
     assert "lease.acquired" not in kinds and "lease.released" not in kinds, kinds
+
+
+def test_another_clones_lease_under_the_same_bare_id_is_not_taken(repo, monkeypatch):
+    """Rubber-duck on B205: two clones with the same hostname and directory name both
+    derived the bare id (the B190 collision). The first to upgrade swept up the OTHER's
+    live lease -- and handed that clone the very "no lease held" this task fixes. Its
+    worktree is not registered in this clone's git, so it is not ours."""
+    _claimed_before_the_upgrade(repo, monkeypatch)
+    bare = _bare(repo)
+    # An explicit identity: deriving one here would create the suffix NOW, and then the
+    # time rule, not the worktree rule, would be what spared T2.
+    assert api.task_add(repo, "T2", title="theirs", globs="b.py", agent=bare)
+    assert not (repo / L.CLONE_ID_FILE).exists()
+    L.EventLog(repo, bare).append(
+        "lease.acquired",
+        "T2",
+        {
+            "holder": bare,
+            "at": time.time(),
+            "ttl_s": 1800,
+            "globs": ["b.py"],
+            "worktree": "../proj-worktrees/T2",  # the same relative path the other clone uses
+            "branch": "ddflow/T2",
+            "kind": "task",
+        },
+    )
+    time.sleep(0.01)
+    _derived(repo)
+    api.heartbeat(repo, "T1")
+    assert _lease(repo, "T2").holder == bare
+    assert _lease(repo, "T1").holder != bare
+
+
+def test_a_lease_without_a_worktree_is_left_alone(repo, monkeypatch):
+    """Nothing local says whose it is, so it is not moved; `--agent <bare>` still works."""
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    monkeypatch.chdir(repo)
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "a.py")[0] == 0
+    (repo / L.CLONE_ID_FILE).unlink(missing_ok=True)
+    bare = _bare(repo)
+    assert api.claim(repo, "T1", no_worktree=True, agent=bare).exit == 0
+    time.sleep(0.01)
+    _derived(repo)
+    api.status(repo)
+    assert _lease(repo, "T1").holder == bare
+    assert api.heartbeat(repo, "T1", agent=bare).exit == 0

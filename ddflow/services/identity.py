@@ -11,17 +11,28 @@ release by the bare id and an acquisition by the suffixed one, carrying the clai
 worktree, branch, globs and resources. Release first: an acquisition over a live lease
 of another holder is a contest (B191), which is exactly what this is not.
 
-Only a lease the bare id acquired BEFORE this clone had a suffix is moved. From that
-moment this clone derives the suffixed id, so a bare-id claim made later came from a
-clone still on the bare id -- the very collision B190 ended -- and is not ours.
+A bare id is not proof of THIS clone: two clones with the same hostname and directory
+name derived the same bare id -- the collision B190 ended -- and their claims sit in one
+union-merged shard. So a lease moves only with local evidence that it is ours:
+
+* it was acquired BEFORE this clone had a suffix (after that, this clone derives the
+  suffixed id, so a later bare-id claim is another clone's), and
+* its worktree is registered in THIS clone's git and checked out on the lease's
+  branch. Stored paths are relative, so the other clone records the same path; only
+  this clone's own worktree list can say the tree is here.
+
+A lease with no worktree carries no such evidence and stays where it is: re-claim it
+with `--agent <bare id>` (`as_agent` over MCP), the workaround B205 was filed with.
 """
 
 from __future__ import annotations
 
 import time
+from pathlib import Path
 
 from ..config import Config
-from ..core.model import State, fold
+from ..core.model import Lease, State, fold
+from ..infra import worktree as W
 from ..infra.log import EventLog, bare_agent_id, clone_suffix_since
 
 
@@ -32,8 +43,19 @@ def _pre_upgrade(cfg: Config, st: State, bare: str, since: float) -> list[str]:
         for i, lease in live.items()
         if lease.holder == bare
         and lease.acquired_at < since
+        and lease.worktree
+        and lease.branch
         and not st.items[i].removed
         and not st.items[i].lease_contest
+    )
+
+
+def _tree_is_here(root: Path, lease: Lease, trees: list[dict[str, str]]) -> bool:
+    path = W.load_path(root, lease.worktree).resolve()
+    return any(
+        Path(t.get("worktree", "")).resolve() == path
+        and t.get("branch") == f"refs/heads/{lease.branch}"
+        for t in trees
     )
 
 
@@ -54,7 +76,12 @@ def rehome_pre_upgrade_leases(log: EventLog, cfg: Config, st: State, layer: str)
     with log.transaction():
         # Decided again under the lock: a sibling process may have moved them already.
         st = fold(log.read_all(), strict=False)
-        moved = _pre_upgrade(cfg, st, bare, since)
+        trees = W.list_worktrees(log.root)
+        moved = [
+            i
+            for i in _pre_upgrade(cfg, st, bare, since)
+            if _tree_is_here(log.root, st.items[i].lease, trees)  # type: ignore[arg-type]
+        ]
         now = time.time()
         for item_id in moved:
             it = st.items[item_id]
