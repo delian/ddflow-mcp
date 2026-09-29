@@ -361,3 +361,64 @@ def test_resolve_and_release_settle_a_late_renewal_contest():
         ]
     ).items["T"]
     assert resolved.lease_contest == [] and resolved.lease.holder == "bob"
+
+
+# -- the same, several takeovers deep --------------------------------------------------
+#
+# Alice claims at 1000, Bob takes over at 3000, Carol at 6000 -- each past the previous
+# TTL by its own reading. Alice's renewal from 1500 then folds last: it kept her live
+# until 3300, so BOB's takeover was of a live claim, two hops before the current lease.
+
+
+def _three_hops(renew_at: float) -> list[Event]:
+    return [
+        _ev("task.added", "T", 1, title="t"),
+        _acq(2, "alice", 1000.0, ttl=1800),
+        _acq(3, "bob", 3000.0, ttl=1800),
+        _acq(4, "carol", 6000.0, ttl=1800),
+        _ev("lease.renewed", "T", 50, "alice", holder="alice", at=renew_at),
+    ]
+
+
+def test_a_late_renewal_two_takeovers_back_makes_a_contest():
+    """FAILED before the fix: one displaced slot, overwritten by Carol's takeover."""
+    it = fold(_three_hops(1500.0)).items["T"]
+    assert [h["holder"] for h in it.lease_contest] == ["alice", "bob", "carol"]
+    assert "alice" in it.contest_summary() and "still live when bob claimed" in (
+        it.contest_summary()
+    )
+    assert it.lease.holder == "carol"
+
+
+def test_a_lapsed_renewal_two_takeovers_back_is_not_a_contest():
+    it = fold(_three_hops(1100.0)).items["T"]
+    assert it.lease_contest == [] and it.lease.holder == "carol"
+
+
+@pytest.mark.parametrize("keep", ["alice", "bob", "carol"])
+def test_one_resolve_settles_a_three_way_contest_whoever_is_kept(keep):
+    """What `resolve` appends: a release for every other contestant, then the kept claim."""
+    it = fold(_three_hops(1500.0)).items["T"]
+    claim = next(h for h in it.lease_contest if h["holder"] == keep)
+    releases = [
+        _ev("lease.released", "T", 51, "op", holder=h["holder"])
+        for h in it.lease_contest
+        if h["holder"] != keep
+    ]
+    resolved = Event("item.resolved", "T", {"kind": "task", "claim": claim, "at": 9000.0}, "op", 52)
+    after = fold([*_three_hops(1500.0), *releases, resolved]).items["T"]
+    assert after.lease_contest == [] and after.lease.holder == keep
+
+
+def test_resolve_settles_a_three_way_contest_on_a_real_log(repo: Path):
+    log = EventLog(repo, "op")
+    log.shard.parent.mkdir(parents=True, exist_ok=True)
+    log.shard.write_text("".join(ev.to_json() + "\n" for ev in _three_hops(1500.0)))
+    from ddflow.api import items
+
+    out = items.resolve(repo, "T", keep="alice", agent="op")
+    assert out.exit == 0, out.reason
+    assert sorted(out.data["released"]) == ["bob", "carol"]
+    it = fold(log.read_all()).items["T"]
+    assert it.lease_contest == [] and it.lease.holder == "alice"
+    assert items.resolve(repo, "T", keep="alice", agent="op").exit == 3
