@@ -311,3 +311,53 @@ def test_replay_carries_the_resolution(rival_adds):
     code, out, err = run_cli(b, "replay")
     assert code == 0, err
     assert "T2: contest resolved" in out and "alpha" in out, out
+
+
+# -- a takeover by TTL arithmetic, contradicted by a renewal that folds after it --------
+#
+# Fold order is Lamport order, not wall time. Alice claims at 1000; Bob, offline, claims
+# at 3000 -- past her TTL by his reading, so the fold lets it through -- and only THEN
+# does Alice's renewal from 1500 arrive, stamped with her clone's much higher Lamport
+# clock. It kept her lease live until 3300: Bob took a live claim.
+
+
+def _takeover(renew_at: float) -> list[Event]:
+    return [
+        _ev("task.added", "T", 1, title="t"),
+        _acq(2, "alice", 1000.0, ttl=1800),
+        _acq(3, "bob", 3000.0, ttl=1800),
+        _ev("lease.renewed", "T", 50, "alice", holder="alice", at=renew_at),
+    ]
+
+
+def test_a_late_renewal_by_the_displaced_holder_makes_a_contest():
+    """FAILED before the fix: the renewal was dropped and Alice's claim vanished."""
+    it = fold(_takeover(1500.0)).items["T"]
+    assert sorted(h["holder"] for h in it.lease_contest) == ["alice", "bob"]
+    alice = next(h for h in it.lease_contest if h["holder"] == "alice")
+    assert alice["lease"]["renewed_at"] == 1500.0
+
+
+def test_a_renewal_that_still_left_the_lease_lapsed_is_not_a_contest():
+    it = fold(_takeover(1100.0)).items["T"]  # live until 2900; Bob claimed at 3000
+    assert it.lease_contest == [] and it.lease.holder == "bob"
+
+
+def test_resolve_and_release_settle_a_late_renewal_contest():
+    kept = fold(
+        [
+            *_takeover(1500.0),
+            _ev("lease.released", "T", 51, "op", holder="bob"),
+        ]
+    ).items["T"]
+    assert kept.lease_contest == [] and kept.lease.holder == "alice"
+    it = fold(_takeover(1500.0)).items["T"]
+    claim = next(h for h in it.lease_contest if h["holder"] == "bob")
+    resolved = fold(
+        [
+            *_takeover(1500.0),
+            _ev("lease.released", "T", 51, "op", holder="alice"),
+            Event("item.resolved", "T", {"kind": "task", "claim": claim, "at": 4000.0}, "op", 52),
+        ]
+    ).items["T"]
+    assert resolved.lease_contest == [] and resolved.lease.holder == "bob"
