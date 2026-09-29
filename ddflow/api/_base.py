@@ -34,6 +34,12 @@ def _load(repo: Path, agent: str = "") -> tuple[EventLog, Config, State]:
         cfg.sources["agent.id"] = layer
     log = EventLog(repo, resolved, lock_timeout_s=cfg.lease.acquire_timeout_s, log_cfg=cfg.log)
     st = fold(log.read_all(), strict=False)
+    # Leases this clone claimed under its pre-B190 bare id become its suffixed id's, HERE,
+    # once -- so no holder comparison anywhere needs to know the old name (B205).
+    from ..services.identity import rehome_pre_upgrade_leases
+
+    if rehome_pre_upgrade_leases(log, cfg, st, layer):
+        st = fold(log.read_all(), strict=False)
     # Workflow choices recorded in the log fill in wherever the config file is silent --
     # HERE, once, so every operation reads `cfg.flow.*` and sees the same answer.
     from ..services.choices import overlay
