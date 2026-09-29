@@ -59,7 +59,7 @@ def quota_show(repo: Path, subject: str, *, agent: str = "") -> O.Outcome:
         return O.nothing(
             "quota.show",
             f"no quota declared for {subject}: ask the agent, and the operator if it "
-            f"cannot tell (`ddflow quota declare`)",
+            f"cannot tell",
             subject=subject,
             profile=None,
         )
