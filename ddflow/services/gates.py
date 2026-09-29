@@ -213,10 +213,14 @@ DEFAULT_GATES: dict[str, GateDef] = {
         applies_to="both",
         command="",
         timeout_s=3600,
-        description="The project's test command must pass.",
+        description="The project's WHOLE test suite must pass, run in parallel.",
         prompt=(
-            "Set `[gate.unit_tests].command` in .ddflow/gates.toml to your test "
-            "command so this gate runs itself."
+            "The WHOLE suite, never a selection: a targeted run hides standing breakage. "
+            "Run it in parallel -- pytest with `-n auto` (pytest-xdist) or a fixed worker "
+            "count; `ddflow workflow` says when the command uses ONE core. While you work, "
+            "`ddflow tests --item <ID>` lists the tests your change reaches and a parallel "
+            "command for them: fast feedback, not this gate. Set `[gate.unit_tests].command` "
+            "in .ddflow/config.toml so this gate runs itself, e.g. `pytest -q -n auto`."
         ),
     ),
     "bug_hunt": GateDef(
