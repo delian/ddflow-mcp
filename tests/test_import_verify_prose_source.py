@@ -112,3 +112,21 @@ def test_a_markdown_link_is_checked_as_its_target(repo):
     assert not any("lessons.md" in s for s in gone), gone
     assert "docs/gone.md" in gone, gone
     assert not any("a.md" in s for s in gone), gone
+
+
+def test_a_titled_or_wrapped_markdown_link_is_checked_as_its_target(repo):
+    """Critic finding: a link with a title, or inside backticks or bold, did not match
+    the link pattern and was then rejected as markup, so a vanished target went
+    unreported."""
+    _corpus(
+        repo,
+        [
+            '[gone one](docs/gone1.md "the title")',
+            "`[gone two](docs/gone2.md)`",
+            "**[gone three](docs/gone3.md)**.",
+            '[here](docs/lessons.md "exists")',
+        ],
+    )
+    gone = _vanished(_verify(repo))
+    assert {"docs/gone1.md", "docs/gone2.md", "docs/gone3.md"} <= gone, gone
+    assert not any("lessons.md" in s for s in gone), gone

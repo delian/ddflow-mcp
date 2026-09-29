@@ -2004,8 +2004,9 @@ _MAX_SOURCE_PATH = 1024
 #: is the file `nemorun/cli/export.py`, and reporting it vanished while it exists is a
 #: false finding. A leading `.` is left alone -- `.ddflow/x.md` is a path.
 _MARKUP_AROUND_PATH = re.compile(r"^[`'\"(\[<*]+|[`'\")\]>*.,;]+$")
-#: A whole markdown link, `[docs/a.md](docs/a.md)`: its TARGET is the path.
-_MD_LINK = re.compile(r"^\[[^\]]*\]\(([^)\s]+)\)[.,;]?$")
+#: A whole markdown link, `[docs/a.md](docs/a.md)`: its TARGET is the path -- also with
+#: a title, `[a](docs/a.md "t")`, or inside code/bold markup, `` `[a](docs/a.md)` ``.
+_MD_LINK = re.compile(r"""^[`*]*\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)[`*]*[.,;]?$""")
 #: Markup still inside a token once the wrapping is gone: not one path, but pieces.
 _MARKUP_INSIDE = frozenset("`[]()<>*")
 
