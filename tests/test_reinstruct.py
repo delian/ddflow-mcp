@@ -129,6 +129,8 @@ def test_the_footer_STOPS_once_the_obligation_is_discharged(repo):
     _eager(repo)
 
     assert "B1" in _footer_of(_call(repo)), "the open bug was never reported"
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_x.py").write_text("def test_y():\n    pass\n")
     run_cli(repo, "bug", "fixed", "B1", "--regression-test", "tests/test_x.py::test_y")
     assert _footer_of(_call(repo)) == "", "it kept reporting a bug that is closed"
 
