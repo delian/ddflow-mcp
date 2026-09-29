@@ -1,7 +1,8 @@
-"""`phase add`, `task add`, `split`, `update` — the human surface for `api.items`."""
+"""`phase add`, `task add`, `split`, `update`, `resolve` — the human surface for `api.items`."""
 
 from __future__ import annotations
 
+import shlex
 import sys
 
 from ...api import items as A
@@ -78,6 +79,44 @@ def cmd_task_add(a, c: Ctx) -> int:
         out.body(TASK_ADD_PAYLOAD),
     )
     return OK
+
+
+def _resolved_text(d: dict) -> str:
+    """What `resolve` kept, and -- for each definition it did not -- how to get it back."""
+    lines = []
+    if d["kept_definition"]:
+        k = d["kept_definition"]
+        lines.append(f"{d['id']}: kept definition {k['event']} by {k['agent']} ({k['title']!r})")
+    if d["kept_holder"]:
+        lines.append(f"{d['id']}: {d['kept_holder']} keeps the lease")
+        lines += [f"  released {h}'s claim" for h in d["released"]]
+    refiled = d["refiled"] or [""] * len(d["lost"])
+    for lost, new in zip(d["lost"], refiled, strict=True):
+        if new:
+            lines.append(f"  re-filed {lost['agent']}'s definition {lost['title']!r} as {new}")
+            continue
+        body = f" --body {shlex.quote(lost['body'])}" if lost["body"] else ""
+        lines.append(f"  NOT kept: {lost['event']} by {lost['agent']}")
+        lines.append(f"    title {lost['title']!r}")
+        lines += [f"    | {ln}" for ln in (lost["body"] or "").splitlines()]
+        lines.append(
+            f"    re-file it under a new id (or resolve with --refile-as <new-id>):\n"
+            f"    ddflow {d['item_kind']} add <new-id> --title {shlex.quote(lost['title'])}{body}"
+        )
+    return "\n".join(lines)
+
+
+def cmd_resolve(a, c: Ctx) -> int:
+    out = A.resolve(c.repo, a.id, keep=a.keep, refile_as=a.refile_as or "", agent=c.requested_agent)
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    c.out(_resolved_text(out.data), out.body(RESOLVE_PAYLOAD))
+    return OK
+
+
+#: `resolve`'s wire body, the same on `ddflow_resolve`.
+RESOLVE_PAYLOAD = ("id", "kept_definition", "kept_holder", "lost", "refiled", "released")
 
 
 def cmd_split(a, c: Ctx) -> int:

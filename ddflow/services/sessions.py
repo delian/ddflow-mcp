@@ -247,6 +247,19 @@ def _rs_completed(n, ev):
     return ReplayStep(n, ev.ts, "completed", ev.subject, ev.subject, sha=ev.data.get("sha", ""))
 
 
+def _rs_resolved(n, ev):
+    """B191: which side of an offline divergence was kept -- a decision, so it replays."""
+    d = ev.data
+    kept = []
+    if d.get("definition"):
+        df = d["definition"]
+        kept.append(f"kept the definition '{df.get('title', '')}' by {df.get('agent', '?')}")
+    if d.get("claim"):
+        kept.append(f"kept the claim of {d['claim'].get('lease', {}).get('holder', '?')}")
+    text = f"{ev.subject}: contest resolved — {'; '.join(kept) or 'nothing kept'}"
+    return ReplayStep(n, ev.ts, "resolved", text, ev.subject)
+
+
 #: kind -> renderer. A table rather than a ladder: each arm is independent, and the
 #: set of kinds that carry irreplaceable intent is exactly what this dict declares.
 _REPLAY_RENDERERS = {
@@ -261,6 +274,7 @@ _REPLAY_RENDERERS = {
     "research.recorded": _rs_research,
     "lesson.recorded": _rs_lesson,
     "item.completed": _rs_completed,
+    "item.resolved": _rs_resolved,
 }
 
 

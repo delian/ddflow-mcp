@@ -20,7 +20,7 @@ more in bookkeeping than it buys.
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import Any
 
 from .events import Event
@@ -97,6 +97,8 @@ class Lease:
     #: Set when a `lease.expired` event was folded. The lease is KEPT so recovery can
     #: still see which worktree it pointed at.
     expired_at: str = ""
+    #: The `lease.acquired` event that granted it, so a lease contest can name the claims.
+    event: str = ""
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
         return (now - self.renewed_at) > (self.ttl_s + grace_s)
@@ -229,10 +231,59 @@ class Item:
     #: docs/todo.md:41". ddflow does not invent completion, so when it records some it
     #: records who said so.
     completion_evidence: str = ""
+    #: B191. Rival DEFINITIONS: `<kind>.added` events for this id from different clones,
+    #: each {"event", "agent", "lamport", "ts", "title", "body", "data"}. One log refuses
+    #: a second add of a live id, so a rival can only arrive by a merge -- and the fold
+    #: used to let the later lamport silently win. Empty unless contested; the displayed
+    #: fields are still the last-folded add's, so the fold stays deterministic.
+    contested: list[dict[str, Any]] = field(default_factory=list)
+    #: B191. Rival CLAIMS: a `lease.acquired` by another holder while the current lease
+    #: was live, which only an offline claim in another clone can produce. Each is
+    #: {"holder", "event", "lease"}; `lease` is the claim, re-applied if its holder is
+    #: kept.
+    lease_contest: list[dict[str, Any]] = field(default_factory=list)
+    #: Every lease taken over by TTL arithmetic alone -- no release, no recorded expiry
+    #: -- each a `lease_contest` entry plus "by": the claim that displaced it. Fold order
+    #: is Lamport order, not wall time, so a displaced holder's renewals from another
+    #: clone can fold AFTER the takeover, even several takeovers later, and they are the
+    #: only evidence that it was live when the other claimed. `_late_renewal` weighs them
+    #: against the entry. Bounded by `MAX_DISPLACED`.
+    displaced: list[dict[str, Any]] = field(default_factory=list)
 
     def gate_outcome(self, gate: str) -> str:
         rec = self.gates.get(gate)
         return rec.outcome if rec else ""
+
+    def contest_summary(self) -> str:
+        """What is contested about this item, naming the rivals; "" when nothing is.
+
+        One sentence, shared by the scheduler's refusal and doctor's problem, so the two
+        cannot describe one contest differently.
+        """
+        parts = []
+        if self.contested:
+            parts.append(
+                f"{len(self.contested)} definitions from different clones ("
+                + "; ".join(
+                    f"{d['event'][:12]} by {d['agent']}: {d['title']!r}" for d in self.contested
+                )
+                + ")"
+            )
+        if self.lease_contest:
+            parts.append(
+                "claimed at once by "
+                + " and ".join(
+                    f"{h['holder']} ({h['event'][:12]}"
+                    + (
+                        f", still live when {h['overlapped_by']} claimed"
+                        if "overlapped_by" in h
+                        else ""
+                    )
+                    + ")"
+                    for h in self.lease_contest
+                )
+            )
+        return "; ".join(parts)
 
 
 @dataclass
@@ -451,6 +502,10 @@ class State:
     #: "reason"}. `by` is "explicit" or "default" -- a default applied at first use is
     #: recorded so the project keeps following it even if ddflow's default changes.
     flow_choices: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: item id -> the add that currently DEFINES it, in the shape of an `Item.contested`
+    #: entry. What a rival add is compared against, and what becomes the first side of
+    #: the contest when one arrives.
+    definitions: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_lamport: int = 0
     event_count: int = 0
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
@@ -606,9 +661,39 @@ def _safe_parent(st: State, item_id: str, parent: str) -> str:
     return parent
 
 
+def _definition(ev: Event) -> dict[str, Any]:
+    return {
+        "event": ev.id or ev.compute_id(),
+        "agent": ev.agent,
+        "lamport": ev.lamport,
+        "ts": ev.ts,
+        "title": ev.data.get("title", ""),
+        "body": ev.data.get("body", ""),
+        "data": dict(ev.data),
+    }
+
+
 def _h_added(st: State, ev: Event, kind: str) -> None:
+    """Define an item -- or, when a live item is already defined differently, contest it.
+
+    A re-add of a REMOVED id is a new definition and ends any old contest. The same
+    definition arriving twice (identical data) is not a contest: nothing would be lost.
+    """
+    prior = st.definitions.get(ev.subject)
     it = _item(st, ev, kind)
-    d = ev.data
+    mine = _definition(ev)
+    if prior is not None and not it.removed and prior["data"] != mine["data"]:
+        if not it.contested:
+            it.contested = [prior]
+        if all(d["data"] != mine["data"] for d in it.contested):
+            it.contested.append(mine)
+    elif it.removed:
+        it.contested = []
+    st.definitions[ev.subject] = mine
+    _apply_definition(st, it, ev.data, kind)
+
+
+def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None:
     it.kind = kind
     it.title = d.get("title", it.title)
     it.parent = _safe_parent(st, it.id, d.get("parent", it.parent))
@@ -641,10 +726,63 @@ def _h_removed(st: State, ev: Event, kind: str) -> None:
     _item(st, ev, kind).removed = True
 
 
+def _claim(lease: Lease) -> dict[str, Any]:
+    return {"holder": lease.holder, "event": lease.event, "lease": asdict(lease)}
+
+
+def _span(lease: dict[str, Any]) -> tuple[float, float]:
+    """A claim's interval by its own evidence: acquired, to its last renewal plus TTL."""
+    return lease["acquired_at"], lease["renewed_at"] + lease["ttl_s"]
+
+
+def _overlaps(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    """Two claims' intervals intersect -- on BOTH ends. One-sided, a claim that ended
+    before the other began read as its rival whenever it happened to fold second."""
+    (a0, a1), (b0, b1) = _span(a), _span(b)
+    return a0 <= b1 and b0 <= a1
+
+
+def _join(it: Item, claims: list[dict[str, Any]]) -> None:
+    """Add claims to the lease contest, once each. Keyed by the ACQUIRING EVENT, never by
+    holder name: one holder can hold an item twice (claimed, lost, claimed again), and
+    those are two claims that can each be contested."""
+    have = {h["event"] for h in it.lease_contest}
+    for c in claims:
+        if c["event"] not in have:
+            it.lease_contest.append(c)
+            have.add(c["event"])
+
+
+def _displace(it: Item, lost: dict[str, Any], by: dict[str, Any]) -> None:
+    it.displaced = [*it.displaced, {**lost, "by": by}][-MAX_DISPLACED:]
+
+
+def _hold(it: Item, lease: Lease) -> None:
+    """Make ``lease`` the displayed one, and point the item at its tree."""
+    it.lease = lease
+    it.worktree = lease.worktree or it.worktree
+    it.branch = lease.branch or it.branch
+
+
 def _h_lease_acquired(st: State, ev: Event) -> None:
+    """A claim, weighed against every claim it could have collided with.
+
+    `acquire` never grants a claim over another holder's live one in one log -- a live
+    lease is refused even with --force, and a takeover needs a release, a recorded
+    expiry, or the lease past its TTL (and grace) at the moment of the claim. So two
+    claims whose intervals intersect can only come from clones that did not see each
+    other: a contest. The comparison is on the claims' own times, never on "now" (the
+    fold is pure), and against the displayed lease AND every claim already contested --
+    a contestant stays live even when the displayed lease is somebody else's.
+
+    Which claim is DISPLAYED is decided by wall time, not fold order: the later
+    acquisition. A claim that ended before the displayed one began is history arriving
+    late; it is remembered as displaced (a late renewal may yet prove it overlapped) and
+    never replaces the lease.
+    """
     d = ev.data
     it = _item(st, ev, d.get("kind", "task"))
-    it.lease = Lease(
+    new = Lease(
         holder=d.get("holder", ev.agent),
         acquired_at=float(d.get("at", 0.0)),
         renewed_at=float(d.get("at", 0.0)),
@@ -654,21 +792,92 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         globs=list(d.get("globs", [])),
         note=d.get("note", ""),
         resources=list(d.get("resources", [])),
+        event=ev.id or ev.compute_id(),
     )
-    it.worktree = it.lease.worktree or it.worktree
-    it.branch = it.lease.branch or it.branch
+    mine = _claim(new)
+    rivals = [
+        h
+        for h in it.lease_contest
+        if h["holder"] != new.holder
+        and h["event"] != new.event
+        and _overlaps(h["lease"], mine["lease"])
+    ]
+    cur = it.lease
+    if cur is None or cur.holder == new.holder or cur.expired_at:
+        if rivals:
+            _join(it, [*rivals, mine])
+        _hold(it, new)
+        return
+    held = _claim(cur)
+    if _overlaps(held["lease"], mine["lease"]):
+        _join(it, [*rivals, held, mine])
+        if new.acquired_at >= cur.acquired_at:
+            _hold(it, new)
+        return
+    if rivals:
+        _join(it, [*rivals, mine])
+    if new.acquired_at < cur.acquired_at:
+        _displace(it, mine, held)  # late history: `cur` took over from it
+        return
+    _displace(it, held, mine)
+    _hold(it, new)
+
+
+#: How many TTL-displaced claims an item remembers, oldest dropped first. A cap rather
+#: than a lapse rule, because "this claim can no longer be contradicted" is exactly what
+#: the fold cannot know: a clone may deliver a renewal from any point in the past. Each
+#: entry needs a takeover without a release -- `--force` or a non-`report` reclaim
+#: policy, per takeover, on one item -- so a real chain is one or two long, and eight is
+#: far past anything but a pathological loop, which `loops` reports on its own.
+MAX_DISPLACED = 8
+
+
+def _late_renewal(it: Item, d: dict[str, Any]) -> None:
+    """A renewal of a claim a TTL takeover displaced, folded after the takeover.
+
+    One log cannot produce it -- `renew` refuses anyone but the current holder -- so it
+    came from a clone that never saw the takeover. It belongs to the holder's LATEST
+    claim acquired at or before the renewal's own time: a holder's claims follow one
+    another in its own clone, so that is the one it was renewing. If the renewal kept
+    that claim live up to the moment the claim that displaced it was made (or was made
+    after it), the takeover was of a LIVE claim: a contest naming the displaced claim,
+    the one that displaced it, and the displayed one if that is another again. A renewal
+    that still left the claim lapsed by then changes nothing.
+    """
+    if "at" not in d:
+        return
+    at = float(d["at"])
+    own = [
+        e for e in it.displaced if e["holder"] == d["holder"] and e["lease"]["acquired_at"] <= at
+    ]
+    if not own:
+        return
+    hit = max(own, key=lambda e: e["lease"]["acquired_at"])
+    if at + hit["lease"]["ttl_s"] < hit["by"]["lease"]["acquired_at"]:
+        return
+    it.displaced = [e for e in it.displaced if e["event"] != hit["event"]]
+    claim = {k: v for k, v in hit.items() if k != "by"}
+    claim["lease"]["renewed_at"] = max(claim["lease"]["renewed_at"], at)
+    claim["overlapped_by"] = hit["by"]["holder"]
+    _join(it, [claim, hit["by"], *([_claim(it.lease)] if it.lease is not None else [])])
 
 
 def _h_lease_renewed(st: State, ev: Event) -> None:
     it = st.items.get(ev.subject)
-    if not it or not it.lease:
+    if not it:
         return
     d = ev.data
-    # Only the CURRENT holder may renew. Lamport values are computed independently on
+    # Only the CURRENT claim may be renewed. Lamport values are computed independently on
     # unsynced clones, so merging two shards can order a former holder's renewal after
     # a later re-acquisition by someone else -- and applying it would point the live
-    # lease at the dead agent's worktree, which every destructive path then targets.
-    if "holder" in d and d["holder"] != it.lease.holder:
+    # lease at the dead agent's worktree, which every destructive path then targets. A
+    # renewal stamped before the displayed claim was acquired is not of it either, even
+    # from the same holder: it renewed an EARLIER claim of theirs.
+    stale = it.lease is not None and "at" in d and float(d["at"]) < it.lease.acquired_at
+    if "holder" in d and (it.lease is None or d["holder"] != it.lease.holder or stale):
+        _late_renewal(it, d)
+        return
+    if not it.lease:
         return
     # A renewal may only move the clock FORWARD. A stale renewal reordered after a
     # re-acquisition would otherwise set `renewed_at` back to its own older timestamp,
@@ -692,6 +901,19 @@ def _h_lease_renewed(st: State, ev: Event) -> None:
         it.lease.resources = list(d["resources"])
 
 
+def _released_claim(claims: list[dict[str, Any]], d: dict[str, Any]) -> str:
+    """The acquiring event a release names, among ``claims``; "" when none.
+
+    By `event` when the release carries it (every release written since B191 does). An
+    older release names only a holder, and then it is taken to end that holder's LATEST
+    claim -- the one it held when it released.
+    """
+    if d.get("event"):
+        return d["event"] if any(c["event"] == d["event"] for c in claims) else ""
+    own = [c for c in claims if c["holder"] == d.get("holder")]
+    return max(own, key=lambda c: c["lease"]["acquired_at"])["event"] if own else ""
+
+
 def _h_lease_gone(st: State, ev: Event) -> None:
     """Handle `lease.released` and `lease.expired`.
 
@@ -710,16 +932,74 @@ def _h_lease_gone(st: State, ev: Event) -> None:
        with its worktree intact — which is what recovery needs to protect the tree.
     """
     it = st.items.get(ev.subject)
-    if not it or not it.lease:
+    if not it:
         return
-    holder = ev.data.get("holder")
+    d = ev.data
+    holder = d.get("holder")
+    if ev.kind == "lease.released" and holder is not None:
+        # A claim given up can no longer contradict a takeover of it.
+        gone = _released_claim(it.displaced, d)
+        it.displaced = [e for e in it.displaced if e["event"] != gone]
+        gone = _released_claim(it.lease_contest, d)
+        if gone:
+            _withdraw_claim(it, gone)
+            return
+    elif ev.kind == "lease.expired" and holder is not None:
+        # A contestant whose expiry is RECORDED is no longer live, so it cannot collide
+        # with a claim that comes after -- its snapshot has to say so.
+        gone = _released_claim(it.lease_contest, d)
+        for h in it.lease_contest:
+            if h["event"] == gone:
+                h["lease"].update(ttl_s=0, expired_at=ev.ts)
+    if not it.lease:
+        return
     if holder is not None and holder != it.lease.holder:
+        return
+    if d.get("event") and d["event"] != it.lease.event:
         return
     if ev.kind == "lease.expired":
         it.lease.ttl_s = 0
         it.lease.expired_at = ev.ts
         return
     it.lease = None
+
+
+def _withdraw_claim(it: Item, event: str) -> None:
+    """A contested claim was released: it is withdrawn, and with one claim left there is
+    nothing to resolve -- that claim holds the item, even when the release was of the
+    lease that happened to be displayed."""
+    it.lease_contest = [h for h in it.lease_contest if h["event"] != event]
+    if it.lease is not None and it.lease.event == event:
+        it.lease = None
+    if len(it.lease_contest) == 1:
+        if it.lease is None:
+            _hold(it, Lease(**it.lease_contest[0]["lease"]))
+        it.lease_contest = []
+
+
+def _h_resolved(st: State, ev: Event) -> None:
+    """An operator settled a contest: the kept definition and/or claim is re-applied.
+
+    The payload CARRIES what was kept rather than pointing at it, so the fold needs no
+    second pass over the log, and the record says what was decided in its own words.
+    """
+    it = st.items.get(ev.subject)
+    if it is None:
+        return
+    d = ev.data
+    keep = d.get("definition")
+    if keep:
+        _apply_definition(st, it, keep.get("data", {}), d.get("kind", it.kind))
+        st.definitions[it.id] = keep
+        it.contested = []
+    claim = d.get("claim")
+    if claim:
+        lease = Lease(**claim["lease"])
+        # The operator's decision is itself a sign of life: the kept holder's TTL runs
+        # from here, not from a claim that may be hours old.
+        lease.renewed_at = max(lease.renewed_at, float(d.get("at", 0.0)))
+        _hold(it, lease)
+        it.lease_contest = []
 
 
 def _h_state(new_state: str):
@@ -1219,6 +1499,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.started": _h_state(RUNNING),
     "item.blocked": _h_state(BLOCKED),
     "item.unblocked": _h_unblocked,
+    "item.resolved": _h_resolved,
     "item.completed": _h_state(DONE),
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},

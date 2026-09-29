@@ -34,7 +34,7 @@ from .flow import FEATURE, branch_kind, line_key, stack_base, unknown_line
 @dataclass
 class Blocked:
     item: str
-    reason: str  # "deps" | "conflict" | "state" | "cycle"
+    reason: str  # "deps" | "conflict" | "state" | "cycle" | "umbrella" | "contested" | ...
     detail: str = ""
     waiting_on: list[str] = field(default_factory=list)
 
@@ -333,6 +333,17 @@ def plan_blocker(
     if in_cycle is None or cycles is None:
         cycles = find_cycles({i.id: i for i in state.items.values() if not i.removed})
         in_cycle = {n for c in cycles for n in c}
+    contest = it.contest_summary()
+    if contest:
+        # B191: two clones disagree about what this item is, or who holds it. Whichever
+        # the fold happens to display, starting it would build on one side of a
+        # disagreement nobody has settled.
+        return Blocked(
+            it.id,
+            "contested",
+            f"{contest}. `ddflow resolve {it.id} --keep <event-id|agent>` settles it.",
+            [],
+        )
     if it.state == BLOCKED:
         return Blocked(
             it.id,
