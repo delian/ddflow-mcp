@@ -49,21 +49,19 @@ commit_without_lease = "warn"
 brief_max_tokens = 1200
 
 [gate.unit_tests]
-# -n 48, not -n auto: auto starts one worker per core (192 here), and up to
-# schedule.max_parallel_tasks = 4 agents run this gate at once, so 4 x 48 fills the
-# machine. Measured: serial 49 min; -n 16 107s, 32 86s, 48 57s, 64 50s, auto 48s.
-command = "uv run pytest tests/ -q --timeout=420 -n 48"
+# In parallel (pytest-xdist): one worker per core, capped at 16 -- several agents may run
+# this gate at once, and on a large host `-n auto` alone would start one worker per core
+# for EACH of them. A machine that wants a different count sets it in its own
+# git-ignored .ddflow/gates.toml.
+command = "uv run pytest tests/ -q --timeout=420 -n auto --maxprocesses 16"
 
-[[reviewer]]
-# Operator 2026-09-29 (decision Da2df1ab39d): the LAN Qwen3.8-27B. vLLM serves it under
-# the name "google/gemma-4-31B-it" (its /v1/models `root` is Qwen/Qwen3.8-27B), so the
-# family is DECLARED: inferred from the name it would read as google.
-name = "lan-qwen3.8-27b"
-base_url = "http://10.220.230.8:8000/v1"
-model = "google/gemma-4-31B-it"
-family = "alibaba"
-gates = ["critic"]
-# Kept from the previous reviewer until measured on this one: 3000 chars per chunk
-# stopped Qwen3.8-Flash-Next exhausting 64000 reasoning tokens on most chunks.
-max_chunk_chars = 3000
-max_tokens = 64000
+# This project's reviewers (the cross-family critic) are NOT committed: an endpoint, a
+# model name and an API-key variable belong to whoever runs the project. Put yours in
+# the git-ignored .ddflow/reviewers.toml, e.g.
+#   [[reviewer]]
+#   name = "my-critic"
+#   base_url = "http://127.0.0.1:8000/v1"
+#   model = "<served model name>"
+#   family = "<its pretraining family>"
+#   gates = ["critic"]
+# `ddflow reviewers detect` finds local endpoints and prints the block.
