@@ -1398,11 +1398,15 @@ def _unstaged_under(repo: Path, d: Path) -> LogProbe:
     failed is not evidence of a clean log, and reading it as one would silently reopen
     the exact false pass this exists to close (roborev on 43c2034).
 
-    The files are ``repo``'s -- the log the view is rendered from -- and the index is the
-    COMMITTING tree's, the log this commit records. A hook in a linked worktree gets that
-    pairing from the `GIT_DIR` git exports to it; it is spelled out here so a check with
-    no git environment (run by hand from the worktree) compares the same two things,
-    rather than the primary's own index (bug Bba366d9893).
+    The files are ``repo``'s and the index is the COMMITTING tree's, deliberately mixed.
+    The view is rendered from `EventLog(repo)`, the primary's log on disk; the commit
+    records the committing tree's index. Those two are what must agree -- the worktree's
+    own working copy of the log is read by neither, so an unstaged edit to it cannot
+    make the view wrong. A real hook in a linked worktree already got this pairing: git
+    exports the worktree's `GIT_DIR`, and `-C <primary>` then made the primary the work
+    tree. It is spelled out here so a check with no git environment (run by hand from
+    the worktree) compares the same two things rather than the primary's own index (bug
+    Bba366d9893).
     """
     rel = _rel(repo, d)
     via: list[str] = []

@@ -240,6 +240,12 @@ def test_a_view_staged_by_hand_in_a_worktree_is_checked_against_that_trees_log(b
     shutil.copytree(events, wt / ".ddflow" / "events")
     _git(wt, "add", "-f", ".ddflow/events")
     assert E.check_views(repo, Config.load(repo)) == (0, "")
+    # The worktree's own working copy of the log is read by neither side -- the view
+    # renders from the primary's log, the commit records the index -- so an unstaged
+    # edit to it does not make the staged view wrong.
+    shard = next((wt / ".ddflow" / "events").glob("*.jsonl"))
+    shard.write_text(shard.read_text() + "{}\n")
+    assert E.check_views(repo, Config.load(repo)) == (0, "")
 
 
 def test_drift_is_not_measured_in_another_repository(behind, monkeypatch, tmp_path):
