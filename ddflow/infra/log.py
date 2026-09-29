@@ -217,12 +217,26 @@ def default_agent_id(fallback_root: Path | str | None = None) -> str:
     suffix (:func:`_clone_suffix`) — shared by every worktree of the clone, because the
     suffix lives in the primary checkout, so the claim and the commit hook still agree.
     """
-    host = socket.gethostname().split(".")[0]
     root = str(fallback_root or "")
     key = f"{os.getcwd()}|{root}"
     if key in _AGENT_ID_CACHE:
         return _AGENT_ID_CACHE[key]
+    ident = bare_agent_id(fallback_root)
+    suffix = _clone_suffix(Path(root)) if root else ""
+    if not suffix:
+        # Not cached: an unadopted repo gains its suffix at `ddflow init`, and a
+        # long-lived MCP server must pick that up rather than keep the bare name.
+        return ident
+    ident = f"{ident}-{suffix}"
+    _AGENT_ID_CACHE[key] = ident
+    return ident
 
+
+def bare_agent_id(fallback_root: Path | str | None = None) -> str:
+    """The derived id WITHOUT this clone's suffix: `{host}-{tree}`, which is what every
+    derived id was before B190, and so the holder of any lease claimed before it."""
+    host = socket.gethostname().split(".")[0]
+    root = str(fallback_root or "")
     name = ""
     here = _toplevel(os.getcwd())
     # Only trust the cwd when it belongs to the SAME repository we are managing;
@@ -237,15 +251,16 @@ def default_agent_id(fallback_root: Path | str | None = None) -> str:
             name = getpass.getuser()
         except Exception:
             name = "agent"
-    ident = f"{host}-{name}"
-    suffix = _clone_suffix(Path(root)) if root else ""
-    if not suffix:
-        # Not cached: an unadopted repo gains its suffix at `ddflow init`, and a
-        # long-lived MCP server must pick that up rather than keep the bare name.
-        return ident
-    ident = f"{ident}-{suffix}"
-    _AGENT_ID_CACHE[key] = ident
-    return ident
+    return f"{host}-{name}"
+
+
+def clone_suffix_since(root: Path | str) -> float:
+    """When this clone got its suffix (the clone-id file's mtime; it is never rewritten),
+    or 0.0 when it has none. Before that moment this clone derived the bare id."""
+    try:
+        return (Path(root) / CLONE_ID_FILE).stat().st_mtime
+    except OSError:
+        return 0.0
 
 
 #: Where a clone keeps its identity suffix. Under `.ddflow/local/`, which is gitignored:
