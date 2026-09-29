@@ -1995,18 +1995,24 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> int:
             if "imported" not in getattr(rec, "tags", []):
                 continue
             for src in getattr(rec, attr, []) or []:
+                # A link's target is one token already -- `docs/a(b).md` included --
+                # so only its `#anchor` goes and its length is left to check. Anything
+                # else is unwrapped and must then be a single markup-free token.
                 link = _MD_LINK.match(str(src))
-                text = link.group(1) if link else str(src)
-                rel = _MARKUP_AROUND_PATH.sub("", text.split(":", 1)[0])
-                # Parenthesised, and narrow on purpose: `and` binds tighter than `or`,
-                # so the unbracketed form accepted `git:foo.md`. A lesson's `seen_in`
-                # also holds bug pins like "review-inverted-severity", which are not
-                # paths -- reporting those as vanished files would be a false positive
-                # in the check whose whole value is that its findings are real.
+                if link:
+                    rel = link.group(1).split("#", 1)[0].split(":", 1)[0]
+                    shaped = len(rel) <= _MAX_SOURCE_PATH
+                else:
+                    rel = _MARKUP_AROUND_PATH.sub("", str(src).split(":", 1)[0])
+                    shaped = _path_shaped(rel)
+                # Narrow on purpose: never `git:foo.md`, and a lesson's `seen_in` also
+                # holds bug pins like "review-inverted-severity", which are not paths
+                # -- reporting those as vanished files would be a false positive in the
+                # check whose whole value is that its findings are real.
                 looks_like_a_path = "/" in rel or rel.endswith(".md")
                 if not rel or rel.startswith("git:") or not looks_like_a_path:
                     continue
-                if _path_shaped(rel):
+                if shaped:
                     paths.setdefault(rel, []).append(rec.id)
                 else:
                     prose += 1
@@ -2022,9 +2028,10 @@ _MAX_SOURCE_PATH = 1024
 _MARKUP_AROUND_PATH = re.compile(r"^[`'\"(\[<*]+|[`'\")\]>*.,;]+$")
 #: A whole markdown link, `[docs/a.md](docs/a.md)`: its TARGET is the path -- also with
 #: a title in any of CommonMark's three forms, and inside code/bold/emphasis markup with
-#: punctuation on either side of it, `` `[a](docs/a.md 't').` ``.
+#: punctuation on either side of it, `` `[a](docs/a.md 't').` ``, and a target with
+#: balanced parentheses, `[a](docs/a(b).md)`.
 _MD_LINK = re.compile(
-    r"""^[`*_]*\[[^\]]*\]\(([^)\s]+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)[`*_.,;]*$"""
+    r"""^[`*_]*\[[^\]]*\]\(((?:[^()\s]|\([^()\s]*\))+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)[`*_.,;]*$"""
 )
 #: Markup still inside a token once the wrapping is gone: not one path, but pieces.
 _MARKUP_INSIDE = frozenset("`[]()<>*")

@@ -141,9 +141,11 @@ def test_a_titled_or_wrapped_markdown_link_is_checked_as_its_target(repo):
             "[gone five](docs/gone5.md (parenthesised title))",
             "__[gone six](docs/gone6.md)__",
             "**[gone seven](docs/gone7.md).**",
+            "[gone eight](docs/gone(8).md)",
             '[here](docs/lessons.md "exists")',
+            "[a heading](docs/lessons.md#rule-number-0)",
         ],
     )
     gone = _vanished(_verify(repo))
-    assert {f"docs/gone{i}.md" for i in range(1, 8)} <= gone, gone
+    assert {f"docs/gone{i}.md" for i in range(1, 8)} | {"docs/gone(8).md"} <= gone, gone
     assert not any("lessons.md" in s for s in gone), gone
