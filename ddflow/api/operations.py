@@ -345,3 +345,65 @@ def pins(
             {"chars": n, "lines": [a, b], "text": t[:240]} for n, a, b, t in rep.free[: max(top, 0)]
         ],
     )
+
+
+def relevant_tests(
+    repo: Path,
+    *,
+    item: str = "",
+    where: Path | None = None,
+    base: str = "",
+    agent: str = "",
+) -> O.Outcome:
+    """B16: the tests the current change reaches, and a PARALLEL command to run them.
+
+    Fast feedback while working, never a pass: the unit_tests gate still runs the whole
+    suite, because a targeted run hides standing breakage. Exit 2 when no test reaches
+    the change. The tree is the item's worktree when ``item`` names one, else ``where``
+    (the caller's own checkout), else the repo; the base is the item's, else the
+    configured base ref, else the default branch.
+    """
+    from ..infra import worktree as W
+    from ..services import testselect as TS
+    from ..services.gates import load_gates, parallel_test_advice
+
+    _log, cfg, st = _load(repo, agent)
+    top = W.git(where, "rev-parse", "--show-toplevel") if where else None
+    # The caller's OWN checkout: a linked worktree stays itself, where the repo root
+    # (and so `repo`) is the primary -- whose diff is not the change being worked on.
+    tree = Path(top.out) if top is not None and top.ok and top.out else repo
+    if item:
+        it = st.items.get(item)
+        if it is None:
+            return O.failed("tests", f"no such item {item!r}")
+        if it.worktree:
+            tree = W.load_path(repo, it.worktree)
+        base = base or it.base
+    try:
+        base = base or cfg.worktree.base_ref or W.default_branch(W.repo_root(tree))
+    except W.GitError as exc:
+        return O.failed("tests", f"{tree} is not a git checkout: {exc}")
+    sel = TS.select(tree, base)
+    if sel is None:
+        return O.failed("tests", f"git could not say what changed in {tree} since {base}")
+    gate = load_gates(repo, cfg).get("unit_tests")
+    full = gate.command if gate else ""
+    files = [t.path for t in sel.tests]
+    data: dict[str, Any] = {
+        "tree": str(tree),
+        "base": base,
+        "changed": sel.changed,
+        "tests": [{"path": t.path, "reason": t.reason} for t in sel.tests],
+        "command": TS.run_command(full, files, tree),
+        "full_suite": full,
+        "advice": parallel_test_advice(full, tree) if full else "",
+        "unparsed": sel.unparsed,
+    }
+    if not files:
+        return O.nothing(
+            "tests",
+            f"No test reaches the {len(sel.changed)} changed file(s) since {base}. That is "
+            "not a pass: the unit_tests gate still runs the whole suite.",
+            **data,
+        )
+    return O.ok("tests", **data)

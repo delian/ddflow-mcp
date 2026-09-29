@@ -61,7 +61,14 @@ from .commands.lifecycle import (
     cmd_remove,
     cmd_unblock,
 )
-from .commands.operations import cmd_cadence, cmd_cleanup, cmd_external, cmd_import, cmd_pins
+from .commands.operations import (
+    cmd_cadence,
+    cmd_cleanup,
+    cmd_external,
+    cmd_import,
+    cmd_pins,
+    cmd_tests,
+)
 from .commands.queue import cmd_phase_add, cmd_resolve, cmd_split, cmd_task_add
 from .commands.reporting import (
     cmd_board,
@@ -828,6 +835,14 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     pn.add_argument("--top", type=int, default=10, help="how many free stretches to show")
     pn.set_defaults(fn=cmd_pins)
+
+    ts = s.add_parser(
+        "tests",
+        help="the tests your change reaches, and a parallel command to run them (exit 2 = none)",
+    )
+    ts.add_argument("--item", default="", help="an item id: use its worktree and base")
+    ts.add_argument("--base", default="", help="compare against this ref (default: the base)")
+    ts.set_defaults(fn=cmd_tests)
 
     rv = s.add_parser("reviewers", help="find, list and test cross-family reviewers")
     rv_s = rv.add_subparsers(dest="reviewers_cmd", required=True)

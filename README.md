@@ -2431,6 +2431,7 @@ ddflow gate skip <id> <gate>    skip, with a mandatory reason
 ddflow approve <id> <gate>      a PERSON clears a human gate  (no MCP equivalent)
 ddflow approve .. --reject      ...or refuses it, with --reason
 ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
+ddflow tests [--item <id>]      tests the change reaches + a parallel command  (2 = none)
 
 ddflow merge <id>               merge from the primary checkout, no checkout
                                 ([flow].integration=pr: push + open/update a PR instead)
@@ -2585,6 +2586,16 @@ code that distinguishes "could not" from "did not need to".
 uv run pytest tests/ -q -n auto      # unit/integration tests, in parallel (pytest-xdist)
 python3 demos/run_all.py             # 6 end-to-end scenarios, 219 assertions
 ```
+
+While working on an item, `ddflow tests --item <id>` (MCP: `ddflow_tests`) lists the
+tests the change reaches — changed test files, tests importing a changed module directly
+or one step removed, tests named after a changed file, everything under a changed
+`conftest.py` — each with why, and prints one command that runs them in parallel with
+the project's own runner and worker flags. It is fast feedback and never a gate: the
+`unit_tests` gate always runs the whole suite, in parallel, because a targeted run hides
+breakage that was already there. The agent driver tells agents to run it after each
+change; `ddflow workflow` and `ddflow doctor` say when the configured test command uses
+one core.
 
 The demos invent whole projects and drive them for real — real git worktrees, real
 `pytest` and `npm test` runs, real merges, real concurrent processes:
