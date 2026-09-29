@@ -1038,7 +1038,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     # 7216f5e, reproduced). Rather than fold shards out of the index, require the log to
     # be fully staged: then the log on disk IS the committed log, and the comparison
     # below is exact.
-    probe = _unstaged_under(repo, log.dir, tree=tree)
+    probe = _unstaged_under(repo, log.dir, tree)
     if probe.failed:
         return _verdict(
             mode,
@@ -1390,7 +1390,7 @@ class LogProbe:
     failed: bool = False  #: git could not say -- never read as "clean"
 
 
-def _unstaged_under(repo: Path, d: Path, *, tree: Path | None = None) -> LogProbe:
+def _unstaged_under(repo: Path, d: Path, tree: Path | None = None) -> LogProbe:
     """Paths under ``d`` whose working copy is not what the commit will record:
     modified-but-not-staged, or not in the index at all.
 
