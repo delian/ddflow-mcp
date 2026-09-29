@@ -200,6 +200,17 @@ repos:
         ("", "check-msg", "    pass_filenames: false", "commit-msg", False),
         # `language: fail` never runs its entry
         ("", "check-commit", "    language: fail", "pre-commit", False),
+        # a hook whose filters match no staged file is SKIPPED ("no files to check"); at
+        # commit-msg the file is the message file, which `types: [python]` never matches
+        ("", "check-commit", "    files: ^src/", "pre-commit", False),
+        ("", "check-msg", "    types: [python]", "commit-msg", False),
+        ("", "check-commit", "    exclude: .*", "pre-commit", False),
+        ("files: ^src/", "check-msg", "", "commit-msg", False),
+        # ... unless it runs regardless of files; YAML 1.1 spells true `yes` too
+        ("", "check-commit", "    files: ^src/\n    always_run: yes", "pre-commit", True),
+        ("files: ^src/", "check-msg", "    always_run: true", "commit-msg", True),
+        # the defaults are no filter at all
+        ("exclude: ^$", "check-commit", "    types: [file]\n    files: ''", "pre-commit", True),
     ],
 )
 def test_the_stage_decides(repo, top, check, extra, name, want):
@@ -215,10 +226,17 @@ def test_the_command_may_be_split_between_entry_and_args(repo):
 repos:
   - repo: local
     hooks:
-      - {id: dd-msg, name: dd, entry: 'scripts/wrap.sh', args: [hooks, check-msg], language: system, stages: [commit-msg]}
+      - {id: dd-msg, name: dd, entry: 'python3 -m ddflow', args: [hooks, check-msg], language: system, stages: [commit-msg]}
 """
     assert E.armed(repo, "commit-msg").via == ""
     assert _armed(repo, config, "commit-msg").via == "pre-commit"
+
+
+def test_a_command_that_is_not_ddflow_is_not_the_check(repo):
+    config = _ONE_HOOK.format(top="", check="check-commit", extra="").replace(
+        "entry: ddflow hooks", "entry: echo hooks"
+    )
+    assert _armed(repo, config, "pre-commit").via == ""
 
 
 def test_ddflow_own_hook_kept_as_legacy_counts(repo):
@@ -236,6 +254,29 @@ def test_a_config_the_reader_cannot_parse_is_not_installed_and_says_why(repo):
     a = _armed(repo, "repos: &r\n  - repo: local\n", "pre-commit")
     assert a.via == ""
     assert "could not read" in a.detail, a
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        # RecursionError inside the reader, not a crash of `hooks status`
+        pytest.param("repos: " + "[" * 3000 + "]" * 3000 + "\n", id="deep-nesting"),
+        # two documents; PyYAML refuses them
+        pytest.param("a: 1\n---\nrepos: []\n", id="two-documents"),
+    ],
+)
+def test_input_the_reader_refuses_is_reported_not_raised(repo, config):
+    a = _armed(repo, config, "pre-commit")
+    assert a.via == "" and "could not read" in a.detail, a
+
+
+def test_a_config_path_the_file_system_refuses_is_not_a_crash(repo):
+    hooks = _framework(repo, _DDFLOW_CONFIG)
+    (hooks / "pre-commit").write_text(
+        _GENERATED.format(config="a\x00b", hook_type="pre-commit"), "utf-8"
+    )
+    a = E.armed(repo, "pre-commit")
+    assert a.via == "" and "could not read" in a.detail, a
 
 
 def test_a_missing_config_is_not_installed(repo):

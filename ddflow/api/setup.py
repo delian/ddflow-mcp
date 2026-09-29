@@ -434,15 +434,11 @@ def _hook_line(name: str, armed) -> str:
 
 
 def _hook_remedy(armed, check: str) -> str:
-    """How to arm `ddflow hooks <check>`. Over a pre-commit-framework hook it is the
-    config: `hooks install` refuses a foreign hook, and an edit to the generated file is
-    lost at the next `pre-commit install` (B259fd32dbd)."""
-    stage = "commit-msg" if check == "check-msg" else "pre-commit"
-    if armed.framework:
-        return (
-            "Add a `repo: local` hook to .pre-commit-config.yaml whose entry runs "
-            f"`ddflow hooks {check}` at stage `{stage}`, then `pre-commit install`"
-        )
+    """How to arm `ddflow hooks <check>`. Over a pre-commit-framework hook, `armed.remedy`
+    is about the config: `hooks install` refuses a foreign hook, and an edit to the
+    generated file is lost at the next `pre-commit install` (B259fd32dbd)."""
+    if armed.remedy:
+        return armed.remedy
     if check == "check-msg":
         return (
             'Run `ddflow hooks install`, or add `ddflow hooks check-msg "$1"` to '
