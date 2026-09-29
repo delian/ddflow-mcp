@@ -68,8 +68,8 @@ def test_the_cli_shows_it_too(repo):
         "initialize",  # the server is proven to start from the REGISTERED entry
         "never `git add -A`",
         "ddflow_bug_found",  # a defect in ddflow hit on the way is filed, not worked around
-        "add both names to `.ddflow/.gitignore`",  # LAN endpoints are never committed
-        "does NOT create `.ddflow/config.toml`",  # the MCP setup path's real behaviour
+        "add it to `.ddflow/.gitignore`",  # LAN reviewer endpoints are never committed
+        "check that `.ddflow/config.toml`",  # setup is verified, whichever path wrote it
     ],
 )
 def test_the_steps_learned_by_hand_are_in_the_prompt(must_say):
