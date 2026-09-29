@@ -90,6 +90,8 @@ def test_window_specs_parse(spec, expected):
         ({"windows": "day=1:tokens,day=2:tokens"}, "declared twice"),
         ({"windows": "total=1:tokens@2026-01-01"}, "never resets"),
         ({"windows": "month=1:usd@yesterday"}, "not an ISO-8601"),
+        ({"windows": "month=1:usd@2026-10-01T00:00:00"}, "no timezone"),
+        ({"windows": "5h=percent@2026-01-01T00:00Z"}, "takes no anchor"),
         ({"windows": "", "unlimited": False}, "exactly one of"),
         ({"windows": "day=1:tokens", "unlimited": True}, "exactly one of"),
         ({"unlimited": True, "unknown": True}, "exactly one of"),
@@ -154,3 +156,26 @@ def test_account_tags_hide_the_raw_id():
     raw = "d9c6b4dc-101d-4597-bf2a-96e954f2057c"
     tag = Q.account_tag(raw)
     assert len(tag) == 12 and raw not in tag and tag == Q.account_tag(raw)
+
+
+def test_an_agent_cannot_forget_the_operator_either(repo):
+    """Rubber-duck on B-quota-profiles: forget-then-declare was a side door around the
+    operator-wins rule."""
+    s = "agent:claude-code/abc123"
+    A.quota_declare(repo, s, windows="5h=percent", by="operator")
+    out = A.quota_forget(repo, s)
+    assert out.exit == REFUSED and "ask the operator" in out.reason
+    assert A.quota_declare(repo, s, unlimited=True).exit == REFUSED
+    assert A.quota_show(repo, s).data["profile"]["declared_by"] == "operator"
+    assert A.quota_forget(repo, s, by="operator").exit == OK
+
+
+def test_a_store_entry_filed_under_another_subject_is_a_failure(repo, user_config):
+    """Rubber-duck: the key was trusted over the profile's own subject, so the real
+    subject's operator quota read as undeclared."""
+    A.quota_declare(repo, "agent:claude-code/real", unlimited=True, by="operator")
+    doc = json.loads(user_config.read_text())
+    doc["profiles"]["agent:claude-code/other"] = doc["profiles"].pop("agent:claude-code/real")
+    user_config.write_text(json.dumps(doc))
+    for out in (A.quota_show(repo, "agent:claude-code/real"), A.quota_list(repo)):
+        assert out.exit == FAIL and "holds subject" in out.reason, out.reason

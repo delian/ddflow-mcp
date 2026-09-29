@@ -112,9 +112,13 @@ def _now() -> str:
 
 def _parse_time(text: str) -> str:
     try:
-        return datetime.fromisoformat(text.replace("Z", "+00:00")).isoformat()
+        t = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError as exc:
         raise QuotaError(f"anchor {text!r} is not an ISO-8601 time") from exc
+    if t.tzinfo is None:
+        # The same wall-clock time is a different moment on another machine.
+        raise QuotaError(f"anchor {text!r} has no timezone: add Z or an offset")
+    return t.isoformat()
 
 
 def _number(text: str) -> float:
@@ -183,6 +187,8 @@ def validate(p: Profile) -> Profile:
             raise QuotaError("a percent window is the vendor's own utilisation: its limit is 100")
         if not w.limit > 0:
             raise QuotaError(f"{w.window}: a limit must be positive (declare unlimited instead)")
+        if w.reset == "fixed" and w.unit == "percent":
+            raise QuotaError("a percent window resets when the vendor says: it takes no anchor")
         if w.reset == "fixed" and w.window == "total":
             raise QuotaError("a total never resets, so it cannot have a fixed anchor")
         if w.reset == "fixed" and not w.anchor:
@@ -228,7 +234,15 @@ def load(path: Path | None = None) -> dict[str, Profile]:
         doc = json.loads(raw)
         if doc.get("version") != STORE_VERSION:
             raise QuotaError(f"{path}: unsupported version {doc.get('version')!r}")
-        return {s: validate(_from_dict(d)) for s, d in doc["profiles"].items()}
+        out = {}
+        for key, d in doc["profiles"].items():
+            p = validate(_from_dict(d))
+            if p.subject != key:
+                # Looked up by key, reported by subject: a mismatch hides the real
+                # subject's quota, which is the silent "no quota" this refuses.
+                raise QuotaError(f"{path}: entry {key!r} holds subject {p.subject!r}")
+            out[key] = p
+        return out
     except QuotaError:
         raise
     except (ValueError, KeyError, TypeError, AttributeError) as exc:
@@ -269,13 +283,25 @@ def declare(profile: Profile, path: Path | None = None) -> tuple[Profile, Profil
     return new, old
 
 
-def forget(subject: str, path: Path | None = None) -> Profile | None:
-    """Remove a subject's profile, so it will be asked for again. Returns what was removed."""
+def forget(subject: str, by: str = "agent", path: Path | None = None) -> Profile | None:
+    """Remove a subject's profile, so it will be asked for again. Returns what was removed.
+
+    An agent may not forget what the operator declared: forget-then-declare would
+    otherwise be a side door around the rule `declare` enforces.
+    """
+    if by not in DECLARERS:
+        raise QuotaError(f"by must be one of {', '.join(DECLARERS)}")
     path = path or store_path()
     with locked(path):
         current = load(path)
-        old = current.pop(subject, None)
+        old = current.get(subject)
+        if old is not None and old.declared_by == "operator" and by == "agent":
+            raise OperatorOwned(
+                f"the operator declared {subject}'s quota ({old.state}); an agent cannot "
+                f"forget it -- ask the operator"
+            )
         if old is not None:
+            del current[subject]
             atomic_write(path, _dump(current.values()))
     return old
 

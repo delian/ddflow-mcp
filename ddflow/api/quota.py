@@ -81,10 +81,13 @@ def quota_list(repo: Path, *, agent: str = "") -> O.Outcome:
     )
 
 
-def quota_forget(repo: Path, subject: str, *, agent: str = "") -> O.Outcome:
-    """Remove a profile so the subject is asked for again. Exit 2 if there was none."""
+def quota_forget(repo: Path, subject: str, *, by: str = "agent", agent: str = "") -> O.Outcome:
+    """Remove a profile so the subject is asked for again. Exit 2 if there was none,
+    exit 3 when an agent would forget what the operator declared."""
     try:
-        old = Q.forget(subject)
+        old = Q.forget(subject, by=by)
+    except Q.OperatorOwned as exc:
+        return O.refused("quota.forgotten", str(exc), subject=subject)
     except Q.QuotaError as exc:
         return O.failed("quota.forgotten", str(exc), subject=subject)
     if old is None:
