@@ -879,6 +879,7 @@ class EnforceConfig:
     install_hooks_on_setup: bool = True
     require_item_trailer: bool = False
     item_trailer_keys: list[str] = field(default_factory=lambda: ["Item"])
+    forbidden_trailers: list[str] = field(default_factory=list)
     generated_views: str = "block"  # block | warn | off
     stale_docs: str = "warn"  # block | warn | off
     doc_globs: list[str] = field(default_factory=lambda: ["**/*.md", "**/*.rst", "**/*.adoc"])
@@ -911,6 +912,12 @@ _doc(
     "enforce",
     "item_trailer_keys",
     'Trailer keys that satisfy require_item_trailer; any one of them will do. A project that has written `Phase: <id>` (or `Phase-ships: none` for a commit that ships no item) in every commit for months keeps its convention: set ["Phase", "Phase-ships"]. Checked by the commit-msg hook on the message being committed; merge commits are exempt.',
+)
+_doc(
+    "enforce",
+    "forbidden_trailers",
+    'Trailer keys the commit-msg hook REFUSES, e.g. ["Co-'
+    + "Authored-By\"] for a project that never credits a tool in its history. Case-insensitive; any line starting with `<key>:` counts, not only git's final-paragraph trailers, and merge commits are NOT exempt. Enforced by git's commit-msg hook, so it holds for every agent and every route that runs git hooks (`git commit -F`, the editor, merges), which a harness-side hook reading only the command text cannot see; `--no-verify` and plumbing skip it, as they skip every hook. Empty by default.",
 )
 _doc(
     "enforce",

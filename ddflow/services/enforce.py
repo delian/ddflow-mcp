@@ -129,8 +129,8 @@ def hooks_dir(repo: Path) -> Path:
 #: WITH `Item: X` was refused and one without it passed after any commit that had one.
 _COMMIT_MSG = """#!/bin/sh
 {marker}
-# Checks the commit MESSAGE: the trailer [enforce].require_item_trailer asks for.
-# Does nothing while that knob is off.
+# Checks the commit MESSAGE: the trailer [enforce].require_item_trailer asks for, and
+# none of [enforce].forbidden_trailers. Does nothing while both are unset.
 {invocation}
 """
 
@@ -790,6 +790,40 @@ def _out_hint(paths: list[str]) -> str:
     if len(dirs) == 1 and (d := dirs.pop()) != "docs/ddflow":
         return f" --out {shlex.quote(d)}"
     return ""
+
+
+def _key(line: str) -> str:
+    """The `<key>` of a `<key>: value` line, past indentation and comment hashes."""
+    return line.split(":", 1)[0].strip().lstrip("#").strip()
+
+
+def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
+    """Refuse a message carrying any of `keys` as a `<key>:` line. `[enforce].forbidden_trailers`.
+
+    A LINE scan, deliberately stricter than `check_item_trailer`'s use of git's parser:
+    git reads trailers only from the final paragraph, while a forge credits a co-author
+    from such a line wherever it sits, and the preference being enforced is about the
+    line. Case-insensitive, because git and forges treat trailer keys so. Prose that
+    merely names the key (`a Co-author line`) is not a `<key>:` line and passes.
+    """
+    wanted = {k.strip().lower() for k in keys if k.strip()}
+    if not wanted:
+        return 0, ""
+    # A leading `#` does not make it a comment that git drops: `git commit -F` cleans up
+    # with `whitespace`, which KEEPS `#` lines, so `#<key>: ...` landed in history
+    # verbatim (rubber-duck on B-forbid-trailers). Refusing it in the editor route too,
+    # where git would strip it, costs one deleted line.
+    found = sorted(
+        {_key(ln) for ln in message.splitlines() if ":" in ln and _key(ln).lower() in wanted}
+    )
+    if not found:
+        return 0, ""
+    return 1, (
+        f"ddflow: this commit message carries {', '.join(f'`{k}:`' for k in found)}, which "
+        f"[enforce].forbidden_trailers refuses.\n\n"
+        f"Remove the line and commit again. Git runs this check for every agent and for "
+        f"`git commit -F`, the editor and merges alike."
+    )
 
 
 def check_item_trailer(message: str, keys: list[str], *, merging: bool = False) -> tuple[int, str]:

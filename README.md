@@ -640,7 +640,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 123 knobs.
+cadences, and the rest of the 124 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -2538,7 +2538,7 @@ declared once and persists — see
 
 ## Configuration
 
-123 knobs across 17 sections, every one documented in place:
+124 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2602,7 +2602,9 @@ part that matters.
   `git merge <base>` is exempt, and the session hook only informs. Its commit-msg
   sibling requires an `Item:` trailer when `[enforce] require_item_trailer` is on — or
   the project's own keys (`item_trailer_keys = ["Phase", "Phase-ships"]`); merges are
-  exempt.
+  exempt. It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
+  tool-attribution line), merges included, for every agent and every route that runs
+  git hooks -- which a harness-side hook reading only the command text cannot promise.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
   crashed work to recover, ready items, binding decisions, operational memory — into
   every session, including after a context compaction, whether or not the agent
