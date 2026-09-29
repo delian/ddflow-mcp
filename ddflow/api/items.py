@@ -8,6 +8,7 @@ from typing import Any
 
 from ..config import csv_list
 from ..core import outcome as O
+from ..core.model import fold
 from ..services import leases as L
 from ._base import _load
 
@@ -118,6 +119,40 @@ def _bad_id(item: str) -> str:
     return ""
 
 
+def _taken(st, item: str, *, readd: bool) -> str:
+    """Why ``item`` cannot be ADDED because the id is already in the queue, or "".
+
+    An `added` event folds as a re-definition, so a second `task add B207` overwrote the
+    first B207 -- title, body, globs -- while its lease and gate records stayed, now under
+    another agent's title (B6bd279367e / B16042585f4). Adding never changes an item;
+    `update` does. A REMOVED id may come back, but only when the caller says so.
+    """
+    it = st.items.get(item)
+    if it is None:
+        return ""
+    what = f"{it.kind} {it.title!r}" if it.title else it.kind
+    if it.removed:
+        if readd:
+            return ""
+        return (
+            f"{item} is a {what} that was removed from the queue. Re-adding it brings the "
+            f"id back with the new definition: pass --readd (MCP/api: readd) to do that "
+            f"on purpose, or file this under a free id."
+        )
+    held = f", leased by {it.lease.holder}" if it.lease else ""
+    return (
+        f"{item} already exists: {what} ({it.state}{held}). Adding never changes an "
+        f"existing item -- use `ddflow update {item} --title ... --globs ...` to change "
+        f"it, or file this under a free id."
+    )
+
+
+def _fresh(log):
+    """The state to decide an add from, read UNDER the append lock: two agents filing the
+    same id at once must not both see it free."""
+    return fold(log.read_all(), strict=False)
+
+
 #: Splitting into one piece is a rename, not a split.
 MIN_SPLIT_PARTS = 2
 
@@ -173,7 +208,7 @@ def _bad_line(cfg, line: str) -> str:
     return f"unknown release line {line!r}. Lines, oldest first: {', '.join(known)}"
 
 
-def phase_add(
+def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_add
     repo: Path,
     item: str,
     *,
@@ -184,11 +219,13 @@ def phase_add(
     tags: str = "",
     priority: int = DEFAULT_PRIORITY,
     line: str = "",
+    readd: bool = False,
     agent: str = "",
 ) -> O.Outcome:
     """Add a phase — an umbrella that completes when its tasks do.
 
-    ``line`` puts the whole phase on a release line; its tasks inherit it.
+    ``line`` puts the whole phase on a release line; its tasks inherit it. An id already
+    in the queue is REFUSED; ``readd`` lets a removed one come back.
     """
     bad = _bad_id(item)
     if bad:
@@ -197,19 +234,23 @@ def phase_add(
     bad = _bad_line(cfg, line) if line else ""
     if bad:
         return O.failed("phase.added", bad, id=item)
-    log.append(
-        "phase.added",
-        item,
-        {
-            "title": title,
-            "needs": csv_list(needs),
-            "globs": csv_list(globs),
-            "body": body,
-            "tags": csv_list(tags),
-            "priority": priority,
-            "line": line,
-        },
-    )
+    with log.transaction():
+        taken = _taken(_fresh(log), item, readd=readd)
+        if taken:
+            return O.refused("phase.added", taken, id=item)
+        log.append(
+            "phase.added",
+            item,
+            {
+                "title": title,
+                "needs": csv_list(needs),
+                "globs": csv_list(globs),
+                "body": body,
+                "tags": csv_list(tags),
+                "priority": priority,
+                "line": line,
+            },
+        )
     return O.ok("phase.added", id=item)
 
 
@@ -226,6 +267,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     priority: int = DEFAULT_PRIORITY,
     line: str = "",
     lines: str = "",
+    readd: bool = False,
     agent: str = "",
 ) -> O.Outcome:
     """Add a task. Its parent may be a phase OR another task (making it a sub-task).
@@ -238,6 +280,9 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     Tasks can be added at ANY time, including while their parent is being worked: a task
     that turns out to contain two things is the normal case, not an exception, and a
     queue that cannot absorb that discovery pushes the work into someone's head.
+
+    An id already in the queue is REFUSED: adding never changes an item, `update` does.
+    ``readd`` lets a REMOVED id come back with the new definition.
     """
     from ..core import flow as F
     from ..services import choices as CH
@@ -256,62 +301,67 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         bad = _bad_line(cfg, ln)
         if bad:
             return O.failed("task.added", bad, id=item)
-    plan = None
-    adopted: list[str] = []
-    if len(set(wanted)) > 1:
-        clash = [f"{item}@{ln}" for ln in wanted if f"{item}@{ln}" in st.items]
-        if clash:
-            return O.failed("task.added", f"{', '.join(clash)} already exist", id=item)
-        # The first fix filed across lines is where the strategy starts to matter: an
-        # unmade choice is defaulted HERE, on the record, and followed from now on.
-        adopted = CH.adopt_defaults(log, cfg, ["port_strategy"])
-        plan = F.plan_ports(cfg, wanted, cfg.flow.port_strategy)
-    base = {
-        "parent": parent,
-        "globs": csv_list(globs),
-        "body": body,
-        "tags": csv_list(tags),
-        "priority": priority,
-    }
-    log.append(
-        "task.added",
-        item,
-        {
-            **base,
-            "title": title,
-            "needs": csv_list(needs),
-            "line": plan.author if plan else (wanted[0] if wanted else ""),
-        },
-    )
-    ports: list[str] = []
-    for ln, frm in plan.ports if plan else []:
-        source = item if frm < 0 else ports[frm]
-        pid = f"{item}@{ln}"
+    with log.transaction():
+        st = _fresh(log)
+        taken = _taken(st, item, readd=readd)
+        if taken:
+            return O.refused("task.added", taken, id=item)
+        plan = None
+        adopted: list[str] = []
+        if len(set(wanted)) > 1:
+            clash = [f"{item}@{ln}" for ln in wanted if f"{item}@{ln}" in st.items]
+            if clash:
+                return O.failed("task.added", f"{', '.join(clash)} already exist", id=item)
+            # The first fix filed across lines is where the strategy starts to matter: an
+            # unmade choice is defaulted HERE, on the record, and followed from now on.
+            adopted = CH.adopt_defaults(log, cfg, ["port_strategy"])
+            plan = F.plan_ports(cfg, wanted, cfg.flow.port_strategy)
+        base = {
+            "parent": parent,
+            "globs": csv_list(globs),
+            "body": body,
+            "tags": csv_list(tags),
+            "priority": priority,
+        }
         log.append(
             "task.added",
-            pid,
+            item,
             {
                 **base,
-                "title": f"{title or item} (port to {ln})",
-                "needs": [source],
-                "line": ln,
-                "port_of": item,
-                "port_from": source,
-                "port_strategy": plan.strategy,
-                "tags": [*csv_list(tags), "port"],
+                "title": title,
+                "needs": csv_list(needs),
+                "line": plan.author if plan else (wanted[0] if wanted else ""),
             },
         )
-        ports.append(pid)
-    # Giving a task its first child turns it into an umbrella, and an umbrella is not the
-    # thing being worked -- its children are. Holding its lease from here would put a live
-    # claim on globs that overlap every child's, so a SECOND agent could not take one, and
-    # recovery would point at a worktree where nothing more will happen. `split` already
-    # released for exactly this reason; adding a sub-task by hand is the same transition
-    # by a different route, and it did not.
-    parent_item = st.items.get(parent) if parent else None
-    released = bool(parent_item and parent_item.kind == "task" and parent_item.lease)
-    if released:
-        L.release(log, parent, note=f"became an umbrella when {item} was added")
+        ports: list[str] = []
+        for ln, frm in plan.ports if plan else []:
+            source = item if frm < 0 else ports[frm]
+            pid = f"{item}@{ln}"
+            log.append(
+                "task.added",
+                pid,
+                {
+                    **base,
+                    "title": f"{title or item} (port to {ln})",
+                    "needs": [source],
+                    "line": ln,
+                    "port_of": item,
+                    "port_from": source,
+                    "port_strategy": plan.strategy,
+                    "tags": [*csv_list(tags), "port"],
+                },
+            )
+            ports.append(pid)
+        # Giving a task its first child turns it into an umbrella, and an umbrella is not the
+        # thing being worked -- its children are. Holding its lease from here would put a live
+        # claim on globs that overlap every child's, so a SECOND agent could not take one, and
+        # recovery would point at a worktree where nothing more will happen. `split` already
+        # released for exactly this reason; adding a sub-task by hand is the same transition
+        # by a different route, and it did not.
+        parent_item = st.items.get(parent) if parent else None
+        released = bool(parent_item and parent_item.kind == "task" and parent_item.lease)
+        if released:
+            L.release(log, parent, note=f"became an umbrella when {item} was added")
     return O.ok(
         "task.added",
         id=item,

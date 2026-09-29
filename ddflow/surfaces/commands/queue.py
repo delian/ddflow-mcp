@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 from ...api import items as A
-from ..context import FAIL, OK, Ctx
+from ..context import OK, Ctx
 
 #: `task add`'s wire body, the same on `ddflow_task_add`: the ports it generated are
 #: part of the result, not a detail of the human message.
@@ -23,6 +23,7 @@ def cmd_phase_add(a, c: Ctx) -> int:
         tags=a.tags or "",
         priority=a.priority,
         line=a.line or "",
+        readd=a.readd,
         agent=c.requested_agent,
     )
     if out.exit != OK:
@@ -46,11 +47,12 @@ def cmd_task_add(a, c: Ctx) -> int:
         priority=a.priority,
         line=a.line or "",
         lines=a.lines or "",
+        readd=a.readd,
         agent=c.requested_agent,
     )
-    if out.exit == FAIL:
+    if out.exit != OK:
         print(out.reason, file=sys.stderr)
-        return FAIL
+        return out.exit
     released = ""
     if out.data["released_parent_lease"]:
         released = (
