@@ -2096,6 +2096,37 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id",),
     },
+    "ddflow_resolve": {
+        "description": (
+            "Settle a CONTESTED item: two clones each added the same id with different "
+            "content, or each claimed it, and a merge brought both in. `ddflow_doctor` "
+            "names every contested item, `ddflow_show` lists the rival definitions (event "
+            "id, agent, title, body) and claims, and `ddflow_next` will not offer one "
+            "until it is settled. `keep` names the definition (event id or agent) and/or "
+            "the lease holder to keep; the losing claim is released in the same "
+            "transaction. A losing DEFINITION is returned in `lost` -- re-add it under a "
+            "new id with `refile_as`, or it exists only in the log. Refused (exit 3) on "
+            "an item that is not contested. Settle what the operator decides, not by guess."
+        ),
+        "properties": {
+            "id": ("string", "The contested item.", True),
+            "keep": (
+                "string",
+                "Event id (or a 6+ character prefix), agent, or lease holder to keep.",
+                True,
+            ),
+            "refile_as": (
+                "string",
+                "Comma-separated new ids, one per definition NOT kept, in `show` order: "
+                "each is re-added under its new id in the same transaction.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().items.resolve(
+            repo, a["id"], keep=a["keep"], refile_as=a.get("refile_as", "") or "", agent=agent
+        ),
+        "payload": ("id", "kept_definition", "kept_holder", "lost", "refiled", "released"),
+    },
     "ddflow_unblock": {
         "description": (
             "Release a BLOCKED item -- and every blocked item beneath it -- back into "
