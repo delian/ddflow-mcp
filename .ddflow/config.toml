@@ -49,9 +49,11 @@ commit_without_lease = "warn"
 brief_max_tokens = 1200
 
 [gate.unit_tests]
-# In parallel (pytest-xdist). A machine that wants a fixed worker count -- e.g. several
-# agents sharing one large host -- sets it in its own git-ignored .ddflow/gates.toml.
-command = "uv run pytest tests/ -q --timeout=420 -n auto"
+# In parallel (pytest-xdist): one worker per core, capped at 16 -- several agents may run
+# this gate at once, and on a large host `-n auto` alone would start one worker per core
+# for EACH of them. A machine that wants a different count sets it in its own
+# git-ignored .ddflow/gates.toml.
+command = "uv run pytest tests/ -q --timeout=420 -n auto --maxprocesses 16"
 
 # This project's reviewers (the cross-family critic) are NOT committed: an endpoint, a
 # model name and an API-key variable belong to whoever runs the project. Put yours in
