@@ -36,6 +36,12 @@ heartbeat_s = 300
 enabled = true
 max_parallel = 4
 
+# .roborev.toml is git-ignored (decision D-roborev-local) but roborev reads it from each
+# checkout, so every worktree ddflow creates gets the primary's copy.
+# Disabled until bug B9cb7dd1c3b is fixed: ddflow code older than this knob reads the
+# primary's config and refuses every command on an unknown knob.
+# local_files = [".roborev.toml"]
+
 [schedule]
 max_parallel_tasks = 4
 
