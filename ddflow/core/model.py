@@ -814,12 +814,18 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         if new.acquired_at >= cur.acquired_at:
             _hold(it, new)
         return
-    if rivals:
-        _join(it, [*rivals, mine])
+    # The two never overlapped: whichever ended first has no stake in a contest the other
+    # is in -- whoever that contest keeps, it was already over. It stays out (or leaves),
+    # remembered as displaced, where a late renewal can still prove it was live.
     if new.acquired_at < cur.acquired_at:
+        if rivals and not any(h["event"] == held["event"] for h in it.lease_contest):
+            _join(it, [*rivals, mine])
         _displace(it, mine, held)  # late history: `cur` took over from it
         return
     _displace(it, held, mine)
+    if rivals:
+        it.lease_contest = [h for h in it.lease_contest if h["event"] != held["event"]]
+        _join(it, [*rivals, mine])
     _hold(it, new)
 
 
