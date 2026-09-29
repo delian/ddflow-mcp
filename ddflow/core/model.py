@@ -1002,24 +1002,35 @@ def _h_lease_gone(st: State, ev: Event) -> None:
         it.lease.expired_at = ev.ts
         return
     it.lease = None
+    _redisplay(it)
+
+
+def _redisplay(it: Item) -> None:
+    """The displayed lease was released while a contest stands: the latest contestant is
+    displayed -- the fold's own rule, and what the log without the released claim shows.
+    A displaced claim is never promoted: it lapsed before a takeover, and reviving it
+    would turn the next ordinary claim into a recovery."""
+    if it.lease is None and it.lease_contest:
+        _hold(it, Lease(**max(it.lease_contest, key=lambda h: h["lease"]["acquired_at"])["lease"]))
 
 
 def _withdraw_claim(it: Item, event: str) -> None:
-    """A contested claim was released: it is withdrawn, and when no two claims left
-    overlapped there is nothing to resolve. With the displayed lease the one withdrawn,
-    the latest claim left holds the item -- the fold's own rule -- and any other left is
-    history it displaced."""
+    """A contested claim was released: it is withdrawn -- it, and nothing else. A claim
+    left with no overlap partner has nothing to resolve: it leaves the contest (all of
+    them do, once no two overlapped) and goes back on the record as history the
+    displayed lease displaced, where a later claim is still weighed against it."""
     it.lease_contest = [h for h in it.lease_contest if h["event"] != event]
     if it.lease is not None and it.lease.event == event:
         it.lease = None
-    if any(_clashing(it.lease_contest, h) for h in it.lease_contest):
+    _redisplay(it)
+    alone = [h for h in it.lease_contest if not _clashing(it.lease_contest, h)]
+    if not alone or it.lease is None:
         return
-    if it.lease is None and it.lease_contest:
-        *older, latest = sorted(it.lease_contest, key=lambda h: h["lease"]["acquired_at"])
-        _hold(it, Lease(**latest["lease"]))
-        for h in older:
-            _displace(it, h, latest)
-    it.lease_contest = []
+    held, kept = _claim(it.lease), {e["event"] for e in it.displaced}
+    for h in alone:
+        if h["event"] not in (held["event"], *kept):
+            _displace(it, h, held)
+    it.lease_contest = [h for h in it.lease_contest if h not in alone]
 
 
 def _h_resolved(st: State, ev: Event) -> None:
@@ -1043,6 +1054,14 @@ def _h_resolved(st: State, ev: Event) -> None:
         # The operator's decision is itself a sign of life: the kept holder's TTL runs
         # from here, not from a claim that may be hours old.
         lease.renewed_at = max(lease.renewed_at, float(d.get("at", 0.0)))
+        # What the resolution did not release stays on the record, as history the kept
+        # claim displaced: a later claim is still weighed against it.
+        on_record = {claim["event"], *(e["event"] for e in it.displaced)}
+        for h in [*it.lease_contest, *([_claim(it.lease)] if it.lease is not None else [])]:
+            if h["event"] not in on_record:
+                _displace(it, h, claim)
+                on_record.add(h["event"])
+        it.displaced = [e for e in it.displaced if e["event"] != claim["event"]]
         _hold(it, lease)
         it.lease_contest = []
 

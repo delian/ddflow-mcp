@@ -221,3 +221,98 @@ def test_show_names_who_each_contested_claim_overlapped(repo: Path):
     assert lines["carol"].endswith("overlapped alice")
     assert lines["bob"].endswith("overlapped alice")
     assert lines["alice"].endswith("overlapped bob and carol")
+
+
+# -- releases: a release takes one claim off the record, never the claims left ----------
+
+
+def _run(claims: dict[str, tuple[float, int]], seq, holders: dict[str, str] | None = None):
+    """Fold ``seq`` of ("acq" | "rel", name): each claim acquired as ``holders[name]``
+    (default: its own name), each release naming the claim's acquiring event."""
+    holders = holders or {}
+    evs, ids = [_ev("task.added", "T", 1, title="t")], {}
+    for k, (kind, w) in enumerate(seq, start=2):
+        who = holders.get(w, w)
+        if kind == "acq":
+            evs.append(
+                _ev("lease.acquired", "T", k, who, holder=who, at=claims[w][0], ttl_s=claims[w][1])
+            )
+            ids[w] = evs[-1].id
+        else:
+            evs.append(_ev("lease.released", "T", k, who, holder=who, event=ids[w]))
+    return fold(evs).items["T"]
+
+
+def test_a_release_that_ends_a_contest_keeps_the_claims_left_on_record():
+    """B4cefa40964, FAILED before the fix: with R's claim released, C was dropped from the
+    contest and kept nowhere, so N -- who overlapped C -- went unreported."""
+    claims = {"c": (1000.0, 1000), "r": (1500.0, 1000), "l": (3000.0, 1000), "n": (1200.0, 1000)}
+    seq = [("acq", "c"), ("acq", "r"), ("acq", "l"), ("rel", "r"), ("acq", "n")]
+    it = _run(claims, seq, holders={"l": "r"})
+    assert _holders(it.lease_contest) == ["c", "n"]
+
+
+_THREE = {"A": (1000.0, 2000), "B": (2000.0, 2000), "C": (3500.0, 1500)}
+
+
+@pytest.mark.parametrize("order", list(permutations(_THREE)), ids="-".join)
+def test_releasing_the_displayed_contestant_displays_the_latest_left(order):
+    """B21c7858371, FAILED before the fix: the item was left with no lease at all, though
+    the log without C displays B."""
+    it = _run(_THREE, [*(("acq", w) for w in order), ("rel", "C")])
+    assert _holders(it.lease_contest) == ["A", "B"] and it.lease.holder == "B"
+
+
+@pytest.mark.parametrize("seed", range(40))
+def test_releases_in_any_position_leave_the_contest_exact(seed):
+    """Property, releases folded at random points after their claims: no released claim is
+    anywhere, every other claim is still on record (contest, displaced or displayed),
+    the contest is exactly the unreleased claims with an unreleased overlap partner, and
+    a standing contest always displays a claim."""
+    rnd = random.Random(1000 + seed)
+    names = ["a", "b", "c", "d", "e"][: rnd.choice([3, 4, 5])]
+    claims = {w: (float(rnd.randrange(0, 40) * 50), rnd.choice([50, 100, 300, 800])) for w in names}
+    for _ in range(60):
+        order = rnd.sample(names, len(names))
+        seq = [("acq", w) for w in order]
+        gone = {w for w in names if rnd.random() < 0.35}
+        for w in gone:
+            seq.insert(rnd.randrange(seq.index(("acq", w)) + 1, len(seq) + 1), ("rel", w))
+        it = _run(claims, seq)
+        left = {w: claims[w] for w in names if w not in gone}
+        partners = _partners(left)
+        on_record = {h["holder"] for h in it.lease_contest} | {e["holder"] for e in it.displaced}
+        on_record |= {it.lease.holder} if it.lease else set()
+        assert on_record == set(left), (claims, seq)
+        assert _holders(it.lease_contest) == sorted(w for w in left if partners[w]), (claims, seq)
+        assert it.lease is not None or not it.lease_contest, (claims, seq)
+
+
+_KEEP_FAR = {"X": (1000.0, 1000), "Y": (1900.0, 1000), "M": (150.0, 150), "K": (100.0, 100)}
+
+
+@pytest.mark.parametrize(
+    ("claims", "keep", "order"),
+    [(_KEEP_FAR, "K", o) for o in permutations(_KEEP_FAR)]
+    + [(_GROUPS, "alice", o) for o in permutations(_GROUPS)],
+    ids=lambda v: "-".join(v) if isinstance(v, tuple) else (v if isinstance(v, str) else ""),
+)
+def test_resolve_keeps_every_claim_it_did_not_release_on_record(claims, keep, order):
+    """FAILED before the fix: the resolution cleared the contest and overwrote the lease,
+    so X -- whose one partner, Y, was released as the holder K takes over from -- was
+    kept nowhere, and a later claim overlapping X would have gone unreported."""
+    it = _folded(claims, order)
+    kept = next(h for h in it.lease_contest if h["holder"] == keep)
+    losers = it.lease_losers(kept)
+    after = [
+        *(
+            _ev("lease.released", "T", 20 + i, "op", holder=h["holder"], event=h["event"])
+            for i, h in enumerate(losers)
+        ),
+        Event("item.resolved", "T", {"kind": "task", "claim": kept, "at": 9000.0}, "op", 30),
+    ]
+    it = _folded(claims, order, *after)
+    on_record = {e["holder"] for e in it.displaced} | {it.lease.holder}
+    assert it.lease_contest == [] and it.lease.holder == keep
+    assert keep not in {e["holder"] for e in it.displaced}  # displayed, not history
+    assert on_record == set(claims) - {h["holder"] for h in losers}
