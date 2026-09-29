@@ -1624,6 +1624,34 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
+    "ddflow_tests": {
+        "description": (
+            "AFTER EACH CHANGE, while you work: the tests your change reaches (changed "
+            "test files, tests importing a changed module directly or one step removed, "
+            "tests named after a changed file, everything under a changed conftest.py), "
+            "each with why, and a command that runs them IN PARALLEL -- the project's own "
+            "test command with its runner and worker flags, the files swapped in. Run it; "
+            "do not reason about which tests matter. It is fast feedback, never a pass: "
+            "the unit_tests gate still runs the WHOLE suite, in parallel. Pass `item` so "
+            "the diff is taken in that item's worktree against its base. Exit 2 when no "
+            "test reaches the change."
+        ),
+        "properties": {
+            "item": ("string", "The item whose worktree and base to use.", False),
+            "base": ("string", "Compare against this ref instead of the item's base.", False),
+        },
+        "api": lambda repo, a, agent, called_from=None: _api().relevant_tests(
+            repo,
+            item=a.get("item", "") or "",
+            where=called_from,
+            base=a.get("base", "") or "",
+            agent=agent,
+        ),
+        "payload": "",
+        # Without `item`, the diff is the caller's own checkout -- the worktree it is
+        # standing in, not the primary the server was started on.
+        "wants_called_from": True,
+    },
     "ddflow_session_prompt": {
         "description": (
             "Record the operator's prompt verbatim. This is what makes the project "
@@ -1676,7 +1704,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Read or write .ddflow/config.toml. With no arguments it prints every "
             "knob, its value, its source and what it does. With `toml`, it APPENDS that "
             "TOML to the config — the usual use is setting your project's test command:\n"
-            '  [gate.unit_tests]\n  command = "pytest -q"\n'
+            '  [gate.unit_tests]\n  command = "pytest -q -n auto"\n'
+            "(-n auto runs the suite in parallel and needs pytest-xdist; drop it without.) "
             "This is how a project is configured without a shell."
         ),
         "properties": {

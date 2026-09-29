@@ -87,7 +87,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "job",
         ),
     ),
-    ("Gates and review", ("gate", "review", "reviewers", "pins")),
+    ("Gates and review", ("gate", "review", "reviewers", "pins", "tests")),
     ("Landing it", ("merge", "pr", "version", "promote", "cleanup")),
     (
         "What the project remembers",

@@ -145,6 +145,25 @@ reviewer sees another's verdict** — each gets the diff, the intent and your re
 notes, nothing else. A reviewer shown a prior verdict stops being an independent sample
 and becomes a vote on someone else's hypothesis.
 
+**Tests: the relevant ones while you work, all of them at the gate, always in parallel.**
+
+```sh
+ddflow tests --item <ID>                         # [ddflow_tests] after EACH change
+```
+
+- **While you work**, run what `ddflow tests` prints after each change: the tests your
+  diff reaches, derived from the import graph and the changed files, and one command that
+  runs them in parallel. Do not reason about which tests matter — that is guessing, and
+  the derivation is cheaper than being wrong. A regression test you are writing is in the
+  set as soon as its file exists.
+- **At the gate**, `unit_tests` runs the **whole** suite. A targeted run says your change
+  is fine and nothing about what was already broken; the full run is where standing
+  breakage surfaces. Never record `unit_tests` from a selection.
+- **Always in parallel.** Run pytest with `-n auto` (pytest-xdist) or the project's
+  configured worker count; a serial run of a large suite is the slowest step in this
+  loop. If `ddflow workflow` says the test command runs on ONE core, fix the command
+  before the next gate, or record why serial is deliberate (`-p no:xdist`).
+
 ### 2d. Close the task
 
 ```sh
@@ -190,7 +209,7 @@ compression.
 When `ddflow next --phase <NAME>` reports no remaining tasks:
 
 ```sh
-ddflow gate run <NAME> unit_tests                # the WHOLE suite, not the task's slice
+ddflow gate run <NAME> unit_tests                # the WHOLE suite, in parallel, not a slice
 ddflow gate record <NAME> bug_hunt   --outcome passed --evidence "..."
 ddflow gate record <NAME> dedupe     --outcome passed --evidence "..."
 ddflow gate record <NAME> live_test  --outcome passed --evidence "<real run output>"
