@@ -14,7 +14,7 @@ Run the `code-clean` workflow to completion before testing anything. Testing a t
 Configure the ones this project has in `.ddflow/config.toml` — integration, UI, end-to-end, property, smoke, whatever exists:
 
     [gate.integration_tests]
-    command = "pytest tests/integration -q"
+    command = "pytest tests/integration -q -n auto"
 
     [gate.e2e_tests]
     command = "npm run test:e2e"
@@ -25,7 +25,9 @@ Configure the ones this project has in `.ddflow/config.toml` — integration, UI
 
 A targeted run tells you your change is fine and says nothing about what was already broken. Standing breakage hides behind targeted gates indefinitely, and the first full run after a long gap is always the expensive one.
 
-Where selection is unavoidable, derive it from the diff rather than reasoning about it: `git diff --name-only`, then the tests that reference those paths. Choosing by intuition is guessing.
+Where selection is useful — fast feedback while you work, never a gate — derive it from the diff rather than reasoning about it: `ddflow_tests` lists the tests your change reaches, each with why, and a command that runs them. Choosing by intuition is guessing.
+
+**Run every suite in parallel.** Give pytest `-n auto` (pytest-xdist) or a fixed worker count; `ddflow_workflow` says when a configured test command runs on ONE core. ddflow's own suite went from 49 minutes serially to under one.
 
 ## 4. Fix what fails — under the bug-hunt rule
 

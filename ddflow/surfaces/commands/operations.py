@@ -241,3 +241,30 @@ def cmd_pins(a, c: Ctx) -> int:
         print(f"\n--- {f['chars']} chars free, {where} ---\n{f['text']}")
     print("\nFree means no test holds it, not that it is not a rule. Read what you delete.")
     return OK
+
+
+def cmd_tests(a, c: Ctx) -> int:
+    """The tests the change reaches, and the parallel command to run them (B16)."""
+    out = A.relevant_tests(c.repo, item=a.item, where=c.called_from, base=a.base)
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
+    if c.json:
+        print(json.dumps(out.body(), indent=2))
+        return out.exit
+    d = out.data
+    if out.exit == NOTHING:
+        print(out.reason)
+    else:
+        print(
+            f"{len(d['tests'])} test file(s) reach {len(d['changed'])} changed file(s) since {d['base']}:"
+        )
+        for t in d["tests"]:
+            print(f"  {t['path']}  -- {t['reason']}")
+        if d["command"]:
+            print(f"\nRun them now, in parallel:\n  {d['command']}")
+    if d["full_suite"]:
+        print(f"\nThe unit_tests gate still runs the whole suite:\n  {d['full_suite']}")
+    if d["advice"]:
+        print(f"  NOTE: that command {d['advice']}")
+    return out.exit
