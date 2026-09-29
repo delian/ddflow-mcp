@@ -309,7 +309,7 @@ def _armed_by_precommit(repo: Path, hook: Path, name: str, text: str) -> Armed:
             True,
             f"Check {config_name}; this reader handles plain YAML without anchors or tags",
         )
-    always, filtered = precommit_hooks_running(doc, stage, check)
+    always, broken = precommit_hooks_running(doc, stage, check)
     if always:
         return Armed(
             "pre-commit",
@@ -317,14 +317,14 @@ def _armed_by_precommit(repo: Path, hook: Path, name: str, text: str) -> Armed:
             f"{', '.join(repr(i) for i in always)} runs {command}",
             True,
         )
-    if filtered:
-        ids = ", ".join(repr(i) for i in filtered)
+    if broken:
+        hook_id, why, fix = broken[0]
         return Armed(
             "",
-            f"the pre-commit framework runs it, but {config_name} hook {ids} runs {command} "
-            "only when a file matches its filters (files/exclude/types), and skips it otherwise",
+            f"the pre-commit framework runs it, but {config_name} hook {hook_id!r}, "
+            f"which names {command}, {why}",
             True,
-            f"Set `always_run: true` on {ids} in {config_name}",
+            f"{fix} ({hook_id!r} in {config_name})",
         )
     return Armed(
         "",
@@ -389,12 +389,7 @@ def _filters(d: dict, keys) -> bool:
 def _runs_check(hook: dict, check: str) -> bool:
     """Whether this configured hook's command (`entry` + `args`) is `... hooks <check>`."""
     if not isinstance(hook.get("entry"), str) or hook.get("language") in ("fail", "pygrep"):
-        # A remote hook's entry is in its manifest; `fail` prints its entry and `pygrep`
-        # greps for it -- neither runs it.
-        return False
-    if check == "check-msg" and _false(hook.get("pass_filenames")):
-        # check-msg reads the message FILE pre-commit passes as its argument; given no
-        # file it has nothing to check and allows the commit.
+        # `fail` prints its entry and `pygrep` greps for it -- neither runs it.
         return False
     cmd = " ".join([hook["entry"], *(str(a) for a in _as_list(hook.get("args")))])
     if "ddflow" not in cmd.lower():
@@ -408,10 +403,41 @@ def _runs_check(hook: dict, check: str) -> bool:
     return any(words[k : k + 2] == ["hooks", check] for k in range(len(words)))
 
 
-def precommit_hooks_running(doc, stage: str, check: str) -> tuple[list[str], list[str]]:
-    """(always, filtered): ids of the hooks in a parsed `.pre-commit-config.yaml` that run
-    `ddflow hooks <check>` when the git hook of type `stage` fires -- on every commit, or
-    only when a file passes their filters.
+def _broken(hook: dict, check: str, top_filters: bool) -> tuple[str, str] | None:
+    """(why, fix) when a hook that names ddflow's check does not actually run it on every
+    commit, or None when it does."""
+    passes_files = not _false(hook.get("pass_filenames"))
+    if check == "check-commit" and passes_files:
+        return (
+            "passes the staged file names as arguments, which `ddflow hooks check-commit` "
+            "refuses (a usage error, exit 2, on every commit)",
+            "Set `pass_filenames: false` on it",
+        )
+    if check == "check-msg" and not passes_files:
+        # check-msg reads the message FILE pre-commit passes as its argument; given no
+        # file it has nothing to check and allows the commit.
+        return (
+            "has `pass_filenames: false`, so check-msg is given no message file and checks nothing",
+            "Remove `pass_filenames: false` from it",
+        )
+    if (top_filters or _filters(hook, tuple(_NO_FILTER))) and not _true(hook.get("always_run")):
+        return (
+            "runs only when a file matches its filters (files/exclude/types), and is "
+            "skipped otherwise",
+            "Set `always_run: true` on it",
+        )
+    return None
+
+
+def precommit_hooks_running(
+    doc, stage: str, check: str
+) -> tuple[list[str], list[tuple[str, str, str]]]:
+    """(armed, broken): ids of the `repo: local` hooks in a parsed
+    `.pre-commit-config.yaml` that run `ddflow hooks <check>` on every commit when the git
+    hook of type `stage` fires; and `(id, why, fix)` for those that name it but do not.
+
+    Only `repo: local` hooks: a remote hook's `language` (and so whether its entry runs
+    at all) is in its repository's manifest, which is not read here.
 
     pre-commit's own rules (repository.py, clientlib.py, commands/run.py in 4.6): a hook
     runs at a stage listed in its `stages`; empty or absent, those default to the
@@ -419,28 +445,32 @@ def precommit_hooks_running(doc, stage: str, check: str) -> tuple[list[str], lis
     `commit`, `push` and `merge-commit` still mean `pre-commit`, `pre-push` and
     `pre-merge-commit`. A hook whose `files`/`exclude`/`types*` (or the top-level
     `files`/`exclude`) match nothing is SKIPPED -- "(no files to check)", which for
-    commit-msg means the message file -- unless it has `always_run: true`.
+    commit-msg means the message file -- unless it has `always_run: true`. And
+    `pass_filenames` must fit the check: check-commit takes no arguments, check-msg
+    needs the message file.
     """
     if not isinstance(doc, dict):
         return [], []
     default = _as_list(doc["default_stages"]) if "default_stages" in doc else None
     top_filters = _filters(doc, ("files", "exclude"))
-    always: list[str] = []
-    filtered: list[str] = []
+    armed: list[str] = []
+    broken: list[tuple[str, str, str]] = []
     for repo in _as_list(doc.get("repos")):
-        hooks = repo.get("hooks") if isinstance(repo, dict) else None
-        for hook in _as_list(hooks):
+        if not isinstance(repo, dict) or repo.get("repo") != "local":
+            continue
+        for hook in _as_list(repo.get("hooks")):
             if not isinstance(hook, dict) or not _runs_check(hook, check):
                 continue
             stages = _as_list(hook.get("stages")) or default
             if stages is not None and stage not in {_OLD_STAGE.get(str(s), str(s)) for s in stages}:
                 continue
-            narrowed = top_filters or _filters(hook, tuple(_NO_FILTER))
-            if narrowed and not _true(hook.get("always_run")):
-                filtered.append(str(hook.get("id", "?")))
+            hook_id = str(hook.get("id", "?"))
+            wrong = _broken(hook, check, top_filters)
+            if wrong:
+                broken.append((hook_id, *wrong))
             else:
-                always.append(str(hook.get("id", "?")))
-    return always, filtered
+                armed.append(hook_id)
+    return armed, broken
 
 
 # -- a YAML reader for .pre-commit-config.yaml ------------------------------------------

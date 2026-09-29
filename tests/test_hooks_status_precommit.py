@@ -197,7 +197,6 @@ repos:
         # the wrong check at the right stage is not the check
         ("", "check-msg", "    stages: [pre-commit]", "pre-commit", False),
         # check-msg reads the message FILE pre-commit passes; without it, it checks nothing
-        ("", "check-msg", "    pass_filenames: false", "commit-msg", False),
         # `language: fail` never runs its entry
         ("", "check-commit", "    language: fail", "pre-commit", False),
         ("", "check-commit", "    language: pygrep", "pre-commit", False),
@@ -215,6 +214,8 @@ repos:
     ],
 )
 def test_the_stage_decides(repo, top, check, extra, name, want):
+    if check == "check-commit":  # it takes no file names; see the pass_filenames test
+        extra = "    pass_filenames: false\n" + extra
     config = _ONE_HOOK.format(top=top, check=check, extra=extra)
     if "language: " in extra:
         config = config.replace("    language: system\n", "")
@@ -233,10 +234,37 @@ repos:
     assert _armed(repo, config, "commit-msg").via == "pre-commit"
 
 
+def test_pass_filenames_must_fit_the_check(repo):
+    """pre-commit passes file names by default: check-commit refuses them as arguments
+    (a usage error on every commit), and check-msg without them has nothing to read."""
+    commit = _ONE_HOOK.format(top="", check="check-commit", extra="")
+    a = _armed(repo, commit, "pre-commit")
+    assert a.via == "" and "pass_filenames: false" in a.remedy, a
+    msg = _ONE_HOOK.format(top="", check="check-msg", extra="    pass_filenames: false")
+    a = _armed(repo, msg, "commit-msg")
+    assert a.via == "" and "pass_filenames" in a.remedy, a
+
+
+def test_only_local_hooks_count(repo):
+    """A remote hook's language is in its manifest, unread here: an `entry` override
+    there may be printed (`fail`) or grepped (`pygrep`) rather than run."""
+    config = """\
+repos:
+  - repo: https://example.com/hooks
+    rev: v1
+    hooks:
+      - id: x
+        entry: ddflow hooks check-msg
+        stages: [commit-msg]
+"""
+    assert _armed(repo, config, "commit-msg").via == ""
+    assert _armed(repo, config.replace("https://example.com/hooks", "local"), "commit-msg").via
+
+
 def test_a_command_that_is_not_ddflow_is_not_the_check(repo):
-    config = _ONE_HOOK.format(top="", check="check-commit", extra="").replace(
-        "entry: ddflow hooks", "entry: echo hooks"
-    )
+    config = _ONE_HOOK.format(
+        top="", check="check-commit", extra="    pass_filenames: false"
+    ).replace("entry: ddflow hooks", "entry: echo hooks")
     assert _armed(repo, config, "pre-commit").via == ""
 
 
