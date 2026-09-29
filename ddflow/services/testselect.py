@@ -17,9 +17,17 @@ A test is selected when, relative to the item's base:
 * its file name carries a changed file's stem (``test_gates.py`` for ``gates.py``) — the
   convention that covers languages this module does not parse.
 
-What it misses, stated so nobody mistakes it for the suite: a test that only drives the
-program in a SUBPROCESS (`python -m pkg ...`) imports nothing it exercises. The gate
-runs those.
+What it misses, stated so nobody mistakes it for the suite -- the gate runs all of these:
+
+* a test that only drives the program in a SUBPROCESS (`python -m pkg ...`) imports
+  nothing it exercises;
+* a test more than `MAX_HOPS` imports away from the change (it imports C, C imports B,
+  B imports the changed A);
+* a test that reaches the change only through a re-exporting package ``__init__``.
+
+The last two are the bound, chosen: unbounded, the layer that imports everything (a CLI,
+an MCP registry) made one leaf module "reach" 42 of 87 test files on this repository.
+Precision for fast feedback, recall at the gate.
 """
 
 from __future__ import annotations
