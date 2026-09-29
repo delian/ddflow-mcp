@@ -108,7 +108,318 @@ def next_(
     }
     if p.ready:
         return O.ok("next", **data)
-    return O.nothing("next", f"Nothing actionable ({p.summary()}).", **data)
+    return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
+
+
+def _wait_hint(p) -> str:
+    """Point a blocked caller at `wait` -- only when something in flight can clear it."""
+    if p.running and any(b.reason in WAITABLE for b in p.blocked):
+        return (
+            " `ddflow wait` sleeps until one of the blocked items frees, and returns "
+            "the moment it does — no need to poll or to ask a person."
+        )
+    return ""
+
+
+#: Blocker reasons that clear on their own when another agent finishes. Everything else
+#: -- a cycle, a contest, an operator's hold, a release line gone from config, an
+#: umbrella -- needs someone to ACT, and waiting on it would idle until the deadline and
+#: look like progress while doing so.
+WAITABLE = frozenset({"conflict", "deps", "resources"})
+
+#: How long `wait` blocks when the caller does not say. Long enough to outlast most
+#: holders' remaining work, short enough that a forgotten wait does not hold a process
+#: for an afternoon. A caller that wants longer asks again, which also re-checks that
+#: waiting is still the right move.
+DEFAULT_WAIT_TIMEOUT_S = 600
+
+
+def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str, Any]:
+    """Can the caller start work NOW, must it wait, or would waiting never end?
+
+    Returns {"status": "ready"|"blocked"|"hopeless", "why", "waiting_on", "ready",
+    "blocked"}. "hopeless" is the case that matters most: a wait that no other agent's
+    progress can end is a stall dressed as patience, so it is refused up front with the
+    move that WOULD help.
+    """
+    now = time.time()
+    live = st.active_leases(now, cfg.lease.grace_s)
+    others = {i: lz for i, lz in live.items() if lz.holder != me}
+    if not item:
+        return _judge_any(st, cfg, me, phase, kind, now, others)
+    it = st.items.get(item)
+    out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
+    if it is None or it.removed:
+        return {**out, "status": "hopeless", "why": f"{item} was removed from the queue"}
+    if it.state in (DONE, ABANDONED):
+        return {**out, "status": "hopeless", "why": f"{item} is already {it.state}"}
+    if it.state == REVIEW:
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"{item} is in review: its reviewers have it, not an agent. "
+            f"`ddflow pr sync` brings it back if they request changes.",
+        }
+    mine = live.get(item)
+    if mine is not None and mine.holder == me:
+        return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
+    b = _claim_blocker(st, cfg, it, me, live, now)
+    if b is None:
+        return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
+    out["blocked"] = [plain(b)]
+    if b.reason not in WAITABLE:
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"{item}: {b.reason} — {b.detail}. That does not clear when another "
+            f"agent finishes; someone has to act on it.",
+        }
+    if b.reason == "resources":
+        return {
+            **out,
+            "status": "blocked",
+            "why": f"{item}: {b.reason} — {b.detail}",
+            "waiting_on": sorted(i for i, lz in others.items() if lz.resources),
+        }
+    if b.reason == "conflict":
+        return {
+            **out,
+            "status": "blocked",
+            "why": f"{item}: {b.detail}",
+            "waiting_on": b.waiting_on,
+        }
+    held_by_me = [d for d in b.waiting_on if d in live and live[d].holder == me]
+    if held_by_me:
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"{item} waits on {', '.join(held_by_me)}, which YOU hold. "
+            f"Finish that first; waiting on yourself never ends.",
+        }
+    moving = [d for d in b.waiting_on if _in_motion(st, d, others)]
+    if not moving:
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"{item} waits on {', '.join(b.waiting_on) or 'its dependencies'}, "
+            f"and nobody is working on them. Take one of them instead of waiting.",
+        }
+    return {**out, "status": "blocked", "why": f"{item}: deps — {b.detail}", "waiting_on": moving}
+
+
+def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, others) -> dict[str, Any]:
+    """`_judge_wait` for "anything": the same ready set `next` offers."""
+    from ..core.schedule import plan
+
+    p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me)
+    out: dict[str, Any] = {
+        "why": "",
+        "waiting_on": [],
+        "ready": [],
+        "blocked": [plain(b) for b in p.blocked],
+    }
+    if p.ready:
+        return {**out, "status": "ready", "ready": [i.id for i in p.ready]}
+    if not others:
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"nothing is ready and no other agent holds anything ({p.summary()}), "
+            "so no release is coming to wake you. `ddflow next` says what blocks the "
+            "queue — it needs someone to act, not to wait.",
+        }
+    return {
+        **out,
+        "status": "blocked",
+        "why": f"nothing is ready ({p.summary()}); waiting on "
+        + ", ".join(f"{i} ({lz.holder})" for i, lz in sorted(others.items())),
+        "waiting_on": sorted(others),
+    }
+
+
+def _claim_blocker(st, cfg, it, me: str, live, now: float):
+    """Why `claim` would refuse ``it`` for ``me`` right now, as a `Blocked`; None if not.
+
+    The scheduler's predicate plus the glob check `claim` applies unconditionally:
+    `item_blocker` skips lease questions under `ready_policy = deps_only`, and waking on
+    a verdict `claim` then refuses would spin.
+    """
+    from ..core.schedule import Blocked, find_cycles, item_blocker
+
+    cycles = find_cycles({i.id: i for i in st.items.values() if not i.removed})
+    in_cycle = {n for c in cycles for n in c}
+    b = item_blocker(st, cfg, it, live, agent=me, now=now, in_cycle=in_cycle, cycles=cycles)
+    if b is not None:
+        return b
+    clash = L.glob_clash(st, cfg, it, me, list(it.globs), now)
+    if clash is None:
+        return None
+    other_id, lz, pair = clash
+    return Blocked(
+        it.id,
+        "conflict",
+        f"globs overlap {other_id} held by {lz.holder} ({pair[0]} vs {pair[1]})",
+        [other_id],
+    )
+
+
+def _in_motion(st, dep: str, others: dict) -> bool:
+    """Will `dep` finish without the caller? Held by another agent, under review, in
+    another repository, or with a sub-task someone holds."""
+    from ..core.schedule import is_external
+
+    if is_external(dep) or dep in others:
+        return True
+    d = st.items.get(dep)
+    if d is None:
+        return False
+    if d.state == REVIEW:
+        return True
+    return any(k.id in others for k in st.open_descendants(dep))
+
+
+def _freed(st, cfg, was: list[str], me: str) -> list[str]:
+    """What happened to each item the caller was waiting on -- the answer to "why did
+    I wake?", in the words an agent can relay."""
+    now = time.time()
+    live = st.active_leases(now, cfg.lease.grace_s)
+    out: list[str] = []
+    for i in was:
+        it = st.items.get(i)
+        if it is None:
+            out.append(f"{i}: gone")
+        elif it.state in (DONE, ABANDONED):
+            out.append(f"{i}: {it.state}")
+        elif i not in live:
+            lz = it.lease
+            out.append(f"{i}: lease {'expired' if lz else 'released'}")
+        elif live[i].holder == me:
+            out.append(f"{i}: now yours")
+        else:
+            out.append(f"{i}: still held by {live[i].holder}")
+    return out
+
+
+def wait(
+    repo: Path,
+    *,
+    item: str = "",
+    phase: str = "",
+    kind: str = DEFAULT_NEXT_KIND,
+    timeout_s: float | None = None,
+    poll_s: float | None = None,
+    agent: str = "",
+    on_progress=None,
+) -> O.Outcome:
+    """Block until ``item`` (or, without one, anything) can be started. Exit 0 on wake.
+
+    Exit 2 when the deadline passes with it still blocked, and at once -- without
+    sleeping -- when waiting cannot help: the item is done, in review, in a cycle, held
+    by an operator, or waits on work nobody is doing. ``timeout_s=0`` asks the question
+    without waiting at all.
+
+    Waking is a hint, not a reservation: two agents waiting on one release both wake,
+    and one of them loses the `claim`. The loser is refused with alternatives and can
+    wait again. A queue that reserved on wake would need the waiter to be alive to use
+    the reservation, which is the crash-recovery problem leases already solve.
+    """
+    from ..services import waits as WT
+
+    timeout = DEFAULT_WAIT_TIMEOUT_S if timeout_s is None else float(timeout_s)
+    poll = WT.POLL_S if poll_s is None else float(poll_s)
+    empty: dict[str, Any] = {
+        "item": item,
+        "phase": phase,
+        "woke": False,
+        "waitable": False,
+        "ready": [],
+        "waiting_on": [],
+        "freed_by": [],
+        "blocked": [],
+        "waited_s": 0,
+    }
+    if timeout < 0 or poll <= 0:
+        return O.failed("wait", "timeout must be >= 0 and poll > 0 seconds", **empty)
+    log, cfg, st = _load(repo, agent)
+    if item:
+        found = _require(st, item, "wait")
+        if isinstance(found, O.Outcome):
+            return O.Outcome("wait", {**empty, **found.data}, found.exit, found.reason)
+    me = cfg.agent.id or log.agent_id
+    say = on_progress or (lambda _msg: None)
+
+    def result(v: dict[str, Any], waited: float, freed: list[str]) -> O.Outcome:
+        data = {
+            **empty,
+            "woke": v["status"] == "ready",
+            "waitable": v["status"] != "hopeless",
+            "ready": v["ready"],
+            "waiting_on": v["waiting_on"],
+            "freed_by": freed,
+            "blocked": v["blocked"],
+            "waited_s": round(waited),
+        }
+        if v["status"] == "ready":
+            data["advice"] = (
+                f"`ddflow claim {v['ready'][0]}` now: anyone else waiting on the same "
+                f"release woke too."
+            )
+            return O.ok("wait", **data)
+        if v["status"] == "hopeless":
+            return O.nothing("wait", f"Not waiting: {v['why']}", **data)
+        return O.nothing(
+            "wait",
+            f"Still blocked after {round(waited)}s: {v['why']}. `ddflow wait` again to "
+            f"keep waiting.",
+            **data,
+        )
+
+    v = _judge_wait(st, cfg, me, item, phase, kind)
+    if v["status"] != "blocked" or timeout == 0:
+        return result(v, 0.0, [])
+
+    started = time.monotonic()
+    deadline = started + timeout
+    w = WT.register(
+        repo,
+        WT.Waiter(
+            agent=me,
+            item=item,
+            phase=phase,
+            waiting_on=v["waiting_on"],
+            reason=v["why"],
+            until=time.time() + timeout,
+        ),
+    )
+    say(f"waiting (up to {round(timeout)}s): {v['why']}")
+    # Empty, so the first pass re-judges whatever landed between the load above and
+    # the registration -- a release in that gap must not cost a whole RECHECK_S.
+    seen: dict[str, int] = {}
+    checked = started
+    try:
+        while True:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return result(v, time.monotonic() - started, [])
+            time.sleep(min(poll, left))
+            # Fingerprint BEFORE the read, never after: see `EventLog.extent`.
+            ext = log.extent()
+            if ext == seen and time.monotonic() - checked < WT.RECHECK_S:
+                continue
+            seen, checked = ext, time.monotonic()
+            log, cfg, st = _load(repo, agent)
+            was = v
+            v = _judge_wait(st, cfg, me, item, phase, kind)
+            if v["status"] != "blocked":
+                freed = _freed(st, cfg, was["waiting_on"], me)
+                if freed:
+                    say("woke: " + "; ".join(freed))
+                return result(v, time.monotonic() - started, freed)
+            if v["why"] != was["why"]:
+                say(f"still waiting: {v['why']}")
+                WT.update(w, waiting_on=v["waiting_on"], reason=v["why"])
+    finally:
+        WT.unregister(w)
 
 
 def _worktree_held_by(st, stored: str, me: str) -> str:
@@ -271,6 +582,14 @@ def claim(
         reason = str(exc)
         if exc.alternatives:
             reason += "\n\nYou could take instead: " + ", ".join(exc.alternatives)
+        if exc.holder and exc.holder != log.agent_id:
+            # The refusal is the moment an agent decides between idling, polling and
+            # asking a person. None of the three is needed when the block is a live
+            # holder: `wait` wakes it when that holder lets go.
+            reason += (
+                f"\n\nOr `ddflow wait --item {item}`: it sleeps until {exc.holder} lets "
+                f"go and returns the moment the item can be claimed."
+            )
         return O.refused("item.claimed", reason, id=item, alternatives=list(exc.alternatives or []))
 
     wt = None
@@ -417,16 +736,33 @@ def heartbeat(
             else:
                 renewed = L.renew(log, item, holder=lease.holder)
     if renewed:
-        return O.ok("lease.renewed", id=item, renewed=True)
-    return O.nothing("lease.renewed", f"no lease held {item}{hint}", id=item, renewed=False)
+        return O.ok("lease.renewed", id=item, renewed=True, waiters=_waiters(repo, item))
+    return O.nothing(
+        "lease.renewed", f"no lease held {item}{hint}", id=item, renewed=False, waiters=[]
+    )
+
+
+def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
+    """Who is blocked on `item` right now, from `ddflow wait` registrations.
+
+    The holder's side of waking: at a heartbeat it is a reason to finish, narrow the
+    globs, or release early; at a release or completion it is the list of agents this
+    just woke. Advisory -- a registry that cannot be read is simply no waiters.
+    """
+    from ..services import waits as WT
+
+    try:
+        return WT.waiting_on(repo, item)
+    except OSError:
+        return []
 
 
 def release(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outcome:
     log, _cfg, _st = _load(repo, agent)
     released = L.release(log, item, note=note)
     if released:
-        return O.ok("lease.released", id=item, released=True)
-    return O.nothing("lease.released", f"no lease on {item}", id=item, released=False)
+        return O.ok("lease.released", id=item, released=True, woke=_waiters(repo, item))
+    return O.nothing("lease.released", f"no lease on {item}", id=item, released=False, woke=[])
 
 
 def complete(
@@ -487,7 +823,7 @@ def complete(
         },
     )
     L.release(log, item, note="completed")
-    return O.ok("item.completed", forced=forced, **base)
+    return O.ok("item.completed", forced=forced, woke=_waiters(repo, item), **base)
 
 
 def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
