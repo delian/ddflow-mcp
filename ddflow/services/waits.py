@@ -36,6 +36,8 @@ import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
+from ..infra.tomlcfg import atomic_write
+
 #: Where waits are registered. Under `.ddflow/local/`, which carries its own `*`
 #: `.gitignore` -- see `infra.log._clone_suffix`.
 WAITS_DIR = Path(".ddflow") / "local" / "waits"
@@ -88,17 +90,11 @@ class Waiter:
 
 
 def _pid_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True  # exists, owned by someone else
-    except OSError:
-        return False
-    return True
+    # `jobs.alive` is the one liveness test (it also sees through zombies). pid 0 is
+    # guarded here because `kill(0, 0)` signals the whole process GROUP and succeeds.
+    from .jobs import alive
+
+    return pid > 0 and alive(pid)
 
 
 def _dir(repo: Path) -> Path:
@@ -143,11 +139,8 @@ def _write(w: Waiter) -> None:
     if not w.path:
         return  # never registered: the registry was not writable
     body = {k: v for k, v in asdict(w).items() if k != "path"}
-    path = Path(w.path)
-    tmp = path.with_name(f".{path.name}.tmp")
     with contextlib.suppress(OSError):
-        tmp.write_text(json.dumps(body), "utf-8")
-        os.replace(tmp, path)
+        atomic_write(Path(w.path), json.dumps(body))
 
 
 def unregister(w: Waiter) -> None:
