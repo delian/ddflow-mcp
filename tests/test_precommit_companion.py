@@ -282,3 +282,43 @@ def test_the_mcp_tool_returns_the_same_proposal(mixed):
     assert set(tool["properties"]) == {"ddflow_cmd", "write"}
     out = tool["api"](mixed, {"ddflow_cmd": "x"}, "", called_from=mixed)
     assert out.exit == 0 and 'entry: "x hooks check-msg"' in out.data["text"]
+
+
+def test_a_write_that_fails_partway_leaves_no_config_behind(mixed, monkeypatch):
+    """Bug B985505b520: a truncated file pre-commit would run, and that every later
+    --write refuses to replace because it exists."""
+    import errno
+
+    real_open = Path.open
+
+    class HalfWriter:
+        def __init__(self, fh):
+            self.fh = fh
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self.fh.close()
+            return False
+
+        def write(self, text):
+            self.fh.write(text[: len(text) // 2])
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+    def failing_open(self, mode="r", *a, **k):
+        fh = real_open(self, mode, *a, **k)
+        return HalfWriter(fh) if "x" in mode or "w" in mode else fh
+
+    monkeypatch.setattr(Path, "open", failing_open)
+    out = OPS.precommit(mixed, where=mixed, write=True)
+    monkeypatch.undo()
+    assert out.exit == 1 and "No space" in out.reason
+    assert sorted(p.name for p in mixed.iterdir() if "pre-commit" in p.name) == []
+    assert OPS.precommit(mixed, where=mixed, write=True).exit == 0, "a retry succeeds"
+
+
+def test_ddflows_own_command_is_not_among_the_programs_required(mixed):
+    """`requires` excludes ddflow's command; the caller checks the one it chose."""
+    reqs = PC.propose(mixed, ddflow_cmd="/opt/ddflow/bin/ddflow").requires
+    assert not any("ddflow" in r for r in reqs), reqs

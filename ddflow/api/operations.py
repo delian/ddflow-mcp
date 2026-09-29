@@ -458,6 +458,7 @@ def precommit(
     one that exists: which checks gate somebody's commits is theirs to decide, and a
     config they already have is exactly that decision.
     """
+    import os
     import shutil
 
     from ..services import precommit as PC
@@ -502,12 +503,19 @@ def precommit(
                 "merge by hand what you want",
                 **data,
             )
+        # Written aside and LINKED into place: the link is atomic and refuses a file made
+        # meanwhile, and a write failing partway never leaves a truncated config that
+        # pre-commit would run and a later --write would refuse to replace.
+        tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
         try:
-            with path.open("x", encoding="utf-8") as fh:  # never over one made meanwhile
+            with tmp.open("x", encoding="utf-8") as fh:
                 fh.write(prop.text)
+            os.link(tmp, path)
         except FileExistsError:
             return O.refused("precommit", f"{path} appeared meanwhile; not replaced", **data)
         except OSError as e:
             return O.failed("precommit", f"could not write {path}: {e}")
+        finally:
+            tmp.unlink(missing_ok=True)
         data["written"] = True
     return O.ok("precommit", **data)
