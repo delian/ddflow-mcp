@@ -254,3 +254,5 @@ def test_heading_words_are_read_as_words_and_a_negated_done_is_not_done():
     assert verdict("Partially landed") is False
     assert verdict("Tooling — NOT DONE") is False
     assert verdict("Tooling — not yet shipped") is False
+    assert verdict("Tooling (IN PROGRESS) ✅") is False, "a live word wins over a done marker"
+    assert verdict("Close the long-context PARTIAL ✅ SHIPPED") is True

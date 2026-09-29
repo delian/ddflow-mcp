@@ -1671,12 +1671,15 @@ def touched_since_import(events) -> Touched:
 
 
 #: Words in a phase HEADING that say work remains, matched as whole words (`WIP` is not
-#: `WIPE`). Only where the heading carries no done marker: `Close the long-context
-#: PARTIAL ✅ SHIPPED` is finished.
-_HEADING_UNFINISHED = re.compile(
-    r"(?<![A-Z0-9])(IN PROGRESS|PARTIAL(?:LY)?|WIP|RE-?OPENED|UNFINISHED|DEFERRED|ON HOLD"
-    r"|PARKED|BLOCKED)(?![A-Z0-9])",
-    re.I,
+#: `WIPE`). Two strengths. A STALLED word yields to a done marker in the same heading --
+#: `Close the long-context PARTIAL ✅ SHIPPED` is finished, `DEFERRED` often says where
+#: the work came from. A LIVE word does not: `Tooling (IN PROGRESS) ✅` contradicts
+#: itself, and the side that hides work is the one not to pick (rubber-duck).
+_HEADING_LIVE = re.compile(
+    r"(?<![A-Z0-9])(IN PROGRESS|WIP|RE-?OPENED|UNFINISHED)(?![A-Z0-9])", re.I
+)
+_HEADING_STALLED = re.compile(
+    r"(?<![A-Z0-9])(PARTIAL(?:LY)?|DEFERRED|ON HOLD|PARKED|BLOCKED)(?![A-Z0-9])", re.I
 )
 #: A done marker the heading itself negates: `NOT DONE`, `not yet shipped`.
 _NEGATED_DONE = re.compile(r"\bNOT\s+(?:YET\s+)?(?:DONE|SHIPPED|CLOSED|COMPLETE[D]?)\b", re.I)
@@ -1692,14 +1695,10 @@ def _says_unfinished(phase: Found) -> str:
     status = phase.extra.get("status")
     if status is not None and status[0] != "closed":
         return f"its STATUS says {status[1] or 'it is live'}"
-    negated = _NEGATED_DONE.search(phase.title)
-    if negated:
-        return f"its heading says {negated.group(0).upper()}"
-    if not _DONE_MARKER.search(phase.title):
-        m = _HEADING_UNFINISHED.search(phase.title)
-        if m:
-            return f"its heading says {m.group(1).upper()}"
-    return ""
+    m = _NEGATED_DONE.search(phase.title) or _HEADING_LIVE.search(phase.title)
+    if not m and not _DONE_MARKER.search(phase.title):
+        m = _HEADING_STALLED.search(phase.title)
+    return f"its heading says {m.group(0).upper()}" if m else ""
 
 
 def _phase_verdict(
