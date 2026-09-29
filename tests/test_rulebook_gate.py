@@ -334,3 +334,24 @@ def test_a_rulebook_changed_differently_on_both_sides_is_still_stale(forked):
     _land(wt, "AGENTS.md", "# rules v2 from the branch\n")
     code, msg = E.check_drift(repo, _cfg(), here=wt)
     assert code == 1 and "AGENTS.md" in msg, msg
+
+
+def test_behind_block_never_refuses_the_merge_that_catches_up(forked):
+    """Critic on B23: with `behind = "block"` the pre-commit hook sees the PRE-merge HEAD,
+    still N behind, and must not refuse the merge commit that brings the branch level --
+    that would make the refusal impossible to clear without --no-verify. The exemption
+    runs before either check; this pins it for the behind-count through the real hook."""
+    repo, wt = forked
+    _config(repo, 'behind = "block"\nmax_behind = 1\nstale_rules = "off"\n')
+    _land(wt, "src/app.py", "x = 'feat'\n")
+    _land(repo, "src/app.py", "x = 'main'\n")
+    _land(repo, "src/other.py", "y = 1\n")
+    assert _commit_in(wt).returncode != 0, "precondition: 2 behind with max 1 is refused"
+
+    assert _git(wt, "reset", "-q", "HEAD", "--", "src/work.py").returncode == 0
+    merge = _git(wt, "merge", "main")
+    assert merge.returncode != 0 and "CONFLICT" in merge.stdout, merge.stdout
+    _write(wt, "src/app.py", "x = 'both'\n")
+    _git(wt, "add", "src/app.py")
+    r = _git(wt, "commit", "--no-edit")
+    assert r.returncode == 0, f"the catching-up merge was refused: {r.stderr}"
