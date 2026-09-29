@@ -201,7 +201,7 @@ def _split_id(text: str) -> tuple[str, str]:
     token = m.group(1) or m.group(2) or m.group(3) or m.group(4) or ""
     if not token and m.group(5):
         token = m.group(5)
-        if "." not in token.strip("."):
+        if "." not in token.strip(".") or not _is_id(token):
             return "", text
         # The bold still wraps the title: keep its opening `**`, so the title reads
         # `Free-text arg vocabulary.` rather than ending in a stray `**`.
@@ -281,7 +281,10 @@ _ASIDE_NOT_DISPOSITIONS = ("PRE-EXISTING",)
 #: reaches prose that merely DESCRIBES a deferral.
 _ANNOTATION_CHARS = 160
 #: A heading that disposes everything under it: `### Deferred`, `## DECLINED items`.
-_SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED", "FUTURE WORK")
+_SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED")
+#: `### P42.8 — Future work (deliberately not in this phase)`: a heading whose title IS
+#: "future work" holds; `## Phase 5 — Future work planning` is a phase about it.
+_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[—:\-]|$)", re.I)
 #: A heading that says its own section is LIVE: `### Phase 39 follow-ups (not started)`
 #: filed under a `## Phase 38` whose STATUS is SHIPPED. Inheriting the ancestor's verdict
 #: dropped both of its open items as history (home-simulator, 2026-09-29).
@@ -297,7 +300,14 @@ _STATUS_HOLD = ("DEFERRED", "WATCH", "ON HOLD", "PARKED", "BLOCKED")
 _STATUS_LIVE = ("IN PROGRESS", "REOPENED", "RE-OPENED")
 _TITLE_ASIDE = re.compile(r"\(([^)]*)\)")
 #: Where one clause of an aside ends: `(MED, deferred from P21.4)` is two clauses.
-_ASIDE_CLAUSE = re.compile(r"[,;\u2014\u2013]|\s-{1,2}\s")
+_ASIDE_CLAUSE = re.compile(r"[,;:\u2014\u2013]|\s-{1,2}\s")
+
+
+def _leads_with(clause: str, markers: tuple[str, ...]) -> bool:
+    """Whether `clause` BEGINS with a marker, past any emphasis or emoji in front of it.
+    `RETRACT` still leads `RETRACTED by the operator`."""
+    head = re.sub(r"^[^A-Za-z0-9]+", "", clause).upper()
+    return any(re.match(rf"{re.escape(m)}[A-Z]*\b", head) for m in markers)
 
 
 def _verdict_asides(text: str, markers: tuple[str, ...]) -> str:
@@ -311,7 +321,7 @@ def _verdict_asides(text: str, markers: tuple[str, ...]) -> str:
 
     def keep(m: re.Match) -> str:
         clauses = _ASIDE_CLAUSE.split(m.group(1))
-        leads = any(_marker_in(c.strip()[:_LEAD_WORD_CHARS], markers) for c in clauses)
+        leads = any(_leads_with(c, markers) for c in clauses)
         return m.group(0) if leads else " "
 
     return _TITLE_ASIDE.sub(keep, text)
@@ -406,7 +416,28 @@ def _heading_disposition(heading: str) -> tuple[str, str] | None:
     m = _marker_in(heading, _SECTION_HOLD)
     if m:
         return "hold", f"under a {m} heading"
+    if _FUTURE_WORK.match(_clean_title(_split_id(heading)[1] or heading)):
+        return "hold", "under a FUTURE WORK heading"
     return ("", "") if _marker_in(heading, _SECTION_LIVE) else None
+
+
+#: The reason a HEADING (not a STATUS line) gave: `under a DECLINED heading`.
+_BY_HEADING = "under a "
+
+
+def _push_heading(
+    stack: list[tuple[int, tuple[str, str] | None]], level: int, heading: str
+) -> None:
+    """Push a heading's own verdict. A LIVE one overrides an ancestor's STATUS (`SHIPPED`
+    over a section whose `(not started)` follow-ups are filed under it) but never an
+    ancestor HEADING that declines or defers: `## Declined ideas / ### Idea A (not
+    started)` is the operator's word about everything below it."""
+    own = _heading_disposition(heading)
+    if own == ("", "") and any(
+        d is not None and d[0] and d[1].startswith(_BY_HEADING) for _lvl, d in stack
+    ):
+        own = None
+    stack.append((level, own))
 
 
 #: A negation in a STATUS verdict. Not an `UN-` prefix: `UNSHIPPED` already fails the
@@ -757,7 +788,7 @@ def scan_todos(
                 level = len(h.group(1))
                 while stack and stack[-1][0] >= level:
                     stack.pop()
-                stack.append((level, _heading_disposition(heading)))
+                _push_heading(stack, level, heading)
                 continue
             m = _CHECK.match(line)
             if not m:
@@ -897,12 +928,13 @@ def _heading_number(heading: str) -> str:
 
 
 def _agrees(prefix: str, number: str) -> bool:
-    """Whether a child prefix spells the heading's own number: `P21` or `21.A` for
-    `Phase 21`, never `34` for `Phase 40`."""
+    """Whether a child prefix spells the heading's own number -- `P21`, `21A`, `21.A`
+    for `Phase 21`, `T4` for `Phase 4`, never `34` for `Phase 40` -- compared on the
+    number in its first component."""
 
     def lead(ident: str) -> str:
-        head = ident.split(".", maxsplit=1)[0].lower()
-        return head[1:] if head[:1] == "p" and head[1:2].isdigit() else head
+        m = re.search(r"\d+", ident.split(".", maxsplit=1)[0])
+        return m.group(0).lstrip("0") if m else ident.lower()
 
     return lead(prefix) == lead(number)
 

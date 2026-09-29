@@ -157,3 +157,57 @@ def test_a_marker_word_inside_the_TITLE_is_not_a_disposition(repo):
     assert "C12" not in tasks, "a disposition AFTER the title still closes the item"
     assert tasks["C13"].extra["disposition"] == "hold", "an aside that IS the verdict holds"
     assert tasks["P21.7"].extra["disposition"] == "hold", "a verdict clause inside the aside"
+
+
+# -- the rubber-duck's refutations of the first version -------------------------------------
+
+
+def test_a_live_sub_heading_does_not_override_a_DECLINED_or_DEFERRED_heading(repo):
+    """Only a STATUS verdict (SHIPPED over a section) is overridden. A heading that says
+    the section is declined or deferred is the operator's word about everything in it."""
+    _write(
+        repo,
+        "## Declined ideas\n### Idea A (not started)\n- [ ] **A.1** x\n\n"
+        "## Deferred\n### Later (in progress)\n- [ ] **B.1** y\n",
+    )
+    plan = _plan(repo)
+    tasks = _by_id(plan, "task")
+    assert "A.1" not in tasks, "declined work offered because a sub-heading says not started"
+    assert tasks["B.1"].extra["disposition"] == "hold"
+
+
+def test_a_verdict_after_a_colon_in_an_aside_still_disposes(repo):
+    _write(
+        repo,
+        "## S\n\n- [ ] **X.1** (operator decision after review: DECLINED)\n"
+        "- [ ] **X.2** (decided 2026-09-01: declined)\n- [ ] **X.3** (todo -> deferred notify)\n",
+    )
+    tasks = _by_id(_plan(repo), "task")
+    assert "X.1" not in tasks and "X.2" not in tasks, "a declined item was offered"
+    assert tasks["X.3"].extra["disposition"] == "", "a short prose aside is not a verdict"
+
+
+def test_dotted_prose_in_a_bold_title_is_not_an_id(repo):
+    _write(
+        repo,
+        "## S\n\n- [ ] **e.g. add caching** later\n- [ ] **README.md rewrite** - docs\n"
+        "- [ ] **Node.js migration**\n",
+    )
+    ids = set(_by_id(_plan(repo), "task"))
+    assert not ids & {"e.g.", "README.md", "Node.js"}, ids
+
+
+def test_a_prefix_spelling_the_heading_number_is_adopted(repo):
+    _write(
+        repo,
+        "## Phase 4 - a\n- [ ] **T4.1** x\n- [ ] **T4.2** y\n\n"
+        "## Session 12 - b\n- [ ] **S12.1** x\n- [ ] **S12.2** y\n\n"
+        "## Phase 21 - c\n- [ ] **21A.1** x\n- [ ] **21A.2** y\n",
+    )
+    phases = set(_by_id(_plan(repo), "phase"))
+    assert {"T4", "S12", "21A"} <= phases, phases
+
+
+def test_a_heading_that_only_MENTIONS_future_work_does_not_hold(repo):
+    _write(repo, "## Phase 5 — Future work planning\n- [ ] **5.1** plan it\n")
+    assert _by_id(_plan(repo), "task")["5.1"].extra["disposition"] == ""
