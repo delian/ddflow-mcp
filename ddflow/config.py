@@ -1061,6 +1061,9 @@ class Config:
 
     #: where each knob's final value came from -- "default" | "file" | "env"
     sources: dict[str, str] = field(default_factory=dict, repr=False)
+    #: Keys a config FILE carried that this code does not know -- "sec.knob", or "[sec]"
+    #: for a whole section. Skipped, not fatal: see `_apply`.
+    unknown_knobs: list[str] = field(default_factory=list, repr=False)
 
     # -- loading ------------------------------------------------------------------
     @classmethod
@@ -1103,7 +1106,7 @@ class Config:
         cls()._apply(data, "check")
 
     def _sections(self) -> list[str]:
-        return [f.name for f in fields(self) if f.name != "sources"]
+        return [f.name for f in fields(self) if f.name not in ("sources", "unknown_knobs")]
 
     #: Top-level TOML tables that are NOT config sections and must not be treated as
     #: typos. They are consumed by other loaders: `[gate.*]` by gates.load_gates,
@@ -1120,8 +1123,20 @@ class Config:
     _FOREIGN_TABLES = frozenset({"gate", "reviewer", "companion", "macro"})
 
     def _apply(self, data: dict[str, Any], source: str) -> None:
+        # A key a config FILE carries that this code does not know is recorded and
+        # skipped, never fatal. Several checkouts of one repository run different
+        # versions of ddflow -- a worktree whose branch predates a knob runs its own,
+        # older code against the primary's newer config -- and raising here refused every
+        # command and every commit until the branch merged main, for a reason unrelated
+        # to the work (bugs Bcfc0d22a09, B9cb7dd1c3b). A typo is still loud: `doctor`
+        # reports every entry here as a problem, and the WRITE paths (source "check")
+        # still refuse an unknown key, so nothing new is written wrong.
+        lenient = source == "file"
         for sec, values in data.items():
             if sec in self._FOREIGN_TABLES:
+                continue
+            if sec not in self._sections() and lenient:
+                self.unknown_knobs.append(f"[{sec}]")
                 continue
             if sec not in self._sections():
                 # A typo'd section used to be skipped in silence -- so `[leases]` for
@@ -1144,6 +1159,9 @@ class Config:
             target = getattr(self, sec)
             known = {f.name: f for f in fields(target)}
             for knob, raw in values.items():
+                if knob not in known and lenient:
+                    self.unknown_knobs.append(f"{sec}.{knob}")
+                    continue
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
                 value = _coerce(raw, known[knob].type)
