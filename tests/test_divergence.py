@@ -300,3 +300,14 @@ def test_resolve_refuses_an_item_that_is_not_contested(two_clones):
 def test_resolve_fails_on_a_keep_that_names_no_contestant(rival_adds):
     code, _out, err = run_cli(rival_adds, "resolve", "T2", "--keep", "zed", agent="bob")
     assert code == 1 and "alice" in err and "bob" in err
+
+
+def test_replay_carries_the_resolution(rival_adds):
+    """`replay` rebuilds the project from the log; a contest settled off the record would
+    come back as two definitions and no decision between them."""
+    b = rival_adds
+    alice = next(d for d in _show(b, "T2")["contested"] if d["agent"] == "alice")
+    assert run_cli(b, "resolve", "T2", "--keep", alice["event"], agent="bob")[0] == 0
+    code, out, err = run_cli(b, "replay")
+    assert code == 0, err
+    assert "T2: contest resolved" in out and "alpha" in out, out
