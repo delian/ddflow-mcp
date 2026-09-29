@@ -16,6 +16,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -114,6 +116,22 @@ def test_a_cycle_terminates_and_is_left_to_the_cycle_detector(log):
     evs = log.read_all()
     found = PR.detect(evs, fold(evs, strict=False), Config())
     assert [f.kind for f in found if f.kind == "dependency_cycle"], found
+    # Each waits on the other, so neither can start beside the other: the cycle is the
+    # finding, and a second one about shared files would add no remedy.
+    assert not [f for f in found if f.kind == "duplicate_work"], found
+
+
+@pytest.mark.parametrize("stack", [False, True])
+def test_a_dependency_in_review_still_orders(log, stack):
+    """In review, A's work is finished: without stacking B waits for the merge, with
+    stacking B forks from A's branch. Either way nobody works A and B at the same time."""
+    _add(log, "A", globs=["x.py"])
+    log.append("pr.opened", "A", {"url": "https://example.invalid/pr/1", "number": 1})
+    _add(log, "B", globs=["x.py"], needs=["A"])
+    cfg = Config()
+    cfg.flow.stack = stack
+    assert fold(log.read_all(), strict=False).items["A"].state == "review"
+    assert _dupes(log, cfg) == []
 
 
 def test_doctor_no_longer_warns_about_an_ordered_pair(repo):
