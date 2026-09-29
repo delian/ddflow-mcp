@@ -99,7 +99,10 @@ def unpickable(state: State, cfg: Config) -> list[Unpickable]:
         # Tasks exist and every one is finished. Always a problem, and deliberately NOT
         # behind the knob: an open phase over finished work is not a workflow style, it is
         # a queue held open by an item nobody can act on, and the remedy (`complete` it,
-        # or file what is left) is the same in every project.
+        # or file what is left) is the same in every project. Whether `complete` would
+        # succeed is NOT decided here: that is `services.completion.verdict()`, which core
+        # may not import, so `doctor` replaces this remedy with the verdict's answer
+        # (B5189cc5756 -- a re-derived rule here missed failed gates and advisory silence).
         out.append(
             Unpickable(
                 ph.id,

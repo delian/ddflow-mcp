@@ -157,7 +157,20 @@ TOOLS: dict[str, dict[str, Any]] = {
             resources=a.get("resources", "") or "",
             agent=agent,
         ),
-        "payload": ("item", "holder", "worktree", "branch", "base", "port", "port_advice"),
+        # `rebound`/`here`: the item kept its OWN tree from an earlier claim, and whether
+        # the caller is standing in it -- over MCP the payload is the only way an agent
+        # learns it has to move there.
+        "payload": (
+            "item",
+            "holder",
+            "worktree",
+            "branch",
+            "base",
+            "rebound",
+            "here",
+            "port",
+            "port_advice",
+        ),
         # `claim` is the one operation that needs to know WHERE THE CALLER IS, not just
         # which repo: adoption turns on whether the caller was already standing in a
         # worktree. The dispatcher passes it only to tools that ask.
@@ -169,8 +182,14 @@ TOOLS: dict[str, dict[str, Any]] = {
             "or the lease expires and another agent may take the item."
         ),
         "properties": {"id": ("string", "Item id.", True)},
-        "api": lambda repo, a, agent: _api().heartbeat(repo, a["id"], agent=agent),
+        "api": lambda repo, a, agent, called_from=None: _api().heartbeat(
+            repo, a["id"], agent=agent, called_from=called_from
+        ),
         "payload": ("renewed",),
+        # The item's own tree renews its lease whoever claimed it -- identity is derived
+        # from the tree, so without WHERE the caller is this said "no lease held" from
+        # exactly the tree `claim` made.
+        "wants_called_from": True,
     },
     "ddflow_gate_status": {
         "description": (
