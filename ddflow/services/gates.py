@@ -1156,7 +1156,7 @@ def parallel_test_advice(command: str, root: Path) -> str:
     )
 
 
-def record(
+def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements are kept apart on purpose
     log: EventLog,
     cfg: Config,
     item_id: str,
@@ -1168,8 +1168,14 @@ def record(
     evidence: dict[str, Any] | None = None,
     gates: dict[str, GateDef] | None = None,
     human: bool = False,
+    measured: dict[str, Any] | None = None,
 ) -> None:
     """Write a gate outcome to the log, enforcing the evidence contract.
+
+    ``evidence`` is what the CALLER supplied; ``measured`` is what ddflow determined
+    itself (the tree fingerprint, the diff size). Only the first can satisfy the
+    contract: the measured fields are always present, so counting them made every bare
+    pass look evidenced (bug Bbc9a7ee3f2). Both are recorded.
 
     Rejecting a bare pass at the API boundary is deliberate. If the only thing standing
     between "I ran the tests" and a recorded pass is the agent's honesty, then over a
@@ -1205,7 +1211,12 @@ def record(
     log.append(
         f"gate.{outcome}",
         item_id,
-        {"gate": gate, "by": by or log.agent_id, "reason": reason, "evidence": evidence or {}},
+        {
+            "gate": gate,
+            "by": by or log.agent_id,
+            "reason": reason,
+            "evidence": {**(measured or {}), **(evidence or {})},
+        },
     )
 
 
