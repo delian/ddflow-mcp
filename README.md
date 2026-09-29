@@ -2582,7 +2582,7 @@ code that distinguishes "could not" from "did not need to".
 ## Testing
 
 ```sh
-python3 -m pytest tests/ -q          # 423 unit/integration tests
+uv run pytest tests/ -q -n auto      # unit/integration tests, in parallel (pytest-xdist)
 python3 demos/run_all.py             # 6 end-to-end scenarios, 219 assertions
 ```
 

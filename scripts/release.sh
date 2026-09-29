@@ -54,7 +54,8 @@ echo "  $VERSION — pyproject, server.json and every OCI tag agree"
 
 # ---------------------------------------------------------------- 2. the suite
 say "tests"
-uv run pytest tests/ -q --timeout=420 \
+# -n auto, as publish.yml runs it: serial took ~49 min here, parallel about one.
+uv run pytest tests/ -q --timeout=420 -n auto \
   || die "the suite is red; a release is not the time to find out"
 
 # ---------------------------------------------------------------- 3. the wheel
