@@ -442,6 +442,23 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
                 f"--keep {keep!r} names more than one contestant; give an event id: {_options(it)}",
                 id=item,
             )
+        if defs and claims:
+            # One token naming a definition AND a claim -- an agent that both filed and
+            # claimed it, or a prefix of both ids -- would settle two separate questions
+            # at once. Only a full event id says which one was meant.
+            if keep == defs[0]["event"]:
+                claims = []
+            elif keep == claims[0]["event"]:
+                defs = []
+            else:
+                return O.refused(
+                    "item.resolved",
+                    f"--keep {keep!r} names both a definition ({defs[0]['event']}) and a "
+                    f"claim ({claims[0]['event']}) of {item}. Settle them one at a time: "
+                    f"`--keep {defs[0]['event']}` keeps that definition, "
+                    f"`--keep {claims[0]['event']}` keeps that claim.",
+                    id=item,
+                )
         lost = [d for d in it.contested if defs and d["event"] != defs[0]["event"]]
         new_ids = csv_list(refile_as)
         if new_ids and len(new_ids) != len(lost):
@@ -455,7 +472,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
             bad = _bad_id(nid) or _taken(st, nid, readd=False)
             if bad:
                 return O.failed("item.resolved", bad, id=item)
-        released = [h["holder"] for h in it.lease_contest if claims and h is not claims[0]]
+        losers = [h for h in it.lease_contest if claims and h["event"] != claims[0]["event"]]
         data: dict[str, Any] = {"kind": it.kind, "keep": keep, "at": time.time()}
         if defs:
             data["definition"] = defs[0]
@@ -463,12 +480,13 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
             data["claim"] = claims[0]
         # Releases FIRST: folded before the resolution, each withdraws a losing claim,
         # and the resolution then re-applies the kept one whichever was displayed.
-        for holder in released:
+        for h in losers:
             log.append(
                 "lease.released",
                 item,
                 {
-                    "holder": holder,
+                    "holder": h["holder"],
+                    "event": h["event"],
                     "by": log.agent_id,
                     "note": f"lost the contest for {item}: {claims[0]['holder']} keeps it",
                 },
@@ -484,7 +502,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
         kept_holder=claims[0]["holder"] if claims else "",
         lost=[{k: d[k] for k in ("event", "agent", "title", "body")} for d in lost],
         refiled=new_ids,
-        released=released,
+        released=[h["holder"] for h in losers],
     )
 
 
