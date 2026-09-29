@@ -341,10 +341,7 @@ def _generated_args(text: str, name: str) -> tuple[str, str]:
     m = re.search(r"^ARGS=\((.*)\)\s*$", text, re.M)
     if not m:
         return config, stage
-    try:
-        args = shlex.split(m.group(1))
-    except ValueError:
-        args = m.group(1).split()
+    args = _words(m.group(1))
     for k, a in enumerate(args):
         if a.startswith("--config="):
             config = a.split("=", 1)[1]
@@ -353,6 +350,14 @@ def _generated_args(text: str, name: str) -> tuple[str, str]:
         elif a.startswith("--hook-type="):
             stage = a.split("=", 1)[1]
     return config, stage
+
+
+def _words(s: str) -> list[str]:
+    """`s` split as a shell would, or on whitespace when its quoting is unbalanced."""
+    try:
+        return shlex.split(s)
+    except ValueError:
+        return s.split()
 
 
 def _as_list(v) -> list:
@@ -396,10 +401,7 @@ def _runs_check(hook: dict, check: str) -> bool:
         # `echo hooks check-commit` is not ddflow. A wrapper not named for ddflow is
         # missed -- reported NOT installed, the safe direction for a status to err in.
         return False
-    try:
-        words = shlex.split(cmd)
-    except ValueError:
-        words = cmd.split()
+    words = _words(cmd)
     return any(words[k : k + 2] == ["hooks", check] for k in range(len(words)))
 
 
