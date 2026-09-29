@@ -394,20 +394,47 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
     trees = [Path(t["worktree"]) for t in W.list_worktrees(repo) if t.get("worktree")] or [repo]
     missing: list[str] = []
     unchecked: list[str] = []
-    for entry in (e.strip() for e in spec.split(",")):
+    for entry in _split_outside_brackets(spec):
         path, _, names = entry.partition("::")
-        if not entry or not path.endswith(".py"):
-            if entry:
-                unchecked.append(entry)
+        if not path.endswith(".py"):
+            unchecked.append(entry)
             continue
-        wanted = [n.split("[", 1)[0] for n in names.split("::") if n]
-        if not any(_defines(tree / path, wanted) for tree in trees):
+        # The parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
+        # `[...]`, and splitting them refused a real test (B-bfu-param-sep).
+        wanted = [n for n in names.split("[", 1)[0].split("::") if n]
+        if not any(_defines(_inside(tree, path), wanted) for tree in trees):
             missing.append(entry)
     return missing, unchecked
 
 
-def _defines(source: Path, names: list[str]) -> bool:
+def _split_outside_brackets(spec: str) -> list[str]:
+    """Comma-separated entries, ignoring commas inside a parametrize id's brackets."""
+    out, depth, cur = [], 0, []
+    for ch in spec:
+        if ch == "," and depth == 0:
+            out.append("".join(cur))
+            cur = []
+            continue
+        depth += {"[": 1, "]": -1}.get(ch, 0)
+        cur.append(ch)
+    out.append("".join(cur))
+    return [e.strip() for e in out if e.strip()]
+
+
+def _inside(tree: Path, path: str) -> Path | None:
+    """`tree / path`, or None when it resolves outside `tree`.
+
+    An absolute path made `tree / path` discard the tree, and `..` walks out of it, so
+    any file anywhere could close a bug (B-bfu-abs-path).
+    """
+    candidate = (tree / path).resolve()
+    return candidate if candidate.is_relative_to(tree.resolve()) else None
+
+
+def _defines(source: Path | None, names: list[str]) -> bool:
     """Does `source` exist and define every class/function in `names`?"""
+    if source is None:
+        return False
     try:
         text = source.read_text(encoding="utf-8")
     except (OSError, UnicodeDecodeError):

@@ -143,3 +143,36 @@ def test_a_non_pytest_reference_is_accepted_and_said_to_be_unchecked(repo):
     out = api.bug_fixed(repo, "B1", regression_test="spec/cart_spec.rb:42")
     assert out.exit == OK, out
     assert out.data["unchecked"] == ["spec/cart_spec.rb:42"]
+
+
+def test_separators_inside_a_parametrize_id_are_part_of_the_id(repo):
+    """`::` and `,` are legal inside `[...]`; splitting on them refused a real test
+    (rubber-duck on 34f6c53, B-bfu-param-sep)."""
+    run_cli(repo, "init")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_fix.py").write_text(
+        "import pytest\n\n\n@pytest.mark.parametrize('v', ['a::b', '1,2'])\n"
+        "def test_param(v):\n    pass\n"
+    )
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    out = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test="tests/test_fix.py::test_param[a::b], tests/test_fix.py::test_param[1,2]",
+    )
+    assert out.exit == OK, out
+    assert out.data["unchecked"] == [], "a bracketed comma split the entry in two"
+
+
+def test_a_test_file_outside_the_repository_does_not_count(repo, tmp_path):
+    """An absolute path made `tree / path` ignore the tree, so any file anywhere closed
+    the bug (rubber-duck on 34f6c53, B-bfu-abs-path)."""
+    run_cli(repo, "init")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "evil.py").write_text("def test_x():\n    pass\n")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    for ref in (f"{outside}/evil.py::test_x", "../elsewhere/evil.py::test_x"):
+        out = api.bug_fixed(repo, "B1", regression_test=ref)
+        assert out.exit == FAIL, (ref, out)
+    assert _open_bugs(repo) == 1
