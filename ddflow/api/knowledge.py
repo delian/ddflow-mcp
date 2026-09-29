@@ -460,7 +460,7 @@ def _defines(source: Path | None, names: list[str]) -> bool:
         )
     module = _definitions(scope)
     node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef | None = None
-    for name in names:
+    for depth, name in enumerate(names):
         found = (
             next((d for d in module if d.name == name), None)
             if node is None
@@ -471,6 +471,8 @@ def _defines(source: Path | None, names: list[str]) -> bool:
         if found is True:
             return True
         node = found
+        if depth < len(names) - 1 and not isinstance(node, ast.ClassDef):
+            return False  # pytest collects from classes only, never a function body
     return True
 
 
@@ -520,11 +522,16 @@ def _definitions(
     for node in body:
         if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             out.append(node)
-        elif isinstance(node, ast.If | ast.Try | ast.With | ast.AsyncWith):
+        elif isinstance(
+            node, ast.If | ast.Try | ast.With | ast.AsyncWith | ast.For | ast.AsyncFor | ast.While
+        ):
             for block in (node.body, getattr(node, "orelse", []), getattr(node, "finalbody", [])):
                 out += _definitions(block)
             for handler in getattr(node, "handlers", []):
                 out += _definitions(handler.body)
+        elif isinstance(node, ast.Match):
+            for case in node.cases:
+                out += _definitions(case.body)
     return out
 
 

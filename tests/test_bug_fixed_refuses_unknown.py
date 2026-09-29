@@ -275,3 +275,37 @@ def test_an_inherited_test_method_is_found_through_its_base_class(repo):
         ),
     )
     assert out.exit == OK, out
+
+
+def test_a_function_body_is_not_a_scope_pytest_collects_from(repo):
+    """`helper::check` resolved by descending into a function, a node id pytest never
+    emits (critic on 21fbb54, Be1796f9f29)."""
+    run_cli(repo, "init")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_x.py").write_text("def helper():\n    def check():\n        pass\n")
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_x.py::helper::check")
+    assert out.exit == FAIL, out
+    assert _open_bugs(repo) == 1
+
+
+def test_a_test_defined_under_a_module_level_loop_or_match_is_found(repo):
+    """pytest collects whatever the module binds; defs under `for`/`while`/`match` were
+    invisible, so a real test was refused (critic on 21fbb54, B4d19ac598c)."""
+    run_cli(repo, "init")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_gen.py").write_text(
+        "for i in range(1):\n    def test_iter(i=i):\n        pass\n\n"
+        "while True:\n    def test_loop():\n        pass\n    break\n\n"
+        "match 1:\n    case 1:\n        def test_case():\n            pass\n"
+    )
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    out = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test=(
+            "tests/test_gen.py::test_iter, tests/test_gen.py::test_loop, "
+            "tests/test_gen.py::test_case"
+        ),
+    )
+    assert out.exit == OK, out
