@@ -406,11 +406,12 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
     transaction. An item that is not contested is refused.
 
     For a lease contest, ``keep`` may name ANY contestant, not only the one the fold
-    displays: every other contestant gets a `lease.released` (the current holder
-    included), and the resolution then reinstates the kept claim with its TTL running
-    from now. Keeping the current holder therefore just records the others as released;
-    keeping a displaced one hands the item back to it. Either way one call settles the
-    whole contest, however many holders it names.
+    displays: every claim that overlapped the kept one gets a `lease.released`, and so
+    does the current holder if that is another claim; the resolution then reinstates the
+    kept claim with its TTL running from now. A contestant that met neither lost nothing
+    to the kept claim and is not released (bug Ba73ee6ea72). Keeping the current holder
+    therefore records the claims it met as released; keeping a displaced one hands the
+    item back to it. Either way one call settles the whole contest.
     """
     import time
 
@@ -472,7 +473,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
             bad = _bad_id(nid) or _taken(st, nid, readd=False)
             if bad:
                 return O.failed("item.resolved", bad, id=item)
-        losers = [h for h in it.lease_contest if claims and h["event"] != claims[0]["event"]]
+        losers = it.lease_losers(claims[0]) if claims else []
         data: dict[str, Any] = {"kind": it.kind, "keep": keep, "at": time.time()}
         if defs:
             data["definition"] = defs[0]

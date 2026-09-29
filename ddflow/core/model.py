@@ -270,20 +270,41 @@ class Item:
                 + ")"
             )
         if self.lease_contest:
-            parts.append(
-                "claimed at once by "
-                + " and ".join(
-                    f"{h['holder']} ({h['event'][:12]}"
-                    + (
-                        f", still live when {h['overlapped_by']} claimed"
-                        if "overlapped_by" in h
-                        else ""
-                    )
-                    + ")"
-                    for h in self.lease_contest
-                )
-            )
+            # Pairwise, never "claimed at once by" all of them: a contest is every claim
+            # that overlapped ANOTHER, and two of them may never have met.
+            named: set[str] = set()
+
+            def who(h: dict[str, Any]) -> str:
+                label = f"{h['holder']} ({h['event'][:12]}"
+                if h["event"] not in named and "overlapped_by" in h:
+                    label += f", still live when {h['overlapped_by']} claimed"
+                named.add(h["event"])
+                return label + ")"
+
+            clauses = []
+            for i, h in enumerate(self.lease_contest):
+                met = _clashing(self.lease_contest[:i], h)
+                if met:
+                    clauses.append(f"{who(h)} overlapped " + " and ".join(who(g) for g in met))
+                elif not _clashing(self.lease_contest, h):
+                    clauses.append(f"{who(h)} overlapped none of them")
+            parts.append("lease claims that overlapped: " + "; ".join(clauses))
         return "; ".join(parts)
+
+    def lease_clashes(self, claim: dict[str, Any]) -> list[dict[str, Any]]:
+        """The contestants whose windows overlapped ``claim``'s: the claims it met."""
+        return _clashing(self.lease_contest, claim)
+
+    def lease_losers(self, kept: dict[str, Any]) -> list[dict[str, Any]]:
+        """The claims `resolve` releases when ``kept`` wins: every one that overlapped it,
+        and the displayed lease if that is another claim -- ``kept`` is about to take the
+        item from it. A contestant that met neither lost nothing to ``kept``."""
+        losers = self.lease_clashes(kept)
+        cur = self.lease
+        if cur is not None and cur.event != kept["event"]:
+            if all(h["event"] != cur.event for h in losers):
+                losers.append(_claim(cur))
+        return losers
 
 
 @dataclass
@@ -742,15 +763,34 @@ def _overlaps(a: dict[str, Any], b: dict[str, Any]) -> bool:
     return a0 <= b1 and b0 <= a1
 
 
+def _clashing(claims: list[dict[str, Any]], claim: dict[str, Any]) -> list[dict[str, Any]]:
+    """The claims among ``claims`` that overlapped ``claim``: another holder's, by both
+    claims' own windows."""
+    return [
+        h
+        for h in claims
+        if h["holder"] != claim["holder"]
+        and h["event"] != claim["event"]
+        and _overlaps(h["lease"], claim["lease"])
+    ]
+
+
 def _join(it: Item, claims: list[dict[str, Any]]) -> None:
     """Add claims to the lease contest, once each. Keyed by the ACQUIRING EVENT, never by
     holder name: one holder can hold an item twice (claimed, lost, claimed again), and
-    those are two claims that can each be contested."""
-    have = {h["event"] for h in it.lease_contest}
+    those are two claims that can each be contested. A claim already there keeps the
+    later evidence -- a renewal since it joined widens the window everything pairwise
+    reads."""
+    have = {h["event"]: h for h in it.lease_contest}
     for c in claims:
-        if c["event"] not in have:
+        old = have.get(c["event"])
+        if old is None:
             it.lease_contest.append(c)
-            have.add(c["event"])
+            have[c["event"]] = c
+            continue
+        old["lease"]["renewed_at"] = max(old["lease"]["renewed_at"], c["lease"]["renewed_at"])
+        if "overlapped_by" in c:
+            old.setdefault("overlapped_by", c["overlapped_by"])
 
 
 def _displace(it: Item, lost: dict[str, Any], by: dict[str, Any]) -> None:
@@ -772,8 +812,11 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
     expiry, or the lease past its TTL (and grace) at the moment of the claim. So two
     claims whose intervals intersect can only come from clones that did not see each
     other: a contest. The comparison is on the claims' own times, never on "now" (the
-    fold is pure), and against the displayed lease AND every claim already contested --
-    a contestant stays live even when the displayed lease is somebody else's.
+    fold is pure), and against EVERY claim the item still knows -- the displayed lease,
+    each one already contested, each one a takeover displaced -- so the contest is the
+    claims that overlapped another, whatever order they fold in. It is never narrowed to
+    the claims that met the displayed one: that hid real double claims. Who met whom is
+    read pairwise from it (`Item.lease_clashes`).
 
     Which claim is DISPLAYED is decided by wall time, not fold order: the later
     acquisition. A claim that ended before the displayed one began is history arriving
@@ -795,37 +838,28 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         event=ev.id or ev.compute_id(),
     )
     mine = _claim(new)
-    rivals = [
-        h
-        for h in it.lease_contest
-        if h["holder"] != new.holder
-        and h["event"] != new.event
-        and _overlaps(h["lease"], mine["lease"])
-    ]
     cur = it.lease
-    if cur is None or cur.holder == new.holder or cur.expired_at:
-        if rivals:
-            _join(it, [*rivals, mine])
+    live = cur is not None and cur.holder != new.holder and not cur.expired_at
+    known = [
+        *it.lease_contest,
+        *({k: v for k, v in e.items() if k != "by"} for e in it.displaced),
+        *([_claim(cur)] if live else []),
+    ]
+    rivals = _clashing(known, mine)
+    if rivals:
+        _join(it, [*rivals, mine])
+    if not live:
         _hold(it, new)
         return
     held = _claim(cur)
     if _overlaps(held["lease"], mine["lease"]):
-        _join(it, [*rivals, held, mine])
         if new.acquired_at >= cur.acquired_at:
             _hold(it, new)
         return
-    # The two never overlapped: whichever ended first has no stake in a contest the other
-    # is in -- whoever that contest keeps, it was already over. It stays out (or leaves),
-    # remembered as displaced, where a late renewal can still prove it was live.
     if new.acquired_at < cur.acquired_at:
-        if rivals and not any(h["event"] == held["event"] for h in it.lease_contest):
-            _join(it, [*rivals, mine])
         _displace(it, mine, held)  # late history: `cur` took over from it
         return
     _displace(it, held, mine)
-    if rivals:
-        it.lease_contest = [h for h in it.lease_contest if h["event"] != held["event"]]
-        _join(it, [*rivals, mine])
     _hold(it, new)
 
 
@@ -971,16 +1005,21 @@ def _h_lease_gone(st: State, ev: Event) -> None:
 
 
 def _withdraw_claim(it: Item, event: str) -> None:
-    """A contested claim was released: it is withdrawn, and with one claim left there is
-    nothing to resolve -- that claim holds the item, even when the release was of the
-    lease that happened to be displayed."""
+    """A contested claim was released: it is withdrawn, and when no two claims left
+    overlapped there is nothing to resolve. With the displayed lease the one withdrawn,
+    the latest claim left holds the item -- the fold's own rule -- and any other left is
+    history it displaced."""
     it.lease_contest = [h for h in it.lease_contest if h["event"] != event]
     if it.lease is not None and it.lease.event == event:
         it.lease = None
-    if len(it.lease_contest) == 1:
-        if it.lease is None:
-            _hold(it, Lease(**it.lease_contest[0]["lease"]))
-        it.lease_contest = []
+    if any(_clashing(it.lease_contest, h) for h in it.lease_contest):
+        return
+    if it.lease is None and it.lease_contest:
+        *older, latest = sorted(it.lease_contest, key=lambda h: h["lease"]["acquired_at"])
+        _hold(it, Lease(**latest["lease"]))
+        for h in older:
+            _displace(it, h, latest)
+    it.lease_contest = []
 
 
 def _h_resolved(st: State, ev: Event) -> None:
