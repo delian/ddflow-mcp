@@ -73,6 +73,12 @@ def test_it_is_refused_outside_the_final_paragraph_too():
     assert E.check_forbidden_trailers(f"s\n\n{LINE}\n\nmore prose\n", [KEY])[0] == 1
 
 
+def test_a_hash_prefixed_line_is_refused():
+    """Rubber-duck: `git commit -F` cleans up with `whitespace`, which keeps `#` lines."""
+    assert E.check_forbidden_trailers(f"s\n\n#{LINE}\n", [KEY])[0] == 1
+    assert E.check_forbidden_trailers(f"s\n\n  # {LINE}\n", [KEY])[0] == 1
+
+
 def test_a_mention_in_prose_is_not_a_trailer():
     msg = f"s\n\nWe no longer add a {KEY} line to messages.\n"
     assert E.check_forbidden_trailers(msg, [KEY]) == (0, "")
@@ -90,6 +96,12 @@ def test_git_commit_dash_F_with_the_trailer_is_refused_by_the_hook(repo):
     r = _commit_file(repo, f"work\n\n{LINE}\n")
     assert r.returncode != 0, r.stdout + r.stderr
     assert KEY in r.stdout + r.stderr
+
+
+def test_a_hash_prefixed_line_via_dash_F_is_refused_by_the_hook(repo):
+    _hooked(repo, f'["{KEY}"]')
+    r = _commit_file(repo, f"work\n\n#{LINE}\n")
+    assert r.returncode != 0, r.stdout + r.stderr
 
 
 def test_a_clean_message_commits(repo):

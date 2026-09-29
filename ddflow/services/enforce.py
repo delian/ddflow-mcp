@@ -129,8 +129,8 @@ def hooks_dir(repo: Path) -> Path:
 #: WITH `Item: X` was refused and one without it passed after any commit that had one.
 _COMMIT_MSG = """#!/bin/sh
 {marker}
-# Checks the commit MESSAGE: the trailer [enforce].require_item_trailer asks for.
-# Does nothing while that knob is off.
+# Checks the commit MESSAGE: the trailer [enforce].require_item_trailer asks for, and
+# none of [enforce].forbidden_trailers. Does nothing while both are unset.
 {invocation}
 """
 
@@ -582,6 +582,11 @@ def _out_hint(paths: list[str]) -> str:
     return ""
 
 
+def _key(line: str) -> str:
+    """The `<key>` of a `<key>: value` line, past indentation and comment hashes."""
+    return line.split(":", 1)[0].strip().lstrip("#").strip()
+
+
 def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
     """Refuse a message carrying any of `keys` as a `<key>:` line. `[enforce].forbidden_trailers`.
 
@@ -594,12 +599,12 @@ def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
     wanted = {k.strip().lower() for k in keys if k.strip()}
     if not wanted:
         return 0, ""
+    # A leading `#` does not make it a comment that git drops: `git commit -F` cleans up
+    # with `whitespace`, which KEEPS `#` lines, so `#<key>: ...` landed in history
+    # verbatim (rubber-duck on B-forbid-trailers). Refusing it in the editor route too,
+    # where git would strip it, costs one deleted line.
     found = sorted(
-        {
-            ln.split(":", 1)[0].strip()
-            for ln in message.splitlines()
-            if ":" in ln and ln.split(":", 1)[0].strip().lower() in wanted
-        }
+        {_key(ln) for ln in message.splitlines() if ":" in ln and _key(ln).lower() in wanted}
     )
     if not found:
         return 0, ""
