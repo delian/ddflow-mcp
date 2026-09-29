@@ -73,6 +73,20 @@ def unknown_cli_mentions(mentions: list[str], leaves: set[str] | None = None) ->
     return unknown
 
 
+def unknown_mentions(mentions: list[tuple[str, str]], leaves: set[str] | None = None) -> list[str]:
+    """Which `(separator, command)` pairs from `H.command_mentions` name nothing real.
+
+    Checked against BOTH registries. `_` is an MCP tool, looked up in the tool table,
+    not the parser: `ddflow_import_verify` is one tool and `ddflow import --verify` is
+    a flag, and neither registry knows the other's spelling. A tool name has no
+    spaces, so only its first word counts -- `ddflow_cleanup with apply=true` names
+    `ddflow_cleanup`. ` ` is a CLI path, looked up in argparse.
+    """
+    tools = {t.removeprefix("ddflow_") for t in TOOLS}
+    bad = [f"ddflow_{m}" for sep, m in mentions if sep == "_" and m.split()[0] not in tools]
+    return bad + unknown_cli_mentions([m for sep, m in mentions if sep == " "], leaves)
+
+
 # -- it answers the question -----------------------------------------------------------
 
 
@@ -144,20 +158,10 @@ def test_every_command_a_help_page_names_exists():
     Checked against BOTH registries: the argparse tree and the MCP tool table.
     """
     leaves = _cli_leaves()
-    tools = {t.removeprefix("ddflow_") for t in TOOLS}
-
     unknown: list[tuple[str, str]] = []
     pages = {"index": H.render_index(tools=TOOLS), **{t: H.render_topic(t) for t in H.TOPICS}}
     for page, text in pages.items():
-        for sep, mention in H.command_mentions(text):
-            if sep == "_":
-                # An MCP tool name. Checked against the tool table, not the parser:
-                # `ddflow_import_verify` is one tool and `ddflow import --verify` is
-                # a flag, and neither registry knows about the other's spelling.
-                if mention not in tools:
-                    unknown.append((page, f"ddflow_{mention}"))
-                continue
-            unknown.extend((page, m) for m in unknown_cli_mentions([mention], leaves))
+        unknown.extend((page, m) for m in unknown_mentions(H.command_mentions(text), leaves))
     assert not unknown, f"help pages name commands that do not exist: {unknown}"
 
 

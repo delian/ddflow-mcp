@@ -63,6 +63,10 @@ class Recovery:
     #: worktree (broken gitdir, git absent, NFS stall) report "safe to remove" -- and
     #: `sweep(apply=True)` acts on exactly this flag.
     salvageable: bool | None = False
+    #: The tree is the HARNESS's (`Item.adopted`): the agent's own live working
+    #: directory, which ddflow bound to the item and did not create. Never advised for
+    #: removal -- `merge` refuses to delete one for the same reason (B930f5c6b7c).
+    adopted: bool = False
 
 
 def _renew_in_place(
@@ -508,6 +512,7 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
                 item=it.id,
                 holder=lease.holder,
                 kind="expired_lease",
+                adopted=it.adopted,
                 worktree=lease.worktree or it.worktree,
                 branch=lease.branch or it.branch,
                 age_s=now - lease.renewed_at,
@@ -522,6 +527,7 @@ def scan(log: EventLog, cfg: Config, repo: Path, *, now: float | None = None) ->
                 item=it.id,
                 holder="(none)",
                 kind="orphan_worktree",
+                adopted=it.adopted,
                 worktree=it.worktree,
                 branch=it.branch,
             )
@@ -586,6 +592,15 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
             f"{rec.unmerged_commits} unmerged commit(s). "
             f"`git -C {wt} diff {base}` then salvage"
             + (f", then `ddflow release {rec.item} --note salvaged`." if held else ".")
+        )
+    elif rec.adopted:
+        rec.advice = (
+            "clean and fully merged, but adopted: this is the agent harness's own working "
+            "tree, not ddflow's -- leave it to the harness. "
+        ) + (
+            f"`ddflow release {rec.item}` is all ddflow needs."
+            if held
+            else "No lease is held on it."
         )
     else:
         # `git worktree remove`, not `ddflow cleanup --apply`: that one removes EVERY

@@ -159,11 +159,14 @@ def _coverage_note(it, gaps: list[str]) -> str:
     """Say what each gap IS. `GateStatus.unavailable` holds `partial` gates as well, and
     one sentence for both called a critic that reviewed 3 of 6 chunks one that "never
     ran" -- erasing the half it did (B72dd4dde17). A reviewer's partial evidence carries
-    its `coverage`; a `partial_exits` gate has none, and says so by omission."""
+    its `coverage`; a `partial_exits` gate has none, and says "coverage unknown"."""
     never = [g for g in gaps if it.gate_outcome(g) != "partial"]
     parts = [f"{', '.join(never)} never ran"] if never else []
     for g in gaps:
         if it.gate_outcome(g) == "partial":
+            # `is None`/`== ""`, not falsiness: a coverage of 0 is a figure, and the
+            # most important one to show.
             coverage = it.gates[g].evidence.get("coverage")
-            parts.append(f"{g} ran only partially" + (f" ({coverage})" if coverage else ""))
+            figure = " unknown" if coverage is None or coverage == "" else f": {coverage}"
+            parts.append(f"{g} ran only partially (coverage{figure})")
     return "; ".join(parts) + " — recorded as a coverage gap, not as a pass."
