@@ -234,10 +234,11 @@ def copy_local_files(primary: Path, tree: Path, names: list[str]) -> list[str]:
     falls back to whatever its global default is. Skipped, each for its reason: a path
     missing from the primary (nothing to copy), a path already in the tree (never
     overwritten -- the agent may have edited it), a path git tracks (the checkout already
-    brought it), and a path outside the repository.
+    brought it), a path outside the repository, and a copy that fails (an unreadable
+    source, a full disk): a convenience file must not kill the claim that called this
+    after its worktree exists, and a half-written copy is removed, since the next claim
+    would otherwise keep it as "already in the tree".
     """
-    import shutil
-
     copied: list[str] = []
     root = Path(primary).resolve()
     for name in names:
@@ -247,8 +248,12 @@ def copy_local_files(primary: Path, tree: Path, names: list[str]) -> list[str]:
             continue
         if git(root, "ls-files", "--error-unmatch", "--", name).ok:
             continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+        try:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+        except OSError:
+            dst.unlink(missing_ok=True)
+            continue
         copied.append(name)
     return copied
 

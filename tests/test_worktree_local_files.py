@@ -82,3 +82,23 @@ def test_a_tracked_file_deleted_in_the_worktree_is_not_brought_back(repo):
     (tree / "tracked.toml").unlink()
     assert W.copy_local_files(repo, tree, ["tracked.toml"]) == []
     assert not (tree / "tracked.toml").exists()
+
+
+def test_a_file_that_cannot_be_copied_is_skipped_not_raised(repo, monkeypatch):
+    """Bug B3254e02e1f: an OSError from the copy (an unreadable source, a full disk)
+    escaped `W.create`, and claim -- which catches only GitError -- died with a
+    traceback after the worktree existed but before it was recorded."""
+    _setup(repo)
+    (repo / ".other.toml").write_text("x\n")
+    tree = repo.parent / "wt4"
+    _git(repo, "worktree", "add", "-q", "-b", "w", str(tree))
+    real = W.shutil.copy2
+
+    def copy2(src, dst, *a, **k):
+        if Path(src).name == ".roborev.toml":
+            raise PermissionError(13, "Permission denied", str(src))
+        return real(src, dst, *a, **k)
+
+    monkeypatch.setattr(W.shutil, "copy2", copy2)
+    assert W.copy_local_files(repo, tree, [".roborev.toml", ".other.toml"]) == [".other.toml"]
+    assert not (tree / ".roborev.toml").exists()
