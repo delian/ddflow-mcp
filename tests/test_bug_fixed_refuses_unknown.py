@@ -216,3 +216,31 @@ def test_a_file_this_python_cannot_parse_is_matched_by_name(repo):
     # assertion pass for a reason other than the missing name (critic on 5ced6c7).
     assert api.bug_fixed(repo, "B2", regression_test="tests/test_new.py::test_q").exit == FAIL
     assert api.bug_fixed(repo, "B1", regression_test="tests/test_new.py::test_z").exit == OK
+
+
+def test_a_shell_command_naming_a_py_file_is_unchecked_not_refused(repo):
+    """Text before `::` that ends in `.py` is not a node id when it holds a command:
+    `pytest tests/test_foo.py` was taken for a path, missed, and refused the close
+    (critic on e520e12, B65bbe327c7)."""
+    run_cli(repo, "init")
+    _suite(repo)
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    cmds = ["pytest tests/test_fix.py", "pytest tests/test_fix.py::test_boundary"]
+    out = api.bug_fixed(repo, "B1", regression_test=", ".join(cmds))
+    assert out.exit == OK, out
+    assert out.data["unchecked"] == cmds
+
+
+def test_a_source_with_a_coding_cookie_is_read_in_its_own_encoding(repo):
+    """A latin-1 suite that pytest imports fine was read as UTF-8, failed to decode, and
+    its real test counted as missing (critic on e520e12, B1d4b2e6914)."""
+    run_cli(repo, "init")
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_latin.py").write_bytes(
+        b"# -*- coding: latin-1 -*-\nNAME = '\xe9'\n\n\ndef test_accent():\n    pass\n"
+    )
+    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "x")
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "y")
+    assert api.bug_fixed(repo, "B2", regression_test="tests/test_latin.py::test_gone").exit == FAIL
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_latin.py::test_accent")
+    assert out.exit == OK, out

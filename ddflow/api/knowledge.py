@@ -397,7 +397,9 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
     unchecked: list[str] = []
     for entry in _split_outside_brackets(spec):
         path, _, names = entry.partition("::")
-        if not path.endswith(".py"):
+        # A command (`pytest tests/test_x.py`) can end in `.py` too; a path has no
+        # whitespace (B65bbe327c7).
+        if not path.endswith(".py") or any(c.isspace() for c in path):
             unchecked.append(entry)
             continue
         # The parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
@@ -444,12 +446,14 @@ def _defines(source: Path | None, names: list[str]) -> bool:
     if source is None:
         return False
     try:
-        text = source.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError):
+        raw = source.read_bytes()
+    except OSError:
         return False
     try:
-        scope: list[ast.stmt] = ast.parse(text).body
+        # Bytes, so a PEP 263 coding cookie is honoured as pytest would (B1d4b2e6914).
+        scope: list[ast.stmt] = ast.parse(raw).body
     except (SyntaxError, ValueError):
+        text = raw.decode("utf-8", errors="replace")
         return all(
             re.search(rf"^\s*(?:async\s+def|def|class)\s+{re.escape(n)}\b", text, re.M)
             for n in names
