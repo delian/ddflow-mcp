@@ -473,14 +473,17 @@ def _duplicate_work(state: State, lc, sev: str) -> list[LoopFinding]:
 
 
 def _waits_on(state: State, item_id: str) -> set[str]:
-    """Every live item that must finish before ``item_id`` can start, transitively.
+    """Every live item whose work must come before ``item_id``'s, transitively.
 
     The graph readiness uses, not a re-derived one: ``inherited_deps`` (an item's own
     `needs` plus its ancestors'), and a dependency on an item also waits for everything
-    beneath it, since a phase cannot finish while a task in it is open. A dependency
-    that no longer holds anything back -- done, abandoned, removed, unknown, or in
-    another repository -- orders nothing, so the walk stops there. Iterative with a
-    visited set: a `needs` cycle (reported by ``_static_cycles``) must not hang it.
+    beneath it, since a phase cannot finish while a task in it is open. The walk stops
+    at a dependency that cannot sequence anything: one that is done, removed or in
+    another repository holds nothing back, and one that is abandoned or unknown holds
+    back forever -- neither puts one item's work after the other's. A dependency in
+    REVIEW still orders, even when `flow.stack` lets the dependent start: its work is
+    finished and the dependent forks from it. Iterative with a visited set: a `needs`
+    cycle (reported by ``_static_cycles``) must not hang it.
     """
     from ..core.schedule import inherited_deps
 
