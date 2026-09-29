@@ -110,6 +110,7 @@ from .operations import (
     import_project,
     import_verify,
     pins,
+    precommit,
     relevant_tests,
 )
 from .reporting import (
@@ -216,6 +217,7 @@ __all__ = [
     "pins",
     "pr_status",
     "pr_sync",
+    "precommit",
     "progress",
     "promote_add",
     "promote_status",

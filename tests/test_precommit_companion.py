@@ -254,3 +254,31 @@ def test_the_activation_hint_names_the_hook_types_the_config_declares(repo):
     _commit(repo, {"go.mod": "module x\n"})
     out = OPS.precommit(repo, where=repo)
     assert out.data["hook_types"] == ["pre-commit", "commit-msg", "pre-push"]
+
+
+# -- reachable from both surfaces ---------------------------------------------------------
+
+
+def test_the_cli_command_proposes_writes_and_refuses_end_to_end(mixed):
+    """The API passing its tests said nothing about whether anyone could invoke it: the
+    command body existed for a while with no parser entry (rubber_duck review)."""
+    from conftest import run_cli
+
+    code, out, err = run_cli(mixed, "precommit")
+    assert code == 0, err
+    assert "id: ddflow-check-commit" in out and "--write creates it" in out
+    assert not (mixed / ".pre-commit-config.yaml").exists()
+    code, out, err = run_cli(mixed, "precommit", "--write", "--ddflow-cmd", "scripts/run.sh")
+    assert code == 0 and "Wrote" in out, err
+    assert 'entry: "scripts/run.sh hooks check-commit"' in (mixed / ".pre-commit-config.yaml").read_text()  # fmt: skip
+    code, _out, err = run_cli(mixed, "precommit", "--write")
+    assert code == REFUSED and "not replaced" in err
+
+
+def test_the_mcp_tool_returns_the_same_proposal(mixed):
+    from ddflow.surfaces.mcp import TOOLS
+
+    tool = TOOLS["ddflow_precommit"]
+    assert set(tool["properties"]) == {"ddflow_cmd", "write"}
+    out = tool["api"](mixed, {"ddflow_cmd": "x"}, "", called_from=mixed)
+    assert out.exit == 0 and 'entry: "x hooks check-msg"' in out.data["text"]

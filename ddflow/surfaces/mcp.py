@@ -1638,6 +1638,36 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
+    "ddflow_precommit": {
+        "description": (
+            "A .pre-commit-config.yaml proposed for THIS repository: the stacks it "
+            "actually has (Python, shell, Docker, JS, Go, Rust, YAML/TOML/JSON) mapped "
+            "to pinned hooks, plus ddflow's own check-commit and check-msg as local "
+            "hooks, so the pre-commit framework and ddflow do not compete for "
+            ".git/hooks/. Proposes; installs nothing. `write` creates the file and is "
+            "REFUSED (exit 3) when one exists -- merge by hand. The body names programs "
+            "the hooks need that this machine lacks (missing) and whether the hooks can "
+            "reach ddflow (ddflow_cmd_found). Installing pre-commit itself is the operator's call."
+        ),
+        "properties": {
+            "ddflow_cmd": (
+                "string",
+                "How the local hooks reach ddflow (default `ddflow` on PATH).",
+                False,
+            ),
+            "write": ("boolean", "Create the file; never replaces an existing one.", False),
+        },
+        "api": lambda repo, a, agent, called_from=None: _api().precommit(
+            repo,
+            where=called_from,
+            ddflow_cmd=a.get("ddflow_cmd") or "ddflow",
+            write=bool(a.get("write")),
+            agent=agent,
+        ),
+        "payload": "",
+        # The proposal is for the checkout the caller stands in, not the primary.
+        "wants_called_from": True,
+    },
     "ddflow_tests": {
         "description": (
             "AFTER EACH CHANGE, while you work: the tests your change reaches (changed "
