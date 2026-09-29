@@ -380,3 +380,9 @@ def test_a_ddflow_command_the_shell_cannot_split_is_refused(mixed):
     out = OPS.precommit(mixed, where=mixed, ddflow_cmd='a "b', write=True)
     assert out.exit == REFUSED
     assert not (mixed / ".pre-commit-config.yaml").exists()
+
+
+def test_the_payload_says_the_file_exists_once_it_was_written(mixed):
+    """Bug B5f0c501ba4: `exists` was probed before the write and never updated."""
+    out = OPS.precommit(mixed, where=mixed, write=True)
+    assert out.data["written"] is True and out.data["exists"] is True

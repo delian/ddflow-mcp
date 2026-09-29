@@ -524,10 +524,11 @@ def precommit(
             os.chmod(tmp, 0o644)  # mkstemp makes it 0600; a config is read by everyone
             os.link(tmp, path)
         except FileExistsError:
+            data["exists"] = True
             return O.refused("precommit", f"{path} appeared meanwhile; not replaced", **data)
         except OSError as e:
             return O.failed("precommit", f"could not write {path}: {e}")
         finally:
             tmp.unlink(missing_ok=True)
-        data["written"] = True
+        data["written"] = data["exists"] = True
     return O.ok("precommit", **data)
