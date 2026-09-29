@@ -1,0 +1,90 @@
+"""`ddflow import --verify` on an imported record whose "source" is a sentence.
+
+Bug Bd5b59f3894. A lesson corpus's `**Seen in:**` paragraph is imported verbatim into
+`Lesson.seen_in`, and on a real corpus that paragraph is often prose that merely
+MENTIONS a path ("... `config/training/initial_finetune.py` cited ~2839 ..."). The
+vanished-source check accepted anything containing a `/` as a path and stat-ed it; a
+sentence longer than a file name made `Path.is_file()` raise ENAMETOOLONG, and verify
+crashed with a traceback instead of producing its report -- so on that project it never
+ran at all. A shorter sentence did not crash; it was reported as a vanished file, a
+false finding in the check whose value is that its findings are real.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import run_cli
+
+OK = 0
+
+#: The shape of the record that crashed the real run: a dated sentence, over 255
+#: characters before its first `/`, that cites paths in backticks.
+LONG_PROSE = (
+    "2026-08-21 Phase 136, roborev 414-D4 (and its earlier duplicate filing under job "
+    "123). Fixing the duplication surfaced the stale reference; the repo-wide sweep then "
+    "found two more, both fixed (`training_initial_finetune.py` cited ~2839 for a call "
+    "at 1088; the stale citation in `config/training/initial_finetune.py` cited ~12)."
+)
+SHORT_PROSE = "Phase 12 review, see config/billing/tax.py for the call site"
+#: One token, path-shaped, whose first component no filesystem accepts.
+UNSTATABLE = "a" * 280 + "/b.md"
+
+
+def _corpus(repo: Path, seen_in: list[str]) -> None:
+    body = "# Lessons\n\n" + "".join(
+        f"## Rule number {i}\nDo the thing {i}.\n\n**Seen in:** {s}\n\n"
+        for i, s in enumerate(seen_in)
+    )
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "lessons.md").write_text(body)
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "commit", "-qm", "history"], check=True, capture_output=True
+    )
+    run_cli(repo, "init")
+    assert run_cli(repo, "import", "--apply")[0] == OK
+
+
+def _verify(repo: Path) -> dict:
+    code, out, err = run_cli(repo, "--json", "import", "--verify")
+    assert out, f"verify produced no report (exit {code}):\n{err[-2000:]}"
+    return json.loads(out)
+
+
+def _vanished(data: dict) -> set[str]:
+    return {v["source"] for v in data["vanished_sources"]}
+
+
+def test_a_prose_seen_in_longer_than_a_file_name_does_not_crash_verify(repo):
+    assert len(LONG_PROSE.split("/", 1)[0].encode()) > 255, "fixture no longer too long"
+    _corpus(repo, [LONG_PROSE])
+    data = _verify(repo)
+    assert data["imported"].get("lesson") == 1, data["imported"]
+    assert not any("Phase 136" in s for s in _vanished(data)), _vanished(data)
+
+
+def test_a_short_prose_seen_in_that_mentions_a_path_is_not_a_vanished_file(repo):
+    _corpus(repo, [SHORT_PROSE])
+    data = _verify(repo)
+    assert not any("Phase 12" in s for s in _vanished(data)), _vanished(data)
+
+
+def test_a_path_shaped_source_that_cannot_be_stat_ed_is_neither_a_crash_nor_vanished(repo):
+    _corpus(repo, [UNSTATABLE])
+    data = _verify(repo)
+    assert UNSTATABLE not in _vanished(data), _vanished(data)
+    assert any("could not be checked" in n for n in data["notes"]), data["notes"]
+
+
+def test_a_real_missing_path_is_still_vanished_and_a_bug_pin_still_is_not(repo):
+    _corpus(repo, [LONG_PROSE, "docs/gone.md", "review-inverted-severity"])
+    data = _verify(repo)
+    gone = _vanished(data)
+    assert "docs/gone.md" in gone, gone
+    assert "review-inverted-severity" not in gone, gone
+    assert "docs/lessons.md" not in gone, gone

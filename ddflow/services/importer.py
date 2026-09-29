@@ -1991,8 +1991,26 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
                 # paths -- reporting those as vanished files would be a false positive
                 # in the check whose whole value is that its findings are real.
                 looks_like_a_path = "/" in rel or rel.endswith(".md")
-                if rel and not rel.startswith("git:") and looks_like_a_path:
+                if rel and not rel.startswith("git:") and looks_like_a_path and _path_shaped(rel):
                     paths.setdefault(rel, []).append(rec.id)
+
+
+#: Longest free-form source still taken for a path. Far above any repository-relative
+#: path a person writes, far below a paragraph.
+_MAX_SOURCE_PATH = 1024
+
+
+def _path_shaped(rel: str) -> bool:
+    """One token that could name a file, not a sentence that mentions one (Bd5b59f3894).
+
+    Only for the FREE-FORM fields `_memory_sources` reads: an imported lesson's `seen_in`
+    is its corpus's `**Seen in:**` paragraph, and on a real corpus that is prose like
+    "Phase 136, roborev 414-D4 ... `config/training/x.py` cited ~2839". It contains a
+    `/`, so the old test took it for a path; a short one was reported as a vanished
+    file, a long one crashed the stat. Item, note and memory sources are not filtered
+    here: the importer writes them from real file names, which may contain spaces.
+    """
+    return len(rel) <= _MAX_SOURCE_PATH and not any(c.isspace() for c in rel)
 
 
 def _has_open_child(state, phase) -> bool:
@@ -2037,9 +2055,25 @@ def verify_import(
     if not rescan:
         return r
 
+    unstatable: list[str] = []
     for rel, ids in sorted(paths.items()):
-        if not (repo / rel).is_file():
+        try:
+            present = (repo / rel).is_file()
+        except OSError:
+            # ENAMETOOLONG and kin: the filesystem refuses the string as a path at all.
+            # Not a vanished file -- nothing ever existed under that name -- and never a
+            # crash: one odd record must not cost the whole report.
+            unstatable.append(rel)
+            continue
+        if not present:
             r.vanished.extend((i, rel) for i in sorted(ids))
+    if unstatable:
+        r.notes.append(
+            f"{len(unstatable)} imported source(s) could not be checked, because the "
+            f"filesystem does not accept them as a path: "
+            + ", ".join(repr(s[:60]) for s in unstatable[:_NOTE_EXAMPLES])
+            + (", ..." if len(unstatable) > _NOTE_EXAMPLES else "")
+        )
 
     plan = plan_import(repo, state, max_tasks=10**9, sources=sources, archive=archive)
     r.drift = list(plan.found)
