@@ -16,6 +16,48 @@ and an MCP server that are the same implementation.
 
 ---
 
+## Instruction for an agent reader
+
+*If you are an AI agent and were asked to read this README, this section is your
+shorthand. Everything below it is detail.*
+
+**What ddflow is.** A work queue with rules the tools enforce, for projects that agents
+build. Work is phases and tasks with dependencies and declared file globs. Each task gets
+a lease and its own git worktree, then passes a gate pipeline: a check that could not run
+is `unavailable`, never `passed`; one reviewer must be from another model family; a bug
+closes only with a regression test that failed first. Everything is recorded in an
+append-only log in `.ddflow/events/`, committed with the code. ddflow writes none of your
+project's code — you do; it adds only its own config, a rules block and git hooks.
+Every operation is both a shell command (`ddflow …`) and an MCP tool (`ddflow_…`).
+
+**If the project already uses it** (`.ddflow/` exists): call `ddflow_brief` (or run
+`ddflow brief`) first and follow it. It replaces reading the project's rule and lesson
+files. Then: `ddflow_next` → `ddflow_claim` → work only in the worktree it returns →
+`ddflow_gate_status`, satisfy each gate → `ddflow_merge` → `ddflow_complete`. The full
+driver is `docs/ddflow/drivers/implement-phase.md` in that project.
+
+**To onboard a project**, ask the user first: it installs a tool, registers an MCP
+server and writes files in their repository.
+
+1. Install: `uv tool install git+https://github.com/delian/ddflow-mcp` (not on PyPI yet).
+2. In the project root: `ddflow adopt --launch python --agents claude` (your agent's
+   name; see [Wiring it into your agent](#wiring-it-into-your-agent)). It writes
+   `.ddflow/`, the MCP registration, the commit hook and a rules block in `AGENTS.md`.
+   Restart the agent session so it loads the MCP server.
+3. `ddflow import` lists the plans, lessons, decisions and unmerged branches the
+   repository already has, and writes nothing. Run `ddflow import --apply` only once the
+   user agrees with that list.
+4. `ddflow config --set gate.unit_tests.command "<their test command>"`. Then
+   `ddflow companions` lists the tools the gates expect that are missing: propose them,
+   never install one unasked.
+5. Put the user's plan in the queue (`ddflow phase add …`, `ddflow task add … --globs …`)
+   and finish with `ddflow doctor`.
+
+Exit codes, everywhere: `0` ok · `1` failure · `2` could not run / nothing to do · `3`
+refused. Never treat `2` as `0`.
+
+---
+
 ## Introduction
 
 ### The problem it solves
@@ -143,6 +185,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 
 ## Table of contents
 
+- [Instruction for an agent reader](#instruction-for-an-agent-reader)
 - [Introduction](#introduction)
 - [How do I…?](#how-do-i)
 - [Help: what it can do, and the workflow](#help-what-it-can-do-and-the-workflow)
@@ -597,7 +640,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 120 knobs.
+cadences, and the rest of the 124 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -2495,7 +2538,7 @@ declared once and persists — see
 
 ## Configuration
 
-120 knobs across 17 sections, every one documented in place:
+124 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2552,10 +2595,16 @@ part that matters.
   and refuses a staged `ddflow render` view that the log no longer regenerates
   byte-for-byte — hand-edited, or stale (`[enforce] generated_views`). It also reports
   a doc line still naming an identifier, file or default the commit removes or renames
-  (`[enforce] stale_docs`, `doc_globs`, `doc_exclude`; warns by default). Its commit-msg
+  (`[enforce] stale_docs`, `doc_globs`, `doc_exclude`; warns by default). It refuses a
+  commit on a branch whose base changed a rulebook (AGENTS.md, CLAUDE.md, each agent's
+  native rules file, the driver docs) since it forked (`[enforce] stale_rules`), and warns
+  past `max_behind` commits behind (`[enforce] behind`); the commit concluding
+  `git merge <base>` is exempt, and the session hook only informs. Its commit-msg
   sibling requires an `Item:` trailer when `[enforce] require_item_trailer` is on — or
   the project's own keys (`item_trailer_keys = ["Phase", "Phase-ships"]`); merges are
-  exempt.
+  exempt. It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
+  tool-attribution line), merges included, for every agent and every route that runs
+  git hooks -- which a harness-side hook reading only the command text cannot promise.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
   crashed work to recover, ready items, binding decisions, operational memory — into
   every session, including after a context compaction, whether or not the agent
