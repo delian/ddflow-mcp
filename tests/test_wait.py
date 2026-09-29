@@ -403,3 +403,74 @@ def test_a_claim_refused_for_an_EXPIRED_lease_does_not_point_at_wait(repo):
     out = A.claim(repo, "T1", no_worktree=True, agent=WAITER)
     assert out.exit == O.REFUSED and "EXPIRED" in out.reason
     assert "ddflow wait" not in out.reason, "wait refuses this case at once"
+
+
+def test_a_resource_you_hold_yourself_is_not_waited_on(repo):
+    """critic: the resources branch built `waiting_on` from OTHER agents' leases only, so
+    a shortfall caused by the waiter's own lease registered a wait nobody could end and
+    burned the whole timeout. The deps branch already refused "waiting on yourself"."""
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[schedule]\nresources = ["gpu=1"]\n')
+    for tid, glob in (("P", "a.py"), ("Q", "b.py")):
+        run_cli(repo, "task", "add", tid, "--globs", glob)
+        run_cli(repo, "update", tid, "--resources", "gpu:1")
+    assert A.claim(repo, "P", no_worktree=True, agent=WAITER).ok
+    out = A.wait(repo, item="Q", timeout_s=0, agent=WAITER)
+    assert out.exit == O.NOTHING and not out.data["waitable"], out.data
+    assert "P" in out.reason and "YOU hold" in out.reason, out.reason
+
+
+def test_a_resource_another_agent_holds_is_waited_on(repo):
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[schedule]\nresources = ["gpu=1"]\n')
+    for tid, glob in (("P", "a.py"), ("Q", "b.py")):
+        run_cli(repo, "task", "add", tid, "--globs", glob)
+        run_cli(repo, "update", tid, "--resources", "gpu:1")
+    assert A.claim(repo, "P", no_worktree=True, agent=HOLDER).ok
+    out = A.wait(repo, item="Q", timeout_s=0, agent=WAITER)
+    assert out.exit == O.NOTHING and out.data["waitable"], out.data
+    assert out.data["waiting_on"] == ["P"]
+
+
+def test_a_cap_blocked_item_wait_agrees_with_claim(proj):
+    """critic: `_blocking_leases` treats a full cap as waitable while the item path
+    called any `state` blocker hopeless. Whatever the item path answers must match what
+    `claim` then does: ready means claim grants it, blocked means claim refuses it."""
+    cfg = proj / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("max_parallel_tasks = 4", "max_parallel_tasks = 1"))
+    run_cli(proj, "task", "add", "U1", "--globs", "docs/u1.md")
+    out = A.wait(proj, item="U1", timeout_s=0, agent=WAITER)
+    assert out.data["waitable"], f"a full cap clears on any release: {out.reason}"
+    claimed = A.claim(proj, "U1", no_worktree=True, agent=WAITER)
+    assert claimed.ok == out.data["woke"], (out.reason, claimed.reason)
+
+
+def test_under_deps_only_an_any_wait_does_not_offer_an_EXPIRED_lease(repo):
+    """critic: `_claim_blocker` lacked the expired-lease check that the item path has, so
+    under deps_only an any-wait woke on an item whose lease had lapsed -- and claim then
+    refused it, the ready -> refused -> ready spin."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
+    _deps_only(repo)
+    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
+    time.sleep(1.5)
+    out = A.wait(repo, timeout_s=0, agent=WAITER)
+    for item in out.data["ready"]:
+        refused = A.claim(repo, item, no_worktree=True, agent=WAITER)
+        assert refused.ok, f"wait offered {item} and claim refused it: {refused.reason}"
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["[]", "null", "123", '"x"', '{"agent": "a", "until": "soon"}', '{"agent": "a", "pid": "42"}'],
+)
+def test_a_malformed_registration_is_skipped_not_raised(repo, body):
+    """critic: valid JSON that is not an object raised AttributeError, and mistyped fields
+    raised TypeError from `live()`, out of every holder-side call."""
+    d = repo / WT.WAITS_DIR
+    d.mkdir(parents=True)
+    (d / "foreign.json").write_text(body)
+    assert WT.live_waiters(repo) == []
+    assert WT.waiting_on(repo, "T1") == []

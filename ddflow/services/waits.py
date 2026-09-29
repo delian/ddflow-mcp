@@ -159,11 +159,14 @@ def live_waiters(repo: Path, now: float | None = None) -> list[Waiter]:
     for path in sorted(d.glob("*.json")):
         try:
             raw = json.loads(path.read_text("utf-8"))
+            if not isinstance(raw, dict):
+                continue  # foreign: valid JSON, but not a registration
             w = Waiter(**{k: v for k, v in raw.items() if k in Waiter.__dataclass_fields__})
+            live = w.live(now)  # a mistyped field (an older format) raises here
         except (OSError, ValueError, TypeError):
             continue  # torn or foreign; not ours to delete
         w.path = str(path)
-        if w.live(now):
+        if live:
             out.append(w)
         else:
             with contextlib.suppress(OSError):

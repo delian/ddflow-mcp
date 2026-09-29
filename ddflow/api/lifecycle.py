@@ -163,27 +163,12 @@ def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str,
     mine = live.get(item)
     if mine is not None and mine.holder == me:
         return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
-    lz = it.lease
-    if (
-        lz is not None
-        and item not in live
-        and lz.holder != me
-        and cfg.lease.reclaim_policy == "report"
-    ):
-        # Expiry frees the holder's GLOBS for everyone else, but not its item: `claim`
-        # refuses an expired lease, because a crashed agent's tree often holds finished
-        # work. Calling it claimable here made wait -> refused -> wait a spin.
-        return {
-            **out,
-            "status": "hopeless",
-            "why": f"{item}'s lease from {lz.holder} has expired and is not handed on "
-            f"automatically. `ddflow recover --item {item}` says what its tree holds; "
-            f"salvage, release it, then claim.",
-        }
     b = _claim_blocker(st, cfg, it, me, live, now)
     if b is None:
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
     out["blocked"] = [plain(b)]
+    if b.reason == "expired":
+        return {**out, "status": "hopeless", "why": b.detail}
     if b.reason not in WAITABLE:
         return {
             **out,
@@ -192,11 +177,22 @@ def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str,
             f"agent finishes; someone has to act on it.",
         }
     if b.reason == "resources":
+        theirs = sorted(i for i, lz in others.items() if lz.resources)
+        if not theirs:
+            held = sorted(i for i, lz in live.items() if lz.holder == me and lz.resources)
+            return {
+                **out,
+                "status": "hopeless",
+                "why": f"{item}: {b.detail}, and only "
+                + (f"{', '.join(held)}, which YOU hold," if held else "nobody")
+                + " holds that resource. Finish or release it first; waiting on "
+                "yourself never ends.",
+            }
         return {
             **out,
             "status": "blocked",
             "why": f"{item}: {b.reason} — {b.detail}",
-            "waiting_on": sorted(i for i, lz in others.items() if lz.resources),
+            "waiting_on": theirs,
         }
     if b.reason == "conflict":
         return {
@@ -286,9 +282,10 @@ def _blocking_leases(st, blocked, others) -> list[str]:
 def _claim_blocker(st, cfg, it, me: str, live, now: float):
     """Why `claim` would refuse ``it`` for ``me`` right now, as a `Blocked`; None if not.
 
-    The scheduler's predicate plus the three checks `claim` applies unconditionally --
-    another holder's live lease on the item, overlapping globs, resource capacity.
-    `item_blocker` skips all three under `ready_policy = deps_only`, and waking on a
+    The scheduler's predicate plus the checks `claim` applies unconditionally -- an
+    expired lease under `reclaim_policy = "report"`, another holder's live lease on the
+    item, overlapping globs, resource capacity.
+    `item_blocker` skips these under `ready_policy = deps_only`, and waking on a
     verdict `claim` then refuses would spin (roborev: it did, for a held item).
     """
     from ..core.schedule import (
@@ -304,6 +301,26 @@ def _claim_blocker(st, cfg, it, me: str, live, now: float):
     b = item_blocker(st, cfg, it, live, agent=me, now=now, in_cycle=in_cycle, cycles=cycles)
     if b is not None:
         return b
+    lz = it.lease
+    if (
+        lz is not None
+        and it.id not in live
+        and lz.holder != me
+        and cfg.lease.reclaim_policy == "report"
+    ):
+        # Expiry frees the holder's GLOBS for everyone else, but not its item: `claim`
+        # refuses an expired lease, because a crashed agent's tree often holds finished
+        # work. Calling it claimable made wait -> refused -> wait a spin -- for the item
+        # path, and (critic) for an any-wait under deps_only, whose ready set is
+        # filtered through here.
+        return Blocked(
+            it.id,
+            "expired",
+            f"{it.id}'s lease from {lz.holder} has expired and is not handed on "
+            f"automatically. `ddflow recover --item {it.id}` says what its tree holds; "
+            f"salvage, release it, then claim.",
+            [],
+        )
     held = live.get(it.id)
     if held is not None and held.holder != me:
         return Blocked(it.id, "conflict", f"leased by {held.holder}", [it.id])
