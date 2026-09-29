@@ -268,3 +268,29 @@ def cmd_tests(a, c: Ctx) -> int:
     if d["advice"]:
         print(f"  NOTE: that command {d['advice']}")
     return out.exit
+
+
+def cmd_precommit(a, c: Ctx) -> int:
+    """A `.pre-commit-config.yaml` proposed for this repository's stacks."""
+    out = A.precommit(c.repo, where=c.called_from, ddflow_cmd=a.ddflow_cmd, write=a.write)
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
+    if c.json:
+        print(json.dumps(out.body(), indent=2))
+        return out.exit
+    d = out.data
+    stacks = ", ".join(sorted(d["stacks"])) or "none detected"
+    if d["written"]:
+        print(f"Wrote {d['path']} for: {stacks}.")
+    elif out.exit != OK:
+        print(out.reason, file=sys.stderr)
+    else:
+        print(d["text"], end="")
+        where = "exists -- compare, and merge by hand" if d["exists"] else "does not exist yet"
+        print(f"\n# {d['path']} {where}. --write creates it; it never replaces one.")
+    if not d["installed"]:
+        print("# pre-commit is not installed: ask the operator, then `pipx install pre-commit`.")
+    elif d["written"]:
+        print("Activate it with `pre-commit install` (the pre-commit and commit-msg hooks).")
+    return out.exit
