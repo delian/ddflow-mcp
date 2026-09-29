@@ -187,8 +187,8 @@ def test_recall_labels_an_invalid_bug_invalid_with_its_reason(repo):
 def test_history_names_the_closure_invalid_not_fixed(repo):
     _init(repo)
     K.bug_invalid(repo, "B1", reason="false")
-    _code, out, _ = run_cli(repo, "history", "B1")
-    assert "invalid" in out, out
+    _code, out, _ = run_cli(repo, "history", "--kind", "bug")
+    assert "bug closed as invalid" in out, out
     assert "bug fixed" not in out, out
 
 

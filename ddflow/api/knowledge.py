@@ -314,10 +314,31 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
 def bug_found(
     repo: Path, *, summary: str, item: str = "", id: str = "", agent: str = ""
 ) -> O.Outcome:
-    log, _cfg, _st = _load(repo, agent)
+    log, _cfg, st = _load(repo, agent)
     bid = id or auto_id("B", summary, item)
     log.append("bug.found", bid, {"item": item, "summary": summary})
+    # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
+    # out loud, because otherwise a real recurrence filed under an id already closed --
+    # the same summary and item give the same auto id -- vanishes without a word.
+    prior = st.bugs.get(bid)
+    if prior is not None and prior.resolution:
+        return O.ok("bug.found", id=bid, resolution=prior.resolution)
     return O.ok("bug.found", id=bid)
+
+
+def _unknown_bug(kind: str, bid: str, st) -> O.Outcome:
+    """The refusal for an id that names no recorded bug, shared by every closure.
+
+    An unknown id used to be closed anyway, folding a phantom bug while the real one
+    stayed open -- typically the TASK id, passed because `bug found --item` links one.
+    """
+    linked = sorted(b.id for b in st.bugs.values() if b.item == bid and b.open)
+    hint = (
+        f" Open bugs linked to {bid}: {', '.join(linked)} -- close those ids."
+        if linked
+        else " `ddflow recall` or `ddflow status` lists the open bugs."
+    )
+    return O.refused(kind, f"no bug {bid} is recorded in this log.{hint}", id=bid)
 
 
 def bug_fixed(
@@ -340,16 +361,8 @@ def bug_fixed(
             "code, then close.",
             id=item,
         )
-    # An unknown id used to be closed anyway, folding a phantom bug while the real one
-    # stayed open -- typically the TASK id, passed because `bug found --item` links one.
     if item not in st.bugs:
-        linked = sorted(b.id for b in st.bugs.values() if b.item == item and not b.fixed_at)
-        hint = (
-            f" Open bugs linked to {item}: {', '.join(linked)} -- close those ids."
-            if linked
-            else " `ddflow recall` or `ddflow status` lists the open bugs."
-        )
-        return O.refused("bug.fixed", f"no bug {item} is recorded in this log.{hint}", id=item)
+        return _unknown_bug("bug.fixed", item, st)
     missing, unchecked = _unresolved_tests(repo, regression_test)
     if missing:
         return O.failed(
@@ -378,6 +391,62 @@ def bug_fixed(
         regression_test=regression_test,
         lesson_captured=captured,
         unchecked=unchecked,
+    )
+
+
+def bug_invalid(
+    repo: Path, bug: str, *, reason: str, evidence: str = "", agent: str = ""
+) -> O.Outcome:
+    """Close a bug as a FALSE finding: nothing was broken, so nothing was fixed.
+
+    `bug fixed` was the only closure, and it claims a repair plus a regression test that
+    fails on the unfixed code. A finding shown false has neither, so B97355c6d15 stayed
+    open forever -- and closing it as fixed would have recorded a repair nobody made. This
+    closure never sets `fixed_at` and never counts as a fix.
+
+    Refused (exit 3): an unknown id, a bug already closed either way (a fixed bug is not
+    re-labelled false after the fact), and an empty reason -- "invalid" with no why is an
+    unexplained dismissal. `evidence` is the probe that showed it false: a command, or a
+    test node id, which is resolved statically as `--regression-test` is (exit 1 when it
+    names nothing).
+    """
+    log, _cfg, st = _load(repo, agent)
+    if not reason.strip():
+        return O.refused(
+            "bug.invalid",
+            "a bug may not be closed as invalid without --reason saying why the finding "
+            "is false; pass --evidence with the probe or test that showed it.",
+            id=bug,
+        )
+    if bug not in st.bugs:
+        return _unknown_bug("bug.invalid", bug, st)
+    rec = st.bugs[bug]
+    if rec.resolution == "fixed":
+        return O.refused(
+            "bug.invalid",
+            f"bug {bug} is already closed as fixed (regression test: "
+            f"{rec.regression_test or 'none recorded'}); a fixed bug is not re-labelled "
+            f"a false finding.",
+            id=bug,
+        )
+    if rec.resolution == "invalid":
+        return O.refused(
+            "bug.invalid",
+            f"bug {bug} is already closed as invalid: {rec.invalid_reason}",
+            id=bug,
+        )
+    missing, unchecked = _unresolved_tests(repo, evidence)
+    if missing:
+        return O.failed(
+            "bug.invalid",
+            f"--evidence names a test that exists in no worktree of this repository: "
+            f"{', '.join(missing)}. Name the test or probe that shows the finding false.",
+            id=bug,
+        )
+    reason = reason.strip()
+    log.append("bug.invalid", bug, {"reason": reason, "evidence": evidence})
+    return O.ok(
+        "bug.invalid", id=bug, invalid_reason=reason, evidence=evidence, unchecked=unchecked
     )
 
 

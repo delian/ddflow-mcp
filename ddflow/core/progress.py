@@ -50,6 +50,7 @@ PROGRESS_KINDS: frozenset[str] = frozenset(
         "task.added",
         "phase.added",
         "bug.fixed",
+        "bug.invalid",
         "lesson.recorded",
         "research.recorded",
         "item.abandoned",
