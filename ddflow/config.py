@@ -913,7 +913,7 @@ _doc(
     "enforce",
     "forbidden_trailers",
     'Trailer keys the commit-msg hook REFUSES, e.g. ["Co-'
-    + "Authored-By\"] for a project that never credits a tool in its history. Case-insensitive; any line starting with `<key>:` counts, not only git's final-paragraph trailers, and merge commits are NOT exempt. Enforced by git itself, so it holds for every agent and every route (`git commit -F`, the editor), which a harness-side hook reading only the command text cannot see. Empty by default.",
+    + "Authored-By\"] for a project that never credits a tool in its history. Case-insensitive; any line starting with `<key>:` counts, not only git's final-paragraph trailers, and merge commits are NOT exempt. Enforced by git's commit-msg hook, so it holds for every agent and every route that runs git hooks (`git commit -F`, the editor, merges), which a harness-side hook reading only the command text cannot see; `--no-verify` and plumbing skip it, as they skip every hook. Empty by default.",
 )
 _doc(
     "enforce",

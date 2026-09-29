@@ -611,8 +611,8 @@ def check_forbidden_trailers(message: str, keys: list[str]) -> tuple[int, str]:
     return 1, (
         f"ddflow: this commit message carries {', '.join(f'`{k}:`' for k in found)}, which "
         f"[enforce].forbidden_trailers refuses.\n\n"
-        f"Remove the line and commit again. The rule is enforced here, by git, so it holds "
-        f"for every agent and for `git commit -F` and the editor alike."
+        f"Remove the line and commit again. Git runs this check for every agent and for "
+        f"`git commit -F`, the editor and merges alike."
     )
 
 

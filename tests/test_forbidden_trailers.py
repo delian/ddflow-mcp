@@ -3,8 +3,9 @@
 Operator 2026-09-29 (decision D-strip-coauthor-history): commit messages never carry the
 co-author attribution trailer. The Claude Code PreToolUse hook that enforced it reads only
 the command text, so `git commit -F <file>`, the editor, and every non-Claude agent went
-straight past it -- plain git accepted such a commit. The hook git itself runs is the one
-place every route passes through.
+straight past it -- plain git accepted such a commit. The hook git itself runs covers every
+route that runs git's hooks, whoever the author; `--no-verify` and plumbing
+(`commit-tree` + `update-ref`) skip every hook by design and stay the explicit bypass.
 
 The trailer is spelled in pieces throughout: this file is itself committed, and the
 operator's own hook refuses a command that carries it literally.
@@ -27,7 +28,9 @@ LINE = f"{KEY}: Some Agent <agent@example.com>"
 
 def _git(cwd: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["git", "-c", "user.email=t@t", "-c", "user.name=t", *args],
+        # No signing: a machine with commit.gpgsign on and no usable key would fail the
+        # commit for a reason that has nothing to do with the hook (critic).
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "-c", "commit.gpgsign=false", *args],
         cwd=cwd,
         capture_output=True,
         text=True,
