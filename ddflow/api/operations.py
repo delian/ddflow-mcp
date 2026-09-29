@@ -410,10 +410,9 @@ def _caller_tree(repo: Path, where: Path | None) -> Path:
     """The checkout the caller is standing in. A linked worktree stays itself, where the
     repo root (and so `repo`) is the PRIMARY -- whose files and diff are not the ones the
     caller is working on."""
-    from ..infra import worktree as W
+    from .lifecycle import _tree_of
 
-    top = W.git(where, "rev-parse", "--show-toplevel") if where else None
-    return Path(top.out) if top is not None and top.ok and top.out else repo
+    return (_tree_of(where) if where else None) or repo
 
 
 def _command_found(command: str, tree: Path) -> bool:
