@@ -1200,6 +1200,21 @@ def family_of(model: str, cfg: Config) -> str:
     return family_for(model, cfg.agent.families)
 
 
+def _declared_family(evidence: dict[str, Any]) -> str:
+    """The family `ddflow review` recorded from the operator's reviewer entry, or ``""``.
+
+    A served model name can belong to another family -- this project's Qwen critic is
+    served as `google/gemma-4-31B-it` -- which is why a reviewer entry declares one
+    (B6ed8b9edb8). Trusted only in evidence `ddflow review` wrote (it names the
+    `reviewer`); an agent's `gate record` cannot write a family, so a manual record is
+    judged by its model name as before.
+    """
+    if not evidence.get("reviewer"):
+        return ""
+    fam = str(evidence.get("family") or "").strip().lower()
+    return "" if fam == "unknown" else fam
+
+
 def reviewer_independence(
     state: State, cfg: Config, item_id: str, author_model: str
 ) -> tuple[bool, str]:
@@ -1220,7 +1235,7 @@ def reviewer_independence(
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue
         m = str(rec.evidence.get("model", rec.by) or "").strip()
-        fam = family_of(m, cfg)
+        fam = _declared_family(rec.evidence) or family_of(m, cfg)
         # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
         if not fam:
             anonymous.append(f"{gname}={m or 'no model'}")
