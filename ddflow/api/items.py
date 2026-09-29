@@ -404,6 +404,13 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
     ``refile_as`` re-adds it under new ids (one per loser, in the order `show` lists
     them), and without it the result says how to. A losing CLAIM is released in the same
     transaction. An item that is not contested is refused.
+
+    For a lease contest, ``keep`` may name ANY contestant, not only the one the fold
+    displays: every other contestant gets a `lease.released` (the current holder
+    included), and the resolution then reinstates the kept claim with its TTL running
+    from now. Keeping the current holder therefore just records the others as released;
+    keeping a displaced one hands the item back to it. Either way one call settles the
+    whole contest, however many holders it names.
     """
     import time
 
