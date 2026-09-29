@@ -286,6 +286,8 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_pins": (["pins", "README.md"], {"document": "README.md"}),
     # The fixture's only change is uncommitted setup, so this compares the no-test body.
     "ddflow_tests": (["tests"], {}),
+    # Without `write` it only proposes, so both surfaces see the same repository.
+    "ddflow_precommit": (["precommit"], {}),
     "ddflow_import_verify": (["import", "--verify"], {}),
     "ddflow_companions": (["companions", "list"], {}),
     "ddflow_hooks": (["hooks", "status"], {}),
