@@ -1984,7 +1984,7 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
             if "imported" not in getattr(rec, "tags", []):
                 continue
             for src in getattr(rec, attr, []) or []:
-                rel = str(src).split(":", 1)[0]
+                rel = _MARKUP_AROUND_PATH.sub("", str(src).split(":", 1)[0])
                 # Parenthesised, and narrow on purpose: `and` binds tighter than `or`,
                 # so the unbracketed form accepted `git:foo.md`. A lesson's `seen_in`
                 # also holds bug pins like "review-inverted-severity", which are not
@@ -1998,6 +1998,10 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
 #: Longest free-form source still taken for a path. Far above any repository-relative
 #: path a person writes, far below a paragraph.
 _MAX_SOURCE_PATH = 1024
+#: Markdown around a path in a `**Seen in:**` paragraph: "`nemorun/cli/export.py:88`."
+#: is the file `nemorun/cli/export.py`, and reporting it vanished while it exists is a
+#: false finding. A leading `.` is left alone -- `.ddflow/x.md` is a path.
+_MARKUP_AROUND_PATH = re.compile(r"^[`'\"(\[<*]+|[`'\")\]>*.,;]+$")
 
 
 def _path_shaped(rel: str) -> bool:

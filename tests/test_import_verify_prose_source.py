@@ -81,6 +81,16 @@ def test_a_path_shaped_source_that_cannot_be_stat_ed_is_neither_a_crash_nor_vani
     assert any("could not be checked" in n for n in data["notes"]), data["notes"]
 
 
+def test_a_path_in_markdown_backticks_is_checked_as_the_path_it_names(repo):
+    """The run that surfaced the crash, once past it, reported 8 vanished sources and
+    every one existed: `**Seen in:** `nemorun/cli/export.py:88`.` was stat-ed with its
+    backtick on."""
+    _corpus(repo, ["`docs/lessons.md:3`.", "`docs/gone.md`"])
+    gone = _vanished(_verify(repo))
+    assert not any("lessons.md" in s for s in gone), gone
+    assert "docs/gone.md" in gone, gone
+
+
 def test_a_real_missing_path_is_still_vanished_and_a_bug_pin_still_is_not(repo):
     _corpus(repo, [LONG_PROSE, "docs/gone.md", "review-inverted-severity"])
     data = _verify(repo)
