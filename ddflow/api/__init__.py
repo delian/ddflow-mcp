@@ -102,6 +102,7 @@ from .lifecycle import merge as merge_item
 from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
+from .lifecycle import wait as wait_item
 from .operations import (
     cadence,
     cleanup,
@@ -244,6 +245,7 @@ __all__ = [
     "update",
     "version_cut",
     "version_show",
+    "wait_item",
     "workflow_drop",
     "workflow_gate",
     "workflow_pipeline",
