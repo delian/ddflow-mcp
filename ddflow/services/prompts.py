@@ -67,7 +67,7 @@ class Template:
 
 #: Workflow commands, surfaced over MCP as PROMPTS -- which is what a client turns into
 #: a slash command. Tools are things an agent calls; prompts are things an operator
-#: invokes, and these four are operator workflows, not primitives.
+#: invokes, and these are operator workflows, not primitives.
 #: name -> (title, one-line description, [argument names])
 COMMANDS: dict[str, tuple[str, str, list[str]]] = {
     "implement": (
@@ -77,6 +77,16 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
         "what the per-item driver does not: the four cases in which the loop may stop, "
         "keeping it running across turns, when to ask the operator, and the termination "
         "checklist. Scope it to a phase or task id, or leave it empty for the whole queue.",
+        ["scope"],
+    ),
+    "onboard": (
+        "Onboard this project onto ddflow, end to end, with the operator",
+        "The whole path from 'the MCP server is attached' to a workflow ddflow manages: "
+        "preflight (leftover worktrees and branches: merged or holding work), setup from "
+        "the durable place, a measured test gate, the history import, cutting the "
+        "project's rulebook over from its old todo/lessons/journal files to ddflow, "
+        "freezing those files, and an end-to-end verification before the commit. Asks "
+        "the operator at each decision rather than in one list at the end.",
         ["scope"],
     ),
     "import-existing-project": (
