@@ -112,13 +112,29 @@ def _local(hook_id: str, name: str, entry: str, *, needs: tuple[str, ...] | None
     return Hook(hook_id, fields, entry.split()[:1] if needs is None else needs)
 
 
-def _package_json_declares(root: Path, tool: str) -> bool:
+def _package_json_declares(root: Path, manifest: str, tool: str) -> bool:
     try:
-        data = json.loads((root / "package.json").read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        data = json.loads((root / manifest).read_text(encoding="utf-8"))
+        deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
+    except (OSError, ValueError, AttributeError, TypeError):
         return False
-    deps = {**data.get("dependencies", {}), **data.get("devDependencies", {})}
     return tool in deps
+
+
+def _js_gap(root: Path, paths: list[str], tool: str) -> str:
+    """Why ``tool`` is not proposed. A hook runs from the repository root, so only the
+    root manifest's tools are reachable -- but one declared deeper still EXISTS, and
+    saying it does not would be false."""
+    nested = [
+        m for m in paths
+        if m.endswith("/package.json") and _package_json_declares(root, m, tool)
+    ][:_EVIDENCE]  # fmt: skip
+    if nested:
+        return (
+            f"{tool}: declared in {', '.join(nested)}, not the root package.json; a hook "
+            "run from the root cannot reach it -- add one per package by hand"
+        )
+    return f"{tool}: no package.json declares it, so there is nothing to run"
 
 
 def _yaml_args(paths: list[str]) -> list[str]:
@@ -172,12 +188,10 @@ def propose(root: Path, *, ddflow_cmd: str = "ddflow") -> Proposal | None:
     local: list[Hook] = []
     if "javascript" in stacks:
         for tool, entry in (("eslint", "npx --no-install eslint"), ("prettier", "npx --no-install prettier --check")):  # fmt: skip
-            if _package_json_declares(root, tool):
+            if _package_json_declares(root, "package.json", tool):
                 local.append(_local(tool, tool, entry, files=r"\.(?:[cm]?[jt]sx?)$"))
             else:
-                skipped.append(
-                    f"{tool}: package.json does not declare it, so there is nothing to run"
-                )
+                skipped.append(_js_gap(root, paths, tool))
     if "go" in stacks:
         local += [
             # -w, not -d: gofmt's exit status does not report unformatted files, but

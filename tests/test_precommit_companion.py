@@ -409,3 +409,14 @@ def test_the_activation_line_names_each_hook_type_whatever_the_file_on_disk_says
     code, out, err = run_cli(mixed, "precommit")
     assert code == 0, err
     assert "pre-commit install --hook-type pre-commit --hook-type commit-msg" in out
+
+
+def test_a_tool_declared_only_in_a_nested_package_json_is_named_as_such(repo):
+    """Bug B839afc3dbc: only the root package.json was read, so a monorepo was told its
+    declared eslint did not exist. A root-level hook cannot reach a nested install, so
+    none is proposed -- but the gap is said truthfully."""
+    _commit(repo, {"web/package.json": json.dumps({"devDependencies": {"eslint": "^9"}})})
+    p = PC.propose(repo)
+    assert "eslint" not in _hooks(p)["local"]
+    (note,) = [s for s in p.skipped if s.startswith("eslint")]
+    assert "web/package.json" in note and "does not declare" not in note
