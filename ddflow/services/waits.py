@@ -149,6 +149,24 @@ def unregister(w: Waiter) -> None:
             Path(w.path).unlink()
 
 
+def _well_formed(w: Waiter) -> bool:
+    """Every field the right type. Checked whole, up front: a field that is only wrong
+    when USED (`since` in the sort) once broke the read for every waiter beside it."""
+
+    def num(v: object) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+    return (
+        all(isinstance(v, str) for v in (w.agent, w.item, w.phase, w.reason, w.host))
+        and isinstance(w.waiting_on, list)
+        and all(isinstance(i, str) for i in w.waiting_on)
+        and num(w.since)
+        and num(w.until)
+        and isinstance(w.pid, int)
+        and not isinstance(w.pid, bool)
+    )
+
+
 def live_waiters(repo: Path, now: float | None = None) -> list[Waiter]:
     """Every wait still in progress. Dead registrations are pruned as they are found."""
     now = time.time() if now is None else now
@@ -162,11 +180,9 @@ def live_waiters(repo: Path, now: float | None = None) -> list[Waiter]:
             if not isinstance(raw, dict):
                 continue  # foreign: valid JSON, but not a registration
             w = Waiter(**{k: v for k, v in raw.items() if k in Waiter.__dataclass_fields__})
-            if not isinstance(w.waiting_on, list) or not all(
-                isinstance(i, str) for i in w.waiting_on
-            ):
-                continue  # mistyped: every holder-side reader tests `item in waiting_on`
-            live = w.live(now)  # a mistyped field (an older format) raises here
+            if not _well_formed(w):
+                continue  # mistyped (an older format, a hand-written file): skipped whole
+            live = w.live(now)
         except (OSError, ValueError, TypeError):
             continue  # torn or foreign; not ours to delete
         w.path = str(path)

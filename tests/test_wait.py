@@ -488,3 +488,19 @@ def test_a_mistyped_live_registration_never_breaks_the_holder(proj):
     (d / "odd.json").write_text(_json.dumps(body))
     assert A.heartbeat(proj, "T1", agent=HOLDER).ok
     assert A.release(proj, "T1", agent=HOLDER).ok
+
+
+def test_one_mistyped_registration_does_not_hide_the_valid_waiters(proj):
+    """critic (third pass): a live registration with a non-numeric `since` (an older
+    ISO-timestamp format) was accepted, then broke the sort -- and the holder, told
+    "no waiters", lost the real one beside it."""
+    import json as _json
+
+    d = proj / WT.WAITS_DIR
+    d.mkdir(parents=True)
+    odd = {"agent": "x", "waiting_on": ["T1"], "pid": os.getpid(), "since": "2025-09-29T10:00:00Z"}
+    (d / "odd.json").write_text(_json.dumps(odd))
+    WT.register(proj, WT.Waiter(agent=WAITER, item="T2", waiting_on=["T1"], until=time.time() + 60))
+    assert [w["agent"] for w in WT.waiting_on(proj, "T1")] == [WAITER]
+    hb = A.heartbeat(proj, "T1", agent=HOLDER)
+    assert [w["agent"] for w in hb.data["waiters"]] == [WAITER], hb.data
