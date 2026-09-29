@@ -231,7 +231,23 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
                     f"red. `ddflow gate verify <item> {gid}` is how you find out.",
                 )
             )
+    out += _policy_findings(cfg)
     return out + (_project_findings(gates, root) if root else [])
+
+
+def _policy_findings(cfg: Config) -> list[Finding]:
+    """What a coherent pipeline can still be missing: a phase that never reviews its docs."""
+    if "docs" in cfg.gates.phase_pipeline:
+        return []
+    return [
+        Finding(
+            ADVISORY,
+            "phase_pipeline",
+            "has no 'docs' gate, so a phase can merge with the README and docs describing "
+            "the code before it. Add 'docs' before 'merge' unless the project keeps no "
+            "user-facing documentation.",
+        )
+    ]
 
 
 def _project_findings(gates: dict[str, GateDef], root: Path) -> list[Finding]:

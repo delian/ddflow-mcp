@@ -214,6 +214,7 @@ ddflow gate record <NAME> bug_hunt   --outcome passed --evidence "..."
 ddflow gate record <NAME> dedupe     --outcome passed --evidence "..."
 ddflow gate record <NAME> live_test  --outcome passed --evidence "<real run output>"
 ddflow gate record <NAME> corrections --outcome passed --evidence "..."
+ddflow gate record <NAME> docs       --outcome passed --evidence "<docs updated, or: no user-visible change, because ...>"
 ddflow complete <NAME> --model "<your model>"
 ddflow render                                    # regenerate the human-readable board
 ```
