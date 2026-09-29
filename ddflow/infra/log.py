@@ -256,9 +256,13 @@ def bare_agent_id(fallback_root: Path | str | None = None) -> str:
 
 def clone_suffix_since(root: Path | str) -> float:
     """When this clone got its suffix (the clone-id file's mtime; it is never rewritten),
-    or 0.0 when it has none. Before that moment this clone derived the bare id."""
+    or 0.0 when it has none. Before that moment this clone derived the bare id.
+
+    "Has a suffix" means what :func:`_clone_suffix` means by it -- the file has content --
+    so an empty file is no suffix here either."""
+    path = Path(root) / CLONE_ID_FILE
     try:
-        return (Path(root) / CLONE_ID_FILE).stat().st_mtime
+        return path.stat().st_mtime if path.read_text("utf-8").strip() else 0.0
     except OSError:
         return 0.0
 
