@@ -19,14 +19,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from test_help import _cli_leaves, unknown_cli_mentions, unknown_mentions
+from test_help import _cli_leaves, mentions, unknown_cli_mentions, unknown_mentions
 
 from ddflow.core.model import fold
 from ddflow.infra import worktree as W
 from ddflow.infra.log import EventLog
 from ddflow.services import completion as CM
 from ddflow.services import gates as G
-from ddflow.services import help as H
 from ddflow.services import leases as L
 
 PACKAGE = Path(__file__).resolve().parents[1] / "ddflow"
@@ -81,7 +80,7 @@ ALLOWED = {**dict.fromkeys(PROSE, "prose"), **KNOWN_OPEN}
 
 def _unresolved(text: str) -> list[str]:
     """CLI commands `text` names in backticks that argparse would reject."""
-    return unknown_cli_mentions([m for sep, m in H.command_mentions(text) if sep == " "])
+    return unknown_cli_mentions([m for sep, m in mentions(text) if sep == " "])
 
 
 def _seed(log: EventLog, item: str = "T1") -> None:
@@ -327,7 +326,7 @@ def _occurrences(rel: str, source: str, leaves: set[str]) -> list[Occurrence]:
     out: list[Occurrence] = []
     if rel.endswith(".py"):
         for lineno, text in _strings(source):
-            for m in unknown_mentions(H.command_mentions(text), leaves):
+            for m in unknown_mentions(mentions(text), leaves):
                 out.append((rel, m, f"{rel}:{lineno}", text))
         return out
     # Markdown: `command_mentions` must see the whole page (a fenced block changes what
@@ -336,7 +335,7 @@ def _occurrences(rel: str, source: str, leaves: set[str]) -> list[Occurrence]:
     lines = source.splitlines()
     seen = 0
     for i, line in enumerate(lines):
-        upto = H.command_mentions("\n".join(lines[: i + 1]))
+        upto = mentions("\n".join(lines[: i + 1]))
         for m in unknown_mentions(upto[seen:], leaves):
             out.append((rel, m, f"{rel}:{i + 1}", line.strip()))
         seen = len(upto)
@@ -409,4 +408,4 @@ def test_the_ratchet_catches_a_fake_command():
     assert _unresolved(text) == ["nosuchcmd"], text
     joined = 'y = "then `ddflow " + "nosuchcmd` and " + f"`ddflow_nosuchtool {z}`"\n'
     [(_, text)] = _strings(joined)
-    assert unknown_mentions(H.command_mentions(text)) == ["ddflow_nosuchtool", "nosuchcmd"]
+    assert unknown_mentions(mentions(text)) == ["ddflow_nosuchtool", "nosuchcmd"]
