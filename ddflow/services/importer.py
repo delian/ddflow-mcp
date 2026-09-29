@@ -1761,13 +1761,7 @@ class _Settled:
 
 def _is_imported_phase(it) -> bool:
     """A phase the IMPORTER wrote -- the only kind it may ever complete."""
-    return (
-        it is not None
-        and it.kind == "phase"
-        and not it.removed
-        and bool(it.source)
-        and not it.source.startswith("git:")
-    )
+    return it is not None and it.kind == "phase" and not it.removed and bool(it.source)
 
 
 def _settle_existing(

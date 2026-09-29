@@ -256,3 +256,15 @@ def test_heading_words_are_read_as_words_and_a_negated_done_is_not_done():
     assert verdict("Tooling — not yet shipped") is False
     assert verdict("Tooling (IN PROGRESS) ✅") is False, "a live word wins over a done marker"
     assert verdict("Close the long-context PARTIAL ✅ SHIPPED") is True
+
+
+def test_a_phase_somebody_created_by_hand_is_never_completed_by_import(repo):
+    """Same id as a source heading, but typed in with `phase add`: no source, not ours."""
+    _repo(repo)
+    run_cli(repo, "init")
+    _as_human(repo, "phase.added", "P5", {"title": "Plumbing, planned by hand"})
+    plan = _import(repo, "--include-done")
+    assert not [f for f in plan["found"] if f["kind"] == "completion"], plan["found"]
+    _import(repo, "--apply", "--include-done")
+    st = _state(repo)
+    assert st.items["P5"].state == OPEN and st.items["P5.A"].state == DONE
