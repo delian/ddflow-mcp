@@ -189,6 +189,9 @@ def test_a_bug_cannot_be_closed_without_a_regression_test(proj):
     run_cli(proj, "bug", "found", "--id", "B1", "--summary", "off by one")
     code, _, err = run_cli(proj, "bug", "fixed", "B1")
     assert code == FAIL and "regression-test" in err
+    # The named test must exist: an invented node id no longer closes a bug.
+    (proj / "tests").mkdir(exist_ok=True)
+    (proj / "tests" / "test_offbyone.py").write_text("def test_boundary():\n    pass\n")
     assert (
         run_cli(
             proj, "bug", "fixed", "B1", "--regression-test", "tests/test_offbyone.py::test_boundary"

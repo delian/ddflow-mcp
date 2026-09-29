@@ -385,8 +385,11 @@ def record(
         # `critic` and `standards` are all agent gates recorded through this branch. The
         # feature missed its own motivating case.
         wt = (W.load_path(repo, it.worktree) if it.worktree else None) or repo
-        ev.setdefault("tree_sha", G.tree_fingerprint(wt))
-        ev.setdefault("diff_stat", G.diff_stat(wt))
+        # MEASURED, and passed apart from what the caller supplied: merged into `ev`
+        # they made every bare pass look evidenced (bug Bbc9a7ee3f2).
+        measured = {"tree_sha": G.tree_fingerprint(wt), "diff_stat": G.diff_stat(wt)}
+    else:
+        measured = {}
 
     try:
         G.record(
@@ -399,6 +402,7 @@ def record(
             evidence=ev or None,
             gates=gates,
             by=evidence.model,
+            measured=measured,
         )
     except ValueError as exc:
         if gdef is not None and gdef.is_human_gate:

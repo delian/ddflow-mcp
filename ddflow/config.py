@@ -332,6 +332,7 @@ class GatesConfig:
             "dedupe",
             "live_test",
             "corrections",
+            "docs",
             "merge",
         ]
     )
@@ -355,6 +356,7 @@ class GatesConfig:
             "rubber_duck",
             "critic",
             "standards",
+            "docs",
         ]
     )
 
@@ -367,7 +369,7 @@ _doc(
 _doc(
     "gates",
     "phase_pipeline",
-    "Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point where member tasks run (in parallel where dependencies allow).",
+    "Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point where member tasks run (in parallel where dependencies allow). 'docs' reviews and updates the documentation for everything the phase changed, before it merges.",
 )
 _doc(
     "gates",
@@ -485,6 +487,7 @@ class SessionConfig:
             r"(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----",
         ]
     )
+    redact_extra: list[str] = field(default_factory=list)
     brief_max_tokens: int = 1200
     brief_lesson_count: int = 4
     replay_verify_diffs: bool = True
@@ -499,6 +502,11 @@ _doc(
     "session",
     "redact_patterns",
     "Regexes applied to every logged prompt and note before it touches disk. The log is committed, so an unredacted secret is a leaked secret.",
+)
+_doc(
+    "session",
+    "redact_extra",
+    "More redaction regexes, applied IN ADDITION to redact_patterns. Setting redact_patterns replaces the built-in secret patterns, so a project that copies them to add one of its own freezes them; add yours here instead -- e.g. private-network addresses, so an operator prompt naming a LAN host is masked before it reaches the committed log.",
 )
 _doc(
     "session",
@@ -1059,7 +1067,7 @@ class Config:
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
-    #: where each knob's final value came from -- "default" | "file" | "env"
+    #: where each knob's final value came from -- "default" | "file" | "local" | "env"
     sources: dict[str, str] = field(default_factory=dict, repr=False)
     #: Keys a config FILE carried that this code does not know -- "sec.knob", or "[sec]"
     #: for a whole section. Skipped, not fatal: see `_apply`.
@@ -1079,6 +1087,12 @@ class Config:
             if path.is_file():
                 data = tomllib.loads(path.read_text("utf-8"))
                 cfg._apply(data, "file")
+            # The MACHINE-LOCAL layer, read last: .ddflow/local/ is git-ignored, so what
+            # belongs to whoever runs this checkout -- their services, their machine's
+            # sizing -- overrides the committed, generic config without ever reaching git.
+            local = Path(root) / ".ddflow" / "local" / "config.toml"
+            if local.is_file():
+                cfg._apply(tomllib.loads(local.read_text("utf-8")), "local")
 
         envdata: dict[str, dict[str, Any]] = {}
         for sec in cfg._sections():
@@ -1131,7 +1145,7 @@ class Config:
         # to the work (bugs Bcfc0d22a09, B9cb7dd1c3b). A typo is still loud: `doctor`
         # reports every entry here as a problem, and the WRITE paths (source "check")
         # still refuse an unknown key, so nothing new is written wrong.
-        lenient = source == "file"
+        lenient = source in ("file", "local")
         for sec, values in data.items():
             if sec in self._FOREIGN_TABLES:
                 continue

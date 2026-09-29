@@ -80,6 +80,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "claim",
             "heartbeat",
             "release",
+            "wait",
             "complete",
             "block",
             "unblock",
