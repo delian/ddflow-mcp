@@ -231,6 +231,9 @@ def render(p: Proposal) -> str:
         "# Review it, then `pre-commit install` (installs the hook types listed below).",
         "# `pre-commit autoupdate` moves the pinned revisions forward.",
         f"default_install_hook_types: [{', '.join(p.hook_types)}]",
+        # Without it, every hook naming no stages runs at EVERY installed hook type --
+        # against the commit-message file at commit-msg, and again before a push.
+        "default_stages: [pre-commit]",
         "repos:",
     ]
     for repo in p.repos:

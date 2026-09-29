@@ -322,3 +322,32 @@ def test_ddflows_own_command_is_not_among_the_programs_required(mixed):
     """`requires` excludes ddflow's command; the caller checks the one it chose."""
     reqs = PC.propose(mixed, ddflow_cmd="/opt/ddflow/bin/ddflow").requires
     assert not any("ddflow" in r for r in reqs), reqs
+
+
+def test_hooks_without_their_own_stages_run_only_before_the_commit(mixed):
+    """Bug B77eb4abf56: with no default_stages, pre-commit runs every hook that names no
+    stages at EVERY installed hook type -- check-merge-conflict and gitleaks re-ran at
+    commit-msg against the message file, and a '=======' line in a message was refused."""
+    assert "\ndefault_stages: [pre-commit]\n" in PC.propose(mixed).text
+
+
+@pytest.mark.skipif(shutil.which("pre-commit") is None, reason="pre-commit is not installed")
+def test_pre_commit_itself_keeps_an_unstaged_hook_out_of_commit_msg(repo, tmp_path):
+    """The same, asserted by pre-commit rather than by reading the text: a local hook that
+    always fails and names no stages must not run at the commit-msg stage."""
+    probe = PC.Hook(
+        "always-fails", {"name": "always fails", "entry": "false", "language": "system"}
+    )
+    text = PC.render(
+        PC.Proposal(stacks={}, repos=[PC.Repo("local", (probe,), "probe")], skipped=[])
+    )
+    cfg = tmp_path / "cfg.yaml"
+    cfg.write_text(text)
+    msg = tmp_path / "msg"
+    msg.write_text("subject\n\n=======\n")
+    r = subprocess.run(
+        ["pre-commit", "run", "-c", str(cfg), "--hook-stage", "commit-msg",
+         "--commit-msg-filename", str(msg)],
+        cwd=repo, capture_output=True, text=True, timeout=300,
+    )  # fmt: skip
+    assert r.returncode == 0 and "always fails" not in r.stdout, r.stdout + r.stderr
