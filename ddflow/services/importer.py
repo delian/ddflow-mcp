@@ -187,6 +187,12 @@ def _is_id(token: str) -> bool:
     return bool(token) and any(c.isdigit() for c in token) and ("." in token or token[0].isalpha())
 
 
+def _titled(text: str) -> bool:
+    """Whether `text` carries its id in the TITLED shape (`**38.9 Free-text ...**`)."""
+    m = _ITEM_ID.match(text)
+    return bool(m and m.group(5) and not any(m.group(i) for i in (1, 2, 3, 4)))
+
+
 def _split_id(text: str) -> tuple[str, str]:
     """`(ident, remaining text)`. `("", text)` when the line carries no id."""
     m = _ITEM_ID.match(text)
@@ -290,6 +296,25 @@ _STATUS_HOLD = ("DEFERRED", "WATCH", "ON HOLD", "PARKED", "BLOCKED")
 #: Words that contradict a closed verdict later on the same STATUS line.
 _STATUS_LIVE = ("IN PROGRESS", "REOPENED", "RE-OPENED")
 _TITLE_ASIDE = re.compile(r"\(([^)]*)\)")
+#: Where one clause of an aside ends: `(MED, deferred from P21.4)` is two clauses.
+_ASIDE_CLAUSE = re.compile(r"[,;\u2014\u2013]|\s-{1,2}\s")
+
+
+def _verdict_asides(text: str, markers: tuple[str, ...]) -> str:
+    """`text` without the parenthesised asides that DESCRIBE rather than dispose.
+
+    An aside is a verdict when one of its clauses LEADS with a marker: `(DEFERRED by the
+    operator)`, `(MED, deferred from P21.4)`. `(inventory → todo → deferred notify)` is
+    what the item builds, and read as a deferral it held back the very item the
+    project's handoff said to start with (home-simulator C11, 2026-09-29).
+    """
+
+    def keep(m: re.Match) -> str:
+        clauses = _ASIDE_CLAUSE.split(m.group(1))
+        leads = any(_marker_in(c.strip()[:_LEAD_WORD_CHARS], markers) for c in clauses)
+        return m.group(0) if leads else " "
+
+    return _TITLE_ASIDE.sub(keep, text)
 
 
 def _marker_in(text: str, markers: tuple[str, ...]) -> str:
@@ -357,11 +382,17 @@ def _disposition(raw: str) -> tuple[str, str]:
     # Closed asides, and one left OPEN at the end of the line -- a `(Deferred to ...`
     # whose closing paren sits on the item's next line.
     aside = " ".join([*_TITLE_ASIDE.findall(title), *_OPEN_ASIDE.findall(title)])
-    closed = _marker_in(annotation, _CLOSED_MARKERS) or _marker_in(aside, _CLOSED_MARKERS)
+    # Inside the title's own asides any marker counts, as measured; in the ANNOTATION an
+    # aside counts only when it leads with its verdict (`_verdict_asides`).
+    closed = _marker_in(_verdict_asides(annotation, _CLOSED_MARKERS), _CLOSED_MARKERS) or (
+        _marker_in(aside, _CLOSED_MARKERS)
+    )
     if closed:
         return "closed", closed
     hold_aside = tuple(m for m in _HOLD_MARKERS if m not in _ASIDE_NOT_DISPOSITIONS)
-    hold = _marker_in(annotation, _HOLD_MARKERS) or _marker_in(aside, hold_aside)
+    hold = _marker_in(_verdict_asides(annotation, _HOLD_MARKERS), _HOLD_MARKERS) or (
+        _marker_in(aside, hold_aside)
+    )
     return ("hold", hold) if hold else ("", "")
 
 
@@ -757,6 +788,10 @@ def scan_todos(
                 # The strike-through is the disposition, recorded above; the id inside it
                 # is still the id every `Needs:` line and commit trailer uses.
                 body = body.replace("~~", "").strip()
+            # A TITLED id that is already taken falls back to the slug of the WHOLE line,
+            # as it did before that shape was read: an id derived from a changed slug is
+            # a new item to a project that imported the old one.
+            unsplit = _clean_title(body) if _titled(body) else ""
             ident, body = _split_id(body)
             body = _clean_title(body)
             if heading and not phase_ident:
@@ -786,7 +821,7 @@ def scan_todos(
                         },
                     )
                 )
-            chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(body, 20)}", taken)
+            chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(unsplit or body, 20)}", taken)
             anchor = Found(
                 kind="task",
                 ident=chosen,

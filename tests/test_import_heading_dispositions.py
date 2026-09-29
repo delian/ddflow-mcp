@@ -137,3 +137,23 @@ def test_a_heading_ABOUT_a_phase_does_not_number_its_own_section(repo):
     plan = _plan(repo)
     assert "38" in _by_id(plan, "phase")
     assert "39" not in _by_id(plan, "phase")
+
+
+def test_a_marker_word_inside_the_TITLE_is_not_a_disposition(repo):
+    """`**C11** consumable-triggered chains (inventory → todo → deferred notify)`: the bold
+    is only the id, so the title follows it, and "deferred notify" is what the chain does.
+    Held as DEFERRED, the item the project's own handoff says to start with was never
+    offered."""
+    _write(
+        repo,
+        "## S\n\n"
+        "- [ ] **C11** consumable-triggered chains (inventory -> todo -> deferred notify) - 34.1\n"
+        "- [ ] **C12** the retry path for skipped batches. DECLINED: not needed\n"
+        "- [ ] **C13** (deferred) multi-credential locks\n"
+        "- [ ] **P21.7 (MED, deferred from P21.4) - Humanizer deixis register**\n",
+    )
+    tasks = _by_id(_plan(repo), "task")
+    assert tasks["C11"].extra["disposition"] == "", "title prose read as a deferral"
+    assert "C12" not in tasks, "a disposition AFTER the title still closes the item"
+    assert tasks["C13"].extra["disposition"] == "hold", "an aside that IS the verdict holds"
+    assert tasks["P21.7"].extra["disposition"] == "hold", "a verdict clause inside the aside"
