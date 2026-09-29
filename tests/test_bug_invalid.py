@@ -196,7 +196,6 @@ def test_closing_as_invalid_is_progress_but_not_a_fix():
     from ddflow.core.progress import PROGRESS_KINDS
 
     assert "bug.invalid" in PROGRESS_KINDS
-    assert "bug.invalid" != "bug.fixed"
 
 
 def test_an_invalid_bug_no_longer_marks_its_item_a_bug_fix():
