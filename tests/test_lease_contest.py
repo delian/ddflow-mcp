@@ -228,19 +228,49 @@ def test_show_names_who_each_contested_claim_overlapped(repo: Path):
 
 def _run(claims: dict[str, tuple[float, int]], seq, holders: dict[str, str] | None = None):
     """Fold ``seq`` of ("acq" | "rel", name): each claim acquired as ``holders[name]``
-    (default: its own name), each release naming the claim's acquiring event."""
+    (default: its own name), each release naming the claim's acquiring event. A
+    ("res", n) step is `resolve` at that point, keeping the n-th contestant (mod the
+    count) as `api.items.resolve` would: releases of `lease_losers`, then the
+    resolution, dated 0 so the kept claim's window stays its own. The claims those
+    releases name are added to ``seq``'s ``gone`` attribute when it has one."""
     holders = holders or {}
     evs, ids = [_ev("task.added", "T", 1, title="t")], {}
-    for k, (kind, w) in enumerate(seq, start=2):
+    for kind, w in seq:
+        k = len(evs) + 1
         who = holders.get(w, w)
         if kind == "acq":
             evs.append(
                 _ev("lease.acquired", "T", k, who, holder=who, at=claims[w][0], ttl_s=claims[w][1])
             )
             ids[w] = evs[-1].id
-        else:
+        elif kind == "rel":
             evs.append(_ev("lease.released", "T", k, who, holder=who, event=ids[w]))
+        else:
+            it = fold(evs).items["T"]
+            if not it.lease_contest:
+                continue
+            kept = sorted(it.lease_contest, key=lambda h: h["holder"])[w % len(it.lease_contest)]
+            for h in it.lease_losers(kept):
+                evs.append(
+                    _ev(
+                        "lease.released",
+                        "T",
+                        len(evs) + 1,
+                        "op",
+                        holder=h["holder"],
+                        event=h["event"],
+                    )
+                )
+                getattr(seq, "gone", set()).add(h["holder"])
+            data = {"kind": "task", "claim": kept, "at": 0.0}
+            evs.append(Event("item.resolved", "T", data, "op", len(evs) + 1))
     return fold(evs).items["T"]
+
+
+class _Seq(list):
+    """A step list that collects the claims its resolutions released."""
+
+    gone: set[str]
 
 
 def test_a_release_that_ends_a_contest_keeps_the_claims_left_on_record():
@@ -265,20 +295,25 @@ def test_releasing_the_displayed_contestant_displays_the_latest_left(order):
 
 @pytest.mark.parametrize("seed", range(40))
 def test_releases_in_any_position_leave_the_contest_exact(seed):
-    """Property, releases folded at random points after their claims: no released claim is
+    """Property, releases and resolutions folded at random points: no released claim is
     anywhere, every other claim is still on record (contest, displaced or displayed),
-    the contest is exactly the unreleased claims with an unreleased overlap partner, and
-    a standing contest always displays a claim."""
+    the contest is exactly the unreleased claims with an unreleased overlap partner --
+    so no unreleased pair that overlapped is ever out of it -- and a standing contest
+    always displays a claim. A resolution releases every partner of the kept claim, so
+    the same oracle holds after one."""
     rnd = random.Random(1000 + seed)
     names = ["a", "b", "c", "d", "e"][: rnd.choice([3, 4, 5])]
     claims = {w: (float(rnd.randrange(0, 40) * 50), rnd.choice([50, 100, 300, 800])) for w in names}
     for _ in range(60):
         order = rnd.sample(names, len(names))
-        seq = [("acq", w) for w in order]
-        gone = {w for w in names if rnd.random() < 0.35}
-        for w in gone:
+        seq = _Seq(("acq", w) for w in order)
+        seq.gone = {w for w in names if rnd.random() < 0.35}
+        for w in list(seq.gone):
             seq.insert(rnd.randrange(seq.index(("acq", w)) + 1, len(seq) + 1), ("rel", w))
+        for _ in range(rnd.choice([0, 1, 2])):
+            seq.insert(rnd.randrange(len(seq) + 1), ("res", rnd.randrange(5)))
         it = _run(claims, seq)
+        gone = seq.gone
         left = {w: claims[w] for w in names if w not in gone}
         partners = _partners(left)
         on_record = {h["holder"] for h in it.lease_contest} | {e["holder"] for e in it.displaced}
@@ -312,7 +347,40 @@ def test_resolve_keeps_every_claim_it_did_not_release_on_record(claims, keep, or
         Event("item.resolved", "T", {"kind": "task", "claim": kept, "at": 9000.0}, "op", 30),
     ]
     it = _folded(claims, order, *after)
+    left = {w: claims[w] for w in claims if w not in {h["holder"] for h in losers}}
+    standing = sorted(w for w, others in _partners(left).items() if others)
     on_record = {e["holder"] for e in it.displaced} | {it.lease.holder}
-    assert it.lease_contest == [] and it.lease.holder == keep
+    assert _holders(it.lease_contest) == standing and it.lease.holder == keep
     assert keep not in {e["holder"] for e in it.displaced}  # displayed, not history
-    assert on_record == set(claims) - {h["holder"] for h in losers}
+    assert on_record | set(standing) == set(left)
+
+
+_BYSTANDERS = {"a": (900.0, 100), "b": (300.0, 100), "c": (300.0, 100), "d": (100.0, 800)}
+
+
+@pytest.mark.parametrize("order", list(permutations(_BYSTANDERS)), ids="-".join)
+def test_resolve_leaves_bystanders_that_met_each_other_contested(repo: Path, order):
+    """Bb8af177fcc, FAILED before the fix: keeping A released D, its one partner, and then
+    displaced B and C "by A" -- a claim neither met -- so their own overlap was no longer
+    a contest and `resolve` refused them as "not contested"."""
+    log = EventLog(repo, "op")
+    log.shard.parent.mkdir(parents=True, exist_ok=True)
+    events = [
+        _ev("task.added", "T", 1, title="t"),
+        *(_acq(2 + i, w, *_BYSTANDERS[w]) for i, w in enumerate(order)),
+    ]
+    log.shard.write_text("".join(ev.to_json() + "\n" for ev in events))
+    from ddflow.api import items
+
+    def displaced(it) -> list[tuple[str, str]]:
+        return sorted((e["holder"], e["event"]) for e in it.displaced if e["holder"] in "bc")
+
+    before = displaced(fold(log.read_all()).items["T"])  # late history, by acquisition
+    out = items.resolve(repo, "T", keep="a", agent="op")
+    assert out.exit == 0, out.reason
+    assert out.data["released"] == ["d"]
+    it = fold(log.read_all()).items["T"]
+    assert _holders(it.lease_contest) == ["b", "c"] and it.lease.holder == "a"
+    assert displaced(it) == before  # the resolution did not file them as history
+    assert "b (" in it.contest_summary() and "c (" in it.contest_summary()
+    assert items.resolve(repo, "T", keep="b", agent="op").exit == 0

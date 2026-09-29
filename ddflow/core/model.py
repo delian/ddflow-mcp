@@ -1054,16 +1054,21 @@ def _h_resolved(st: State, ev: Event) -> None:
         # The operator's decision is itself a sign of life: the kept holder's TTL runs
         # from here, not from a claim that may be hours old.
         lease.renewed_at = max(lease.renewed_at, float(d.get("at", 0.0)))
-        # What the resolution did not release stays on the record, as history the kept
-        # claim displaced: a later claim is still weighed against it.
-        on_record = {claim["event"], *(e["event"] for e in it.displaced)}
-        for h in [*it.lease_contest, *([_claim(it.lease)] if it.lease is not None else [])]:
+        # What the resolution did not release stays on the record: claims that still
+        # overlap each other are still a contest -- this one settled the kept claim's,
+        # not theirs -- and a claim with no partner left is history the kept claim
+        # displaced, which a later claim is still weighed against.
+        rest = [h for h in it.lease_contest if h["event"] != claim["event"]]
+        standing = [h for h in rest if _clashing(rest, h)]
+        on_record = {claim["event"], *(h["event"] for h in standing)}
+        on_record |= {e["event"] for e in it.displaced}
+        for h in [*rest, *([_claim(it.lease)] if it.lease is not None else [])]:
             if h["event"] not in on_record:
                 _displace(it, h, claim)
                 on_record.add(h["event"])
         it.displaced = [e for e in it.displaced if e["event"] != claim["event"]]
         _hold(it, lease)
-        it.lease_contest = []
+        it.lease_contest = standing
 
 
 def _h_state(new_state: str):
