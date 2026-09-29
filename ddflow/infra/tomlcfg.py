@@ -86,15 +86,19 @@ def overlay_array(
     return out
 
 
-def config_paths(root: Path, own: str) -> tuple[Path, Path]:
-    """The two files every configurable surface here reads, in precedence order.
+def config_paths(root: Path, own: str) -> tuple[Path, ...]:
+    """The files every configurable surface here reads, in precedence order (later wins).
 
     `.ddflow/config.toml` first so a project has ONE obvious place to configure, then
-    the dedicated file for operators who prefer to split it out. A file that had to
+    the dedicated file for operators who prefer to split it out, then the same two under
+    the git-ignored `.ddflow/local/` for what belongs to this machine alone. A file that had to
     restate everything to change one thing gets copied once and then drifts, which is
     the failure this whole module is about.
     """
-    return (Path(root) / ".ddflow" / "config.toml", Path(root) / ".ddflow" / own)
+    base = Path(root) / ".ddflow"
+    # The machine-local layer last, so it wins: .ddflow/local/ is git-ignored, and holds
+    # what belongs to whoever runs this checkout (their reviewers, their companions).
+    return (base / "config.toml", base / own, base / "local" / "config.toml", base / "local" / own)
 
 
 @contextlib.contextmanager

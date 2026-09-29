@@ -262,6 +262,23 @@ DEFAULT_GATES: dict[str, GateDef] = {
             "unit suite and a working feature are different claims."
         ),
     ),
+    "docs": GateDef(
+        id="docs",
+        title="Documentation",
+        applies_to="phase",
+        evidence=True,
+        description="The README and docs describe what this phase changed, before it merges.",
+        prompt=(
+            "Read the phase's whole diff (the phase base..HEAD) and list every change a "
+            "user or an agent can see: commands and MCP tools, flags, config knobs and "
+            "their defaults, output, install and setup steps. Check each against the "
+            "README and the project's documentation, and update what is missing or wrong "
+            "in this phase -- a stale page is worse than a missing one, because a reader "
+            "trusts it. Check counts and examples the README states (knob counts, command "
+            "samples) still hold. Record the files you changed, or 'no user-visible "
+            "change' with the reason; an unexplained pass is not evidence."
+        ),
+    ),
     "corrections": GateDef(
         id="corrections",
         title="Corrections",
@@ -1139,7 +1156,7 @@ def parallel_test_advice(command: str, root: Path) -> str:
     )
 
 
-def record(
+def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements are kept apart on purpose
     log: EventLog,
     cfg: Config,
     item_id: str,
@@ -1151,8 +1168,14 @@ def record(
     evidence: dict[str, Any] | None = None,
     gates: dict[str, GateDef] | None = None,
     human: bool = False,
+    measured: dict[str, Any] | None = None,
 ) -> None:
     """Write a gate outcome to the log, enforcing the evidence contract.
+
+    ``evidence`` is what the CALLER supplied; ``measured`` is what ddflow determined
+    itself (the tree fingerprint, the diff size). Only the first can satisfy the
+    contract: the measured fields are always present, so counting them made every bare
+    pass look evidenced (bug Bbc9a7ee3f2). Both are recorded.
 
     Rejecting a bare pass at the API boundary is deliberate. If the only thing standing
     between "I ran the tests" and a recorded pass is the agent's honesty, then over a
@@ -1188,7 +1211,12 @@ def record(
     log.append(
         f"gate.{outcome}",
         item_id,
-        {"gate": gate, "by": by or log.agent_id, "reason": reason, "evidence": evidence or {}},
+        {
+            "gate": gate,
+            "by": by or log.agent_id,
+            "reason": reason,
+            "evidence": {**(measured or {}), **(evidence or {})},
+        },
     )
 
 
@@ -1198,6 +1226,21 @@ def family_of(model: str, cfg: Config) -> str:
     from ..config import family_for
 
     return family_for(model, cfg.agent.families)
+
+
+def _declared_family(evidence: dict[str, Any]) -> str:
+    """The family `ddflow review` recorded from the operator's reviewer entry, or ``""``.
+
+    A served model name can belong to another family -- this project's Qwen critic is
+    served as `google/gemma-4-31B-it` -- which is why a reviewer entry declares one
+    (B6ed8b9edb8). Trusted only in evidence `ddflow review` wrote (it names the
+    `reviewer`); an agent's `gate record` cannot write a family, so a manual record is
+    judged by its model name as before.
+    """
+    if not evidence.get("reviewer"):
+        return ""
+    fam = str(evidence.get("family") or "").strip().lower()
+    return "" if fam == "unknown" else fam
 
 
 def reviewer_independence(
@@ -1212,7 +1255,9 @@ def reviewer_independence(
     it = state.items.get(item_id)
     if not it:
         return False, f"no such item {item_id}"
-    author_fam = family_of(author_model, cfg)
+    # Compared case-blind on BOTH sides: a map value 'Alibaba' and a declared
+    # 'ALIBABA' are one family (B-fam-case).
+    author_fam = family_of(author_model, cfg).strip().lower()
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     for gname in ("rubber_duck", "critic", "standards"):
@@ -1220,7 +1265,7 @@ def reviewer_independence(
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue
         m = str(rec.evidence.get("model", rec.by) or "").strip()
-        fam = family_of(m, cfg)
+        fam = _declared_family(rec.evidence) or family_of(m, cfg).strip().lower()
         # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
         if not fam:
             anonymous.append(f"{gname}={m or 'no model'}")

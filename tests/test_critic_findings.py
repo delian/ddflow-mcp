@@ -152,16 +152,19 @@ def test_bug_found_after_bug_fixed_does_not_reopen_it():
 def test_a_typod_config_section_is_an_error_not_a_silent_drop():
     """`[leases]` for `[lease]` left every knob at its default while the operator
     believed the file was in effect — the silent-knob-drop class, in the module written
-    to prevent it."""
-    cfg = Config()
+    to prevent it. WRITING it is refused; a file that already carries it loads, with the
+    key recorded for `doctor` (tests/test_config_newer_than_code.py), because an older
+    ddflow reading a newer config must keep working."""
     with pytest.raises(ValueError, match=r"unknown config section \[leases\]"):
-        cfg._apply({"leases": {"ttl_s": 1}}, "file")
+        Config.check({"leases": {"ttl_s": 1}})
+    cfg = Config()
+    cfg._apply({"leases": {"ttl_s": 1}}, "file")
+    assert cfg.unknown_knobs == ["[leases]"], "loaded past, never dropped in silence"
 
 
 def test_the_typo_error_suggests_the_intended_section():
-    cfg = Config()
     with pytest.raises(ValueError, match=r"Did you mean \[lease\]"):
-        cfg._apply({"leases": {"ttl_s": 1}}, "file")
+        Config.check({"leases": {"ttl_s": 1}})
 
 
 def test_foreign_tables_are_not_mistaken_for_typos():
