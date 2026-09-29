@@ -1227,7 +1227,9 @@ def reviewer_independence(
     it = state.items.get(item_id)
     if not it:
         return False, f"no such item {item_id}"
-    author_fam = family_of(author_model, cfg)
+    # Compared case-blind on BOTH sides: a map value 'Alibaba' and a declared
+    # 'ALIBABA' are one family (B-fam-case).
+    author_fam = family_of(author_model, cfg).strip().lower()
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     for gname in ("rubber_duck", "critic", "standards"):
@@ -1235,7 +1237,7 @@ def reviewer_independence(
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue
         m = str(rec.evidence.get("model", rec.by) or "").strip()
-        fam = _declared_family(rec.evidence) or family_of(m, cfg)
+        fam = _declared_family(rec.evidence) or family_of(m, cfg).strip().lower()
         # An UNIDENTIFIED reviewer cannot establish independence — see `family_of`.
         if not fam:
             anonymous.append(f"{gname}={m or 'no model'}")

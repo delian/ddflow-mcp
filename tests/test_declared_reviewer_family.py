@@ -77,3 +77,26 @@ def test_an_undeclared_family_falls_back_to_the_name(log, cfg, gd, family):
     G.record(log, cfg, "T1", "critic", "passed", evidence=_review(family), gates=gd)
     ok, why = G.reviewer_independence(fold(log.read_all()), cfg, "T1", "claude-opus-5")
     assert ok and "google" in why, why
+
+
+def test_family_names_are_compared_case_blind(log, cfg, gd):
+    """A declared 'ALIBABA' against an author the map calls 'Alibaba' is the SAME family:
+    lowercasing only one side made them look independent (rubber duck, B-fam-case)."""
+    cfg.agent.families = {**cfg.agent.families, "inhouse-coder": "Alibaba"}
+    _item(log)
+    G.record(log, cfg, "T1", "critic", "passed", evidence=_review("ALIBABA"), gates=gd)
+    ok, why = G.reviewer_independence(fold(log.read_all()), cfg, "T1", "inhouse-coder-1")
+    assert not ok and "same as the author" in why, why
+
+
+def test_map_values_differing_only_in_case_are_one_family(log, cfg, gd):
+    """The name-inferred side too: two map entries spelling one family differently."""
+    cfg.agent.families = {
+        **cfg.agent.families,
+        "inhouse-coder": "alibaba",
+        "inhouse-reviewer": "Alibaba",
+    }
+    _item(log)
+    G.record(log, cfg, "T1", "critic", "passed", evidence={"model": "inhouse-reviewer-2"}, gates=gd)
+    ok, why = G.reviewer_independence(fold(log.read_all()), cfg, "T1", "inhouse-coder-1")
+    assert not ok and "same as the author" in why, why
