@@ -332,6 +332,7 @@ class GatesConfig:
             "dedupe",
             "live_test",
             "corrections",
+            "docs",
             "merge",
         ]
     )
@@ -355,6 +356,7 @@ class GatesConfig:
             "rubber_duck",
             "critic",
             "standards",
+            "docs",
         ]
     )
 
@@ -367,7 +369,7 @@ _doc(
 _doc(
     "gates",
     "phase_pipeline",
-    "Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point where member tasks run (in parallel where dependencies allow).",
+    "Ordered gate ids every PHASE passes through. 'tasks' is the fan-out point where member tasks run (in parallel where dependencies allow). 'docs' reviews and updates the documentation for everything the phase changed, before it merges.",
 )
 _doc(
     "gates",

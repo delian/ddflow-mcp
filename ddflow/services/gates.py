@@ -262,6 +262,23 @@ DEFAULT_GATES: dict[str, GateDef] = {
             "unit suite and a working feature are different claims."
         ),
     ),
+    "docs": GateDef(
+        id="docs",
+        title="Documentation",
+        applies_to="phase",
+        evidence=True,
+        description="The README and docs describe what this phase changed, before it merges.",
+        prompt=(
+            "Read the phase's whole diff (the phase base..HEAD) and list every change a "
+            "user or an agent can see: commands and MCP tools, flags, config knobs and "
+            "their defaults, output, install and setup steps. Check each against the "
+            "README and the project's documentation, and update what is missing or wrong "
+            "in this phase -- a stale page is worse than a missing one, because a reader "
+            "trusts it. Check counts and examples the README states (knob counts, command "
+            "samples) still hold. Record the files you changed, or 'no user-visible "
+            "change' with the reason; an unexplained pass is not evidence."
+        ),
+    ),
     "corrections": GateDef(
         id="corrections",
         title="Corrections",
