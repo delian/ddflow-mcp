@@ -58,6 +58,20 @@ def _AGENT_KEYS() -> list[str]:
     return list(AGENT_TARGETS)
 
 
+#: `ddflow_wait` over MCP: shorter than the CLI's default, because the client -- not
+#: ddflow -- decides when a tool call has hung, and a timed-out call is a lost answer.
+#: Capped for the same reason; an agent that wants longer calls again.
+MCP_WAIT_DEFAULT_S = 300
+MCP_WAIT_MAX_S = 1800
+
+
+def _wait_timeout(a: dict[str, Any]) -> float:
+    """`timeout` as given (0 included -- it means "ask, do not sleep"), else the MCP
+    default; never above the cap."""
+    t = a.get("timeout")
+    return min(float(MCP_WAIT_DEFAULT_S if t is None else t), float(MCP_WAIT_MAX_S))
+
+
 TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_brief": {
         "description": (
@@ -185,7 +199,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent, called_from=None: _api().heartbeat(
             repo, a["id"], agent=agent, called_from=called_from
         ),
-        "payload": ("renewed",),
+        "payload": ("renewed", "waiters"),
         # The item's own tree renews its lease whoever claimed it -- identity is derived
         # from the tree, so without WHERE the caller is this said "no lease held" from
         # exactly the tree `claim` made.
@@ -351,7 +365,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             model=a.get("model", "") or "",
             agent=agent,
         ),
-        "payload": ("id", "sha", "independence", "forced", "coverage_gaps", "note"),
+        "payload": ("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke"),
     },
     "ddflow_merge": {
         "description": (
@@ -1941,7 +1955,41 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().release_item(
             repo, a["id"], note=a.get("note", "") or "", agent=agent
         ),
-        "payload": ("released",),
+        "payload": ("released", "woke"),
+    },
+    "ddflow_wait": {
+        "description": (
+            "Sleep until an item can be claimed -- or, with no item, until anything is "
+            "ready -- and return the moment it can. Use it instead of polling or asking "
+            "the operator when a claim was refused because another agent holds the item "
+            "or overlapping files, or a dependency someone is working on is unfinished. "
+            "Exit 0: claim now (it says what freed it). Exit 2: the deadline passed, or "
+            "waiting cannot help (done, cycle, operator hold, a dependency nobody works "
+            "on) and it says what to do instead. The holder is told you are waiting."
+        ),
+        "properties": {
+            "item": ("string", "The item to wait for (default: anything ready).", False),
+            "phase": ("string", "With no item: anything ready in this phase.", False),
+            "kind": ("string", "'task' (default) or 'phase'.", False),
+            "timeout": (
+                "number",
+                f"Seconds to wait (default {MCP_WAIT_DEFAULT_S}, at most {MCP_WAIT_MAX_S}: "
+                f"a client may time a tool call out, so call again to keep waiting). 0 asks "
+                f"without waiting.",
+                False,
+            ),
+            "poll": ("number", "Seconds between log checks (default 2).", False),
+        },
+        "api": lambda repo, a, agent: _api().wait_item(
+            repo,
+            item=a.get("item", "") or "",
+            phase=a.get("phase", "") or "",
+            kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
+            timeout_s=_wait_timeout(a),
+            poll_s=a.get("poll"),
+            agent=agent,
+        ),
+        "payload": "",
     },
     "ddflow_block": {
         "description": (

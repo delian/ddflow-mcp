@@ -274,3 +274,68 @@ def test_the_holder_hears_who_woke_even_when_the_waiter_is_quick(proj, monkeypat
     monkeypatch.setattr(A.L, "release", release_then_waiter_leaves)
     out = A.release(proj, "T1", agent=HOLDER)
     assert [w["agent"] for w in out.data["woke"]] == [WAITER]
+
+
+# -- the surfaces ----------------------------------------------------------------------
+
+
+def test_the_cli_wakes_a_background_waiter_on_release(proj):
+    """The way a harness uses it: a separate process that EXITS when the item frees."""
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    argv = [sys.executable, "-m", "ddflow", "--repo", str(proj), "--agent", WAITER]
+    p = subprocess.Popen(
+        [*argv, "wait", "--item", "T2", "--timeout", "60", "--poll", "0.1"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+    )
+    deadline = time.monotonic() + 30
+    while not WT.live_waiters(proj) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert [w.agent for w in WT.live_waiters(proj)] == [WAITER], "the process never registered"
+    code, out, _ = run_cli(proj, "release", "T1", agent=HOLDER)
+    assert code == 0 and WAITER in out, f"the holder was not told who it woke: {out}"
+    stdout, stderr = p.communicate(timeout=30)
+    assert p.returncode == 0, stdout + stderr
+    assert "READY: T2" in stdout and "T1: lease released" in stdout
+    assert "waiting" in stderr, "no progress line for a watching harness"
+
+
+def test_the_cli_timeout_zero_is_honoured_not_defaulted(proj):
+    started = time.monotonic()
+    code, out, _ = run_cli(proj, "wait", "--item", "T2", "--timeout", "0", agent=WAITER)
+    assert code == 2 and "Still blocked" in out
+    assert time.monotonic() - started < 30, "an explicit 0 fell back to the default wait"
+
+
+def test_mcp_caps_the_wait_and_honours_zero():
+    from ddflow.surfaces import mcp as M
+
+    assert M._wait_timeout({}) == M.MCP_WAIT_DEFAULT_S
+    assert M._wait_timeout({"timeout": 0}) == 0
+    assert M._wait_timeout({"timeout": 10**6}) == M.MCP_WAIT_MAX_S
+
+
+def test_mcp_wait_returns_what_the_holder_side_reports(proj):
+    from ddflow.surfaces.mcp import Server
+
+    def call(name, args, agent):
+        r = Server(proj, agent=agent).handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": args},
+            }
+        )
+        return r["result"]
+
+    res = call("ddflow_wait", {"item": "T2", "timeout": 0}, WAITER)
+    import json as _json
+
+    body = _json.loads(res["content"][0]["text"])
+    assert res["_meta"]["exit"] == 2 and body["waitable"] and body["waiting_on"] == ["T1"]
+    WT.register(proj, WT.Waiter(agent=WAITER, item="T2", waiting_on=["T1"], until=time.time() + 60))
+    hb = _json.loads(call("ddflow_heartbeat", {"id": "T1"}, HOLDER)["content"][0]["text"])
+    assert [w["agent"] for w in hb["waiters"]] == [WAITER]

@@ -144,7 +144,7 @@ def cmd_heartbeat(a, c: Ctx) -> int:
             f"{len(waiters)} agent(s) are waiting on {a.id}. Finishing, narrowing its "
             f"globs, or releasing it wakes them:",
         ),
-        out.body(("renewed",)),
+        out.body(("renewed", "waiters")),
     )
     return out.exit
 
@@ -154,7 +154,7 @@ def cmd_release(a, c: Ctx) -> int:
     c.out(
         f"{'released' if out.data['released'] else 'no lease on'} {a.id}"
         + _waiting(out.data.get("woke", []), "woke:"),
-        out.body(("released",)),
+        out.body(("released", "woke")),
     )
     return out.exit
 
@@ -202,7 +202,7 @@ def cmd_complete(a, c: Ctx) -> int:
         + (f" as {a.sha}" if a.sha else "")
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
         + _waiting(out.data.get("woke", []), "woke:"),
-        out.body(("id", "sha", "independence", "forced", "coverage_gaps", "note")),
+        out.body(("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke")),
     )
     return OK
 
