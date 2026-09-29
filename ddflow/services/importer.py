@@ -33,7 +33,9 @@ Three rules hold this together:
 from __future__ import annotations
 
 import fnmatch
+import os
 import re
+import stat
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1940,7 +1942,14 @@ def _scan_queue(state, r: VerifyReport) -> tuple[list[str], dict[str, list[str]]
         rel = m.source.split(":", 1)[0]
         if rel:
             paths.setdefault(rel, []).append(m.id)
-    _memory_sources(state, paths)
+    prose = _memory_sources(state, paths)
+    if prose:
+        # A NOTE: nobody looked at these, and a clean report must not read as if they
+        # were checked and found present.
+        r.notes.append(
+            f"{prose} imported source(s) are prose that mentions a path rather than a "
+            f"path, so they were not checked for a vanished file."
+        )
     return ats, paths
 
 
@@ -1966,8 +1975,9 @@ def _note_sources(state, r: VerifyReport, paths: dict[str, list[str]]) -> None:
                 paths.setdefault(rel, []).append(f"{sid}#{n.get('ident', n.get('seq', '?'))}")
 
 
-def _memory_sources(state, paths: dict[str, list[str]]) -> None:
-    """Source files named by imported lessons and research notes.
+def _memory_sources(state, paths: dict[str, list[str]]) -> int:
+    """Source files named by imported lessons and research notes; returns how many
+    sources mentioned a path but were prose, so were not checked.
 
     All three carry a STRUCTURED source -- `Lesson.seen_in`, `ResearchNote.sources`,
     `Decision.sources` -- so there is no reason for the vanished-source check to cover
@@ -1975,6 +1985,7 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
     in the prose `context`, and parsing a path back out of a sentence is the
     anti-pattern this whole check exists to replace.
     """
+    prose = 0
     for holder, attr in (
         (getattr(state, "lessons", {}), "seen_in"),
         (getattr(state, "research", {}), "sources"),
@@ -1984,15 +1995,59 @@ def _memory_sources(state, paths: dict[str, list[str]]) -> None:
             if "imported" not in getattr(rec, "tags", []):
                 continue
             for src in getattr(rec, attr, []) or []:
-                rel = str(src).split(":", 1)[0]
-                # Parenthesised, and narrow on purpose: `and` binds tighter than `or`,
-                # so the unbracketed form accepted `git:foo.md`. A lesson's `seen_in`
-                # also holds bug pins like "review-inverted-severity", which are not
-                # paths -- reporting those as vanished files would be a false positive
-                # in the check whose whole value is that its findings are real.
+                # A link's target is one token already -- `docs/a(b).md` included --
+                # so only its `#anchor` goes and its length is left to check. Anything
+                # else is unwrapped and must then be a single markup-free token.
+                link = _MD_LINK.match(str(src))
+                if link:
+                    rel = link.group(1).split("#", 1)[0].split(":", 1)[0]
+                    shaped = len(rel) <= _MAX_SOURCE_PATH
+                else:
+                    rel = _MARKUP_AROUND_PATH.sub("", str(src).split(":", 1)[0])
+                    shaped = _path_shaped(rel)
+                # Narrow on purpose: never `git:foo.md`, and a lesson's `seen_in` also
+                # holds bug pins like "review-inverted-severity", which are not paths
+                # -- reporting those as vanished files would be a false positive in the
+                # check whose whole value is that its findings are real.
                 looks_like_a_path = "/" in rel or rel.endswith(".md")
-                if rel and not rel.startswith("git:") and looks_like_a_path:
+                if not rel or rel.startswith("git:") or not looks_like_a_path:
+                    continue
+                if shaped:
                     paths.setdefault(rel, []).append(rec.id)
+                else:
+                    prose += 1
+    return prose
+
+
+#: Longest free-form source still taken for a path. Far above any repository-relative
+#: path a person writes, far below a paragraph.
+_MAX_SOURCE_PATH = 1024
+#: Markdown around a path in a `**Seen in:**` paragraph: "`nemorun/cli/export.py:88`."
+#: is the file `nemorun/cli/export.py`, and reporting it vanished while it exists is a
+#: false finding. A leading `.` is left alone -- `.ddflow/x.md` is a path.
+_MARKUP_AROUND_PATH = re.compile(r"^[`'\"(\[<*]+|[`'\")\]>*.,;]+$")
+#: A whole markdown link, `[docs/a.md](docs/a.md)`: its TARGET is the path -- also with
+#: a title in any of CommonMark's three forms, and inside code/bold/emphasis markup with
+#: punctuation on either side of it, `` `[a](docs/a.md 't').` ``, and a target with
+#: balanced parentheses, `[a](docs/a(b).md)`.
+_MD_LINK = re.compile(
+    r"""^[`*_]*\[[^\]]*\]\(((?:[^()\s]|\([^()\s]*\))+)(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\)[`*_.,;]*$"""
+)
+#: Markup still inside a token once the wrapping is gone: not one path, but pieces.
+_MARKUP_INSIDE = frozenset("`[]()<>*")
+
+
+def _path_shaped(rel: str) -> bool:
+    """One token that could name a file, not a sentence that mentions one (Bd5b59f3894).
+
+    Only for the FREE-FORM fields `_memory_sources` reads: an imported lesson's `seen_in`
+    is its corpus's `**Seen in:**` paragraph, and on a real corpus that is prose like
+    "Phase 136, roborev 414-D4 ... `config/training/x.py` cited ~2839". It contains a
+    `/`, so the old test took it for a path; a short one was reported as a vanished
+    file, a long one crashed the stat. Item, note and memory sources are not filtered
+    here: the importer writes them from real file names, which may contain spaces.
+    """
+    return len(rel) <= _MAX_SOURCE_PATH and not any(c.isspace() or c in _MARKUP_INSIDE for c in rel)
 
 
 def _has_open_child(state, phase) -> bool:
@@ -2037,9 +2092,30 @@ def verify_import(
     if not rescan:
         return r
 
+    unstatable: list[str] = []
     for rel, ids in sorted(paths.items()):
-        if not (repo / rel).is_file():
+        # os.stat, not Path.is_file: 3.11-3.13 RAISE on ENAMETOOLONG, 3.14 returns False
+        # for every OSError -- a crash on one, an "unstatable" reported as vanished on
+        # the other. Only "no such file" is a vanished file.
+        try:
+            present = stat.S_ISREG(os.stat(repo / rel).st_mode)
+        except (FileNotFoundError, NotADirectoryError):
+            present = False
+        except (OSError, ValueError):
+            # ENAMETOOLONG, an embedded NUL and kin: the filesystem refuses the string as
+            # a path at all. Not a vanished file -- nothing ever existed under that name
+            # -- and never a crash: one odd record must not cost the whole report.
+            unstatable.append(rel)
+            continue
+        if not present:
             r.vanished.extend((i, rel) for i in sorted(ids))
+    if unstatable:
+        r.notes.append(
+            f"{len(unstatable)} imported source(s) could not be checked, because the "
+            f"filesystem does not accept them as a path: "
+            + ", ".join(repr(s[:60]) for s in unstatable[:_NOTE_EXAMPLES])
+            + (", ..." if len(unstatable) > _NOTE_EXAMPLES else "")
+        )
 
     plan = plan_import(repo, state, max_tasks=10**9, sources=sources, archive=archive)
     r.drift = list(plan.found)

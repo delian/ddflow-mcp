@@ -485,6 +485,7 @@ class SessionConfig:
             r"(?s)-----BEGIN OPENSSH PRIVATE KEY-----.*?-----END OPENSSH PRIVATE KEY-----",
         ]
     )
+    redact_extra: list[str] = field(default_factory=list)
     brief_max_tokens: int = 1200
     brief_lesson_count: int = 4
     replay_verify_diffs: bool = True
@@ -499,6 +500,11 @@ _doc(
     "session",
     "redact_patterns",
     "Regexes applied to every logged prompt and note before it touches disk. The log is committed, so an unredacted secret is a leaked secret.",
+)
+_doc(
+    "session",
+    "redact_extra",
+    "More redaction regexes, applied IN ADDITION to redact_patterns. Setting redact_patterns replaces the built-in secret patterns, so a project that copies them to add one of its own freezes them; add yours here instead -- e.g. private-network addresses, so an operator prompt naming a LAN host is masked before it reaches the committed log.",
 )
 _doc(
     "session",
@@ -1059,8 +1065,11 @@ class Config:
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
-    #: where each knob's final value came from -- "default" | "file" | "env"
+    #: where each knob's final value came from -- "default" | "file" | "local" | "env"
     sources: dict[str, str] = field(default_factory=dict, repr=False)
+    #: Keys a config FILE carried that this code does not know -- "sec.knob", or "[sec]"
+    #: for a whole section. Skipped, not fatal: see `_apply`.
+    unknown_knobs: list[str] = field(default_factory=list, repr=False)
 
     # -- loading ------------------------------------------------------------------
     @classmethod
@@ -1076,6 +1085,12 @@ class Config:
             if path.is_file():
                 data = tomllib.loads(path.read_text("utf-8"))
                 cfg._apply(data, "file")
+            # The MACHINE-LOCAL layer, read last: .ddflow/local/ is git-ignored, so what
+            # belongs to whoever runs this checkout -- their services, their machine's
+            # sizing -- overrides the committed, generic config without ever reaching git.
+            local = Path(root) / ".ddflow" / "local" / "config.toml"
+            if local.is_file():
+                cfg._apply(tomllib.loads(local.read_text("utf-8")), "local")
 
         envdata: dict[str, dict[str, Any]] = {}
         for sec in cfg._sections():
@@ -1103,7 +1118,7 @@ class Config:
         cls()._apply(data, "check")
 
     def _sections(self) -> list[str]:
-        return [f.name for f in fields(self) if f.name != "sources"]
+        return [f.name for f in fields(self) if f.name not in ("sources", "unknown_knobs")]
 
     #: Top-level TOML tables that are NOT config sections and must not be treated as
     #: typos. They are consumed by other loaders: `[gate.*]` by gates.load_gates,
@@ -1120,8 +1135,20 @@ class Config:
     _FOREIGN_TABLES = frozenset({"gate", "reviewer", "companion", "macro"})
 
     def _apply(self, data: dict[str, Any], source: str) -> None:
+        # A key a config FILE carries that this code does not know is recorded and
+        # skipped, never fatal. Several checkouts of one repository run different
+        # versions of ddflow -- a worktree whose branch predates a knob runs its own,
+        # older code against the primary's newer config -- and raising here refused every
+        # command and every commit until the branch merged main, for a reason unrelated
+        # to the work (bugs Bcfc0d22a09, B9cb7dd1c3b). A typo is still loud: `doctor`
+        # reports every entry here as a problem, and the WRITE paths (source "check")
+        # still refuse an unknown key, so nothing new is written wrong.
+        lenient = source in ("file", "local")
         for sec, values in data.items():
             if sec in self._FOREIGN_TABLES:
+                continue
+            if sec not in self._sections() and lenient:
+                self.unknown_knobs.append(f"[{sec}]")
                 continue
             if sec not in self._sections():
                 # A typo'd section used to be skipped in silence -- so `[leases]` for
@@ -1144,6 +1171,9 @@ class Config:
             target = getattr(self, sec)
             known = {f.name: f for f in fields(target)}
             for knob, raw in values.items():
+                if knob not in known and lenient:
+                    self.unknown_knobs.append(f"{sec}.{knob}")
+                    continue
                 if knob not in known:
                     raise ValueError(f"unknown knob '{sec}.{knob}'. Known: {sorted(known)}")
                 value = _coerce(raw, known[knob].type)
