@@ -235,3 +235,22 @@ def test_globs_given_to_an_imported_done_task_do_not_make_it_hand_finished(repo)
     _as_human(repo, "task.updated", "P5.A", {"globs": ["src/pipes.py"]})
     plan = _import(repo, "--include-done")
     assert {f["id"] for f in plan["found"] if f["kind"] == "completion"} == {"P5"}, plan
+
+
+def test_heading_words_are_read_as_words_and_a_negated_done_is_not_done():
+    def verdict(title: str) -> bool:
+        plan = IM.ImportPlan(
+            found=[
+                IM.Found(kind="phase", ident="X", title=title, source="docs/todo.md:1"),
+                IM.Found(
+                    kind="task", ident="X.1", title="t", source="s", done=True, extra={"phase": "X"}
+                ),
+            ]
+        )
+        IM._settle_phases(plan, None, IM.Touched(), {})
+        return plan.found[0].done
+
+    assert verdict("Wipe the stale cache") is True, "WIP matched inside WIPE"
+    assert verdict("Partially landed") is False
+    assert verdict("Tooling — NOT DONE") is False
+    assert verdict("Tooling — not yet shipped") is False
