@@ -17,3 +17,10 @@ __pycache__/
 
 # ddflow task worktrees (git worktrees; never commit them)
 .ddflow-worktrees/
+
+# Machine-local ddflow configuration: YOUR services (reviewer endpoints, API-key variable
+# names) and machine sizing (test workers). ddflow reads these beside .ddflow/config.toml;
+# they are never committed, so the repository stays generic.
+.ddflow/reviewers.toml
+.ddflow/gates.toml
+
