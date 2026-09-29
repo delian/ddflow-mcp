@@ -45,6 +45,34 @@ def _cli_leaves() -> set[str]:
     return out
 
 
+def unknown_cli_mentions(mentions: list[str], leaves: set[str] | None = None) -> list[str]:
+    """The CLI mentions (`gate run`, `lease release`) that do not resolve in argparse.
+
+    Shared with the remedy-text ratchet, so help pages and printed advice are held to
+    one definition of "names a real command" rather than two that can drift.
+    """
+    leaves = _cli_leaves() if leaves is None else leaves
+    tops = {leaf.split()[0] for leaf in leaves}
+    #: A top-level command that HAS subcommands. Naming one without a valid subcommand
+    #: is the failure this catches -- `ddflow gate check` reads as real and is not.
+    parents = {t for t in tops if any(leaf.startswith(f"{t} ") for leaf in leaves)}
+    unknown: list[str] = []
+    for mention in mentions:
+        if mention in leaves:
+            continue  # an exactly-runnable path, parent or leaf
+        if any(leaf.startswith(f"{mention}-") for leaf in leaves):
+            # COMMAND_MENTION stops at a hyphen, so `hooks check-msg` arrives as
+            # `hooks check`: the rest of the word is in the text, not in the match.
+            continue
+        words = mention.split()
+        head = words[0]
+        if head not in tops or (
+            head in parents and (len(words) < 2 or f"{head} {words[1]}" not in leaves)
+        ):
+            unknown.append(mention)
+    return unknown
+
+
 # -- it answers the question -----------------------------------------------------------
 
 
@@ -117,10 +145,6 @@ def test_every_command_a_help_page_names_exists():
     """
     leaves = _cli_leaves()
     tools = {t.removeprefix("ddflow_") for t in TOOLS}
-    tops = {leaf.split()[0] for leaf in leaves}
-    #: A top-level command that HAS subcommands. Naming one without a valid subcommand
-    #: is the failure this catches -- `ddflow gate check` reads as real and is not.
-    parents = {t for t in tops if any(leaf.startswith(f"{t} ") for leaf in leaves)}
 
     unknown: list[tuple[str, str]] = []
     pages = {"index": H.render_index(tools=TOOLS), **{t: H.render_topic(t) for t in H.TOPICS}}
@@ -133,14 +157,7 @@ def test_every_command_a_help_page_names_exists():
                 if mention not in tools:
                     unknown.append((page, f"ddflow_{mention}"))
                 continue
-            if mention in leaves:
-                continue  # an exactly-runnable path, parent or leaf
-            words = mention.split()
-            head = words[0]
-            if head not in tops:
-                unknown.append((page, mention))
-            elif head in parents and (len(words) < 2 or f"{head} {words[1]}" not in leaves):
-                unknown.append((page, mention))
+            unknown.extend((page, m) for m in unknown_cli_mentions([mention], leaves))
     assert not unknown, f"help pages name commands that do not exist: {unknown}"
 
 

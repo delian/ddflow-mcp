@@ -554,11 +554,15 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
     unmerged-commit count into ``rev-list HEAD..HEAD`` = 0, so a tree holding unmerged
     work was reported "safe to remove" — the one error this function must never make.
     """
+    # Only an expired lease is still there to release. An orphan's lease is already
+    # null, and telling someone to release it sends them to an exit 2 (B4f9019c0d7).
+    held = rec.kind == "expired_lease"
     wt = W.load_path(repo, rec.worktree) if rec.worktree else None
     if not wt or not wt.exists():
-        rec.advice = (
-            "worktree is gone; nothing to salvage. "
-            f"`ddflow lease release {rec.item}` to clear the claim."
+        rec.advice = "worktree is gone; nothing to salvage" + (
+            f". `ddflow release {rec.item}` to clear the claim."
+            if held
+            else ", and no lease is held on it."
         )
         return
     base = cfg.worktree.base_ref or W.default_branch(repo)
@@ -580,14 +584,14 @@ def _measure(rec: Recovery, repo: Path, cfg: Config) -> None:
         rec.advice = (
             f"INSPECT FIRST — {rec.dirty_files} uncommitted file(s), "
             f"{rec.unmerged_commits} unmerged commit(s). "
-            f"`git -C {wt} diff {base}` then salvage, "
-            f"then `ddflow lease release {rec.item} --note salvaged`."
+            f"`git -C {wt} diff {base}` then salvage"
+            + (f", then `ddflow release {rec.item} --note salvaged`." if held else ".")
         )
     else:
-        rec.advice = (
-            f"clean and fully merged — safe to remove: "
-            f"`ddflow worktree remove {rec.item}` "
-            f"then `ddflow lease release {rec.item}`."
+        # `git worktree remove`, not `ddflow cleanup --apply`: that one removes EVERY
+        # merged tree, a live agent's freshly claimed one included (B5a009b185a).
+        rec.advice = f"clean and fully merged — safe to remove: `git worktree remove {wt}`" + (
+            f" then `ddflow release {rec.item}`." if held else " (no lease is held on it)."
         )
 
 

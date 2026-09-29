@@ -141,9 +141,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         v.blockers.append(f"reviewer independence not satisfied: {why}")
 
     if s.unavailable:
-        v.coverage_note = (
-            f"{', '.join(s.unavailable)} never ran — recorded as a coverage gap, not as a pass."
-        )
+        v.coverage_note = _coverage_note(it, s.unavailable)
 
     from ..infra import worktree as W
 
@@ -155,3 +153,17 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"cosmetic."
         )
     return v
+
+
+def _coverage_note(it, gaps: list[str]) -> str:
+    """Say what each gap IS. `GateStatus.unavailable` holds `partial` gates as well, and
+    one sentence for both called a critic that reviewed 3 of 6 chunks one that "never
+    ran" -- erasing the half it did (B72dd4dde17). A reviewer's partial evidence carries
+    its `coverage`; a `partial_exits` gate has none, and says so by omission."""
+    never = [g for g in gaps if it.gate_outcome(g) != "partial"]
+    parts = [f"{', '.join(never)} never ran"] if never else []
+    for g in gaps:
+        if it.gate_outcome(g) == "partial":
+            coverage = it.gates[g].evidence.get("coverage")
+            parts.append(f"{g} ran only partially" + (f" ({coverage})" if coverage else ""))
+    return "; ".join(parts) + " — recorded as a coverage gap, not as a pass."
