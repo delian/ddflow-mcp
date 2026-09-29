@@ -246,6 +246,11 @@ def test_the_manifest_offers_a_way_to_run_it_without_python():
         assert k["transport"]["type"] == "stdio", k
 
 
+def test_the_manifest_description_fits_the_mcp_registry_limit():
+    srv = json.loads((ROOT / "server.json").read_text())
+    assert len(srv["description"]) <= 100, "MCP registry limits body.description to 100 characters"
+
+
 def test_the_manifest_does_not_describe_behaviour_the_code_does_not_have():
     """`server.json` is PUBLISHED — it is what a marketplace shows people, so a stale
     claim in it is a stale claim in front of every prospective user.
