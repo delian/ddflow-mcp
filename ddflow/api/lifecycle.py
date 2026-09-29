@@ -163,6 +163,23 @@ def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str,
     mine = live.get(item)
     if mine is not None and mine.holder == me:
         return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
+    lz = it.lease
+    if (
+        lz is not None
+        and item not in live
+        and lz.holder != me
+        and cfg.lease.reclaim_policy == "report"
+    ):
+        # Expiry frees the holder's GLOBS for everyone else, but not its item: `claim`
+        # refuses an expired lease, because a crashed agent's tree often holds finished
+        # work. Calling it claimable here made wait -> refused -> wait a spin.
+        return {
+            **out,
+            "status": "hopeless",
+            "why": f"{item}'s lease from {lz.holder} has expired and is not handed on "
+            f"automatically. `ddflow recover --item {item}` says what its tree holds; "
+            f"salvage, release it, then claim.",
+        }
     b = _claim_blocker(st, cfg, it, me, live, now)
     if b is None:
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
@@ -392,9 +409,9 @@ def wait(
         ),
     )
     say(f"waiting (up to {round(timeout)}s): {v['why']}")
-    # Empty, so the first pass re-judges whatever landed between the load above and
+    # None, so the first pass re-judges whatever landed between the load above and
     # the registration -- a release in that gap must not cost a whole RECHECK_S.
-    seen: dict[str, int] = {}
+    seen: dict[str, int] | None = None
     checked = started
     try:
         while True:
@@ -759,9 +776,12 @@ def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
 
 def release(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outcome:
     log, _cfg, _st = _load(repo, agent)
+    # Read BEFORE letting go: a waiter wakes on the release and unregisters, and one
+    # quick enough to do that before a read after it would never be reported.
+    waiting = _waiters(repo, item)
     released = L.release(log, item, note=note)
     if released:
-        return O.ok("lease.released", id=item, released=True, woke=_waiters(repo, item))
+        return O.ok("lease.released", id=item, released=True, woke=waiting)
     return O.nothing("lease.released", f"no lease on {item}", id=item, released=False, woke=[])
 
 
@@ -812,6 +832,7 @@ def complete(
             **base,
         )
     forced = bool(v.blockers and force)
+    waiting = _waiters(repo, item)  # before the release: see `release`
     log.append(
         "item.completed",
         item,
@@ -823,7 +844,7 @@ def complete(
         },
     )
     L.release(log, item, note="completed")
-    return O.ok("item.completed", forced=forced, woke=_waiters(repo, item), **base)
+    return O.ok("item.completed", forced=forced, woke=waiting, **base)
 
 
 def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:

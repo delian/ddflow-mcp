@@ -240,3 +240,37 @@ def test_the_registry_is_never_committed(repo):
         check=True,
     )
     assert "waits" not in st.stdout, st.stdout
+
+
+def test_an_expired_lease_on_the_item_ITSELF_is_not_a_wake(repo, monkeypatch):
+    """Expiry frees the holder's GLOBS, but not its item: `claim` refuses an expired
+    lease under `reclaim_policy = report` (a crashed agent's tree may hold finished
+    work). Reporting it claimable made wait -> claim refused -> wait -> "ready" a spin."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("ttl_s = 1800", "ttl_s = 1\ngrace_s = 0", 1))
+    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
+    monkeypatch.setattr(WT, "RECHECK_S", 0.2)
+    out = A.wait(repo, item="T1", timeout_s=20, poll_s=0.05, agent=WAITER)
+    assert out.exit == O.NOTHING and not out.data["waitable"], out.reason
+    assert "ddflow recover" in out.reason
+    refused = A.claim(repo, "T1", no_worktree=True, agent=WAITER)
+    assert refused.exit == O.REFUSED, "if claim accepts it, wait should have said ready"
+
+
+def test_the_holder_hears_who_woke_even_when_the_waiter_is_quick(proj, monkeypatch):
+    """Waiters are read BEFORE the lease is let go. Read after, a waiter that wakes and
+    unregisters inside that window was never reported to the holder at all."""
+    WT.register(proj, WT.Waiter(agent=WAITER, item="T2", waiting_on=["T1"], until=time.time() + 60))
+    real = A.L.release
+
+    def release_then_waiter_leaves(*a, **k):
+        ok = real(*a, **k)
+        for w in WT.live_waiters(proj):
+            WT.unregister(w)
+        return ok
+
+    monkeypatch.setattr(A.L, "release", release_then_waiter_leaves)
+    out = A.release(proj, "T1", agent=HOLDER)
+    assert [w["agent"] for w in out.data["woke"]] == [WAITER]

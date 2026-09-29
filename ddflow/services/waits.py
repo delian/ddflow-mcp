@@ -107,9 +107,16 @@ def _dir(repo: Path) -> Path:
 
 def register(repo: Path, w: Waiter) -> Waiter:
     """Record ``w`` and return it with its file path set. Written whole, then renamed,
-    so a reader never sees half a registration."""
+    so a reader never sees half a registration.
+
+    Advisory: where the registry cannot be written (a read-only checkout), the wait
+    still runs -- only the holder goes untold -- so this never raises for that.
+    """
     d = _dir(repo)
-    d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        return w
     ignore = d.parent / ".gitignore"
     if not ignore.exists():
         with contextlib.suppress(OSError):
@@ -133,6 +140,8 @@ def update(w: Waiter, *, waiting_on: list[str], reason: str) -> None:
 
 
 def _write(w: Waiter) -> None:
+    if not w.path:
+        return  # never registered: the registry was not writable
     body = {k: v for k, v in asdict(w).items() if k != "path"}
     path = Path(w.path)
     tmp = path.with_name(f".{path.name}.tmp")
