@@ -2122,7 +2122,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "api": lambda repo, a, agent: _api().items.resolve(
+        "api": lambda repo, a, agent: _api().resolve(
             repo, a["id"], keep=a["keep"], refile_as=a.get("refile_as", "") or "", agent=agent
         ),
         "payload": ("id", "kept_definition", "kept_holder", "lost", "refiled", "released"),

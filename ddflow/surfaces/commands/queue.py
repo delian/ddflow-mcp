@@ -81,25 +81,6 @@ def cmd_task_add(a, c: Ctx) -> int:
     return OK
 
 
-def contest_block(it) -> str:
-    """`show`'s CONTESTED block: each rival definition or claim, whole.
-
-    Whole, not summarised: the point of recording a contest is that the losing side is
-    not lost, and a title alone is not enough to re-file it from.
-    """
-    if not (it.contested or it.lease_contest):
-        return ""
-    lines = [f"CONTESTED — `ddflow resolve {it.id} --keep <event-id|agent>` settles it"]
-    for d in it.contested:
-        lines.append(f"  definition {d['event']} by {d['agent']} (lamport {d['lamport']})")
-        lines.append(f"    title {d['title']!r}")
-        lines += [f"    | {ln}" for ln in (d["body"] or "").splitlines()]
-    for h in it.lease_contest:
-        where = h["lease"].get("worktree") or "-"
-        lines.append(f"  claim {h['event']} by {h['holder']} (worktree {where})")
-    return "\n".join(lines)
-
-
 def _resolved_text(d: dict) -> str:
     """What `resolve` kept, and -- for each definition it did not -- how to get it back."""
     lines = []
