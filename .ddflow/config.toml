@@ -36,6 +36,10 @@ heartbeat_s = 300
 enabled = true
 max_parallel = 4
 
+# .roborev.toml is git-ignored (decision D-roborev-local) but roborev reads it from each
+# checkout, so every worktree gets the primary's copy.
+local_files = [".roborev.toml"]
+
 [schedule]
 max_parallel_tasks = 4
 

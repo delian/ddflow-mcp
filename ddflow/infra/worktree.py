@@ -22,7 +22,7 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -177,6 +177,8 @@ class Worktree:
     branch: str
     base: str
     created: bool = False
+    #: git-ignored files copied in from the primary (`[worktree].local_files`)
+    local_files: list[str] = field(default_factory=list)
 
 
 def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str = "") -> Worktree:
@@ -203,6 +205,7 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     wt = Worktree(item=item_id, path=path, branch=branch, base=base)
 
     if path.exists() and (path / ".git").exists():
+        wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
         return wt  # adopt
     wt_root.mkdir(parents=True, exist_ok=True)
 
@@ -218,7 +221,36 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     wt.created = True
     if cfg.worktree.sync_before_start and have_branch:
         sync(wt, cfg)
+    wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
     return wt
+
+
+def copy_local_files(primary: Path, tree: Path, names: list[str]) -> list[str]:
+    """Copy ``names`` -- git-ignored, machine-local files -- from the primary checkout into
+    ``tree``. Returns what was copied.
+
+    A worktree is a git checkout, so an UNTRACKED file (a tool's local config, such as a
+    .roborev.toml that must not be committed) is simply absent from it, and the tool
+    falls back to whatever its global default is. Skipped, each for its reason: a path
+    missing from the primary (nothing to copy), a path already in the tree (never
+    overwritten -- the agent may have edited it), a path git tracks (the checkout already
+    brought it), and a path outside the repository.
+    """
+    import shutil
+
+    copied: list[str] = []
+    root = Path(primary).resolve()
+    for name in names:
+        src = (root / name).resolve()
+        dst = Path(tree) / name
+        if not src.is_relative_to(root) or not src.is_file() or dst.exists():
+            continue
+        if git(root, "ls-files", "--error-unmatch", "--", name).ok:
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        copied.append(name)
+    return copied
 
 
 def sync(wt: Worktree, cfg: Config) -> GitResult:

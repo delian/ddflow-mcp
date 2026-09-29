@@ -86,6 +86,7 @@ class WorktreeConfig:
     max_parallel: int = 4
     sync_before_start: bool = True
     adopt_existing: bool = True
+    local_files: list[str] = field(default_factory=list)
 
 
 _doc(
@@ -132,6 +133,11 @@ _doc(
     "worktree",
     "sync_before_start",
     "Merge the base branch into the task branch before work starts. Prevents the 98-commits-behind-and-unmergeable failure that motivated this knob.",
+)
+_doc(
+    "worktree",
+    "local_files",
+    "Git-IGNORED, machine-local files (repo-relative paths) copied from the primary checkout into every worktree ddflow creates or adopts -- a tool config that must not be committed but is read from each checkout, like .roborev.toml. Never overwrites a file already in the worktree, and never copies a path git tracks (that one arrives with the checkout).",
 )
 
 
