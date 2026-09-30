@@ -704,12 +704,13 @@ irreversible:
 $ git push origin main           # that is the whole release
 ```
 
-**Every push to main that changes shipped code releases, with the MINOR version bumped.**
+**Every push to main that changes shipped code releases, with the PATCH version bumped.**
+Major and minor move only when you move them.
 "Shipped" means `ddflow/`, `pyproject.toml`, `uv.lock`, `Dockerfile`,
 `docker-entrypoint.sh` or `.dockerignore`: a push of docs, tests or the ddflow event log
 releases nothing, because PyPI keeps every version forever and one identical to the last
-is noise nobody can withdraw. CI runs `scripts/bump.sh minor`, commits `release 0.2.0` to
-main, publishes PyPI, Docker Hub, ghcr.io and the MCP registry, then creates `v0.2.0` and
+is noise nobody can withdraw. CI runs `scripts/bump.sh patch`, commits `release 0.1.2` to
+main, publishes PyPI, Docker Hub, ghcr.io and the MCP registry, then creates `v0.1.2` and
 a GitHub release — **last**, and only once every publish succeeded, because a tag pointing
 at a half-release is worse than no tag: it looks authoritative.
 
@@ -717,9 +718,14 @@ at a half-release is worse than no tag: it looks authoritative.
 it and the next push is refused until you `git pull`.
 
 How the gate picks the version: it publishes the declared version if PyPI does not have it
-yet, and bumps minor only if it does. So a different bump is still yours to make —
-`scripts/bump.sh major` (or `patch`, or an exact version), commit, push, and CI publishes
-exactly that. The same rule makes a failed release retry its number with the next push
+yet, and bumps patch only if it does. So moving major or minor is yours to do —
+
+```console
+$ scripts/bump.sh minor          # 0.1.4 -> 0.2.0 (or: major, or an exact 1.0.0)
+$ git commit -am 'release 0.2.0' && git push origin main
+```
+
+— and CI publishes exactly `0.2.0`; the next push that bumps nothing releases `0.2.1`. The same rule makes a failed release retry its number with the next push
 instead of skipping it. The bump is pushed to main *before* anything publishes: a push that
 loses a race with another commit fails the run and publishes nothing, where pushed last it
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
