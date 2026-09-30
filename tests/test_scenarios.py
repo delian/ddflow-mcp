@@ -50,6 +50,10 @@ def test_every_scenario_still_imports():
 
 
 @pytest.mark.slow
+@pytest.mark.scenarios
+# The run's --timeout is sized for unit tests (420 s in CI's `tests` job and the pre-push
+# hook); a scenario gets CI's scenario budget whatever the command line says.
+@pytest.mark.timeout(1800)
 @pytest.mark.parametrize("name", [n for n, _ in _scenarios()], ids=lambda n: n)
 def test_scenario(name, tmp_path):
     """One scenario, against a freshly invented project in a temp directory."""

@@ -1,8 +1,15 @@
 # What CI runs (.github/workflows/ci.yml), run before the push instead of after it.
 #
-#   pre-commit install        # once per clone; installs the PRE-PUSH hook only
+#   ln -sf ../../scripts/ci/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push"
+#                             # once per clone -- NOT `pre-commit install`; see below
 #   pre-commit run --hook-stage pre-push --all-files     # the whole set, on demand
-#   SKIP=scenarios git push   # skip one hook by id, when you know why
+#   SKIP=tests git push       # skip one hook by id, when you know why
+#
+# The hook is scripts/ci/pre-push, which runs these checks in a scratch worktree of the
+# commit being pushed. `pre-commit install` would run them in YOUR tree, and pre-commit
+# fails a hook when anything in the tree changes while it runs: ddflow agents append to the
+# committed event logs constantly, so the minute-long test hook failed with every test
+# green (B431fff0197). The script's header has the whole story.
 #
 # PRE-PUSH, not pre-commit, deliberately. The per-commit hooks in this repository belong to
 # `ddflow hooks install` (lease enforcement, commit-message checks); `pre-commit install`
@@ -68,17 +75,21 @@ repos:
         always_run: true
         pass_filenames: false
 
-      # -- the CI `tests` and `scenarios` jobs -----------------------------------------
-      - id: unit-tests
-        name: "unit and integration tests (CI: tests)"
-        entry: uv run pytest tests/ -q --timeout=420 -n auto
-        language: system
-        files: ^(ddflow/|tests/|demos/|pyproject\.toml$|uv\.lock$)
-        pass_filenames: false
-      - id: scenarios
-        # The slowest hook (minutes, even in parallel) and the one CI caught this time.
-        name: "end-to-end scenarios (CI: scenarios)"
-        entry: uv run pytest tests/test_scenarios.py -m slow -q --timeout=1800 -n auto
+      # -- the CI `tests` and `scenarios` jobs, as ONE pytest session -----------------
+      - id: tests
+        # One session, not two hooks in a row: the scenarios run beside the unit tests
+        # instead of after them. `-n auto` is one worker per CPU the machine has, and
+        # `worksteal` lets an idle worker take tests queued behind a long one -- the default
+        # scheduler hands tests out in batches, which put all six scenarios on three
+        # workers, two each, back to back (6 min instead of under 2 on a 192-thread box).
+        # DDFLOW_DEMO_NO_REVIEWER: CI has no model server, so its scenarios take the
+        # no-reviewer path; on a machine with one, a real review made mcp-orchestration
+        # alone take 89-240 s, depending on the server's load.
+        name: "unit tests + end-to-end scenarios (CI: tests, scenarios)"
+        entry: >-
+          env DDFLOW_DEMO_NO_REVIEWER=1
+          uv run pytest tests/ -m "not slow or scenarios" -q --timeout=420
+          -n auto --dist worksteal
         language: system
         files: ^(ddflow/|tests/|demos/|pyproject\.toml$|uv\.lock$)
         pass_filenames: false
