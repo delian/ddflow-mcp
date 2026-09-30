@@ -122,3 +122,26 @@ def test_an_unclaimed_item_still_reviews_the_primary_without_ddflows_bookkeeping
         '"note"' not in text
     )  # ... the event log is not assert "# proj" in text  # the README edit is there ...
     assert '"note"' not in text  # ... the event log is not
+
+
+def _another_items_tree(repo: Path) -> Path:
+    """A second harness tree, adopted by another open item, T2."""
+    other = repo.parent / "t2-tree"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "t2-work")
+    run_cli(repo, "task", "add", "T2", "--title", "t2", "--globs", "z.py")
+    code, out, err = run_cli(other, "claim", "T2")
+    assert code == OK and "adopted" in out, out + err
+    return other
+
+
+def test_another_items_tree_is_not_reviewed_as_this_items_work(repo, tmp_path):
+    tree, seen = _setup(repo, tmp_path)
+    run_cli(tree, "claim", "T1", "--no-worktree")
+    other = _another_items_tree(repo)
+    (other / "z.py").write_text("T2 WORK = 1\n")
+    _git(other, "add", "z.py")
+    _git(other, "commit", "-qm", "t2")
+    code, out, err = run_cli(other, "review", "T1")
+    assert code == NOTHING, out + err
+    assert not seen.exists() or "T2 WORK" not in seen.read_text()
+    assert "T2" in out + err
