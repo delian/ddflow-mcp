@@ -126,7 +126,7 @@ def test_a_queue_that_cannot_be_read_is_could_not_run_never_a_pass(repo):
     shutil.rmtree(repo / ".ddflow" / "events")
     code, out = _check(repo, "subject\n\nPhase: 160.D.4\n")
     assert code == 2, f"an unreadable queue must be exit 2 (could not run), got {code}\n{out}"
-    assert "queue" in out.lower(), out
+    assert "not a pass" in out.lower(), out
 
 
 @pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root reads anything")
@@ -298,7 +298,8 @@ def test_a_waiver_declared_alone_is_accepted_not_inert(repo):
     code, out = _check(repo, "docs\n\nPhase-ships: bogus\n")
     assert code == 1 and "bogus" in out, out
     code, out = _check(repo, "docs, no trailer\n")
-    assert code == 1 and "`Phase-ships: none|filing|recon|evidence|followup`" in out, out
+    assert code == 1, out
+    assert "Phase-ships" in out and all(w in out for w in WORDS), out
 
 
 def test_git_failing_to_parse_the_trailers_is_could_not_run(monkeypatch):
