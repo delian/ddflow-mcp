@@ -530,20 +530,31 @@ def _worktree_held_by(st, stored: str, me: str, repo: Path | None = None, cfg=No
 
 
 def callers_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Any, str]:
-    """(the linked worktree the caller stands in, or None; the OTHER item holding it, or "").
+    """(the linked worktree the caller stands in, or None; the OTHER item working it, or "").
 
     For an item claimed without a worktree, where the caller stands is the best evidence
-    of where its work is -- unless that tree belongs to another open item. Run from item
-    B's tree, item A's gate ran B's suite and recorded it as A's pass (found by the critic
-    review of B8be9373cf5's fix). Held means what `claim` means by it: bound to another
-    open item that has not let go (`_worktree_held_by`). Shared by `gate run`/`record`,
-    `review` and `merge`, so the three cannot disagree about whose tree it is.
+    of where its work is -- unless another item is being worked there. Run from item B's
+    tree, item A's gate ran B's suite and recorded it as A's pass (found by the critic
+    review of B8be9373cf5's fix). Shared by `gate run`/`record`, `review` and `merge`, so
+    they cannot disagree about whose tree it is.
+
+    "Being worked" is a LIVE claim: another open item bound to the tree with its lease
+    held. Not `claim`'s stricter held-until-let-go rule, which protects a released item's
+    leftover work from being co-opted: a tree bound to an item that was merged and let go
+    of its lease, carrying newer commits, is exactly where a `--no-worktree` item is
+    worked -- the case this feature exists for -- and treating it as foreign made that
+    item's own gates unavailable.
     """
     here = W.current(called_from or repo)
     if here is None:
         return None, ""
-    held = _worktree_held_by(st, W.store_path(repo, here.path), it.id, repo, cfg)
-    return (None, held) if held else (here, "")
+    stored = W.store_path(repo, here.path)
+    for other in st.items.values():
+        if other.id == it.id or other.removed or other.state in (DONE, ABANDONED):
+            continue
+        if (other.worktree or "") == stored and other.lease is not None:
+            return None, other.id
+    return here, ""
 
 
 def _tree_let_go(repo: Path, cfg, st, item) -> bool:
