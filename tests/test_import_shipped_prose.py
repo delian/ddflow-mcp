@@ -30,6 +30,12 @@ from ddflow.services import importer as IM
         "162.C — ticked-but-never-shipped has NO detector",
         "141.F — audit deferrals hidden inside completed items",
         'Phase 43 — cleanup ("make sure all incomplete work is completed")',
+        "Phase 62 — LLM Orchestrator (closed-loop autonomous training)",
+        "Closed-loop evaluation",
+        "Done when the tests pass",
+        "Shipped-vs-ticked drift detector",
+        "Phase 9 — foo (NOT DONE)",
+        "137.E.2 — NOT SHIPPED in 137.E",
     ],
 )
 def test_the_word_in_prose_is_not_a_status(heading):
@@ -48,6 +54,12 @@ def test_the_word_in_prose_is_not_a_status(heading):
         "P2 sweep complete — final state",
         "Phase 7 — done",
         "Phase 8 (shipped)",
+        "Phase 5 — foo (P1) — shipped in 0.3",
+        "Phase 5 — foo — Shipped (v1)",
+        "Phase 5 — foo: shipped in v2",
+        "Phase 5 — foo **shipped**",
+        "Phase 5 — foo, now shipped",
+        "Phase 5 — foo ✔ done",
     ],
 )
 def test_a_status_still_is(heading):

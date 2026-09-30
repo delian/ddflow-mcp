@@ -87,16 +87,21 @@ LESSON_SUMMARY_GLOBS = (
 #: in 137.E` are prose, and matched case-insensitively anywhere they raised a permanent
 #: "finished with an open task" alarm on every import of home-simulator (15 such headings
 #: across it and run_nemo_run, bug B-imp-shipped-prose). What counts: the word in
-#: capitals, a check mark, the word opening the heading or an aside clause, the word
-#: followed by a date or a separator, or the word closing the heading.
+#: capitals (not after NOT/NEVER), a check mark, the whole word opening the heading or
+#: an aside clause, opening a clause after a separator, in bold, followed by a date or a
+#: separator, or closing the heading.
 _DONE_WORD = r"(?:shipped|closed|done|complete[d]?)"
+#: The whole word: not `closed-loop`, not `shipped-vs-ticked`.
+_WORD_END = r"(?![\w-])"
 _DONE_MARKER = re.compile(
-    r"\b(?:SHIPPED|CLOSED|DONE|COMPLETED?)\b|\u2705"
-    rf"|(?i:^\W*{_DONE_WORD}\b)"
-    rf"|(?i:[(\[,;]\s*\**\s*{_DONE_WORD}\b)"
-    rf"|(?i:\b{_DONE_WORD}\s+\d{{4}}-\d{{2}})"
-    rf"|(?i:\b{_DONE_WORD}\s*(?:[\u2014\u2013:]|\s-+\s))"
-    rf"|(?i:(?:[\u2014\u2013:|]|\s-+)\s*\**\s*{_DONE_WORD}\b[^a-z]*$)"
+    rf"(?<!NOT )(?<!NEVER )\b(?:SHIPPED|CLOSED|DONE|COMPLETED?){_WORD_END}|\u2705|\u2714"
+    rf"|(?i:^\W*{_DONE_WORD}{_WORD_END}\s*(?:$|[(\[\u2014\u2013:]|\s-+\s|\d{{4}}-\d{{2}}))"
+    rf"|(?i:[(\[,;]\s*(?:now\s+)?\**\s*{_DONE_WORD}{_WORD_END})"
+    rf"|(?i:\b{_DONE_WORD}{_WORD_END}\s+\d{{4}}-\d{{2}})"
+    rf"|(?i:\b{_DONE_WORD}{_WORD_END}\s*(?:[\u2014\u2013:]|\s-+\s))"
+    rf"|(?i:(?:[\u2014\u2013:|]|\s-+\s)\s*\**\s*{_DONE_WORD}{_WORD_END})"
+    rf"|(?i:\*\*\s*{_DONE_WORD}{_WORD_END}[^*]{{0,30}}\*\*)"
+    rf"|(?i:(?:[\u2014\u2013:|]|\s-+)\s*\**\s*{_DONE_WORD}{_WORD_END}[^a-z]*$)"
 )
 #: Files inside an ADR directory that are the index rather than a decision.
 _DECISION_INDEX_STEMS = {"readme", "index", "template", "0000-template", "_template"}
