@@ -163,6 +163,6 @@ def test_a_launch_line_with_no_path_gets_no_note(checkout, tmp_path):
 
 
 def test_an_interpreter_that_cannot_follow_is_warned_about(checkout, monkeypatch):
-    primary, tree = checkout
+    _primary, tree = checkout
     monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
     assert "WARNING" in E.redirect_note() and "no .venv" in E.redirect_note()
