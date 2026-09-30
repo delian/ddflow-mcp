@@ -49,6 +49,8 @@ def _claims(heading: str) -> bool:
         "Importer — closed questions",
         "Phase 9 (NEVER SHIPPED)",
         "Phase 9 — NOT ✅",
+        "Phase 12 — WORK TO BE DONE",
+        "Phase 12: Definition of DONE",
         "Phase 3 — Work to be done: parser rewrite",
         "Tasks completed: 3 of 12",
         "What's shipped — and what isn't",
@@ -83,6 +85,7 @@ def test_the_word_in_prose_is_not_a_status(heading):
         "PHASE 5 — DONE",
         "PHASE 12 SHIPPED",
         "PHASE 3 COMPLETE (2026-08-01)",
+        "PHASE 12 SHIPPED IN 0.3",
     ],
 )
 def test_a_status_still_is(heading):
