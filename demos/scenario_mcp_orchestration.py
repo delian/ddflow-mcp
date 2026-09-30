@@ -634,10 +634,17 @@ def run(sc: Scenario) -> None:
         )
         out, code = alpha.tool("ddflow_gate_run", id="P1", gate="unit_tests")
         sc.check("the phase-level suite runs against the merged result", code in (0, 2), out[-300:])
-        for gate in ("tasks", "bug_hunt", "dedupe", "live_test", "corrections", "merge"):
+        for gate in ("tasks", "bug_hunt", "dedupe", "live_test", "corrections", "docs", "merge"):
             alpha.tool(
                 "ddflow_gate_record", id="P1", gate=gate, outcome="passed", evidence="phase pass"
             )
+        out, code = alpha.tool(
+            "ddflow_gate_skip",
+            id="P1",
+            gate="docs",
+            reason="Documentation work is outside the scope of this lifecycle scenario.",
+        )
+        sc.check("the docs gate is explicitly skipped", code == 0, out[:200])
         out, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
         sc.check("phase P1 completes once every task is done", code == 0, out[:300])
 
