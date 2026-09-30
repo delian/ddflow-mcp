@@ -147,3 +147,16 @@ install = "see the project README"
 note = "Prefer a small repo-local wrapper over a bare `memo`: it derives the store from `git rev-parse --git-common-dir`, so every worktree lands on ONE memory instead of one per agent."
 url = "https://github.com/VictorTaelin/OptMem"
 default = true
+
+[[companion]]
+id = "pre-commit"
+title = "Local lint, format and secret checks before every commit (pre-commit)"
+kind = "cli"
+gates = ["standards"]
+why = """Runs the project's own linters, formatters and a secret scanner BEFORE a commit exists, instead of only in CI afterwards, so the `standards` gate has a tool's verdict behind it rather than a model's unaided review. `ddflow precommit` proposes a configuration for the stacks this repository actually has -- pinned hooks for them, plus ddflow's own checks as local hooks, so the framework owns `.git/hooks/` alone and ddflow's lease and commit-message checks still run inside it."""
+detect = ["pre-commit", "--version"]
+command = "pre-commit"
+install = "pipx install pre-commit"
+note = "Then `ddflow precommit` shows the proposed .pre-commit-config.yaml (--write creates it, never over an existing one) and prints the line that activates it -- `pre-commit install` for the generated config, which declares its hook types. The intended end state is ddflow's checks running as that config's local hooks. (Where ddflow's own git hook was installed first, `pre-commit install` keeps it as pre-commit.legacy and it still runs -- a duplicate once the generated config is in place.)"
+url = "https://pre-commit.com"
+default = true

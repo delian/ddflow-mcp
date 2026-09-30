@@ -368,10 +368,7 @@ def relevant_tests(
     from ..services.gates import load_gates, parallel_test_advice
 
     _log, cfg, st = _load(repo, agent)
-    top = W.git(where, "rev-parse", "--show-toplevel") if where else None
-    # The caller's OWN checkout: a linked worktree stays itself, where the repo root
-    # (and so `repo`) is the primary -- whose diff is not the change being worked on.
-    tree = Path(top.out) if top is not None and top.ok and top.out else repo
+    tree = _caller_tree(repo, where)
     if item:
         it = st.items.get(item)
         if it is None:
@@ -407,3 +404,165 @@ def relevant_tests(
             **data,
         )
     return O.ok("tests", **data)
+
+
+def _caller_tree(repo: Path, where: Path | None) -> Path:
+    """The checkout the caller is standing in. A linked worktree stays itself, where the
+    repo root (and so `repo`) is the PRIMARY -- whose files and diff are not the ones the
+    caller is working on."""
+    from .lifecycle import _tree_of
+
+    return (_tree_of(where) if where else None) or repo
+
+
+def _command_found(command: str, tree: Path) -> bool:
+    """Whether the program ``command`` starts with can be run from ``tree`` -- where
+    pre-commit runs a hook's entry, so a relative path is read against it."""
+    import os
+    import shlex
+    import shutil
+
+    try:
+        words = shlex.split(command)
+    except ValueError:
+        return False
+    if not words:
+        return False
+    if "/" in words[0]:
+        prog = Path(words[0]) if Path(words[0]).is_absolute() else tree / words[0]
+        return prog.is_file() and os.access(prog, os.X_OK)
+    return shutil.which(words[0]) is not None
+
+
+def _precommit_installed(repo: Path) -> bool | None:
+    from ..services import companions as C
+
+    try:
+        entry = next((c for c in C.load(repo) if c.id == "pre-commit"), None)
+    except ValueError:  # a malformed project catalogue: it cannot say
+        return None
+    return C.is_installed(entry)[0] if entry is not None else None
+
+
+def _activation(path: Path, exists: bool, hook_types: list[str]) -> str:
+    """The command that activates the config at ``path``. Plain `pre-commit install`
+    honours a file's default_install_hook_types -- the generated one declares them --
+    and explicit --hook-type flags would OVERRIDE that list; they are needed only for a
+    file that declares none, where a plain install sets up the pre-commit hook alone."""
+    import re
+
+    try:
+        text = path.read_text(encoding="utf-8") if exists else ""
+    except (OSError, UnicodeDecodeError):
+        text = ""
+    if not exists or re.search(r"^default_install_hook_types\s*:", text, re.M):
+        return "pre-commit install"
+    return "pre-commit install " + " ".join(f"--hook-type {t}" for t in hook_types)
+
+
+def precommit(
+    repo: Path,
+    *,
+    where: Path | None = None,
+    ddflow_cmd: str = "ddflow",
+    write: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """A `.pre-commit-config.yaml` proposed for this repository's stacks.
+
+    Proposes; installs nothing. ``write`` creates the file and REFUSES (exit 3) to replace
+    one that exists: which checks gate somebody's commits is theirs to decide, and a
+    config they already have is exactly that decision.
+    """
+    import contextlib
+    import os
+    import shlex
+    import shutil
+    import tempfile
+
+    from ..services import enforce as E
+    from ..services import precommit as PC
+
+    _load(repo, agent)
+    ddflow_cmd = ddflow_cmd.strip()
+    if not ddflow_cmd:
+        return O.refused("precommit", "ddflow_cmd is empty: the local hooks would run nothing")
+    try:
+        shlex.split(ddflow_cmd)
+    except ValueError as e:  # pre-commit splits an entry the same way, on every commit
+        return O.refused("precommit", f"ddflow_cmd {ddflow_cmd!r} cannot be split: {e}")
+    tree = _caller_tree(repo, where)
+    prop = PC.propose(tree, ddflow_cmd=ddflow_cmd)
+    if prop is None:
+        # Could not run: nothing was proposed, so nothing about the proposal failed.
+        return O.nothing("precommit", f"git could not list the files of {tree}")
+    path = PC.config_path(tree)
+    data: dict[str, Any] = {
+        "path": str(path),
+        # A symlink counts, dangling or not: writing through one lands somewhere else.
+        "exists": path.exists() or path.is_symlink(),
+        "written": False,
+        # The catalogue's own probe, so both say the same -- including "could not tell".
+        # Through the PRIMARY on purpose: whether the program is installed is a fact
+        # about this machine, not a checkout, and the primary holds the machine-local
+        # config layer `ddflow companions` reads it through.
+        "installed": _precommit_installed(repo),
+        # The local hooks run `ddflow_cmd` with git's environment, not this one: a
+        # command missing from PATH fails every commit, which reads like a refusal.
+        "ddflow_cmd": ddflow_cmd,
+        "ddflow_cmd_found": _command_found(ddflow_cmd, tree),
+        # `hooks status` knows these hooks by "ddflow" in their command; a wrapper named
+        # otherwise runs the checks but is reported NOT installed.
+        "ddflow_cmd_recognised": "ddflow" in ddflow_cmd.lower(),
+        # Programs the proposed hooks run from PATH that this machine lacks -> the stages
+        # whose hooks would fail without them.
+        "missing": {p: st for p, st in prop.requires.items() if shutil.which(p) is None},
+        # ddflow's own git hooks, which `pre-commit install` would keep as <name>.legacy
+        # and run beside the config's local hooks: remove them first.
+        "ddflow_hooks_installed": [
+            n for n in ("pre-commit", "commit-msg") if E.armed(tree, n).via == "ddflow"
+        ],
+        "hook_types": prop.hook_types,  #: the git hooks `pre-commit install` sets up
+        "stacks": prop.stacks,
+        "repos": [
+            {"repo": r.url, "rev": r.rev, "hooks": [h.id for h in r.hooks], "why": r.why}
+            for r in prop.repos
+        ],
+        "skipped": prop.skipped,
+        "text": prop.text,
+    }
+    data["activate"] = _activation(path, data["exists"], prop.hook_types)
+    if write:
+        if data["exists"]:
+            return O.refused(
+                "precommit",
+                f"{path} exists and is not replaced: run `ddflow precommit` without --write "
+                "to see the proposal, and merge by hand what you want",
+                **data,
+            )
+        # Written aside and LINKED into place: the link is atomic and refuses a file made
+        # meanwhile, and a write failing partway never leaves a truncated config that
+        # pre-commit would run and a later --write would refuse to replace.
+        # mkstemp: a name no earlier run (killed, same pid) can have left behind.
+        try:
+            fd, tmp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+        except OSError as e:
+            return O.failed("precommit", f"could not write {path}: {e}")
+        tmp = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(prop.text)
+            os.chmod(tmp, 0o644)  # mkstemp makes it 0600; a config is read by everyone
+            os.link(tmp, path)
+        except FileExistsError:
+            data["exists"] = True
+            return O.refused("precommit", f"{path} appeared meanwhile; not replaced", **data)
+        except OSError as e:
+            return O.failed("precommit", f"could not write {path}: {e}")
+        finally:
+            # Best effort: the answer is decided, and a leftover temp name is unique.
+            with contextlib.suppress(OSError):
+                tmp.unlink()
+        data["written"] = data["exists"] = True
+        data["activate"] = _activation(path, True, prop.hook_types)
+    return O.ok("precommit", **data)
