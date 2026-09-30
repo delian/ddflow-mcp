@@ -199,7 +199,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent, called_from=None: _api().heartbeat(
             repo, a["id"], agent=agent, called_from=called_from
         ),
-        "payload": ("renewed", "waiters"),
+        "payload": ("renewed", "waiters", "globs_withheld"),
         # The item's own tree renews its lease whoever claimed it -- identity is derived
         # from the tree, so without WHERE the caller is this said "no lease held" from
         # exactly the tree `claim` made.
@@ -391,17 +391,27 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "have looked at what is dirty and decided it is build output.",
                 False,
             ),
+            "branch": (
+                "string",
+                "For an item claimed with no_worktree: the branch to land. Default: the "
+                "branch checked out in the worktree this connection runs in. Paths the "
+                "landing changes outside the item's globs come back as outside_globs.",
+                False,
+            ),
         },
-        "api": lambda repo, a, agent: _api().merge_item(
+        "api": lambda repo, a, agent, called_from=None: _api().merge_item(
             repo,
             a["id"],
             message=a.get("message", "") or "",
             allow_dirty=bool(a.get("allow_dirty")),
             keep=bool(a.get("keep")),
             model=a.get("model", "") or "",
+            branch=a.get("branch", "") or "",
+            called_from=called_from,
             agent=agent,
         ),
-        "payload": ("id", "sha", "base", "pr"),
+        "wants_called_from": True,
+        "payload": ("id", "sha", "base", "pr", "branch", "outside_globs"),
     },
     "ddflow_pr_sync": {
         "description": (
@@ -1867,8 +1877,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "pass a merge's own sha expecting its branch's changes AND more.",
                 False,
             ),
+            "branch": (
+                "string",
+                "Review this branch against base -- for an item claimed with no_worktree. "
+                "Default for such an item: the branch checked out in the worktree this "
+                "connection runs in. With neither, the review is recorded unavailable.",
+                False,
+            ),
         },
-        "api": lambda repo, a, agent: _api().run_review(
+        "api": lambda repo, a, agent, called_from=None: _api().run_review(
             repo,
             gate=a.get("gate") or "critic",
             item=a.get("id", "") or "",
@@ -1876,8 +1893,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             context=a.get("context", "") or "",
             base=a.get("base", "") or "",
             commit=a.get("commit", "") or "",
+            branch=a.get("branch", "") or "",
+            called_from=called_from,
             agent=agent,
         ),
+        "wants_called_from": True,
         # The TRANSCRIPT the run produced — findings already formatted with their
         # severities, which is what this tool has always returned.
         "payload": "text",

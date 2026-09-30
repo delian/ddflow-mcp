@@ -506,13 +506,14 @@ def wait(
         WT.unregister(w)
 
 
-def _worktree_held_by(st, stored: str, me: str) -> str:
+def _worktree_held_by(st, stored: str, me: str, repo: Path | None = None, cfg=None) -> str:
     """Another OPEN item bound to this same worktree, or "".
 
     Two items sharing one tree cannot be merged or recovered separately: `merge` would
     take one item's branch for the other's work, and `recover` could not say whose
     uncommitted changes it had found. Closed items are ignored — reusing the tree of
-    finished work is exactly what an agent should be able to do.
+    finished work is exactly what an agent should be able to do. So is an open item
+    that has let go of the tree and left nothing in it (`_tree_let_go`), given ``repo``.
     """
     for item in st.items.values():
         if item.id == me or item.removed or item.state in (DONE, ABANDONED):
@@ -522,8 +523,33 @@ def _worktree_held_by(st, stored: str, me: str) -> str:
         # released item whose tree still holds its work is exactly the case that must not
         # be silently co-opted.
         if (item.worktree or "") == stored:
+            if repo is not None and _tree_let_go(repo, cfg, st, item):
+                continue
             return item.id
     return ""
+
+
+def _tree_let_go(repo: Path, cfg, st, item) -> bool:
+    """True when an OPEN item's tree holds none of its work: lease released, merged, and
+    nothing in the tree that its merge target lacks -- no uncommitted change, and a HEAD
+    the target already contains.
+
+    Open is not the same as occupying. B-release-every-push was merged and released, open
+    only for a review the operator deferred, and still refused the next claim in its tree
+    (B0ff09a29a5) -- whose way out, `--no-worktree`, then broke `merge` and `review`. An
+    expired but unreleased lease still holds: that is `recover`'s, not a claim's.
+    """
+    from ..services import flow as FS
+
+    if item.lease is not None or not item.merged_sha:
+        return False
+    tree = W.load_path(repo, item.worktree)
+    if not tree.is_dir():
+        return False
+    if W.dirty(W.Worktree(item=item.id, path=tree, branch=item.branch, base="")):
+        return False
+    target = FS.target(repo, cfg, item, st)
+    return W.git(tree, "merge-base", "--is-ancestor", "HEAD", target).ok
 
 
 def _tree_of(start: Path) -> Path | None:
@@ -702,7 +728,7 @@ def claim(
         adopted = W.current(called_from or repo) if cfg.worktree.adopt_existing else None
         if adopted is not None:
             stored = W.store_path(repo, adopted.path)
-            held = _worktree_held_by(st, stored, item)
+            held = _worktree_held_by(st, stored, item, repo, cfg)
             if held:
                 # RELEASE before refusing -- see the module docstring.
                 _undo_claim(log, item, held_before, "claim refused: worktree conflict")
@@ -825,10 +851,47 @@ def heartbeat(
             else:
                 renewed = L.renew(log, item, holder=lease.holder)
     if renewed:
-        return O.ok("lease.renewed", id=item, renewed=True, waiters=_waiters(repo, item))
+        withheld = _catch_up_globs(log, cfg, item)
+        return O.ok(
+            "lease.renewed",
+            id=item,
+            renewed=True,
+            waiters=_waiters(repo, item),
+            globs_withheld=withheld,
+        )
     return O.nothing(
-        "lease.renewed", f"no lease held {item}{hint}", id=item, renewed=False, waiters=[]
+        "lease.renewed",
+        f"no lease held {item}{hint}",
+        id=item,
+        renewed=False,
+        waiters=[],
+        globs_withheld="",
     )
+
+
+def _catch_up_globs(log, cfg, item: str) -> str:
+    """Point a just-renewed lease at the item's CURRENT globs; "" or why it could not.
+
+    `update --globs` retargets a LIVE lease and leaves a lapsed one for recovery, so an
+    edit made while the lease had lapsed reached only the item. The heartbeat that then
+    revived the lease kept its claim-time globs, and the commit hook reported the paths
+    just added as unleased (Bb21d338f26). Now that the lease is live again it takes the
+    item's globs -- through `plan_retarget`, the same overlap check as any widening, so
+    paths another agent took in the meantime are withheld and the holder is told.
+    """
+    from ..core.model import fold
+
+    with log.transaction():
+        it = fold(log.read_all(), strict=False).items.get(item)
+        lease = it.lease if it else None
+        if lease is None or not it.globs or sorted(lease.globs) == sorted(it.globs):
+            return ""
+        live, refusal = L.plan_retarget(log, cfg, item, list(it.globs))
+        if refusal:
+            return refusal
+        if live is not None:
+            L.retarget(log, item, live, list(it.globs))
+    return ""
 
 
 def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
@@ -1068,6 +1131,8 @@ def merge(
     allow_dirty: bool = False,
     keep: bool = False,
     model: str = "",
+    branch: str = "",
+    called_from: Path | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
@@ -1076,6 +1141,12 @@ def merge(
     updates) the request instead and parks the item in REVIEW; `pr sync` finishes it.
     Same verb either way, so an agent's loop does not change with the repository's
     merge policy.
+
+    An item claimed WITHOUT a worktree has no branch of its own, so it lands the branch
+    it was worked on: ``branch`` when named, else the one checked out in the linked
+    worktree the caller stands in (`_branch_to_land`). That tree is borrowed, never
+    removed. It used to refuse ("has no worktree to merge"), and the work was then
+    landed by hand, outside the log -- no `worktree.merged`, no merge gate.
     """
     from ..core import flow as F
     from ..services import flow as FS
@@ -1085,16 +1156,12 @@ def merge(
     it = _require(st, item, "worktree.merged")
     if isinstance(it, O.Outcome):
         return it
-    if not it.worktree:
-        return O.nothing("worktree.merged", f"{item} has no worktree to merge", id=item, dirty=[])
-
-    wt = W.Worktree(
-        item=item,
-        path=W.load_path(repo, it.worktree),
-        branch=it.branch,
-        base=FS.target(repo, cfg, it, st),
-    )
-    dirty = W.dirty(wt)
+    target = FS.target(repo, cfg, it, st)
+    borrowed = not it.worktree  # claimed --no-worktree: land the branch it was worked on
+    source = _what_to_land(repo, it, target, branch, called_from)
+    if isinstance(source, O.Outcome):
+        return source
+    wt, dirty, outside = source
     if dirty and not allow_dirty:
         # LISTED, not just counted: half the time these are build artefacts the project
         # forgot to gitignore, and half the time they are a source file the agent never
@@ -1123,11 +1190,21 @@ def merge(
             dirty=[],
         )
     if cfg.flow.integration == "pr":
+        if borrowed:
+            return O.refused(
+                "worktree.merged",
+                f"{item} was claimed without a worktree, and a pull request is opened from "
+                f"the item's own branch. Push {wt.branch!r} and open the request yourself, "
+                f"or claim {item} with a worktree.",
+                id=item,
+                sha="",
+                dirty=[],
+            )
         return _open_request(repo, cfg, log, it, message=message, model=model, dirty=dirty)
     bad = F.problems(cfg)
     if bad:
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
-    sha = W.head_sha(wt.path)
+    sha = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     if not r.ok:
@@ -1147,6 +1224,8 @@ def merge(
             # The target's range this merge added -- what a cherry-pick port re-applies.
             "landed_before": landed_before,
             "landed_after": W.rev(repo, wt.base),
+            # Landed from a branch the item does not own (claimed --no-worktree).
+            **({"borrowed": True, "outside_globs": outside} if borrowed else {}),
         },
     )
     # A gitflow hotfix lands on production AND develop. A failure here is reported, not
@@ -1166,10 +1245,13 @@ def merge(
         evidence={"sha": sha, "branch": wt.branch},
         gates=G.load_gates(repo, cfg),
     )
-    # NEVER remove an ADOPTED tree -- see the module docstring.
+    # NEVER remove an ADOPTED tree -- see the module docstring. Nor a borrowed one: it
+    # is the caller's, or whoever's has that branch checked out.
     kept_reason = ""
     removed_tree = False
-    if it.adopted:
+    if borrowed:
+        kept_reason = f"no worktree of its own: {wt.branch!r} was landed, no tree touched."
+    elif it.adopted:
         kept_reason = f"worktree {wt.path} kept: adopted, not created by ddflow."
     elif cfg.worktree.remove_on_merge and not keep:
         rr = W.remove(repo, cfg, wt)
@@ -1192,7 +1274,113 @@ def merge(
         kept_reason=kept_reason,
         back_merged=back_merged,
         pr="",
+        branch=wt.branch,
+        outside_globs=outside,
     )
+
+
+def _what_to_land(
+    repo: Path, it, target: str, branch: str, called_from: Path | None
+) -> tuple[W.Worktree, list[str], list[str]] | O.Outcome:
+    """(the tree and branch to land, its uncommitted files, paths outside the globs).
+
+    An item's own worktree lands its own branch, and naming another is refused. An item
+    claimed without one lands a borrowed branch (`_branch_to_land`); its tree, if the
+    branch is checked out anywhere, is only inspected for uncommitted work.
+    """
+    if it.worktree:
+        if branch and branch != it.branch:
+            return O.refused(
+                "worktree.merged",
+                f"{it.id} has its own worktree on {it.branch!r}; it lands that branch, not "
+                f"{branch!r}. Drop --branch, or land {branch!r} under the item it belongs to.",
+                id=it.id,
+                sha="",
+                dirty=[],
+            )
+        wt = W.Worktree(
+            item=it.id, path=W.load_path(repo, it.worktree), branch=it.branch, base=target
+        )
+        return wt, W.dirty(wt), []
+    picked = _branch_to_land(repo, it, branch, called_from, target)
+    if isinstance(picked, O.Outcome):
+        return picked
+    tree = W.checked_out_at(repo, picked)
+    wt = W.Worktree(item=it.id, path=tree or W.repo_root(repo), branch=picked, base=target)
+    dirty = W.dirty(wt) if tree is not None else []
+    return wt, dirty, _outside_globs(repo, it, target, picked)
+
+
+def _branch_to_land(
+    repo: Path, it, branch: str, called_from: Path | None, target: str
+) -> str | O.Outcome:
+    """The branch an item claimed WITHOUT a worktree is landed from, or why none can be.
+
+    Named with ``branch``, else the branch checked out in the linked worktree the caller
+    stands in -- where an agent whose harness gave it a tree is working. The primary
+    names nothing: it is usually on the target itself, and a guess there would land
+    whatever it happens to be on.
+    """
+    if not branch:
+        here = W.current(called_from or repo)
+        if here is None or not here.branch:
+            return O.refused(
+                "worktree.merged",
+                f"{it.id} was claimed without a worktree, so it has no branch of its own. "
+                f"Name the branch that holds its commits -- `ddflow merge {it.id} "
+                f"--branch <branch>` -- or run merge from the worktree it was worked in.",
+                id=it.id,
+                sha="",
+                dirty=[],
+            )
+        branch = here.branch
+    if not W.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}").ok:
+        return O.refused(
+            "worktree.merged",
+            f"no local branch {branch!r} to land {it.id} from.",
+            id=it.id,
+            sha="",
+            dirty=[],
+        )
+    if branch == target:
+        return O.refused(
+            "worktree.merged",
+            f"{branch!r} is the merge target itself. Name the branch {it.id} was worked "
+            f"on with --branch.",
+            id=it.id,
+            sha="",
+            dirty=[],
+        )
+    ahead = W.git(repo, "rev-list", "--count", f"{target}..{branch}")
+    if ahead.ok and ahead.out.strip() == "0":
+        return O.nothing(
+            "worktree.merged",
+            f"{branch!r} has nothing {target!r} lacks: nothing to merge for {it.id}.",
+            id=it.id,
+            sha="",
+            dirty=[],
+        )
+    return branch
+
+
+def _outside_globs(repo: Path, it, target: str, branch: str) -> list[str]:
+    """Paths the landing changes that the item never declared.
+
+    A borrowed branch can carry more than this item's work -- another item's commits made
+    in the same tree -- and landing that should at least not be silent. Reported, not
+    refused: an item's globs are often narrower than its honest diff, and the caller named
+    or stood on this branch. ddflow's own bookkeeping paths are not the item's to declare.
+    """
+    from ..core.schedule import globs_overlap
+    from ..services.enforce import SELF_MANAGED
+
+    d = W.git(repo, "diff", "--name-only", f"{target}...{branch}")
+    changed = [p for p in d.out.splitlines() if p.strip()] if d.ok else []
+    return [
+        p
+        for p in changed
+        if not p.startswith(SELF_MANAGED) and not any(globs_overlap(p, g) for g in it.globs)
+    ]
 
 
 def _open_request(
