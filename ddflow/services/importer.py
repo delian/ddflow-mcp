@@ -116,8 +116,10 @@ _DONE_CLAUSE = re.compile(
     rf"(?i:(?:^\W*|[(\[,;]\s*(?:now\s+)?|(?:[\u2014\u2013:|]|\s-+\s)\s*)"
     rf"(?P<w>{_DONE_WORD}){_WORD_END}{_CLAUSE_END})"
 )
+#: The one negation prefix both checks use: `NOT`, `NOT YET`, `NEVER`.
+_NEGATION = r"\b(?:NOT|NEVER)\s+(?:YET\s+)?"
 #: A negation that ends right before a status word: `NOT SHIPPED`, `not yet done`.
-_NEGATED_BEFORE = re.compile(r"\b(?:NOT|NEVER)\s+(?:YET\s+)?\W*$", re.I)
+_NEGATED_BEFORE = re.compile(rf"{_NEGATION}\W*$", re.I)
 #: Files inside an ADR directory that are the index rather than a decision.
 _DECISION_INDEX_STEMS = {"readme", "index", "template", "0000-template", "_template"}
 DECISION_GLOBS = (
@@ -1906,24 +1908,26 @@ _HEADING_STALLED = re.compile(
     r"(?<![A-Z0-9])(PARTIAL(?:LY)?|DEFERRED|ON HOLD|PARKED|BLOCKED)(?![A-Z0-9])", re.I
 )
 #: A done marker the heading itself negates: `NOT DONE`, `not yet shipped`.
-_NEGATED_DONE = re.compile(r"\bNOT\s+(?:YET\s+)?(?:DONE|SHIPPED|CLOSED|COMPLETE[D]?)\b", re.I)
+_NEGATED_DONE = re.compile(rf"{_NEGATION}\W*(?:DONE|SHIPPED|CLOSED|COMPLETE[D]?)\b", re.I)
 
 
 def _claims_done(title: str) -> bool:
     """Whether a heading says its work is finished: some status in it is not negated.
 
-    One place for the drift note, `import --verify` and the phase verdict, so they cannot
-    disagree. Negation is per status, not per heading: `Phase 12 SHIPPED — docs NOT
-    DONE` still claims done, `Phase 9 (NOT YET SHIPPED)` does not. In a heading written in
+    One place for the drift note, `import --verify` and the phase verdict. Negation is
+    per status, not per heading: `Phase 12 SHIPPED — docs NOT DONE` still claims done
+    (so a phase shipped with a task open is still drift), `Phase 9 (NOT YET SHIPPED)`
+    does not. Whether the heading ALSO says something remains is `_says_unfinished`'s
+    question, built from the same `_NEGATION`: that one keeps the verdict from
+    completing such a phase. In a heading written in
     capitals a capital status word must end its clause (`_DONE_CAPS_ENDING`).
     """
-    if _DONE_CHECK.search(title):
-        return True
     letters = [c for c in title if c.isalpha()]
     caps_heading = bool(letters) and all(c.isupper() for c in letters)
     caps = _DONE_CAPS_ENDING if caps_heading else _DONE_CAPS
     starts = [m.start() for m in caps.finditer(title)]
     starts += [m.start("w") for m in _DONE_CLAUSE.finditer(title)]
+    starts += [m.start() for m in _DONE_CHECK.finditer(title)]
     return any(not _NEGATED_BEFORE.search(title[:at]) for at in starts)
 
 

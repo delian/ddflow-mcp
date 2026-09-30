@@ -47,6 +47,8 @@ def _claims(heading: str) -> bool:
         "Phase 20 — launch (closed beta)",
         "Parser: complete rewrite",
         "Importer — closed questions",
+        "Phase 9 (NEVER SHIPPED)",
+        "Phase 9 — NOT ✅",
         "Phase 3 — Work to be done: parser rewrite",
         "Tasks completed: 3 of 12",
         "What's shipped — and what isn't",
@@ -127,3 +129,18 @@ def test_import_verify_reports_drift_for_a_status_heading_only(repo):
     _code, out, err = run_cli(repo, "--json", "import", "--verify")
     drift = json.loads(out)["shipped_with_open_tasks"]
     assert drift == ["36.9"], (drift, err)
+
+
+def test_the_verdict_path_reads_a_stall_under_a_prose_status_word():
+    """`_says_unfinished` skipped its STALLED check whenever the heading 'claimed done';
+    with prose counted as a claim, `beyond the shipped two (DEFERRED)` said nothing
+    remained and a phase of ticked boxes would have been completed over its deferral."""
+    ph = IM.Found(
+        kind="phase", ident="36.5", title="36.5 — beyond the shipped two (DEFERRED)", source=""
+    )
+    assert "DEFERRED" in IM._says_unfinished(ph)
+
+
+def test_both_checks_share_one_negation():
+    ph = IM.Found(kind="phase", ident="9", title="Phase 9 (NEVER SHIPPED)", source="")
+    assert not IM._claims_done(ph.title) and IM._says_unfinished(ph)
