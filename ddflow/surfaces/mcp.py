@@ -229,7 +229,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id.", True),
             "gate": ("string", "Gate id, e.g. unit_tests.", True),
         },
-        "api": lambda repo, a, agent: _api().gate_run(repo, a["id"], a["gate"], agent=agent),
+        "api": lambda repo, a, agent, called_from=None: _api().gate_run(
+            repo, a["id"], a["gate"], agent=agent, called_from=called_from
+        ),
+        "wants_called_from": True,
         "payload": ("gate", "outcome", "evidence"),
     },
     "ddflow_gate_record": {
@@ -262,7 +265,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "api": lambda repo, a, agent: _api().gate_record(
+        "api": lambda repo, a, agent, called_from=None: _api().gate_record(
             repo,
             a["id"],
             a["gate"],
@@ -276,7 +279,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                 output_file=a.get("output_file", "") or "",
             ),
             agent=agent,
+            called_from=called_from,
         ),
+        "wants_called_from": True,
         "payload": ("gate", "outcome", "warning"),
         # B160: `warning` carries the out-of-order NOTE. It printed to stderr only, and
         # `_run_cli` captured stdout — so an agent recording `rubber_duck` before
