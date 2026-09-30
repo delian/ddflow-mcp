@@ -28,7 +28,10 @@ fi
 
 tree=""
 cleanup() { [ -n "$tree" ] && git worktree remove --force "$tree" >/dev/null 2>&1 || true; }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
+# An interrupt stops the whole hook -- not just the ref being checked, which a trap that
+# merely returned would do, and then go on to check the next ref.
+trap 'cleanup; exit 130' INT TERM
 
 status=0
 # git feeds one line per pushed ref on stdin. The loop owns stdin: every command inside

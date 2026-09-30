@@ -288,7 +288,7 @@ def run(sc: Scenario) -> None:
         # The pre-push hook sets DDFLOW_DEMO_NO_REVIEWER to take that same path on a machine
         # that has one: there, a real review costs minutes that depend on how busy the
         # server is (89 s to 240 s for this scenario alone), and it is not what CI checks.
-        if os.environ.get("DDFLOW_DEMO_NO_REVIEWER"):
+        if os.environ.get("DDFLOW_DEMO_NO_REVIEWER", "").lower() in ("1", "true", "yes"):
             detected = "discovery skipped: DDFLOW_DEMO_NO_REVIEWER is set"
         else:
             detected, _ = alpha.tool("ddflow_reviewers_detect", write=True)
