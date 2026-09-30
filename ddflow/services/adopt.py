@@ -551,8 +551,11 @@ def adopt(
 
     # Only when a line written here carries a path: a uvx or docker entry has none, and
     # the hooks' own install message already says it for the hooks.
-    carries_path = bool(_launch_entry(launch, image).get("env"))
-    if carries_path and (note := redirect_note()) and note not in "\n".join(actions):
+    entry = _launch_entry(launch, image)
+    line = (
+        f'PYTHONPATH="{entry["env"]["PYTHONPATH"]}" {entry["command"]}' if entry.get("env") else ""
+    )
+    if line and (note := redirect_note(line)) and note not in "\n".join(actions):
         actions.append(note)
     return actions
 

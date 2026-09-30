@@ -119,7 +119,7 @@ def test_a_symlinked_path_to_the_worktree_venv_is_still_swapped(checkout, monkey
 
 def test_a_bare_common_dir_beside_an_unrelated_package_is_not_a_primary(tmp_path):
     bare = tmp_path / "ddflow.git"
-    _git(tmp_path, "init", "-q", "--bare", str(bare))
+    _git(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
     seed = tmp_path / "seed"
     _git(tmp_path, "init", "-q", "-b", "main", str(seed))
     _git(
@@ -138,7 +138,8 @@ def test_a_bare_common_dir_beside_an_unrelated_package_is_not_a_primary(tmp_path
     (tmp_path / "ddflow").mkdir()
     (tmp_path / "ddflow" / "__init__.py").write_text("")
     tree = tmp_path / "wt"
-    _git(bare, "worktree", "add", "-q", str(tree), "main")
+    # A new branch: `main` is the bare repo's HEAD, which some git setups refuse to add.
+    _git(bare, "worktree", "add", "-q", "-b", "wt", str(tree), "main")
     assert PATHS.primary_checkout(tree) is None
 
 
@@ -208,3 +209,22 @@ def test_with_no_primary_venv_an_outside_interpreter_that_imports_it_is_used(che
     monkeypatch.setattr(sys, "_base_executable", outside, raising=False)
     assert PATHS.launch_python() == outside
     assert "WARNING" not in E.redirect_note()
+
+
+def test_an_undecodable_gitdir_pointer_is_no_primary(tmp_path):
+    tree = tmp_path / "wt"
+    tree.mkdir()
+    (tree / ".git").write_bytes(b"gitdir: /tmp/\xff\xfe/worktrees/x\n")
+    assert PATHS.primary_checkout(tree) is None
+
+
+def test_a_probed_interpreter_is_not_called_the_primarys(checkout, monkeypatch):
+    primary, tree = checkout
+    (primary / "ddflow" / "surfaces").mkdir()
+    (primary / "ddflow" / "surfaces" / "__init__.py").write_text("")
+    (primary / "ddflow" / "surfaces" / "mcp.py").write_text("")
+    outside = sys.executable
+    monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
+    monkeypatch.setattr(sys, "_base_executable", outside, raising=False)
+    note = E.redirect_note()
+    assert f"the interpreter {outside}" in note and "primary's interpreter" not in note
