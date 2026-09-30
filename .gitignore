@@ -18,11 +18,13 @@ __pycache__/
 # ddflow task worktrees (git worktrees; never commit them)
 .ddflow-worktrees/
 
-# Machine-local ddflow configuration: YOUR services (reviewer endpoints, API-key variable
-# names) and machine sizing (test workers). ddflow reads these beside .ddflow/config.toml;
-# they are never committed, so the repository stays generic.
+# Machine-local ddflow configuration -- YOUR services (reviewer endpoints, API-key variable
+# names) and machine sizing (test workers) -- lives in .ddflow/local/{config,gates,
+# reviewers}.toml, read last and git-ignored by .ddflow/.gitignore (`local/`). A top-level
+# .ddflow/reviewers.toml is ignored too, as a guard: endpoints are never project policy.
+# .ddflow/gates.toml is NOT ignored: it is where a project declares its gates, human
+# checkpoints included, and a declaration nobody else can see declares nothing.
 .ddflow/reviewers.toml
-.ddflow/gates.toml
 # roborev's agent/model/reasoning (decision D-roborev-local); git carries .roborev.toml.example.
 .roborev.toml
 
