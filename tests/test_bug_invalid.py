@@ -195,9 +195,22 @@ def test_history_names_the_closure_invalid_not_fixed(repo):
 
 
 def test_closing_as_invalid_is_progress_but_not_a_fix():
+    """The no-progress detector counts it -- a finding was resolved -- but nothing that
+    reads a bug as fixed may: no `fixed_at`, no regression test, resolution 'invalid'."""
     from ddflow.core.progress import PROGRESS_KINDS
 
     assert "bug.invalid" in PROGRESS_KINDS
+    st = fold(
+        [
+            ev(1, "bug.found", "B1", {"summary": "s"}),
+            ev(2, "bug.found", "B2", {"summary": "t"}),
+            ev(3, "bug.invalid", "B1", {"reason": "r", "evidence": "t.py::t"}),
+        ]
+    )
+    fixed = [b.id for b in st.bugs.values() if b.fixed_at or b.resolution == "fixed"]
+    assert fixed == [], "a false finding was counted as a fix"
+    assert not st.bugs["B1"].regression_test
+    assert [b.id for b in st.bugs.values() if b.open] == ["B2"]
 
 
 def test_an_invalid_bug_no_longer_marks_its_item_a_bug_fix():
