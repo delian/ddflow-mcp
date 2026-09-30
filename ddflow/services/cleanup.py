@@ -13,6 +13,15 @@ So this module **classifies before it acts**, and the classification is the prod
 * ``dirty``       — uncommitted edits. NEVER touched automatically; a human looks.
 * ``orphan``      — a worktree no queue item claims. Reported with its contents.
 * ``stale_branch``— a branch with our prefix and no worktree. Removable if merged.
+* ``held``        — its item has a LIVE lease: an agent is working in it now.
+* ``adopted``     — the agent harness's own tree (``Item.adopted``), not ddflow's.
+
+``held`` and ``adopted`` are never acted on, whatever git says about them. Git cannot
+tell a finished tree from a fresh one: a tree claimed a second ago is clean and nothing
+ahead of the base, which is exactly what "merged, safe to remove" looked like -- and
+``--apply`` deleted a live agent's tree out from under it (B5a009b185a). Both notions
+are ``recover``'s own: ``State.active_leases`` with ``lease.grace_s`` for live, and
+``Item.adopted`` for a tree ddflow bound but did not make.
 
 Only ``merged`` is ever acted on without asking, and ``--apply`` additionally merges
 ``unmerged`` trees whose item the queue already considers complete. Everything else is
@@ -22,6 +31,8 @@ the report) decides, having been told what is actually in each tree.
 
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -73,14 +84,73 @@ class Plan:
         return [t for t in self.trees + self.stale_branches if t.action]
 
 
+@dataclass
+class _Protected:
+    """Trees and branches that are someone else's to remove, as ``item -- holder``."""
+
+    held_paths: dict[str, str] = field(default_factory=dict)
+    held_branches: dict[str, str] = field(default_factory=dict)
+    adopted_paths: dict[str, str] = field(default_factory=dict)
+
+    def why(self, path: str, branch: str) -> tuple[str, str]:
+        """(kind, reason) when the tree at ``path`` on ``branch`` must be left alone."""
+        who = self.held_paths.get(_key(path)) or (branch and self.held_branches.get(branch))
+        if who:
+            return "held", (
+                f"LEAVE ALONE — item {who} holds a live lease on it: an agent is working "
+                f"here now, and a fresh claim looks exactly like finished work."
+            )
+        who = self.adopted_paths.get(_key(path))
+        if who:
+            return "adopted", (
+                f"LEAVE ALONE — adopted by item {who}: the agent harness's own working "
+                f"tree, not ddflow's. The harness removes it, not cleanup."
+            )
+        return "", ""
+
+
+def _key(path: str) -> str:
+    return str(Path(path).resolve()) if path else ""
+
+
+def _protected(root: Path, cfg: Config, state: State, now: float | None = None) -> _Protected:
+    """What ``recover`` already treats as not-ours: live leases and adopted trees.
+
+    Matched by PATH as well as branch. The item index below is by branch, but an adopted
+    tree sits on whatever branch the harness chose, and a lease records the tree it was
+    taken on; a branch-only match missed both whenever the two disagreed.
+    """
+    now = time.time() if now is None else now
+    p = _Protected()
+    for iid, lease in state.active_leases(now, cfg.lease.grace_s).items():
+        it = state.items.get(iid)
+        who = f"{iid} (held by {lease.holder or 'unknown'})"
+        for stored in (lease.worktree, it.worktree if it else ""):
+            if stored:
+                p.held_paths[_key(str(W.load_path(root, stored)))] = who
+        for br in (lease.branch, it.branch if it else ""):
+            if br:
+                p.held_branches[br] = who
+    for it in state.items.values():
+        # Removed and finished items included: the harness's tree outlives ddflow's
+        # interest in it, and `merge` keeps an adopted tree for the same reason.
+        if it.adopted and it.worktree:
+            p.adopted_paths.setdefault(_key(str(W.load_path(root, it.worktree))), it.id)
+    return p
+
+
 def survey(repo: Path, cfg: Config, state: State) -> Plan:
     """Classify every ddflow worktree and branch. Reads only; changes nothing."""
     root = W.repo_root(repo)
     base = cfg.worktree.base_ref or W.default_branch(root)
     prefix = cfg.worktree.branch_prefix
     plan = Plan()
+    guard = _protected(root, cfg, state)
 
     by_branch = {it.branch: it for it in state.items.values() if it.branch}
+    by_path = {
+        _key(str(W.load_path(root, it.worktree))): it for it in state.items.values() if it.worktree
+    }
     seen_branches: set[str] = set()
 
     for entry in W.list_worktrees(root):
@@ -92,7 +162,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             continue
         seen_branches.add(branch)
         t = TreeState(name=Path(path).name, path=path, branch=branch)
-        item = by_branch.get(branch)
+        item = by_branch.get(branch) or by_path.get(_key(path))
         if item:
             t.item, t.item_state = item.id, item.state
         wt = W.Worktree(item=t.item or t.name, path=Path(path), branch=branch, base=base)
@@ -100,7 +170,12 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         t.ahead = max(0, W.ahead(wt))
         t.behind = max(0, W.behind(wt))
 
-        if t.dirty_files:
+        protected, reason = guard.why(path, branch)
+        if protected == "held" or (protected and not t.dirty_files):
+            # A held tree's edits are its holder's work in progress, not a question for
+            # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
+            t.kind, t.action, t.done = protected, "", reason
+        elif t.dirty_files:
             t.kind = "dirty"
             t.action = ""
             t.done = (
@@ -129,14 +204,22 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         plan.trees.append(t)
 
     for branch in W.branches(root, prefix):
-        if branch in seen_branches:
+        # The base branch is never "stale": with an empty prefix it was offered for
+        # deletion and survived only because the primary had it checked out.
+        if branch in seen_branches or branch == base:
             continue
         merged = W.is_merged(root, branch, base)
         t = TreeState(name=branch, branch=branch, kind="stale_branch")
         item = by_branch.get(branch)
         if item:
             t.item, t.item_state = item.id, item.state
-        if merged:
+        who = guard.held_branches.get(branch)
+        if who:
+            # `claim` takes the lease before the tree exists, and `--no-worktree` never
+            # makes one: a leased branch with no tree is its holder's, not a leftover.
+            t.kind = "held"
+            t.done = f"LEAVE ALONE — item {who} holds a live lease on this branch."
+        elif merged:
             t.action = "delete_branch"
             t.done = f"branch with no worktree, fully merged into {base} — safe to delete"
         else:
@@ -148,12 +231,32 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     return plan
 
 
-def apply(repo: Path, cfg: Config, plan: Plan) -> list[str]:
-    """Perform only the safe actions. Dirty trees are never touched, whatever is set."""
+def apply(
+    repo: Path, cfg: Config, plan: Plan, fresh: Callable[[], State] | None = None
+) -> list[str]:
+    """Perform only the safe actions. Dirty trees are never touched, whatever is set.
+
+    ``fresh`` re-reads the queue, and is asked again before EACH destructive step: the
+    plan is as old as the survey, which ran git in every tree, and a merge here takes
+    seconds more. An agent that claims a surveyed tree meanwhile must still find it
+    there. Without ``fresh`` only the survey's view protects anything.
+    """
     root = W.repo_root(repo)
     base = cfg.worktree.base_ref or W.default_branch(root)
     done: list[str] = []
+
+    def still_free(t: TreeState) -> bool:
+        if fresh is None:
+            return True
+        kind, reason = _protected(root, cfg, fresh()).why(t.path, t.branch)
+        if kind:
+            t.action, t.kind, t.done = "", kind, reason
+            done.append(f"kept {t.name}: {kind} since the survey")
+        return not kind
+
     for t in plan.trees:
+        if t.action and not still_free(t):
+            continue
         if t.action == "merge":
             wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
             r = W.merge(repo, cfg, wt, message=f"merge {t.item or t.branch} (cleanup)")
@@ -164,6 +267,8 @@ def apply(repo: Path, cfg: Config, plan: Plan) -> list[str]:
             if not r.ok:
                 continue
             t.action = "remove"
+            if not still_free(t):
+                continue
         if t.action == "remove":
             wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
             r = W.remove(repo, cfg, wt)
@@ -172,6 +277,13 @@ def apply(repo: Path, cfg: Config, plan: Plan) -> list[str]:
                 + ("" if r.ok else f": {(r.err or r.out).splitlines()[0][:120]}")
             )
     for t in plan.stale_branches:
+        if t.action == "delete_branch" and fresh is not None:
+            who = _protected(root, cfg, fresh()).held_branches.get(t.branch)
+            if who:
+                t.action, t.kind = "", "held"
+                t.done = f"LEAVE ALONE — item {who} holds a live lease on this branch."
+                done.append(f"kept branch {t.branch}: held since the survey")
+                continue
         if t.action == "delete_branch":
             r = W.git(root, "branch", "-d", t.branch)
             done.append(f"{'deleted' if r.ok else 'kept'} branch {t.branch}")
