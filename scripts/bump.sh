@@ -120,6 +120,16 @@ stale = [p["identifier"] for p in got["packages"]
          if p.get("registryType") == "oci" and not p["identifier"].endswith(f":{new}")]
 problems = []
 sys.path.insert(0, ".")
+# Bytecode from an EMPTY cache, i.e. compiled from the files just written. The tree's own
+# __pycache__ is trusted whenever source size and whole-second mtime match, and a patch
+# bump keeps the size: two bumps in one second read the previous version's bytecode and
+# reported every correct write as "did not take" (Bf898a7f3b8).
+import atexit
+import shutil
+import tempfile
+
+sys.pycache_prefix = tempfile.mkdtemp(prefix="bump-pycache-")
+atexit.register(shutil.rmtree, sys.pycache_prefix, True)
 import importlib
 
 import ddflow.surfaces.mcp as _mcp
