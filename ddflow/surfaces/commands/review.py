@@ -30,6 +30,8 @@ def cmd_review(a, c: Ctx) -> int:
         context=a.context or "",
         base=a.base or "",
         commit=a.commit or "",
+        branch=a.branch or "",
+        called_from=c.called_from,
         # Streamed as it happens. Silence for two minutes reads as a hang, and an agent
         # watching a hung tool kills it.
         on_progress=lambda line: print(line, flush=True),

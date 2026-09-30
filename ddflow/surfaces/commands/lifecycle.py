@@ -136,6 +136,11 @@ def _waiting(rows: list, head: str) -> str:
 def cmd_heartbeat(a, c: Ctx) -> int:
     # WHERE THE CALLER IS: the item's own tree renews its lease whoever claimed it.
     out = A.heartbeat(c.repo, a.id, agent=c.requested_agent, called_from=c.called_from)
+    if out.data.get("globs_withheld"):
+        print(
+            f"  lease renewed WITHOUT {a.id}'s newer globs: {out.data['globs_withheld']}",
+            file=sys.stderr,
+        )
     waiters = out.data.get("waiters", [])
     c.out(
         (f"renewed {a.id}" if out.data["renewed"] else out.reason)
@@ -144,7 +149,7 @@ def cmd_heartbeat(a, c: Ctx) -> int:
             f"{len(waiters)} agent(s) are waiting on {a.id}. Finishing, narrowing its "
             f"globs, or releasing it wakes them:",
         ),
-        out.body(("renewed", "waiters")),
+        out.body(("renewed", "waiters", "globs_withheld")),
     )
     return out.exit
 
@@ -256,6 +261,8 @@ def cmd_merge(a, c: Ctx) -> int:
         allow_dirty=a.allow_dirty,
         keep=a.keep,
         model=a.model or "",
+        branch=a.branch or "",
+        called_from=c.called_from,
         agent=c.requested_agent,
     )
     if out.exit == REFUSED and out.data.get("dirty"):
@@ -292,6 +299,15 @@ def cmd_merge(a, c: Ctx) -> int:
         return OK
     if out.data["kept_reason"]:
         print(f"  {out.data['kept_reason']}", file=sys.stderr)
+    outside = out.data.get("outside_globs") or []
+    if outside:
+        print(
+            f"  WARNING: {len(outside)} landed path(s) outside {a.id}'s globs -- another "
+            f"item's work on the same branch?",
+            file=sys.stderr,
+        )
+        for p in outside[:MAX_LISTED_FILES]:
+            print(f"    {p}", file=sys.stderr)
     for extra in out.data["back_merged"]:
         print(f"  back-merged into {extra}", file=sys.stderr)
     c.out(
@@ -302,7 +318,7 @@ def cmd_merge(a, c: Ctx) -> int:
 
 
 #: The wire body of `merge` on both surfaces. `pr` is empty for a local merge.
-MERGE_PAYLOAD = ("id", "sha", "base", "pr")
+MERGE_PAYLOAD = ("id", "sha", "base", "pr", "branch", "outside_globs")
 
 
 def cmd_brief(a, c: Ctx) -> int:

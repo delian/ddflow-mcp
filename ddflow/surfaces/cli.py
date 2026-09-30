@@ -502,6 +502,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     mg.add_argument("--keep", action="store_true")
     mg.add_argument("--allow-dirty", action="store_true")
     mg.add_argument(
+        "--branch",
+        default="",
+        help="for an item claimed without a worktree: the branch to land (default: the one "
+        "checked out in the worktree you are standing in)",
+    )
+    mg.add_argument(
         "--model",
         default="",
         help="the AUTHOR's model. In PR mode completion happens later, at `pr sync`, and "
@@ -939,6 +945,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--commit",
         default="",
         help="review this one landed commit (vs its first parent) instead of the item's branch",
+    )
+    rw.add_argument(
+        "--branch",
+        default="",
+        help="review this branch against base -- for an item claimed without a worktree "
+        "(default: the branch checked out in the worktree you are standing in)",
     )
     rw.set_defaults(fn=cmd_review)
 
