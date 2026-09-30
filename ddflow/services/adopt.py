@@ -948,3 +948,8 @@ def get_server(data: dict, shape: str, name: str) -> Any:
     """What ``data`` currently stores for ``name``, or None. The read half of `place_server`."""
     container = _server_container(data, shape, create=False)
     return (container or {}).get(name)
+
+
+def get_servers(data: dict, shape: str) -> dict:
+    """Every server ``data`` stores, by name: the container `get_server` reads, whole."""
+    return dict(_server_container(data, shape, create=False) or {})

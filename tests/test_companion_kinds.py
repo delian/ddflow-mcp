@@ -103,9 +103,11 @@ def test_gate_coverage_counts_an_installed_cli_tool(tmp_path):
     report `rules` as having nothing behind it while the tool serving `rules` sits on
     the PATH — the report contradicting the line directly above it.
     """
-    cli = CO.Status(_companion(id="optmem", kind="cli", gates=["rules"]), True, "", "")
-    cover = CO.gate_coverage(tmp_path, [cli], ["rules", "implement"])
-    assert cover["rules"] == ["optmem"], "an installed cli companion did not count"
+    # `dedupe`, not `rules`: ddflow serves `rules` itself (`BUILTIN_COVERAGE`), so a
+    # companion-only assertion needs a gate nothing built in stands behind.
+    cli = CO.Status(_companion(id="optmem", kind="cli", gates=["dedupe"]), True, "", "")
+    cover = CO.gate_coverage(tmp_path, [cli], ["dedupe", "implement"])
+    assert cover["dedupe"] == ["optmem"], "an installed cli companion did not count"
     assert cover["implement"] == []
 
 
@@ -117,17 +119,17 @@ def test_gate_coverage_does_not_count_a_cli_tool_that_is_absent_or_unknown(tmp_p
     class, which is the thing gate coverage exists to expose.
     """
     for installed in (False, None):
-        st = CO.Status(_companion(id="optmem", kind="cli", gates=["rules"]), installed, "", "")
-        cover = CO.gate_coverage(tmp_path, [st], ["rules"])
-        assert cover["rules"] == [], f"a cli companion with installed={installed!r} counted"
+        st = CO.Status(_companion(id="optmem", kind="cli", gates=["dedupe"]), installed, "", "")
+        cover = CO.gate_coverage(tmp_path, [st], ["dedupe"])
+        assert cover["dedupe"] == [], f"a cli companion with installed={installed!r} counted"
 
 
 def test_an_unregistered_mcp_server_still_does_not_count(tmp_path):
     """Unchanged behaviour, asserted so the fix above cannot quietly widen to servers:
     an MCP server that is installed but not registered is one command away from being
     usable and is NOT usable yet."""
-    st = CO.Status(_companion(id="roborev", gates=["rules"]), True, "", "")
-    assert CO.gate_coverage(tmp_path, [st], ["rules"])["rules"] == []
+    st = CO.Status(_companion(id="roborev", gates=["dedupe"]), True, "", "")
+    assert CO.gate_coverage(tmp_path, [st], ["dedupe"])["dedupe"] == []
 
 
 def test_companions_add_refuses_a_cli_tool_and_says_why(repo):
