@@ -44,6 +44,141 @@ def package_parent() -> Path:
     return package_dir().parent
 
 
+#: Overrides where durable launch lines point. ddflow's own tests set it to the tree
+#: under test, so hooks they install exercise THAT code, not the primary checkout's.
+LAUNCH_ROOT_ENV = "DDFLOW_LAUNCH_ROOT"
+
+
+def primary_checkout(tree: Path) -> Path | None:
+    """The primary checkout of `tree` when `tree` is a LINKED git worktree holding a
+    ddflow source tree whose primary holds one too; else None.
+
+    Read from the files git keeps (`<tree>/.git` is a `gitdir:` pointer, the gitdir
+    names its `commondir`) rather than by running git: this is asked while writing a
+    hook, in whatever environment that happens.
+    """
+    marker = Path(tree) / ".git"
+    if not marker.is_file():
+        return None
+    try:
+        text = marker.read_text("utf-8").strip()
+        if not text.startswith("gitdir:"):
+            return None
+        gitdir = (Path(tree) / text.split(":", 1)[1].strip()).resolve()
+        common = (gitdir / (gitdir / "commondir").read_text("utf-8").strip()).resolve()
+    except (OSError, ValueError):
+        # ValueError: a path git wrote as raw non-UTF-8 bytes. Unreadable is "no primary",
+        # never a crash in the middle of writing a hook.
+        return None
+    # A bare or `--separate-git-dir` common dir has no checkout beside it: its parent
+    # is just a directory, and one holding an unrelated `ddflow/` is not a primary.
+    if common.name != ".git":
+        return None
+    primary = common.parent
+    if primary == Path(tree).resolve() or not (primary / "ddflow" / "__init__.py").is_file():
+        return None
+    return primary
+
+
+def launch_parent() -> Path:
+    """What durable launch lines -- an MCP entry, a git hook, a SessionStart hook --
+    put on `PYTHONPATH`.
+
+    `package_parent()`, except in a LINKED worktree of ddflow: that tree is removed when
+    its branch merges, and every line pointing into it then fails -- the MCP server
+    cannot import and each git hook fails closed. Its primary checkout outlives it and
+    is where the latest code lands, so a line written from a worktree points there
+    (bug B-adopt-worktree-path). `DDFLOW_LAUNCH_ROOT` overrides both.
+    """
+    import os
+
+    forced = os.environ.get(LAUNCH_ROOT_ENV)
+    if forced:
+        return Path(forced)
+    here = package_parent()
+    return primary_checkout(here) or here
+
+
+def launch_python() -> str:
+    """The interpreter for those lines: `sys.executable`, unless it lives inside the
+    worktree `launch_parent()` redirected away from -- a per-worktree venv goes with the
+    worktree -- in which case the primary checkout's own venv, when it has one, else an
+    interpreter outside the worktree that is PROBED to import the primary's MCP server,
+    else `sys.executable`, which `enforce.redirect_note` then warns about."""
+    import os
+    import sys
+
+    here, target = package_parent(), launch_parent()
+    # The venv DIRECTORY resolved, not the interpreter: a venv's python is a symlink to
+    # the system one, while its directory is what lives (or not) inside the worktree --
+    # possibly reached through a symlinked path (`/home/delian/src` is `/ai/delian/src`).
+    written = Path(os.path.abspath(sys.executable))
+    exe_dir = written.parent.resolve()
+    if target == here:
+        return sys.executable
+    if not exe_dir.is_relative_to(here):
+        # The venv itself lives outside the worktree -- but the path to it may still run
+        # THROUGH the worktree (`/wt/.venv -> /shared/venv`), and that path dies with it.
+        # Write the venv's real location instead, keeping the interpreter's own name.
+        # Ancestors compared RESOLVED, one by one: the worktree may itself be reached by
+        # an alias (`/home/delian/src` is `/ai/delian/src`).
+        via_tree = any(a.resolve() == here for a in written.parents)
+        return str(exe_dir / written.name) if via_tree else sys.executable
+    for cand in (target / ".venv" / "bin" / "python3", target / ".venv" / "bin" / "python"):
+        if cand.is_file():
+            return str(cand)
+    # No venv in the primary: any interpreter OUTSIDE the worktree that can import the
+    # primary's MCP server -- deps and all -- outlives the worktree. Probed, because a
+    # base python without the dependencies would fail as surely as a deleted one.
+    import shutil
+
+    outside = [getattr(sys, "_base_executable", ""), shutil.which("python3") or ""]
+    for cand in dict.fromkeys(c for c in outside if c):
+        cand_dir = Path(os.path.abspath(cand)).parent.resolve()
+        if not cand_dir.is_relative_to(here) and _imports_ddflow(cand, str(target)):
+            return cand
+    return sys.executable
+
+
+def _imports_ddflow(python: str, root: str) -> bool:
+    """Whether `python` imports ddflow's MCP server from `root` (cheap, bounded)."""
+    import os
+    import subprocess
+
+    from .proc import run
+
+    env = {**os.environ, "PYTHONPATH": root}
+    try:
+        return (
+            # Through `proc.run`: stdin detached, since in the MCP server stdin IS the
+            # JSON-RPC stream and a child holding it would eat the next request.
+            run(
+                [python, "-c", "import ddflow.surfaces.mcp"],
+                env=env,
+                # `-c` puts the working directory first on sys.path: run it FROM the root,
+                # or whatever ddflow sits in the caller's directory answers instead.
+                cwd=root,
+                capture_output=True,
+                timeout=30,
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def redirected_from() -> Path | None:
+    """The linked worktree launch lines were redirected away from -- only when the
+    redirect is the worktree one, never for an explicit `DDFLOW_LAUNCH_ROOT`."""
+    import os
+
+    if os.environ.get(LAUNCH_ROOT_ENV):
+        return None
+    here = package_parent()
+    primary = primary_checkout(here)
+    return here if primary is not None and primary == launch_parent() else None
+
+
 def templates_dir() -> Path:
     """Shipped template data. Present in a wheel; `tests/test_packaging.py` proves it.
 

@@ -189,6 +189,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [Introduction](#introduction)
 - [How do I…?](#how-do-i)
 - [Help: what it can do, and the workflow](#help-what-it-can-do-and-the-workflow)
+- [The default workflow at a glance](#the-default-workflow-at-a-glance)
 - [Wiring it into your agent](#wiring-it-into-your-agent)
 - [From plan mode to the queue](#from-plan-mode-to-the-queue)
 - [When a companion is missing](#when-a-companion-is-missing)
@@ -273,6 +274,80 @@ a wrong answer trusts it. Every command a page names must exist as a CLI leaf or
 tool; every topic the index offers must resolve; and every tool must fall into a group,
 so a new capability has to be classified rather than quietly dropped from an inventory
 that claims to be complete.
+
+---
+
+## The default workflow at a glance
+
+Three pictures of what ships by default. Every step is configurable (see
+[The workflow, and changing it](#the-workflow-and-changing-it)); `ddflow workflow`
+prints what *this* project actually runs.
+
+**The agent's loop.** One item at a time: pick it, lease it, clear its gates, land it.
+Each arrow labelled with an exit code is what the tool says, not a convention —
+`2` means nothing to do, `3` means refused, and neither is ever read as success.
+
+```mermaid
+flowchart TD
+    S["Session start<br/>ddflow brief · recover"] --> R{"Crashed agent's<br/>work left over?"}
+    R -- yes --> SV["Inspect the worktree, salvage,<br/>ddflow release"] --> N
+    R -- no --> N["ddflow next"]
+    N -- "exit 2: nothing ready" --> W["ddflow wait<br/>sleeps until a holder lets go"] --> N
+    N -- "exit 0: items ready" --> C["ddflow claim<br/>lease + isolated git worktree"]
+    C -- "exit 3: refused<br/>(lease or file-glob conflict)" --> N
+    C --> P["Task pipeline<br/>satisfy every gate in order"]
+    P --> M["ddflow merge<br/>lands the branch from the primary checkout"]
+    M --> D["ddflow complete<br/>checks every gate has an outcome<br/>+ a different-family review"]
+    D -- "exit 3: refused" --> P
+    D -- done --> N
+```
+
+With `[flow].integration = "pr"`, `merge` opens a pull request and parks the item in
+review instead; `next` completes it when the request merges.
+
+**The task pipeline.** Ten gates, in order. Heavy borders are the gates
+`gates.required` names by default (`implement`, `unit_tests`, `merge`); the rest still
+need *some* outcome — passed, failed, unavailable, partial, or an explicit skip with a
+reason — because silence is not a pass.
+
+```mermaid
+flowchart LR
+    subgraph A["You, the agent"]
+        direction TB
+        g1["1 · research<br/>falsifiable claim + probe"] --> g2["2 · rules<br/>ddflow brief --item"] --> g3["3 · implement<br/>in the item's worktree"]
+    end
+    subgraph X["A different model family"]
+        direction TB
+        g4["4 · rubber_duck<br/>try to refute it"] --> g5["5 · critic<br/>diff vs. stated intent"]
+    end
+    subgraph T["Tooling"]
+        direction TB
+        g6["6 · standards<br/>linters, architecture"] --> g7["7 · unit_tests<br/>the suite, executed"]
+    end
+    subgraph B["You, again"]
+        direction TB
+        g8["8 · bug_hunt<br/>recurring bug classes"] --> g9["9 · dedupe<br/>already exists?"]
+    end
+    g10(["10 · merge<br/>ddflow lands it"])
+    A --> X --> T --> B --> g10
+
+    classDef req stroke-width:3px
+    class g3,g7,g10 req
+```
+
+**The phase pipeline.** A phase wraps its tasks and checks the whole before it lands:
+
+```mermaid
+flowchart LR
+    p1["research<br/>the phase's open questions"] --> p2["tasks<br/>each runs its own<br/>ten-gate pipeline,<br/>in parallel where<br/>globs allow"]
+    p2 --> p3["unit_tests"] --> p4["bug_hunt"] --> p5["dedupe"]
+    p5 --> p6["live_test<br/>run the real thing"] --> p7["corrections"] --> p8["docs<br/>README and docs<br/>match the change"] --> p9(["merge"])
+```
+
+Details: [The task pipeline](#the-task-pipeline) ·
+[The phase pipeline](#the-phase-pipeline) ·
+[Parallelism and coordination](#parallelism-and-coordination) ·
+[Crash recovery](#crash-recovery).
 
 ---
 
