@@ -18,5 +18,7 @@ uv pip install --quiet --python "$out/probe/bin/python" "$out"/dist/*.whl
 # sys.path, and run from the repository root it imports the SOURCE tree -- which always has
 # its templates -- instead of the wheel this probe exists to check.
 cd "$out"
-probe/bin/python -m ddflow --version
+# The console script a user types, not `python -m ddflow`: `__main__` can import fine while
+# the [project.scripts] target is misspelled, and only the shim would say so.
+probe/bin/ddflow --version
 probe/bin/python -c 'from ddflow.infra.paths import templates_dir; import ddflow, sys; d=templates_dir(); m=[n for n in ("companions.toml","prompts") if not (d/n).exists()]; sys.exit(f"missing package data: {m}" if m else 0) if "site-packages" in ddflow.__file__ else sys.exit(f"probed the source tree, not the wheel: {ddflow.__file__}")'
