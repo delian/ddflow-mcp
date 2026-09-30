@@ -61,7 +61,8 @@ def test_a_project_keeps_its_own_trailer_keys(repo):
     )
     assert _commit(repo, "a.txt", "x\n\nPhase: OPIK.2").returncode == 0
     assert _commit(repo, "b.txt", "docs\n\nPhase-ships: none").returncode == 0
-    refused = _commit(repo, "c.txt", "x\n\nItem: OPIK.3")
+    # A REAL id under a key the project does not use: refused for the key alone.
+    refused = _commit(repo, "c.txt", "x\n\nItem: OPIK.2")
     assert refused.returncode != 0, "a key the project does not use satisfied the check"
     assert "`Phase: <id>` or `Phase-ships: none`" in refused.stderr
 
