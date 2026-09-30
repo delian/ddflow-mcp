@@ -68,6 +68,7 @@ from .commands.operations import (
     cmd_external,
     cmd_import,
     cmd_pins,
+    cmd_precommit,
     cmd_tests,
 )
 from .commands.queue import cmd_phase_add, cmd_resolve, cmd_split, cmd_task_add
@@ -757,6 +758,15 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bx.add_argument("--lesson-title", default="")
     bx.add_argument("--lesson-rule", default="")
     bx.set_defaults(fn=cmd_bug)
+    bv = bg_s.add_parser(
+        "invalid", help="close a bug as a FALSE finding (never as fixed), with why and the probe"
+    )
+    bv.add_argument("id")
+    bv.add_argument("--reason", required=True, help="why the finding is false")
+    bv.add_argument(
+        "--evidence", default="", help="the probe command or test node id that showed it"
+    )
+    bv.set_defaults(fn=cmd_bug)
 
     se = s.add_parser("session")
     se_s = se.add_subparsers(dest="session_cmd", required=True)
@@ -863,6 +873,23 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     ts.add_argument("--item", default="", help="an item id: use its worktree and base")
     ts.add_argument("--base", default="", help="compare against this ref (default: the base)")
     ts.set_defaults(fn=cmd_tests)
+
+    pc = s.add_parser(
+        "precommit",
+        help="propose a .pre-commit-config.yaml for this repository's stacks "
+        "(writes nothing without --write)",
+    )
+    pc.add_argument(
+        "--ddflow-cmd",
+        default="ddflow",
+        help="how the proposed local hooks reach ddflow (default: `ddflow` on PATH)",
+    )
+    pc.add_argument(
+        "--write",
+        action="store_true",
+        help="create .pre-commit-config.yaml; an existing one is never replaced (exit 3)",
+    )
+    pc.set_defaults(fn=cmd_precommit)
 
     rv = s.add_parser("reviewers", help="find, list and test cross-family reviewers")
     rv_s = rv.add_subparsers(dest="reviewers_cmd", required=True)

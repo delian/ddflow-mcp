@@ -268,3 +268,59 @@ def cmd_tests(a, c: Ctx) -> int:
     if d["advice"]:
         print(f"  NOTE: that command {d['advice']}")
     return out.exit
+
+
+def cmd_precommit(a, c: Ctx) -> int:
+    """A `.pre-commit-config.yaml` proposed for this repository's stacks."""
+    out = A.precommit(c.repo, where=c.called_from, ddflow_cmd=a.ddflow_cmd, write=a.write)
+    if c.json:  # a body for EVERY outcome, failure included, and the reason beside it
+        print(json.dumps(out.body(), indent=2))
+        if out.exit != OK and out.reason:
+            print(out.reason, file=sys.stderr)  # a bare `{}` and an exit code say nothing
+        return out.exit
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
+    d = out.data
+    if "stacks" not in d:  # refused before anything was proposed
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    stacks = ", ".join(sorted(d["stacks"])) or "none detected"
+    if d["written"]:
+        print(f"Wrote {d['path']} for: {stacks}.")
+    elif out.exit != OK:
+        print(out.reason, file=sys.stderr)
+    else:
+        print(d["text"], end="")
+        where = "exists -- compare, and merge by hand" if d["exists"] else "does not exist yet"
+        print(f"\n# {d['path']} {where}. --write creates it; it never replaces one.")
+    if not d["ddflow_cmd_found"]:
+        print(
+            f"# NOTE: `{d['ddflow_cmd']}` is not found from here, and the ddflow hooks run it "
+            "on every commit: pass --ddflow-cmd with a command that reaches ddflow."
+        )
+    if not d["ddflow_cmd_recognised"]:
+        print(
+            f"# NOTE: `ddflow hooks status` finds these hooks by 'ddflow' in their command, "
+            f"so `{d['ddflow_cmd']}` will be reported NOT installed although it runs."
+        )
+    for prog, stages in d["missing"].items():
+        print(
+            f"# NOTE: {prog} is not found here; the hook that runs it would fail at "
+            f"{'/'.join(stages)} until it is installed (or drop that hook)."
+        )
+    if d["ddflow_hooks_installed"]:
+        print(
+            f"# ddflow's own {', '.join(d['ddflow_hooks_installed'])} hook(s) are installed: "
+            "`pre-commit install` would keep them as .legacy and run them beside the local "
+            "hooks. Run `ddflow hooks uninstall` first."
+        )
+    # Said on EVERY run, not only the one that wrote the file: a config nobody activated
+    # runs nothing, and the run after installing pre-commit is when this is needed.
+    activate = f"`{d['activate']}` activates it."
+    if d["installed"] is None:
+        print("# Could not tell whether pre-commit is installed: its probe did not answer.")
+    elif not d["installed"]:
+        print("# pre-commit is not installed: ask the operator, then `pipx install pre-commit`.")
+    print(f"# {activate}")
+    return out.exit

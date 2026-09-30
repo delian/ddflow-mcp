@@ -35,7 +35,7 @@ from ..config import Config
 from ..core.model import State, fold
 from ..infra.log import EventLog
 
-SCHEMA = 7
+SCHEMA = 8
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -99,7 +99,8 @@ class Store:
             status text, decided_by text, superseded_by text, at text, item text);
         create table if not exists bugs(
             id text primary key, item text, summary text, found_at text,
-            fixed_at text, regression_test text, lesson text);
+            fixed_at text, regression_test text, lesson text,
+            invalid_at text, invalid_reason text, evidence text);
         create table if not exists prompts(
             session text, seq integer, at text, item text, text text,
             role text default 'prompt',
@@ -434,8 +435,16 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
             (row.get("claim") or "")[:width],
         )
     if table == "bugs":
-        state = "fixed" if row.get("fixed_at") else "OPEN"
-        return f"{row.get('summary', '')}  [{state}]", (row.get("lesson") or "")[:width]
+        # Three states, never two: a false finding labelled "fixed" would tell the next
+        # agent a repair exists, and one labelled "OPEN" would send it to fix nothing.
+        if row.get("fixed_at"):
+            return f"{row.get('summary', '')}  [fixed]", (row.get("lesson") or "")[:width]
+        if row.get("invalid_at"):
+            why = f"invalid: {row.get('invalid_reason') or ''}"
+            if row.get("evidence"):
+                why += f" (evidence: {row['evidence']})"
+            return f"{row.get('summary', '')}  [invalid]", why[:width]
+        return f"{row.get('summary', '')}  [OPEN]", (row.get("lesson") or "")[:width]
     if table == "items":
         return f"{row.get('id', '')} — {row.get('title', '')}", (row.get("body") or "")[:width]
     if table == "memories":
@@ -534,6 +543,17 @@ def _insert_bugs(con, state, fts: bool) -> None:
         if fts:
             con.execute("insert into bugs_fts values(?,?,?)", (bg.id, bg.summary, bg.lesson))
         con.execute(
-            "insert or replace into bugs values(?,?,?,?,?,?,?)",
-            (bg.id, bg.item, bg.summary, bg.found_at, bg.fixed_at, bg.regression_test, bg.lesson),
+            "insert or replace into bugs values(?,?,?,?,?,?,?,?,?,?)",
+            (
+                bg.id,
+                bg.item,
+                bg.summary,
+                bg.found_at,
+                bg.fixed_at,
+                bg.regression_test,
+                bg.lesson,
+                bg.invalid_at,
+                bg.invalid_reason,
+                bg.evidence,
+            ),
         )

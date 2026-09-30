@@ -853,6 +853,31 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id",),
     },
+    "ddflow_bug_invalid": {
+        "description": (
+            "Close a bug as a FALSE finding -- nothing was broken, so nothing was fixed. "
+            "Never counts as a fix. Requires the reason; give the probe or test that "
+            "showed it false as evidence. Refused (exit 3) for an unknown id or a bug "
+            "already closed; a real bug is closed with `ddflow_bug_fixed` instead."
+        ),
+        "properties": {
+            "id": ("string", "Bug id.", True),
+            "reason": ("string", "Why the finding is false.", True),
+            "evidence": (
+                "string",
+                "The probe command or test node id that showed it false.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().bug_invalid(
+            repo,
+            a["id"],
+            reason=a.get("reason", "") or "",
+            evidence=a.get("evidence", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id", "invalid_reason", "evidence", "unchecked"),
+    },
     "ddflow_recover": {
         "description": (
             "Find work left behind by a crashed agent: expired leases, orphaned "
@@ -1637,6 +1662,39 @@ TOOLS: dict[str, dict[str, Any]] = {
             top=int(a.get("top") if a.get("top") is not None else 10),
         ),
         "payload": "",
+    },
+    "ddflow_precommit": {
+        "description": (
+            "A .pre-commit-config.yaml proposed for THIS repository: the stacks it "
+            "actually has (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON files add "
+            "their checks) mapped to pinned hooks, plus ddflow's own check-commit and check-msg as local "
+            "hooks, so the pre-commit framework, not ddflow, owns .git/hooks/ (ddflow's "
+            "own hooks, if installed, are named: remove them before `pre-commit "
+            "install`, which would keep them as duplicates). Proposes; installs nothing. `write` creates the file and is "
+            "REFUSED (exit 3) when one exists -- merge by hand. The body names programs "
+            "the hooks need that this machine lacks (missing) and whether the hooks can "
+            "reach ddflow (ddflow_cmd_found). Installing pre-commit itself is the operator's call."
+        ),
+        "properties": {
+            "ddflow_cmd": (
+                "string",
+                "How the local hooks reach ddflow (default `ddflow` on PATH).",
+                False,
+            ),
+            "write": ("boolean", "Create the file; never replaces an existing one.", False),
+        },
+        "api": lambda repo, a, agent, called_from=None: _api().precommit(
+            repo,
+            where=called_from,
+            # Absent means the default; an empty string is passed on, and refused, as on
+            # the CLI.
+            ddflow_cmd="ddflow" if a.get("ddflow_cmd") is None else a["ddflow_cmd"],
+            write=bool(a.get("write")),
+            agent=agent,
+        ),
+        "payload": "",
+        # The proposal is for the checkout the caller stands in, not the primary.
+        "wants_called_from": True,
     },
     "ddflow_tests": {
         "description": (
