@@ -1316,16 +1316,23 @@ def _coerce_dict(raw: str, ts: str) -> dict[str, Any]:
     contains "list", and was comma-split into a list of strings. A list-valued map has
     no comma notation that would not tear its words, so it takes JSON only.
     """
-    lists = f'expected a JSON object of lists, e.g. {{"Phase-ships": ["none"]}}; got {raw!r}'
+    if not raw.strip():
+        return {}  # "" is an empty map, as it is an empty list for a list knob
+    lists = (
+        f'expected a JSON object of lists of strings, e.g. {{"Phase-ships": ["none"]}}; got {raw!r}'
+    )
     parsed = _maybe_json(raw, dict)
     if parsed is not None:
         if "list" not in ts:
             return {str(k): str(v) for k, v in parsed.items()}
-        # Refused HERE, not left to a per-knob check: a string where the type says a list
-        # passed through, and only a knob that happened to have one caught it (critic).
-        if not all(isinstance(v, list) for v in parsed.values()):
+        # Refused HERE, not left to a per-knob check, and never `str()`-cast: a string
+        # where the type says a list, or `null` where it says a word (read as "None"),
+        # passed through as valid-looking strings (critic).
+        if not all(
+            isinstance(v, list) and all(isinstance(x, str) for x in v) for v in parsed.values()
+        ):
             raise ValueError(lists)
-        return {str(k): [str(x) for x in v] for k, v in parsed.items()}
+        return {str(k): list(v) for k, v in parsed.items()}
     if "list" in ts:
         raise ValueError(lists)
     pairs = [p for p in raw.split(",") if p.strip()]

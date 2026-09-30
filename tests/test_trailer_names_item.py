@@ -275,6 +275,15 @@ def test_the_waiver_map_from_the_environment(tmp_path):
     with pytest.raises(ValueError, match="object of lists"):
         _coerce_dict("Phase-ships=none", "dict[str, list[str]]")
     assert _coerce_dict('{"a": "b"}', "dict[str, str]") == {"a": "b"}
+    # Never str()-cast into a word: `null` would become "None" (critic, round 3).
+    for bad in ('{"Phase-ships": [null]}', '{"Phase-ships": [1]}', '{"Phase-ships": [["none"]]}'):
+        with pytest.raises(ValueError, match="object of lists"):
+            _coerce_dict(bad, "dict[str, list[str]]")
+    # An empty value is an empty map, as it is an empty list for a list knob.
+    assert (
+        Config.load(tmp_path, env={"DDFLOW_ENFORCE_TRAILER_WAIVERS": ""}).enforce.trailer_waivers
+        == {}
+    )
 
 
 # -- roborev on the branch ---------------------------------------------------------------
