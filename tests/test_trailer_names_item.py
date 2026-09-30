@@ -312,3 +312,19 @@ def test_an_id_in_the_body_is_not_a_trailer(repo):
     _queue(repo)
     code, out = _check(repo, "Fix the parser\n\nPhase: 160.D.4\n\n(refs: #12)\n")
     assert code == 1 and "no `Phase: <id>`" in out, out
+
+
+def test_config_set_takes_the_documented_toml_form(repo):
+    """roborev (deepseek): the knob's doc must name the form `config --set` accepts."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(
+        repo, "config", "--set", "enforce.trailer_waivers", '{ "Phase-ships" = ["none"] }'
+    )
+    assert code == 0, out + err
+    assert Config.load(repo).enforce.trailer_waivers == {"Phase-ships": ["none"]}
+    from ddflow.config import KNOB_DOCS
+
+    assert (
+        'config --set enforce.trailer_waivers \'{ "Phase-ships" = ["none"] }\''
+        in (KNOB_DOCS["enforce.trailer_waivers"])
+    )
