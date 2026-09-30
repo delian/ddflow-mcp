@@ -16,10 +16,13 @@
 # in an IDE marketplace, installable, and the wrong build. `tests/test_packaging.py`
 # catches the drift, but only after you have made it.
 #
-# The bump is also the RELEASE DECISION. `.github/workflows/publish.yml` publishes on a
-# push to main exactly when this number changes, so this is the one deliberate step in an
-# otherwise automatic pipeline. That is on purpose: PyPI refuses to re-upload a version,
-# so a release per commit is a release you cannot take back for a README typo.
+# CI RUNS THIS FOR YOU. `.github/workflows/publish.yml` bumps MINOR on every push to main
+# that changes shipped code, commits 'release X.Y.0' to main, and publishes. Run it by hand
+# only for another bump -- `major`, `patch`, an exact version: publish.yml releases a
+# declared version PyPI does not have yet AS IS, instead of bumping it again.
+#
+# uv.lock records the project's own version too, so it is re-locked here; left stale, the
+# next `uv run` rewrites it and the release commit is not what CI actually built.
 set -eu
 
 cd "$(git rev-parse --show-toplevel)"
@@ -139,14 +142,19 @@ if problems:
 print(f"{cur} -> {new}  (pyproject.toml, server.json + {len(got['packages'])} packages, SERVER_INFO, __version__)")
 PY
 
+uv lock --quiet || { echo "uv lock failed: uv.lock still records $CUR" >&2; exit 1; }
+grep -A1 '^name = "ddflow-mcp"$' uv.lock | grep -qx "version = \"$NEW\"" \
+  || { echo "uv.lock does not record $NEW after uv lock" >&2; exit 1; }
+echo "  uv.lock re-locked at $NEW"
+
 cat <<EOF
 
 Next:
 
   scripts/release.sh              # build and verify everything locally, publish nothing
   git commit -am 'release $NEW'
-  git push origin main            # CI publishes PyPI + Docker Hub + ghcr + MCP registry,
-                                  # then tags v$NEW once all of them succeeded
+  git push origin main            # CI publishes $NEW as declared (it bumps only a
+                                  # version PyPI already has), then tags v$NEW
 
 Nothing is published until that push, and nothing is tagged until it worked.
 EOF
