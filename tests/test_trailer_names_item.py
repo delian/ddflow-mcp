@@ -256,6 +256,9 @@ def test_the_waiver_map_is_validated_on_load():
         {"Phase-ships": "none"},
         {"Phase-ships": []},
         {"Phase-ships": ["none", ""]},
+        {"Phase-ships ": ["none"]},
+        {"": ["none"]},
+        {"Phase-ships:": ["none"]},
         ["Phase-ships"],
     ):
         with pytest.raises(ValueError, match="trailer_waivers"):
