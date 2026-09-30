@@ -317,3 +317,24 @@ def test_an_array_command_is_never_re_split_and_npx_p_names_the_package(tmp_path
     assert CO.launches_as(
         ctx, {"command": "npx", "args": ["-p", "@upstash/context7-mcp", "context7-mcp"]}
     )
+
+
+def test_an_id_entry_that_differs_only_in_env_is_not_called_something_else(tmp_path):
+    """Found by roborev on 0c7ed2b: the "launches something else" note fired on the id's
+    presence alone, so an id entry carrying `env` -- the same server -- was reported as a
+    different one to delete."""
+    same = {"command": "docker", "args": CODEGUIDE, "env": {"A": "b"}}
+    _mcp_json(
+        tmp_path, {"codeguide": same, "coding-guides": {"command": "docker", "args": CODEGUIDE}}
+    )
+    status, msg = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
+    assert status == "unchanged" and "something else" not in msg and "two copies" in msg, msg
+
+
+def test_register_into_a_config_with_no_server_table_writes_it(tmp_path):
+    """Refutes the critic's round-7 claim that `get_servers` can hand back None."""
+    for text in ("{}", '{"other": 1}'):
+        (tmp_path / ".mcp.json").write_text(text)
+        status, _ = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
+        assert status == "written"
+        assert "codeguide" in json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]

@@ -629,9 +629,12 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -
     for name, entry in servers.items():
         if name != c.id and launches_as(c, entry):
             msg = f"{rel} already launches {c.id} as `{name}` (the same command); left as it is"
-            if c.id in servers:
-                # Not repaired here: refreshing it would be a second copy, deleting it is
-                # the operator's call. But say so -- "unchanged" alone hid a stale entry.
+            # An entry under the id too is not repaired here: refreshing it would be a
+            # second copy, deleting it is the operator's call. But it is said -- and only
+            # what was CHECKED: an id entry differing by `env` launches the same server.
+            if c.id in servers and launches_as(c, servers[c.id]):
+                msg += f". `{c.id}` launches it too: two copies, remove one by hand"
+            elif c.id in servers:
                 msg += f". The entry under `{c.id}` launches something else: remove it by hand"
             return msg
     return ""
