@@ -17,6 +17,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import os
+import sys
 import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field, fields
@@ -1092,7 +1093,11 @@ class Config:
             path = Path(root) / ".ddflow" / "config.toml"
             if path.is_file():
                 data = tomllib.loads(path.read_text("utf-8"))
-                cfg._apply(data, "file")
+                # Lenient only when the code is ANOTHER tree's: there the file may be
+                # newer than the code. In the tree the code came from, the two are one
+                # commit, so an unknown key can only be a typo -- and skipping it (with
+                # just a warning) was how 81a52e3 let a typo in the primary stand.
+                cfg._apply(data, "file", lenient=not _is_code_tree(Path(root)))
             # The MACHINE-LOCAL layer, read last: .ddflow/local/ is git-ignored, so what
             # belongs to whoever runs this checkout -- their services, their machine's
             # sizing -- overrides the committed, generic config without ever reaching git.
@@ -1108,6 +1113,7 @@ class Config:
                     envdata.setdefault(sec, {})[f.name] = env[key]
         if envdata:
             cfg._apply(envdata, "env")
+        _warn_unknown(cfg.unknown_knobs, root)
         return cfg
 
     @classmethod
@@ -1142,16 +1148,18 @@ class Config:
     #: `tests/test_roborev_findings.py` asserts they do.
     _FOREIGN_TABLES = frozenset({"gate", "reviewer", "companion", "macro"})
 
-    def _apply(self, data: dict[str, Any], source: str) -> None:
+    def _apply(self, data: dict[str, Any], source: str, *, lenient: bool | None = None) -> None:
         # A key a config FILE carries that this code does not know is recorded and
         # skipped, never fatal. Several checkouts of one repository run different
         # versions of ddflow -- a worktree whose branch predates a knob runs its own,
         # older code against the primary's newer config -- and raising here refused every
         # command and every commit until the branch merged main, for a reason unrelated
-        # to the work (bugs Bcfc0d22a09, B9cb7dd1c3b). A typo is still loud: `doctor`
-        # reports every entry here as a problem, and the WRITE paths (source "check")
-        # still refuse an unknown key, so nothing new is written wrong.
-        lenient = source in ("file", "local")
+        # to the work (bugs Bcfc0d22a09, B9cb7dd1c3b). A typo is still loud: `load`
+        # names every entry on stderr, `doctor` reports each as a problem, the WRITE
+        # paths (source "check") still refuse an unknown key, and `load` passes
+        # lenient=False where the file and the code are the same tree's.
+        if lenient is None:
+            lenient = source in ("file", "local")
         for sec, values in data.items():
             if sec in self._FOREIGN_TABLES:
                 continue
@@ -1211,6 +1219,50 @@ class Config:
                     )
                 )
         return rows
+
+
+#: The checkout this code was imported from: `<tree>/ddflow/config.py` -> `<tree>`. For an
+#: installed ddflow it is site-packages, which is no project's root.
+_CODE_TREE = Path(__file__).resolve().parents[1]
+
+
+def _is_code_tree(root: Path) -> bool:
+    """Is `root` the very tree this code runs from -- not merely a parent of it?
+
+    Equality, not a prefix: a harness tree NESTED under the primary
+    (`.claude/worktrees/x`) has the primary as a prefix, and it is exactly the checkout
+    whose older code meets the primary's newer config (bug B9cb7dd1c3b).
+    """
+    try:
+        return root.resolve() == _CODE_TREE
+    except OSError:
+        return False
+
+
+#: (root, key) already warned about in this process. `Config.load` runs several times per
+#: command -- the CLI context, the store, the hook's checks -- and the same warning five
+#: times over reads as five problems.
+_WARNED: set[tuple[str, str]] = set()
+
+
+def _warn_unknown(keys: list[str], root: Path | None) -> None:
+    """Say, on stderr, which config keys this code skipped.
+
+    Skipping without a word is the silent-knob-drop class: 81a52e3 made an unknown key
+    load-and-skip so an older tree keeps working, but only `doctor` mentioned it, so
+    every other command ran with the knob dropped and nobody was told. stderr, so
+    `--json` output and MCP replies stay parseable.
+    """
+    new = [k for k in keys if (str(root), k) not in _WARNED]
+    if not new:
+        return
+    _WARNED.update((str(root), k) for k in new)
+    print(
+        f"ddflow: warning: {root}/.ddflow config sets {', '.join(new)}, which this ddflow "
+        f"({_CODE_TREE}) does not know; skipped. The config is newer than this code: "
+        "merge main into this tree (or, if it is a typo, fix it).",
+        file=sys.stderr,
+    )
 
 
 def _waivers_problem(v: Any) -> str:
