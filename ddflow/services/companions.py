@@ -2,9 +2,9 @@
 
 ddflow imposes an order and demands evidence. It does not *perform* the judgement
 inside most of its gates: `standards` wants an automated standards review, `research`
-wants documentation it can check a claim against, `rules` wants memory of the last time
-somebody hit this. A project that installs ddflow and stops has those gates wired to
-nothing — and because an agent gate passes on an assertion, that gap is invisible
+wants documentation it can check a claim against. (`rules` wants memory of the last
+time somebody hit this, and ddflow serves that one itself -- see `BUILTIN_COVERAGE`.) A
+project that installs ddflow and stops has the others wired to nothing — and because an agent gate passes on an assertion, that gap is invisible
 exactly the way the whole design is meant to prevent.
 
 So the gap is named. `ddflow companions` maps each gate to the servers that serve it,
@@ -33,9 +33,11 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import time
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +48,7 @@ from .adopt import (
     SHAPE_TOML,
     UnplaceableConfig,
     get_server,
+    get_servers,
     place_server,
     server_entry_for,
 )
@@ -129,6 +132,10 @@ class Status:
     installed: bool | None
     registered_in: list[str] = field(default_factory=list)
     detail: str = ""
+    #: Agent -> the server name its config launches this under. Usually the id, but a
+    #: project may have registered the same launch under its own name before ddflow
+    #: knew it (run_nemo_run's `coding-guides`), and the report names that key.
+    registered_as: dict[str, str] = field(default_factory=dict)
 
     @property
     def state(self) -> str:
@@ -308,34 +315,207 @@ def _said(output: str) -> list[str]:
     return [line for line in lines if line and not _NPM_NOISE.match(line)]
 
 
-#: Agents whose MCP config keys servers under `servers` rather than `mcpServers`.
-def registered_in(repo: Path, cid: str) -> list[str]:
-    """Which agents' MCP configs already name this server."""
-    found = []
+#: An npm package spec with a version suffix: `pkg@latest`, `@scope/pkg@1.2.3`, `pkg@^2`.
+#: The name part is npm's own charset (no `:` or `/` beyond the scope), and the rule runs
+#: only for an npm launcher (`NPM_LAUNCHERS`): run on every argument, it read the host in
+#: `postgresql://u:p@1db.example` as a version and made two databases one server.
+_NPM_TAG = re.compile(
+    r"^((?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*)@(?:latest|next|[\^~]?v?\d[\w.+-]*)$"
+)
+
+#: Launchers whose arguments name an npm package, where a version tag is not identity.
+NPM_LAUNCHERS = frozenset({"npx", "npm", "pnpm", "pnpx", "bunx", "yarn"})
+
+
+def _norm_args(cmd: str, args: list[str]) -> list[str]:
+    if Path(cmd).name not in NPM_LAUNCHERS:
+        return list(args)
+    return [m.group(1) if (m := _NPM_TAG.match(a)) else a for a in args]
+
+
+def _launch_of(entry: object) -> tuple[str, list[str]] | None:
+    """``(command, args)`` of one stored server entry, whatever the agent's shape.
+
+    opencode/Kilo keep one `command` ARRAY holding the arguments; a few configs write the
+    whole launch as one `command` string. A remote server (`url`) has no launch.
+    """
+    if not isinstance(entry, dict):
+        return None
+    cmd, args = entry.get("command"), entry.get("args") or []
+    if not isinstance(args, list):
+        return None  # checked BEFORE the array form merges it: `*5` raised, `*"a b"` split
+    if isinstance(cmd, list) and cmd and all(isinstance(x, str) for x in cmd):
+        # Already tokenised: an element holding a space is ONE token (`/Apps/My App/x`).
+        return (cmd[0], [*cmd[1:], *map(str, args)]) if cmd[0].strip() else None
+    if not isinstance(cmd, str) or not cmd.strip():
+        return None
+    # A whole launch written as one string is split -- unless the string names a file
+    # that exists, which is a path with a space in it, not a command line.
+    if not args and any(ch.isspace() for ch in cmd.strip()) and not Path(cmd).exists():
+        try:
+            cmd, *args = shlex.split(cmd)
+        except ValueError:
+            return None
+    return cmd, [str(a) for a in args]
+
+
+def launches_as(c: Companion, entry: object) -> bool:
+    """Does this stored server entry launch companion ``c``?
+
+    How strict "the same launch" is, decided once:
+
+    * the same COMMAND, compared by basename (`/usr/local/bin/npx` is `npx`);
+    * the companion's ARGUMENTS appear in the entry IN ORDER, with only flags (and the
+      value of a flag known to take one, `VALUE_FLAGS`) between them -- `docker run --rm -i -e TOKEN <image>` is still that
+      image, `docker run <other-image> <image>` is not -- and anything after them;
+    * an npm version tag is ignored on both sides (`@upstash/context7-mcp@latest`),
+      for an npm launcher only -- elsewhere `x@1.2` is not a package and not a tag;
+    * a companion that declares no arguments matches only an entry with none, or every
+      server started by the same launcher would count.
+
+    Everything else is a different server: another image or package (a package whose
+    name merely starts with the companion's is not it), another launcher, reordered
+    arguments. Environment is ignored -- it configures a server, it does not pick one.
+    """
+    if not c.is_mcp or not c.command:
+        return False
+    launch = _launch_of(entry)
+    if launch is None:
+        return False
+    cmd, args = launch
+    if Path(cmd).name != Path(c.command).name:
+        return False
+    want = _norm_args(c.command, c.args)
+    have = _norm_args(cmd, args)
+    if not want:
+        return not have
+    return _in_order_with_flags(want, have, VALUE_FLAGS.get(Path(cmd).name, frozenset()))
+
+
+#: Flags known to take their value as the NEXT argument, per launcher. Whether `-x v`
+#: is a flag and its value or a boolean flag and a positional cannot be told from the
+#: tokens, and guessing "value" let `docker run -i <other-image> <image>` pass as the
+#: companion. So only these consume a following token; any other flag is taken as
+#: boolean, and a value written `--flag=value` needs no entry here.
+_DOCKER_VALUE_FLAGS = frozenset(
+    {"-a", "--attach", "--add-host", "--annotation", "--blkio-weight", "--blkio-weight-device", "-c", "--cap-add", "--cap-drop",
+     "--cgroup-parent", "--cgroupns", "--cidfile", "--cpu-count", "--cpu-percent",
+     "--cpu-period", "--cpu-quota", "--cpu-rt-period", "--cpu-rt-runtime", "--cpu-shares",
+     "--cpus", "--cpuset-cpus", "--cpuset-mems", "--detach-keys",
+     "--device-read-bps", "--device-read-iops", "--device-write-bps", "--device-write-iops",
+     "--device", "--device-cgroup-rule", "--dns", "--dns-opt", "--dns-option", "--dns-search",
+     "--domainname", "-e", "--entrypoint", "--env", "--env-file", "--expose", "--gpus",
+     "--group-add", "-h", "--health-cmd", "--health-interval", "--health-retries",
+     "--health-start-interval", "--health-start-period", "--health-timeout", "--hostname",
+     "--ip", "--ip6", "--ipc", "--kernel-memory", "--link-local-ip",
+     "--isolation", "-l", "--label", "--label-file", "--link", "--log-driver", "--log-opt",
+     "-m", "--mac-address", "--memory", "--memory-reservation", "--memory-swap",
+     "--memory-swappiness", "--network-alias", "--pids-limit", "--mount", "--name", "--net",
+     "--network", "--oom-score-adj", "-p", "--pid", "--platform", "--publish", "--pull",
+     "--restart", "--runtime", "--security-opt", "--shm-size", "--stop-signal",
+     "--stop-timeout", "--storage-opt", "--sysctl", "--tmpfs", "-u", "--ulimit", "--user",
+     "--userns", "--uts", "-v", "--volume", "--volume-driver", "--volumes-from", "-w", "--workdir"}
+)  # fmt: skip
+VALUE_FLAGS: dict[str, frozenset[str]] = {
+    "docker": _DOCKER_VALUE_FLAGS,
+    "podman": _DOCKER_VALUE_FLAGS,
+    # Not npx: its `-p <pkg>` value IS the package that names the server, so consuming it
+    # as a flag's value hid the one token the match needs. Taken as a flag, `-p` is
+    # skipped and the package is compared like any other argument.
+}
+
+
+def _in_order_with_flags(want: list[str], have: list[str], value_flags: frozenset[str]) -> bool:
+    """``want`` appears in ``have`` in order, with only FLAGS between its items.
+
+    Between two of the companion's arguments the entry may add a flag (`-i`, `--x=y`),
+    and a flag in ``value_flags`` may bring the one value after it (`-e TOKEN`). Any
+    other bare positional there is another package or image, and the companion's own
+    name after it is only that server's argument (`npx -y server-github
+    server-filesystem` launches github). Once every item of ``want`` is matched, the
+    rest is the server's own configuration and is allowed.
+    """
+    i, takes_value = 0, False
+    for h in have:
+        if i == len(want):
+            return True
+        if takes_value:
+            takes_value = False
+        elif h == want[i]:
+            i += 1
+        elif h.startswith("-"):
+            takes_value = h in value_flags
+        else:
+            return False
+    return i == len(want)
+
+
+def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
+    """(servers by name, raw text) of one agent config; None when unreadable."""
+    try:
+        text = path.read_text("utf-8")
+    except OSError:
+        return None
+    if shape == SHAPE_TOML:
+        try:
+            servers = tomllib.loads(text).get("mcp_servers") or {}
+        except tomllib.TOMLDecodeError:
+            servers = {}
+        return (servers if isinstance(servers, dict) else {}), text
+    try:
+        data = json.loads(text or "{}")
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    # `get_servers` reads the container `get_server` and `place_server` use: ONE
+    # declaration of where servers live, so the reader cannot look somewhere the writer
+    # does not write. They used to disagree by construction, the reader checking both
+    # field names for every agent while the writer special-cased one agent by name.
+    return get_servers(data, shape), text
+
+
+def _registered_name(servers: dict, text: str, shape: str, c: Companion | str) -> str | None:
+    """The name one config launches ``c`` under: its id first, else a matching launch."""
+    cid = c if isinstance(c, str) else c.id
+    # `is not None`, not `in`: a `"codeguide": null` placeholder launches nothing.
+    if servers.get(cid) is not None or (shape == SHAPE_TOML and f"[mcp_servers.{cid}]" in text):
+        return cid
+    if isinstance(c, str):
+        return None
+    for name, entry in servers.items():
+        if launches_as(c, entry):
+            return name
+    return None
+
+
+def registrations(repo: Path, c: Companion | str) -> dict[str, str]:
+    """Agent -> the server name its MCP config registers this companion under.
+
+    Found under the companion's id, or -- given a `Companion` -- under ANY name whose
+    launch is the companion's (`launches_as`). A project that registered codeguide-mcp as
+    `coding-guides` before ddflow knew it was reported "installed but no agent is
+    configured to launch it", and `companions add` offered to write a second copy.
+    """
+    found: dict[str, str] = {}
     for key, target in AGENT_TARGETS.items():
         if not target.config:
             continue  # no project-level MCP file to look in
         path = Path(repo) / target.config
         if not path.is_file():
             continue
-        text = path.read_text("utf-8")
-        if target.shape == SHAPE_TOML:
-            if f"[mcp_servers.{cid}]" in text:
-                found.append(key)
+        read = _servers_in(path, target.shape)
+        if read is None:
             continue
-        try:
-            data = json.loads(text or "{}")
-        except json.JSONDecodeError:
-            continue
-        # `get_server` and `place_server` are ONE declaration of where servers live, so
-        # the reader cannot look somewhere the writer does not write. They used to
-        # disagree by construction: the reader checked both field names for every agent
-        # while the writer compared the agent name to the literal "copilot", so an agent
-        # using a third shape would have been reported as registered while the writer
-        # created a dead block beside its real entry.
-        if get_server(data, target.shape, cid) is not None:
-            found.append(key)
+        name = _registered_name(*read, target.shape, c)
+        if name is not None:
+            found[key] = name
     return found
+
+
+def registered_in(repo: Path, c: Companion | str) -> list[str]:
+    """Which agents' MCP configs already launch this companion (see `registrations`)."""
+    return list(registrations(repo, c))
 
 
 def _cache_path(repo: Path) -> Path:
@@ -404,7 +584,8 @@ def scan(repo: Path, *, probe: bool = True, ttl_s: int | None = None) -> list[St
             inst, detail = is_installed(c)
             if inst is not None:
                 fresh[c.id] = (inst, detail)
-        out.append(Status(c, inst, registered_in(repo, c.id), detail))
+        regs = registrations(repo, c)
+        out.append(Status(c, inst, list(regs), detail, regs))
     if probe and ttl_s > 0 and fresh != cached:
         _write_cache(repo, fresh)
     return out
@@ -436,6 +617,28 @@ def _toml(value: object) -> str:
     if isinstance(value, dict):
         return "{" + ", ".join(f"{k} = {_toml(v)}" for k, v in value.items()) + "}"
     return json.dumps(str(value))
+
+
+def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -> str:
+    """The message when config ``rel`` already launches ``c`` under ANOTHER name, else "".
+
+    Writing the id beside it would start the same server twice, under two names, with
+    two copies of every tool -- and an operator whose tools are already named after
+    their own key (`mcp__coding-guides__*`) would get a second set they never asked for.
+    """
+    servers = read[0] if read else {}
+    for name, entry in servers.items():
+        if name != c.id and launches_as(c, entry):
+            msg = f"{rel} already launches {c.id} as `{name}` (the same command); left as it is"
+            # An entry under the id too is not repaired here: refreshing it would be a
+            # second copy, deleting it is the operator's call. But it is said -- and only
+            # what was CHECKED: an id entry differing by `env` launches the same server.
+            if c.id in servers and launches_as(c, servers[c.id]):
+                msg += f". `{c.id}` launches it too: two copies, remove one by hand"
+            elif c.id in servers:
+                msg += f". The entry under `{c.id}` is not this launch: remove it by hand"
+            return msg
+    return ""
 
 
 def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> tuple[str, str]:
@@ -481,6 +684,8 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         text = path.read_text("utf-8") if path.exists() else ""
         if f"[mcp_servers.{c.id}]" in text:
             return "unchanged", f"{rel} already registers {c.id}"
+        if other := _launched_elsewhere(_servers_in(path, target.shape) if text else None, c, rel):
+            return "unchanged", other
         block = (
             f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
         )
@@ -514,6 +719,10 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         # and re-running `companions add` -- the obvious remedy -- reported success and
         # did nothing.
         return "unchanged", f"{rel} already registers {c.id} with the same launch command"
+    # Checked even when the id holds a STALE entry: refreshing it to this launch would
+    # start the server twice, once under each name. The other name already serves it.
+    if other := _launched_elsewhere((get_servers(data, target.shape), ""), c, rel):
+        return "unchanged", other
     try:
         place_server(data, target.shape, c.id, c.entry())
     except UnplaceableConfig as exc:
@@ -526,6 +735,19 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n", "utf-8")
     return "written", f"registered {c.id} in {rel}"
+
+
+#: What stands in `gate_coverage` for ddflow's OWN operational memory.
+BUILTIN_MEMORY = "ddflow memory"
+
+#: Gates ddflow serves itself, with no companion installed. `rules` is `ddflow brief`:
+#: the binding decisions, the lessons ranked against the task, and the operational
+#: memory -- facts about this machine, recorded with `ddflow memory add` and searched by
+#: `recall`. That last part was the job OptMem and the memory server were recommended
+#: for, and once ddflow held it (35dd944) reporting `rules` as having "no companion
+#: behind it" sent operators to install a second store beside the first. Named, not
+#: silently dropped from the gap list, so the report says WHAT covers the gate.
+BUILTIN_COVERAGE: dict[str, tuple[str, ...]] = {"rules": (BUILTIN_MEMORY,)}
 
 
 def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> dict[str, list[str]]:
@@ -543,11 +765,15 @@ def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> di
       so judging it by `registered` reports its gate as having nothing behind it while
       the tool sits on the PATH — the report contradicting the line above it.
 
+    One gate has ddflow itself behind it, always: `rules` is `ddflow brief`, which shows
+    the operational memory (`ddflow memory`) and the lessons ranked against the task --
+    see `BUILTIN_COVERAGE`, whose names are not companion ids.
+
     Neither counts on `installed is None`. A probe that could not run leaves the tool
     exactly as unknown as before we asked, and counting it would be the
     unavailable-as-success class inside the very report that exists to expose it.
     """
-    cover: dict[str, list[str]] = {g: [] for g in pipeline}
+    cover: dict[str, list[str]] = {g: list(BUILTIN_COVERAGE.get(g, ())) for g in pipeline}
     for st in statuses:
         # `is True`, so an unprobed companion does not silently count as coverage --
         # and, equally, does not count as a gap. `gate_coverage` answers "what is
