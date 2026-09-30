@@ -360,8 +360,8 @@ def launches_as(c: Companion, entry: object) -> bool:
     How strict "the same launch" is, decided once:
 
     * the same COMMAND, compared by basename (`/usr/local/bin/npx` is `npx`);
-    * the companion's ARGUMENTS appear in the entry IN ORDER, with only flags (and a
-      flag's value) between them -- `docker run --rm -i -e TOKEN <image>` is still that
+    * the companion's ARGUMENTS appear in the entry IN ORDER, with only flags (and the
+      value of a flag known to take one, `VALUE_FLAGS`) between them -- `docker run --rm -i -e TOKEN <image>` is still that
       image, `docker run <other-image> <image>` is not -- and anything after them;
     * an npm version tag is ignored on both sides (`@upstash/context7-mcp@latest`),
       for an npm launcher only -- elsewhere `x@1.2` is not a package and not a tag;
@@ -384,28 +384,46 @@ def launches_as(c: Companion, entry: object) -> bool:
     have = _norm_args(cmd, args)
     if not want:
         return not have
-    return _in_order_with_flags(want, have)
+    return _in_order_with_flags(want, have, VALUE_FLAGS.get(Path(cmd).name, frozenset()))
 
 
-def _in_order_with_flags(want: list[str], have: list[str]) -> bool:
+#: Flags known to take their value as the NEXT argument, per launcher. Whether `-x v`
+#: is a flag and its value or a boolean flag and a positional cannot be told from the
+#: tokens, and guessing "value" let `docker run -i <other-image> <image>` pass as the
+#: companion. So only these consume a following token; any other flag is taken as
+#: boolean, and a value written `--flag=value` needs no entry here.
+_DOCKER_VALUE_FLAGS = frozenset(
+    {"-e", "--env", "--env-file", "-v", "--volume", "--mount", "-p", "--publish", "--name",
+     "--network", "--net", "-w", "--workdir", "-u", "--user", "-l", "--label",
+     "--platform", "--add-host", "--entrypoint", "--pull", "-m", "--memory", "--cpus"}
+)  # fmt: skip
+VALUE_FLAGS: dict[str, frozenset[str]] = {
+    "docker": _DOCKER_VALUE_FLAGS,
+    "podman": _DOCKER_VALUE_FLAGS,
+    "npx": frozenset({"-p", "--package"}),
+}
+
+
+def _in_order_with_flags(want: list[str], have: list[str], value_flags: frozenset[str]) -> bool:
     """``want`` appears in ``have`` in order, with only FLAGS between its items.
 
-    Between two of the companion's arguments the entry may add a flag (`-x`, `--x=y`)
-    and the one value after it (`-e TOKEN`); a bare positional there is another package
-    or image, and the companion's own name after it is just that server's argument
-    (`npx -y server-github server-filesystem` launches github). Once every item of
-    ``want`` is matched, the rest is the server's own configuration and is allowed.
+    Between two of the companion's arguments the entry may add a flag (`-i`, `--x=y`),
+    and a flag in ``value_flags`` may bring the one value after it (`-e TOKEN`). Any
+    other bare positional there is another package or image, and the companion's own
+    name after it is only that server's argument (`npx -y server-github
+    server-filesystem` launches github). Once every item of ``want`` is matched, the
+    rest is the server's own configuration and is allowed.
     """
-    i, after_flag = 0, False
+    i, takes_value = 0, False
     for h in have:
         if i == len(want):
             return True
-        if h == want[i]:
-            i, after_flag = i + 1, False
+        if takes_value:
+            takes_value = False
+        elif h == want[i]:
+            i += 1
         elif h.startswith("-"):
-            after_flag = True
-        elif after_flag:
-            after_flag = False
+            takes_value = h in value_flags
         else:
             return False
     return i == len(want)

@@ -866,7 +866,7 @@ A server is found by its launch as well as its name. A project that registered
 codeguide-mcp as `coding-guides` before ddflow knew it reads as
 ``registered for: claude (as `coding-guides`)``, and `companions add` leaves it alone
 instead of writing a second copy under the id. "The same launch" is the same command
-(by basename) with the companion's arguments in order — only flags and a flag's value
+(by basename) with the companion's arguments in order — only flags, and the value of a flag known to take one
 (`-e TOKEN`) may sit between them, the server's own arguments may follow, and a version
 tag on an npm package (`@latest`, `@1.2.3`) is ignored. Another image, package or
 launcher is another server, and so is reordered arguments.

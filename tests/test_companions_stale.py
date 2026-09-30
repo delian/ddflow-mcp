@@ -245,7 +245,14 @@ def test_another_server_given_the_companion_as_an_argument_is_not_it():
     assert not CO.launches_as(fs, {"command": "npx", "args": gh})
     a = CO.Companion(id="a", command="docker", args=["run", "img-a"])
     assert not CO.launches_as(a, {"command": "docker", "args": ["run", "img-b", "img-a"]})
+    # Found by roborev on dfc13e3: a BOOLEAN flag before the other image let it through,
+    # because every flag was assumed to take the next token as its value.
+    for flag in ("-i", "--rm", "-it"):
+        entry = {"command": "docker", "args": ["run", flag, "img-b", "img-a"]}
+        assert not CO.launches_as(a, entry), flag
+    assert not CO.launches_as(fs, {"command": "npx", "args": ["-y", "--quiet", *gh[1:]]})
     # A flag with its value between them, and the server's own arguments after, still match.
+    assert CO.launches_as(a, {"command": "docker", "args": ["run", "--env=X", "-i", "img-a"]})
     assert CO.launches_as(a, {"command": "docker", "args": ["run", "-e", "TOKEN", "img-a"]})
     assert CO.launches_as(
         fs, {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/srv"]}
