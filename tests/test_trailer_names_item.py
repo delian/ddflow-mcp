@@ -368,3 +368,20 @@ def test_a_dict_knob_is_recognised_by_any_spelling_of_its_type():
 
     assert _outer_is_dict("dict[str, list[str]]") and _outer_is_dict("<class 'dict'>")
     assert not _outer_is_dict("list[dict[str, str]]") and not _outer_is_dict("list[str]")
+
+
+def test_no_trailer_under_a_waiver_only_config_is_a_refusal_not_a_crash():
+    """rubber-duck (deepseek): the example line indexed `keys[0]`, an IndexError when a
+    caller passes no item keys. The hook itself substitutes ["Item"] for an empty list."""
+    from ddflow.services import enforce as E
+
+    code, msg = E.check_item_trailer(
+        "subject only\n", [], ids=set, waivers={"Phase-ships": ["none", "recon"]}
+    )
+    assert code == 1 and "Phase-ships: none" in msg, msg
+    assert (
+        E.check_item_trailer(
+            "s\n\nPhase-ships: recon\n", [], ids=set, waivers={"Phase-ships": ["none", "recon"]}
+        )[0]
+        == 0
+    )

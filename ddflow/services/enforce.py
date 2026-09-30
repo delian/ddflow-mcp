@@ -1626,7 +1626,7 @@ def check_item_trailer(
     # required both, and a waiver declared alone sat inert (cross-family reviewers,
     # three rounds).
     spelled = {k.lower(): k for k in (waivers or {})}
-    accepted = [*keys, *(k for k in (waivers or {}) if k.lower() not in canon)]
+    accepted = [*keys, *(k for k in (waivers or {}) if k.lower() not in canon)] or ["Item"]
     checked = [
         (canon.get(k.lower()) or spelled[k.lower()], v)
         for k, v in trailers
@@ -1641,7 +1641,7 @@ def check_item_trailer(
             f"ddflow: this commit has no {shown} trailer, and "
             f"[enforce].require_item_trailer is on.\n\n"
             f"Add a final line to the commit message, e.g.:\n"
-            f"    {keys[0]}: P1.T3\n\n"
+            f"    {accepted[0]}: {words.get(accepted[0].lower(), ['P1.T3'])[0]}\n\n"
             f"It is what lets an audit match commits to queue items mechanically."
         )
     bad: list[str] = []
