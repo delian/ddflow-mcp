@@ -118,9 +118,15 @@ def launch_python() -> str:
 
 
 def redirected_from() -> Path | None:
-    """The linked worktree launch lines were redirected away from, for the notice."""
+    """The linked worktree launch lines were redirected away from -- only when the
+    redirect is the worktree one, never for an explicit `DDFLOW_LAUNCH_ROOT`."""
+    import os
+
+    if os.environ.get(LAUNCH_ROOT_ENV):
+        return None
     here = package_parent()
-    return here if launch_parent() != here else None
+    primary = primary_checkout(here)
+    return here if primary is not None and primary == launch_parent() else None
 
 
 def templates_dir() -> Path:

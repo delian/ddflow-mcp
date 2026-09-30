@@ -554,8 +554,9 @@ def hooks(
     if claude and action in ("install", "uninstall"):
         try:
             if action == "install":
-                msg = CH.install(repo, E.command_line(CH.MARKER))
-                if note := E.redirect_note():
+                line = E.command_line(CH.MARKER)
+                msg = CH.install(repo, line)
+                if note := E.redirect_note(line):
                     msg = f"{msg}\n{note}"
             else:
                 msg = CH.uninstall(repo)
