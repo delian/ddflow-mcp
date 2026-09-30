@@ -217,7 +217,9 @@ def test_a_version_tag_is_only_dropped_from_an_npm_package_spec(tmp_path):
     one image against different hosts (`...@1db.example`, `...@2db.example`) collapsed to one
     server, and `companions add` would have refused to write the right entry."""
     db = CO.Companion(
-        id="db", command="docker", args=["run", "-i", "mcp/postgres", "postgresql://u:p@1db.example"]
+        id="db",
+        command="docker",
+        args=["run", "-i", "mcp/postgres", "postgresql://u:p@1db.example"],
     )
     other = {
         "command": "docker",
@@ -229,3 +231,29 @@ def test_a_version_tag_is_only_dropped_from_an_npm_package_spec(tmp_path):
     # ...while an npx package still matches across a version tag.
     ctx = CO.Companion(id="c", command="npx", args=["-y", "@upstash/context7-mcp"])
     assert CO.launches_as(ctx, {"command": "npx", "args": ["-y", "@upstash/context7-mcp@2.0.1"]})
+
+
+def test_another_server_given_the_companion_as_an_argument_is_not_it():
+    """Found by the critic: "the companion's args in order, anything between" accepted an
+    entry that launches ANOTHER package or image and merely passes the companion's as an
+    argument. Only flags (and a flag's value) may sit between the companion's arguments;
+    anything after them is the server's own configuration."""
+    fs = CO.Companion(
+        id="fs", command="npx", args=["-y", "@modelcontextprotocol/server-filesystem"]
+    )
+    gh = ["-y", "@modelcontextprotocol/server-github", "@modelcontextprotocol/server-filesystem"]
+    assert not CO.launches_as(fs, {"command": "npx", "args": gh})
+    a = CO.Companion(id="a", command="docker", args=["run", "img-a"])
+    assert not CO.launches_as(a, {"command": "docker", "args": ["run", "img-b", "img-a"]})
+    # A flag with its value between them, and the server's own arguments after, still match.
+    assert CO.launches_as(a, {"command": "docker", "args": ["run", "-e", "TOKEN", "img-a"]})
+    assert CO.launches_as(
+        fs, {"command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/srv"]}
+    )
+
+
+def test_a_cli_companion_on_rules_still_counts_beside_ddflow_memory(tmp_path):
+    """Raised by the rubber duck: the kinds tests moved to `dedupe`, so nothing checked a
+    companion on a gate ddflow ALSO serves. Both are named; neither hides the other."""
+    optmem = CO.Status(_reg(tmp_path)["optmem"], True, [], "")
+    assert CO.gate_coverage(tmp_path, [optmem], ["rules"])["rules"] == [CO.BUILTIN_MEMORY, "optmem"]
