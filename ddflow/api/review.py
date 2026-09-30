@@ -54,26 +54,75 @@ def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
     return (d.out + "\n") if d.ok and d.out else "", f"commit {full[:12]} vs its first parent"
 
 
-def diff_for(repo: Path, cfg, st, item: str, base: str = "") -> tuple[str, str]:
+def diff_for(
+    repo: Path,
+    cfg,
+    st,
+    item: str,
+    base: str = "",
+    branch: str = "",
+    called_from: Path | None = None,
+) -> tuple[str, str]:
     """(diff, how) for an item: its worktree branch vs base, plus the working tree.
 
     Goes through `worktree.capture_diff`, which includes UNTRACKED files via
     intent-to-add. A plain `git diff` omits them, so the regression test an agent just
     wrote is invisible to the reviewer — which then reports, correctly given its input and
     wrongly given the facts, that the change ships no tests.
+
+    For an item, the item's work (B60de9a57ed): ``branch`` when named; else its tree;
+    else its recorded branch (the tree is gone); else the branch checked out in the
+    linked worktree the caller stands in, unless another open item holds that tree. An
+    item CLAIMED without a worktree gets nothing more -- an empty diff, recorded
+    UNAVAILABLE: the primary's working tree was the old fallback, and in a busy checkout
+    it held other agents' uncommitted event logs, 43 KB of them, which the reviewer found
+    nothing wrong with and which were recorded as this item's PASS. Any other uncommitted
+    edit there would be credited the same way, so no path filter makes it the item's.
+    Only an unclaimed item, or worktrees off, still reads the primary -- without ddflow's
+    own bookkeeping.
     """
-    it = st.items.get(item)
     base = base or cfg.worktree.base_ref or W.default_branch(repo)
+    if not item:
+        return W.capture_diff(repo), f"working tree in {repo}"
+    it = st.items.get(item)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
-    if wt_path and wt_path.exists():
+    if not branch and wt_path and wt_path.exists():
         diff = W.capture_diff(wt_path, base)
+        how = f"{base}..HEAD + working tree in {wt_path}"
         if diff.strip():
             ok, missing = W.diff_covers_everything(wt_path, diff)
-            how = f"{base}..HEAD + working tree in {wt_path}"
             if not ok:
                 how += f" (WARNING: {len(missing)} changed path(s) absent from the diff)"
-            return diff, how
-    return W.capture_diff(repo), f"working tree in {repo}"
+        return diff, how
+    chosen = "named with --branch" if branch else ""
+    if not branch and it and it.branch:
+        branch, chosen = it.branch, f"{item}'s branch (its tree is gone)"
+    if not branch and it:
+        from .lifecycle import callers_tree
+
+        here, held = callers_tree(repo, cfg, st, it, called_from)
+        if held:
+            return "", (
+                f"the worktree you are in belongs to {held}, not {item}; pass {item}'s "
+                f"branch with --branch"
+            )
+        if here is not None and here.branch:
+            branch, chosen = here.branch, f"checked out in {here.path}"
+    if not branch and it and it.lease is not None and cfg.worktree.enabled:
+        return "", (
+            f"{item} was claimed without a worktree, and the primary's working tree is not "
+            f"its: pass --branch <branch>, run review from the worktree it is worked in, or "
+            f"set [worktree].enabled = false if the primary is where you work"
+        )
+    if not branch:
+        from ..services.enforce import SELF_MANAGED
+
+        return W.capture_diff(repo, exclude=SELF_MANAGED), (
+            f"working tree in {repo}, ddflow's bookkeeping excluded -- for {item}'s work "
+            f"on a branch, pass --branch <branch> or run review from its worktree"
+        )
+    d = W.git(repo, "diff", "--no-color", f"{base}...{branch}")
+    return (d.out + "\n") if d.ok and d.out else "", f"{base}...{branch} ({chosen})"
 
 
 def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
@@ -151,7 +200,7 @@ def reviewers_detect(repo: Path, *, write: bool = False, agent: str = "") -> O.O
     return out
 
 
-def review(
+def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
     gate: str = "critic",
@@ -161,12 +210,16 @@ def review(
     base: str = "",
     on_progress: Callable[[str], None] | None = None,
     commit: str = "",
+    branch: str = "",
+    called_from: Path | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
 
     `commit` reviews that one landed commit instead of the item's branch -- the
-    after-merge review, recorded against the item (done or not) all the same.
+    after-merge review, recorded against the item (done or not) all the same. `branch`
+    reviews that branch against base, for an item claimed without a worktree (see
+    `diff_for` for how the branch is otherwise found).
     """
     from ..services import gates as G
     from ..services import prompts as P
@@ -212,7 +265,11 @@ def review(
             how="",
         )
 
-    diff, how = commit_diff(repo, commit) if commit else diff_for(repo, cfg, st, item, base)
+    diff, how = (
+        commit_diff(repo, commit)
+        if commit
+        else diff_for(repo, cfg, st, item, base, branch=branch, called_from=called_from)
+    )
     if not diff.strip():
         return unavailable(
             f"Empty diff ({how}) — nothing to review. Recording UNAVAILABLE.", how=how

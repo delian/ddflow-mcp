@@ -1856,8 +1856,28 @@ ddflow never needed to have *created* the tree — it needs to know *which* tree
 is worked in, so `recover` can find stranded work and `merge` knows what to merge. An
 adopted tree is recorded as adopted, not created, so `remove_on_merge` will never delete
 something ddflow did not make. A tree already bound to another open item is refused: two
-items in one tree cannot be merged or recovered separately. `worktree.adopt_existing =
-false` restores the old behaviour; `--no-worktree` skips binding entirely.
+items in one tree cannot be merged or recovered separately — unless that item has let go
+of it: merged, lease released, and nothing left in the tree (no uncommitted change, a
+`HEAD` its target already contains). `worktree.adopt_existing = false` restores the old
+behaviour; `--no-worktree` skips binding entirely.
+
+An item claimed `--no-worktree` has no branch of its own, so `merge` and `review` take
+one: the branch checked out in the worktree you run them from, or `--branch <branch>`
+from anywhere, and `gate run` runs in the worktree you stand in. Two places are not the
+item's and are refused rather than guessed: another open item's worktree, and — with
+worktrees on — the primary, whose working tree is nobody's in particular (other agents'
+event logs, anyone's uncommitted edit); there `merge` refuses, and `review` and `gate
+run` record UNAVAILABLE and say what to pass. A lone agent working in the primary says
+so with `[worktree].enabled = false`.
+The borrowed tree is never removed; uncommitted work in it is refused as for any merge;
+and paths the merge lands outside the item's globs are listed (`outside_globs`), since a
+borrowed branch can carry another item's commits too.
+
+```console
+$ ddflow merge B-fix --branch agent-work
+  no worktree of its own: 'agent-work' was landed, no tree touched.
+merged B-fix (1c2d3e4f) into main
+```
 
 A second agent is refused, and told what to take instead:
 
@@ -2613,6 +2633,7 @@ ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 ddflow tests [--item <id>]      tests the change reaches + a parallel command  (2 = none)
 
 ddflow merge <id>               merge from the primary checkout, no checkout
+ddflow merge <id> --branch <b>  an item claimed --no-worktree: land <b> (default: your tree's branch)
                                 ([flow].integration=pr: push + open/update a PR instead)
 ddflow pr sync [--item]         what reviewers did: complete / reopen / park / merge (2 = forge unreachable)
 ddflow pr status               every item's request, from the log (no forge call)
