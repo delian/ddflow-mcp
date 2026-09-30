@@ -70,13 +70,14 @@ def diff_for(
     wrote is invisible to the reviewer — which then reports, correctly given its input and
     wrongly given the facts, that the change ships no tests.
 
-    An item's review is of the item's work or of nothing (B60de9a57ed). Its tree when it
-    has one; else a branch -- ``branch`` when named, the item's recorded branch, or the
-    one checked out in the linked worktree the caller stands in; else an empty diff,
-    which records UNAVAILABLE. It used to fall back to the PRIMARY's working tree -- in a
-    ddflow checkout, other agents' uncommitted event logs -- and the reviewer's "no
-    findings" on those was recorded as this item's PASS. Only an item-less review reads
-    the working tree of the repository it was pointed at.
+    For an item, the item's work (B60de9a57ed): ``branch`` when named; else its tree;
+    else its recorded branch (the tree is gone); else the branch checked out in the
+    linked worktree the caller stands in; else the primary's working tree -- where a
+    lone agent that claimed `--no-worktree` works -- WITHOUT ddflow's own bookkeeping.
+    That last fallback used to include it: in a busy checkout, other agents'
+    uncommitted event logs, 43 KB of them, which the reviewer found nothing wrong with
+    and which were recorded as this item's PASS. With nothing left, the diff is empty and
+    the review is recorded UNAVAILABLE.
     """
     base = base or cfg.worktree.base_ref or W.default_branch(repo)
     if not item:
@@ -99,9 +100,11 @@ def diff_for(
         if here is not None and here.branch:
             branch, chosen = here.branch, f"checked out in {here.path}"
     if not branch:
-        return "", (
-            f"{item} has no worktree, and no branch to review: pass --branch <branch> "
-            f"(or --commit <sha>), or run review from the worktree it is worked in"
+        from ..services.enforce import SELF_MANAGED
+
+        return W.capture_diff(repo, exclude=SELF_MANAGED), (
+            f"working tree in {repo}, ddflow's bookkeeping excluded -- for {item}'s work "
+            f"on a branch, pass --branch <branch> or run review from its worktree"
         )
     d = W.git(repo, "diff", "--no-color", f"{base}...{branch}")
     return (d.out + "\n") if d.ok and d.out else "", f"{base}...{branch} ({chosen})"

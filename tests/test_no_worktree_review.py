@@ -6,9 +6,9 @@ reviewer read 43 KB of somebody else's JSON lines, found nothing wrong with them
 the gate was recorded PASSED for a change it never saw. The same fallback caught an item
 whose own tree had nothing to diff.
 
-A review is of the item's work or it is unavailable: its tree, else its branch (named, or
-the one checked out where the caller stands), else nothing -- recorded as unavailable,
-which is not a pass.
+A review is of the item's work: a named branch, its tree, the branch checked out where
+the caller stands, or -- for a lone agent working in the primary -- the primary's working
+tree without ddflow's own bookkeeping. With nothing left it is recorded unavailable.
 """
 
 from __future__ import annotations
@@ -53,8 +53,12 @@ def _setup(repo: Path, tmp_path: Path) -> tuple[Path, Path]:
     (tree / "a.py").write_text("THE ITEM'S OWN CHANGE = 1\n")
     _git(tree, "add", "a.py")
     _git(tree, "commit", "-qm", "add a")
-    # What a busy ddflow primary always has: somebody else's uncommitted writes.
-    (repo / "README.md").write_text(f"# proj\n{FOREIGN}\n")
+    # What a busy ddflow primary always has: other agents' uncommitted event logs.
+    other = repo / ".ddflow" / "events" / "other-agent.jsonl"
+    other.write_text("{}\n")
+    _git(repo, "add", "-f", str(other))
+    _git(repo, "commit", "-qm", "another agent's log")
+    other.write_text(f'{{}}\n{{"note": "{FOREIGN}"}}\n')
     return tree, seen
 
 
@@ -62,7 +66,7 @@ def _critic(repo: Path) -> str:
     return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].outcome
 
 
-def test_no_tree_and_no_branch_is_unavailable_not_a_review_of_the_primary(repo, tmp_path):
+def test_other_agents_event_logs_are_never_the_items_diff(repo, tmp_path):
     tree, seen = _setup(repo, tmp_path)
     run_cli(tree, "claim", "T1", "--no-worktree")
     code, out, err = run_cli(repo, "review", "T1")
@@ -101,3 +105,13 @@ def test_an_item_whose_own_tree_has_nothing_to_diff_is_not_reviewed_against_the_
     assert code == NOTHING, out + err
     assert _critic(repo) == "unavailable"
     assert not seen.exists() or FOREIGN not in seen.read_text()
+
+
+def test_a_lone_agent_in_the_primary_has_its_own_work_reviewed(repo, tmp_path):
+    _tree, seen = _setup(repo, tmp_path)
+    run_cli(repo, "claim", "T1", "--no-worktree")
+    (repo / "c.py").write_text("WORK DONE IN THE PRIMARY = 1\n")
+    code, out, err = run_cli(repo, "review", "T1")
+    assert code == OK, out + err
+    assert "WORK DONE IN THE PRIMARY" in seen.read_text()
+    assert FOREIGN not in seen.read_text()
