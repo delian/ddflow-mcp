@@ -129,7 +129,7 @@ gate `unavailable` rather than passing it on your own word.
   fact about *this machine and working state* with `ddflow_memory_add`; `ddflow_brief`
   shows the newest and `ddflow_recall` searches them beside the decisions, lessons,
   research, bugs and past prompts. OptMem (`memo`) and the memory MCP server did this
-  job before ddflow held it; they are opt-in now, for a project that wants a separate
+  job first; they are opt-in now, for a project that wants a separate
   store, and not something to propose installing.
 - **sequential-thinking** — `research`, `rubber_duck`, `bug_hunt`. The three gates that
   are reasoning rather than tool-running. Use it where a chain has middle steps you
