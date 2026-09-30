@@ -40,5 +40,6 @@ HISTORY_VERBS: dict[str, str] = {
     "memory.forgotten": "forgot",
     "bug.found": "BUG found",
     "bug.fixed": "bug fixed",
+    "bug.invalid": "bug closed as invalid",
     "cadence.ran": "cadence ran",
 }

@@ -853,6 +853,31 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("id",),
     },
+    "ddflow_bug_invalid": {
+        "description": (
+            "Close a bug as a FALSE finding -- nothing was broken, so nothing was fixed. "
+            "Never counts as a fix. Requires the reason; give the probe or test that "
+            "showed it false as evidence. Refused (exit 3) for an unknown id or a bug "
+            "already closed; a real bug is closed with `ddflow_bug_fixed` instead."
+        ),
+        "properties": {
+            "id": ("string", "Bug id.", True),
+            "reason": ("string", "Why the finding is false.", True),
+            "evidence": (
+                "string",
+                "The probe command or test node id that showed it false.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().bug_invalid(
+            repo,
+            a["id"],
+            reason=a.get("reason", "") or "",
+            evidence=a.get("evidence", "") or "",
+            agent=agent,
+        ),
+        "payload": ("id", "invalid_reason", "evidence", "unchecked"),
+    },
     "ddflow_recover": {
         "description": (
             "Find work left behind by a crashed agent: expired leases, orphaned "

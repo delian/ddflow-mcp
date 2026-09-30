@@ -88,7 +88,8 @@ def outstanding(state, cfg, *, repo=None, limit: int = MAX_REPORTED) -> list[Obl
                 "open_bug",
                 ids,
                 f"{len(open_bugs)} bug(s) still open: {ids}",
-                "close with `ddflow_bug_fixed` (it requires the regression test) or say why not",
+                "close with `ddflow_bug_fixed` (it requires the regression test), or "
+                "`ddflow_bug_invalid` with the probe if the finding was false",
             )
         )
 

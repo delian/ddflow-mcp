@@ -316,10 +316,27 @@ class Bug:
     fixed_at: str = ""
     regression_test: str = ""
     lesson: str = ""
+    #: Closed as a FALSE finding (`bug invalid`), with why and what showed it. Kept apart
+    #: from `fixed_at` because the two closures claim different things: a fix claims a
+    #: repair and a regression test that failed without it; an invalid finding claims
+    #: there was nothing to repair. B97355c6d15 was shown false by a test and could only
+    #: be closed as "fixed", which would have written a repair nobody made into history.
+    invalid_at: str = ""
+    invalid_reason: str = ""
+    evidence: str = ""
+
+    @property
+    def resolution(self) -> str:
+        """'fixed', 'invalid' or '' (open). A fix wins over an invalid closure whatever the
+        fold order: a finding later shown real and fixed is fixed, and a shard merge that
+        sorts the older `bug.invalid` last must not turn it back into a false finding."""
+        if self.fixed_at:
+            return "fixed"
+        return "invalid" if self.invalid_at else ""
 
     @property
     def open(self) -> bool:
-        return not self.fixed_at
+        return not self.resolution
 
 
 @dataclass
@@ -1306,6 +1323,18 @@ def _h_bug_fixed(st: State, ev: Event) -> None:
     bug.lesson = ev.data.get("lesson", "")
 
 
+def _h_bug_invalid(st: State, ev: Event) -> None:
+    """The first closure as invalid is the one kept: `api.bug_invalid` refuses a second,
+    so two can only meet from clones that each closed it, and the reason recorded first
+    is the one the record already showed. Never touches `fixed_at` -- see `Bug.resolution`."""
+    bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
+    if bug.invalid_at:
+        return
+    bug.invalid_at = ev.ts
+    bug.invalid_reason = ev.data.get("reason", "")
+    bug.evidence = ev.data.get("evidence", "")
+
+
 def _h_lesson(st: State, ev: Event) -> None:
     """Merge, never replace — the same rule `_h_decision` and `_h_bug_found` follow.
 
@@ -1594,6 +1623,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "release.closed": _h_release_closed,
     "bug.found": _h_bug_found,
     "bug.fixed": _h_bug_fixed,
+    "bug.invalid": _h_bug_invalid,
     "lesson.recorded": _h_lesson,
     "research.recorded": _h_research,
     "decision.recorded": _h_decision,

@@ -758,6 +758,15 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bx.add_argument("--lesson-title", default="")
     bx.add_argument("--lesson-rule", default="")
     bx.set_defaults(fn=cmd_bug)
+    bv = bg_s.add_parser(
+        "invalid", help="close a bug as a FALSE finding (never as fixed), with why and the probe"
+    )
+    bv.add_argument("id")
+    bv.add_argument("--reason", required=True, help="why the finding is false")
+    bv.add_argument(
+        "--evidence", default="", help="the probe command or test node id that showed it"
+    )
+    bv.set_defaults(fn=cmd_bug)
 
     se = s.add_parser("session")
     se_s = se.add_subparsers(dest="session_cmd", required=True)

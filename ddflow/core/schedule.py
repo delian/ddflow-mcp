@@ -557,10 +557,11 @@ def bug_items(state: State, cfg: Config) -> set[str]:
 
     A bug fix is what `branch_kind` already calls one -- a `bugfix_tags` or `hotfix_tags`
     tag, the same test gitflow names its branches by -- or an item an OPEN bug record
-    names. A fixed record stops counting: its item is ordinary work again.
+    names. A closed record stops counting -- fixed, or invalid (a false finding was never
+    a bug): its item is ordinary work again.
     """
     ids = {i.id for i in state.items.values() if branch_kind(i, cfg) != FEATURE}
-    ids.update(b.item for b in state.bugs.values() if b.item and not b.fixed_at)
+    ids.update(b.item for b in state.bugs.values() if b.item and b.open)
     return ids
 
 

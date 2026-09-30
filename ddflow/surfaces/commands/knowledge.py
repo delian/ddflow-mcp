@@ -234,7 +234,26 @@ def cmd_bug(a, c: Ctx) -> int:
         out = A.bug_found(
             c.repo, summary=a.summary, item=a.item or "", id=a.id or "", agent=c.requested_agent
         )
-        c.out(f"bug {out.data['id']} recorded", out.body(("id",)))
+        closed = out.data.get("resolution", "")
+        note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
+        c.out(f"bug {out.data['id']} recorded{note}", out.body(("id",)))
+        return OK
+    if a.bug_cmd == "invalid":
+        out = A.bug_invalid(
+            c.repo,
+            a.id,
+            reason=a.reason or "",
+            evidence=a.evidence or "",
+            agent=c.requested_agent,
+        )
+        if out.exit != OK:
+            print(out.reason, file=sys.stderr)
+            return out.exit
+        probe = f" (evidence: {a.evidence})" if a.evidence else ""
+        c.out(
+            f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}",
+            out.body(("id", "invalid_reason", "evidence", "unchecked")),
+        )
         return OK
     out = A.bug_fixed(
         c.repo,
@@ -245,9 +264,11 @@ def cmd_bug(a, c: Ctx) -> int:
         lesson_rule=getattr(a, "lesson_rule", "") or "",
         agent=c.requested_agent,
     )
-    if out.exit == FAIL:
+    # Every non-OK exit, not just 1: checking only FAIL let a REFUSED unknown id print
+    # "bug NOPE closed" and exit 0 while nothing was appended (B-cli-bugfixed-refusal-ok).
+    if out.exit != OK:
         print(out.reason, file=sys.stderr)
-        return FAIL
+        return out.exit
     c.out(f"bug {a.id} closed (regression: {a.regression_test})", out.body(("id",)))
     return OK
 

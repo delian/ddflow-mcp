@@ -20,7 +20,8 @@ What it draws on, and what each is FOR:
   next session re-researching something a probe already killed. CONFIRMED and REFUTED
   require a probe.
 - **Bugs** (`ddflow bug found` / `ddflow bug fixed`) — and a bug cannot be closed
-  without its regression test.
+  without its regression test. A finding shown FALSE is closed with `ddflow bug invalid
+  <id> --reason ... --evidence <probe or test>`, which never counts as a fix.
 - **Sessions** (`ddflow session start|prompt|note|end`) — what the operator actually
   asked for, in their words. This is what makes `ddflow replay` able to reconstruct the
   project's intent rather than just its diff. Secrets are redacted on the way IN, because
