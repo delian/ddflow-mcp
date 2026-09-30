@@ -345,3 +345,13 @@ def test_config_set_takes_the_documented_toml_form(repo):
         'config --set enforce.trailer_waivers \'{ "Phase-ships" = ["none"] }\''
         in (KNOB_DOCS["enforce.trailer_waivers"])
     )
+
+
+def test_a_dict_knob_is_recognised_by_any_spelling_of_its_type():
+    """rubber-duck (deepseek): `startswith("dict")` missed `dict` itself and a wrapped
+    `Optional[dict[...]]`, which the substring test it replaced had handled."""
+    from ddflow.config import _coerce
+
+    assert _coerce("a=b", dict) == {"a": "b"}
+    assert _coerce('{"a": "b"}', "Optional[dict[str, str]]") == {"a": "b"}
+    assert _coerce("a,b", "list[str]") == ["a", "b"]

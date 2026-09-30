@@ -1282,7 +1282,7 @@ def _coerce(raw: Any, typ: Any) -> Any:
     ts = typ if isinstance(typ, str) else getattr(typ, "__name__", str(typ))
     if not isinstance(raw, str):
         return raw
-    if ts.startswith("dict"):
+    if "dict" in ts:  # before "list": `dict[str, list[str]]` contains both
         return _coerce_dict(raw, ts)
     if "bool" in ts:
         low = raw.strip().lower()
