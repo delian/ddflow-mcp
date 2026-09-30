@@ -1032,8 +1032,8 @@ def _read_text(path: Path) -> str:
 def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     """How the gate definition `load_gates` ran differs from the one `tree` commits.
 
-    `{}` when it does not, or `tree` is the primary, or the difference is only the
-    primary's uncommitted edit. Otherwise `kind` says whose change it is: "behind" --
+    `{}` when it does not, or `tree` is the primary, or neither side COMMITTED a change
+    since the fork (the difference is an uncommitted edit). Otherwise `kind` says whose change it is: "behind" --
     the base COMMITTED a new definition since `tree` forked and the tree still carries
     the one it forked with, so its code and dependencies predate the command that ran --
     or "own", the branch changed the definition itself, which merging the base cannot
@@ -1070,15 +1070,21 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
             (W.git(tree, "show", f"{rev}:{f}").out for f in _COMMITTED_GATE_FILES), gate_id
         )
 
+    # Classified on COMMITS alone. `ran` and `here` include uncommitted edits, and
+    # letting them decide mislabelled both ways: an operator's uncommitted tweak in the
+    # primary on top of main's committed change hid the drift, and an agent's
+    # half-made edit in the tree turned a branch that is behind into one "changing the
+    # gate itself" (bug B-drift-dirty-trees).
     forked = at(fork.out)
-    if here != forked:
+    if at("HEAD") != forked:
         kind = "own"
-    elif ran == at(head) != forked:
+    elif at(head) != forked:
         kind = "behind"
     else:
-        # The primary's definition is UNCOMMITTED -- an operator who just set the
-        # command. Merging the base would bring nothing, and the command that ran is the
-        # one configured: a failure of it is a failure (tests/test_cli.py).
+        # Neither side committed a change: the difference is an uncommitted edit -- an
+        # operator who just set the command. Merging the base would bring nothing, and
+        # the command that ran is the one configured: its failure is a failure
+        # (tests/test_cli.py).
         return {}
     return {"kind": kind, "base": base, "ran": ran, "tree": here}
 
