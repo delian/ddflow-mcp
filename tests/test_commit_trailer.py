@@ -32,6 +32,11 @@ def _commit(repo: Path, name: str, message: str) -> subprocess.CompletedProcess:
 def _setup(repo: Path, config: str) -> None:
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(config)
+    # The trailer must name an item in the queue (bug B438d336b24), so the ids these
+    # tests commit with exist; `tests/test_trailer_names_item.py` covers ids that do not.
+    for item in ("T0", "T1", "T2", "OPIK.2"):
+        code, out, err = run_cli(repo, "task", "add", item, "--title", item)
+        assert code == 0, out + err
     code, out, err = run_cli(repo, "hooks", "install")
     assert code == 0, err
     assert "commit-msg" in out
@@ -51,13 +56,15 @@ def test_the_message_BEING_committed_is_checked_not_the_previous_one(repo):
 def test_a_project_keeps_its_own_trailer_keys(repo):
     _setup(
         repo,
-        '[enforce]\nrequire_item_trailer = true\nitem_trailer_keys = ["Phase", "Phase-ships"]\n',
+        '[enforce]\nrequire_item_trailer = true\nitem_trailer_keys = ["Phase", "Phase-ships"]\n'
+        'trailer_waivers = { "Phase-ships" = ["none"] }\n',
     )
     assert _commit(repo, "a.txt", "x\n\nPhase: OPIK.2").returncode == 0
     assert _commit(repo, "b.txt", "docs\n\nPhase-ships: none").returncode == 0
-    refused = _commit(repo, "c.txt", "x\n\nItem: OPIK.3")
+    # A REAL id under a key the project does not use: refused for the key alone.
+    refused = _commit(repo, "c.txt", "x\n\nItem: OPIK.2")
     assert refused.returncode != 0, "a key the project does not use satisfied the check"
-    assert "`Phase: <id>` or `Phase-ships: <id>`" in refused.stderr
+    assert "`Phase: <id>` or `Phase-ships: none`" in refused.stderr
 
 
 def test_a_trailer_only_inside_a_comment_line_does_not_count(repo):
