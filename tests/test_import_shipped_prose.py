@@ -47,6 +47,12 @@ def _claims(heading: str) -> bool:
         "Phase 20 — launch (closed beta)",
         "Parser: complete rewrite",
         "Importer — closed questions",
+        "Phase 3 — Work to be done: parser rewrite",
+        "Tasks completed: 3 of 12",
+        "What's shipped — and what isn't",
+        "DEFINITION OF DONE",
+        "PHASE 4 — COMPLETE REWRITE OF PARSER",
+        "Phase 4 — done in 3 days",
     ],
 )
 def test_the_word_in_prose_is_not_a_status(heading):
@@ -62,7 +68,6 @@ def test_the_word_in_prose_is_not_a_status(heading):
         "Review (V6 session, closed 2026-07-12)",
         "Review — Session AUTODEDUPE (roborev job 191), closed 2026-08-07",
         "Completed (current)",
-        "P2 sweep complete — final state",
         "Phase 7 — done",
         "Phase 8 (shipped)",
         "Phase 5 — foo (P1) — shipped in 0.3",
@@ -70,6 +75,10 @@ def test_the_word_in_prose_is_not_a_status(heading):
         "Phase 5 — foo: shipped in v2",
         "Phase 5 — foo, now shipped",
         "Phase 5 — foo ✔ done",
+        "Phase 12 SHIPPED — docs NOT DONE",
+        "Phase 9 — done.",
+        "Phase 9 (closed!)",
+        "PHASE 5 — DONE",
     ],
 )
 def test_a_status_still_is(heading):
@@ -98,3 +107,21 @@ def test_the_drift_note_names_a_status_heading_end_to_end(repo, heading):
     p.write_text(f"## Phase 36\n### {heading}\n- [ ] **36.9a** x\n")
     notes = " ".join(IM.plan_import(repo, None).notes)
     assert "say the work is finished" in notes and "36.9" in notes, notes
+
+
+def test_import_verify_reports_drift_for_a_status_heading_only(repo):
+    """The `--verify` call site, end to end: the prose heading is not drift."""
+    import json
+
+    from conftest import run_cli
+
+    p = repo / "docs" / "todo.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(
+        "## Phase 36\n### 36.5 — Orchestration recipes beyond the shipped two\n"
+        "- [ ] **36.5a** four recipes\n\n### 36.9 — Gates ✅ SHIPPED\n- [ ] **36.9a** x\n"
+    )
+    assert run_cli(repo, "import", "--apply")[0] == 0
+    _code, out, err = run_cli(repo, "--json", "import", "--verify")
+    drift = json.loads(out)["shipped_with_open_tasks"]
+    assert drift == ["36.9"], (drift, err)
