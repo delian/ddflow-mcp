@@ -154,6 +154,13 @@ _CHECK = re.compile(r"^(\s*)[-*]\s+\[( |x|X)\]\s+(.*)$")
 #:               instead of `DRIVERFIX.1`. A queue whose ids do not match the ids the
 #:               project has been using in commit trailers for months is not an import.
 #:
+#:   TITLED    — `**38.9 Free-text arg vocabulary.** detail`: the bold wraps a DOTTED id
+#:               and the title with no separator between them (home-simulator writes
+#:               this). Dotted only -- `**L2 cache misses**` is prose -- and the dot is
+#:               checked in `_split_id`, since `_ID` also matches `L2`. Prose that
+#:               opens with a dotted number (`**3.5 million users**`) is read as an id
+#:               too: the shape cannot tell them apart.
+#:
 #: The optional `(...)` is an annotation projects put between the id and the separator
 #: ("(DECISION)", "(BLOCKED)"); it is bounded so it cannot swallow a sentence.
 #: A permissive TOKEN. What counts as an id is decided by `_is_id`, in code, because
@@ -171,6 +178,7 @@ _ITEM_ID = re.compile(
     rf"\*\*({_ID})\s*\([^)]{{0,80}}\)\*\*"
     r")\s*[—\-:]?\s*"
     rf"|^(?:\*\*)?({_ID})(?:\s*\([^)]{{0,30}}\))?\s*[—:]\s+"
+    rf"|^\*\*({_ID})\s+(?=[^\s*])"
 )
 
 
@@ -184,12 +192,26 @@ def _is_id(token: str) -> bool:
     return bool(token) and any(c.isdigit() for c in token) and ("." in token or token[0].isalpha())
 
 
+def _titled(text: str) -> bool:
+    """Whether `text` carries its id in the TITLED shape (`**38.9 Free-text ...**`) --
+    by the same rule `_split_id` applies, so `**L2 cache misses**` is prose to both."""
+    m = _ITEM_ID.match(text)
+    return bool(m and m.group(5) and _split_id(text)[0])
+
+
 def _split_id(text: str) -> tuple[str, str]:
     """`(ident, remaining text)`. `("", text)` when the line carries no id."""
     m = _ITEM_ID.match(text)
     if not m:
         return "", text
     token = m.group(1) or m.group(2) or m.group(3) or m.group(4) or ""
+    if not token and m.group(5):
+        token = m.group(5)
+        if "." not in token.strip(".") or not _is_id(token):
+            return "", text
+        # The bold still wraps the title: keep its opening `**`, so the title reads
+        # `Free-text arg vocabulary.` rather than ending in a stray `**`.
+        return token, "**" + text[m.end() :]
     if not _is_id(token):
         return "", text
     return token, text[m.end() :]
@@ -266,6 +288,13 @@ _ASIDE_NOT_DISPOSITIONS = ("PRE-EXISTING",)
 _ANNOTATION_CHARS = 160
 #: A heading that disposes everything under it: `### Deferred`, `## DECLINED items`.
 _SECTION_HOLD = ("DEFERRED", "ON HOLD", "PARKED")
+#: `### P42.8 — Future work (deliberately not in this phase)`: a heading whose title IS
+#: "future work" holds; `## Phase 5 — Future work planning` is a phase about it.
+_FUTURE_WORK = re.compile(r"^future work\b\s*(?:\(|[\u2014\u2013:]|\s-+\s|\.(?:\s|$)|$)", re.I)
+#: A heading that says its own section is LIVE: `### Phase 39 follow-ups (not started)`
+#: filed under a `## Phase 38` whose STATUS is SHIPPED. Inheriting the ancestor's verdict
+#: dropped both of its open items as history (home-simulator, 2026-09-29).
+_SECTION_LIVE = ("NOT STARTED", "NOT YET STARTED", "IN PROGRESS", "REOPENED", "RE-OPENED")
 _SECTION_CLOSED = ("DECLINED", "OPTED OUT", "DESCOPED")
 #: A section's own `**STATUS**:` line. Its VERDICT is the leading token, never the whole
 #: line: `IN PROGRESS -- 373 of 534 (B.5 CLOSED 2026-08-17)` is live, and matching the
@@ -276,6 +305,40 @@ _STATUS_HOLD = ("DEFERRED", "WATCH", "ON HOLD", "PARKED", "BLOCKED")
 #: Words that contradict a closed verdict later on the same STATUS line.
 _STATUS_LIVE = ("IN PROGRESS", "REOPENED", "RE-OPENED")
 _TITLE_ASIDE = re.compile(r"\(([^)]*)\)")
+#: Where one clause of an aside ends: `(MED, deferred from P21.4)` is two clauses.
+_ASIDE_CLAUSE = re.compile(r"[,;:\u2014\u2013]|\s-{1,2}\s")
+
+
+#: Words that may stand before a verdict without making it prose: `(marked deferred)`,
+#: `(now on hold)`, `(operator: deferred)`.
+_VERDICT_FILLER = re.compile(
+    r"^(?:(?:NOW|WAS|IS|BEEN|BEING|MARKED|EXPLICITLY|OPERATOR|ALSO|STATUS|THE)\W+)*"
+)
+
+
+def _leads_with(clause: str, markers: tuple[str, ...]) -> bool:
+    """Whether `clause` BEGINS with a marker -- the whole word, so `watchdog`,
+    `parkedcar` and `deferred_from` do not -- past emphasis, emoji and filler words in front of it."""
+    head = re.sub(r"^[^A-Za-z0-9]+", "", clause).upper()
+    head = _VERDICT_FILLER.sub("", head)
+    return any(re.match(rf"{re.escape(m)}(?!\w)", head) for m in markers)
+
+
+def _verdict_asides(text: str, markers: tuple[str, ...]) -> str:
+    """`text` without the parenthesised asides that DESCRIBE rather than dispose.
+
+    An aside is a verdict when one of its clauses LEADS with a marker: `(DEFERRED by the
+    operator)`, `(MED, deferred from P21.4)`. `(inventory → todo → deferred notify)` is
+    what the item builds, and read as a deferral it held back the very item the
+    project's handoff said to start with (home-simulator C11, 2026-09-29).
+    """
+
+    def keep(m: re.Match) -> str:
+        clauses = _ASIDE_CLAUSE.split(m.group(1))
+        leads = any(_leads_with(c, markers) for c in clauses)
+        return m.group(0) if leads else " "
+
+    return _TITLE_ASIDE.sub(keep, text)
 
 
 def _marker_in(text: str, markers: tuple[str, ...]) -> str:
@@ -324,6 +387,23 @@ def _disposition(raw: str) -> tuple[str, str]:
     body = raw.lstrip()
     if body.startswith("~~"):
         return "closed", "STRUCK THROUGH"
+    # `**C11** consumable-triggered chains (... deferred notify) — 34.1`: the bold is only
+    # the id and the TITLE follows it with no separator, so it is read like an unbolded
+    # line, and a hold word in its asides must lead its clause (home-simulator's shape;
+    # `**A.3** — a finding (DEFERRED)` keeps the separator and stays annotation).
+    id_then_title = False
+    if body.startswith("**"):
+        close = body.find("**", 2)
+        inner, rest = (body[2:close].strip(), body[close + 2 :]) if close != -1 else ("", "")
+        id_then_title = (
+            bool(inner)
+            and " " not in inner
+            and _is_id(inner)
+            and bool(rest.strip())
+            and not re.match(r"\s*[\u2014\u2013:(\-]", rest)
+        )
+        if id_then_title:
+            body = rest.strip()
     if body.startswith("**"):
         close = body.find("**", 2)
         title, annotation = (body[2:close], body[close + 2 :]) if close != -1 else (body[2:], "")
@@ -339,24 +419,85 @@ def _disposition(raw: str) -> tuple[str, str]:
         if lead.upper() not in (*_CLOSED_MARKERS, *_HOLD_MARKERS):
             lead = ""
         annotation = f"{lead} {annotation}".strip()
+    # Asides are judged WHOLE, before the window is cut: a cut inside one leaves it
+    # unclosed, and its prose would count as a verdict.
+    held_text = _verdict_asides(annotation, _HOLD_MARKERS)[:_ANNOTATION_CHARS]
     annotation = annotation[:_ANNOTATION_CHARS]
     # Closed asides, and one left OPEN at the end of the line -- a `(Deferred to ...`
     # whose closing paren sits on the item's next line.
-    aside = " ".join([*_TITLE_ASIDE.findall(title), *_OPEN_ASIDE.findall(title)])
+    asides = [*_TITLE_ASIDE.findall(title), *_OPEN_ASIDE.findall(title)]
+    aside = " ".join(asides)
+    # A CLOSED word disposes anywhere in the annotation ("operator declined", "now
+    # superseded by X.9") and in the title's asides; a HOLD word in an annotation aside
+    # must lead its clause (`_verdict_asides`), and so must one in the title's asides
+    # when the title is prose after an id-only bold.
     closed = _marker_in(annotation, _CLOSED_MARKERS) or _marker_in(aside, _CLOSED_MARKERS)
     if closed:
         return "closed", closed
     hold_aside = tuple(m for m in _HOLD_MARKERS if m not in _ASIDE_NOT_DISPOSITIONS)
-    hold = _marker_in(annotation, _HOLD_MARKERS) or _marker_in(aside, hold_aside)
+    if id_then_title:
+        aside = _verdict_asides(" ".join(f"({a})" for a in asides), hold_aside)
+    hold = _marker_in(held_text, _HOLD_MARKERS) or _marker_in(aside, hold_aside)
     return ("hold", hold) if hold else ("", "")
 
 
-def _heading_disposition(heading: str) -> tuple[str, str]:
+def _heading_disposition(heading: str) -> tuple[str, str] | None:
+    """What a heading says about its own section: a disposition, `("", "")` for an
+    explicitly LIVE section (which overrides an ancestor's verdict), or None when it
+    says nothing and the section inherits."""
     m = _marker_in(heading, _SECTION_CLOSED)
     if m:
         return "closed", f"under a {m} heading"
     m = _marker_in(heading, _SECTION_HOLD)
-    return ("hold", f"under a {m} heading") if m else ("", "")
+    if m:
+        return "hold", f"under a {m} heading"
+    if _marker_in(heading, _SECTION_LIVE):
+        return "", ""
+    if _FUTURE_WORK.match(_heading_title(heading)):
+        # Not "under a ..." -- that prefix is what `_push_heading` refuses to let a live
+        # sub-heading override, and a `(in progress)` item filed under "Future work" is
+        # the operator saying this one has started.
+        return "hold", "its heading files it as FUTURE WORK"
+    return None
+
+
+#: What a heading's title follows: `Phase 14 — `, `4. `, `P42.8 — `.
+_HEADING_LEAD = re.compile(
+    r"^\W*(?:(?:phase|session|stage|milestone|sprint)\s+[A-Za-z]?\d[\w.]*?(?:\.\s+|\s*[\u2014\u2013:\-]+\s*)"
+    r"|\d+(?:\.\d+)*\.?\s+)",
+    re.I,
+)
+
+
+def _heading_title(heading: str) -> str:
+    """The heading with any id or `Phase N —` lead removed."""
+    rest = _split_id(heading)[1] or heading
+    return _clean_title(_HEADING_LEAD.sub("", _clean_title(rest)))
+
+
+#: The reason a HEADING (not a STATUS line) gave: `under a DECLINED heading`.
+_BY_HEADING = "under a "
+
+
+def _push_heading(
+    stack: list[tuple[int, tuple[str, str] | None]], level: int, heading: str
+) -> None:
+    """Push a heading's own verdict. A LIVE one overrides an ancestor's STATUS (`SHIPPED`
+    over a section whose `(not started)` follow-ups are filed under it) but never an
+    ancestor HEADING that declines or defers: `## Declined ideas / ### Idea A (not
+    started)` is the operator's word about everything below it."""
+    own = _heading_disposition(heading)
+    if own == ("", ""):
+        # The nearest blocking ancestor is PUSHED again, not merely inherited: a
+        # "Future work" hold between it and this heading would otherwise be the
+        # nearest verdict, and a declined section would come back as merely held.
+        blocking = next(
+            (d for _lvl, d in reversed(stack) if d and d[0] and d[1].startswith(_BY_HEADING)),
+            None,
+        )
+        if blocking:
+            own = blocking
+    stack.append((level, own))
 
 
 #: A negation in a STATUS verdict. Not an `UN-` prefix: `UNSHIPPED` already fails the
@@ -721,8 +862,7 @@ def scan_todos(
                 level = len(h.group(1))
                 while stack and stack[-1][0] >= level:
                     stack.pop()
-                own = _heading_disposition(heading)
-                stack.append((level, own if own[0] else None))
+                _push_heading(stack, level, heading)
                 continue
             m = _CHECK.match(line)
             if not m:
@@ -756,6 +896,10 @@ def scan_todos(
                 # The strike-through is the disposition, recorded above; the id inside it
                 # is still the id every `Needs:` line and commit trailer uses.
                 body = body.replace("~~", "").strip()
+            # A TITLED id that is already taken falls back to the slug of the WHOLE line,
+            # as it did before that shape was read: an id derived from a changed slug is
+            # a new item to a project that imported the old one.
+            unsplit = _clean_title(body) if _titled(body) else ""
             ident, body = _split_id(body)
             body = _clean_title(body)
             if heading and not phase_ident:
@@ -783,10 +927,11 @@ def scan_todos(
                         # Its own section STATUS, for `_phase_verdict`: every box
                         # ticked under "STATUS: PARTIAL" is not a finished phase.
                         "status": heading_status,
+                        "heading_number": _heading_number(heading),
                     },
                 )
                 found.append(phase_found)
-            chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(body, 20)}", taken)
+            chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(unsplit or body, 20)}", taken)
             anchor = Found(
                 kind="task",
                 ident=chosen,
@@ -845,6 +990,36 @@ def _date_hint(*texts: str) -> str:
     return ""
 
 
+#: `## Phase 40 — Phase 34 follow-ups`: the number a heading gives its own section. A
+#: separator must follow it -- `### Phase 39 follow-ups` is a heading ABOUT Phase 39,
+#: and its items (`38.9`, `38.10`) are what the project calls Phase 38's leftovers.
+_HEADING_NUMBER = re.compile(
+    r"^\W*(?:phase|session|stage|milestone|sprint)\s+([A-Za-z]?\d[\w.]*?)"
+    r"(?:\.\s|\.?(?:\s*[\u2014\u2013:(]|\s+-+\s|\s*\*\*|\s*$))",
+    re.I,
+)
+
+
+def _heading_number(heading: str) -> str:
+    """The number `Phase <N>` gives its section, "" when the heading names none."""
+    m = _HEADING_NUMBER.match(heading)
+    return m.group(1) if m else ""
+
+
+def _agrees(prefix: str, number: str) -> bool:
+    """Whether a child prefix spells the heading's own number -- `P21`, `21A`, `21.A`
+    for `Phase 21`, `T4` for `Phase 4`, never `34` for `Phase 40` -- compared on the
+    number in its first component."""
+
+    def lead(ident: str) -> str:
+        m = re.search(r"\d+", ident.split(".", maxsplit=1)[0])
+        return (m.group(0).lstrip("0") or "0") if m else ""
+
+    # A prefix with no number (`DRIVERFIX`, `B`) is the project's NAME for the phase,
+    # not the id of another one: it agrees with any number.
+    return not lead(prefix) or lead(prefix) == lead(number)
+
+
 def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
     """Rename a phase to the id prefix its own tasks already use.
 
@@ -865,6 +1040,11 @@ def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
     evidence too, and a stronger one. `### 142.A` has children `142.1`, `142.2`, so the
     child prefix is `142` and taking it renames the phase out from under every
     `Needs: 142.A` in the file.
+
+    So is a heading that NUMBERS itself: `## Phase 40 — Phase 34 follow-ups` holds
+    `34.6e`, `34.8f`, and their prefix is the id of a different, closed phase. Such a
+    phase takes its own number instead; a prefix that agrees with it (`P21.7` under
+    `## Phase 21`) is still adopted, since it is the project's spelling of that number.
     """
     by_phase: dict[str, list[Found]] = {}
     for f in found:
@@ -876,7 +1056,12 @@ def _adopt_child_prefix(found: list[Found], taken: set[str]) -> None:
         kids = by_phase.get(phase.ident, [])
         voters = [t.ident for t in kids if t.extra.get("id_from_source")]
         best = _common_dotted_prefix(voters)
-        if not best or len(voters) < _PREFIX_QUORUM or best in taken:
+        if not best or len(voters) < _PREFIX_QUORUM:
+            continue
+        number = phase.extra.get("heading_number", "")
+        if number and not _agrees(best, number):
+            best = number
+        if best in taken:
             continue
         old_ident = phase.ident
         taken.discard(old_ident)
@@ -1575,7 +1760,7 @@ def _pull_in_needed(
 
 
 def _note_withheld(
-    plan: ImportPlan, ticked: list[Found], closed_skipped: int, held: list[str]
+    plan: ImportPlan, ticked: list[Found], closed: list[str], held: list[str]
 ) -> None:
     """Say what the import deliberately did not offer as work, and how to get it."""
     if ticked:
@@ -1595,12 +1780,16 @@ def _note_withheld(
             + ". Re-run with --include-done (include_done over MCP) to bring them in as "
             "completed items -- which also completes every phase they finish."
         )
-    if closed_skipped:
+    if closed:
+        # Named, like the held ones below: a bare count hid that two items under a
+        # `(not started)` heading had been dropped with the history around them.
         plan.notes.append(
-            f"{closed_skipped} open task(s) were NOT imported because the source disposes "
+            f"{len(closed)} open task(s) were NOT imported because the source disposes "
             f"of them (declined, refuted, superseded, struck through, or in a section whose "
             f"STATUS says it is closed). They are history — pass include_done to bring them "
-            f"in as abandoned items."
+            f"in as abandoned items. E.g. {', '.join(closed[:_NOTE_EXAMPLES])}"
+            + (", ..." if len(closed) > _NOTE_EXAMPLES else "")
+            + "."
         )
     if held:
         plan.notes.append(
@@ -1969,7 +2158,7 @@ def plan_import(
     known = _known_ids(state)
     sources = sources or {}
 
-    closed_skipped = 0
+    closed: list[Found] = []
     held: list[str] = []
     deferred_done: dict[str, Found] = {}
     proposed: set[str] = set()
@@ -2009,7 +2198,7 @@ def plan_import(
             # Declined, refuted, superseded: history, the same as a ticked box -- and
             # brought in the same way when open work depends on it.
             deferred_done[f.ident] = f
-            closed_skipped += 1
+            closed.append(f)
             continue
         if f.kind == "task" and f.extra.get("disposition") == "hold":
             held.append(f.ident)
@@ -2019,11 +2208,11 @@ def plan_import(
     # it leaves the open one blocked on an id the queue has never heard of — and an
     # unknown dependency is treated as unmet, deliberately, so the import would land
     # permanently stuck work and look like it had succeeded.
-    _done_pulled, closed_pulled = _pull_in_needed(plan, deferred_done, held)
+    _pull_in_needed(plan, deferred_done, held)
     in_plan = {id(f) for f in plan.found}
     ticked = [f for f in deferred_done.values() if f.done and id(f) not in in_plan]
     plan.ticked_left_out = len(ticked)
-    _note_withheld(plan, ticked, closed_skipped - closed_pulled, held)
+    _note_withheld(plan, ticked, [f.ident for f in closed if id(f) not in in_plan], held)
 
     tasks = [f for f in plan.found if f.kind == "task"]
     if len(tasks) > max_tasks:
