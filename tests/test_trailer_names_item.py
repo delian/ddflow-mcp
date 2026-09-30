@@ -360,3 +360,10 @@ def test_a_dict_knob_is_recognised_by_any_spelling_of_its_type():
     assert _coerce("a=b", dict) == {"a": "b"}
     assert _coerce('{"a": "b"}', "Optional[dict[str, str]]") == {"a": "b"}
     assert _coerce("a,b", "list[str]") == ["a", "b"]
+    # ...and a list OF dicts is still a list (rubber-duck, round 5).
+    assert _coerce("", "list[dict[str, str]]") == []
+    assert isinstance(_coerce('[{"a": "b"}]', "list[dict[str, str]]"), list)
+    from ddflow.config import _outer_is_dict
+
+    assert _outer_is_dict("dict[str, list[str]]") and _outer_is_dict("<class 'dict'>")
+    assert not _outer_is_dict("list[dict[str, str]]") and not _outer_is_dict("list[str]")

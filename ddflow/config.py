@@ -1282,7 +1282,7 @@ def _coerce(raw: Any, typ: Any) -> Any:
     ts = typ if isinstance(typ, str) else getattr(typ, "__name__", str(typ))
     if not isinstance(raw, str):
         return raw
-    if "dict" in ts:  # before "list": `dict[str, list[str]]` contains both
+    if _outer_is_dict(ts):
         return _coerce_dict(raw, ts)
     if "bool" in ts:
         low = raw.strip().lower()
@@ -1307,6 +1307,18 @@ def _coerce(raw: Any, typ: Any) -> Any:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
     return raw
+
+
+def _outer_is_dict(ts: str) -> bool:
+    """Is the OUTERMOST container in this type spelling a dict?
+
+    `dict[str, list[str]]` and `list[dict[str, str]]` both contain both words, so
+    neither a substring test nor branch order alone can tell them apart; `dict`,
+    `<class 'dict'>` and `Optional[dict[...]]` do not start with "dict". Whichever
+    word comes first is the outer container.
+    """
+    d, lst = ts.find("dict"), ts.find("list")
+    return d >= 0 and (lst < 0 or d < lst)
 
 
 def _coerce_dict(raw: str, ts: str) -> dict[str, Any]:
