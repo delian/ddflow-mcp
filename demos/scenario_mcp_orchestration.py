@@ -634,7 +634,7 @@ def run(sc: Scenario) -> None:
         )
         out, code = alpha.tool("ddflow_gate_run", id="P1", gate="unit_tests")
         sc.check("the phase-level suite runs against the merged result", code in (0, 2), out[-300:])
-        for gate in ("tasks", "bug_hunt", "dedupe", "live_test", "corrections", "merge"):
+        for gate in ("tasks", "bug_hunt", "dedupe", "live_test", "corrections", "docs", "merge"):
             alpha.tool(
                 "ddflow_gate_record", id="P1", gate=gate, outcome="passed", evidence="phase pass"
             )
