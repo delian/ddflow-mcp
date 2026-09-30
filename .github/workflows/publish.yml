@@ -104,12 +104,26 @@ jobs:
           # 200 = released, 404 = not yet. Anything else is PyPI being unreachable, and
           # guessing either way is wrong: "not released" would republish, "released" would
           # skip a number. Fail, and the next push retries.
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/ddflow-mcp/$version/json")
+          pypi() { curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/ddflow-mcp/$1/json"; }
+          code=$(pypi "$version")
           case "$code" in
             404)
               echo "$version is declared and not on PyPI yet — publishing it without a bump" ;;
             200)
-              scripts/bump.sh patch
+              # The next patch PyPI does NOT have. The obvious +1 can be taken already -- a
+              # `v*` tag publishes out of band, and never moves main's declared version --
+              # and committing `release X.Y.Z` for a number PyPI holds would put a false
+              # release on main before the upload failed. Checked here, before any commit.
+              next=$version
+              for _ in $(seq 1 50); do
+                next=$(python3 -c 'import sys; a, b, c = sys.argv[1].split("."); print(f"{a}.{b}.{int(c) + 1}")' "$next")
+                taken=$(pypi "$next")
+                [ "$taken" = 404 ] && break
+                [ "$taken" = 200 ] || { echo "::error::PyPI answered HTTP $taken for ddflow-mcp $next"; exit 1; }
+                echo "$next is on PyPI already (released out of band) — skipping it"
+              done
+              [ "$taken" = 404 ] || { echo "::error::no free patch version within 50 of $version"; exit 1; }
+              scripts/bump.sh "$next"
               version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
               git config user.name "github-actions[bot]"
               git config user.email "github-actions[bot]@users.noreply.github.com"

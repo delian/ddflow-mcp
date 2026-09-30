@@ -800,8 +800,14 @@ $ scripts/bump.sh minor          # 0.1.4 -> 0.2.0 (or: major, or an exact 1.0.0)
 $ git commit -am 'release 0.2.0' && git push origin main
 ```
 
-— and CI publishes exactly `0.2.0`; the next push that bumps nothing releases `0.2.1`. The same rule makes a failed release retry its number with the next push
-instead of skipping it. The bump is pushed to main *before* anything publishes: a push that
+— and CI publishes exactly `0.2.0`; the next push that bumps nothing releases `0.2.1`.
+
+The same rule makes a release that failed *before* its PyPI upload retry its number with
+the next push. One that failed after it — Docker Hub, ghcr.io, the MCP registry — does
+not: PyPI has the number, so the next push moves past it; re-run that run's failed jobs
+from the Actions page instead. A bump never lands on a number PyPI already holds (a `v*`
+tag can publish one out of band): CI skips to the next free patch before it commits
+anything. The bump is pushed to main *before* anything publishes: a push that
 loses a race with another commit fails the run and publishes nothing, where pushed last it
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
 `main` or a `v*` tag releases.
