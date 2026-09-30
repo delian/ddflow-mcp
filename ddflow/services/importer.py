@@ -82,7 +82,46 @@ LESSON_SUMMARY_GLOBS = (
 #: Checked against the PHASE heading only: a phase marked shipped whose tasks are still
 #: unticked is the single most valuable thing this scan can tell the operator, because
 #: it is drift they cannot see and the queue would otherwise hand that work out again.
-_DONE_MARKER = re.compile(r"\bSHIPPED\b|\bCLOSED\b|\bDONE\b|\bCOMPLETE[D]?\b|✅", re.I)
+#:
+#: A STATUS, not the word: `beyond the shipped two`, `Definition of done`, `(closed beta)`
+#: and `NOT shipped in 137.E` are prose, and matched case-insensitively anywhere they
+#: raised a permanent "finished with an open task" alarm on every import of
+#: home-simulator (15 such headings across it and run_nemo_run, bug B-imp-shipped-prose).
+#: What counts: the whole word in capitals or a check mark; or a lowercase one that ENDS
+#: its clause (`(shipped)`, `— done`, `closed 2026-08-07`, `— shipped in 0.3`) where it
+#: opens the heading, an aside clause or the text after a separator, or precedes a
+#: separator. Titles reach this with their bold already stripped (`_clean_title`), so
+#: bold is not a signal here. Ask `_claims_done`, which also handles negation.
+_DONE_WORD = r"(?:shipped|closed|done|complete[d]?)"
+#: The whole word: not `closed-loop`, not `shipped-vs-ticked`.
+_WORD_END = r"(?![\w-])"
+#: What may follow a lowercase status word for it to end its clause: the end, a closing
+#: bracket, a separator, sentence punctuation, a date, or a version (`shipped in 0.3`).
+_CLAUSE_END = (
+    r"(?=\s*(?:$|[)\],;(\u2014\u2013:|]|[.!?](?:\s|$|[)\]])|\s-+\s|\d{4}-\d{2}"
+    r"|(?i:in\s+(?:v\d|\d+\.\d)|now\b)))"
+)
+#: The word in capitals, in a heading that is not itself written in capitals.
+#: Never as the object of `OF` or `TO BE` (`Definition of DONE`, `WORK TO BE DONE`).
+_NOT_AFTER_OF = r"(?<!\bOF )(?<!\bof )(?<!\bBE )(?<!\bbe )"
+_DONE_CAPS = re.compile(rf"{_NOT_AFTER_OF}\b(?:SHIPPED|CLOSED|DONE|COMPLETED?){_WORD_END}")
+#: In a heading written in capitals every word is a capital word, so there the status
+#: word must END its clause (`PHASE 12 SHIPPED`), and not as the object of `OF` or `TO BE`
+#: (`DEFINITION OF DONE`, `WORK TO BE DONE`).
+_DONE_CAPS_ENDING = re.compile(
+    rf"{_NOT_AFTER_OF}\b(?:SHIPPED|CLOSED|DONE|COMPLETED?){_WORD_END}{_CLAUSE_END}"
+)
+_DONE_CHECK = re.compile(r"[\u2705\u2714]")
+#: A lowercase word that opens the heading, an aside clause or the text after a separator,
+#: and ends its clause.
+_DONE_CLAUSE = re.compile(
+    rf"(?i:(?:^\W*|[(\[,;]\s*(?:now\s+)?|(?:[\u2014\u2013:|]|\s-+\s)\s*)"
+    rf"(?P<w>{_DONE_WORD}){_WORD_END}{_CLAUSE_END})"
+)
+#: The one negation prefix both checks use: `NOT`, `NOT YET`, `NEVER`.
+_NEGATION = r"\b(?:NOT|NEVER)\s+(?:YET\s+)?"
+#: A negation that ends right before a status word: `NOT SHIPPED`, `not yet done`.
+_NEGATED_BEFORE = re.compile(rf"{_NEGATION}\W*$", re.I)
 #: Files inside an ADR directory that are the index rather than a decision.
 _DECISION_INDEX_STEMS = {"readme", "index", "template", "0000-template", "_template"}
 DECISION_GLOBS = (
@@ -1644,7 +1683,7 @@ def _flag_shipped_phases_with_open_tasks(plan: ImportPlan) -> None:
     drifted = [
         f
         for f in plan.found
-        if f.kind == "phase" and _DONE_MARKER.search(f.title) and open_by_phase.get(f.ident)
+        if f.kind == "phase" and _claims_done(f.title) and open_by_phase.get(f.ident)
     ]
     if not drifted:
         return
@@ -1871,7 +1910,27 @@ _HEADING_STALLED = re.compile(
     r"(?<![A-Z0-9])(PARTIAL(?:LY)?|DEFERRED|ON HOLD|PARKED|BLOCKED)(?![A-Z0-9])", re.I
 )
 #: A done marker the heading itself negates: `NOT DONE`, `not yet shipped`.
-_NEGATED_DONE = re.compile(r"\bNOT\s+(?:YET\s+)?(?:DONE|SHIPPED|CLOSED|COMPLETE[D]?)\b", re.I)
+_NEGATED_DONE = re.compile(rf"{_NEGATION}\W*(?:DONE|SHIPPED|CLOSED|COMPLETE[D]?)\b", re.I)
+
+
+def _claims_done(title: str) -> bool:
+    """Whether a heading says its work is finished: some status in it is not negated.
+
+    One place for the drift note, `import --verify` and the phase verdict. Negation is
+    per status, not per heading: `Phase 12 SHIPPED — docs NOT DONE` still claims done
+    (so a phase shipped with a task open is still drift), `Phase 9 (NOT YET SHIPPED)`
+    does not. Whether the heading ALSO says something remains is `_says_unfinished`'s
+    question, built from the same `_NEGATION`: that one keeps the verdict from
+    completing such a phase. In a heading written in
+    capitals a capital status word must end its clause (`_DONE_CAPS_ENDING`).
+    """
+    letters = [c for c in title if c.isalpha()]
+    caps_heading = bool(letters) and all(c.isupper() for c in letters)
+    caps = _DONE_CAPS_ENDING if caps_heading else _DONE_CAPS
+    starts = [m.start() for m in caps.finditer(title)]
+    starts += [m.start("w") for m in _DONE_CLAUSE.finditer(title)]
+    starts += [m.start() for m in _DONE_CHECK.finditer(title)]
+    return any(not _NEGATED_BEFORE.search(title[:at]) for at in starts)
 
 
 def _says_unfinished(phase: Found) -> str:
@@ -1885,7 +1944,7 @@ def _says_unfinished(phase: Found) -> str:
     if status is not None and status[0] != "closed":
         return f"its STATUS says {status[1] or 'it is live'}"
     m = _NEGATED_DONE.search(phase.title) or _HEADING_LIVE.search(phase.title)
-    if not m and not _DONE_MARKER.search(phase.title):
+    if not m and not _claims_done(phase.title):
         m = _HEADING_STALLED.search(phase.title)
     return f"its heading says {m.group(0).upper()}" if m else ""
 
@@ -1931,7 +1990,7 @@ def _phase_verdict(
             f"every task under it is done or closed in the source ({done} done, "
             f"{closed} closed) -- phase imported from {source}"
         )
-    if _DONE_MARKER.search(phase.title) and not _says_unfinished(phase):
+    if _claims_done(phase.title) and not _says_unfinished(phase):
         return "done", f"its heading at {source} marks it finished, and no task is filed under it"
     return "open", ""
 
@@ -2403,7 +2462,7 @@ def _scan_queue(state, r: VerifyReport) -> tuple[list[str], dict[str, list[str]]
             ats.append(it.created_at)
         if it.kind == "task" and not it.globs and it.state not in (DONE, ABANDONED):
             (r.no_globs_branches if it.source.startswith("git:") else r.no_globs).append(it.id)
-        elif it.kind == "phase" and _DONE_MARKER.search(it.title) and _has_open_child(state, it):
+        elif it.kind == "phase" and _claims_done(it.title) and _has_open_child(state, it):
             r.shipped_drift.append(it.id)
         if not it.source.startswith("git:"):
             paths.setdefault(it.source.split(":", 1)[0], []).append(it.id)
