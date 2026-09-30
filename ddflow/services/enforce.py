@@ -1502,7 +1502,9 @@ def queue_ids(repo: Path, cfg: Config) -> set[str]:
     `.ddflow/index.db` when the index is current -- one query, where a fold re-parses
     every event (~120 ms on a 5k-event log, on every commit) -- and from the log itself
     when it is not; `Store.rebuild` projects exactly the non-removed items, so the two
-    answers are the same set. A damaged index is a cache miss, not an error.
+    answers are the same set (`tests/test_trailer_names_item.py::
+    test_the_fresh_index_and_the_fold_agree` holds a removed id refused on both paths).
+    A damaged index is a cache miss, not an error.
 
     Raises `QueueUnreadable` when there is no log to read or reading it fails: an
     unverifiable trailer is "could not run", never a pass.
@@ -1545,8 +1547,9 @@ def _near_ids(value: str, ids: set[str], limit: int = 3) -> list[str]:
     return near[:limit] or difflib.get_close_matches(value, sorted(ids), n=limit, cutoff=0.8)
 
 
-def _trailers(message: str) -> list[tuple[str, str]]:
-    """`(key, value)` for every trailer git reads in `message`; [] if git cannot parse it.
+def _trailers(message: str) -> list[tuple[str, str]] | None:
+    """`(key, value)` for every trailer git reads in `message`; None if git could not
+    say -- which is "could not check", never "no trailer" (the caller exits 2).
 
     Git's OWN trailer parser, not a line scan. Git reads trailers only from the final
     paragraph, so `Item: X` in the body passed a line scan while
@@ -1554,15 +1557,20 @@ def _trailers(message: str) -> list[tuple[str, str]]:
     found nothing (roborev 827). A check that disagrees with the query it serves
     certifies commits the audit will miss.
     """
-    parsed = P.run(
-        ["git", "interpret-trailers", "--parse"],
-        input=message,
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
+    try:
+        parsed = P.run(
+            ["git", "interpret-trailers", "--parse"],
+            input=message,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+    except (OSError, P.SubprocessError):
+        return None
+    if parsed.returncode != 0:
+        return None
     out = []
-    for ln in parsed.stdout.splitlines() if parsed.returncode == 0 else []:
+    for ln in parsed.stdout.splitlines():
         key, sep, value = ln.partition(":")
         if sep:
             out.append((key.strip(), value.strip()))
@@ -1605,17 +1613,32 @@ def check_item_trailer(
         return 0, ""
     canon = {k.lower(): k for k in keys}
     words = {k.lower(): list(v) for k, v in (waivers or {}).items()}
-    found = [(canon[k.lower()], v) for k, v in _trailers(message) if k.lower() in canon]
+    trailers = _trailers(message)
+    if trailers is None:
+        return 2, (
+            "ddflow: `git interpret-trailers --parse` failed, so this commit's item trailer "
+            "could not be checked. This is not a pass; check that `git` runs here."
+        )
+    found = [(canon[k.lower()], v) for k, v in trailers if k.lower() in canon]
     if not found:
         shown = " or ".join(
             f"`{k}: {'|'.join(words[k.lower()]) if k.lower() in words else '<id>'}`" for k in keys
         )
+        # A waiver for a key that is not accepted is never consulted: say so, rather
+        # than refuse `Phase-ships: none` with no hint that the waiver is inert.
+        inert = sorted(k for k in (waivers or {}) if k.lower() not in canon)
         return 1, (
             f"ddflow: this commit has no {shown} trailer, and "
             f"[enforce].require_item_trailer is on.\n\n"
             f"Add a final line to the commit message, e.g.:\n"
             f"    {keys[0]}: P1.T3\n\n"
             f"It is what lets an audit match commits to queue items mechanically."
+            + (
+                f"\n\n[enforce].trailer_waivers declares {', '.join(inert)}, which "
+                f"[enforce].item_trailer_keys does not list, so it is ignored: add it there."
+                if inert
+                else ""
+            )
         )
     bad: list[str] = []
     known: set[str] | None = None

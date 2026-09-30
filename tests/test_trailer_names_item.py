@@ -267,3 +267,28 @@ def test_the_waiver_map_from_the_environment(tmp_path):
     cfg = Config.load(tmp_path, env=env)
     assert cfg.enforce.trailer_waivers == {"Phase-ships": ["none", "recon"]}
     assert Config().enforce.trailer_waivers == {}
+
+
+# -- roborev on the branch ---------------------------------------------------------------
+
+
+def test_a_waiver_for_a_key_that_is_not_accepted_is_named_as_inert(repo):
+    _queue(repo, NEMO.replace('["Phase", "Phase-ships"]', '["Phase"]'))
+    code, out = _check(repo, "docs\n\nPhase-ships: none\n")
+    assert code == 1
+    assert "Phase-ships" in out and "ignored" in out, out
+
+
+def test_git_failing_to_parse_the_trailers_is_could_not_run(monkeypatch):
+    from ddflow.services import enforce as E
+
+    def broken(*_a, **_k):
+        raise E.P.TimeoutExpired("git", 30)
+
+    monkeypatch.setattr(E.P, "run", broken)
+    code, msg = E.check_item_trailer("s\n\nItem: T1\n", ["Item"], ids=lambda: {"T1"})
+    assert code == 2, msg
+    monkeypatch.setattr(
+        E.P, "run", lambda *a, **k: subprocess.CompletedProcess(a, 128, "", "fatal")
+    )
+    assert E.check_item_trailer("s\n\nItem: T1\n", ["Item"], ids=lambda: {"T1"})[0] == 2
