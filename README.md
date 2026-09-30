@@ -942,6 +942,33 @@ there is.
 > truncated. That case is reported as `TRUNCATED` with the remedy named, never as an
 > empty completion and never as a clean review.
 
+**Reviews run in parallel, and each chunk is raced.** A large diff is reviewed in chunks
+(`max_chunk_chars`). They go out together, up to `max_concurrency` requests in flight
+(default 4), so a review takes as long as its slowest chunk rather than the sum. Each
+chunk is also sent `hedge` times (default 2): the first copy that answers **on contract**
+is the chunk's review, and the rest are cancelled — the connection is closed so the
+server aborts the request, a `command` reviewer's process group is killed. A chunk whose
+every copy failed is reported exactly as before; nothing is counted as reviewed that was
+not.
+
+Why: a reasoning model's time is its reasoning length, and that is random. Measured on a
+LAN vLLM: the same 3 KB diff took 64–391 s across eight identical calls, about one call
+in four on a hard diff never answers before `max_tokens`, and the server was idle —
+eight concurrent requests each ran 28% slower for 5.7× the throughput. A 24 KB review
+went from 1 274 s (chunks in sequence) to the time of its slowest chunk.
+
+```toml
+[[reviewer]]
+# ...
+hedge = 3             # copies per chunk; 1 turns racing off
+max_concurrency = 10  # requests in flight, across chunks and copies
+```
+
+On a **metered API** a cancelled copy is still billed for what it generated before it
+was stopped: `hedge = 1` if cost matters more than time there. On a single-slot local
+server (an `ollama` with `OLLAMA_NUM_PARALLEL=1`) the extra copies simply queue behind the
+first ones, which are always sent first.
+
 ### Companion tools
 
 ddflow imposes the order and demands the evidence. It does not *perform* the judgement
