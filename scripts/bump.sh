@@ -16,10 +16,11 @@
 # in an IDE marketplace, installable, and the wrong build. `tests/test_packaging.py`
 # catches the drift, but only after you have made it.
 #
-# CI RUNS THIS FOR YOU. `.github/workflows/publish.yml` bumps MINOR on every push to main
-# that changes shipped code, commits 'release X.Y.0' to main, and publishes. Run it by hand
-# only for another bump -- `major`, `patch`, an exact version: publish.yml releases a
-# declared version PyPI does not have yet AS IS, instead of bumping it again.
+# CI RUNS `patch` FOR YOU. `.github/workflows/publish.yml` bumps the patch version on every
+# push to main that changes shipped code, commits 'release X.Y.Z' to main, and publishes.
+# MAJOR AND MINOR ARE YOURS: run `minor`, `major` or an exact version by hand, commit and
+# push. publish.yml releases a declared version PyPI does not have yet AS IS, instead of
+# bumping it again, and the automatic patches continue from there.
 #
 # uv.lock records the project's own version too, so it is re-locked here; left stale, the
 # next `uv run` rewrites it and the release commit is not what CI actually built.

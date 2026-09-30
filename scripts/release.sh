@@ -6,7 +6,7 @@
 #   scripts/release.sh --publish       # ...then push to PyPI, Docker Hub, ghcr.io, MCP
 #
 # WHY THIS EXISTS ALONGSIDE .github/workflows/publish.yml. The workflow is the thing that
-# actually releases -- on every push to main that changes shipped code (bumping minor), or
+# actually releases -- on every push to main that changes shipped code (bumping patch), or
 # on a `v*` tag. But a release is not reversible: PyPI refuses to re-upload
 # a version, `:latest` is already on someone's disk by the time you notice, and a manifest
 # in the MCP registry is what an IDE marketplace offers people. So the same checks have to
