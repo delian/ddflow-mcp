@@ -298,3 +298,20 @@ def test_a_malformed_args_field_is_no_launch_not_a_crash(tmp_path):
             json.dumps({"mcp": {"cg": {"type": "local", "command": ["docker"], "args": bad}}})
         )
         assert _status(tmp_path, "codeguide").registered_as == {}, bad
+
+
+def test_an_array_command_is_never_re_split_and_npx_p_names_the_package(tmp_path):
+    """Found by the critic: an array `command` whose one element held a space was
+    shlex-split into a different command; and npx's `-p <pkg>` was consumed as a flag
+    value, hiding the package that identifies the server."""
+    app = CO.Companion(id="app", command="/Apps/My App/mcp-server", args=["--stdio"])
+    entry = {"type": "local", "command": ["/Apps/My App/mcp-server", "--stdio"]}
+    assert CO.launches_as(app, entry)
+    assert CO.launches_as(app, {"command": ["/Apps/My App/mcp-server"], "args": ["--stdio"]})
+    bare = CO.Companion(id="bare", command="/Apps/My App/mcp-server")
+    assert CO.launches_as(bare, {"command": ["/Apps/My App/mcp-server"]}), "array was re-split"
+    ctx = CO.Companion(id="c", command="npx", args=["@upstash/context7-mcp"])
+    assert CO.launches_as(ctx, {"command": "npx", "args": ["-p", "@upstash/context7-mcp@latest"]})
+    assert CO.launches_as(
+        ctx, {"command": "npx", "args": ["-p", "@upstash/context7-mcp", "context7-mcp"]}
+    )

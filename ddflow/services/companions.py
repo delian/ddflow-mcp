@@ -345,10 +345,13 @@ def _launch_of(entry: object) -> tuple[str, list[str]] | None:
     if not isinstance(args, list):
         return None  # checked BEFORE the array form merges it: `*5` raised, `*"a b"` split
     if isinstance(cmd, list) and cmd and all(isinstance(x, str) for x in cmd):
-        cmd, args = cmd[0], [*cmd[1:], *args]
+        # Already tokenised: an element holding a space is ONE token (`/Apps/My App/x`).
+        return (cmd[0], [*cmd[1:], *map(str, args)]) if cmd[0].strip() else None
     if not isinstance(cmd, str) or not cmd.strip():
         return None
-    if not args and any(ch.isspace() for ch in cmd.strip()):
+    # A whole launch written as one string is split -- unless the string names a file
+    # that exists, which is a path with a space in it, not a command line.
+    if not args and any(ch.isspace() for ch in cmd.strip()) and not Path(cmd).exists():
         try:
             cmd, *args = shlex.split(cmd)
         except ValueError:
@@ -416,7 +419,9 @@ _DOCKER_VALUE_FLAGS = frozenset(
 VALUE_FLAGS: dict[str, frozenset[str]] = {
     "docker": _DOCKER_VALUE_FLAGS,
     "podman": _DOCKER_VALUE_FLAGS,
-    "npx": frozenset({"-p", "--package"}),
+    # Not npx: its `-p <pkg>` value IS the package that names the server, so consuming it
+    # as a flag's value hid the one token the match needs. Taken as a flag, `-p` is
+    # skipped and the package is compared like any other argument.
 }
 
 
