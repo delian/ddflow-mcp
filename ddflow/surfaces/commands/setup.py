@@ -397,7 +397,7 @@ def cmd_init(a, c: Ctx) -> int:
         "# test-worker counts -- goes in local/config.toml, local/gates.toml or\n"
         "# local/reviewers.toml, read last so it wins. reviewers.toml beside config.toml is\n"
         "# ignored as well: a LAN endpoint committed here reaches every clone.\n"
-        "local/\nreviewers.toml\n"
+        "local/\n/reviewers.toml\n"
         "# The lock `config --set` / `workflow gate` take for a read-modify-write of a\n"
         "# config file. Without this line `git add .ddflow`, as `init` instructs, committed it.\n"
         ".*.lock\n",

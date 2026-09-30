@@ -34,6 +34,7 @@ def test_gates_toml_is_committed_project_policy_here():
 
 def test_init_ignores_a_top_level_reviewers_toml_but_not_gates_toml(repo):
     assert run_cli(repo, "init")[0] == 0
+    assert "/reviewers.toml" in (repo / ".ddflow" / ".gitignore").read_text()
     assert _ignored(repo, ".ddflow/reviewers.toml"), "LAN endpoints would be committed"
     assert _ignored(repo, ".ddflow/local/reviewers.toml")
     assert _ignored(repo, ".ddflow/local/gates.toml")
@@ -41,6 +42,8 @@ def test_init_ignores_a_top_level_reviewers_toml_but_not_gates_toml(repo):
 
 
 def test_the_local_layer_wins_over_the_committed_gate_file(repo):
+    """Pins EXISTING precedence (`tomlcfg.config_paths` already read `local/` last); it is
+    the reason the fix can move machine values there, not evidence for the fix."""
     from ddflow.config import Config
     from ddflow.services import gates as G
 
