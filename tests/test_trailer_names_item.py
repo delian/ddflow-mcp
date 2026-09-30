@@ -276,7 +276,7 @@ def test_a_waiver_for_a_key_that_is_not_accepted_is_named_as_inert(repo):
     _queue(repo, NEMO.replace('["Phase", "Phase-ships"]', '["Phase"]'))
     code, out = _check(repo, "docs\n\nPhase-ships: none\n")
     assert code == 1
-    assert "Phase-ships" in out and "ignored" in out, out
+    assert "Phase-ships" in out and "cannot satisfy" in out, out
 
 
 def test_git_failing_to_parse_the_trailers_is_could_not_run(monkeypatch):
@@ -292,3 +292,23 @@ def test_git_failing_to_parse_the_trailers_is_could_not_run(monkeypatch):
         E.P, "run", lambda *a, **k: subprocess.CompletedProcess(a, 128, "", "fatal")
     )
     assert E.check_item_trailer("s\n\nItem: T1\n", ["Item"], ids=lambda: {"T1"})[0] == 2
+
+
+# -- the cross-family reviewers on the branch -------------------------------------------
+
+
+def test_a_waiver_key_outside_item_trailer_keys_still_takes_only_its_words(repo):
+    """rubber-duck (deepseek): with `item_trailer_keys = ["Phase"]`, `Phase-ships: bogus`
+    beside a valid `Phase:` passed unexamined."""
+    _queue(repo, NEMO.replace('["Phase", "Phase-ships"]', '["Phase"]'))
+    code, out = _check(repo, "s\n\nPhase: 160.D.4\nPhase-ships: bogus\n")
+    assert code == 1 and "bogus" in out, out
+    assert _check(repo, "s\n\nPhase: 160.D.4\nPhase-ships: none\n")[0] == 0
+
+
+def test_an_id_in_the_body_is_not_a_trailer(repo):
+    """critic (deepseek) read `_trailers` as a line scan: it is git's own parser, so a
+    real id outside the final paragraph does not satisfy the check."""
+    _queue(repo)
+    code, out = _check(repo, "Fix the parser\n\nPhase: 160.D.4\n\n(refs: #12)\n")
+    assert code == 1 and "no `Phase: <id>`" in out, out

@@ -937,7 +937,7 @@ _doc(
 _doc(
     "enforce",
     "trailer_waivers",
-    'Trailer keys that mark a commit shipping NO item, each with the only words its value may take: `{ "Phase-ships" = ["none", "filing", "recon", "evidence", "followup"] }`. A trailer whose key is here AND in item_trailer_keys passes only with one of its words (`Phase-ships: bogus` is refused, listing them); every other item_trailer_keys trailer must carry an item id. A key not in item_trailer_keys is ignored. Empty by default: every accepted key names an item. From the environment, as JSON: DDFLOW_ENFORCE_TRAILER_WAIVERS=\'{"Phase-ships": ["none"]}\'.',
+    'Trailer keys that mark a commit shipping NO item, each with the only words its value may take: `{ "Phase-ships" = ["none", "filing", "recon", "evidence", "followup"] }`. A trailer whose key is here AND in item_trailer_keys passes only with one of its words (`Phase-ships: bogus` is refused, listing them); every other item_trailer_keys trailer must carry an item id. A key not in item_trailer_keys still takes only its words, but does not satisfy require_item_trailer. Empty by default: every accepted key names an item. From the environment, as JSON: DDFLOW_ENFORCE_TRAILER_WAIVERS=\'{"Phase-ships": ["none"]}\'.',
 )
 _doc(
     "enforce",

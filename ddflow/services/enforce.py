@@ -1620,6 +1620,15 @@ def check_item_trailer(
             "could not be checked. This is not a pass; check that `git` runs here."
         )
     found = [(canon[k.lower()], v) for k, v in trailers if k.lower() in canon]
+    # A waiver key takes only its declared words WHEREVER it appears: one that is not
+    # also an accepted key does not satisfy the requirement, but `Phase-ships: bogus`
+    # beside a valid `Phase:` must not ride along unchecked (rubber-duck, deepseek).
+    spelled = {k.lower(): k for k in (waivers or {})}
+    checked = [
+        (canon.get(k.lower()) or spelled[k.lower()], v)
+        for k, v in trailers
+        if k.lower() in canon or k.lower() in words
+    ]
     if not found:
         shown = " or ".join(
             f"`{k}: {'|'.join(words[k.lower()]) if k.lower() in words else '<id>'}`" for k in keys
@@ -1635,7 +1644,7 @@ def check_item_trailer(
             f"It is what lets an audit match commits to queue items mechanically."
             + (
                 f"\n\n[enforce].trailer_waivers declares {', '.join(inert)}, which "
-                f"[enforce].item_trailer_keys does not list, so it is ignored: add it there."
+                f"[enforce].item_trailer_keys does not list, so it cannot satisfy the requirement: add it there."
                 if inert
                 else ""
             )
@@ -1644,7 +1653,7 @@ def check_item_trailer(
     known: set[str] | None = None
     unreadable = ""
     unknown = False
-    for key, value in found:
+    for key, value in checked:
         allowed = words.get(key.lower())
         if allowed is not None:
             if value not in allowed:
