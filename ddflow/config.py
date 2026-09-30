@@ -1220,9 +1220,10 @@ def _waivers_problem(v: Any) -> str:
     if not isinstance(v, dict):
         return shape
     for key, words in v.items():
-        if not key or key.strip() != key or ":" in key:
-            # `"Phase-ships "` could never match a parsed trailer key: an inert waiver.
-            return f"{key!r}: a trailer key must be non-empty, with no spaces around it and no ':'"
+        if not key or ":" in key or any(c.isspace() for c in key):
+            # `"Phase-ships "` or `"Phase ships"` could never match a trailer git
+            # parses (its token holds no whitespace): an inert waiver.
+            return f"{key!r}: a trailer key must be non-empty, with no whitespace and no ':'"
         if not isinstance(words, list):
             return f"{key!r}: {shape}"
         if not words:
