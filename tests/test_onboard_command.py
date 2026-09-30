@@ -69,7 +69,7 @@ def test_the_cli_shows_it_too(repo):
         "initialize",  # the server is proven to start from the REGISTERED entry
         "never `git add -A`",
         "ddflow_bug_found",  # a defect in ddflow hit on the way is filed, not worked around
-        "add it to `.ddflow/.gitignore`",  # LAN reviewer endpoints are never committed
+        "Machine-local values go under `.ddflow/local/`",  # never committed
         "check that `.ddflow/config.toml`",  # setup is verified, whichever path wrote it
     ],
 )

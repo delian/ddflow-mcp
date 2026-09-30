@@ -315,7 +315,10 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
     exists. **Both**, because a project should have ONE place to configure and the
     obvious place is the config file — but an operator who prefers to split the gate
     definitions out should not be told they cannot. `gates.toml` wins on a conflict,
-    being the more specific file.
+    being the more specific file. Then the machine-local layer, git-ignored:
+    ``.ddflow/local/config.toml`` and ``.ddflow/local/gates.toml``, which win over both
+    -- this machine's worker count, never a project-wide declaration such as a human
+    gate, which belongs in the committed ``gates.toml`` (`tomlcfg.config_paths`).
 
     This read used to look at `gates.toml` ALONE, which meant `ddflow configure` (and
     the `ddflow_configure` MCP tool) accepted a `[gate.unit_tests]` block, wrote it to
@@ -338,6 +341,13 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
             setattr(base, k, v)
         base.id = gid
         gates[gid] = base
+    # A human checkpoint the COMMITTED files declare cannot be switched off by the
+    # git-ignored local layer: a `human = false` there never appears in a diff or a
+    # review, so it would quietly hand the operator's gate to any agent on this machine.
+    committed = tomlcfg.config_paths(root, "gates.toml")[:2]
+    for gid, spec in tomlcfg.overlay_table(committed, "gate", GateDef).items():
+        if spec.get("human") and gid in gates:
+            gates[gid].human = True
     for gid in cfg.gates.required:
         if gid in gates:
             gates[gid].required = True
