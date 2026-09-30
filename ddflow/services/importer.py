@@ -91,18 +91,27 @@ LESSON_SUMMARY_GLOBS = (
 #: its clause (`(shipped)`, `— done`, `closed 2026-08-07`, `— shipped in 0.3`) where it
 #: opens the heading, an aside clause or the text after a separator, or precedes a
 #: separator. Titles reach this with their bold already stripped (`_clean_title`), so
-#: bold is not a signal here. Negation is `_NEGATED_DONE`'s job: call `_claims_done`.
+#: bold is not a signal here. Ask `_claims_done`, which also handles negation.
 _DONE_WORD = r"(?:shipped|closed|done|complete[d]?)"
 #: The whole word: not `closed-loop`, not `shipped-vs-ticked`.
 _WORD_END = r"(?![\w-])"
-#: What may follow a lowercase status word for it to end its clause.
-_CLAUSE_END = r"(?=\s*(?:$|[)\],;(\u2014\u2013:|]|\s-+\s|\d{4}-\d{2}|in\s+v?\d|now\b))"
-_DONE_MARKER = re.compile(
-    rf"\b(?:SHIPPED|CLOSED|DONE|COMPLETED?){_WORD_END}|\u2705|\u2714"
-    rf"|(?i:(?:^\W*|[(\[,;]\s*(?:now\s+)?|(?:[\u2014\u2013:|]|\s-+\s)\s*)"
-    rf"{_DONE_WORD}{_WORD_END}{_CLAUSE_END})"
-    rf"|(?i:\b{_DONE_WORD}{_WORD_END}\s*(?:[\u2014\u2013:]|\s-+\s|\d{{4}}-\d{{2}}))"
+#: What may follow a lowercase status word for it to end its clause: the end, a closing
+#: bracket, a separator, sentence punctuation, a date, or a version (`shipped in 0.3`).
+_CLAUSE_END = (
+    r"(?=\s*(?:$|[)\],;(\u2014\u2013:|]|[.!?](?:\s|$|[)\]])|\s-+\s|\d{4}-\d{2}"
+    r"|in\s+(?:v\d|\d+\.\d)|now\b))"
 )
+#: The word in capitals, in a heading that is not itself written in capitals.
+_DONE_CAPS = re.compile(rf"\b(?:SHIPPED|CLOSED|DONE|COMPLETED?){_WORD_END}")
+_DONE_CHECK = re.compile(r"[\u2705\u2714]")
+#: A lowercase word that opens the heading, an aside clause or the text after a separator,
+#: and ends its clause.
+_DONE_CLAUSE = re.compile(
+    rf"(?i:(?:^\W*|[(\[,;]\s*(?:now\s+)?|(?:[\u2014\u2013:|]|\s-+\s)\s*)"
+    rf"(?P<w>{_DONE_WORD}){_WORD_END}{_CLAUSE_END})"
+)
+#: A negation that ends right before a status word: `NOT SHIPPED`, `not yet done`.
+_NEGATED_BEFORE = re.compile(r"\b(?:NOT|NEVER)\s+(?:YET\s+)?\W*$", re.I)
 #: Files inside an ADR directory that are the index rather than a decision.
 _DECISION_INDEX_STEMS = {"readme", "index", "template", "0000-template", "_template"}
 DECISION_GLOBS = (
@@ -1895,12 +1904,20 @@ _NEGATED_DONE = re.compile(r"\bNOT\s+(?:YET\s+)?(?:DONE|SHIPPED|CLOSED|COMPLETE[
 
 
 def _claims_done(title: str) -> bool:
-    """Whether a heading says its work is finished: a status marker, not negated.
+    """Whether a heading says its work is finished: some status in it is not negated.
 
-    One place for both halves, so the drift note, `import --verify` and the phase verdict
-    cannot disagree about `Phase 9 (NOT YET SHIPPED)` -- which the marker alone matches.
+    One place for the drift note, `import --verify` and the phase verdict, so they cannot
+    disagree. Negation is per status, not per heading: `Phase 12 SHIPPED — docs NOT
+    DONE` still claims done, `Phase 9 (NOT YET SHIPPED)` does not. A heading written in
+    capitals is read by the lowercase rules, or every capital word would be a status.
     """
-    return bool(_DONE_MARKER.search(title)) and not _NEGATED_DONE.search(title)
+    if _DONE_CHECK.search(title):
+        return True
+    letters = [c for c in title if c.isalpha()]
+    caps_heading = bool(letters) and all(c.isupper() for c in letters)
+    starts = [] if caps_heading else [m.start() for m in _DONE_CAPS.finditer(title)]
+    starts += [m.start("w") for m in _DONE_CLAUSE.finditer(title)]
+    return any(not _NEGATED_BEFORE.search(title[:at]) for at in starts)
 
 
 def _says_unfinished(phase: Found) -> str:
@@ -1914,7 +1931,7 @@ def _says_unfinished(phase: Found) -> str:
     if status is not None and status[0] != "closed":
         return f"its STATUS says {status[1] or 'it is live'}"
     m = _NEGATED_DONE.search(phase.title) or _HEADING_LIVE.search(phase.title)
-    if not m and not _DONE_MARKER.search(phase.title):
+    if not m and not _claims_done(phase.title):
         m = _HEADING_STALLED.search(phase.title)
     return f"its heading says {m.group(0).upper()}" if m else ""
 
