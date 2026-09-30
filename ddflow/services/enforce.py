@@ -234,7 +234,12 @@ def redirect_note(line: str | None = None) -> str:
             f"(the primary has no .venv): re-run this from the primary checkout."
         )
     if python != sys.executable:
-        note += f", with the primary's interpreter {python}"
+        whose = (
+            "the primary's interpreter"
+            if Path(python).is_relative_to(launch_parent())
+            else ("the interpreter")
+        )
+        note += f", with {whose} {python}"
     return note + "."
 
 

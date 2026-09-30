@@ -66,7 +66,9 @@ def primary_checkout(tree: Path) -> Path | None:
             return None
         gitdir = (Path(tree) / text.split(":", 1)[1].strip()).resolve()
         common = (gitdir / (gitdir / "commondir").read_text("utf-8").strip()).resolve()
-    except OSError:
+    except (OSError, ValueError):
+        # ValueError: a path git wrote as raw non-UTF-8 bytes. Unreadable is "no primary",
+        # never a crash in the middle of writing a hook.
         return None
     # A bare or `--separate-git-dir` common dir has no checkout beside it: its parent
     # is just a directory, and one holding an unrelated `ddflow/` is not a primary.
@@ -134,10 +136,14 @@ def _imports_ddflow(python: str, root: str) -> bool:
     import os
     import subprocess
 
+    from .proc import run
+
     env = {**os.environ, "PYTHONPATH": root}
     try:
         return (
-            subprocess.run(
+            # Through `proc.run`: stdin detached, since in the MCP server stdin IS the
+            # JSON-RPC stream and a child holding it would eat the next request.
+            run(
                 [python, "-c", "import ddflow.surfaces.mcp"],
                 env=env,
                 # `-c` puts the working directory first on sys.path: run it FROM the root,
