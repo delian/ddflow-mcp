@@ -9,6 +9,7 @@ the framework and ddflow do not fight over `.git/hooks/` (research Rb5e33fdbf9).
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -508,6 +509,10 @@ def test_ddflows_own_git_hooks_are_named_before_they_become_a_legacy_duplicate(m
     ]
 
 
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root writes into a 0555 directory, so the write cannot be made to fail this way",
+)
 def test_a_failed_write_still_answers_in_json(mixed):
     """Bug B64ec928418: with --json a FAIL printed nothing on stdout; every other outcome a body."""
     from conftest import run_cli
