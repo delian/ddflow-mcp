@@ -231,13 +231,49 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     return renew
 
 
-def run(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
+def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
+    """(where ``it``'s work is, or None; the other item whose tree the caller is in, or "").
+
+    Its tree. For a TASK claimed without one, the linked worktree the caller stands in
+    (B8be9373cf5: run from there, a gate still ran in the primary -- `main`'s suite as
+    the change's pass) -- unless that tree is another open item's -- and from the primary
+    None: with worktrees on, the primary's working tree is nobody's in particular, and
+    any uncommitted edit there would be credited to the item. None is recorded, not
+    guessed. The primary stays the answer for a phase (its gates test the merged
+    result), for an item never claimed, and with worktrees off -- the switch for a lone
+    agent that works in the primary.
+    """
+    from ..infra import worktree as W
+    from .lifecycle import callers_tree
+
+    if it.worktree:
+        return W.load_path(repo, it.worktree), ""
+    if it.kind != "phase" and cfg.worktree.enabled:
+        here, held = callers_tree(repo, cfg, st, it, called_from)
+        if held:
+            return None, held
+        if here is not None:
+            return here.path, ""
+        if it.lease is not None:  # claimed --no-worktree, and asked from the primary
+            return None, ""
+    return repo, ""
+
+
+def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
+    """(the directory a command gate runs in, or None; whose tree the caller is in)."""
+    return (repo, "") if gdef.cwd != "worktree" else _item_tree(repo, cfg, st, it, called_from)
+
+
+def run(
+    repo: Path, item: str, gate: str, *, agent: str = "", called_from: Path | None = None
+) -> O.Outcome:
     """Execute a command gate and record what it said.
 
     Refuses a human gate (nothing to run) and an agent gate (ddflow cannot perform it)
     with exit 2 and the instruction, rather than pretending to have run something.
+
+    A worktree gate runs where the item's work is (`_item_tree`).
     """
-    from ..infra import worktree as W
 
     resolved = _resolve(repo, item, gate, agent)
     if isinstance(resolved, O.Outcome):
@@ -273,7 +309,18 @@ def run(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
             outcome="",
         )
 
-    cwd = W.load_path(repo, it.worktree) if (gdef.cwd == "worktree" and it.worktree) else repo
+    cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
+    if cwd is None:
+        reason = (
+            f"the worktree you are in belongs to {held}, not {item}: its suite is not "
+            f"{item}'s. Run the gate from the worktree {item} is worked in."
+            if held
+            else f"{item} was claimed without a worktree, and the primary's working tree "
+            f"is not its: run the gate from the worktree it is worked in, or set "
+            f"[worktree].enabled = false if the primary is where you work."
+        ) + " Recording UNAVAILABLE."
+        G.record(log, cfg, item, gate, "unavailable", reason=reason, gates=gates)
+        return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     log.append("gate.started", item, {"gate": gate})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = G.run_command_gate(
@@ -327,6 +374,7 @@ def record(
     reason: str = "",
     evidence: Evidence | None = None,
     agent: str = "",
+    called_from: Path | None = None,
 ) -> O.Outcome:
     """Record an outcome an agent produced, or skip the gate on the record.
 
@@ -334,7 +382,6 @@ def record(
     forced to `skipped`, and a skip records no magnitude, since nothing was reviewed and
     a diff size would imply an inspection that did not happen.
     """
-    from ..infra import worktree as W
 
     # `None`, not a shared default instance: a mutable default is one object for every
     # call, and `Evidence` is a dataclass somebody will add a list field to.
@@ -384,10 +431,25 @@ def record(
         # minutes is a different claim from one that passed over 12" -- and `rubber_duck`,
         # `critic` and `standards` are all agent gates recorded through this branch. The
         # feature missed its own motivating case.
-        wt = (W.load_path(repo, it.worktree) if it.worktree else None) or repo
+        # Where the item's work is (B8be9373cf5): from its worktree, not the primary.
+        wt, held = _item_tree(repo, cfg, st, it, called_from)
+        if held:
+            # Recorded all the same: an agent gate is the agent's assertion, and an
+            # orchestrator records gates for many items from wherever it stands. Only the
+            # MEASUREMENT is ddflow's, and it is not taken from another item's tree.
+            warning = " ".join(
+                filter(
+                    None,
+                    [
+                        warning,
+                        f"NOTE: you are in {held}'s worktree, so nothing was measured for {item}.",
+                    ],
+                )
+            )
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
-        # they made every bare pass look evidenced (bug Bbc9a7ee3f2).
-        measured = {"tree_sha": G.tree_fingerprint(wt), "diff_stat": G.diff_stat(wt)}
+        # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
+        # than another item's tree, when the caller stands in one.
+        measured = {"tree_sha": G.tree_fingerprint(wt), "diff_stat": G.diff_stat(wt)} if wt else {}
     else:
         measured = {}
 
