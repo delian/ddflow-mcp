@@ -68,6 +68,10 @@ def primary_checkout(tree: Path) -> Path | None:
         common = (gitdir / (gitdir / "commondir").read_text("utf-8").strip()).resolve()
     except OSError:
         return None
+    # A bare or `--separate-git-dir` common dir has no checkout beside it: its parent
+    # is just a directory, and one holding an unrelated `ddflow/` is not a primary.
+    if common.name != ".git":
+        return None
     primary = common.parent
     if primary == Path(tree).resolve() or not (primary / "ddflow" / "__init__.py").is_file():
         return None
@@ -97,11 +101,15 @@ def launch_python() -> str:
     """The interpreter for those lines: `sys.executable`, unless it lives inside the
     worktree `launch_parent()` redirected away from -- a per-worktree venv goes with the
     worktree -- in which case the primary checkout's own venv, when it has one."""
+    import os
     import sys
 
     here, target = package_parent(), launch_parent()
-    exe = Path(sys.executable)
-    if target == here or not exe.is_relative_to(here):
+    # The venv DIRECTORY resolved, not the interpreter: a venv's python is a symlink to
+    # the system one, while its directory is what lives (or not) inside the worktree --
+    # possibly reached through a symlinked path (`/home/delian/src` is `/ai/delian/src`).
+    exe_dir = Path(os.path.abspath(sys.executable)).parent.resolve()
+    if target == here or not exe_dir.is_relative_to(here):
         return sys.executable
     for cand in (target / ".venv" / "bin" / "python3", target / ".venv" / "bin" / "python"):
         if cand.is_file():

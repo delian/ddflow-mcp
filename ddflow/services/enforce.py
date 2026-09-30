@@ -197,17 +197,28 @@ def install(repo: Path, *, force: bool = False) -> str:
 def redirect_note() -> str:
     """Say so when launch lines point at the primary checkout rather than the linked
     worktree ddflow is running from (`infra.paths.launch_parent`): the lines use the
-    PRIMARY's code, which is not the code running this command until the branch merges."""
-    from ..infra.paths import launch_parent, redirected_from
+    PRIMARY's code, which is not the code running this command until the branch merges.
+    And say it LOUDER when the interpreter could not follow: a primary with no `.venv`
+    leaves the worktree's own python in the line, which dies with the worktree."""
+    import os
+
+    from ..infra.paths import launch_parent, launch_python, redirected_from
 
     tree = redirected_from()
     if tree is None:
         return ""
-    return (
+    note = (
         f"NOTE: ddflow is running from the linked worktree {tree}, which is removed when "
         f"its branch merges; the hooks and MCP entry point at its primary checkout "
         f"{launch_parent()} instead, so they run that checkout's code."
     )
+    exe_dir = Path(os.path.abspath(launch_python())).parent.resolve()
+    if exe_dir.is_relative_to(tree):
+        note += (
+            f" WARNING: the interpreter {launch_python()} is still inside the worktree "
+            f"(the primary has no .venv): re-run this from the primary checkout."
+        )
+    return note
 
 
 def uninstall(repo: Path) -> str:

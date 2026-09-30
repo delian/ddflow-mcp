@@ -555,6 +555,8 @@ def hooks(
         try:
             if action == "install":
                 msg = CH.install(repo, E.command_line(CH.MARKER))
+                if note := E.redirect_note():
+                    msg = f"{msg}\n{note}"
             else:
                 msg = CH.uninstall(repo)
         except CH.SettingsError as exc:

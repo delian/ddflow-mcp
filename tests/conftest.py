@@ -10,7 +10,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # linked worktree ddflow would otherwise point them at the primary checkout (bug
 # B-adopt-worktree-path), and every hook a test installed would run the primary's code
 # instead of the code under test. Inherited by every `run_cli` subprocess.
-os.environ.setdefault("DDFLOW_LAUNCH_ROOT", str(Path(__file__).resolve().parents[1]))
+# Assigned, not defaulted: a developer's own exported value must not redirect the suite.
+os.environ["DDFLOW_LAUNCH_ROOT"] = str(Path(__file__).resolve().parents[1])
 
 from ddflow.config import Config
 from ddflow.infra.log import EventLog
