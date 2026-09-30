@@ -1788,10 +1788,12 @@ behaviour; `--no-worktree` skips binding entirely.
 
 An item claimed `--no-worktree` has no branch of its own, so `merge` and `review` take
 one: the branch checked out in the worktree you run them from, or `--branch <branch>`
-from anywhere, and `gate run` runs where you stand. From the primary with no `--branch`,
-`merge` refuses rather than guess — the primary is usually on the target itself — while
-`review` and `gate run` treat the primary as where a lone agent works: its working tree,
-minus ddflow's own bookkeeping, so other agents' event logs are never an item's diff.
+from anywhere, and `gate run` runs in the worktree you stand in. Two places are not the
+item's and are refused rather than guessed: another open item's worktree, and — with
+worktrees on — the primary, whose working tree is nobody's in particular (other agents'
+event logs, anyone's uncommitted edit); there `merge` refuses, and `review` and `gate
+run` record UNAVAILABLE and say what to pass. A lone agent working in the primary says
+so with `[worktree].enabled = false`.
 The borrowed tree is never removed; uncommitted work in it is refused as for any merge;
 and paths the merge lands outside the item's globs are listed (`outside_globs`), since a
 borrowed branch can carry another item's commits too.

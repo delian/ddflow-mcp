@@ -48,11 +48,21 @@ def _setup(repo: Path) -> Path:
     return tree
 
 
-def test_a_lone_agent_working_in_the_primary_runs_there(repo):
+def test_claimed_without_a_tree_and_run_from_the_primary_is_unavailable(repo):
+    """The primary's working tree is nobody's in particular: any uncommitted edit there
+    would be credited to the item (the critic review of the first cut)."""
+    _setup(repo)
+    code, out, err = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests")
+    assert code == NOTHING, out + err
+    assert json.loads(out)["outcome"] == "unavailable"
+
+
+def test_a_lone_agent_working_in_the_primary_says_so_with_worktrees_off(repo):
     run_cli(repo, "init")
     run_cli(repo, "config", "--set", "gate.unit_tests.command", PROBE)
+    run_cli(repo, "config", "--set", "worktree.enabled", "false")
     run_cli(repo, "task", "add", "T1", "--title", "add a", "--globs", "a.py")
-    assert run_cli(repo, "claim", "T1", "--no-worktree")[0] == OK
+    assert run_cli(repo, "claim", "T1")[0] == OK
     (repo / "a.py").write_text("a = 1\n")
     code, out, err = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests")
     assert code == OK, out + err

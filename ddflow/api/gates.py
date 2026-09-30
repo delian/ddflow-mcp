@@ -234,11 +234,14 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
 def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
     """(where ``it``'s work is, or None; the other item whose tree the caller is in, or "").
 
-    Its tree; for a TASK claimed without one, the linked worktree the caller stands in
+    Its tree. For a TASK claimed without one, the linked worktree the caller stands in
     (B8be9373cf5: run from there, a gate still ran in the primary -- `main`'s suite as
-    the change's pass) -- unless that tree is another open item's, which is None, not a
-    guess; else the primary: where a lone agent that claimed `--no-worktree` works, what
-    a phase's gates test, and all there is with worktrees off.
+    the change's pass) -- unless that tree is another open item's -- and from the primary
+    None: with worktrees on, the primary's working tree is nobody's in particular, and
+    any uncommitted edit there would be credited to the item. None is recorded, not
+    guessed. The primary stays the answer for a phase (its gates test the merged
+    result), for an item never claimed, and with worktrees off -- the switch for a lone
+    agent that works in the primary.
     """
     from ..infra import worktree as W
     from .lifecycle import callers_tree
@@ -251,6 +254,8 @@ def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path 
             return None, held
         if here is not None:
             return here.path, ""
+        if it.lease is not None:  # claimed --no-worktree, and asked from the primary
+            return None, ""
     return repo, ""
 
 
@@ -308,9 +313,12 @@ def run(
     if cwd is None:
         reason = (
             f"the worktree you are in belongs to {held}, not {item}: its suite is not "
-            f"{item}'s. Run the gate from {item}'s own tree (or the primary, if that is "
-            f"where it is worked). Recording UNAVAILABLE."
-        )
+            f"{item}'s. Run the gate from the worktree {item} is worked in."
+            if held
+            else f"{item} was claimed without a worktree, and the primary's working tree "
+            f"is not its: run the gate from the worktree it is worked in, or set "
+            f"[worktree].enabled = false if the primary is where you work."
+        ) + " Recording UNAVAILABLE."
         G.record(log, cfg, item, gate, "unavailable", reason=reason, gates=gates)
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     log.append("gate.started", item, {"gate": gate})
