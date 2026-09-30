@@ -53,3 +53,17 @@ def test_the_local_layer_wins_over_the_committed_gate_file(repo):
     (d / "local").mkdir(exist_ok=True)
     (d / "local" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "pytest -q -n 48"\n')
     assert G.load_gates(repo, Config.load(repo))["unit_tests"].command == "pytest -q -n 48"
+
+
+def test_the_local_layer_cannot_switch_off_a_committed_human_gate(repo):
+    """Found by the rubber-duck: `human = false` in `.ddflow/local/gates.toml` won, and
+    that file is in no diff and no review."""
+    from ddflow.config import Config
+    from ddflow.services import gates as G
+
+    assert run_cli(repo, "init")[0] == 0
+    d = repo / ".ddflow"
+    (d / "gates.toml").write_text("[gate.signoff]\nhuman = true\n")
+    (d / "local").mkdir(exist_ok=True)
+    (d / "local" / "gates.toml").write_text("[gate.signoff]\nhuman = false\n")
+    assert G.load_gates(repo, Config.load(repo))["signoff"].human is True

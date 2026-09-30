@@ -341,6 +341,13 @@ def load_gates(root: Path, cfg: Config) -> dict[str, GateDef]:
             setattr(base, k, v)
         base.id = gid
         gates[gid] = base
+    # A human checkpoint the COMMITTED files declare cannot be switched off by the
+    # git-ignored local layer: a `human = false` there never appears in a diff or a
+    # review, so it would quietly hand the operator's gate to any agent on this machine.
+    committed = tomlcfg.config_paths(root, "gates.toml")[:2]
+    for gid, spec in tomlcfg.overlay_table(committed, "gate", GateDef).items():
+        if spec.get("human") and gid in gates:
+            gates[gid].human = True
     for gid in cfg.gates.required:
         if gid in gates:
             gates[gid].required = True
