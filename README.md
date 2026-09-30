@@ -824,9 +824,10 @@ there is.
 
 ddflow imposes the order and demands the evidence. It does not *perform* the judgement
 inside most of its gates: `standards` wants an automated standards review, `research`
-wants documentation to check a claim against, `rules` wants memory of the last time
-somebody hit this. A project that installs ddflow and stops has those gates wired to
-nothing — and because an agent gate passes on an assertion, that gap is invisible in
+wants documentation to check a claim against. (`rules` wants memory of the last time
+somebody hit this, and ddflow serves that one itself: `ddflow brief` shows the lessons
+and the operational memory.) A project that installs ddflow and stops has the others
+wired to nothing — and because an agent gate passes on an assertion, that gap is invisible in
 exactly the way the rest of this design exists to prevent.
 
 So the gap is **named**:
@@ -852,7 +853,7 @@ Companion tools
        -> ask the operator, then: npx -y @modelcontextprotocol/server-sequential-thinking
 
 Gates in this project's task pipeline with no companion behind them:
-  rules, implement, rubber_duck, critic, unit_tests, bug_hunt, dedupe, merge
+  implement, rubber_duck, critic, unit_tests, bug_hunt, dedupe, merge
 ```
 
 Three states, reported separately because the remedies differ: **registered**,
@@ -861,19 +862,32 @@ and the URL). `ddflow adopt` prints the same summary, so the gap is visible at
 adoption rather than discovered six tasks later. Exit 2 when a default companion is
 missing — "no data", never collapsed into "no problem".
 
+A server is found by its launch as well as its name. A project that registered
+codeguide-mcp as `coding-guides` before ddflow knew it reads as
+``registered for: claude (as `coding-guides`)``, and `companions add` leaves it alone
+instead of writing a second copy under the id. "The same launch" is the same command
+(by basename) with the companion's arguments in order — only flags, and the value of a flag known to take one
+(`-e TOKEN`) may sit between them, the server's own arguments may follow, and a version
+tag on an npm package (`@latest`, `@1.2.3`) is ignored. Another image, package or
+launcher is another server, and so is reordered arguments.
+
+`rules` never shows as uncovered: `ddflow brief` serves it from ddflow's own lessons
+and operational memory (`ddflow memory add|list|forget`), which is the job the memory
+companions below were once recommended for.
+
 | | Serves | Why |
 |---|---|---|
 | **roborev** *(cli)* | `standards`, `bug_hunt`, `dedupe` | Cross-file duplication analysis, which is the failure mode of agent-written code specifically: an agent changing replicated logic reliably updates one copy and misses the rest |
 | **codeguide** | `standards` | Checks against a written standard instead of the reviewer's taste |
 | **context7** | `research`, `standards` | A model's memory of a library's API is exactly the kind of claim that is cheap to check and often wrong |
-| **memory** | `rules` | Operational facts about *this machine* — ddflow's own `recall` covers the project's memory, which is a different thing and belongs in the committed log |
+| **memory** *(opt-in)* | `rules` | A machine-local knowledge graph, for a project that wants one. ddflow already keeps operational facts itself (`ddflow memory`), so this is a second store outside the committed log |
 | **sequential** | `research`, `rubber_duck`, `bug_hunt` | The three gates that are *reasoning*, not tool-running. A thought can be marked a revision or a branch instead of being appended to a transcript that only grows — so a retracted hypothesis reads as retracted, and what a bug hunt **ruled out** stays visible |
-| **optmem** *(cli)* | `rules` | Append-only cross-session memory that compresses as it grows. The other half of memory: `recall` answers "what did this project decide and learn", OptMem answers "what does this environment do" |
+| **optmem** *(cli, opt-in)* | `rules` | Superseded by `ddflow memory`, which holds the operational facts OptMem was recommended for; listed for a project that wants an OptMem store anyway. An existing OptMem `LOG.txt` imports as ddflow memories |
 
 **Servers and command-line tools are different things**, and the registry says which:
 `kind = "mcp"` is registrable into an agent's config, `kind = "cli"` is a tool the agent
-shells out to. OptMem is the live example — a real tool with no MCP mode, so
-`companions add` refuses it and says why instead of writing a launch entry that would
+shells out to. OptMem and pre-commit are examples — real tools with no MCP mode, so
+`companions add` refuses them and says why instead of writing a launch entry that would
 fail its first handshake. A `cli` companion counts toward its gate's coverage once it is
 **installed**; `registered` is a state it cannot reach.
 
@@ -1081,7 +1095,7 @@ what happens when one is absent, and the answer is deliberately never "the gate 
 | **codeguide** | `standards` | The standards gate falls back to the reviewer's taste. Still recordable — but say which it was. |
 | **context7** | `research`, `standards` | Claims about a library's API rest on the model's memory, which is exactly the claim that is cheap to check and often wrong. |
 | **sequential-thinking** | `research`, `rubber_duck`, `bug_hunt` | A retracted hypothesis becomes one more assertion in a linear transcript, and what you ruled out disappears. |
-| **OptMem** *(cli)* | `rules` | `ddflow recall` still covers the project's memory — decisions, lessons, research, bugs. What is lost is memory of *this machine*. |
+| **memory** / **OptMem** *(opt-in)* | `rules` | Nothing: `ddflow memory` keeps the facts about *this machine*, `brief` shows them and `recall` searches them beside the decisions, lessons, research and bugs. |
 
 **The rule, and it is enforced:** a gate whose tool could not run is recorded
 `unavailable` with the reason, never `passed`. `ddflow complete` reports those as a

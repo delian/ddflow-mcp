@@ -31,7 +31,17 @@ def _companion_lines(statuses) -> list[str]:
         lines.append(f"  {mark} {st.companion.id:<10s} {st.companion.title}{tag}")
         lines.append(f"       gates: {', '.join(st.companion.gates) or '—'}")
         if st.state == "registered":
-            lines.append(f"       registered for: {', '.join(st.registered_in)}")
+            # Named when it differs from the id: an operator looking for `codeguide` in
+            # `.mcp.json` finds `coding-guides`, and the report must say that is the one.
+            lines.append(
+                "       registered for: "
+                + ", ".join(
+                    a
+                    if st.registered_as.get(a, st.companion.id) == st.companion.id
+                    else f"{a} (as `{st.registered_as[a]}`)"
+                    for a in st.registered_in
+                )
+            )
         elif st.state == "installed" and not st.companion.is_mcp:
             lines.append(
                 f"       installed ({st.detail}). A {st.companion.kind} tool — the agent "

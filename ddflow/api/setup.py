@@ -66,6 +66,7 @@ def companions(repo: Path, *, no_probe: bool = False, agent: str = "") -> O.Outc
                 "gates": st.companion.gates,
                 "state": st.state,
                 "registered_in": st.registered_in,
+                "registered_as": st.registered_as,
                 "detail": st.detail,
                 "install": st.companion.install,
                 "url": st.companion.url,
