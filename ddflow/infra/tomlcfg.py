@@ -18,9 +18,12 @@ extracting rather than merely tidy:
 * **Where `known` was computed.** Hoisted in two, recomputed in the innermost loop in
   the third: harmless, and a tell that these were copied at different times.
 
-The policy, in one place: **an unknown field is always an error**, and the message names
-the file and the entry, because a config error whose location you have to guess is a
-config error you work around.
+The policy, in one place: **an unknown field is an error**, and the message names the
+file and the entry, because a config error whose location you have to guess is a config
+error you work around -- **except** when the caller says the file may be newer than the
+code (``lenient``): an older ddflow reading a newer checkout's config then warns and skips
+the field, as `Config.load` does for config.toml (B9cb7dd1c3b). Refusing there made every
+new reviewer knob break every older clone sharing the config (B6f757e18cf).
 
 Two shapes, because TOML has two: a **table of tables** (`[gate.unit_tests]`) keyed by
 its table name, and an **array of tables** (`[[reviewer]]`) keyed by a field inside it.
@@ -31,20 +34,40 @@ from __future__ import annotations
 import contextlib
 import fcntl
 import os
+import sys
 import tempfile
 import tomllib
 from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+#: (where, field) already warned about in this process: a loader runs several times per
+#: command, and the same warning repeated reads as several problems.
+_WARNED: set[tuple[str, str]] = set()
 
-def _check(spec: dict[str, Any], known: set[str], where: str) -> None:
+
+def _check(spec: dict[str, Any], known: set[str], where: str, lenient: bool = False) -> dict:
+    """``spec`` without its unknown fields, or ValueError naming them (not ``lenient``)."""
     unknown = sorted(set(spec) - known)
-    if unknown:
+    if not unknown:
+        return spec
+    if not lenient:
         raise ValueError(f"unknown field(s) {unknown} in {where}. Known: {sorted(known)}")
+    new = [k for k in unknown if (where, k) not in _WARNED]
+    if new:
+        _WARNED.update((where, k) for k in new)
+        print(
+            f"ddflow: warning: {where} sets {', '.join(new)}, which this ddflow does not "
+            f"know; skipped. The config is newer than this code: merge main into this tree "
+            f"(or, if it is a typo, fix it).",
+            file=sys.stderr,
+        )
+    return {k: v for k, v in spec.items() if k in known}
 
 
-def overlay_table(paths: Iterable[Path], table: str, cls: type) -> dict[str, dict[str, Any]]:
+def overlay_table(
+    paths: Iterable[Path], table: str, cls: type, *, lenient: bool = False
+) -> dict[str, dict[str, Any]]:
     """`[table.<id>]` blocks, merged by id. Later paths win. Returns raw dicts.
 
     Raw rather than constructed, because the callers differ in what they do next: gates
@@ -57,16 +80,23 @@ def overlay_table(paths: Iterable[Path], table: str, cls: type) -> dict[str, dic
         if not Path(path).is_file():
             continue
         data = tomllib.loads(Path(path).read_text("utf-8"))
-        for key, spec in (data.get(table) or {}).items():
-            if not isinstance(spec, dict):
+        for key, raw in (data.get(table) or {}).items():
+            if not isinstance(raw, dict):
                 continue
-            _check(spec, known, f"[{table}.{key}] in {path}")
-            out.setdefault(key, {}).update(spec)
+            out.setdefault(key, {}).update(
+                _check(raw, known, f"[{table}.{key}] in {path}", lenient)
+            )
     return out
 
 
 def overlay_array(
-    paths: Iterable[Path], table: str, cls: type, *, key: str, fallback_key: str = ""
+    paths: Iterable[Path],
+    table: str,
+    cls: type,
+    *,
+    key: str,
+    fallback_key: str = "",
+    lenient: bool = False,
 ) -> dict[str, dict[str, Any]]:
     """`[[table]]` blocks, merged by the value of ``key``. Later paths win."""
     known = set(cls.__dataclass_fields__)
@@ -75,11 +105,11 @@ def overlay_array(
         if not Path(path).is_file():
             continue
         data = tomllib.loads(Path(path).read_text("utf-8"))
-        for n, spec in enumerate(data.get(table) or [], 1):
-            if not isinstance(spec, dict):
+        for n, raw in enumerate(data.get(table) or [], 1):
+            if not isinstance(raw, dict):
                 continue
-            ident = spec.get(key) or (spec.get(fallback_key) if fallback_key else "")
-            _check(spec, known, f"[[{table}]] #{n} ({ident or 'unnamed'}) in {path}")
+            ident = raw.get(key) or (raw.get(fallback_key) if fallback_key else "")
+            spec = _check(raw, known, f"[[{table}]] #{n} ({ident or 'unnamed'}) in {path}", lenient)
             if not ident:
                 raise ValueError(f"[[{table}]] #{n} in {path} has no `{key}`")
             out[str(ident)] = spec
