@@ -300,10 +300,11 @@ def cmd_adopt(a, c: Ctx) -> int:
         return FAIL
     # A REFUSAL with actions is a partial adoption: everything else WAS written, so init
     # and the report still happen -- and then the exit code says it is not done.
-    # `cmd_init` lives HERE, not in `cli`: `adopt` calls it, and reaching back up into
-    # the surface this module was extracted out of would recreate the module-level cycle
-    # `test_no_mutually_importing_pair_has_a_module_level_edge` forbids.
-    cmd_init(a, c)
+    # `setup` already wrote the init files -- the same call `ddflow_setup` makes -- so
+    # only the report is left. `_report_init` lives HERE, not in `cli`, because reaching
+    # back up into the surface this module was extracted out of would recreate the
+    # module-level cycle `test_no_mutually_importing_pair_has_a_module_level_edge` forbids.
+    _report_init(c)
     c.out(
         out.data["text"],
         out.body(("actions", "agents", "companions_ready", "companions_absent")),
@@ -314,117 +315,24 @@ def cmd_adopt(a, c: Ctx) -> int:
     return OK
 
 
-def _starter_config() -> str:
-    """The single configuration file.
-
-    One file, not two. An earlier version also wrote `.ddflow/gates.toml` carrying a
-    placeholder `unit_tests.command`, and because gates.toml wins over config.toml that
-    placeholder silently overrode anything `ddflow configure` wrote -- so the documented
-    way to set the test command could not set the test command. Splitting gates into
-    their own file is still supported for operators who want it; it is just not the
-    default, because a default that creates two sources of truth will produce two
-    sources of truth.
-    """
-    return """# ddflow configuration — everything in one file.
-# `ddflow config --explain` documents every knob. Only what you change needs to be
-# here; everything else keeps its default.
-
-# ---------------------------------------------------------------------------------
-# THE ONE THING YOU MUST SET: how this project runs its tests.
-# ---------------------------------------------------------------------------------
-# [gate.unit_tests]
-# command = "pytest -q -n auto"   # or "npm test" · "cargo test" · "go test ./..." · "make check"
-#
-# Set it with:   ddflow config --set gate.unit_tests.command "pytest -q -n auto"
-# Run it in PARALLEL: `-n auto` needs pytest-xdist (`uv add --dev pytest-xdist`); without
-# it, drop the flag. A serial run of a large suite is the slowest step of every item.
-# Until it is set, the unit_tests gate reports UNAVAILABLE — which is honest, and
-# blocks completion, rather than passing vacuously.
-#
-# Left COMMENTED on purpose: an empty table here would collide with the block that
-# `ddflow config --append-toml` writes, since TOML forbids a duplicate table, and the
-# documented way to configure the project would fail on a fresh install.
-
-# ---------------------------------------------------------------------------------
-# A cross-family reviewer makes the `critic` gate real rather than self-reported.
-# `ddflow reviewers detect --write` finds a local model server and fills this in.
-# ---------------------------------------------------------------------------------
-# [[reviewer]]
-# name     = "local"
-# base_url = "http://127.0.0.1:11434/v1"
-# model    = "qwen3:8b"
-# family   = "alibaba"            # must differ from the authoring model's family
-# gates    = ["critic"]
-# api_key_env = "MY_API_KEY"      # the NAME of an env var, never the key itself
-
-[lease]
-ttl_s = 1800            # how long a claim survives without a heartbeat
-heartbeat_s = 300
-
-[worktree]
-enabled = true
-max_parallel = 4
-
-[schedule]
-max_parallel_tasks = 4
-
-[enforce]
-# "block" makes the pre-commit hook REFUSE a commit touching paths no lease of yours
-# covers — the only layer of this workflow that does not rely on the agent agreeing.
-# Starts at "warn" so adopting ddflow never breaks an existing repo on day one.
-commit_without_lease = "warn"
-
-[session]
-brief_max_tokens = 1200
-"""
-
-
 # -- parser ----------------------------------------------------------------------------
 
 
 def cmd_init(a, c: Ctx) -> int:
-    d = c.repo / ".ddflow"
-    d.mkdir(parents=True, exist_ok=True)
-    (d / "events").mkdir(exist_ok=True)
-    gi = d / ".gitignore"
-    gi.write_text(
-        "# The index and local state are DERIVED from events/ and are rebuildable.\n"
-        "# They are machine-local on purpose: a committed index resurrects dead agents'\n"
-        "# leases on every clone, and a committed cache is a merge conflict with no\n"
-        "# meaningful resolution.\n"
-        "index.db\nindex.db-*\nindex.rebuilding*\nevents.lock\n"
-        "# What belongs to THIS machine -- your reviewer endpoints, API-key variable names,\n"
-        "# test-worker counts -- goes in local/config.toml, local/gates.toml or\n"
-        "# local/reviewers.toml, read last so it wins. reviewers.toml beside config.toml is\n"
-        "# ignored as well: a LAN endpoint committed here reaches every clone.\n"
-        "local/\n/reviewers.toml\n"
-        "# The lock `config --set` / `workflow gate` take for a read-modify-write of a\n"
-        "# config file. Without this line `git add .ddflow`, as `init` instructs, committed it.\n"
-        ".*.lock\n",
-        "utf-8",
-    )
-    cfgp = d / "config.toml"
-    if not cfgp.exists():
-        cfgp.write_text(_starter_config(), "utf-8")
-    # An in-repo worktree root (the default inside a container, where a sibling path
-    # would land on the ephemeral layer) must be ignored, or every worktree shows up as
-    # hundreds of untracked files and the enforcement hook trips over them.
-    root_gi = c.repo / ".gitignore"
-    prev_gi = root_gi.read_text("utf-8") if root_gi.exists() else ""
-    if ".ddflow-worktrees" not in prev_gi:
-        root_gi.write_text(
-            prev_gi
-            + ("" if prev_gi.endswith("\n") or not prev_gi else "\n")
-            + "\n# ddflow task worktrees (git worktrees; never commit them)\n"
-            ".ddflow-worktrees/\n",
-            "utf-8",
-        )
+    """`ddflow init`. The writes are `api.setup.init_project`'s; this only reports them."""
+    A.init_project(c.repo, agent=c.requested_agent)
+    return _report_init(c)
 
-    ga = c.repo / ".gitattributes"
-    line = ".ddflow/events/*.jsonl merge=union\n"
-    prev = ga.read_text("utf-8") if ga.exists() else ""
-    if "ddflow/events" not in prev:
-        ga.write_text(prev + ("" if prev.endswith("\n") or not prev else "\n") + line, "utf-8")
+
+def _report_init(c: Ctx) -> int:
+    """What `init` and `adopt` print after the init files exist: where, and what to commit.
+
+    Presentation only. The files themselves are written below the surfaces
+    (`services.adopt.init_files`), because a write that lives here is a write the MCP
+    `ddflow_setup` never makes -- which is how bug B185ec008b4 happened.
+    """
+    d = c.repo / ".ddflow"
+    cfgp = d / "config.toml"
     c.store.rebuild(c.log)
     # Setup touches TRACKED files (.gitignore, .gitattributes, AGENTS.md). Leaving them
     # uncommitted makes the primary checkout dirty, and `ddflow merge` then refuses --
