@@ -735,7 +735,9 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     # add` and `memory add` all take the verb, the MCP tool is `ddflow_research_add`, and
     # the research gate's instruction says `research add` -- which this parser rejected
     # as "unrecognized arguments: add" for every agent that followed it.
-    rs.add_argument("verb", nargs="?", choices=["add"], help=argparse.SUPPRESS)
+    rs.add_argument(
+        "verb", nargs="?", choices=["add"], help="optional: `research add` = `research`"
+    )
     rs.add_argument("--id", default="")
     rs.add_argument("--question", required=True)
     rs.add_argument("--claim", default="")

@@ -33,21 +33,35 @@ def _record(repo: Path, *head: str) -> dict:
     return json.loads(out)
 
 
+def _recorded(repo: Path, rid: str) -> str:
+    code, out, err = run_cli(repo, "recall", "does it parse", "--max-chars", "4000")
+    assert code == 0, err
+    return out
+
+
 def test_research_add_records_a_verdict(repo):
-    _record(repo, "research", "add")
+    out = _record(repo, "research", "add")
+    assert out.get("verdict") == "CONFIRMED" and out.get("id"), out
+    assert out["id"] in _recorded(repo, out["id"])
 
 
 def test_the_bare_form_still_works(repo):
-    _record(repo, "research")
+    out = _record(repo, "research")
+    assert out.get("verdict") == "CONFIRMED" and out.get("id"), out
+
+
+def test_help_shows_the_add_spelling(repo):
+    code, out, _ = run_cli(repo, "research", "--help")
+    assert code == 0 and "research add" in out
 
 
 def test_the_research_gate_instruction_names_a_command_that_parses():
     from ddflow.services import gates as G
     from ddflow.surfaces.cli import build_parser
 
-    text = Path(G.__file__).read_text("utf-8")
-    cmd = re.search(r"`(ddflow research add[^`]*)`", text)
-    assert cmd, "the research gate no longer names its command"
-    argv = cmd.group(1).split()[1:]
-    argv = [a for a in argv if "|" not in a] + ["CONFIRMED", "--question", "q", "--probe", "p"]
-    build_parser().parse_args(argv)
+    shown = G.DEFAULT_GATES["research"].prompt
+    cmd = re.search(r"`(ddflow research add[^`]*)`", shown)
+    assert cmd, f"the research gate no longer names its command: {shown[:200]}"
+    # `A|B|C` placeholders take their first alternative, in place.
+    argv = [a.split("|")[0] for a in cmd.group(1).split()[1:]]
+    build_parser().parse_args([*argv, "--question", "q", "--probe", "p"])
