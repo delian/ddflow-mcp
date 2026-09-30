@@ -1081,11 +1081,16 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     # primary on top of main's committed change hid the drift, and an agent's
     # half-made edit in the tree turned a branch that is behind into one "changing the
     # gate itself" (bug B-drift-dirty-trees).
+    #
+    # "behind" first: when the base committed a change, the base's definition is what
+    # ran, and the tree's code predates it whatever the tree edited itself -- checking
+    # "own" first recorded exactly the original bare failure for a branch that had also
+    # touched, say, the timeout (bug B-drift-own-masks-behind).
     forked = at(fork.out)
-    if at("HEAD") != forked:
-        kind = "own"
-    elif at(head) != forked:
+    if at(head) != forked:
         kind = "behind"
+    elif at("HEAD") != forked:
+        kind = "own"
     else:
         # Neither side committed a change: the difference is an uncommitted edit -- an
         # operator who just set the command. Merging the base would bring nothing, and

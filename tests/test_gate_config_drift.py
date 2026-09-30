@@ -173,3 +173,38 @@ def test_a_local_override_of_the_command_is_what_ran_so_its_failure_stands(repo)
     outcome, reason = _recorded(repo)
     assert outcome == "failed", f"{outcome}: {reason}"
     assert code == FAIL
+
+
+def test_a_branch_with_its_own_gate_edit_is_still_behind_a_base_change(repo):
+    """Main's committed change is what ran, so the branch is behind whatever it edited
+    itself: its own edit takes effect only after it merges, and so does main's."""
+    tree = _setup(repo, "true")
+    (tree / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "true"\ntimeout_s = 600\n'
+    )
+    _git(tree, "commit", "-qam", "branch edits the timeout")
+    (repo / "xdist.marker").write_text("")
+    _commit_gates(repo, "test -f xdist.marker", "parallel tests")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    outcome, reason = _recorded(repo)
+    assert outcome == "unavailable", f"{outcome}: {reason} {out}{err}"
+    assert "merge main" in reason and code == NOTHING
+
+
+def test_drift_is_found_in_config_toml_too(repo):
+    """The live case: main's `[gate.unit_tests]` lives in `.ddflow/config.toml`."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[gate.unit_tests]\ncommand = "true"\n')
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "gate config")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    assert run_cli(repo, "claim", "T1", agent="worker")[0] == 0
+    (repo / "xdist.marker").write_text("")
+    cfg.write_text(cfg.read_text().replace('command = "true"', 'command = "test -f xdist.marker"'))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "parallel tests")
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    outcome, reason = _recorded(repo)
+    assert outcome == "unavailable", f"{outcome}: {reason} {out}{err}"
+    assert "behind a gate-config change on main" in reason and code == NOTHING
