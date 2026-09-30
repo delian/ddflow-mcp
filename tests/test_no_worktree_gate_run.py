@@ -1,13 +1,12 @@
-"""A command gate runs where the item's work is, or records unavailable (B8be9373cf5).
+"""A command gate runs, and a recorded gate is measured, where the item's work is (B8be9373cf5).
 
-`gate run` ran a task's `unit_tests` in the item's tree -- and, for an item claimed
-`--no-worktree`, in the PRIMARY checkout instead: the suite of `main`, recorded as the
+For an item claimed `--no-worktree`, `gate run` ran in the PRIMARY checkout even when
+called from the worktree the item was worked in: the suite of `main`, recorded as the
 change's pass (B-no-worktree-lifecycle.unit_tests = passed, diff_stat files=0). A task's
-work is in its tree, else in the tree the caller stands in; from the primary there is
-nothing of the item's to run, and that is unavailable, not a pass.
+work is in its tree, else in the linked worktree the caller stands in, else -- for a lone
+agent that claimed `--no-worktree` and works in the primary -- in the primary.
 
-A PHASE has no tree by design -- its gates test the merged result -- and a project with
-worktrees switched off works in the primary: both still run there.
+A PHASE has no tree by design -- its gates test the merged result -- so it runs there too.
 """
 
 from __future__ import annotations
@@ -49,11 +48,15 @@ def _setup(repo: Path) -> Path:
     return tree
 
 
-def test_from_the_primary_it_is_unavailable_not_mains_suite(repo):
-    _setup(repo)
+def test_a_lone_agent_working_in_the_primary_runs_there(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "gate.unit_tests.command", PROBE)
+    run_cli(repo, "task", "add", "T1", "--title", "add a", "--globs", "a.py")
+    assert run_cli(repo, "claim", "T1", "--no-worktree")[0] == OK
+    (repo / "a.py").write_text("a = 1\n")
     code, out, err = run_cli(repo, "--json", "gate", "run", "T1", "unit_tests")
-    assert code == NOTHING, out + err
-    assert json.loads(out)["outcome"] == "unavailable"
+    assert code == OK, out + err
+    assert json.loads(out)["outcome"] == "passed"
 
 
 def test_from_the_tree_the_item_is_worked_in_it_runs_there(repo):
@@ -79,15 +82,15 @@ def _last_evidence(repo: Path, gate: str) -> dict:
     return [e.data for e in evs if e.data.get("gate") == gate][-1].get("evidence", {})
 
 
-def test_a_recorded_gate_measures_the_items_tree_never_the_primarys(repo):
+def test_a_recorded_gate_is_measured_in_the_tree_the_caller_stands_in(repo):
     """An agent gate is stamped with WHICH tree and HOW MUCH. For an item claimed without
-    a tree, that stamp was the primary's -- other agents' uncommitted files, as this
-    item's diff. From the primary it now measures nothing; from the tree, the tree."""
+    a tree, recorded from the tree it is worked in, that stamp was the PRIMARY's."""
     tree = _setup(repo)
     (repo / "README.md").write_text("somebody else's uncommitted change\n")
-    args = ("gate", "record", "T1", "research", "--outcome", "passed", "--evidence", "probe")
-    assert run_cli(repo, *args)[0] == OK
-    assert "diff_stat" not in _last_evidence(repo, "research")
     (tree / "b.py").write_text("b = 1\n")  # the item's own uncommitted work
+    args = ("gate", "record", "T1", "research", "--outcome", "passed", "--evidence", "probe")
     assert run_cli(tree, *args)[0] == OK
-    assert _last_evidence(repo, "research")["diff_stat"]["untracked"] == 1
+    from ddflow.services.gates import diff_stat
+
+    stat = _last_evidence(repo, "research")["diff_stat"]
+    assert stat == diff_stat(tree) != diff_stat(repo), stat

@@ -467,7 +467,9 @@ def list_worktrees(repo: Path) -> list[dict[str, str]]:
     return out
 
 
-def capture_diff(tree: Path, base: str = "", *, include_untracked: bool = True) -> str:
+def capture_diff(
+    tree: Path, base: str = "", *, include_untracked: bool = True, exclude: tuple[str, ...] = ()
+) -> str:
     """The diff a reviewer should actually see, including NEW files.
 
     `git diff` omits untracked files entirely. A reviewer handed that diff cannot see
@@ -479,21 +481,24 @@ def capture_diff(tree: Path, base: str = "", *, include_untracked: bool = True) 
     Ordering matters: intent-to-add FIRST, then one `git diff HEAD` that covers tracked
     modifications and new files together. Concatenating two separate diffs produces
     duplicate headers when a file is both modified and re-added.
+
+    ``exclude`` drops paths starting with any of those prefixes from every part of it.
     """
     untracked = [
         ln
         for ln in git(tree, "ls-files", "--others", "--exclude-standard").out.splitlines()
-        if ln.strip()
+        if ln.strip() and not ln.startswith(exclude)
     ]
+    spec = ["--", ".", *(f":(exclude){p}" for p in exclude)] if exclude else []
     if include_untracked and untracked:
         git(tree, "add", "-N", "--", *untracked)
     try:
         if base:
             merge_base = git(tree, "merge-base", base, "HEAD").out or base
-            committed = git(tree, "diff", f"{merge_base}..HEAD").out
+            committed = git(tree, "diff", f"{merge_base}..HEAD", *spec).out
         else:
             committed = ""
-        working = git(tree, "diff", "HEAD").out
+        working = git(tree, "diff", "HEAD", *spec).out
     finally:
         if include_untracked and untracked:
             # Undo intent-to-add so the caller's index is exactly as we found it. A
