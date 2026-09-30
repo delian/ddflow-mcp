@@ -94,3 +94,26 @@ def test_a_recorded_gate_is_measured_in_the_tree_the_caller_stands_in(repo):
 
     stat = _last_evidence(repo, "research")["diff_stat"]
     assert stat == diff_stat(tree) != diff_stat(repo), stat
+
+
+def _another_items_tree(repo: Path) -> Path:
+    """A second harness tree, adopted by another open item, T2."""
+    other = repo.parent / "t2-tree"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "t2-work")
+    run_cli(repo, "task", "add", "T2", "--title", "t2", "--globs", "z.py")
+    code, out, err = run_cli(other, "claim", "T2")
+    assert code == OK and "adopted" in out, out + err
+    return other
+
+
+def test_from_another_items_tree_it_is_unavailable_not_that_items_suite(repo):
+    """Found by the critic review of the first fix: standing in item B's tree, item A's
+    gate ran B's suite and recorded it as A's pass."""
+    _setup(repo)
+    other = _another_items_tree(repo)
+    (other / "a.py").write_text("a = 1\n")  # would make the probe pass -- in T2's tree
+    code, out, err = run_cli(other, "--json", "gate", "run", "T1", "unit_tests")
+    assert code == NOTHING, out + err
+    assert json.loads(out)["outcome"] == "unavailable"
+    rec = json.loads(run_cli(repo, "--json", "show", "T1")[1])["gates"]["unit_tests"]
+    assert rec["outcome"] == "unavailable" and "T2" in rec["reason"], rec

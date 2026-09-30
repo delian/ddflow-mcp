@@ -231,31 +231,32 @@ def _lease_keeper(log, cfg, it) -> Callable[[], None] | None:
     return renew
 
 
-def _item_tree(repo: Path, cfg, it, called_from: Path | None) -> Path:
-    """Where ``it``'s work is: its tree; for a TASK claimed without one, the linked
-    worktree the caller stands in; else the primary.
+def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path | None, str]:
+    """(where ``it``'s work is, or None; the other item whose tree the caller is in, or "").
 
-    The middle case is B8be9373cf5: run from the worktree the item was worked in, a gate
-    still ran in the primary -- `main`'s suite recorded as the change's pass (diff_stat
-    files=0). The primary stays the answer from the primary itself, where a lone agent
-    that claimed `--no-worktree` does its work, for a phase (whose gates test the merged
-    result), and with worktrees off.
+    Its tree; for a TASK claimed without one, the linked worktree the caller stands in
+    (B8be9373cf5: run from there, a gate still ran in the primary -- `main`'s suite as
+    the change's pass) -- unless that tree is another open item's, which is None, not a
+    guess; else the primary: where a lone agent that claimed `--no-worktree` works, what
+    a phase's gates test, and all there is with worktrees off.
     """
     from ..infra import worktree as W
+    from .lifecycle import callers_tree
 
     if it.worktree:
-        return W.load_path(repo, it.worktree)
+        return W.load_path(repo, it.worktree), ""
     if it.kind != "phase" and cfg.worktree.enabled:
-        here = W.current(called_from or repo)
+        here, held = callers_tree(repo, cfg, st, it, called_from)
+        if held:
+            return None, held
         if here is not None:
-            return here.path
-    return repo
+            return here.path, ""
+    return repo, ""
 
 
-def _where_to_run(repo: Path, cfg, it, gdef, called_from: Path | None) -> Path:
-    """The directory a command gate runs in: the primary for a repo gate, else where the
-    item's work is (`_item_tree`)."""
-    return repo if gdef.cwd != "worktree" else _item_tree(repo, cfg, it, called_from)
+def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
+    """(the directory a command gate runs in, or None; whose tree the caller is in)."""
+    return (repo, "") if gdef.cwd != "worktree" else _item_tree(repo, cfg, st, it, called_from)
 
 
 def run(
@@ -303,7 +304,15 @@ def run(
             outcome="",
         )
 
-    cwd = _where_to_run(repo, cfg, it, gdef, called_from)
+    cwd, held = _where_to_run(repo, cfg, st, it, gdef, called_from)
+    if cwd is None:
+        reason = (
+            f"the worktree you are in belongs to {held}, not {item}: its suite is not "
+            f"{item}'s. Run the gate from {item}'s own tree (or the primary, if that is "
+            f"where it is worked). Recording UNAVAILABLE."
+        )
+        G.record(log, cfg, item, gate, "unavailable", reason=reason, gates=gates)
+        return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
     log.append("gate.started", item, {"gate": gate})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = G.run_command_gate(
@@ -415,10 +424,11 @@ def record(
         # `critic` and `standards` are all agent gates recorded through this branch. The
         # feature missed its own motivating case.
         # Where the item's work is (B8be9373cf5): from its worktree, not the primary.
-        wt = _item_tree(repo, cfg, it, called_from)
+        wt, _held = _item_tree(repo, cfg, st, it, called_from)
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
-        # they made every bare pass look evidenced (bug Bbc9a7ee3f2).
-        measured = {"tree_sha": G.tree_fingerprint(wt), "diff_stat": G.diff_stat(wt)}
+        # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
+        # than another item's tree, when the caller stands in one.
+        measured = {"tree_sha": G.tree_fingerprint(wt), "diff_stat": G.diff_stat(wt)} if wt else {}
     else:
         measured = {}
 

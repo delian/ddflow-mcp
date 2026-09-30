@@ -529,6 +529,23 @@ def _worktree_held_by(st, stored: str, me: str, repo: Path | None = None, cfg=No
     return ""
 
 
+def callers_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Any, str]:
+    """(the linked worktree the caller stands in, or None; the OTHER item holding it, or "").
+
+    For an item claimed without a worktree, where the caller stands is the best evidence
+    of where its work is -- unless that tree belongs to another open item. Run from item
+    B's tree, item A's gate ran B's suite and recorded it as A's pass (found by the critic
+    review of B8be9373cf5's fix). Held means what `claim` means by it: bound to another
+    open item that has not let go (`_worktree_held_by`). Shared by `gate run`/`record`,
+    `review` and `merge`, so the three cannot disagree about whose tree it is.
+    """
+    here = W.current(called_from or repo)
+    if here is None:
+        return None, ""
+    held = _worktree_held_by(st, W.store_path(repo, here.path), it.id, repo, cfg)
+    return (None, held) if held else (here, "")
+
+
 def _tree_let_go(repo: Path, cfg, st, item) -> bool:
     """True when an OPEN item's tree holds none of its work: lease released, merged, and
     nothing in the tree that its merge target lacks -- no uncommitted change, and a HEAD
@@ -1160,7 +1177,7 @@ def merge(
         return it
     target = FS.target(repo, cfg, it, st)
     borrowed = not it.worktree  # claimed --no-worktree: land the branch it was worked on
-    source = _what_to_land(repo, it, target, branch, called_from)
+    source = _what_to_land(repo, cfg, st, it, target, branch, called_from)
     if isinstance(source, O.Outcome):
         return source
     wt, dirty, outside = source
@@ -1282,7 +1299,7 @@ def merge(
 
 
 def _what_to_land(
-    repo: Path, it, target: str, branch: str, called_from: Path | None
+    repo: Path, cfg, st, it, target: str, branch: str, called_from: Path | None
 ) -> tuple[W.Worktree, list[str], list[str]] | O.Outcome:
     """(the tree and branch to land, its uncommitted files, paths outside the globs).
 
@@ -1304,7 +1321,7 @@ def _what_to_land(
             item=it.id, path=W.load_path(repo, it.worktree), branch=it.branch, base=target
         )
         return wt, W.dirty(wt), []
-    picked = _branch_to_land(repo, it, branch, called_from, target)
+    picked = _branch_to_land(repo, cfg, st, it, branch, called_from, target)
     if isinstance(picked, O.Outcome):
         return picked
     tree = W.checked_out_at(repo, picked)
@@ -1314,7 +1331,7 @@ def _what_to_land(
 
 
 def _branch_to_land(
-    repo: Path, it, branch: str, called_from: Path | None, target: str
+    repo: Path, cfg, st, it, branch: str, called_from: Path | None, target: str
 ) -> str | O.Outcome:
     """The branch an item claimed WITHOUT a worktree is landed from, or why none can be.
 
@@ -1324,7 +1341,16 @@ def _branch_to_land(
     whatever it happens to be on.
     """
     if not branch:
-        here = W.current(called_from or repo)
+        here, held = callers_tree(repo, cfg, st, it, called_from)
+        if held:
+            return O.refused(
+                "worktree.merged",
+                f"the worktree you are in belongs to {held}, not {it.id}: its branch is "
+                f"{held}'s work. Name {it.id}'s branch with --branch.",
+                id=it.id,
+                sha="",
+                dirty=[],
+            )
         if here is None or not here.branch:
             return O.refused(
                 "worktree.merged",

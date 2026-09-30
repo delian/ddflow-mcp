@@ -128,3 +128,24 @@ def test_an_item_with_its_own_tree_refuses_a_different_branch(repo):
     code, out, err = run_cli(repo, "merge", "T1", "--branch", "elsewhere")
     assert code == REFUSED, out + err
     assert "elsewhere" in out + err
+
+
+def _another_items_tree(repo: Path) -> Path:
+    """A second harness tree, adopted by another open item, T2."""
+    other = repo.parent / "t2-tree"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "t2-work")
+    run_cli(repo, "task", "add", "T2", "--title", "t2", "--globs", "z.py")
+    code, out, err = run_cli(other, "claim", "T2")
+    assert code == OK and "adopted" in out, out + err
+    return other
+
+
+def test_standing_in_another_items_tree_does_not_land_its_branch(repo):
+    tree = _setup(repo)
+    _commit(tree, "a.py")
+    other = _another_items_tree(repo)
+    _commit(other, "z.py")
+    code, out, err = run_cli(other, "merge", "T1")
+    assert code == REFUSED, out + err
+    assert "T2" in out + err
+    assert _merged_events(repo) == []
