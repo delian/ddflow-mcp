@@ -1788,11 +1788,13 @@ behaviour; `--no-worktree` skips binding entirely.
 
 An item claimed `--no-worktree` has no branch of its own, so `merge` and `review` take
 one: the branch checked out in the worktree you run them from, or `--branch <branch>`
-from anywhere. From the primary with no `--branch` they refuse rather than guess — the
-primary is usually on the target itself. The borrowed tree is never removed; uncommitted
-work in it is refused as for any merge; and paths the merge lands outside the item's
-globs are listed (`outside_globs`), since a borrowed branch can carry another item's
-commits too.
+from anywhere, and `gate run` runs where you stand. From the primary with no `--branch`,
+`merge` refuses rather than guess — the primary is usually on the target itself — while
+`review` and `gate run` treat the primary as where a lone agent works: its working tree,
+minus ddflow's own bookkeeping, so other agents' event logs are never an item's diff.
+The borrowed tree is never removed; uncommitted work in it is refused as for any merge;
+and paths the merge lands outside the item's globs are listed (`outside_globs`), since a
+borrowed branch can carry another item's commits too.
 
 ```console
 $ ddflow merge B-fix --branch agent-work
