@@ -378,6 +378,7 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_research_add",
     "ddflow_bug_found",
     "ddflow_bug_fixed",
+    "ddflow_bug_invalid",
     "ddflow_session_start",
     "ddflow_session_prompt",
     "ddflow_session_note",
