@@ -210,3 +210,22 @@ def test_a_server_key_with_braces_is_reported_not_crashed_on(tmp_path):
     _mcp_json(tmp_path, {"{guides}": {"command": "docker", "args": CODEGUIDE}})
     status, msg = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
     assert status == "unchanged" and "`{guides}`" in msg, (status, msg)
+
+
+def test_a_version_tag_is_only_dropped_from_an_npm_package_spec(tmp_path):
+    """Found by the critic: the tag rule ran on EVERY argument, so two docker launches of
+    one image against different hosts (`...@10.0.0.5`, `...@10.0.0.6`) collapsed to one
+    server, and `companions add` would have refused to write the right entry."""
+    db = CO.Companion(
+        id="db", command="docker", args=["run", "-i", "mcp/postgres", "postgresql://u:p@10.0.0.5"]
+    )
+    other = {
+        "command": "docker",
+        "args": ["run", "-i", "mcp/postgres", "postgresql://u:p@10.0.0.6"],
+    }
+    assert not CO.launches_as(db, other)
+    tagged = CO.Companion(id="t", command="docker", args=["run", "-i", "secret@2024"])
+    assert not CO.launches_as(tagged, {"command": "docker", "args": ["run", "-i", "secret@2025"]})
+    # ...while an npx package still matches across a version tag.
+    ctx = CO.Companion(id="c", command="npx", args=["-y", "@upstash/context7-mcp"])
+    assert CO.launches_as(ctx, {"command": "npx", "args": ["-y", "@upstash/context7-mcp@2.0.1"]})

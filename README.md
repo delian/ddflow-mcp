@@ -867,7 +867,7 @@ codeguide-mcp as `coding-guides` before ddflow knew it reads as
 ``registered for: claude (as `coding-guides`)``, and `companions add` leaves it alone
 instead of writing a second copy under the id. "The same launch" is the same command
 (by basename) with the companion's arguments in order — other arguments may sit
-between them, and an npm version tag (`@latest`, `@1.2.3`) is ignored; another image,
+between them, and a version tag on an npm package (`@latest`, `@1.2.3`) is ignored; another image,
 package or launcher is another server.
 
 `rules` never shows as uncovered: `ddflow brief` serves it from ddflow's own lessons

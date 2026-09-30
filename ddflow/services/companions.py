@@ -315,14 +315,22 @@ def _said(output: str) -> list[str]:
     return [line for line in lines if line and not _NPM_NOISE.match(line)]
 
 
-#: An npm package spec's version suffix: `pkg@latest`, `@scope/pkg@1.2.3`, `pkg@^2`.
-#: Only a TAG-shaped suffix is dropped, so `user@host` keeps its meaning.
-_NPM_TAG = re.compile(r"^((?:@[^/@\s]+/)?[^@/\s][^@\s]*)@(?:latest|next|[\^~]?v?\d[\w.+-]*)$")
+#: An npm package spec with a version suffix: `pkg@latest`, `@scope/pkg@1.2.3`, `pkg@^2`.
+#: The name part is npm's own charset (no `:` or `/` beyond the scope), and the rule runs
+#: only for an npm launcher (`NPM_LAUNCHERS`): run on every argument, it read the host in
+#: `postgresql://u:p@10.0.0.5` as a version and made two databases one server.
+_NPM_TAG = re.compile(
+    r"^((?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*)@(?:latest|next|[\^~]?v?\d[\w.+-]*)$"
+)
+
+#: Launchers whose arguments name an npm package, where a version tag is not identity.
+NPM_LAUNCHERS = frozenset({"npx", "npm", "pnpm", "pnpx", "bunx", "yarn"})
 
 
-def _norm_arg(arg: str) -> str:
-    m = _NPM_TAG.match(arg)
-    return m.group(1) if m else arg
+def _norm_args(cmd: str, args: list[str]) -> list[str]:
+    if Path(cmd).name not in NPM_LAUNCHERS:
+        return list(args)
+    return [m.group(1) if (m := _NPM_TAG.match(a)) else a for a in args]
 
 
 def _launch_of(entry: object) -> tuple[str, list[str]] | None:
@@ -354,7 +362,8 @@ def launches_as(c: Companion, entry: object) -> bool:
     * the same COMMAND, compared by basename (`/usr/local/bin/npx` is `npx`);
     * the companion's ARGUMENTS appear in the entry IN ORDER, other arguments allowed
       between them -- `docker run --rm -i -e TOKEN <image>` is still that image;
-    * an npm version tag is ignored on both sides (`@upstash/context7-mcp@latest`);
+    * an npm version tag is ignored on both sides (`@upstash/context7-mcp@latest`),
+      for an npm launcher only -- elsewhere `x@1.2` is not a package and not a tag;
     * a companion that declares no arguments matches only an entry with none, or every
       server started by the same launcher would count.
 
@@ -370,8 +379,8 @@ def launches_as(c: Companion, entry: object) -> bool:
     cmd, args = launch
     if Path(cmd).name != Path(c.command).name:
         return False
-    want = [_norm_arg(a) for a in c.args]
-    have = [_norm_arg(a) for a in args]
+    want = _norm_args(c.command, c.args)
+    have = _norm_args(cmd, args)
     if not want:
         return not have
     it = iter(have)
@@ -685,7 +694,7 @@ def gate_coverage(repo: Path, statuses: list[Status], pipeline: list[str]) -> di
 
     One gate has ddflow itself behind it, always: `rules` is `ddflow brief`, which shows
     the operational memory (`ddflow memory`) and the lessons ranked against the task --
-    see `BUILTIN_COVERAGE`. Its entry is not a companion id.
+    see `BUILTIN_COVERAGE`, whose names are not companion ids.
 
     Neither counts on `installed is None`. A probe that could not run leaves the tool
     exactly as unknown as before we asked, and counting it would be the
