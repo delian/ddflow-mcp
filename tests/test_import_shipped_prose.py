@@ -21,6 +21,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ddflow.services import importer as IM
 
 
+def _claims(heading: str) -> bool:
+    """What production asks: the TITLE, bold already stripped by `_clean_title`."""
+    return IM._claims_done(IM._clean_title(heading))
+
+
 @pytest.mark.parametrize(
     "heading",
     [
@@ -36,10 +41,16 @@ from ddflow.services import importer as IM
         "Shipped-vs-ticked drift detector",
         "Phase 9 — foo (NOT DONE)",
         "137.E.2 — NOT SHIPPED in 137.E",
+        "Phase 9 (NOT YET SHIPPED)",
+        "Phase 9 (not SHIPPED)",
+        "Phase 9 — NOT  DONE",
+        "Phase 20 — launch (closed beta)",
+        "Parser: complete rewrite",
+        "Importer — closed questions",
     ],
 )
 def test_the_word_in_prose_is_not_a_status(heading):
-    assert not IM._DONE_MARKER.search(heading), heading
+    assert not _claims(heading), heading
 
 
 @pytest.mark.parametrize(
@@ -57,13 +68,12 @@ def test_the_word_in_prose_is_not_a_status(heading):
         "Phase 5 — foo (P1) — shipped in 0.3",
         "Phase 5 — foo — Shipped (v1)",
         "Phase 5 — foo: shipped in v2",
-        "Phase 5 — foo **shipped**",
         "Phase 5 — foo, now shipped",
         "Phase 5 — foo ✔ done",
     ],
 )
 def test_a_status_still_is(heading):
-    assert IM._DONE_MARKER.search(heading), heading
+    assert _claims(heading), heading
 
 
 def test_the_drift_note_no_longer_names_a_prose_heading(repo):
@@ -76,3 +86,15 @@ def test_the_drift_note_no_longer_names_a_prose_heading(repo):
     notes = " ".join(IM.plan_import(repo, None).notes)
     assert "say the work is finished" in notes and "36.9" in notes
     assert "36.5 (" not in notes
+
+
+@pytest.mark.parametrize(
+    "heading",
+    ["36.9 — Gates ✅ SHIPPED", "36.9 — Gates — shipped in 0.3", "36.9 — Gates (done)"],
+)
+def test_the_drift_note_names_a_status_heading_end_to_end(repo, heading):
+    p = repo / "docs" / "todo.md"
+    p.parent.mkdir(parents=True)
+    p.write_text(f"## Phase 36\n### {heading}\n- [ ] **36.9a** x\n")
+    notes = " ".join(IM.plan_import(repo, None).notes)
+    assert "say the work is finished" in notes and "36.9" in notes, notes
