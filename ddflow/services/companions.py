@@ -342,9 +342,11 @@ def _launch_of(entry: object) -> tuple[str, list[str]] | None:
     if not isinstance(entry, dict):
         return None
     cmd, args = entry.get("command"), entry.get("args") or []
+    if not isinstance(args, list):
+        return None  # checked BEFORE the array form merges it: `*5` raised, `*"a b"` split
     if isinstance(cmd, list) and cmd and all(isinstance(x, str) for x in cmd):
         cmd, args = cmd[0], [*cmd[1:], *args]
-    if not isinstance(cmd, str) or not cmd.strip() or not isinstance(args, list):
+    if not isinstance(cmd, str) or not cmd.strip():
         return None
     if not args and any(ch.isspace() for ch in cmd.strip()):
         try:
@@ -393,17 +395,23 @@ def launches_as(c: Companion, entry: object) -> bool:
 #: companion. So only these consume a following token; any other flag is taken as
 #: boolean, and a value written `--flag=value` needs no entry here.
 _DOCKER_VALUE_FLAGS = frozenset(
-    {"-a", "--attach", "--add-host", "--blkio-weight", "-c", "--cap-add", "--cap-drop",
-     "--cgroup-parent", "--cgroupns", "--cidfile", "--cpu-shares", "--cpus", "--cpuset-cpus",
-     "--device", "--device-cgroup-rule", "--dns", "--dns-option", "--dns-search",
+    {"-a", "--attach", "--add-host", "--annotation", "--blkio-weight", "--blkio-weight-device", "-c", "--cap-add", "--cap-drop",
+     "--cgroup-parent", "--cgroupns", "--cidfile", "--cpu-count", "--cpu-percent",
+     "--cpu-period", "--cpu-quota", "--cpu-rt-period", "--cpu-rt-runtime", "--cpu-shares",
+     "--cpus", "--cpuset-cpus", "--cpuset-mems", "--detach-keys",
+     "--device-read-bps", "--device-read-iops", "--device-write-bps", "--device-write-iops",
+     "--device", "--device-cgroup-rule", "--dns", "--dns-opt", "--dns-option", "--dns-search",
      "--domainname", "-e", "--entrypoint", "--env", "--env-file", "--expose", "--gpus",
-     "--group-add", "-h", "--health-cmd", "--hostname", "--ip", "--ip6", "--ipc",
+     "--group-add", "-h", "--health-cmd", "--health-interval", "--health-retries",
+     "--health-start-interval", "--health-start-period", "--health-timeout", "--hostname",
+     "--ip", "--ip6", "--ipc", "--kernel-memory", "--link-local-ip",
      "--isolation", "-l", "--label", "--label-file", "--link", "--log-driver", "--log-opt",
-     "-m", "--mac-address", "--memory", "--memory-swap", "--mount", "--name", "--net",
+     "-m", "--mac-address", "--memory", "--memory-reservation", "--memory-swap",
+     "--memory-swappiness", "--network-alias", "--pids-limit", "--mount", "--name", "--net",
      "--network", "--oom-score-adj", "-p", "--pid", "--platform", "--publish", "--pull",
      "--restart", "--runtime", "--security-opt", "--shm-size", "--stop-signal",
      "--stop-timeout", "--storage-opt", "--sysctl", "--tmpfs", "-u", "--ulimit", "--user",
-     "--userns", "--uts", "-v", "--volume", "--volumes-from", "-w", "--workdir"}
+     "--userns", "--uts", "-v", "--volume", "--volume-driver", "--volumes-from", "-w", "--workdir"}
 )  # fmt: skip
 VALUE_FLAGS: dict[str, frozenset[str]] = {
     "docker": _DOCKER_VALUE_FLAGS,

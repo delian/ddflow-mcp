@@ -254,9 +254,13 @@ def test_another_server_given_the_companion_as_an_argument_is_not_it():
     # Found by the critic: a flag's VALUE equal to the companion's image is not the image.
     assert not CO.launches_as(a, {"command": "docker", "args": ["run", "-e", "img-a", "alpine"]})
     # Found by roborev on 5160e3e: common value-taking docker flags must be known ones.
-    for flag, value in (("-h", "host"), ("--gpus", "all"), ("--dns", "dns.example")):
+    known = (("-h", "host"), ("--gpus", "all"), ("--dns", "dns.example"), ("--pids-limit", "128"))
+    for flag, value in known:
         entry = {"command": "docker", "args": ["run", flag, value, "img-a"]}
         assert CO.launches_as(a, entry), flag
+    # An UNLISTED flag is taken as boolean, so its value reads as another image: a missed
+    # registration (a duplicate on `add`) is the chosen failure, never a false "covered".
+    assert not CO.launches_as(a, {"command": "docker", "args": ["run", "--made-up", "v", "img-a"]})
     # A flag with its value between them, and the server's own arguments after, still match.
     assert CO.launches_as(a, {"command": "docker", "args": ["run", "--env=X", "-i", "img-a"]})
     assert CO.launches_as(a, {"command": "docker", "args": ["run", "-e", "TOKEN", "img-a"]})
@@ -282,3 +286,15 @@ def test_register_does_not_refresh_a_stale_id_into_a_duplicate(tmp_path):
     status, msg = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
     assert status == "unchanged" and "coding-guides" in msg, (status, msg)
     assert json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]["codeguide"] == stale
+
+
+def test_a_malformed_args_field_is_no_launch_not_a_crash(tmp_path):
+    """Found by the rubber duck: an array `command` merged `args` before its type was
+    checked, so `"args": 5` raised out of the scan and `"args": "run img"` split into
+    characters."""
+    (tmp_path / ".kilo").mkdir()
+    for bad in (5, "run --rm -i docker.io/delian/codeguide-mcp"):
+        (tmp_path / ".kilo" / "kilo.json").write_text(
+            json.dumps({"mcp": {"cg": {"type": "local", "command": ["docker"], "args": bad}}})
+        )
+        assert _status(tmp_path, "codeguide").registered_as == {}, bad
