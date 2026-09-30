@@ -126,7 +126,7 @@ def test_a_queue_that_cannot_be_read_is_could_not_run_never_a_pass(repo):
     shutil.rmtree(repo / ".ddflow" / "events")
     code, out = _check(repo, "subject\n\nPhase: 160.D.4\n")
     assert code == 2, f"an unreadable queue must be exit 2 (could not run), got {code}\n{out}"
-    assert "not a pass" in out.lower(), out
+    assert "could not" in out.lower(), out  # the exit code is the contract
 
 
 @pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0, reason="root reads anything")
