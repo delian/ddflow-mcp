@@ -887,6 +887,8 @@ def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
+    if not users:  # `review` refuses an empty diff first; this is for any other caller
+        return []
     hedge = max(1, int(rev.hedge))
     cap = max(1, int(rev.max_concurrency))
     n = len(users)

@@ -209,3 +209,10 @@ def test_a_command_reviewers_losing_copy_is_killed(tmp_path):
 def test_the_defaults_parallelise_and_hedge():
     r = Reviewer(name="d")
     assert (r.hedge, r.max_concurrency) == (2, 4)
+
+
+def test_no_chunks_is_no_results_not_a_crash():
+    """Found by the critic review: ThreadPoolExecutor(max_workers=0) raises."""
+    from ddflow.services.review import _race
+
+    assert _race(Reviewer(name="d"), "system", [], time.time()) == []
