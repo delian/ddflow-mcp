@@ -38,10 +38,9 @@ max_parallel = 4
 
 # .roborev.toml is git-ignored (decision D-roborev-local) but roborev reads it from each
 # checkout, so every worktree ddflow creates gets the primary's copy.
-# Still off, though B9cb7dd1c3b is fixed (B-tolerate-newer-config): the fix only helps
-# code that contains it, and a branch cut before it still refuses the whole config on
-# this unknown knob. Re-enable once no active worktree predates the fix.
-# local_files = [".roborev.toml"]
+# A tree whose ddflow predates this knob skips it with a warning (B9cb7dd1c3b); one that
+# predates 81a52e3 refuses the whole config until it merges main.
+local_files = [".roborev.toml"]
 
 [schedule]
 max_parallel_tasks = 4
