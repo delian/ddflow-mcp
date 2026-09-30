@@ -478,7 +478,8 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
 def _registered_name(servers: dict, text: str, shape: str, c: Companion | str) -> str | None:
     """The name one config launches ``c`` under: its id first, else a matching launch."""
     cid = c if isinstance(c, str) else c.id
-    if cid in servers or (shape == SHAPE_TOML and f"[mcp_servers.{cid}]" in text):
+    # `is not None`, not `in`: a `"codeguide": null` placeholder launches nothing.
+    if servers.get(cid) is not None or (shape == SHAPE_TOML and f"[mcp_servers.{cid}]" in text):
         return cid
     if isinstance(c, str):
         return None
@@ -635,7 +636,7 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -
             if c.id in servers and launches_as(c, servers[c.id]):
                 msg += f". `{c.id}` launches it too: two copies, remove one by hand"
             elif c.id in servers:
-                msg += f". The entry under `{c.id}` launches something else: remove it by hand"
+                msg += f". The entry under `{c.id}` is not this launch: remove it by hand"
             return msg
     return ""
 

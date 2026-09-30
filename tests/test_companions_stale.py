@@ -328,7 +328,7 @@ def test_an_id_entry_that_differs_only_in_env_is_not_called_something_else(tmp_p
         tmp_path, {"codeguide": same, "coding-guides": {"command": "docker", "args": CODEGUIDE}}
     )
     status, msg = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
-    assert status == "unchanged" and "something else" not in msg and "two copies" in msg, msg
+    assert status == "unchanged" and "not this launch" not in msg and "two copies" in msg, msg
 
 
 def test_register_into_a_config_with_no_server_table_writes_it(tmp_path):
@@ -338,3 +338,10 @@ def test_register_into_a_config_with_no_server_table_writes_it(tmp_path):
         status, _ = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
         assert status == "written"
         assert "codeguide" in json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]
+
+
+def test_a_null_entry_under_the_id_is_not_a_registration(tmp_path):
+    """Found by the critic (round 8): `cid in servers` counted a `null` placeholder that
+    the old `get_server(...) is not None` did not."""
+    _mcp_json(tmp_path, {"codeguide": None})
+    assert _status(tmp_path, "codeguide").registered_as == {}
