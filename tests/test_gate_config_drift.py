@@ -158,3 +158,18 @@ def test_an_uncommitted_edit_in_the_tree_does_not_make_a_behind_branch_its_own(r
     outcome, reason = _recorded(repo)
     assert outcome == "unavailable", f"{outcome}: {reason} {out}{err}"
     assert "merge main" in reason and code == NOTHING
+
+
+def test_a_local_override_of_the_command_is_what_ran_so_its_failure_stands(repo):
+    """`.ddflow/local/` wins over both committed files in `load_gates`: when it sets the
+    command, main's committed change never ran, and the failure is this branch's own."""
+    _setup(repo, "true")
+    (repo / "xdist.marker").write_text("")
+    _commit_gates(repo, "test -f xdist.marker", "parallel tests")
+    local = repo / ".ddflow" / "local"
+    local.mkdir(parents=True, exist_ok=True)
+    (local / "gates.toml").write_text('[gate.unit_tests]\ncommand = "false"\n')
+    code, _out, _err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    outcome, reason = _recorded(repo)
+    assert outcome == "failed", f"{outcome}: {reason}"
+    assert code == FAIL
