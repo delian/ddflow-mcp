@@ -701,29 +701,42 @@ irreversible:
 ### Cutting a release
 
 ```console
-$ scripts/bump.sh patch          # 0.1.0 -> 0.1.1, in all FIVE places that declare it
-$ scripts/release.sh             # build + verify everything locally; publishes nothing
-$ git commit -am 'release 0.1.1' && git push origin main
+$ git push origin main           # that is the whole release
 ```
 
-That push is the whole release. CI publishes PyPI, Docker Hub, ghcr.io and the MCP
-registry, then creates `v0.1.1` and a GitHub release — **last**, and only once every
-publish succeeded, because a tag pointing at a half-release is worse than no tag: it
-looks authoritative.
+**Every push to main that changes shipped code releases, with the PATCH version bumped.**
+Major and minor move only when you move them.
+"Shipped" means `ddflow/`, `pyproject.toml`, `uv.lock`, `Dockerfile`,
+`docker-entrypoint.sh` or `.dockerignore`: a push of docs, tests or the ddflow event log
+releases nothing, because PyPI keeps every version forever and one identical to the last
+is noise nobody can withdraw. CI runs `scripts/bump.sh patch`, commits `release 0.1.2` to
+main, publishes PyPI, Docker Hub, ghcr.io and the MCP registry, then creates `v0.1.2` and
+a GitHub release — **last**, and only once every publish succeeded, because a tag pointing
+at a half-release is worse than no tag: it looks authoritative.
 
-**The version bump is the release decision, and it is deliberate on purpose.** A push to
-main publishes exactly when that number changes. Publishing on *every* push is arithmetic
-that does not work — PyPI refuses to re-upload a version, so the second push fails and
-every one after it — and deriving a unique version per commit instead would mean an
-irreversible release for a README typo. So one reviewable line in a diff decides, and
-everything after it is automatic. `workflow_dispatch` with `force: true` is there for the
-case where you need to republish deliberately.
+**Pull after a release.** The release commit is CI's, so your `main` is one commit behind
+it and the next push is refused until you `git pull`.
 
-The version lives in five places — `pyproject.toml`, `server.json`'s version, its
-per-package version, the tag inside every OCI identifier, and `SERVER_INFO`, which is
-what the server tells every client it is. `scripts/bump.sh` moves all five and then
-re-reads them to check it did; `tests/test_packaging.py` fails if they ever drift. (That
-test caught the bump script missing `SERVER_INFO` on its first run.)
+How the gate picks the version: it publishes the declared version if PyPI does not have it
+yet, and bumps patch only if it does. So moving major or minor is yours to do —
+
+```console
+$ scripts/bump.sh minor          # 0.1.4 -> 0.2.0 (or: major, or an exact 1.0.0)
+$ git commit -am 'release 0.2.0' && git push origin main
+```
+
+— and CI publishes exactly `0.2.0`; the next push that bumps nothing releases `0.2.1`. The same rule makes a failed release retry its number with the next push
+instead of skipping it. The bump is pushed to main *before* anything publishes: a push that
+loses a race with another commit fails the run and publishes nothing, where pushed last it
+would leave PyPI holding a version main does not declare. Runs are serialized, and only
+`main` or a `v*` tag releases.
+
+The version lives in seven places — `pyproject.toml`, `server.json`'s version, its
+per-package version, the tag inside every OCI identifier, `SERVER_INFO` (what the server
+tells every client it is), `ddflow.__version__`, and `uv.lock`, which records the project's
+own version. `scripts/bump.sh` moves them all and re-reads them to check it did;
+`tests/test_packaging.py` fails if the first six ever drift. (That test caught the bump
+script missing `SERVER_INFO` on its first run.)
 
 **`scripts/release.sh` runs all of that locally and publishes nothing.** It is dry by
 default, needs no credentials, and exists because a tag is not reversible: PyPI refuses a
@@ -739,7 +752,7 @@ for different reasons so you can tell at a glance which:
 
 | Job | Checks |
 |---|---|
-| **quality** | `ruff check` + `format --check`; the wheel **installs into a clean venv, runs, and carries its templates**; `gitleaks` over full history; `bandit` over the package; a dependency audit that also asserts the runtime dependency list is still *empty* |
+| **quality** | `ruff check` + `format --check`; the wheel **installs into a clean venv, runs, and carries its templates**; `gitleaks` over full history; `bandit` over the package; a dependency audit that also asserts every runtime dependency is on an explicit allowlist (today: Jinja2) |
 | **tests** | The suite on Python 3.11 and 3.13 — the floor and the current release, because a version-specific break is a break for somebody |
 | **codeql** | GitHub's `security-and-quality` queries, landing in the Security tab rather than a log |
 | **scenarios** | The slow end-to-end runs, and the concurrency/load suite, each as its own step with `if: always()` |
@@ -754,6 +767,15 @@ push.
 `bandit` deliberately skips `tests/`, which use `subprocess` and temporary paths
 constantly and by design. A scanner that cries wolf on every fixture is a scanner nobody
 reads.
+
+**The same checks run before you push.** `.pre-commit-config.yaml` installs a *pre-push*
+hook (`pre-commit install`, once per clone) that runs what CI runs: ruff, the wheel probe,
+bandit, the dependency allowlist, gitleaks over the commits being pushed, the unit suite,
+the scenarios, and a schema check of the workflow files. The build probe and the allowlist
+are `scripts/ci/` files that CI calls too, so the two cannot drift. It is a push hook, not
+a commit hook, because ddflow's own hooks own the commit (`ddflow hooks install`), and
+because minutes per commit teaches `--no-verify`. `SKIP=scenarios git push` skips one.
+It does not run the 3.11/3.13 matrix, CodeQL, pip-audit or the load suite.
 
 ### Any LLM as a reviewer — local, remote, SaaS, or a CLI
 

@@ -1,4 +1,6 @@
-# Publish to PyPI and register in the official MCP registry, on a version tag.
+# Publish to PyPI, Docker Hub, ghcr.io and the MCP registry. A push to main that changes
+# shipped code bumps the PATCH version, commits the bump to main and releases it; a `v*`
+# tag releases exactly the version it names. The `gate` job says how the version is chosen.
 #
 # HOW THIS AUTHENTICATES, per target — four mechanisms, and only one stored secret.
 #
@@ -18,6 +20,9 @@
 #                 `delian` account, which is what entitles this server to the
 #                 `io.github.delian/*` namespace declared in server.json. No token.
 #   tag/release   `secrets.GITHUB_TOKEN` with `contents: write`.
+#   release commit  the same token, `contents: write` on `gate`. A branch-protection rule
+#                 on main that refuses github-actions[bot] refuses the bump: allow the
+#                 bot to push, or no release gets past `gate`.
 #
 # `environment: release` on the jobs that publish is a deliberate control: point it at a
 # GitHub environment with required reviewers and a release waits for a human, without
@@ -28,63 +33,102 @@ name: publish
 
 on:
   push:
-    branches: ["main"]         # publishes when the declared version CHANGES (see `gate`)
-    tags: ["v*"]               # or immediately, on an explicit tag
-  workflow_dispatch:
-    inputs:
-      force:
-        description: "Publish the current version even if it did not change in this push"
-        type: boolean
-        default: false
+    branches: ["main"]
+    # Only a push that changes what ships releases. The wheel is `ddflow/` and the image is
+    # built from it plus these files; a push of docs, tests or the ddflow event log changes
+    # neither, and releasing it would mint a permanent PyPI version identical to the last.
+    # (GitHub does not evaluate path filters for tag pushes, so `v*` below still fires.)
+    paths:
+      - "ddflow/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "Dockerfile"
+      - "docker-entrypoint.sh"
+      - ".dockerignore"
+    tags: ["v*"]               # an explicit tag publishes exactly that version, no bump
+  workflow_dispatch:           # release now, by the same rule as a push
+
+# One release at a time. Two overlapping runs would both read the same version and bump
+# to the same number, and the second would collide with the first on PyPI.
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   # ---------------------------------------------------------------- what to publish, if anything
   gate:
-    # A push to main publishes ONLY when the declared version moved. That is not
-    # timidity, it is arithmetic: PyPI refuses to re-upload a version, so "publish every
-    # push" fails on the second one and every one after. Deriving a unique version per
-    # commit instead would mean a release for every README typo, each irreversible.
+    # CI bumps only the PATCH version; major and minor are the operator's to move
+    # (operator, 2026-09-30): 0.1.1 -> 0.1.2, 1.1.2 -> 1.1.3. A push to main that changes
+    # shipped code is the release decision, so nobody has to remember scripts/bump.sh.
     #
-    # So the version bump IS the release decision, made in a reviewable diff, and
-    # everything after it is automatic — including the tag, which this workflow creates
-    # so tags track releases rather than depending on anybody remembering to push one.
+    # The rule is "publish the declared version if PyPI does not have it yet, otherwise
+    # bump patch and publish that". The first half is how a person moves major or minor
+    # (`scripts/bump.sh minor|major|X.Y.Z`, commit, push: published as declared, and the
+    # patches continue from it), and how a release that failed after its bump landed is
+    # retried with the new code instead of being skipped.
+    #
+    # The bump is committed to main BEFORE anything publishes. Pushed last, a push that
+    # lost a race with another commit would leave PyPI holding a version main does not
+    # declare, and the next run would bump to that same number and be refused. Pushed
+    # first, losing the race fails this job and publishes nothing. A push made with the
+    # workflow's GITHUB_TOKEN does not trigger workflows, so the release commit cannot
+    # start another release (and the actor check below holds if that token ever changes).
+    #
+    # Releases come from main or a tag only: `workflow_dispatch` can be started on any
+    # branch, and a bump pushed there would publish code main has never seen.
+    if: >-
+      github.actor != 'github-actions[bot]'
+      && (github.ref_type == 'tag' || github.ref_name == 'main')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write          # the release commit on main
     outputs:
       publish: ${{ steps.decide.outputs.publish }}
       version: ${{ steps.decide.outputs.version }}
+      sha: ${{ steps.decide.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
-        with:
-          fetch-depth: 2        # enough to diff this push against its parent
+      - uses: astral-sh/setup-uv@v10.2.0   # bump.sh re-locks uv.lock, which records the version
       - id: decide
         run: |
           set -eu
           version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
-          echo "version=$version" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "tag push — publishing $version"; exit 0
-          fi
-          if [ "${{ inputs.force }}" = "true" ]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "forced — publishing $version"; exit 0
+            {
+              echo "publish=true"; echo "version=$version"; echo "sha=$(git rev-parse HEAD)"
+            } >> "$GITHUB_OUTPUT"
+            echo "tag push — publishing $version as declared"; exit 0
           fi
 
-          prev=$(git show 'HEAD^:pyproject.toml' 2>/dev/null                  | grep -m1 '^version = ' | cut -d'"' -f2 || echo "")
-          if [ "$version" = "$prev" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "version unchanged ($version) — nothing to publish."
-            echo "Bump it with scripts/bump.sh to cut a release."
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "version moved ${prev:-none} -> $version — publishing"
-          fi
+          # 200 = released, 404 = not yet. Anything else is PyPI being unreachable, and
+          # guessing either way is wrong: "not released" would republish, "released" would
+          # skip a number. Fail, and the next push retries.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/ddflow-mcp/$version/json")
+          case "$code" in
+            404)
+              echo "$version is declared and not on PyPI yet — publishing it without a bump" ;;
+            200)
+              scripts/bump.sh patch
+              version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+              git config user.name "github-actions[bot]"
+              git config user.email "github-actions[bot]@users.noreply.github.com"
+              git commit -qam "release $version"
+              # Refused if main moved since checkout: nothing has been published yet.
+              git push origin "HEAD:${{ github.ref_name }}"
+              echo "bumped patch and committed to ${{ github.ref_name }} — publishing $version" ;;
+            *)
+              echo "::error::PyPI answered HTTP $code for ddflow-mcp $version; cannot tell whether it is released"
+              exit 1 ;;
+          esac
+          {
+            echo "publish=true"; echo "version=$version"; echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
       - name: Refuse to republish a version that already exists
-        # The check that turns a confusing 400 from PyPI into a sentence. A version bumped
-        # to one already released is a mistake made in the diff, and this is where it is
-        # cheapest to say so.
-        if: steps.decide.outputs.publish == 'true'
+        # A tag push only: the main path above has already chosen a version PyPI lacks. A
+        # tag naming a released version is a mistake, and a sentence here beats a
+        # confusing 400 from PyPI.
+        if: github.ref_type == 'tag'
         run: |
           v='${{ steps.decide.outputs.version }}'
           if curl -fsSL "https://pypi.org/pypi/ddflow-mcp/$v/json" >/dev/null 2>&1; then
@@ -109,6 +153,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Test before publishing
         run: uv run pytest tests/ -q --timeout=420 -n auto
@@ -131,6 +177,8 @@ jobs:
       id-token: write          # OIDC trusted publishing; no PyPI token stored
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Verify the tag matches the declared version
         run: |
@@ -175,6 +223,8 @@ jobs:
       packages: write          # ghcr.io, via the workflow's own GITHUB_TOKEN
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - uses: docker/setup-qemu-action@v4
       - uses: docker/setup-buildx-action@v4
       - name: Log in to ghcr.io
@@ -229,6 +279,8 @@ jobs:
       id-token: write          # OIDC auth to the MCP registry via GitHub identity
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - name: Install mcp-publisher
         run: |
           curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
@@ -251,6 +303,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - name: Tag and release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
