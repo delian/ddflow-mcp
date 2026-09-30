@@ -3,7 +3,7 @@
 Operator, 2026-09-29: the critic LLM, roborev and companion configurations stay local to
 whoever runs the project, and are never pushed -- ddflow recommends services, it does
 not hand a new user someone else's. They live in git-ignored files that ddflow reads
-beside the committed config (`.ddflow/reviewers.toml`, `.ddflow/gates.toml`).
+last, under the git-ignored `.ddflow/local/` (`reviewers.toml`, `gates.toml`).
 
 This is the check that holds every agent to it, because every agent's unit_tests gate
 runs it: a private-network address in a tracked file, or a reviewer in the committed
@@ -93,8 +93,8 @@ def test_no_tracked_file_names_a_private_network_host():
             hits[path] = sorted(found)
     assert not hits, (
         f"private-network hosts in committed files: {hits}. A host is somebody's own "
-        "service: put it in a git-ignored local file (.ddflow/reviewers.toml, "
-        ".ddflow/gates.toml, the git-ignored .roborev.toml)."
+        "service: put it in a git-ignored local file (.ddflow/local/reviewers.toml, "
+        ".ddflow/local/gates.toml, the git-ignored .roborev.toml)."
     )
 
 
@@ -102,12 +102,17 @@ def test_the_committed_config_names_no_reviewer():
     data = tomllib.loads((ROOT / ".ddflow" / "config.toml").read_text(encoding="utf-8"))
     assert not data.get("reviewer"), (
         "a [[reviewer]] in the committed .ddflow/config.toml ships one person's endpoint "
-        "to every clone; it belongs in the git-ignored .ddflow/reviewers.toml"
+        "to every clone; it belongs in the git-ignored .ddflow/local/reviewers.toml"
     )
 
 
 def test_the_local_files_are_ignored():
-    for path in (".ddflow/reviewers.toml", ".ddflow/gates.toml", ".roborev.toml"):
+    for path in (
+        ".ddflow/local/reviewers.toml",
+        ".ddflow/local/gates.toml",
+        ".ddflow/reviewers.toml",
+        ".roborev.toml",
+    ):
         r = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q", path])
         assert r.returncode == 0, f"{path} is not git-ignored, so it would be committed"
 
