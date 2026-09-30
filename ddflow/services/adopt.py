@@ -575,18 +575,29 @@ DDFLOW_GITIGNORE = (
 UNION_MERGE_LINE = ".ddflow/events/*.jsonl merge=union\n"
 
 
-def _append_once(path: Path, marker: str, text: str) -> bool:
-    """Append `text` to a file the PROJECT owns unless `marker` is already in it.
+def _append_once(path: Path, present: frozenset[str], text: str) -> bool:
+    """Append `text` to a file the PROJECT owns unless one of its lines is in `present`.
 
     Appended, never rewritten: `.gitignore` and `.gitattributes` usually carry the
     project's own lines, and the newline guard keeps a file without a trailing newline
     from gluing our first line onto its last one.
+
+    Whole LINES are compared, not substrings (bug B63d0028716): `.ddflow/events/*.jsonl
+    -diff` contains "ddflow/events" and is not the union merge, and `.ddflow-worktrees-old/`
+    contains ".ddflow-worktrees" and ignores nothing of ours. A substring test let either
+    one stand in for the rule and the rule was never written.
     """
     prev = path.read_text("utf-8") if path.exists() else ""
-    if marker in prev:
+    if any(" ".join(line.split()) in present for line in prev.splitlines()):
         return False
     path.write_text(prev + ("" if prev.endswith("\n") or not prev else "\n") + text, "utf-8")
     return True
+
+
+#: The root `.gitignore` lines that already ignore an in-repo worktree root.
+_WORKTREES_IGNORED = frozenset(
+    {".ddflow-worktrees", ".ddflow-worktrees/", "/.ddflow-worktrees", "/.ddflow-worktrees/"}
+)
 
 
 def init_files(repo: Path) -> list[str]:
@@ -619,11 +630,13 @@ def init_files(repo: Path) -> list[str]:
     # hundreds of untracked files and the enforcement hook trips over them.
     if _append_once(
         repo / ".gitignore",
-        ".ddflow-worktrees",
+        _WORKTREES_IGNORED,
         "\n# ddflow task worktrees (git worktrees; never commit them)\n.ddflow-worktrees/\n",
     ):
         actions.append("added .ddflow-worktrees/ to .gitignore")
-    if _append_once(repo / ".gitattributes", "ddflow/events", UNION_MERGE_LINE):
+    if _append_once(
+        repo / ".gitattributes", frozenset({UNION_MERGE_LINE.strip()}), UNION_MERGE_LINE
+    ):
         actions.append("added merge=union for .ddflow/events/*.jsonl to .gitattributes")
     return actions
 

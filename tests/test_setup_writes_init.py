@@ -112,10 +112,40 @@ def test_setup_keeps_the_projects_own_files(tmp_path, surface):
     ga = (repo / ".gitattributes").read_text("utf-8")
     assert ga.startswith("*.png binary\n") and ".ddflow/events/*.jsonl merge=union" in ga
 
-    # Idempotent: a second run appends nothing.
+    # Idempotent: a second run SUCCEEDS and appends nothing. The exit is checked, or a
+    # second run that failed before writing anything would pass as idempotent.
     if surface == "cli":
-        run_cli(repo, "adopt", "--agents", "claude")
+        code, _out, err = run_cli(repo, "adopt", "--agents", "claude")
+        assert code == 0, err
     else:
-        _mcp_setup(repo)
+        assert not _mcp_setup(repo).get("isError")
     assert (repo / ".gitignore").read_text("utf-8") == gi
     assert (repo / ".gitattributes").read_text("utf-8") == ga
+
+
+def test_a_neighbouring_rule_does_not_count_as_ours(tmp_path):
+    """Bug B63d0028716: "already present" was a SUBSTRING test. A project whose
+    .gitattributes already said `.ddflow/events/*.jsonl -diff` never got the union
+    merge, and `.ddflow-worktrees-old/` in .gitignore stood in for `.ddflow-worktrees/`.
+    Asked of git, because what matters is what git does with the result."""
+    from ddflow.services.adopt import init_files
+
+    repo = _fresh(tmp_path / "p")
+    (repo / ".gitignore").write_text(".ddflow-worktrees-old/\n", "utf-8")
+    (repo / ".gitattributes").write_text(".ddflow/events/*.jsonl -diff\n", "utf-8")
+
+    init_files(repo)
+
+    assert (
+        subprocess.run(
+            ["git", "-C", str(repo), "check-ignore", "-q", ".ddflow-worktrees/x"]
+        ).returncode
+        == 0
+    )
+    attr = subprocess.run(
+        ["git", "-C", str(repo), "check-attr", "merge", ".ddflow/events/a.jsonl"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert attr.strip().endswith("merge: union"), attr
