@@ -921,7 +921,7 @@ _doc(
 _doc(
     "enforce",
     "require_item_trailer",
-    "Require every commit to carry an `Item: <id>` git trailer (or another key from item_trailer_keys) whose value is the id of an item in the queue -- a phase or task in any state but removed -- checked by the commit-msg hook `ddflow hooks install` adds. A mistyped id is refused, naming it and the nearest real ids; a queue the hook cannot read is exit 2 (could not run), never a pass. Makes commits reconcilable against the queue by `git log --format='%(trailers:key=Item)'` instead of by parsing prose. Off by default because it is noisy on a repo with non-agent contributors.",
+    "Require every commit to carry an `Item: <id>` git trailer (or another key from item_trailer_keys) whose value is the id of an item in the queue -- a phase or task in any state but removed -- or a key from trailer_waivers carrying one of its words; checked by the commit-msg hook `ddflow hooks install` adds. A mistyped id is refused, naming it and the nearest real ids; a queue the hook cannot read is exit 2 (could not run), never a pass. Makes commits reconcilable against the queue by `git log --format='%(trailers:key=Item)'` instead of by parsing prose. Off by default because it is noisy on a repo with non-agent contributors.",
 )
 _doc(
     "enforce",
