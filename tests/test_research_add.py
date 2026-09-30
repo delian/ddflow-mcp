@@ -12,6 +12,8 @@ import re
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -33,26 +35,17 @@ def _record(repo: Path, *head: str) -> dict:
     return json.loads(out)
 
 
-def _recorded(repo: Path, rid: str) -> str:
-    code, out, err = run_cli(repo, "recall", "does it parse", "--max-chars", "4000")
-    assert code == 0, err
-    return out
-
-
-def test_research_add_records_a_verdict(repo):
-    out = _record(repo, "research", "add")
+@pytest.mark.parametrize("head", [("research", "add"), ("research",)])
+def test_both_spellings_record_a_finding_that_recall_finds(repo, head):
+    out = _record(repo, *head)
     assert out.get("verdict") == "CONFIRMED" and out.get("id"), out
-    assert out["id"] in _recorded(repo, out["id"])
-
-
-def test_the_bare_form_still_works(repo):
-    out = _record(repo, "research")
-    assert out.get("verdict") == "CONFIRMED" and out.get("id"), out
+    code, found, err = run_cli(repo, "recall", "does it parse", "--max-chars", "4000")
+    assert code == 0 and out["id"] in found, err or found
 
 
 def test_help_shows_the_add_spelling(repo):
     code, out, _ = run_cli(repo, "research", "--help")
-    assert code == 0 and "research add" in out
+    assert code == 0 and "{add}" in out
 
 
 def test_the_research_gate_instruction_names_a_command_that_parses():
