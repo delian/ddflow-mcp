@@ -432,7 +432,20 @@ def record(
         # `critic` and `standards` are all agent gates recorded through this branch. The
         # feature missed its own motivating case.
         # Where the item's work is (B8be9373cf5): from its worktree, not the primary.
-        wt, _held = _item_tree(repo, cfg, st, it, called_from)
+        wt, held = _item_tree(repo, cfg, st, it, called_from)
+        if held:
+            # Recorded all the same: an agent gate is the agent's assertion, and an
+            # orchestrator records gates for many items from wherever it stands. Only the
+            # MEASUREMENT is ddflow's, and it is not taken from another item's tree.
+            warning = " ".join(
+                filter(
+                    None,
+                    [
+                        warning,
+                        f"NOTE: you are in {held}'s worktree, so nothing was measured for {item}.",
+                    ],
+                )
+            )
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.

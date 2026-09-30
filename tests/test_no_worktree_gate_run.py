@@ -127,3 +127,30 @@ def test_from_another_items_tree_it_is_unavailable_not_that_items_suite(repo):
     assert json.loads(out)["outcome"] == "unavailable"
     rec = json.loads(run_cli(repo, "--json", "show", "T1")[1])["gates"]["unit_tests"]
     assert rec["outcome"] == "unavailable" and "T2" in rec["reason"], rec
+
+
+def test_a_tree_bound_to_a_released_item_is_where_the_next_item_is_worked(repo):
+    """The case the feature exists for: the harness tree is still bound to an earlier
+    item that was merged and let go of its lease; newer commits there are the
+    --no-worktree item's, and its gates run there -- the tree is nobody else's live work."""
+    tree = repo.parent / "agent-tree"
+    run_cli(repo, "init")
+    run_cli(repo, "config", "--set", "gate.unit_tests.command", PROBE)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    _git(repo, "worktree", "add", "-q", str(tree), "-b", "agent-work")
+    run_cli(repo, "task", "add", "T0", "--title", "earlier", "--globs", "z.py")
+    run_cli(repo, "task", "add", "T1", "--title", "add a", "--globs", "a.py")
+    assert run_cli(tree, "claim", "T0")[0] == OK
+    (tree / "z.py").write_text("z = 1\n")
+    _git(tree, "add", "z.py")
+    _git(tree, "commit", "-qm", "T0")
+    assert run_cli(tree, "merge", "T0")[0] == OK
+    assert run_cli(tree, "release", "T0")[0] == OK
+    assert run_cli(tree, "claim", "T1", "--no-worktree")[0] == OK
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    code, out, err = run_cli(tree, "--json", "gate", "run", "T1", "unit_tests")
+    assert code == OK, out + err
+    assert json.loads(out)["outcome"] == "passed"
