@@ -33,6 +33,12 @@ from ddflow.config import Config
 CODE = Path(__file__).resolve().parents[1] / "ddflow"
 
 
+@pytest.fixture(autouse=True)
+def _fresh_warning_memo(monkeypatch):
+    """The warn-once memo is process-global; each test starts from an empty one."""
+    monkeypatch.setattr(C, "_WARNED", set())
+
+
 def _add_knob(repo: Path, line: str) -> None:
     cfg = repo / ".ddflow" / "config.toml"
     text = cfg.read_text()

@@ -1113,7 +1113,8 @@ class Config:
                     envdata.setdefault(sec, {})[f.name] = env[key]
         if envdata:
             cfg._apply(envdata, "env")
-        _warn_unknown(cfg.unknown_knobs, root)
+        if root is not None:
+            _warn_unknown(cfg.unknown_knobs, Path(root))
         return cfg
 
     @classmethod
@@ -1245,7 +1246,7 @@ def _is_code_tree(root: Path) -> bool:
 _WARNED: set[tuple[str, str]] = set()
 
 
-def _warn_unknown(keys: list[str], root: Path | None) -> None:
+def _warn_unknown(keys: list[str], root: Path) -> None:
     """Say, on stderr, which config keys this code skipped.
 
     Skipping without a word is the silent-knob-drop class: 81a52e3 made an unknown key
@@ -1258,9 +1259,10 @@ def _warn_unknown(keys: list[str], root: Path | None) -> None:
         return
     _WARNED.update((str(root), k) for k in new)
     print(
-        f"ddflow: warning: {root}/.ddflow config sets {', '.join(new)}, which this ddflow "
-        f"({_CODE_TREE}) does not know; skipped. The config is newer than this code: "
-        "merge main into this tree (or, if it is a typo, fix it).",
+        f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
+        f"{', '.join(new)}, which this ddflow ({_CODE_TREE}) does not know; skipped. The "
+        "config is newer than this code: merge main into this tree (or, if it is a "
+        "typo, fix it; `ddflow doctor` lists each).",
         file=sys.stderr,
     )
 
