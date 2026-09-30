@@ -273,14 +273,14 @@ def cmd_tests(a, c: Ctx) -> int:
 def cmd_precommit(a, c: Ctx) -> int:
     """A `.pre-commit-config.yaml` proposed for this repository's stacks."""
     out = A.precommit(c.repo, where=c.called_from, ddflow_cmd=a.ddflow_cmd, write=a.write)
-    if out.exit == FAIL:
-        print(out.reason, file=sys.stderr)
-        return FAIL
-    if c.json:
+    if c.json:  # a body for EVERY outcome, failure included, and the reason beside it
         print(json.dumps(out.body(), indent=2))
         if out.exit != OK and out.reason:
             print(out.reason, file=sys.stderr)  # a bare `{}` and an exit code say nothing
         return out.exit
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return FAIL
     d = out.data
     if "stacks" not in d:  # refused before anything was proposed
         print(out.reason, file=sys.stderr)

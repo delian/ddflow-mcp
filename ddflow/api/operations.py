@@ -502,6 +502,9 @@ def precommit(
         "exists": path.exists() or path.is_symlink(),
         "written": False,
         # The catalogue's own probe, so both say the same -- including "could not tell".
+        # Through the PRIMARY on purpose: whether the program is installed is a fact
+        # about this machine, not a checkout, and the primary holds the machine-local
+        # config layer `ddflow companions` reads it through.
         "installed": _precommit_installed(repo),
         # The local hooks run `ddflow_cmd` with git's environment, not this one: a
         # command missing from PATH fails every commit, which reads like a refusal.

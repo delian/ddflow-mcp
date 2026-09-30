@@ -506,3 +506,16 @@ def test_ddflows_own_git_hooks_are_named_before_they_become_a_legacy_duplicate(m
         "pre-commit",
         "commit-msg",
     ]
+
+
+def test_a_failed_write_still_answers_in_json(mixed):
+    """Bug B64ec928418: with --json a FAIL printed nothing on stdout; every other outcome a body."""
+    from conftest import run_cli
+
+    mixed.chmod(0o555)  # the write cannot create its temp file
+    try:
+        code, out, err = run_cli(mixed, "--json", "precommit", "--write")
+    finally:
+        mixed.chmod(0o755)
+    assert code == 1, (out, err)
+    assert json.loads(out) is not None and "could not write" in err
