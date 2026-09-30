@@ -125,11 +125,12 @@ gate `unavailable` rather than passing it on your own word.
 - **context7** — `research`, `standards`. Resolve the library, then fetch current docs
   for any API you are about to use. Your memory of a library's API is exactly the kind
   of claim that is cheap to check and often wrong.
-- **OptMem** (`memo`) — `rules`. Cross-session memory of operational facts about
-  *this machine and working state*. ddflow's own `ddflow_recall` covers the project's
-  memory — decisions, lessons, research, bugs, past prompts — and is the one to reach
-  for first; OptMem covers what is true of the environment, which is a different thing.
-  A command-line tool, not an MCP server: there is nothing to register.
+- **ddflow's own memory** — `rules`, with nothing to install. Record an operational
+  fact about *this machine and working state* with `ddflow_memory_add`; `ddflow_brief`
+  shows the newest and `ddflow_recall` searches them beside the decisions, lessons,
+  research, bugs and past prompts. OptMem (`memo`) and the memory MCP server did this
+  job before ddflow held it; they are opt-in now, for a project that wants a separate
+  store, and not something to propose installing.
 - **sequential-thinking** — `research`, `rubber_duck`, `bug_hunt`. The three gates that
   are reasoning rather than tool-running. Use it where a chain has middle steps you
   expect to RETRACT: a falsifiable claim and the probe that would kill it, or a bug
