@@ -267,6 +267,14 @@ def test_the_waiver_map_from_the_environment(tmp_path):
     cfg = Config.load(tmp_path, env=env)
     assert cfg.enforce.trailer_waivers == {"Phase-ships": ["none", "recon"]}
     assert Config().enforce.trailer_waivers == {}
+    # A string where the type says a list is refused by the coercion itself (critic).
+    from ddflow.config import _coerce_dict
+
+    with pytest.raises(ValueError, match="object of lists"):
+        _coerce_dict('{"Phase-ships": "none"}', "dict[str, list[str]]")
+    with pytest.raises(ValueError, match="object of lists"):
+        _coerce_dict("Phase-ships=none", "dict[str, list[str]]")
+    assert _coerce_dict('{"a": "b"}', "dict[str, str]") == {"a": "b"}
 
 
 # -- roborev on the branch ---------------------------------------------------------------
