@@ -236,31 +236,33 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     return plan
 
 
-def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog | None = None) -> list[str]:
+def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog) -> list[str]:
     """Perform only the safe actions. Dirty trees are never touched, whatever is set.
 
-    With ``log``, every removal and branch deletion re-reads the queue and acts INSIDE
+    Every removal and branch deletion re-reads the queue from ``log`` and acts INSIDE
     the log's append lock, the one `claim` takes to record a lease. The plan is as old as
     the survey, which ran git in every tree, and a merge here takes seconds more, so a
     tree claimed meanwhile has to be seen. Re-reading alone was not enough: a claim
     appended between the re-read and `git worktree remove` still lost its tree
     (B19d87ac436). Under the lock a claim either landed first, and is seen, or waits and
-    then finds no tree and makes a fresh one. Without ``log`` only the survey protects.
+    then finds no tree and makes a fresh one. ``log`` is required, not optional: a
+    sweep with no way to re-check has nothing but a stale plan to go on.
+
+    A ``merge`` action is checked before it too, but runs outside the lock: it only lands
+    commits on the base and touches no tree. The removal that follows it re-enters the
+    lock and checks again, like any other.
     """
     root = W.repo_root(repo)
     base = cfg.worktree.base_ref or W.default_branch(root)
     done: list[str] = []
 
     @contextlib.contextmanager
-    def unless_claimed() -> Iterator[_Protected | None]:
-        if log is None:
-            yield None
-            return
+    def unless_claimed() -> Iterator[_Protected]:
         with log.transaction():
             yield _protected(root, cfg, fold(log.read_all(), strict=False))
 
-    def kept(t: TreeState, guard: _Protected | None) -> bool:
-        kind, reason = guard.why(t.path, t.branch) if guard else ("", "")
+    def kept(t: TreeState, guard: _Protected) -> bool:
+        kind, reason = guard.why(t.path, t.branch)
         if kind:
             t.action, t.kind, t.done = "", kind, reason
             done.append(f"kept {t.name}: {kind} since the survey")
@@ -295,7 +297,7 @@ def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog | None = None) -> l
     for t in plan.stale_branches:
         if t.action == "delete_branch":
             with unless_claimed() as guard:
-                who = guard.held_branches.get(t.branch) if guard else ""
+                who = guard.held_branches.get(t.branch)
                 if who:
                     t.action, t.kind = "", "held"
                     t.done = f"LEAVE ALONE — item {who} holds a live lease on this branch."
