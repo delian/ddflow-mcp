@@ -304,17 +304,20 @@ def cmd_precommit(a, c: Ctx) -> int:
             f"# NOTE: `ddflow hooks status` finds these hooks by 'ddflow' in their command, "
             f"so `{d['ddflow_cmd']}` will be reported NOT installed although it runs."
         )
-    if d["missing"]:
+    for prog, stages in d["missing"].items():
         print(
-            f"# NOTE: the proposed hooks run {', '.join(d['missing'])}, not found here: "
-            "each would fail every commit until installed (or drop its hook)."
+            f"# NOTE: {prog} is not found here; the hook that runs it would fail at "
+            f"{'/'.join(stages)} until it is installed (or drop that hook)."
+        )
+    if d["ddflow_hooks_installed"]:
+        print(
+            f"# ddflow's own {', '.join(d['ddflow_hooks_installed'])} hook(s) are installed: "
+            "`pre-commit install` would keep them as .legacy and run them beside the local "
+            "hooks. Run `ddflow hooks uninstall` first."
         )
     # Said on EVERY run, not only the one that wrote the file: a config nobody activated
     # runs nothing, and the run after installing pre-commit is when this is needed.
-    # Each hook type named, because the file on disk may be the operator's own, without
-    # the default_install_hook_types that makes a plain `pre-commit install` enough.
-    flags = " ".join(f"--hook-type {t}" for t in d["hook_types"])
-    activate = f"`pre-commit install {flags}` activates it."
+    activate = f"`{d['activate']}` activates it."
     if d["installed"] is None:
         print("# Could not tell whether pre-commit is installed: its probe did not answer.")
     elif not d["installed"]:

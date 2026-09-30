@@ -234,7 +234,6 @@ def test_a_program_a_proposed_hook_needs_and_this_machine_lacks_is_named(mixed, 
     monkeypatch.setenv("PATH", str(bin_))
     out = OPS.precommit(mixed, where=mixed)
     assert {"docker", "npx"} <= set(out.data["missing"]), out.data["missing"]
-    assert "git" not in out.data["missing"]
 
 
 def test_yaml_is_fully_loaded_unless_the_project_uses_custom_tags(repo):
@@ -461,3 +460,49 @@ def test_hooks_status_credits_the_generated_config_once_installed(mixed):
     for name in ("pre-commit", "commit-msg"):
         got = E.armed(mixed, name)
         assert got.via == "pre-commit", (name, got)
+
+
+def test_a_config_that_declares_its_hook_types_is_activated_by_a_plain_install(mixed):
+    """Bug Bb8e07a8a97: explicit --hook-type flags OVERRIDE the file's
+    default_install_hook_types, so an operator's config declaring pre-push lost it."""
+    (mixed / ".pre-commit-config.yaml").write_text(
+        "default_install_hook_types: [pre-commit, commit-msg, pre-push]\nrepos: []\n"
+    )
+    assert OPS.precommit(mixed, where=mixed).data["activate"] == "pre-commit install"
+    written = OPS.precommit(_fresh(mixed), where=mixed, write=True)
+    assert written.data["activate"] == "pre-commit install", "the generated file declares them"
+
+
+def _fresh(repo: Path) -> Path:
+    (repo / ".pre-commit-config.yaml").unlink()
+    return repo
+
+
+def test_a_refusal_over_an_existing_file_says_how_to_see_the_proposal(mixed):
+    """Bug Bb2a0c1b79e: 'compare it with the proposal', and no proposal in sight."""
+    (mixed / ".pre-commit-config.yaml").write_text("repos: []\n")
+    out = OPS.precommit(mixed, where=mixed, write=True)
+    assert out.exit == REFUSED and "without --write" in out.reason
+
+
+def test_a_missing_program_is_reported_with_the_stage_it_would_fail(repo, monkeypatch, tmp_path):
+    """Bug Bc21277cb83: `go vet` runs before a push, not on every commit."""
+    _commit(repo, {"go.mod": "module x\n"})
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "git").symlink_to(shutil.which("git"))
+    monkeypatch.setenv("PATH", str(bin_))
+    missing = OPS.precommit(repo, where=repo).data["missing"]
+    assert missing["go"] == ["pre-push"] and missing["gofmt"] == ["pre-commit"]
+
+
+def test_ddflows_own_git_hooks_are_named_before_they_become_a_legacy_duplicate(mixed):
+    """pre-commit keeps an existing ddflow hook as <name>.legacy and runs it as well as
+    the config's local hook; the time to say so is before `pre-commit install`."""
+    from ddflow.services import enforce as E
+
+    E.install(mixed)
+    assert OPS.precommit(mixed, where=mixed).data["ddflow_hooks_installed"] == [
+        "pre-commit",
+        "commit-msg",
+    ]

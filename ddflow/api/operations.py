@@ -444,6 +444,22 @@ def _precommit_installed(repo: Path) -> bool | None:
     return C.is_installed(entry)[0] if entry is not None else None
 
 
+def _activation(path: Path, exists: bool, hook_types: list[str]) -> str:
+    """The command that activates the config at ``path``. Plain `pre-commit install`
+    honours a file's default_install_hook_types -- the generated one declares them --
+    and explicit --hook-type flags would OVERRIDE that list; they are needed only for a
+    file that declares none, where a plain install sets up the pre-commit hook alone."""
+    import re
+
+    try:
+        text = path.read_text(encoding="utf-8") if exists else ""
+    except (OSError, UnicodeDecodeError):
+        text = ""
+    if not exists or re.search(r"^default_install_hook_types\s*:", text, re.M):
+        return "pre-commit install"
+    return "pre-commit install " + " ".join(f"--hook-type {t}" for t in hook_types)
+
+
 def precommit(
     repo: Path,
     *,
@@ -463,6 +479,7 @@ def precommit(
     import shutil
     import tempfile
 
+    from ..services import enforce as E
     from ..services import precommit as PC
 
     _load(repo, agent)
@@ -493,8 +510,14 @@ def precommit(
         # `hooks status` knows these hooks by "ddflow" in their command; a wrapper named
         # otherwise runs the checks but is reported NOT installed.
         "ddflow_cmd_recognised": "ddflow" in ddflow_cmd.lower(),
-        # Programs the proposed hooks run from PATH that this machine does not have.
-        "missing": [prog for prog in prop.requires if shutil.which(prog) is None],
+        # Programs the proposed hooks run from PATH that this machine lacks -> the stages
+        # whose hooks would fail without them.
+        "missing": {p: st for p, st in prop.requires.items() if shutil.which(p) is None},
+        # ddflow's own git hooks, which `pre-commit install` would keep as <name>.legacy
+        # and run beside the config's local hooks: remove them first.
+        "ddflow_hooks_installed": [
+            n for n in ("pre-commit", "commit-msg") if E.armed(tree, n).via == "ddflow"
+        ],
         "hook_types": prop.hook_types,  #: the git hooks `pre-commit install` sets up
         "stacks": prop.stacks,
         "repos": [
@@ -504,12 +527,13 @@ def precommit(
         "skipped": prop.skipped,
         "text": prop.text,
     }
+    data["activate"] = _activation(path, data["exists"], prop.hook_types)
     if write:
         if data["exists"]:
             return O.refused(
                 "precommit",
-                f"{path} exists and is not replaced: compare it with the proposal and "
-                "merge by hand what you want",
+                f"{path} exists and is not replaced: run `ddflow precommit` without --write "
+                "to see the proposal, and merge by hand what you want",
                 **data,
             )
         # Written aside and LINKED into place: the link is atomic and refuses a file made
@@ -534,4 +558,5 @@ def precommit(
         finally:
             tmp.unlink(missing_ok=True)
         data["written"] = data["exists"] = True
+        data["activate"] = _activation(path, True, prop.hook_types)
     return O.ok("precommit", **data)

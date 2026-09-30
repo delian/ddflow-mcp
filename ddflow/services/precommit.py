@@ -8,6 +8,10 @@ hooks -- so the framework owns `.git/hooks/` alone and ddflow's lease and commit
 checks still run inside it (research Rb5e33fdbf9: installed side by side, one of the two
 ends up not running or running as a renamed legacy hook).
 
+Where ddflow's own git hooks are already installed, `pre-commit install` keeps each as
+`<name>.legacy` and runs it too -- a duplicate of the local hook -- so the caller is
+told to remove them first (`ddflow hooks uninstall`).
+
 It PROPOSES. Nothing here installs anything, and a file is written only on request and
 never over an existing one: which checks gate someone's commits is their decision.
 """
@@ -77,10 +81,15 @@ class Proposal:
     text: str = ""
 
     @property
-    def requires(self) -> list[str]:
-        """Every program the proposed hooks run from PATH (ddflow's own excepted: the
-        caller checks the command it chose)."""
-        return sorted({n for r in self.repos for h in r.hooks for n in h.needs})
+    def requires(self) -> dict[str, list[str]]:
+        """Every program the proposed hooks run from PATH -> the stages it runs at
+        (ddflow's own excepted: the caller checks the command it chose)."""
+        out: dict[str, set[str]] = {}
+        for r in self.repos:
+            for h in r.hooks:
+                for n in h.needs:
+                    out.setdefault(n, set()).update(h.fields.get("stages", ["pre-commit"]))
+        return {n: sorted(st) for n, st in sorted(out.items())}
 
     @property
     def hook_types(self) -> list[str]:
