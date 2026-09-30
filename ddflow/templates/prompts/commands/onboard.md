@@ -27,9 +27,9 @@ Before anything is written, find the work that exists only in git:
 - `ddflow_companions` reports what the gates expect; the `install-companions` prompt installs, with the operator's consent per install. A companion that is installed but not registered is registered with `ddflow_companions_add`.
 - **The harness must be allowed to start the servers.** Claude Code only launches a project `.mcp.json` server it has been told to trust: add each registered name to `enabledMcpjsonServers` in `.claude/settings.json` (committed, so worktree sessions get it too).
 - **The shell must reach the same ddflow.** The driver and the brief say `ddflow <command>`. If the agent sessions' `PATH` has no `ddflow`, tell the operator and offer a one-line wrapper that runs the same code the MCP entry runs.
-- Reviewers: `ddflow_reviewers_detect` finds a local model server; endpoints on a LAN are machine-local, so they go in `.ddflow/reviewers.toml`, never in the committed config. A sibling project on this machine that already has one is the fastest answer — ask before copying it.
+- Reviewers: `ddflow_reviewers_detect` finds a local model server; endpoints on a LAN are machine-local, so they go in `.ddflow/local/reviewers.toml` (git-ignored, read last), never in the committed config. A sibling project on this machine that already has one is the fastest answer — ask before copying it.
 
-- **`.ddflow/reviewers.toml` is machine-local, and nothing ignores it yet**: add it to `.ddflow/.gitignore` the moment you create it, before anything under `.ddflow/` is staged. Do the same for `.ddflow/gates.toml` only if the operator decided it holds this machine's values alone.
+- **Machine-local values go under `.ddflow/local/`** (`config.toml`, `gates.toml`, `reviewers.toml`), which `.ddflow/.gitignore` ignores. Check that it does before anything under `.ddflow/` is staged; a project set up by an older ddflow may lack the line. `.ddflow/gates.toml` itself is committed project policy.
 
 **Ask:** which companions to install; which reviewer endpoints to use.
 
@@ -39,7 +39,7 @@ Until `unit_tests` has a command, it reports `unavailable`, honestly, and blocks
 
 - Find how the project runs its tests (its CI config, `pyproject.toml`, `package.json`, `Makefile`, the rulebook).
 - Measure a **baseline** in a tree nobody is editing — a fresh clone or a detached worktree of the default branch — never in the one you are changing: how many pass, how many fail, how long it takes.
-- A suite over a minute or two runs in parallel (`pytest-xdist` and `-n <workers>` for Python; size the workers so several agents can run the gate at once — `auto` on a many-core machine is usually slower). A worker count sized to one machine is a machine-local value; `.ddflow/gates.toml` wins over the committed config, but it is also where project-wide gate declarations live (a `human = true` checkpoint), so decide with the operator what that file is for in this repository before using it for either. Adding a dev dependency changes the project: ask.
+- A suite over a minute or two runs in parallel (`pytest-xdist` and `-n <workers>` for Python; size the workers so several agents can run the gate at once — `auto` on a many-core machine is usually slower). A worker count sized to one machine goes in `.ddflow/local/gates.toml`, which wins over the committed `gate.unit_tests.command`; `.ddflow/gates.toml` is for what every clone shares, `human = true` checkpoints included. Adding a dev dependency changes the project: ask.
 - Tests already failing at the baseline would make the gate red for every item for reasons no item caused. Propose a shrink-only known-failures list, tracked as its own phase, rather than a gate everyone learns to ignore.
 - A phase-end `live_test`: the smallest real end-to-end run of the project's own entry point (a few seconds), as a script that fails when it produces nothing.
 - Set them with `ddflow_configure`.
