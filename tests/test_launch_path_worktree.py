@@ -166,3 +166,30 @@ def test_an_interpreter_that_cannot_follow_is_warned_about(checkout, monkeypatch
     _primary, tree = checkout
     monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
     assert "WARNING" in E.redirect_note() and "no .venv" in E.redirect_note()
+
+
+def test_an_explicit_root_is_not_reported_as_a_worktree_redirect(checkout, monkeypatch):
+    primary, _tree = checkout
+    monkeypatch.setattr(PATHS, "package_parent", lambda: primary)
+    monkeypatch.setenv(PATHS.LAUNCH_ROOT_ENV, str(primary.parent / "elsewhere"))
+    assert "linked worktree" not in E.redirect_note()
+
+
+def test_an_explicit_root_with_no_package_is_warned_about(checkout, monkeypatch, tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    monkeypatch.setenv(PATHS.LAUNCH_ROOT_ENV, str(empty))
+    assert "no ddflow package" in E.redirect_note()
+
+
+def test_a_line_that_embeds_no_path_gets_no_note(checkout):
+    assert E.redirect_note('exec "/usr/bin/ddflow" hooks check-commit') == ""
+
+
+def test_a_swapped_interpreter_is_named(checkout, monkeypatch):
+    primary, tree = checkout
+    py = primary / ".venv" / "bin" / "python3"
+    py.parent.mkdir(parents=True)
+    py.write_text("")
+    monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
+    assert str(py) in E.redirect_note()
