@@ -318,7 +318,7 @@ def _said(output: str) -> list[str]:
 #: An npm package spec with a version suffix: `pkg@latest`, `@scope/pkg@1.2.3`, `pkg@^2`.
 #: The name part is npm's own charset (no `:` or `/` beyond the scope), and the rule runs
 #: only for an npm launcher (`NPM_LAUNCHERS`): run on every argument, it read the host in
-#: `postgresql://u:p@10.0.0.5` as a version and made two databases one server.
+#: `postgresql://u:p@1db.example` as a version and made two databases one server.
 _NPM_TAG = re.compile(
     r"^((?:@[a-z0-9][\w.-]*/)?[a-z0-9][\w.-]*)@(?:latest|next|[\^~]?v?\d[\w.+-]*)$"
 )
