@@ -33,7 +33,6 @@ import os
 import re
 import shlex
 import stat
-import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -92,14 +91,14 @@ def command_line(args: str, *, exec_: bool = False) -> str:
     script = shutil.which("ddflow")
     if script and not _running_from_source():
         return f'{run}"{script}" {args}'
-    from ..infra.paths import package_parent
+    from ..infra.paths import launch_parent, launch_python
 
-    pkg_parent = str(package_parent())
+    pkg_parent = str(launch_parent())
     # The environment prefix goes BEFORE `exec`: `exec VAR=x cmd` runs a command
     # literally named `VAR=x`.
     return (
         f'PYTHONPATH="{pkg_parent}${{PYTHONPATH:+:$PYTHONPATH}}" '
-        f'{run}"{sys.executable}" -m ddflow {args}'
+        f'{run}"{launch_python()}" -m ddflow {args}'
     )
 
 
@@ -189,7 +188,26 @@ def install(repo: Path, *, force: bool = False) -> str:
         # was fixed for in the same change (roborev 827).
         return first
     rest = [_install_one(d, n, t, inv, force) for n, (t, inv) in hooks.items() if n != "pre-commit"]
-    return "\n".join([first, *rest]).replace("REFUSED:", "NOT INSTALLED:")
+    note = redirect_note()
+    return "\n".join([first, *rest, *([note] if note else [])]).replace(
+        "REFUSED:", "NOT INSTALLED:"
+    )
+
+
+def redirect_note() -> str:
+    """Say so when launch lines point at the primary checkout rather than the linked
+    worktree ddflow is running from (`infra.paths.launch_parent`): the lines use the
+    PRIMARY's code, which is not the code running this command until the branch merges."""
+    from ..infra.paths import launch_parent, redirected_from
+
+    tree = redirected_from()
+    if tree is None:
+        return ""
+    return (
+        f"NOTE: ddflow is running from the linked worktree {tree}, which is removed when "
+        f"its branch merges; the hooks and MCP entry point at its primary checkout "
+        f"{launch_parent()} instead, so they run that checkout's code."
+    )
 
 
 def uninstall(repo: Path) -> str:

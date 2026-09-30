@@ -547,6 +547,10 @@ def adopt(
             actions.append(_write_native_rule(repo, key, docs_dir))
         for dst, src in AGENT_COMMANDS.get(key, {}).items():
             actions.append(_write_command(repo, dst, templates / src))
+    from .enforce import redirect_note
+
+    if (note := redirect_note()) and note not in "\n".join(actions):
+        actions.append(note)
     return actions
 
 
@@ -734,10 +738,18 @@ MCP_MODULE = "ddflow.surfaces.mcp"
 
 
 def _package_parent() -> str:
-    """The directory containing the `ddflow` package — what goes on PYTHONPATH."""
-    from ..infra.paths import package_parent
+    """The directory containing the `ddflow` package that launch lines point at — what
+    goes on PYTHONPATH. The primary checkout when run from a linked worktree of ddflow
+    (`infra.paths.launch_parent`)."""
+    from ..infra.paths import launch_parent
 
-    return str(package_parent())
+    return str(launch_parent())
+
+
+def _python() -> str:
+    from ..infra.paths import launch_python
+
+    return launch_python()
 
 
 def _launch_entry(
@@ -759,7 +771,6 @@ def _launch_entry(
       already; on Linux it does not exist without this flag.
     """
     import shutil
-    import sys
 
     if launch == "docker" or (
         launch == "auto"
@@ -782,7 +793,7 @@ def _launch_entry(
     if launch == "python":
         pkg_parent = _package_parent()
         return {
-            "command": sys.executable,
+            "command": _python(),
             "args": ["-m", MCP_MODULE],
             "env": {"PYTHONPATH": pkg_parent},
         }
@@ -794,7 +805,7 @@ def _launch_entry(
     # are editing.
     pkg_parent = _package_parent()
     return {
-        "command": sys.executable,
+        "command": _python(),
         "args": ["-m", MCP_MODULE],
         "env": {"PYTHONPATH": pkg_parent},
     }
