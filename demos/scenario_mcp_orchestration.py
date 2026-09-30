@@ -25,6 +25,7 @@ test that runs is a real test of real behaviour.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from pathlib import Path
 
@@ -283,7 +284,14 @@ def run(sc: Scenario) -> None:
             "ddflow_configure", set="gate.unit_tests.command", value="python3 -m pytest tests/ -q"
         )
         alpha.tool("ddflow_configure", set="enforce.commit_without_lease", value="block")
-        detected, _ = alpha.tool("ddflow_reviewers_detect", write=True)
+        # A CI runner has no model server, so CI always takes the no-reviewer path below.
+        # The pre-push hook sets DDFLOW_DEMO_NO_REVIEWER to take that same path on a machine
+        # that has one: there, a real review costs minutes that depend on how busy the
+        # server is (89 s to 240 s for this scenario alone), and it is not what CI checks.
+        if os.environ.get("DDFLOW_DEMO_NO_REVIEWER"):
+            detected = "discovery skipped: DDFLOW_DEMO_NO_REVIEWER is set"
+        else:
+            detected, _ = alpha.tool("ddflow_reviewers_detect", write=True)
         has_reviewer = "family" in detected
         sc.note(
             f"reviewer discovery: {detected.strip().splitlines()[0][:90]}"

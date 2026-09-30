@@ -89,7 +89,12 @@ include = ["ddflow/", "docs/", "tests/", "demos/", "probes/",
 # Registered here rather than left implicit because an unregistered marker is silently
 # a typo: `@pytest.mark.slwo` selects nothing and warns, and a test nobody selects is a
 # test nobody runs.
-markers = ["slow: end-to-end scenarios; minutes, not seconds"]
+markers = [
+    "slow: end-to-end scenarios; minutes, not seconds",
+    # Selects the scenarios alone among the slow tests, so the pre-push hook can run them in
+    # ONE pytest session with the unit tests: `-m "not slow or scenarios"`.
+    "scenarios: the end-to-end scenarios in tests/test_scenarios.py",
+]
 addopts = "-m 'not slow'"
 
 # The dev toolchain, declared ONCE and here rather than as a `[project.optional-
