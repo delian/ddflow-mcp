@@ -1003,11 +1003,6 @@ _RUN_FIELDS = frozenset(
      "require_output", "fail_output"}
 )  # fmt: skip
 
-#: The committed layers of `tomlcfg.config_paths`, relative to a checkout. The machine-
-#: local layer is git-ignored and lives in the primary alone, so it is the same for every
-#: tree and cannot drift between them.
-_COMMITTED_GATE_FILES = (".ddflow/config.toml", ".ddflow/gates.toml")
-
 
 def _run_spec(texts: Iterable[str], gate_id: str) -> dict[str, Any]:
     """The run-deciding part of `[gate.<gate_id>]` across `texts`, later winning."""
@@ -1033,11 +1028,11 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     """How the gate definition `load_gates` ran differs from the one `tree` commits.
 
     `{}` when it does not, or `tree` is the primary, or neither side COMMITTED a change
-    since the fork (the difference is an uncommitted edit). Otherwise `kind` says whose change it is: "behind" --
-    the base COMMITTED a new definition since `tree` forked and the tree still carries
-    the one it forked with, so its code and dependencies predate the command that ran --
-    or "own", the branch changed the definition itself, which merging the base cannot
-    fix.
+    since the fork (the difference is an uncommitted edit). Otherwise `kind` says whose
+    change it is: "behind" -- the base COMMITTED a new definition since `tree` forked
+    and the tree still carries the one it forked with, so its code and dependencies
+    predate the command that ran -- or "own", the branch changed the definition itself,
+    which merging the base cannot fix.
 
     Needed because the definition comes from the PRIMARY (`repo_root`) while the command
     runs in the item's tree: main switching unit_tests to `-n 48` alongside adding
@@ -1045,6 +1040,7 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
     recorded as a test failure (bug B8ea7a90aea). The config-knob half of the same
     class warns "merge main" from `config._warn_unknown`.
     """
+    from ..infra import tomlcfg
     from ..infra import worktree as W
 
     try:
@@ -1053,8 +1049,20 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
         return {}
     if primary.resolve() == Path(tree).resolve():
         return {}
-    ran = _run_spec((_read_text(primary / f) for f in _COMMITTED_GATE_FILES), gate_id)
-    here = _run_spec((_read_text(Path(tree) / f) for f in _COMMITTED_GATE_FILES), gate_id)
+    # The layers `load_gates` reads. Every spec compared below carries the PRIMARY's
+    # machine-local layer on top: it is git-ignored, applies whichever tree's committed
+    # files it lands on, and wins -- so a committed change it overrides never ran, and
+    # calling that drift turned a real failure into "unavailable" (bug
+    # B-drift-ignores-local-layer).
+    paths = tomlcfg.config_paths(primary, "gates.toml")
+    committed = [str(p.relative_to(primary)) for p in paths[:2]]
+    local = [_read_text(p) for p in paths[2:]]
+
+    def spec(committed_texts: Iterable[str]) -> dict[str, Any]:
+        return _run_spec([*committed_texts, *local], gate_id)
+
+    ran = spec(_read_text(primary / f) for f in committed)
+    here = spec(_read_text(Path(tree) / f) for f in committed)
     if ran == here:
         return {}
     # The primary's HEAD by SHA: the name `HEAD` means the tree's own HEAD inside `tree`.
@@ -1066,9 +1074,7 @@ def gate_config_drift(gate_id: str, tree: Path) -> dict[str, Any]:
         return {}
 
     def at(rev: str) -> dict[str, Any]:
-        return _run_spec(
-            (W.git(tree, "show", f"{rev}:{f}").out for f in _COMMITTED_GATE_FILES), gate_id
-        )
+        return spec(W.git(tree, "show", f"{rev}:{f}").out for f in committed)
 
     # Classified on COMMITS alone. `ran` and `here` include uncommitted edits, and
     # letting them decide mislabelled both ways: an operator's uncommitted tweak in the
