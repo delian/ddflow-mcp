@@ -51,12 +51,8 @@ def cleanup(repo: Path, *, apply: bool = False, agent: str = "") -> O.Outcome:
             "cleanup", "Nothing to clean up: no ddflow worktrees or branches remain.", **data
         )
     if apply:
-        from ..core.model import fold
-
-        # Re-read before each removal, not once: a claim landing mid-sweep must win.
-        data["performed"] = CL.apply(
-            repo, cfg, plan, fresh=lambda: fold(log.read_all(), strict=False)
-        )
+        # The log, so each removal re-checks for a claim under the append lock.
+        data["performed"] = CL.apply(repo, cfg, plan, log=log)
         # Re-plained: a tree claimed mid-sweep changed kind, and the rows must say so.
         data["trees"] = [plain(t) for t in plan.trees]
         data["stale_branches"] = [plain(t) for t in plan.stale_branches]

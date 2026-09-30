@@ -176,7 +176,52 @@ def test_a_tree_claimed_between_survey_and_apply_survives(repo):
     code, _, err = run_cli(repo, "claim", "T1", agent="worker")
     assert code == OK, err
     assert _tree_of(repo, "T1") == tree, "fixture: the re-claim did not reuse the tree"
-    done = CL.apply(repo, cfg, plan, fresh=lambda: fold(log.read_all(), strict=False))
+    done = CL.apply(repo, cfg, plan, log=log)
 
     assert tree.exists(), f"a tree claimed after the survey was deleted: {done}"
     assert plan.trees[0].kind == "held", plan.trees[0]
+
+
+def test_a_claim_racing_the_removal_itself_keeps_its_tree(repo, monkeypatch):
+    """Re-reading the queue before each removal only shrinks the window: a claim appended
+    after the re-read and before `git worktree remove` still lost its tree (B19d87ac436).
+    The re-check and the removal must hold the log's append lock together, so a claim
+    either lands first and is seen, or waits and then finds no tree and makes a new one.
+
+    Forced deterministically: the claim is started from INSIDE the removal and given
+    seconds to finish before the removal proceeds. Unlocked, it finishes and binds the
+    tree about to be deleted; locked, it blocks until the removal is done.
+    """
+    import threading
+
+    from ddflow.infra import worktree as W
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "claim", "T1", agent="worker")
+    _tree_of(repo, "T1")
+    run_cli(repo, "release", "T1", agent="worker")
+
+    real_remove = W.remove
+    claims: list[tuple[int, str, str]] = []
+    racer: list[threading.Thread] = []
+
+    def remove_while_someone_claims(*args, **kwargs):
+        t = threading.Thread(
+            target=lambda: claims.append(run_cli(repo, "claim", "T1", agent="worker"))
+        )
+        t.start()
+        racer.append(t)
+        t.join(timeout=6)
+        return real_remove(*args, **kwargs)
+
+    monkeypatch.setattr(W, "remove", remove_while_someone_claims)
+    api.cleanup(repo, apply=True, agent="sweeper")
+    for t in racer:
+        t.join(timeout=60)
+
+    assert claims and claims[0][0] == OK, f"the racing claim did not succeed: {claims}"
+    it = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    assert it.lease is not None, "fixture: the racing claim left no lease"
+    held = W.load_path(repo, it.worktree)
+    assert held.exists(), f"a live lease points at a tree cleanup deleted: {held}"
