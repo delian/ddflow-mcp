@@ -1,8 +1,8 @@
 """A heading claims its work finished by a STATUS, not by using the word.
 
 home-simulator's `### 36.5 — Orchestration recipes beyond the shipped two` was reported
-by every `import` and `import --verify` as "says the work is finished while a task under
-it is still open" -- a permanent false alarm on an onboarded project, telling the operator
+by every `import` and `import --verify` as a phase that "say[s] the work is finished while
+a task under them is still open" -- a permanent false alarm on an onboarded project, telling the operator
 to decide something there is nothing to decide about. Measured over run_nemo_run's and
 home-simulator's todo headings, the case-insensitive word match raised 15 such alarms
 ("Definition of done", "NOT shipped in 137.E", "ticked-but-never-shipped") and every
@@ -79,6 +79,8 @@ def test_the_word_in_prose_is_not_a_status(heading):
         "Phase 9 — done.",
         "Phase 9 (closed!)",
         "PHASE 5 — DONE",
+        "PHASE 12 SHIPPED",
+        "PHASE 3 COMPLETE (2026-08-01)",
     ],
 )
 def test_a_status_still_is(heading):
