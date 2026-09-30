@@ -120,6 +120,10 @@ def test_an_adopted_tree_survives_with_an_empty_branch_prefix(repo):
 
     assert tree.exists(), f"cleanup --apply deleted an adopted tree: {out.data['performed']}"
     assert _row(out, tree)["action"] == ""
+    # With no prefix every branch is a candidate -- the base branch must not be one; it
+    # was offered for deletion and survived only because the primary had it checked out.
+    offered = [b["branch"] for b in out.data["stale_branches"]]
+    assert "main" not in offered, f"the base branch was offered as stale: {offered}"
 
 
 def test_a_merged_tree_nobody_holds_is_still_removed(repo):
