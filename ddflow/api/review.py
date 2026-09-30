@@ -72,12 +72,14 @@ def diff_for(
 
     For an item, the item's work (B60de9a57ed): ``branch`` when named; else its tree;
     else its recorded branch (the tree is gone); else the branch checked out in the
-    linked worktree the caller stands in; else the primary's working tree -- where a
-    lone agent that claimed `--no-worktree` works -- WITHOUT ddflow's own bookkeeping.
-    That last fallback used to include it: in a busy checkout, other agents'
-    uncommitted event logs, 43 KB of them, which the reviewer found nothing wrong with
-    and which were recorded as this item's PASS. With nothing left, the diff is empty and
-    the review is recorded UNAVAILABLE.
+    linked worktree the caller stands in, unless another open item holds that tree. An
+    item CLAIMED without a worktree gets nothing more -- an empty diff, recorded
+    UNAVAILABLE: the primary's working tree was the old fallback, and in a busy checkout
+    it held other agents' uncommitted event logs, 43 KB of them, which the reviewer found
+    nothing wrong with and which were recorded as this item's PASS. Any other uncommitted
+    edit there would be credited the same way, so no path filter makes it the item's.
+    Only an unclaimed item, or worktrees off, still reads the primary -- without ddflow's
+    own bookkeeping.
     """
     base = base or cfg.worktree.base_ref or W.default_branch(repo)
     if not item:
@@ -106,6 +108,12 @@ def diff_for(
             )
         if here is not None and here.branch:
             branch, chosen = here.branch, f"checked out in {here.path}"
+    if not branch and it and it.lease is not None and cfg.worktree.enabled:
+        return "", (
+            f"{item} was claimed without a worktree, and the primary's working tree is not "
+            f"its: pass --branch <branch>, run review from the worktree it is worked in, or "
+            f"set [worktree].enabled = false if the primary is where you work"
+        )
     if not branch:
         from ..services.enforce import SELF_MANAGED
 

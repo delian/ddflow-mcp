@@ -161,7 +161,7 @@ def test_gate_run_reports_unavailable_for_a_missing_tool(proj):
 
 def test_gate_run_reports_failure_for_a_real_failure(proj):
     (proj / ".ddflow" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "exit 1"\n')
-    run_cli(proj, "claim", "P1.T1", "--no-worktree")
+    run_cli(proj, "claim", "P1.T1")
     assert run_cli(proj, "gate", "run", "P1.T1", "unit_tests")[0] == FAIL
 
 
@@ -255,7 +255,7 @@ def test_a_failing_command_gate_is_recorded_not_crashed(proj):
     (proj / ".ddflow" / "gates.toml").write_text(
         "[gate.unit_tests]\ncommand = \"echo '3 tests, 1 failed' && exit 1\"\n"
     )
-    run_cli(proj, "claim", "P1.T1", "--no-worktree")
+    run_cli(proj, "claim", "P1.T1")
     code, _out, err = run_cli(proj, "gate", "run", "P1.T1", "unit_tests")
     assert code == FAIL, err
     assert "must carry a --reason" not in err, "the gate crashed instead of recording"
