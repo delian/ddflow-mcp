@@ -1,0 +1,94 @@
+# What CI runs (.github/workflows/ci.yml), run before the push instead of after it.
+#
+#   pre-commit install        # once per clone; installs the PRE-PUSH hook only
+#   pre-commit run --hook-stage pre-push --all-files     # the whole set, on demand
+#   SKIP=scenarios git push   # skip one hook by id, when you know why
+#
+# PRE-PUSH, not pre-commit, deliberately. The per-commit hooks in this repository belong to
+# `ddflow hooks install` (lease enforcement, commit-message checks); `pre-commit install`
+# for those types would move them aside as `.legacy`. The push is also the moment that
+# matters: CI runs on what reaches GitHub, and a commit-time suite of minutes teaches
+# people `--no-verify`.
+#
+# Every Python tool runs through `uv run`, as CI does, so its version is the one uv.lock
+# pins -- a hook repo pinning its own ruff formats differently from CI's, and that drift
+# is exactly the red run this file exists to prevent (run 36694543037: quota.py was not
+# ruff-formatted; two scenarios closed a phase without the then-new `docs` gate).
+#
+# NOT covered locally, by choice: the 3.11/3.13 matrix (this runs your interpreter only),
+# CodeQL, pip-audit (advisory in CI anyway), and the concurrency/load suite
+# (tests/test_mcp_load.py, minutes of timing-sensitive runs).
+minimum_pre_commit_version: "3.2.0"
+default_install_hook_types: [pre-push]
+default_stages: [pre-push, manual]
+
+repos:
+  - repo: local
+    hooks:
+      # -- the CI `tests` and `quality` jobs: lint and format -------------------------
+      - id: ruff-check
+        name: "ruff check (CI: Lint)"
+        entry: uv run ruff check .
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+      - id: ruff-format
+        name: "ruff format --check (CI: Lint)"
+        entry: uv run ruff format --check .
+        language: system
+        types_or: [python, pyi]
+        pass_filenames: false
+
+      # -- the CI `quality` job --------------------------------------------------------
+      - id: build-probe
+        name: "the wheel builds, installs, runs and carries its templates (CI: Build)"
+        entry: scripts/ci/build-probe.sh
+        language: system
+        files: ^(ddflow/|pyproject\.toml$|uv\.lock$|scripts/ci/)
+        pass_filenames: false
+      - id: bandit
+        name: "bandit (CI: Static security scan)"
+        entry: uv run --no-project --with bandit bandit -q -r ddflow/ -ll
+        language: system
+        files: ^ddflow/
+        pass_filenames: false
+      - id: deps-allowlist
+        name: "runtime dependencies stay on the allowlist (CI: Dependency audit)"
+        entry: uv run --no-project python scripts/ci/deps-allowlist.py
+        language: system
+        files: ^(pyproject\.toml|scripts/ci/deps-allowlist\.py)$
+        pass_filenames: false
+      - id: gitleaks
+        # The commits being pushed, not the index: at pre-push nothing is staged, and a
+        # secret already committed is what the push would publish. pre-commit exports the
+        # pushed range as PRE_COMMIT_FROM_REF..PRE_COMMIT_TO_REF; a manual run falls back
+        # to what is not yet on origin/main.
+        name: "gitleaks over the pushed commits (CI: Secrets)"
+        entry: >-
+          bash -c 'exec gitleaks git --no-banner --redact --config .gitleaks.toml
+          --log-opts="${PRE_COMMIT_FROM_REF:-origin/main}..${PRE_COMMIT_TO_REF:-HEAD}"'
+        language: golang
+        additional_dependencies: [github.com/zricethezav/gitleaks/v8@v8.30.1]
+        always_run: true
+        pass_filenames: false
+
+      # -- the CI `tests` and `scenarios` jobs -----------------------------------------
+      - id: unit-tests
+        name: "unit and integration tests (CI: tests)"
+        entry: uv run pytest tests/ -q --timeout=420 -n auto
+        language: system
+        files: ^(ddflow/|tests/|demos/|pyproject\.toml$|uv\.lock$)
+        pass_filenames: false
+      - id: scenarios
+        # The slowest hook (minutes, even in parallel) and the one CI caught this time.
+        name: "end-to-end scenarios (CI: scenarios)"
+        entry: uv run pytest tests/test_scenarios.py -m slow -q --timeout=1800 -n auto
+        language: system
+        files: ^(ddflow/|tests/|demos/|pyproject\.toml$|uv\.lock$)
+        pass_filenames: false
+
+  # A workflow file that does not validate fails on GitHub before any job runs.
+  - repo: https://github.com/python-jsonschema/check-jsonschema
+    rev: 0.38.2
+    hooks:
+      - id: check-github-workflows
