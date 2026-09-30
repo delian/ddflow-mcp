@@ -130,3 +130,31 @@ def test_an_uncommitted_command_in_the_primary_is_not_drift(repo):
     code, _out, _err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
     assert code == FAIL
     assert _recorded(repo)[0] == "failed"
+
+
+def test_an_uncommitted_tweak_in_the_primary_does_not_hide_a_committed_change(repo):
+    """The drift is decided on COMMITTED definitions: the primary's working tree adding
+    a flag on top of main's committed change left the branch just as far behind."""
+    _setup(repo, "true")
+    (repo / "xdist.marker").write_text("")
+    _commit_gates(repo, "test -f xdist.marker", "parallel tests")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "test -f xdist.marker -a -f xdist.marker"\n'
+    )
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    outcome, reason = _recorded(repo)
+    assert outcome == "unavailable", f"{outcome}: {reason} {out}{err}"
+    assert "merge main" in reason and code == NOTHING
+
+
+def test_an_uncommitted_edit_in_the_tree_does_not_make_a_behind_branch_its_own(repo):
+    """An agent mid-edit of the branch's gate block has not changed the definition the
+    branch carries: it is still behind main, and told to merge it."""
+    tree = _setup(repo, "true")
+    (repo / "xdist.marker").write_text("")
+    _commit_gates(repo, "test -f xdist.marker", "parallel tests")
+    (tree / ".ddflow" / "gates.toml").write_text('[gate.unit_tests]\ncommand = "true -x"\n')
+    code, out, err = run_cli(repo, "gate", "run", "T1", "unit_tests", agent="worker")
+    outcome, reason = _recorded(repo)
+    assert outcome == "unavailable", f"{outcome}: {reason} {out}{err}"
+    assert "merge main" in reason and code == NOTHING
