@@ -89,9 +89,11 @@ def test_a_probe_command_is_accepted_as_evidence_unchecked(repo):
     assert out.data["unchecked"] == ["ddflow wait X --once"]
 
 
-def test_evidence_naming_a_test_that_does_not_exist_is_refused(repo):
+def test_evidence_naming_a_test_that_does_not_exist_fails_as_bug_fixed_does(repo):
     """The same static resolution `bug fixed --regression-test` applies: a node id that
-    names nothing would be evidence pointing at nothing."""
+    names nothing would be evidence pointing at nothing. Exit 1, not 3, deliberately --
+    the same code `bug fixed` gives a missing regression test, so a caller branching on
+    one closure's exit codes reads the other's the same way."""
     _init(repo)
     out = K.bug_invalid(repo, "B1", reason="x", evidence="tests/test_probe.py::test_gone")
     assert out.exit == FAIL, out
