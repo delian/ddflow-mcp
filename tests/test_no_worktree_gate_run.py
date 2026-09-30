@@ -154,3 +154,15 @@ def test_a_tree_bound_to_a_released_item_is_where_the_next_item_is_worked(repo):
     code, out, err = run_cli(tree, "--json", "gate", "run", "T1", "unit_tests")
     assert code == OK, out + err
     assert json.loads(out)["outcome"] == "passed"
+
+
+def test_recording_from_another_items_tree_records_it_and_says_nothing_was_measured(repo):
+    """An agent gate is the agent's assertion, so it is recorded wherever the recorder
+    stands; the measurement is ddflow's, and is not taken from another item's tree."""
+    _setup(repo)
+    other = _another_items_tree(repo)
+    args = ("--json", "gate", "record", "T1", "research", "--outcome", "passed")
+    code, out, err = run_cli(other, *args, "--evidence", "probe")
+    assert code == OK, out + err
+    assert "T2's worktree" in err and "nothing was measured" in err  # the CLI's stderr note
+    assert "diff_stat" not in _last_evidence(repo, "research")
