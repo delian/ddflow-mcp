@@ -101,3 +101,68 @@ def test_a_worktree_of_a_repository_that_is_not_ddflow_is_left_alone(tmp_path, m
     tree = tmp_path / "wt"
     _git(primary, "worktree", "add", "-q", str(tree), "-b", "f")
     assert PATHS.primary_checkout(tree) is None
+
+
+# -- the rubber-duck's findings ----------------------------------------------------------
+
+
+def test_a_symlinked_path_to_the_worktree_venv_is_still_swapped(checkout, monkeypatch, tmp_path):
+    """`/home/delian/src` and `/ai/delian/src` are the same tree here."""
+    primary, tree = checkout
+    (primary / ".venv" / "bin").mkdir(parents=True)
+    (primary / ".venv" / "bin" / "python3").write_text("")
+    alias = tmp_path / "alias"
+    alias.symlink_to(tree)
+    monkeypatch.setattr(sys, "executable", str(alias / ".venv" / "bin" / "python3"))
+    assert PATHS.launch_python() == str(primary / ".venv" / "bin" / "python3")
+
+
+def test_a_bare_common_dir_beside_an_unrelated_package_is_not_a_primary(tmp_path):
+    bare = tmp_path / "ddflow.git"
+    _git(tmp_path, "init", "-q", "--bare", str(bare))
+    seed = tmp_path / "seed"
+    _git(tmp_path, "init", "-q", "-b", "main", str(seed))
+    _git(
+        seed,
+        "-c",
+        "user.email=t@e",
+        "-c",
+        "user.name=t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "x",
+    )
+    _git(seed, "push", "-q", str(bare), "main")
+    (tmp_path / "ddflow").mkdir()
+    (tmp_path / "ddflow" / "__init__.py").write_text("")
+    tree = tmp_path / "wt"
+    _git(bare, "worktree", "add", "-q", str(tree), "main")
+    assert PATHS.primary_checkout(tree) is None
+
+
+def test_the_session_start_hook_install_says_so_too(checkout, tmp_path, monkeypatch):
+    from ddflow.api import setup as S
+
+    primary, tree = checkout
+    monkeypatch.setattr(E, "_running_from_source", lambda: True)
+    repo = tmp_path / "proj"
+    _git(tmp_path, "init", "-q", "-b", "main", str(repo))
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "config.toml").write_text("")
+    out = S.hooks(repo, action="install", claude=True)
+    assert str(tree) in out.data["message"] and str(primary) in out.data["message"]
+
+
+def test_a_launch_line_with_no_path_gets_no_note(checkout, tmp_path):
+    repo = tmp_path / "proj"
+    _git(tmp_path, "init", "-q", "-b", "main", str(repo))
+    actions = A.adopt(repo, agents=["claude"], launch="docker", install_hooks=False)
+    assert not any("NOTE: ddflow is running from the linked worktree" in a for a in actions)
+
+
+def test_an_interpreter_that_cannot_follow_is_warned_about(checkout, monkeypatch):
+    primary, tree = checkout
+    monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
+    assert "WARNING" in E.redirect_note() and "no .venv" in E.redirect_note()
