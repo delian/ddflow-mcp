@@ -289,11 +289,16 @@ def test_the_waiver_map_from_the_environment(tmp_path):
 # -- roborev on the branch ---------------------------------------------------------------
 
 
-def test_a_waiver_for_a_key_that_is_not_accepted_is_named_as_inert(repo):
+def test_a_waiver_declared_alone_is_accepted_not_inert(repo):
+    """A waiver key need not be repeated in item_trailer_keys: the waiver map declares
+    it (roborev, then both cross-family reviewers over three rounds)."""
     _queue(repo, NEMO.replace('["Phase", "Phase-ships"]', '["Phase"]'))
     code, out = _check(repo, "docs\n\nPhase-ships: none\n")
-    assert code == 1
-    assert "Phase-ships" in out and "cannot satisfy" in out, out
+    assert code == 0, out
+    code, out = _check(repo, "docs\n\nPhase-ships: bogus\n")
+    assert code == 1 and "bogus" in out, out
+    code, out = _check(repo, "docs, no trailer\n")
+    assert code == 1 and "`Phase-ships: none|filing|recon|evidence|followup`" in out, out
 
 
 def test_git_failing_to_parse_the_trailers_is_could_not_run(monkeypatch):

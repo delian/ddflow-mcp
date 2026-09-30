@@ -1598,7 +1598,8 @@ def check_item_trailer(
     audit could never match it (bug B438d336b24).
 
     A key in `waivers` (``[enforce].trailer_waivers``) marks a commit that ships NO
-    item, and takes only its declared words (`Phase-ships: none`). Every accepted
+    item: it is accepted whether or not `keys` lists it, and takes only its declared
+    words (`Phase-ships: none`). Every accepted
     trailer present must be valid: one invalid trailer is refused beside a valid one,
     because the audit reads them all. Keys match case-insensitively, as git's
     `%(trailers:key=...)` does.
@@ -1619,35 +1620,29 @@ def check_item_trailer(
             "ddflow: `git interpret-trailers --parse` failed, so this commit's item trailer "
             "could not be checked. This is not a pass; check that `git` runs here."
         )
-    found = [(canon[k.lower()], v) for k, v in trailers if k.lower() in canon]
-    # A waiver key takes only its declared words WHEREVER it appears: one that is not
-    # also an accepted key does not satisfy the requirement, but `Phase-ships: bogus`
-    # beside a valid `Phase:` must not ride along unchecked (rubber-duck, deepseek).
+    # A key in `waivers` is accepted as well: the waiver map is what DECLARES a key that
+    # marks a commit shipping no item, so `Phase-ships: none` satisfies the requirement
+    # whether or not the key is also listed in item_trailer_keys. An earlier version
+    # required both, and a waiver declared alone sat inert (cross-family reviewers,
+    # three rounds).
     spelled = {k.lower(): k for k in (waivers or {})}
+    accepted = [*keys, *(k for k in (waivers or {}) if k.lower() not in canon)]
     checked = [
         (canon.get(k.lower()) or spelled[k.lower()], v)
         for k, v in trailers
         if k.lower() in canon or k.lower() in words
     ]
-    if not found:
+    if not checked:
         shown = " or ".join(
-            f"`{k}: {'|'.join(words[k.lower()]) if k.lower() in words else '<id>'}`" for k in keys
+            f"`{k}: {'|'.join(words[k.lower()]) if k.lower() in words else '<id>'}`"
+            for k in accepted
         )
-        # A waiver for a key that is not accepted is never consulted: say so, rather
-        # than refuse `Phase-ships: none` with no hint that the waiver is inert.
-        inert = sorted(k for k in (waivers or {}) if k.lower() not in canon)
         return 1, (
             f"ddflow: this commit has no {shown} trailer, and "
             f"[enforce].require_item_trailer is on.\n\n"
             f"Add a final line to the commit message, e.g.:\n"
             f"    {keys[0]}: P1.T3\n\n"
             f"It is what lets an audit match commits to queue items mechanically."
-            + (
-                f"\n\n[enforce].trailer_waivers declares {', '.join(inert)}, which "
-                f"[enforce].item_trailer_keys does not list, so it cannot satisfy the requirement: add it there."
-                if inert
-                else ""
-            )
         )
     bad: list[str] = []
     known: set[str] | None = None
