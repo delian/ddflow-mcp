@@ -214,14 +214,14 @@ def test_a_server_key_with_braces_is_reported_not_crashed_on(tmp_path):
 
 def test_a_version_tag_is_only_dropped_from_an_npm_package_spec(tmp_path):
     """Found by the critic: the tag rule ran on EVERY argument, so two docker launches of
-    one image against different hosts (`...@10.0.0.5`, `...@10.0.0.6`) collapsed to one
+    one image against different hosts (`...@192.0.2.5`, `...@192.0.2.6`) collapsed to one
     server, and `companions add` would have refused to write the right entry."""
     db = CO.Companion(
-        id="db", command="docker", args=["run", "-i", "mcp/postgres", "postgresql://u:p@10.0.0.5"]
+        id="db", command="docker", args=["run", "-i", "mcp/postgres", "postgresql://u:p@192.0.2.5"]
     )
     other = {
         "command": "docker",
-        "args": ["run", "-i", "mcp/postgres", "postgresql://u:p@10.0.0.6"],
+        "args": ["run", "-i", "mcp/postgres", "postgresql://u:p@192.0.2.6"],
     }
     assert not CO.launches_as(db, other)
     tagged = CO.Companion(id="t", command="docker", args=["run", "-i", "secret@2024"])
