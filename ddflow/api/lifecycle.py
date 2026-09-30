@@ -884,7 +884,9 @@ def _catch_up_globs(log, cfg, item: str) -> str:
     with log.transaction():
         it = fold(log.read_all(), strict=False).items.get(item)
         lease = it.lease if it else None
-        if lease is None or not it.globs or sorted(lease.globs) == sorted(it.globs):
+        # Globs cleared to none are caught up too: a revived lease left on the old paths
+        # would keep holding them against every other agent.
+        if lease is None or sorted(lease.globs) == sorted(it.globs):
             return ""
         live, refusal = L.plan_retarget(log, cfg, item, list(it.globs))
         if refusal:

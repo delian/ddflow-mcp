@@ -64,3 +64,12 @@ def test_a_revival_does_not_take_paths_another_agent_holds_now(repo, monkeypatch
     assert code == OK, out + err  # the lease itself is renewed ...
     assert _lease_globs(repo) == ["i/*"]  # ... without the path beta holds
     assert "j/*" in out + err and "T2" in out + err  # and alpha is told why
+
+
+def test_globs_cleared_while_it_had_lapsed_are_cleared_on_the_lease_too(repo, monkeypatch):
+    """The mirror image: a revived lease left on paths the item no longer declares keeps
+    holding them against every other agent. Found by the rubber_duck review."""
+    _setup(repo, monkeypatch)
+    assert run_cli(repo, "update", "T1", "--globs", "", agent="alpha")[0] == OK
+    assert run_cli(repo, "heartbeat", "T1", agent="alpha")[0] == OK
+    assert _lease_globs(repo) == []
