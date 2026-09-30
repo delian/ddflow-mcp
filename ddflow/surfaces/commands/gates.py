@@ -52,7 +52,7 @@ def _gate_verify(a, c: Ctx) -> int:
 
 
 def _gate_run(a, c: Ctx) -> int:
-    out = A.run(c.repo, a.id, a.gate, agent=c.requested_agent)
+    out = A.run(c.repo, a.id, a.gate, agent=c.requested_agent, called_from=c.called_from)
     if out.exit == FAIL and not out.data.get("outcome"):
         print(out.reason, file=sys.stderr)
         return FAIL
@@ -92,6 +92,7 @@ def _gate_record(a, c: Ctx, *, skip: bool) -> int:
             output_file=a.output_file or "",
         ),
         agent=c.requested_agent,
+        called_from=c.called_from,
     )
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
