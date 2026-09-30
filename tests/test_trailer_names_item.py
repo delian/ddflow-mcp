@@ -388,3 +388,32 @@ def test_no_trailer_under_a_waiver_only_config_is_a_refusal_not_a_crash():
         )[0]
         == 0
     )
+
+
+def test_git_commit_verbose_keeps_the_trailer_readable(repo, tmp_path):
+    """critic (deepseek): with `git commit -v` the message file ends in the diff below
+    the scissors line. `git interpret-trailers` honours the scissors line, so the trailer
+    above it is still read -- a valid id commits, a bad one is refused."""
+    _queue(repo)
+    run_cli(repo, "hooks", "install")
+    editor = tmp_path / "ed.sh"
+
+    def commit_verbose(trailer: str) -> subprocess.CompletedProcess:
+        editor.write_text(
+            '#!/bin/sh\nf="$1"; { printf \'subject\\n\\n%s\\n\' "' + trailer + '"; cat "$f"; }'
+            ' > "$f.new" && mv "$f.new" "$f"\n'
+        )
+        editor.chmod(0o755)
+        (repo / "v.txt").write_text(trailer)
+        subprocess.run(["git", "-C", str(repo), "add", "v.txt"], check=True)
+        return subprocess.run(
+            ["git", "-C", str(repo), "commit", "-v", "-q"],
+            capture_output=True,
+            text=True,
+            env={**os.environ, "GIT_EDITOR": str(editor)},
+        )
+
+    ok = commit_verbose("Phase: 160.D.4")
+    assert ok.returncode == 0, ok.stderr
+    bad = commit_verbose("Phase: NOPE.99")
+    assert bad.returncode != 0 and "NOPE.99" in bad.stderr, bad.stderr
