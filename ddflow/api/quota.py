@@ -58,8 +58,7 @@ def quota_show(repo: Path, subject: str, *, agent: str = "") -> O.Outcome:
     if p is None:
         return O.nothing(
             "quota.show",
-            f"no quota declared for {subject}: ask the agent, and the operator if it "
-            f"cannot tell",
+            f"no quota declared for {subject}: ask the agent, and the operator if it cannot tell",
             subject=subject,
             profile=None,
         )
