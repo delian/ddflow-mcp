@@ -31,14 +31,19 @@ the report) decides, having been told what is actually in each tree.
 
 from __future__ import annotations
 
+import contextlib
 import time
-from collections.abc import Callable
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..config import Config
-from ..core.model import DONE, State
+from ..core.model import DONE, State, fold
 from ..infra import worktree as W
+
+if TYPE_CHECKING:
+    from ..infra.log import EventLog
 
 
 @dataclass
@@ -231,33 +236,41 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
     return plan
 
 
-def apply(
-    repo: Path, cfg: Config, plan: Plan, fresh: Callable[[], State] | None = None
-) -> list[str]:
+def apply(repo: Path, cfg: Config, plan: Plan, log: EventLog | None = None) -> list[str]:
     """Perform only the safe actions. Dirty trees are never touched, whatever is set.
 
-    ``fresh`` re-reads the queue, and is asked again before EACH destructive step: the
-    plan is as old as the survey, which ran git in every tree, and a merge here takes
-    seconds more. An agent that claims a surveyed tree meanwhile must still find it
-    there. Without ``fresh`` only the survey's view protects anything.
+    With ``log``, every removal and branch deletion re-reads the queue and acts INSIDE
+    the log's append lock, the one `claim` takes to record a lease. The plan is as old as
+    the survey, which ran git in every tree, and a merge here takes seconds more, so a
+    tree claimed meanwhile has to be seen. Re-reading alone was not enough: a claim
+    appended between the re-read and `git worktree remove` still lost its tree
+    (B19d87ac436). Under the lock a claim either landed first, and is seen, or waits and
+    then finds no tree and makes a fresh one. Without ``log`` only the survey protects.
     """
     root = W.repo_root(repo)
     base = cfg.worktree.base_ref or W.default_branch(root)
     done: list[str] = []
 
-    def still_free(t: TreeState) -> bool:
-        if fresh is None:
-            return True
-        kind, reason = _protected(root, cfg, fresh()).why(t.path, t.branch)
+    @contextlib.contextmanager
+    def unless_claimed() -> Iterator[_Protected | None]:
+        if log is None:
+            yield None
+            return
+        with log.transaction():
+            yield _protected(root, cfg, fold(log.read_all(), strict=False))
+
+    def kept(t: TreeState, guard: _Protected | None) -> bool:
+        kind, reason = guard.why(t.path, t.branch) if guard else ("", "")
         if kind:
             t.action, t.kind, t.done = "", kind, reason
             done.append(f"kept {t.name}: {kind} since the survey")
-        return not kind
+        return bool(kind)
 
     for t in plan.trees:
-        if t.action and not still_free(t):
-            continue
         if t.action == "merge":
+            with unless_claimed() as guard:
+                if kept(t, guard):
+                    continue
             wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
             r = W.merge(repo, cfg, wt, message=f"merge {t.item or t.branch} (cleanup)")
             done.append(
@@ -267,24 +280,27 @@ def apply(
             if not r.ok:
                 continue
             t.action = "remove"
-            if not still_free(t):
-                continue
         if t.action == "remove":
-            wt = W.Worktree(item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base)
-            r = W.remove(repo, cfg, wt)
+            with unless_claimed() as guard:
+                if kept(t, guard):
+                    continue
+                wt = W.Worktree(
+                    item=t.item or t.name, path=Path(t.path), branch=t.branch, base=base
+                )
+                r = W.remove(repo, cfg, wt)
             done.append(
                 f"{'removed' if r.ok else 'kept'} worktree {t.name}"
                 + ("" if r.ok else f": {(r.err or r.out).splitlines()[0][:120]}")
             )
     for t in plan.stale_branches:
-        if t.action == "delete_branch" and fresh is not None:
-            who = _protected(root, cfg, fresh()).held_branches.get(t.branch)
-            if who:
-                t.action, t.kind = "", "held"
-                t.done = f"LEAVE ALONE — item {who} holds a live lease on this branch."
-                done.append(f"kept branch {t.branch}: held since the survey")
-                continue
         if t.action == "delete_branch":
-            r = W.git(root, "branch", "-d", t.branch)
+            with unless_claimed() as guard:
+                who = guard.held_branches.get(t.branch) if guard else ""
+                if who:
+                    t.action, t.kind = "", "held"
+                    t.done = f"LEAVE ALONE — item {who} holds a live lease on this branch."
+                    done.append(f"kept branch {t.branch}: held since the survey")
+                    continue
+                r = W.git(root, "branch", "-d", t.branch)
             done.append(f"{'deleted' if r.ok else 'kept'} branch {t.branch}")
     return done
