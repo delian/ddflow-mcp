@@ -103,6 +103,12 @@ _CLAUSE_END = (
 )
 #: The word in capitals, in a heading that is not itself written in capitals.
 _DONE_CAPS = re.compile(rf"\b(?:SHIPPED|CLOSED|DONE|COMPLETED?){_WORD_END}")
+#: In a heading written in capitals every word is a capital word, so there the status
+#: word must END its clause (`PHASE 12 SHIPPED`), and not as the object of `OF` or `TO BE`
+#: (`DEFINITION OF DONE`, `WORK TO BE DONE`).
+_DONE_CAPS_ENDING = re.compile(
+    rf"(?<!\bOF )(?<!\bBE )\b(?:SHIPPED|CLOSED|DONE|COMPLETED?){_WORD_END}{_CLAUSE_END}"
+)
 _DONE_CHECK = re.compile(r"[\u2705\u2714]")
 #: A lowercase word that opens the heading, an aside clause or the text after a separator,
 #: and ends its clause.
@@ -1908,14 +1914,15 @@ def _claims_done(title: str) -> bool:
 
     One place for the drift note, `import --verify` and the phase verdict, so they cannot
     disagree. Negation is per status, not per heading: `Phase 12 SHIPPED — docs NOT
-    DONE` still claims done, `Phase 9 (NOT YET SHIPPED)` does not. A heading written in
-    capitals is read by the lowercase rules, or every capital word would be a status.
+    DONE` still claims done, `Phase 9 (NOT YET SHIPPED)` does not. In a heading written in
+    capitals a capital status word must end its clause (`_DONE_CAPS_ENDING`).
     """
     if _DONE_CHECK.search(title):
         return True
     letters = [c for c in title if c.isalpha()]
     caps_heading = bool(letters) and all(c.isupper() for c in letters)
-    starts = [] if caps_heading else [m.start() for m in _DONE_CAPS.finditer(title)]
+    caps = _DONE_CAPS_ENDING if caps_heading else _DONE_CAPS
+    starts = [m.start() for m in caps.finditer(title)]
     starts += [m.start("w") for m in _DONE_CLAUSE.finditer(title)]
     return any(not _NEGATED_BEFORE.search(title[:at]) for at in starts)
 
