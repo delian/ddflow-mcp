@@ -94,4 +94,6 @@ def test_a_bump_is_verified_against_the_source_it_wrote_not_stale_bytecode(tmp_p
     assert _version(repo) == want
     assert json.loads((repo / "server.json").read_text())["version"] == want
     assert f'__version__ = "{want}"' in (repo / "ddflow" / "__init__.py").read_text()
-    assert re.search(rf'name = "ddflow-mcp"\nversion = "{re.escape(want)}"', (repo / "uv.lock").read_text())
+    assert re.search(
+        rf'name = "ddflow-mcp"\nversion = "{re.escape(want)}"', (repo / "uv.lock").read_text()
+    )
