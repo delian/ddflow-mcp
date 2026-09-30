@@ -420,3 +420,44 @@ def test_a_tool_declared_only_in_a_nested_package_json_is_named_as_such(repo):
     assert "eslint" not in _hooks(p)["local"]
     (note,) = [s for s in p.skipped if s.startswith("eslint")]
     assert "web/package.json" in note and "does not declare" not in note
+
+
+def test_a_json_refusal_still_says_why(mixed):
+    """Bug B52a5797742: `--json` printed `{}` and exit 3, the reason nowhere."""
+    from conftest import run_cli
+
+    code, _out, err = run_cli(mixed, "--json", "precommit", "--ddflow-cmd", " ")
+    assert code == REFUSED and "empty" in err
+
+
+def test_a_wrapper_hooks_status_will_not_credit_is_said(mixed):
+    """Bug Bb717d6089e: `hooks status` recognises the local hooks by 'ddflow' in their
+    command; a wrapper named otherwise is reported NOT installed, and nothing warned."""
+    out = OPS.precommit(mixed, where=mixed, ddflow_cmd="scripts/run.sh")
+    assert out.data["ddflow_cmd_recognised"] is False
+    assert OPS.precommit(mixed, where=mixed).data["ddflow_cmd_recognised"] is True
+
+
+def test_mcp_refuses_an_empty_ddflow_command_as_the_cli_does(mixed):
+    """Bug Beee89ef678: MCP turned "" into "ddflow" where the CLI refused it."""
+    from ddflow.surfaces.mcp import TOOLS
+
+    out = TOOLS["ddflow_precommit"]["api"](mixed, {"ddflow_cmd": ""}, "", called_from=mixed)
+    assert out.exit == REFUSED
+    default = TOOLS["ddflow_precommit"]["api"](mixed, {}, "", called_from=mixed)
+    assert default.exit == 0 and default.data["ddflow_cmd"] == "ddflow"
+
+
+@pytest.mark.skipif(shutil.which("pre-commit") is None, reason="pre-commit is not installed")
+def test_hooks_status_credits_the_generated_config_once_installed(mixed):
+    """The end state the proposal is for: after `pre-commit install`, ddflow's own status
+    sees both checks armed through the framework (enforce.armed, from
+    B-fix-hooks-status-precommit)."""
+    from ddflow.services import enforce as E
+
+    OPS.precommit(mixed, where=mixed, write=True)
+    r = subprocess.run(["pre-commit", "install"], cwd=mixed, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    for name in ("pre-commit", "commit-msg"):
+        got = E.armed(mixed, name)
+        assert got.via == "pre-commit", (name, got)

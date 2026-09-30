@@ -64,7 +64,9 @@ class Repo:
 
     @property
     def rev(self) -> str:
-        return PINS.get(self.url, "")
+        """The pin. A remote repository WITHOUT one is a KeyError, not `rev: ""`, which
+        pre-commit refuses only when somebody commits."""
+        return "" if self.url == "local" else PINS[self.url]
 
 
 @dataclass
@@ -83,8 +85,9 @@ class Proposal:
     @property
     def hook_types(self) -> list[str]:
         """The git hooks `pre-commit install` must set up for these hooks to run."""
+        # default_stages is [pre-commit], so every hook naming no stages runs there.
         staged = {s for r in self.repos for h in r.hooks for s in h.fields.get("stages", ())}
-        return ["pre-commit", "commit-msg"] + (["pre-push"] if "pre-push" in staged else [])
+        return [t for t in ("pre-commit", "commit-msg", "pre-push") if t in staged | {"pre-commit"}]
 
 
 #: How many paths to cite as evidence for a stack.

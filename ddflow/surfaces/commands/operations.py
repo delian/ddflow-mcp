@@ -278,6 +278,8 @@ def cmd_precommit(a, c: Ctx) -> int:
         return FAIL
     if c.json:
         print(json.dumps(out.body(), indent=2))
+        if out.exit != OK and out.reason:
+            print(out.reason, file=sys.stderr)  # a bare `{}` and an exit code say nothing
         return out.exit
     d = out.data
     if "stacks" not in d:  # refused before anything was proposed
@@ -296,6 +298,11 @@ def cmd_precommit(a, c: Ctx) -> int:
         print(
             f"# NOTE: `{d['ddflow_cmd']}` is not found from here, and the ddflow hooks run it "
             "on every commit: pass --ddflow-cmd with a command that reaches ddflow."
+        )
+    if not d["ddflow_cmd_recognised"]:
+        print(
+            f"# NOTE: `ddflow hooks status` finds these hooks by 'ddflow' in their command, "
+            f"so `{d['ddflow_cmd']}` will be reported NOT installed although it runs."
         )
     if d["missing"]:
         print(

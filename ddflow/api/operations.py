@@ -490,6 +490,9 @@ def precommit(
         # command missing from PATH fails every commit, which reads like a refusal.
         "ddflow_cmd": ddflow_cmd,
         "ddflow_cmd_found": _command_found(ddflow_cmd, tree),
+        # `hooks status` knows these hooks by "ddflow" in their command; a wrapper named
+        # otherwise runs the checks but is reported NOT installed.
+        "ddflow_cmd_recognised": "ddflow" in ddflow_cmd.lower(),
         # Programs the proposed hooks run from PATH that this machine does not have.
         "missing": [prog for prog in prop.requires if shutil.which(prog) is None],
         "hook_types": prop.hook_types,  #: the git hooks `pre-commit install` sets up

@@ -1641,8 +1641,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_precommit": {
         "description": (
             "A .pre-commit-config.yaml proposed for THIS repository: the stacks it "
-            "actually has (Python, shell, Docker, JS, Go, Rust, YAML/TOML/JSON) mapped "
-            "to pinned hooks, plus ddflow's own check-commit and check-msg as local "
+            "actually has (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON files add "
+            "their checks) mapped to pinned hooks, plus ddflow's own check-commit and check-msg as local "
             "hooks, so the pre-commit framework and ddflow do not compete for "
             ".git/hooks/. Proposes; installs nothing. `write` creates the file and is "
             "REFUSED (exit 3) when one exists -- merge by hand. The body names programs "
@@ -1660,7 +1660,9 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent, called_from=None: _api().precommit(
             repo,
             where=called_from,
-            ddflow_cmd=a.get("ddflow_cmd") or "ddflow",
+            # Absent means the default; an empty string is passed on, and refused, as on
+            # the CLI.
+            ddflow_cmd="ddflow" if a.get("ddflow_cmd") is None else a["ddflow_cmd"],
             write=bool(a.get("write")),
             agent=agent,
         ),
