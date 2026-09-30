@@ -259,7 +259,8 @@ def test_another_server_given_the_companion_as_an_argument_is_not_it():
         entry = {"command": "docker", "args": ["run", flag, value, "img-a"]}
         assert CO.launches_as(a, entry), flag
     # An UNLISTED flag is taken as boolean, so its value reads as another image: a missed
-    # registration (a duplicate on `add`) is the chosen failure, never a false "covered".
+    # registration (a duplicate on `add`) is the chosen failure. (A false "covered" is
+    # still possible if an unlisted flag's value happens to BE the companion's image.)
     assert not CO.launches_as(a, {"command": "docker", "args": ["run", "--made-up", "v", "img-a"]})
     # A flag with its value between them, and the server's own arguments after, still match.
     assert CO.launches_as(a, {"command": "docker", "args": ["run", "--env=X", "-i", "img-a"]})
@@ -285,6 +286,7 @@ def test_register_does_not_refresh_a_stale_id_into_a_duplicate(tmp_path):
     )
     status, msg = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
     assert status == "unchanged" and "coding-guides" in msg, (status, msg)
+    assert "remove it by hand" in msg, "the stale entry under the id went unmentioned"
     assert json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]["codeguide"] == stale
 
 

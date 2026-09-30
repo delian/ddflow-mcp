@@ -625,9 +625,15 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -
     two copies of every tool -- and an operator whose tools are already named after
     their own key (`mcp__coding-guides__*`) would get a second set they never asked for.
     """
-    for name, entry in (read[0] if read else {}).items():
+    servers = read[0] if read else {}
+    for name, entry in servers.items():
         if name != c.id and launches_as(c, entry):
-            return f"{rel} already launches {c.id} as `{name}` (the same command); left as it is"
+            msg = f"{rel} already launches {c.id} as `{name}` (the same command); left as it is"
+            if c.id in servers:
+                # Not repaired here: refreshing it would be a second copy, deleting it is
+                # the operator's call. But say so -- "unchanged" alone hid a stale entry.
+                msg += f". The entry under `{c.id}` launches something else: remove it by hand"
+            return msg
     return ""
 
 
