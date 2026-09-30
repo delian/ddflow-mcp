@@ -228,3 +228,53 @@ def test_a_probed_interpreter_is_not_called_the_primarys(checkout, monkeypatch):
     monkeypatch.setattr(sys, "_base_executable", outside, raising=False)
     note = E.redirect_note()
     assert f"the interpreter {outside}" in note and "primary's interpreter" not in note
+
+
+def test_a_venv_symlinked_from_the_worktree_is_written_by_its_real_path(
+    checkout, monkeypatch, tmp_path
+):
+    """`/wt/.venv -> /shared/venv`: the venv outlives the worktree, the path through the
+    worktree does not."""
+    _primary, tree = checkout
+    shared = tmp_path / "shared" / "venv"
+    (shared / "bin").mkdir(parents=True)
+    (shared / "bin" / "python3").write_text("")
+    (tree / ".venv").symlink_to(shared)
+    monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
+    assert PATHS.launch_python() == str(shared.resolve() / "bin" / "python3")
+
+
+def test_an_unreadable_pointer_falls_back_to_the_package_itself(tmp_path, monkeypatch):
+    """`launch_parent()` never yields None: no primary means the package's own tree."""
+    tree = tmp_path / "wt"
+    tree.mkdir()
+    (tree / ".git").write_bytes(b"gitdir: /tmp/\xff/worktrees/x\n")
+    monkeypatch.delenv(PATHS.LAUNCH_ROOT_ENV, raising=False)
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    assert PATHS.launch_parent() == tree
+
+
+def test_an_explicit_root_overrides_a_real_worktree_without_calling_it_a_redirect(
+    checkout, monkeypatch, tmp_path
+):
+    _primary, _tree = checkout
+    other = tmp_path / "other"
+    (other / "ddflow").mkdir(parents=True)
+    (other / "ddflow" / "__init__.py").write_text("")
+    monkeypatch.setenv(PATHS.LAUNCH_ROOT_ENV, str(other))
+    assert PATHS.launch_parent() == other
+    assert "linked worktree" not in E.redirect_note()
+
+
+def test_a_shared_venv_reached_through_an_aliased_worktree_path_is_written_real(
+    checkout, monkeypatch, tmp_path
+):
+    _primary, tree = checkout
+    shared = tmp_path / "shared2" / "venv"
+    (shared / "bin").mkdir(parents=True)
+    (shared / "bin" / "python3").write_text("")
+    (tree / ".venv").symlink_to(shared)
+    alias = tmp_path / "alias2"
+    alias.symlink_to(tree)
+    monkeypatch.setattr(sys, "executable", str(alias / ".venv" / "bin" / "python3"))
+    assert PATHS.launch_python() == str(shared.resolve() / "bin" / "python3")

@@ -112,9 +112,18 @@ def launch_python() -> str:
     # The venv DIRECTORY resolved, not the interpreter: a venv's python is a symlink to
     # the system one, while its directory is what lives (or not) inside the worktree --
     # possibly reached through a symlinked path (`/home/delian/src` is `/ai/delian/src`).
-    exe_dir = Path(os.path.abspath(sys.executable)).parent.resolve()
-    if target == here or not exe_dir.is_relative_to(here):
+    written = Path(os.path.abspath(sys.executable))
+    exe_dir = written.parent.resolve()
+    if target == here:
         return sys.executable
+    if not exe_dir.is_relative_to(here):
+        # The venv itself lives outside the worktree -- but the path to it may still run
+        # THROUGH the worktree (`/wt/.venv -> /shared/venv`), and that path dies with it.
+        # Write the venv's real location instead, keeping the interpreter's own name.
+        # Ancestors compared RESOLVED, one by one: the worktree may itself be reached by
+        # an alias (`/home/delian/src` is `/ai/delian/src`).
+        via_tree = any(a.resolve() == here for a in written.parents)
+        return str(exe_dir / written.name) if via_tree else sys.executable
     for cand in (target / ".venv" / "bin" / "python3", target / ".venv" / "bin" / "python"):
         if cand.is_file():
             return str(cand)
