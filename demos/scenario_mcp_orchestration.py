@@ -638,6 +638,13 @@ def run(sc: Scenario) -> None:
             alpha.tool(
                 "ddflow_gate_record", id="P1", gate=gate, outcome="passed", evidence="phase pass"
             )
+        out, code = alpha.tool(
+            "ddflow_gate_skip",
+            id="P1",
+            gate="docs",
+            reason="Documentation work is outside the scope of this lifecycle scenario.",
+        )
+        sc.check("the docs gate is explicitly skipped", code == 0, out[:200])
         out, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
         sc.check("phase P1 completes once every task is done", code == 0, out[:300])
 

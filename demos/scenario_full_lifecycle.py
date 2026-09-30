@@ -861,6 +861,13 @@ def _act4_close_the_phase(sc, alpha, repo):
         ("merge", "all task branches landed"),
     ):
         alpha.tool("ddflow_gate_record", id="P1", gate=gate, outcome="passed", evidence=ev)
+    text, code = alpha.tool(
+        "ddflow_gate_skip",
+        id="P1",
+        gate="docs",
+        reason="Documentation work is outside the scope of this lifecycle scenario.",
+    )
+    sc.check("the docs gate is explicitly skipped", code == 0, text[:200])
     text, code = alpha.tool("ddflow_complete", id="P1", model="claude-opus-5")
     sc.check("P1 closes", code == 0, text)
 
