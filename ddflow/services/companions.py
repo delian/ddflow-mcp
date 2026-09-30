@@ -546,8 +546,8 @@ def _toml(value: object) -> str:
     return json.dumps(str(value))
 
 
-def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion) -> str:
-    """A message template when a config already launches ``c`` under ANOTHER name.
+def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -> str:
+    """The message when config ``rel`` already launches ``c`` under ANOTHER name, else "".
 
     Writing the id beside it would start the same server twice, under two names, with
     two copies of every tool -- and an operator whose tools are already named after
@@ -555,7 +555,7 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion) -> str:
     """
     for name, entry in (read[0] if read else {}).items():
         if name != c.id and launches_as(c, entry):
-            return f"{{rel}} already launches {c.id} as `{name}` (the same command); left as it is"
+            return f"{rel} already launches {c.id} as `{name}` (the same command); left as it is"
     return ""
 
 
@@ -602,8 +602,8 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         text = path.read_text("utf-8") if path.exists() else ""
         if f"[mcp_servers.{c.id}]" in text:
             return "unchanged", f"{rel} already registers {c.id}"
-        if other := _launched_elsewhere(_servers_in(path, target.shape) if text else None, c):
-            return "unchanged", other.format(rel=rel)
+        if other := _launched_elsewhere(_servers_in(path, target.shape) if text else None, c, rel):
+            return "unchanged", other
         block = (
             f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
         )
@@ -638,9 +638,9 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         # did nothing.
         return "unchanged", f"{rel} already registers {c.id} with the same launch command"
     if get_server(data, target.shape, c.id) is None and (
-        other := _launched_elsewhere((get_servers(data, target.shape), ""), c)
+        other := _launched_elsewhere((get_servers(data, target.shape), ""), c, rel)
     ):
-        return "unchanged", other.format(rel=rel)
+        return "unchanged", other
     try:
         place_server(data, target.shape, c.id, c.entry())
     except UnplaceableConfig as exc:

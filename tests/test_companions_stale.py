@@ -202,3 +202,11 @@ def test_register_still_writes_when_only_a_different_server_is_there(tmp_path):
     assert status == "written"
     servers = json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]
     assert set(servers) == {"other", "codeguide"}
+
+
+def test_a_server_key_with_braces_is_reported_not_crashed_on(tmp_path):
+    """Found by roborev on 622a254: the message was built with the key interpolated and
+    then `.format`-ed, so a key holding `{` or `}` raised instead of reporting."""
+    _mcp_json(tmp_path, {"{guides}": {"command": "docker", "args": CODEGUIDE}})
+    status, msg = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
+    assert status == "unchanged" and "`{guides}`" in msg, (status, msg)
