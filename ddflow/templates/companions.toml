@@ -157,6 +157,6 @@ why = """Runs the project's own linters, formatters and a secret scanner BEFORE 
 detect = ["pre-commit", "--version"]
 command = "pre-commit"
 install = "pipx install pre-commit"
-note = "Then `ddflow precommit` shows the proposed .pre-commit-config.yaml (--write creates it, never over an existing one) and prints the `pre-commit install --hook-type ...` line that activates it. The intended end state is ddflow's checks running as that config's local hooks. (Where ddflow's own git hook was installed first, `pre-commit install` keeps it as pre-commit.legacy and it still runs -- a duplicate once the generated config is in place.)"
+note = "Then `ddflow precommit` shows the proposed .pre-commit-config.yaml (--write creates it, never over an existing one) and prints the line that activates it -- `pre-commit install` for the generated config, which declares its hook types. The intended end state is ddflow's checks running as that config's local hooks. (Where ddflow's own git hook was installed first, `pre-commit install` keeps it as pre-commit.legacy and it still runs -- a duplicate once the generated config is in place.)"
 url = "https://pre-commit.com"
 default = true

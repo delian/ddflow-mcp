@@ -474,6 +474,7 @@ def precommit(
     one that exists: which checks gate somebody's commits is theirs to decide, and a
     config they already have is exactly that decision.
     """
+    import contextlib
     import os
     import shlex
     import shutil
@@ -559,7 +560,9 @@ def precommit(
         except OSError as e:
             return O.failed("precommit", f"could not write {path}: {e}")
         finally:
-            tmp.unlink(missing_ok=True)
+            # Best effort: the answer is decided, and a leftover temp name is unique.
+            with contextlib.suppress(OSError):
+                tmp.unlink()
         data["written"] = data["exists"] = True
         data["activate"] = _activation(path, True, prop.hook_types)
     return O.ok("precommit", **data)

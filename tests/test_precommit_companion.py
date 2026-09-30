@@ -524,3 +524,27 @@ def test_a_failed_write_still_answers_in_json(mixed):
         mixed.chmod(0o755)
     assert code == 1, (out, err)
     assert json.loads(out) is not None and "could not write" in err
+
+
+def test_the_catalogue_note_promises_what_the_command_prints(mixed):
+    """Bug B365dadde12: the note promised a `--hook-type` line; for the generated config
+    the command prints plain `pre-commit install`."""
+    comp = {c.id: c for c in C.load(Path(__file__).resolve().parents[1])}["pre-commit"]
+    assert "--hook-type" not in comp.note
+    assert OPS.precommit(mixed, where=mixed).data["activate"] in comp.note
+
+
+def test_a_temp_file_that_cannot_be_removed_does_not_undo_the_answer(mixed, monkeypatch):
+    """Bug Bb90bd68c75: an OSError from removing the temp escaped as a traceback after the
+    config was already in place."""
+    real_unlink = Path.unlink
+
+    def stuck(self, *a, **k):
+        if self.name.endswith(".tmp"):
+            real_unlink(self, *a, **k)
+            raise PermissionError(13, "Permission denied")
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", stuck)
+    out = OPS.precommit(mixed, where=mixed, write=True)
+    assert out.exit == 0 and (mixed / ".pre-commit-config.yaml").is_file()
