@@ -768,14 +768,33 @@ push.
 constantly and by design. A scanner that cries wolf on every fixture is a scanner nobody
 reads.
 
-**The same checks run before you push.** `.pre-commit-config.yaml` installs a *pre-push*
-hook (`pre-commit install`, once per clone) that runs what CI runs: ruff, the wheel probe,
-bandit, the dependency allowlist, gitleaks over the commits being pushed, the unit suite,
-the scenarios, and a schema check of the workflow files. The build probe and the allowlist
-are `scripts/ci/` files that CI calls too, so the two cannot drift. It is a push hook, not
-a commit hook, because ddflow's own hooks own the commit (`ddflow hooks install`), and
-because minutes per commit teaches `--no-verify`. `SKIP=scenarios git push` skips one.
-It does not run the 3.11/3.13 matrix, CodeQL, pip-audit or the load suite.
+**The same checks run before you push.** Install the pre-push hook once per clone:
+
+```console
+$ ln -sf ../../scripts/ci/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push"
+```
+
+It runs what CI runs, from `.pre-commit-config.yaml`: ruff, the wheel probe, bandit, the
+dependency allowlist, gitleaks over the commits being pushed, the unit suite and the
+scenarios, and a schema check of the workflow files. The build probe and the allowlist are
+`scripts/ci/` files that CI calls too, so the two cannot drift.
+
+It runs them **in a scratch worktree of the commit being pushed**, not in your checkout —
+which is why it is not `pre-commit install`. pre-commit fails a hook when anything in the
+tree changes while it runs, and ddflow agents append to the committed event logs
+constantly: in your own tree the test hook failed with every test green. A scratch tree has
+no other writers, and it checks what you push rather than what is uncommitted.
+
+The unit suite and the scenarios run as **one** pytest session, one worker per CPU
+(`-n auto`) with work-stealing, so the scenarios overlap the unit tests instead of
+following them: about a minute on a 192-thread machine. The scenarios take CI's
+no-model-server path (`DDFLOW_DEMO_NO_REVIEWER=1`), since a real review there costs
+minutes and is not what CI checks.
+
+It is a push hook, not a commit hook, because ddflow's own hooks own the commit (`ddflow
+hooks install`), and because minutes per commit teaches `--no-verify`. `SKIP=tests git
+push` skips one check by id. It does not run the 3.11/3.13 matrix, CodeQL, pip-audit or
+the load suite.
 
 ### Any LLM as a reviewer — local, remote, SaaS, or a CLI
 

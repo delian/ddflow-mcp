@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# git pre-push hook: run the pre-push checks in .pre-commit-config.yaml on each commit
+# being pushed, in a SCRATCH WORKTREE of that commit.
+#
+# Install once per clone (it replaces any pre-push hook `pre-commit install` wrote):
+#
+#   ln -sf ../../scripts/ci/pre-push "$(git rev-parse --git-common-dir)/hooks/pre-push"
+#
+# WHY NOT `pre-commit install`. pre-commit fails a hook when ANYTHING in the working tree
+# changed while it ran -- it diffs the whole tree before and after each hook -- and in a
+# ddflow checkout agents append to the committed .ddflow/events/*.jsonl all the time. The
+# test hook runs for a minute, so it lost that race on an ordinary push: every test passed
+# and the push was refused, "files were modified by this hook" (bug B431fff0197). A scratch
+# worktree has no other writers, so that check goes back to meaning what it says. It also
+# tests the commit being PUSHED, not whatever happens to be uncommitted in your tree.
+#
+# `git push --no-verify` skips it, as it skips every hook.
+set -euo pipefail
+
+remote=${1:-origin}
+z40=0000000000000000000000000000000000000000
+
+if ! command -v pre-commit >/dev/null 2>&1; then
+    echo "pre-push: pre-commit is not installed, so nothing was checked." >&2
+    echo "  Install it (uv tool install pre-commit), or push with --no-verify to skip on purpose." >&2
+    exit 1
+fi
+
+tree=""
+cleanup() { [ -n "$tree" ] && git worktree remove --force "$tree" >/dev/null 2>&1 || true; }
+trap cleanup EXIT
+# An interrupt stops the whole hook -- not just the ref being checked, which a trap that
+# merely returned would do, and then go on to check the next ref.
+trap 'cleanup; exit 130' INT TERM
+
+status=0
+# git feeds one line per pushed ref on stdin. The loop owns stdin: every command inside
+# reads /dev/null instead, or the first one to read stdin would swallow the next refs.
+while read -r local_ref local_sha _remote_ref remote_sha; do
+    [ "$local_sha" = "$z40" ] && continue # a deletion publishes nothing
+
+    # The same range pre-commit's own hook computes: what the remote already has, else
+    # from the parent of the first commit it lacks; a pushed root commit means every file.
+    if [ "$remote_sha" != "$z40" ] && git cat-file -e "$remote_sha^{commit}" 2>/dev/null; then
+        range=(--from-ref "$remote_sha" --to-ref "$local_sha")
+    else
+        first=$(git rev-list "$local_sha" --topo-order --reverse --not --remotes="$remote" </dev/null | head -n1 || true)
+        [ -n "$first" ] || continue # the remote has every commit already
+        if base=$(git rev-parse -q --verify "$first^" </dev/null); then
+            range=(--from-ref "$base" --to-ref "$local_sha")
+        else
+            range=(--all-files)
+        fi
+    fi
+
+    tree=$(mktemp -d "${TMPDIR:-/tmp}/ddflow-prepush.XXXXXX")
+    git worktree add --quiet --detach "$tree" "$local_sha" </dev/null
+    echo "pre-push: checking $local_ref at ${local_sha:0:12} in a scratch worktree"
+    (cd "$tree" && pre-commit run --hook-stage pre-push "${range[@]}" </dev/null) || status=1
+    cleanup
+    tree=""
+done
+
+exit $status
