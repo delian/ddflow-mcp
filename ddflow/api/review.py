@@ -95,8 +95,15 @@ def diff_for(
     chosen = "named with --branch" if branch else ""
     if not branch and it and it.branch:
         branch, chosen = it.branch, f"{item}'s branch (its tree is gone)"
-    if not branch:
-        here = W.current(called_from or repo)
+    if not branch and it:
+        from .lifecycle import callers_tree
+
+        here, held = callers_tree(repo, cfg, st, it, called_from)
+        if held:
+            return "", (
+                f"the worktree you are in belongs to {held}, not {item}; pass {item}'s "
+                f"branch with --branch"
+            )
         if here is not None and here.branch:
             branch, chosen = here.branch, f"checked out in {here.path}"
     if not branch:
