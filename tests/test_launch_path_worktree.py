@@ -193,3 +193,18 @@ def test_a_swapped_interpreter_is_named(checkout, monkeypatch):
     py.write_text("")
     monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
     assert str(py) in E.redirect_note()
+
+
+def test_with_no_primary_venv_an_outside_interpreter_that_imports_it_is_used(checkout, monkeypatch):
+    """The critic: a primary with no `.venv` left the worktree's own interpreter in the
+    line. An interpreter outside the worktree that can import the primary's server --
+    here the one running this test, after the primary is given that module -- lives on."""
+    primary, tree = checkout
+    (primary / "ddflow" / "surfaces").mkdir()
+    (primary / "ddflow" / "surfaces" / "__init__.py").write_text("")
+    (primary / "ddflow" / "surfaces" / "mcp.py").write_text("")
+    outside = sys.executable
+    monkeypatch.setattr(sys, "executable", str(tree / ".venv" / "bin" / "python3"))
+    monkeypatch.setattr(sys, "_base_executable", outside, raising=False)
+    assert PATHS.launch_python() == outside
+    assert "WARNING" not in E.redirect_note()

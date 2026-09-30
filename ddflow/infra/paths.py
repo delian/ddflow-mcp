@@ -100,7 +100,9 @@ def launch_parent() -> Path:
 def launch_python() -> str:
     """The interpreter for those lines: `sys.executable`, unless it lives inside the
     worktree `launch_parent()` redirected away from -- a per-worktree venv goes with the
-    worktree -- in which case the primary checkout's own venv, when it has one."""
+    worktree -- in which case the primary checkout's own venv, when it has one, else an
+    interpreter outside the worktree that is PROBED to import the primary's MCP server,
+    else `sys.executable`, which `enforce.redirect_note` then warns about."""
     import os
     import sys
 
@@ -114,7 +116,40 @@ def launch_python() -> str:
     for cand in (target / ".venv" / "bin" / "python3", target / ".venv" / "bin" / "python"):
         if cand.is_file():
             return str(cand)
+    # No venv in the primary: any interpreter OUTSIDE the worktree that can import the
+    # primary's MCP server -- deps and all -- outlives the worktree. Probed, because a
+    # base python without the dependencies would fail as surely as a deleted one.
+    import shutil
+
+    outside = [getattr(sys, "_base_executable", ""), shutil.which("python3") or ""]
+    for cand in dict.fromkeys(c for c in outside if c):
+        cand_dir = Path(os.path.abspath(cand)).parent.resolve()
+        if not cand_dir.is_relative_to(here) and _imports_ddflow(cand, str(target)):
+            return cand
     return sys.executable
+
+
+def _imports_ddflow(python: str, root: str) -> bool:
+    """Whether `python` imports ddflow's MCP server from `root` (cheap, bounded)."""
+    import os
+    import subprocess
+
+    env = {**os.environ, "PYTHONPATH": root}
+    try:
+        return (
+            subprocess.run(
+                [python, "-c", "import ddflow.surfaces.mcp"],
+                env=env,
+                # `-c` puts the working directory first on sys.path: run it FROM the root,
+                # or whatever ddflow sits in the caller's directory answers instead.
+                cwd=root,
+                capture_output=True,
+                timeout=30,
+            ).returncode
+            == 0
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
 
 
 def redirected_from() -> Path | None:
