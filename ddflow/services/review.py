@@ -27,10 +27,14 @@ review did not happen, whatever the token count says.
 
 from __future__ import annotations
 
+import http.client
 import json
 import os
 import re
+import signal
+import socket
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -222,6 +226,19 @@ class Reviewer:
     #: grows faster than linearly in the input.
     max_chunk_chars: int = 30000
     total_budget_s: int = 3600
+    #: Copies of each chunk sent at once; the first that comes back ON CONTRACT is the
+    #: chunk's review and the rest are cancelled (connection closed, process killed).
+    #: Measured on a reasoning model (research Rfa535c6747): the same 3 KB diff took
+    #: 64-391 s across 8 identical calls (6k-42k reasoning tokens), and about one call in
+    #: four on a hard diff never answers before `max_tokens`. Racing copies cuts that
+    #: tail. The cost is compute up to the moment a loser is cancelled -- free on an idle
+    #: local server, billed on a metered API: set 1 there if that matters more than time.
+    hedge: int = 2
+    #: Requests in flight at once, across chunks and their copies. Chunks used to be sent
+    #: one after another, so a review took the SUM of its chunks; in parallel it takes the
+    #: slowest. On the measured vLLM server 8 concurrent requests were each 28% slower
+    #: with 5.7x the throughput. 4 is a default an ordinary local server can carry.
+    max_concurrency: int = 4
     system_prompt_path: str = ""
     extra_body: dict[str, Any] = field(default_factory=dict)
     #: Extra environment for a kind="command" reviewer (e.g. a per-reviewer API key).
@@ -309,7 +326,7 @@ def load_reviewers(root: Path) -> list[Reviewer]:
     configure. ``.ddflow/reviewers.toml`` is also read if present, for operators who
     prefer to split it; entries merge by name, with the dedicated file winning.
     """
-    from ..config import Config
+    from ..config import Config, _is_code_tree
     from ..infra import tomlcfg
 
     blocks = tomlcfg.overlay_array(
@@ -318,6 +335,9 @@ def load_reviewers(root: Path) -> list[Reviewer]:
         Reviewer,
         key="name",
         fallback_key="model",
+        # A newer checkout's reviewer knob (hedge, max_concurrency, ...) warns and is
+        # skipped by older code, instead of failing every review (B6f757e18cf).
+        lenient=not _is_code_tree(root),
     )
     # The project's own family map, not just the shipped one. `resolved_family` had no
     # Config in scope, so it always used `FAMILY_HINTS` while `reviewer_independence`
@@ -345,6 +365,84 @@ def reviewers_for(reviewers: list[Reviewer], gate: str) -> list[Reviewer]:
 # -- probing ---------------------------------------------------------------------------
 
 
+class _Cancel:
+    """What one hedged copy is blocked on, so the winning copy can stop it.
+
+    A losing copy that is merely ignored keeps the server generating -- up to
+    `max_tokens` of reasoning -- and keeps a thread the CLI must wait for before it can
+    exit. So cancelling closes the thing it is blocked on: the socket of an HTTP
+    reviewer (the server sees the disconnect and aborts the request), or the process
+    group of a command reviewer. Things attached after cancellation are closed at once.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._held: list[Any] = []
+        self.cancelled = False
+
+    def attach(self, thing: Any) -> None:
+        with self._lock:
+            if not self.cancelled:
+                self._held.append(thing)
+                return
+        _abort(thing)
+
+    def cancel(self) -> None:
+        with self._lock:
+            self.cancelled = True
+            held, self._held = self._held, []
+        for thing in held:
+            _abort(thing)
+
+
+def _abort(thing: Any) -> None:
+    try:
+        if isinstance(thing, subprocess.Popen):
+            os.killpg(thing.pid, signal.SIGKILL)  # the shell AND the reviewer it started
+        else:
+            thing.shutdown(socket.SHUT_RDWR)
+    except (OSError, ProcessLookupError):
+        pass
+
+
+#: The copy the current thread is running, if any: set by the review scheduler around
+#: each `_chat`, read where a socket or process is created.
+_running = threading.local()
+
+
+def _attach_to_running(thing: Any) -> None:
+    token = getattr(_running, "cancel", None)
+    if token is not None:
+        token.attach(thing)
+
+
+class _TrackedHTTP(http.client.HTTPConnection):
+    def connect(self) -> None:
+        super().connect()
+        _attach_to_running(self.sock)
+
+
+class _TrackedHTTPS(http.client.HTTPSConnection):
+    def connect(self) -> None:
+        super().connect()
+        _attach_to_running(self.sock)
+
+
+class _TrackedHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_TrackedHTTP, req)
+
+
+class _TrackedHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_TrackedHTTPS, req, context=self._context)
+
+
+#: `urlopen`'s own opener -- proxies, redirects, TLS defaults -- except that each
+#: connection's socket is handed to the copy that opened it, so it can be cancelled.
+_OPENER = urllib.request.build_opener(_TrackedHTTPHandler, _TrackedHTTPSHandler)
+
+
 def _open(target: str | urllib.request.Request, *, timeout: float):
     """`urlopen`, for http(s) only. Every reviewer HTTP call goes through here.
 
@@ -358,7 +456,7 @@ def _open(target: str | urllib.request.Request, *, timeout: float):
     scheme = urllib.parse.urlsplit(url).scheme.lower()
     if scheme not in ("http", "https"):
         raise urllib.error.URLError(f"only http(s) reviewer endpoints; refusing {scheme!r}")
-    return urllib.request.urlopen(target, timeout=timeout)  # nosec B310 -- scheme checked above
+    return _OPENER.open(target, timeout=timeout)  # nosec B310 -- scheme checked above
 
 
 def probe_endpoint(base_url: str, timeout_s: float = 4.0) -> list[str]:
@@ -496,23 +594,34 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
             f"This is NOT a clean review."
         )
     try:
-        p = P.run(
+        # Its own process group, so a timeout or a winning copy kills the reviewer the
+        # shell started, not just the shell.
+        p = P.popen(
             cmd,
             # bandit B604: a CLI reviewer IS a shell command line the operator configured.
             shell=True,  # nosec B604
-            input=f"{system}\n\n{user}",
-            capture_output=True,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
             text=True,
-            timeout=timeout_s,
             env={**os.environ, **rev.env},
+            start_new_session=True,
         )
-    except subprocess.TimeoutExpired:
-        return "", f"command timed out after {timeout_s:.0f}s"
     except (OSError, ValueError) as exc:
         return "", f"could not execute: {exc}"
-    out = (p.stdout or "").strip()
+    _attach_to_running(p)
+    try:
+        stdout, stderr = p.communicate(f"{system}\n\n{user}", timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        _abort(p)
+        p.communicate()
+        return "", f"command timed out after {timeout_s:.0f}s"
+    except OSError as exc:
+        _abort(p)
+        return "", f"could not execute: {exc}"
+    out = (stdout or "").strip()
     if p.returncode != 0:
-        return "", (f"command exited {p.returncode}: {((p.stderr or '') + out).strip()[:300]}")
+        return "", (f"command exited {p.returncode}: {((stderr or '') + out).strip()[:300]}")
     if not out:
         return "", "command produced no output on stdout"
     return out, ""
@@ -767,6 +876,59 @@ def _absorb_chunk(
     return findings
 
 
+def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[tuple[str, str]]:
+    """(content, error) for every chunk: chunks in parallel, ``rev.hedge`` copies each.
+
+    Up to ``rev.max_concurrency`` requests are in flight. Every chunk's first copy is
+    queued before any chunk's second, so a narrow cap spends itself on coverage before
+    speculation. A chunk is settled by its first copy to come back ON CONTRACT -- the
+    others are cancelled (`_Cancel`) and any still queued never start -- or, if every
+    copy failed, by its first failure, reported exactly as a sequential review would.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    hedge = max(1, int(rev.hedge))
+    cap = max(1, int(rev.max_concurrency))
+    n = len(users)
+    tokens = {(i, c): _Cancel() for i in range(n) for c in range(hedge)}
+    settled: dict[int, tuple[str, str]] = {}
+    first_failure: dict[int, tuple[str, str]] = {}
+    left = dict.fromkeys(range(n), hedge)
+
+    def attempt(i: int, c: int) -> tuple[str, str] | None:
+        if i in settled:
+            return None  # another copy already won; never start this one
+        remaining = rev.total_budget_s - (time.time() - started)
+        if remaining <= 0:
+            return "", f"total budget {rev.total_budget_s}s exhausted before it started"
+        _running.cancel = tokens[(i, c)]
+        try:
+            return _chat(rev, system, users[i], min(rev.timeout_s, remaining))
+        finally:
+            _running.cancel = None
+
+    order = [(i, c) for c in range(hedge) for i in range(n)]
+    with ThreadPoolExecutor(max_workers=min(cap, len(order))) as pool:
+        futures = {pool.submit(attempt, i, c): (i, c) for i, c in order}
+        for fut in as_completed(futures):
+            i, c = futures[fut]
+            got = fut.result()
+            if got is None or i in settled:
+                continue
+            left[i] -= 1
+            content, err = got
+            if not err and content and parse(content)[1]:
+                settled[i] = got
+                for other in range(hedge):
+                    if other != c:
+                        tokens[(i, other)].cancel()
+            elif left[i] == 0:
+                settled[i] = first_failure.get(i, got)
+            else:
+                first_failure.setdefault(i, got)
+    return [settled[i] for i in range(n)]
+
+
 def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
     """Start a local server if one is configured and is not already answering.
 
@@ -881,16 +1043,9 @@ def review(
         res.status, res.reason = ERROR, str(exc)
         return res
 
-    all_raw: list[str] = []
-    for i, chunk in enumerate(chunks, 1):
-        remaining = rev.total_budget_s - (time.time() - started)
-        if remaining <= 0:
-            res.reason = (
-                f"total budget {rev.total_budget_s}s exhausted after {i - 1}/{len(chunks)} chunk(s)"
-            )
-            break
-        try:
-            user = P.render(
+    try:
+        users = [
+            P.render(
                 user_tmpl,
                 intent=intent,
                 context=context,
@@ -898,11 +1053,16 @@ def review(
                 chunk_index=i,
                 chunk_total=len(chunks),
             )
-        except P.TemplateError as exc:
-            res.status, res.reason = ERROR, f"review_user template: {exc}"
-            return res
+            for i, chunk in enumerate(chunks, 1)
+        ]
+    except P.TemplateError as exc:
+        res.status, res.reason = ERROR, f"review_user template: {exc}"
+        return res
 
-        content, err = _chat(rev, system, user, min(rev.timeout_s, remaining))
+    all_raw: list[str] = []
+    # Absorbed in CHUNK order whatever order they finished in, so the findings, the raw
+    # transcript and the first reported failure do not depend on which copy was quick.
+    for i, (content, err) in enumerate(_race(rev, system, users, started), 1):
         note = _absorb_chunk(res, i, len(chunks), content, err, all_raw)
         if note is not None and on_chunk:
             on_chunk(i, len(chunks), note)

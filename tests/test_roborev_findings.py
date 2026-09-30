@@ -97,7 +97,8 @@ def test_the_container_host_rewrite_applies_to_every_reviewer_backend(monkeypatc
         seen.append(req.full_url)
         raise _Boom("not really opening a socket")
 
-    monkeypatch.setattr(R.urllib.request, "urlopen", _fake_urlopen)
+    # Every reviewer request goes through `_open`'s opener (cancellable sockets).
+    monkeypatch.setattr(R._OPENER, "open", _fake_urlopen)
     R._post_json("http://127.0.0.1:11434/v1/messages", {}, {}, 5)
     assert seen and "127.0.0.1" not in seen[0], (
         f"inside a container the reviewer's loopback endpoint is the CONTAINER's "
