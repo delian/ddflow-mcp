@@ -251,6 +251,12 @@ def test_another_server_given_the_companion_as_an_argument_is_not_it():
         entry = {"command": "docker", "args": ["run", flag, "img-b", "img-a"]}
         assert not CO.launches_as(a, entry), flag
     assert not CO.launches_as(fs, {"command": "npx", "args": ["-y", "--quiet", *gh[1:]]})
+    # Found by the critic: a flag's VALUE equal to the companion's image is not the image.
+    assert not CO.launches_as(a, {"command": "docker", "args": ["run", "-e", "img-a", "alpine"]})
+    # Found by roborev on 5160e3e: common value-taking docker flags must be known ones.
+    for flag, value in (("-h", "host"), ("--gpus", "all"), ("--dns", "dns.example")):
+        entry = {"command": "docker", "args": ["run", flag, value, "img-a"]}
+        assert CO.launches_as(a, entry), flag
     # A flag with its value between them, and the server's own arguments after, still match.
     assert CO.launches_as(a, {"command": "docker", "args": ["run", "--env=X", "-i", "img-a"]})
     assert CO.launches_as(a, {"command": "docker", "args": ["run", "-e", "TOKEN", "img-a"]})
@@ -264,3 +270,15 @@ def test_a_cli_companion_on_rules_still_counts_beside_ddflow_memory(tmp_path):
     companion on a gate ddflow ALSO serves. Both are named; neither hides the other."""
     optmem = CO.Status(_reg(tmp_path)["optmem"], True, [], "")
     assert CO.gate_coverage(tmp_path, [optmem], ["rules"])["rules"] == [CO.BUILTIN_MEMORY, "optmem"]
+
+
+def test_register_does_not_refresh_a_stale_id_into_a_duplicate(tmp_path):
+    """Found by the critic: with a STALE entry under the id and the right launch under
+    another name, `register` rewrote the id to that launch -- two names, one server."""
+    stale = {"command": "docker", "args": ["run", "old/image"]}
+    _mcp_json(
+        tmp_path, {"codeguide": stale, "coding-guides": {"command": "docker", "args": CODEGUIDE}}
+    )
+    status, msg = CO.register(tmp_path, _reg(tmp_path)["codeguide"], "claude")
+    assert status == "unchanged" and "coding-guides" in msg, (status, msg)
+    assert json.loads((tmp_path / ".mcp.json").read_text())["mcpServers"]["codeguide"] == stale

@@ -393,9 +393,17 @@ def launches_as(c: Companion, entry: object) -> bool:
 #: companion. So only these consume a following token; any other flag is taken as
 #: boolean, and a value written `--flag=value` needs no entry here.
 _DOCKER_VALUE_FLAGS = frozenset(
-    {"-e", "--env", "--env-file", "-v", "--volume", "--mount", "-p", "--publish", "--name",
-     "--network", "--net", "-w", "--workdir", "-u", "--user", "-l", "--label",
-     "--platform", "--add-host", "--entrypoint", "--pull", "-m", "--memory", "--cpus"}
+    {"-a", "--attach", "--add-host", "--blkio-weight", "-c", "--cap-add", "--cap-drop",
+     "--cgroup-parent", "--cgroupns", "--cidfile", "--cpu-shares", "--cpus", "--cpuset-cpus",
+     "--device", "--device-cgroup-rule", "--dns", "--dns-option", "--dns-search",
+     "--domainname", "-e", "--entrypoint", "--env", "--env-file", "--expose", "--gpus",
+     "--group-add", "-h", "--health-cmd", "--hostname", "--ip", "--ip6", "--ipc",
+     "--isolation", "-l", "--label", "--label-file", "--link", "--log-driver", "--log-opt",
+     "-m", "--mac-address", "--memory", "--memory-swap", "--mount", "--name", "--net",
+     "--network", "--oom-score-adj", "-p", "--pid", "--platform", "--publish", "--pull",
+     "--restart", "--runtime", "--security-opt", "--shm-size", "--stop-signal",
+     "--stop-timeout", "--storage-opt", "--sysctl", "--tmpfs", "-u", "--ulimit", "--user",
+     "--userns", "--uts", "-v", "--volume", "--volumes-from", "-w", "--workdir"}
 )  # fmt: skip
 VALUE_FLAGS: dict[str, frozenset[str]] = {
     "docker": _DOCKER_VALUE_FLAGS,
@@ -688,9 +696,9 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
         # and re-running `companions add` -- the obvious remedy -- reported success and
         # did nothing.
         return "unchanged", f"{rel} already registers {c.id} with the same launch command"
-    if get_server(data, target.shape, c.id) is None and (
-        other := _launched_elsewhere((get_servers(data, target.shape), ""), c, rel)
-    ):
+    # Checked even when the id holds a STALE entry: refreshing it to this launch would
+    # start the server twice, once under each name. The other name already serves it.
+    if other := _launched_elsewhere((get_servers(data, target.shape), ""), c, rel):
         return "unchanged", other
     try:
         place_server(data, target.shape, c.id, c.entry())
