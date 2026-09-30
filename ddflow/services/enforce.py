@@ -33,7 +33,6 @@ import os
 import re
 import shlex
 import stat
-import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -92,14 +91,14 @@ def command_line(args: str, *, exec_: bool = False) -> str:
     script = shutil.which("ddflow")
     if script and not _running_from_source():
         return f'{run}"{script}" {args}'
-    from ..infra.paths import package_parent
+    from ..infra.paths import launch_parent, launch_python
 
-    pkg_parent = str(package_parent())
+    pkg_parent = str(launch_parent())
     # The environment prefix goes BEFORE `exec`: `exec VAR=x cmd` runs a command
     # literally named `VAR=x`.
     return (
         f'PYTHONPATH="{pkg_parent}${{PYTHONPATH:+:$PYTHONPATH}}" '
-        f'{run}"{sys.executable}" -m ddflow {args}'
+        f'{run}"{launch_python()}" -m ddflow {args}'
     )
 
 
@@ -189,7 +188,59 @@ def install(repo: Path, *, force: bool = False) -> str:
         # was fixed for in the same change (roborev 827).
         return first
     rest = [_install_one(d, n, t, inv, force) for n, (t, inv) in hooks.items() if n != "pre-commit"]
-    return "\n".join([first, *rest]).replace("REFUSED:", "NOT INSTALLED:")
+    note = redirect_note(command_line("hooks check-commit"))
+    return "\n".join([first, *rest, *([note] if note else [])]).replace(
+        "REFUSED:", "NOT INSTALLED:"
+    )
+
+
+def redirect_note(line: str | None = None) -> str:
+    """What the user must know about where launch lines point, or "".
+
+    When they point at the primary checkout rather than the linked worktree ddflow is
+    running from (`infra.paths.launch_parent`): they use the PRIMARY's code, not the code
+    running this command, until the branch merges -- and the interpreter, named when it
+    was swapped for the primary's, or warned about when it could not follow. When an
+    explicit `DDFLOW_LAUNCH_ROOT` holds no ddflow package: every line would fail. Given
+    the ``line`` actually written, nothing is said about one that embeds no path (an
+    installed `ddflow` script).
+    """
+    import os
+    import sys
+
+    from ..infra.paths import LAUNCH_ROOT_ENV, launch_parent, launch_python, redirected_from
+
+    if line is not None and "PYTHONPATH=" not in line:
+        return ""
+    forced = os.environ.get(LAUNCH_ROOT_ENV)
+    if forced and not (Path(forced) / "ddflow" / "__init__.py").is_file():
+        return (
+            f"WARNING: {LAUNCH_ROOT_ENV}={forced} holds no ddflow package, and the hooks "
+            f"and MCP entry written now point there: they will fail until it does."
+        )
+    tree = redirected_from()
+    if tree is None:
+        return ""
+    python = launch_python()
+    note = (
+        f"NOTE: ddflow is running from the linked worktree {tree}, which is removed when "
+        f"its branch merges; the hooks and MCP entry point at its primary checkout "
+        f"{launch_parent()} instead, so they run that checkout's code"
+    )
+    exe_dir = Path(os.path.abspath(python)).parent.resolve()
+    if exe_dir.is_relative_to(tree):
+        return note + (
+            f". WARNING: the interpreter {python} is still inside the worktree "
+            f"(the primary has no .venv): re-run this from the primary checkout."
+        )
+    if python != sys.executable:
+        whose = (
+            "the primary's interpreter"
+            if Path(python).is_relative_to(launch_parent())
+            else ("the interpreter")
+        )
+        note += f", with {whose} {python}"
+    return note + "."
 
 
 def uninstall(repo: Path) -> str:
