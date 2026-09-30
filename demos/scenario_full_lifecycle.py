@@ -857,6 +857,7 @@ def _act4_close_the_phase(sc, alpha, repo):
         ("dedupe", "no duplicated balance logic across money/entry/validate"),
         ("live_test", live.stdout.strip()),
         ("corrections", "B1's fix applied and merged"),
+        ("docs", "README documents Money, Account, Entry and validate"),
         ("merge", "all task branches landed"),
     ):
         alpha.tool("ddflow_gate_record", id="P1", gate=gate, outcome="passed", evidence=ev)
