@@ -1026,10 +1026,13 @@ def _retry_truncated(
         # `split_diff` drops a file section with no hunk that is larger than the limit
         # (a big rename or mode change): halves missing a file would let the chunk
         # count as reviewed without it, so such a chunk is retried whole.
-        if not pieces or not all(any(h in p for p in pieces) for h in _file_headers(chunks[i])):
+        headers = _file_headers(chunks[i])
+        # No header at all is not "every header kept": without one there is nothing to
+        # check the halves against, so the chunk goes again whole (roborev).
+        if not pieces or not headers or not all(any(h in p for p in pieces) for h in headers):
             pieces = [chunks[i]]
         parts += [(i, piece) for piece in pieces]
-    # Rendered the same way every first copy already was, so it cannot fail here.
+    # `render` is the renderer every first copy already went through.
     users = [render(piece, i + 1) for i, piece in parts]
     again = _race(rev, system, users, started)
     out = list(results)
@@ -1160,23 +1163,8 @@ def review(
         res.status, res.reason = ERROR, str(exc)
         return res
 
-    try:
-        users = [
-            P.render(
-                user_tmpl,
-                intent=intent,
-                context=context,
-                diff=chunk,
-                chunk_index=i,
-                chunk_total=len(chunks),
-            )
-            for i, chunk in enumerate(chunks, 1)
-        ]
-    except P.TemplateError as exc:
-        res.status, res.reason = ERROR, f"review_user template: {exc}"
-        return res
-
     def render(chunk: str, i: int) -> str:
+        # ONE renderer for the first pass and the truncation retry, so they cannot drift.
         return P.render(
             user_tmpl,
             intent=intent,
@@ -1185,6 +1173,12 @@ def review(
             chunk_index=i,
             chunk_total=len(chunks),
         )
+
+    try:
+        users = [render(chunk, i) for i, chunk in enumerate(chunks, 1)]
+    except P.TemplateError as exc:
+        res.status, res.reason = ERROR, f"review_user template: {exc}"
+        return res
 
     results = _retry_truncated(
         rev, system, chunks, _race(rev, system, users, started), render, started
