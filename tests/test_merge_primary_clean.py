@@ -75,10 +75,11 @@ def test_a_conflicting_merge_leaves_the_primary_clean(repo, item):
     assert code == OK, out + err
 
 
-def _install_check_commit_as_commit_msg(repo: Path) -> None:
+def _install_check_commit_as(repo: Path, name: str = "commit-msg") -> None:
     """What the pre-commit framework does with a `ddflow-check-commit` hook that names no
-    `stages:` -- runs it at the commit-msg stage too, which `git merge` invokes."""
-    hook = repo / ".git" / "hooks" / "commit-msg"
+    `stages:` -- runs it at the commit-msg stage too, which `git merge` invokes (and at
+    pre-merge-commit, where installed: there MERGE_HEAD is not written yet)."""
+    hook = repo / ".git" / "hooks" / name
     hook.write_text(
         f"#!/bin/sh\nPYTHONPATH={ROOT} exec {sys.executable} -m ddflow hooks check-commit\n"
     )
@@ -88,8 +89,9 @@ def _install_check_commit_as_commit_msg(repo: Path) -> None:
     _git(repo, "commit", "-qm", "policy", "--no-verify")
 
 
-def test_the_lease_hook_passes_ddflows_own_merge_commit(repo, item):
-    _install_check_commit_as_commit_msg(repo)
+@pytest.mark.parametrize("stage", ["commit-msg", "pre-merge-commit"])
+def test_the_lease_hook_passes_ddflows_own_merge_commit(repo, item, stage):
+    _install_check_commit_as(repo, stage)
     (item / "c.txt").write_text("branch\n")
     _git(item, "commit", "-qam", "branch edit", "--no-verify")
 
@@ -102,7 +104,7 @@ def test_the_lease_hook_passes_ddflows_own_merge_commit(repo, item):
 
 
 def test_a_hand_made_merge_commit_is_still_checked(repo, item):
-    _install_check_commit_as_commit_msg(repo)
+    _install_check_commit_as(repo)
     (item / "c.txt").write_text("branch\n")
     _git(item, "commit", "-qam", "branch edit", "--no-verify")
 
