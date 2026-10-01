@@ -1451,10 +1451,16 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
     # whichever was scanned LAST, and the bullet meant for the current lesson landed on
     # an unrelated old one that the uniquifier later renamed `L1-2` (rubber-duck).
     by_id: dict[str, list[Found]] = {}
+    by_key: dict[str, list[Found]] = {}
     for f in scanned:
         if f.kind == "lesson":
-            by_id.setdefault(_id_key(f.ident), []).append(f)
+            by_id.setdefault(f.ident, []).append(f)
+            by_key.setdefault(_id_key(f.ident), []).append(f)
+    # The spelling cited first (`L12` names the lesson headed `L12`), and only then the
+    # spelling-blind key (`L-12` also names it) -- so a corpus holding BOTH an `L12` and an
+    # `L-12` still resolves each exact citation instead of finding the key ambiguous.
     lessons = {i: fs[0] for i, fs in by_id.items() if len(fs) == 1}
+    keyed = {k: fs[0] for k, fs in by_key.items() if len(fs) == 1}
     attached = consolidated = 0
     generated: list[str] = []
     out: list[Found] = []
@@ -1466,7 +1472,9 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
             out.append(f)
             continue
         cites = f.extra.get("cites", [])
-        target = lessons.get(_id_key(cites[0])) if len(cites) == 1 else None
+        target = (
+            (lessons.get(cites[0]) or keyed.get(_id_key(cites[0]))) if len(cites) == 1 else None
+        )
         if target is not None and not target.extra.get("summary"):
             target.extra["summary"] = _summary_text(f.body, target.title)
             attached += 1
@@ -1557,8 +1565,9 @@ def scan_research(
 
 
 #: A research entry's own id, `R12` or `R-12`, kept like a lesson's (B-import-hyphen-ids).
-#: At most five digits: ddflow's own research ids are `R` + ten hex characters.
-_RESEARCH_HEAD = re.compile(r"^(R-?\d{1,5}[a-z]?)\b")
+#: Unhyphenated, at most five digits: ddflow's own research ids are `R` + ten hex
+#: characters. The id must END there (`R2-D2 — ...` and `R-12-3 — ...` are titles, not ids).
+_RESEARCH_HEAD = re.compile(r"^(R-\d+[a-z]?|R\d{1,5}[a-z]?)(?![-\w])")
 
 
 def _research_ident(title: str, _rel: str = "") -> str:
