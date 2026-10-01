@@ -265,3 +265,16 @@ def test_a_response_cut_off_mid_read_is_an_error_not_a_crash(monkeypatch, kind):
     rev = Reviewer(name="r", kind=kind, base_url="http://x", model="m", api_key_env="K")
     content, err = R._chat(rev, "s", "u", 5)
     assert content == "" and "IncompleteRead" in err, err
+
+
+@pytest.mark.parametrize("exc", ["InvalidURL", "BadStatusLine"])
+def test_other_http_client_errors_are_named_and_never_retried_as_truncation(monkeypatch, exc):
+    import http.client
+
+    def boom(*a, **k):
+        raise getattr(http.client, exc)("nonsense")
+
+    monkeypatch.setattr(R, "_open", boom)
+    content, err = R._chat(Reviewer(name="r", base_url="http://x", model="m"), "s", "u", 5)
+    assert content == "" and exc in err and "cut off" not in err, err
+    assert not err.startswith(R.TRUNCATED)
