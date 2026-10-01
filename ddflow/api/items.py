@@ -67,19 +67,21 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             "or an empty list to clear it.",
             id=item,
         )
-    rebound: dict[str, str] = {}
+    target = None
     if edit.worktree is not None:
         # Decided before anything is written: a refused rebind records no field either.
         target = _rebind_target(repo, cfg, st, it, edit.worktree, log.agent_id)
         if isinstance(target, O.Outcome):
             return target
-        rebound = _rebind(log, cfg, it, *target)
     if not fields:
+        rebound = _rebind(log, cfg, it, *target)
         return O.ok("item.updated", id=it.id, changed=["worktree"], fields={}, **rebound)
     out = _record_update(log, cfg, it, fields)
-    if rebound and out.exit == O.OK:
+    if target is not None and out.exit == O.OK:
+        # Only after the fields landed: a refused field edit records NOTHING, the rebind
+        # included -- and the rebind itself cannot be refused once `_rebind_target` passed.
+        out.data.update(_rebind(log, cfg, it, *target))
         out.data["changed"] = sorted([*out.data["changed"], "worktree"])
-        out.data.update(rebound)
     return out
 
 
@@ -106,18 +108,12 @@ def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
         same_repo = here is not None and W.repo_root(where) == W.repo_root(repo)
     except W.GitError:
         same_repo = False
-    if here is None or not same_repo:
+    if here is None or not same_repo:  # `W.current` is None for a detached HEAD too
         return O.refused(
             "item.updated",
-            f"{path} is not a linked worktree of this repository (the primary checkout is "
-            f"nobody's tree in particular). Name the worktree {it.id}'s work is in.",
-            id=it.id,
-        )
-    if not here.branch:
-        return O.refused(
-            "item.updated",
-            f"{here.path} has a detached HEAD: there is no branch to bind {it.id} to. "
-            f"Check out its branch there first.",
+            f"{path} is not a linked worktree of this repository on a branch (the primary "
+            f"checkout is nobody's tree in particular). Name the worktree {it.id}'s work "
+            f"is in, with its branch checked out.",
             id=it.id,
         )
     stored = W.store_path(repo, here.path)
