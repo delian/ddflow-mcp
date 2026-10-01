@@ -474,11 +474,49 @@ def _untitled(st) -> list[str]:
 
 
 def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
-    """The queue as a markdown board. The body is the document, on both surfaces."""
+    """The queue as a board: the markdown document (`text`, what MCP and a terminal
+    show) and the same rows as data (`phases`, `critical_path`) for `--json` -- which
+    used to print the markdown (B1f1d4f9f54)."""
+    from ..core.schedule import critical_path
+    from ..services.gates import pipeline_for
     from ..views import markdown as render_md
 
     _log, cfg, st = _load(repo, agent)
-    return O.ok("board", text=render_md.board(st, cfg, phase=phase), phase=phase)
+    phases = []
+    for ph in sorted(st.phases(), key=lambda p: (p.priority, p.id)):
+        if phase and ph.id != phase:
+            continue
+        tasks = [
+            {
+                "id": t.id,
+                "title": t.title,
+                "state": t.state,
+                "parent": t.parent,
+                "depth": render_md._depth(st, t, ph.id),
+                "needs": list(t.needs),
+                "globs": list(t.globs),
+                "owner": t.lease.holder if t.lease else "",
+                "gates": {g: t.gate_outcome(g) for g in pipeline_for(t, cfg)},
+            }
+            for t in render_md._nested(st, ph.id)
+        ]
+        phases.append(
+            {
+                "id": ph.id,
+                "title": ph.title,
+                "state": ph.state,
+                "needs": list(ph.needs),
+                "holder": ph.lease.holder if ph.lease else "",
+                "tasks": tasks,
+            }
+        )
+    return O.ok(
+        "board",
+        text=render_md.board(st, cfg, phase=phase),
+        phase=phase,
+        phases=phases,
+        critical_path=critical_path(st, phase),
+    )
 
 
 #: `render --show <name>` targets, and the function that produces each.
