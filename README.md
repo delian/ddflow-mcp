@@ -975,11 +975,18 @@ there is.
 > on Qwen3.8-Flash-Next over a 30 KB diff, a 6000-token budget produced **zero
 > characters of content** — the whole budget went to reasoning and the reply was
 > truncated. That case is reported as `TRUNCATED` with the remedy named, never as an
-> empty completion and never as a clean review.
+> empty completion and never as a clean review. A chunk lost that way on every copy is
+> tried once more, split in halves when it splits, before it is reported unreviewed.
+>
+> **Leave `temperature` unset** unless you mean to override the model. Unset, the request
+> carries none and the server applies the model's own recommended sampling. A reasoning
+> model sampled cold (ddflow used to send 0.3) can loop — "let me reconsider" — until
+> the whole budget is gone; at its vendor's recommended 1.0 the same diff reviewed fully.
 
 **Reviews run in parallel, and each chunk is raced.** A large diff is reviewed in chunks
-(`max_chunk_chars`). They go out together, up to `max_concurrency` requests in flight
-(default 4), so a review takes as long as its slowest chunk rather than the sum. Each
+(`max_chunk_chars`). They go out together — by default every chunk and every copy in one
+wave (up to 32 requests); `max_concurrency` caps it — so a review takes as long as its
+slowest chunk rather than the sum. Each
 chunk is also sent `hedge` times (default 2): the first copy that answers **on contract**
 is the chunk's review, and the rest are cancelled — the connection is closed so the
 server aborts the request, a `command` reviewer's process group is killed. A chunk whose
@@ -996,13 +1003,14 @@ went from 1 274 s (chunks in sequence) to the time of its slowest chunk.
 [[reviewer]]
 # ...
 hedge = 3             # copies per chunk; 1 turns racing off
-max_concurrency = 10  # requests in flight, across chunks and copies
+max_concurrency = 10  # cap on requests in flight; 0 (default) = all in one wave
 ```
 
 On a **metered API** a cancelled copy is still billed for what it generated before it
 was stopped: `hedge = 1` if cost matters more than time there. On a single-slot local
-server (an `ollama` with `OLLAMA_NUM_PARALLEL=1`) the extra copies simply queue behind the
-first ones, which are always sent first.
+server (an `ollama` with `OLLAMA_NUM_PARALLEL=1`) the extra copies queue behind the first
+ones, which are always sent first; there, set `max_concurrency` to the server's slots so a
+queued request's `timeout_s` does not run out while it waits.
 
 ### Companion tools
 

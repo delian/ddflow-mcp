@@ -212,7 +212,14 @@ class Reviewer:
     api_key_env: str = ""
     gates: list[str] = field(default_factory=lambda: ["critic"])
     enabled: bool = True
-    temperature: float = 0.3
+    #: Unset (the default) sends NO temperature, so the server applies the model's own
+    #: recommended sampling (vLLM reads it from the model's generation_config; an API
+    #: uses its default). ddflow used to send 0.3, and a reasoning model sampled that
+    #: cold loops: lesson Lf3feebf5d3 measured DeepSeek repeating "let me reconsider"
+    #: until all 64 000 tokens were gone, on every reasoning_effort tried, where the
+    #: vendor's 1.0 reviewed the same diff fully (bugs B568e9def3b, B769704d1dc). Set a
+    #: value only to override the model's own.
+    temperature: float | None = None
     #: Deliberately large. A REASONING model spends this budget thinking BEFORE it
     #: emits any content, so a budget sized for the answer alone produces
     #: `finish_reason: length` with an EMPTY content field -- a review that silently
@@ -237,8 +244,11 @@ class Reviewer:
     #: Requests in flight at once, across chunks and their copies. Chunks used to be sent
     #: one after another, so a review took the SUM of its chunks; in parallel it takes the
     #: slowest. On the measured vLLM server 8 concurrent requests were each 28% slower
-    #: with 5.7x the throughput. 4 is a default an ordinary local server can carry.
-    max_concurrency: int = 4
+    #: with 5.7x the throughput. 0 (the default) sends every chunk's copies in ONE wave,
+    #: up to `AUTO_CONCURRENCY_CEILING`: a fixed 4 ran a 5-chunk x hedge-2 review in
+    #: waves, 1 301-1 465 s against 1 122 s in one (bug B289bf87e8d). A positive value is
+    #: a cap, for a server with few slots whose queued requests would time out waiting.
+    max_concurrency: int = 0
     system_prompt_path: str = ""
     extra_body: dict[str, Any] = field(default_factory=dict)
     #: Extra environment for a kind="command" reviewer (e.g. a per-reviewer API key).
@@ -656,6 +666,19 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
         return None, f"bad response body: {exc}"
 
 
+def _temperature(rev: Reviewer) -> dict[str, float]:
+    """The request's temperature field: absent unless the reviewer entry sets one."""
+    return {} if rev.temperature is None else {"temperature": rev.temperature}
+
+
+#: Below this a reasoning model is sampled colder than vendors recommend (DeepSeek and
+#: Qwen thinking modes: 0.6-1.0), which is where looping-to-the-budget was measured.
+_COLD = 0.6
+
+#: Marks a `_truncated` reply, so a chunk lost to it can be told apart and retried.
+TRUNCATED = "TRUNCATED:"
+
+
 def _truncated(rev: Reviewer, *, reasoning_tokens: object = None) -> str:
     """The one way this package explains a reply that ran out of budget mid-thought.
 
@@ -673,9 +696,18 @@ def _truncated(rev: Reviewer, *, reasoning_tokens: object = None) -> str:
     detail = ""
     if reasoning_tokens not in (None, "", 0):
         detail = f" ({reasoning_tokens} of them reasoning)"
+    cold = (
+        f"[[reviewer]].temperature = {rev.temperature} is below what most reasoning "
+        f"models are tuned for, and a model sampled cold can loop until the budget is "
+        f"gone: remove it (the model's own default applies) or set the vendor's "
+        f"recommended value. Otherwise raise "
+        if rev.temperature is not None and rev.temperature < _COLD
+        else "If the model's vendor recommends a temperature, check the server applies "
+        "it ([[reviewer]].temperature sets one explicitly). Otherwise raise "
+    )
     return (
-        f"TRUNCATED: the model consumed all {rev.max_tokens} tokens{detail} before "
-        f"emitting any answer. This is UNAVAILABLE, not a clean review. Raise "
+        f"{TRUNCATED} the model consumed all {rev.max_tokens} tokens{detail} before "
+        f"emitting any answer. This is UNAVAILABLE, not a clean review. {cold}"
         f"[[reviewer]].max_tokens, or lower [[reviewer]].max_chunk_chars so each "
         f"chunk needs less thinking."
     )
@@ -691,7 +723,7 @@ def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> 
         {
             "model": rev.model,
             "max_tokens": rev.max_tokens,
-            "temperature": rev.temperature,
+            **_temperature(rev),
             "system": system,
             "messages": [{"role": "user", "content": user}],
             **rev.extra_body,
@@ -725,7 +757,7 @@ def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         {
             "systemInstruction": {"parts": [{"text": system}]},
             "contents": [{"role": "user", "parts": [{"text": user}]}],
-            "generationConfig": {"temperature": rev.temperature, "maxOutputTokens": rev.max_tokens},
+            "generationConfig": {**_temperature(rev), "maxOutputTokens": rev.max_tokens},
             **rev.extra_body,
         },
         {},
@@ -748,7 +780,7 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     payload: dict[str, Any] = {
         "model": rev.model,
         "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}],
-        "temperature": rev.temperature,
+        **_temperature(rev),
         "max_tokens": rev.max_tokens,
         **rev.extra_body,
     }
@@ -876,10 +908,23 @@ def _absorb_chunk(
     return findings
 
 
+#: The most requests `max_concurrency = 0` puts in flight at once. A server queues what
+#: it cannot run, so this bounds only threads and sockets, not what the server carries.
+AUTO_CONCURRENCY_CEILING = 32
+
+
+def _concurrency(rev: Reviewer, requests: int) -> int:
+    """Requests in flight for a review of ``requests`` chunks: the cap, or one wave."""
+    cap = int(rev.max_concurrency)
+    if cap > 0:
+        return cap
+    return max(1, min(requests * max(1, int(rev.hedge)), AUTO_CONCURRENCY_CEILING))
+
+
 def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[tuple[str, str]]:
     """(content, error) for every chunk: chunks in parallel, ``rev.hedge`` copies each.
 
-    Up to ``rev.max_concurrency`` requests are in flight. Every chunk's first copy is
+    Up to ``_concurrency(rev, len(users))`` requests are in flight. Every chunk's first copy is
     queued before any chunk's second, so a narrow cap spends itself on coverage before
     speculation. A chunk is settled by its first copy to come back ON CONTRACT -- the
     others are cancelled (`_Cancel`) and any still queued never start -- or, if every
@@ -890,8 +935,8 @@ def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[
     if not users:  # `review` refuses an empty diff first; this is for any other caller
         return []
     hedge = max(1, int(rev.hedge))
-    cap = max(1, int(rev.max_concurrency))
     n = len(users)
+    cap = _concurrency(rev, n)
     tokens = {(i, c): _Cancel() for i in range(n) for c in range(hedge)}
     settled: dict[int, tuple[str, str]] = {}
     first_failure: dict[int, tuple[str, str]] = {}
@@ -929,6 +974,47 @@ def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[
             else:
                 first_failure.setdefault(i, got)
     return [settled[i] for i in range(n)]
+
+
+def _retry_truncated(
+    rev: Reviewer,
+    system: str,
+    chunks: list[str],
+    results: list[tuple[str, str]],
+    render,
+    started: float,
+) -> list[tuple[str, str]]:
+    """Give a chunk that ran out of budget on EVERY copy one more round.
+
+    A reasoning model's thinking length is random per call and grows with the input,
+    so a chunk lost to `TRUNCATED` is retried once: in halves when it splits (by file,
+    then by hunk, as `split_diff` always does), whole when it does not. The chunk counts
+    as reviewed only if every part comes back on contract; the parts' replies are
+    joined into the chunk's one reply, so chunk counts and reports are unchanged. One
+    round only, inside `total_budget_s` -- this is a second draw, not a loop.
+    """
+    lost = [i for i, (_c, err) in enumerate(results) if err.startswith(TRUNCATED)]
+    if not lost:
+        return results
+    parts: list[tuple[int, str]] = []
+    for i in lost:
+        pieces = split_diff(chunks[i], max(1, (len(chunks[i]) + 1) // 2)) or [chunks[i]]
+        parts += [(i, piece) for piece in pieces]
+    # Rendered the same way every first copy already was, so it cannot fail here.
+    users = [render(piece, i + 1) for i, piece in parts]
+    again = _race(rev, system, users, started)
+    out = list(results)
+    for i in lost:
+        mine = [again[k] for k, (j, _p) in enumerate(parts) if j == i]
+        failed = next(((c, e) for c, e in mine if e or not c or not parse(c)[1]), None)
+        if failed is None:
+            out[i] = ("\n\n".join(c for c, _e in mine), "")
+            continue
+        note = f"retried once in {len(mine)} part(s), still unreviewed"
+        _c, err = failed
+        # An empty or off-contract part has no error of its own: report the truncation.
+        out[i] = ("", f"{err} ({note})" if err else f"{results[i][1]} ({note})")
+    return out
 
 
 def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
@@ -1061,10 +1147,23 @@ def review(
         res.status, res.reason = ERROR, f"review_user template: {exc}"
         return res
 
+    def render(chunk: str, i: int) -> str:
+        return P.render(
+            user_tmpl,
+            intent=intent,
+            context=context,
+            diff=chunk,
+            chunk_index=i,
+            chunk_total=len(chunks),
+        )
+
+    results = _retry_truncated(
+        rev, system, chunks, _race(rev, system, users, started), render, started
+    )
     all_raw: list[str] = []
     # Absorbed in CHUNK order whatever order they finished in, so the findings, the raw
     # transcript and the first reported failure do not depend on which copy was quick.
-    for i, (content, err) in enumerate(_race(rev, system, users, started), 1):
+    for i, (content, err) in enumerate(results, 1):
         note = _absorb_chunk(res, i, len(chunks), content, err, all_raw)
         if note is not None and on_chunk:
             on_chunk(i, len(chunks), note)
