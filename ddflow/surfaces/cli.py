@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from ..api import items as A_ITEMS
@@ -140,6 +141,9 @@ def cmd_item_update(a, c: Ctx) -> int:
             priority=a.priority,
             line=a.line,
             resources=None if a.resources is None else _csv(a.resources),
+            # Relative to where the caller stands, like any path typed in a shell.
+            # An empty value stays empty, for the api to refuse: abspath("") is the cwd.
+            worktree=a.worktree and os.path.abspath(a.worktree),
         ),
         agent=c.requested_agent,
     )
@@ -147,6 +151,8 @@ def cmd_item_update(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return out.exit
     msg = f"{a.id} updated: {', '.join(out.data['changed'])}"
+    if out.data.get("branch"):
+        msg += f"\n  now bound to {out.data['worktree']} on {out.data['branch']}"
     if "globs" in out.data["fields"]:
         # `--globs` REPLACES the list. Say what that took away: an agent widening its
         # claim with only the new paths otherwise drops the old ones from every
@@ -459,6 +465,11 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="REPLACES the item's globs (and a claimed item's lease) with these; " + GLOBS_HELP,
     )
     up.add_argument("--priority", type=int)
+    up.add_argument(
+        "--worktree",
+        help="rebind the item (and your live lease on it) to this linked worktree and the "
+        "branch checked out there -- the way out of a binding to the wrong tree",
+    )
     up.set_defaults(fn=cmd_item_update)
 
     nx = s.add_parser("next", help="what may start now (exit 2 = nothing actionable)")
@@ -592,6 +603,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     mg.add_argument("--message", default="")
     mg.add_argument("--keep", action="store_true")
     mg.add_argument("--allow-dirty", action="store_true")
+    mg.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="land a branch with no commits ahead of its target (refused by default: it "
+        "would record the item merged with nothing landed)",
+    )
     mg.add_argument(
         "--branch",
         default="",
@@ -1041,6 +1058,14 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="do not auto-start a local server for this reviewer",
     )
     rva.set_defaults(fn=cmd_reviewers)
+    rvp = rv_s.add_parser(
+        "approve",
+        help="a PERSON vouches for a tool-written reviewer entry (refused under an agent "
+        "identity); with no name, list the entries waiting (anyone may)",
+    )
+    rvp.add_argument("name", nargs="?", default="")
+    rvp.add_argument("--note", default="")
+    rvp.set_defaults(fn=cmd_reviewers)
     rvt = rv_s.add_parser("test", help="send a tiny known-buggy diff and check the reply")
     rvt.add_argument("name", nargs="?", default="")
     rvt.set_defaults(fn=cmd_reviewers)

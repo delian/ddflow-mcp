@@ -396,6 +396,13 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "have looked at what is dirty and decided it is build output.",
                 False,
             ),
+            "allow_empty": (
+                "boolean",
+                "Land a branch with no commits ahead of its target. Refused by default: "
+                "it would record the item merged with nothing landed -- usually the item "
+                "is bound to the wrong tree (rebind with ddflow_update worktree).",
+                False,
+            ),
             "branch": (
                 "string",
                 "For an item claimed with no_worktree: the branch to land. Default: the "
@@ -409,6 +416,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             a["id"],
             message=a.get("message", "") or "",
             allow_dirty=bool(a.get("allow_dirty")),
+            allow_empty=bool(a.get("allow_empty")),
             keep=bool(a.get("keep")),
             model=a.get("model", "") or "",
             branch=a.get("branch", "") or "",
@@ -2008,6 +2016,14 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "string clears.",
                 False,
             ),
+            "worktree": (
+                "string",
+                "Rebind the item -- and your live lease on it -- to this linked worktree "
+                "(absolute, or relative to the repository root) and the branch checked out "
+                "there. The way out of a binding to the wrong tree: re-claiming keeps the "
+                "item's recorded tree, and merge lands that tree's branch.",
+                False,
+            ),
         },
         # Typed, and the argv lambda that used to sit here is GONE rather than kept
         # "in case". The `api` branch runs first, so it was unreachable -- a second
@@ -2038,6 +2054,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 priority=a.get("priority"),
                 line=a.get("line"),
                 resources=_list_or_none(a, "resources"),
+                worktree=a.get("worktree"),
             ),
             agent=agent,
         ),

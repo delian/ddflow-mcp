@@ -570,6 +570,12 @@ class State:
     #: entry. What a rival add is compared against, and what becomes the first side of
     #: the contest when one arrives.
     definitions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: reviewer-entry digest -> who a TOOL wrote it as ({"name", "kind", "agent",
+    #: "person", "user", "at"}), and digest -> the person who approved it. A digest in
+    #: the first and not the second is a reviewer whose reviews do not count yet
+    #: (decision D-reviewer-trust). An entry no tool wrote appears in neither.
+    reviewer_writes: dict[str, dict[str, Any]] = field(default_factory=dict)
+    reviewer_approvals: dict[str, dict[str, Any]] = field(default_factory=dict)
     last_lamport: int = 0
     event_count: int = 0
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
@@ -1645,6 +1651,31 @@ def _h_cadence(st: State, ev: Event) -> None:
     )
 
 
+def _h_reviewer_configured(st: State, ev: Event) -> None:
+    dig = str(ev.data.get("digest", ""))
+    if dig:
+        st.reviewer_writes[dig] = {
+            "name": ev.subject,
+            "kind": ev.data.get("kind", ""),
+            "agent": ev.agent,
+            "person": bool(ev.data.get("person")),
+            "user": ev.data.get("user", ""),
+            "at": ev.ts,
+        }
+
+
+def _h_reviewer_approved(st: State, ev: Event) -> None:
+    dig = str(ev.data.get("digest", ""))
+    if dig:
+        st.reviewer_approvals[dig] = {
+            "name": ev.subject,
+            "user": ev.data.get("user", ""),
+            "host": ev.data.get("host", ""),
+            "note": ev.data.get("note", ""),
+            "at": ev.ts,
+        }
+
+
 #: kind -> handler. The single declaration of the event vocabulary.
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": lambda st, ev: _h_added(st, ev, "phase"),
@@ -1702,6 +1733,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "session.ended": _h_session_ended,
     "gate.out_of_order": _h_gate_out_of_order,
     "cadence.ran": _h_cadence,
+    "reviewer.configured": _h_reviewer_configured,
+    "reviewer.approved": _h_reviewer_approved,
 }
 
 
