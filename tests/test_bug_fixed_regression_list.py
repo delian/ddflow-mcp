@@ -37,6 +37,11 @@ def test_b():
 @pytest.mark.parametrize("n", ["x;y", "1,2"])
 def test_p(n):
     pass
+
+
+@pytest.mark.parametrize("v", ["x] y"])
+def test_q(v):
+    pass
 """
 
 A, B = "tests/test_fix.py::test_a", "tests/test_fix.py::test_b"
@@ -184,3 +189,18 @@ def test_the_fold_exposes_every_test_and_old_events_still_read(repo):
     assert st.bugs["B1"].regression_tests == [A, B]
     assert st.bugs["B1"].regression_test == f"{A}, {B}"
     assert st.bugs["B2"].regression_tests == [A]
+
+
+def test_a_parameter_holding_a_bracket_and_a_space_is_still_one_test(repo):
+    """pytest names it `test_q[x] y]`; a bracket-stripping check saw a space and refused."""
+    _setup(repo)
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_fix.py::test_q[x] y]")
+    assert out.exit == OK, out.reason
+
+
+def test_mcp_list_only_records_no_phantom_entry(repo):
+    from ddflow.surfaces.mcp import _regression_tests
+
+    assert _regression_tests({"regression_tests": [A]}) == [A]
+    assert _regression_tests({"regression_test": A}) == A
+    assert _regression_tests({"regression_test": A, "regression_tests": [B]}) == [A, B]

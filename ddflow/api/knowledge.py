@@ -501,8 +501,8 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         # `[...]`, and splitting them refused a real test (B-bfu-param-sep).
         wanted = names.split("[", 1)[0].split("::") if sep else []
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
-        # Whitespace outside the brackets is several tests in one entry, never one test:
-        # `t[1] other.py::t2` resolved `t` and accepted the unchecked rest (B227585c781).
+        # Several tests joined by whitespace are never one test: `a.py::t[1] a.py::t2`
+        # resolved `t` and accepted the unchecked rest (B227585c781).
         if (
             "" in wanted
             or _looks_like_several(entry)
@@ -513,14 +513,15 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
 
 
 def _looks_like_several(entry: str) -> bool:
-    """A node id whose test part holds whitespace: tests joined by spaces, not one test.
+    """A node id followed, after whitespace, by another test path: tests joined by
+    spaces, not one test (`a.py::t1 a.py::t2`, `a.py::t[1] a.py::t2`).
 
-    Only a refused entry is asked, so a command (unchecked, never refused) is not.
+    Asked of a node id whose path has no whitespace (a command never gets here). Decided
+    by what follows the space, not by stripping `[...]`: a parameter value may itself
+    hold `]` and a space (`t[x] y]`), and that is still one test.
     """
-    _path, _sep, names = entry.partition("::")
-    # Every bracketed parametrize id is cut, not everything after the first `[`: the
-    # space that joins `t[1] other.py::t2` comes after one.
-    return any(c.isspace() for c in re.sub(r"\[[^\]]*\]", "", names))
+    _first, *rest = entry.split()
+    return any("::" in tok or tok.endswith(".py") for tok in rest)
 
 
 def _split_outside_brackets(spec: str) -> list[str]:
