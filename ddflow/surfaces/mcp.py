@@ -2517,6 +2517,58 @@ def _list_or_none(args: dict[str, Any], key: str) -> list[str] | None:
     return csv_list(args[key]) if isinstance(args[key], str) else list(args[key])
 
 
+def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
+    """The JSON body of a call that did not do what was asked, led by WHY.
+
+    A refused call used to return the tool's SUCCESS projection: `claim` refused for an
+    overlap answered `{"item": null, "holder": null, "worktree": null, ...}` with the
+    reason only in a second block, and the data the refusal did carry (the alternatives
+    it names, the id) was projected away. An agent reading the first block — which is
+    what the wire contract tells a machine to read — saw a broken success (B9cf58aaeaa).
+
+    So a JSON object body leads with a `refusal` object (reason first, then outcome and
+    exit) on every REFUSAL (exit 3), and on any other non-zero exit whose declared shape
+    the operation did not fill — the null-padded success schema is the bug, whatever
+    the code. On exit 1 and 3 the rest is what the operation actually said: the declared
+    fields it set, plus every other wire field of its data, which is the structured
+    payload a refusal carries (claim's `alternatives`, later duplicate candidates). A
+    field it never set is not invented as null. Exit 2 keeps its declared keys after the
+    lead, since "nothing" is still that tool's answer (`heartbeat` with no lease).
+
+    An exit 1 or 2 body that fills its declared shape is a RESULT and is left alone,
+    byte-identical to the CLI's `--json`: `gate verify` fails WITH its results, `next` on
+    an empty queue and `companions` with gaps are answers. So is an array at any exit
+    (`loops` exits 1 with its findings). Their reason is the second content block.
+
+    `refusal` is a name no operation's data uses; `outcome` and `reason` are both wire
+    fields of some tools (`gate record`, `gate verify`) and could not lead unambiguously.
+    """
+    if out.exit == 0 or not isinstance(body, dict):
+        return body
+    from ..core.outcome import EXIT_NAMES, NOTHING, REFUSED
+
+    data = {k: v for k, v in out.data.items() if not k.startswith("_")}
+    projected = isinstance(payload_key, tuple)
+    padded = projected and any(k not in data for k in payload_key)
+    if out.exit != REFUSED and not padded:
+        return body
+    lead: dict[str, Any] = {
+        "refusal": {
+            "reason": out.reason,
+            "outcome": EXIT_NAMES.get(out.exit, str(out.exit)),
+            "exit": out.exit,
+        }
+    }
+    if out.exit == NOTHING:
+        said = dict(body)
+    else:
+        said = {k: v for k, v in body.items() if not projected or k in data}
+        if projected:
+            said.update({k: v for k, v in data.items() if k not in said})
+    said.pop("refusal", None)
+    return {**lead, **said}
+
+
 def _outcome_result(
     out: Any, payload_key: str | tuple[str, ...] = "", *, as_text: bool = False
 ) -> dict[str, Any]:
@@ -2563,7 +2615,7 @@ def _outcome_result(
             body = out.reason
         return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
 
-    body = json.dumps(out.body(payload_key), indent=2, default=str)
+    body = json.dumps(_refusal_body(out, payload_key, out.body(payload_key)), indent=2, default=str)
     result = _text(body, error=(out.exit == 1), meta={"exit": out.exit})
     if out.reason:
         # A SECOND content block, never a prefix. The reason used to be prepended to the
@@ -2579,7 +2631,10 @@ def _outcome_result(
         # change it was written to prevent") and it had one anyway.
         #
         # Both readers are served: a machine indexes `content[0]`, and a model is shown
-        # every block, so the reason still reaches the thing that has to act on it.
+        # every block, so the reason still reaches the thing that has to act on it. A
+        # refusal's JSON body ALSO leads with it (`_refusal_body`): the block a machine
+        # reads must not be the success shape in nulls (B9cf58aaeaa). The prose block
+        # stays, for the array bodies that cannot carry it and for a model reading text.
         # `_meta.exit` carries the code either way.
         result["content"].append({"type": "text", "text": out.reason})
     return result
