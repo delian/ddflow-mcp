@@ -483,6 +483,13 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     notes += [f"gate {f.gate} {f.detail}" for f in RT.failing_gates(RT.gate_rates(events), cfg)]
     notes += [f"cadence behind schedule: {r.render()}" for r in RT.stalled(st, cfg)]
     _dependency_findings(repo, cfg, st, problems, notes)
+    # Shared files (D-shared-globs): an append-only glob git does not union-merge, and a
+    # shared generated file with no merge strategy at all.
+    from ..services import shared_files as SF
+
+    shared_problems, shared_notes = SF.findings(repo, cfg)
+    problems += shared_problems
+    notes += shared_notes
 
     # The workflow's own coherence. A pipeline naming a gate that has no definition is the
     # one config error that is both silent and permanent -- every item entering the

@@ -223,3 +223,13 @@ def test_append_only_written_as_one_string_is_one_glob(repo):
         cfg.read_text().replace("[lease]\n", '[lease]\nappend_only_globs = "NEWS.md"\n', 1)
     )
     assert SF.sync_attributes(repo) == ["NEWS.md merge=union"]
+
+
+def test_doctor_reports_a_missing_union_line_and_notes_an_unmerged_generated_file(repo):
+    _project(repo, append='["docs/CHANGELOG.md"]', shared='["configs/default.toml"]')
+    (repo / ".gitattributes").write_text("")
+    code, out, err = run_cli(repo, "doctor")
+    text = out + err
+    assert code != O.OK, text
+    assert "docs/CHANGELOG.md" in text and "merge=union" in text, text
+    assert "configs/default.toml" in text and "regenerate" in text, text
