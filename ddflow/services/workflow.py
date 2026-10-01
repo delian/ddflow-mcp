@@ -257,10 +257,19 @@ def _policy_findings(cfg: Config) -> list[Finding]:
 
 
 def _project_findings(gates: dict[str, GateDef], root: Path) -> list[Finding]:
-    """What only the project's own files can show: a test gate using one core."""
+    """What only the project's own files can show: a test gate using one core, and a
+    `[[macro]]` -- an operator-defined workflow command -- that is not loaded.
+
+    The macro is a PROBLEM, not advice: the operator configured a command and no agent
+    can invoke it. Refused at load time and said nowhere, it was the silence of
+    B-macro-clash-silent: doctor exited 0 while every macro was gone.
+    """
+    from .macros import macro_problems
+
     tests = gates.get("unit_tests")
     advice = parallel_test_advice(tests.command, root) if tests else ""
-    return [Finding(ADVISORY, "unit_tests", advice)] if advice else []
+    out = [Finding(ADVISORY, "unit_tests", advice)] if advice else []
+    return out + [Finding(PROBLEM, "config", p) for p in macro_problems(root)]
 
 
 def _gate_kind(g) -> str:

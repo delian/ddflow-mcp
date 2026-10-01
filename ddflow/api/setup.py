@@ -602,18 +602,32 @@ def prompts(
     _log, cfg, _st = _load(repo, agent)
     overrides = P.overrides_from(cfg)
 
+    from ..services.macros import macro_problems
+
+    # Every configured macro that is NOT loaded, and why -- on the surface an operator
+    # reads, not only in doctor (B-macro-clash-silent).
+    problems = macro_problems(repo)
     if action == "list":
         rows = [
             {
                 "name": t.name,
                 "kind": t.kind,
                 "source": t.source,
-                "path": str(t.path),
+                # "" for an inline `[[macro]]`, which has no file: `str(None)` printed "None".
+                "path": str(t.path) if t.path else "",
                 "chars": len(t.text),
             }
             for t in P.list_all(repo, overrides)
         ]
-        return O.ok("prompts", rows=rows, action=action, text="", written=[], skipped=[])
+        return O.ok(
+            "prompts",
+            rows=rows,
+            action=action,
+            text="",
+            written=[],
+            skipped=[],
+            problems=problems,
+        )
     if action == "show":
         try:
             return O.ok(
@@ -623,6 +637,7 @@ def prompts(
                 text=P.resolve_any(name, repo, overrides).text,
                 written=[],
                 skipped=[],
+                problems=[p for p in problems if f"macro {name!r}" in p],
             )
         except P.TemplateError as exc:
             return O.failed(

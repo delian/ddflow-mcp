@@ -193,7 +193,10 @@ def cmd_prompts(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     action = out.data["action"]
+    problems = out.data.get("problems") or []
     if action == "show":
+        for p in problems:
+            print(f"note: {p}", file=sys.stderr)
         print(out.data["text"])
         return OK
     if action == "eject":
@@ -208,6 +211,10 @@ def cmd_prompts(a, c: Ctx) -> int:
         return OK
     rows = out.data["rows"]
     if c.json:
+        # The rows stay the document (its shape is what callers parse); what was not
+        # loaded goes beside it, where a human or a log still sees it.
+        for p in problems:
+            print(f"not loaded: {p}", file=sys.stderr)
         print(json.dumps(rows, indent=2))
         return OK
     # Grouped, because the two kinds are used for entirely different things: a template is
@@ -220,7 +227,13 @@ def cmd_prompts(a, c: Ctx) -> int:
             continue
         print(f"{title}:")
         for t in members:
-            print(f"  {t['name']:<24} [{t['source']:<7}] {t['path']}")
+            where = t["path"] or "inline [[macro]] in the .ddflow config"
+            print(f"  {t['name']:<24} [{t['source']:<7}] {where}")
+        print()
+    if problems:
+        print("Not loaded:")
+        for p in problems:
+            print(f"  {p}")
         print()
     print(
         "Edit any of them with `ddflow prompts eject <name>`, which copies the "

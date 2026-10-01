@@ -1414,11 +1414,32 @@ def _coerce(raw: Any, typ: Any) -> Any:
         # config still looked set.
         parsed = _maybe_json(raw, list)
         if parsed is not None:
-            return [str(x) for x in parsed]
+            # Refused, never `str()`-cast: `[null]` loaded as ["None"] (B7506c1124a).
+            # Only where the elements are declared strings; a list of anything else
+            # (`list[dict[str, str]]`) is returned as JSON gave it.
+            if not _is_exactly(ts, "list[str]"):
+                return parsed
+            if bad := [x for x in parsed if not isinstance(x, str)]:
+                raise ValueError(
+                    f"expected a JSON list of strings; got {json.dumps(bad[0])} in {raw!r}"
+                )
+            return parsed
         if "," not in raw:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
     return raw
+
+
+def _is_exactly(ts: str, want: str) -> bool:
+    """Is the type spelling ``want`` itself, optionally wrapped as Optional or ``| None``?
+
+    Not a substring test: `list[list[str]]` and `dict[str, dict[str, str]]` CONTAIN
+    `list[str]` and `dict[str, str]`, and their elements are not strings (rubber duck,
+    critic).
+    """
+    t = ts.replace(" ", "")
+    w = want.replace(" ", "")
+    return t in (w, f"Optional[{w}]", f"{w}|None", f"None|{w}")
 
 
 def _outer_is_dict(ts: str) -> bool:
@@ -1448,7 +1469,19 @@ def _coerce_dict(raw: str, ts: str) -> dict[str, Any]:
     parsed = _maybe_json(raw, dict)
     if parsed is not None:
         if "list" not in ts:
-            return {str(k): str(v) for k, v in parsed.items()}
+            # Refused, never `str()`-cast: `{"core": null}` loaded as {"core": "None"},
+            # a family nobody declared, in the map reviewer independence reads
+            # (B7506c1124a). Keys are strings already: JSON object keys always are.
+            # Only where the values are declared strings (critic): a map of anything
+            # else is returned as JSON gave it.
+            if not _is_exactly(ts, "dict[str, str]"):
+                return dict(parsed)
+            if bad := [k for k, v in parsed.items() if not isinstance(v, str)]:
+                raise ValueError(
+                    f"expected a JSON object of strings; {bad[0]!r} is "
+                    f"{json.dumps(parsed[bad[0]])} in {raw!r}"
+                )
+            return dict(parsed)
         # Refused HERE, not left to a per-knob check, and never `str()`-cast: a string
         # where the type says a list, or `null` where it says a word (read as "None"),
         # passed through as valid-looking strings (critic).
