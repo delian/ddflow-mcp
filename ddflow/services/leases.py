@@ -180,7 +180,7 @@ def glob_clash(
         other = state.items.get(other_id)
         if other is not None and line_key(state, other, cfg) != my_line:
             continue  # different release lines: different branches, no collision
-        pairs = conflicts(globs, lease.globs)
+        pairs = conflicts(globs, lease.globs, schedule.shared_globs(cfg))
         if pairs:
             return other_id, lease, pairs[0]
     return None

@@ -21,6 +21,8 @@ losing their work. The asymmetry is not close, so the comparison errs toward "ye
 
 from __future__ import annotations
 
+import functools
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -173,7 +175,97 @@ def globs_overlap(a: str, b: str) -> bool:
     return pa.startswith(pb) or pb.startswith(pa)
 
 
-def conflicts(mine: list[str], theirs: list[str]) -> list[tuple[str, str]]:
+def shared_globs(cfg: Config) -> list[str]:
+    """`[lease] shared_globs` and `append_only_globs`: paths many items may hold at once
+    (D-shared-globs)."""
+    lease = cfg.lease
+    return [*lease.shared_globs, *lease.append_only_globs]
+
+
+def _class_end(pat: str, i: int) -> int:
+    """Index of the `]` closing the class opened at ``pat[i]``, or -1 (then `[` is literal).
+
+    A `]` right after `[`, `[!` or `[^` is a MEMBER, as in git and Python: `[]]`, `[^]]`.
+    Taken as the closer, it left `[^]` -- an invalid regex that crashed a claim.
+    """
+    k = i + 1
+    if k < len(pat) and pat[k] in "!^":
+        k += 1
+    if k < len(pat) and pat[k] == "]":
+        k += 1
+    return pat.find("]", k)
+
+
+@functools.lru_cache(maxsize=256)
+def _gitattributes_re(pattern: str) -> re.Pattern[str]:
+    """``pattern`` as git matches it in `.gitattributes` (gitignore rules).
+
+    `*` and `?` stop at `/`; `**/` is any leading directories (none included), `/**` and
+    `**` anything below; a pattern with no `/` matches the name at any depth, one with a
+    `/` is anchored at the root. fnmatch's `*` crosses `/` and its `**/x` needs a `/`, so
+    it disagreed with the very line `merge=union` is written as (review finding).
+    """
+    anchored = "/" in pattern.rstrip("/")
+    pat = pattern.lstrip("/")
+    out: list[str] = []
+    i = 0
+    while i < len(pat):
+        # `**` is "any depth" only on a path boundary -- a leading `**/`, a `/**/`, a
+        # trailing `/**`; elsewhere it is two plain `*`s, which stop at `/` (gitignore(5)).
+        at_start = i == 0 or pat[i - 1] == "/"
+        if at_start and pat.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif at_start and pat.startswith("**", i) and i + 2 == len(pat):
+            out.append(".*")
+            i += 2
+        elif pat[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pat[i] == "?":
+            out.append("[^/]")
+            i += 1
+        elif pat[i] == "[" and _class_end(pat, i) != -1:
+            j = _class_end(pat, i)
+            body = pat[i + 1 : j].replace("\\", "\\\\")
+            # git negates with `[!...]` as well as `[^...]`; Python knows only `^`.
+            if body.startswith("!"):
+                body = "^" + body[1:]
+            out.append("[" + body + "]")
+            i = j + 1
+        else:
+            out.append(re.escape(pat[i]))
+            i += 1
+    return re.compile(("" if anchored else "(?:.*/)?") + "".join(out) + r"\Z")
+
+
+def is_shared(glob: str, shared: list[str]) -> bool:
+    """Is ``glob`` (a claim's glob or a staged path) INSIDE one of the ``shared`` globs?
+
+    Inside, not overlapping: `docs/**` merely overlaps a shared `docs/CHANGELOG.md` and
+    still claims the rest of `docs/`, so it stays exclusive. Matched as git matches the
+    `.gitattributes` line (`_gitattributes_re`), so "shared" and "merged with union" agree.
+    """
+    for s in shared:
+        try:
+            if glob == s or _gitattributes_re(s).match(glob):
+                return True
+        except re.error:
+            continue  # a pattern git would read and we cannot: equality only, never a crash
+    return False
+
+
+def conflicts(
+    mine: list[str], theirs: list[str], shared: list[str] | None = None
+) -> list[tuple[str, str]]:
+    """Overlapping pairs between two glob lists; a glob inside ``shared`` overlaps nothing.
+
+    Every parallel item edits a changelog; exclusive leases on it serialised them all
+    or pushed agents to commit it unleased (B07878037ab).
+    """
+    shared = shared or []
+    mine = [a for a in mine if not is_shared(a, shared)]
+    theirs = [b for b in theirs if not is_shared(b, shared)]
     return [(a, b) for a in mine for b in theirs if globs_overlap(a, b)]
 
 
@@ -448,7 +540,7 @@ def item_blocker(
             # Different release lines are different branches: `src/x.py` on 2.x and on
             # 3.x cannot collide, and refusing it would serialise every port behind its fix.
             continue
-        pairs = conflicts(it.globs, lease.globs)
+        pairs = conflicts(it.globs, lease.globs, shared_globs(cfg))
         if pairs:
             return Blocked(
                 it.id,

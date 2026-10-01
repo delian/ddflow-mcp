@@ -638,6 +638,11 @@ def init_files(repo: Path) -> list[str]:
         repo / ".gitattributes", frozenset({UNION_MERGE_LINE.strip()}), UNION_MERGE_LINE
     ):
         actions.append("added merge=union for .ddflow/events/*.jsonl to .gitattributes")
+    # `[lease] append_only_globs` get their union line too (D-shared-globs): re-synced
+    # here, so a config edited by hand is caught up by `init` / `adopt`.
+    from . import shared_files as SF
+
+    actions += [f"added '{ln}' to .gitattributes" for ln in SF.sync_attributes(repo)]
     return actions
 
 

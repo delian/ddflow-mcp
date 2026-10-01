@@ -45,6 +45,9 @@ class LeaseConfig:
     grace_s: int = 120
     acquire_timeout_s: int = 30
     reclaim_policy: str = "report"  # report | auto
+    #: Paths many items may hold at once (D-shared-globs). See the knob docs below.
+    shared_globs: list[str] = field(default_factory=list)
+    append_only_globs: list[str] = field(default_factory=list)
 
 
 _doc(
@@ -66,6 +69,16 @@ _doc(
     "lease",
     "acquire_timeout_s",
     "How long to block on the flock arbitrating lease acquisition before giving up. On NFS a contended acquire measured ~135 ms, so 30 s is ~200x headroom.",
+)
+_doc(
+    "lease",
+    "shared_globs",
+    'Files EVERY item edits that ddflow must not merge for you -- generated files (a regenerated config, a lockfile): ["configs/default.toml"]. A path inside one of these is exempt from lease-overlap checks (claim, update, next, wait) and counts as covered for any agent holding a live lease at commit time. ddflow does NOT write a merge driver for them: union-merging a generated file interleaves it. Regenerate it after merging, or declare a driver yourself in .gitattributes; doctor notes a shared glob that has none. For append-only files (a changelog) use append_only_globs instead.',
+)
+_doc(
+    "lease",
+    "append_only_globs",
+    'Files every item APPENDS to -- a changelog, a research log: ["docs/CHANGELOG.md"]. Shared like shared_globs (no lease-overlap check; covered for any live lease holder), and ddflow WRITES "<glob> merge=union" to .gitattributes for each one, so two items\' added lines both survive the merge. Written when this is set through `ddflow config --set/--append-toml` (or ddflow_configure), and re-synced by `ddflow init`/`adopt` after a hand edit; .gitattributes is tracked, so commit it with the config. Only globs in the COMMITTED config get a line: one set with --local is this machine\'s and writes no rule for every clone. doctor reports a missing line.',
 )
 _doc(
     "lease",
