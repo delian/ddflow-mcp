@@ -273,6 +273,48 @@ class _PrintVersion(argparse.Action):
         parser.exit()
 
 
+def _accept_global_options_anywhere(root: argparse.ArgumentParser) -> None:
+    """`--repo`, `--agent` and `--json` after the subcommand as well as before it.
+
+    They lived on the root parser only, so `ddflow brief --agent X` failed "unrecognized
+    arguments" while `ddflow --agent X brief` worked -- and agents append flags, told by
+    every driver to "pass --agent on every call" without being told where (B9811d8617c).
+    Copied onto every subparser, nested ones included, with `default=SUPPRESS`: given
+    after the subcommand it sets the same attribute (and wins over one given before),
+    and absent there it leaves the root's value alone instead of resetting it.
+    """
+    # Derived from the root, so a global option added there later is accepted after the
+    # subcommand too, instead of drifting from a second hand-kept list.
+    mirrored = []
+    for action in root._actions:
+        if not action.option_strings or isinstance(
+            action, (argparse._HelpAction, argparse._SubParsersAction, _PrintVersion)
+        ):
+            continue
+        kwargs: dict = {"dest": action.dest, "default": argparse.SUPPRESS}
+        if isinstance(action, argparse._StoreTrueAction):
+            kwargs["action"] = "store_true"
+        elif type(action) is not argparse._StoreAction:
+            raise TypeError(f"global option {action.option_strings} cannot be mirrored")
+        mirrored.append((action.option_strings, kwargs))
+    seen: set[int] = set()
+
+    def walk(parser: argparse.ArgumentParser) -> None:
+        for action in parser._actions:
+            if not isinstance(action, argparse._SubParsersAction):
+                continue
+            for sub in action.choices.values():
+                if id(sub) in seen:  # an alias is the same parser under another name
+                    continue
+                seen.add(id(sub))
+                for flags, kwargs in mirrored:
+                    if not set(flags) & set(sub._option_string_actions):
+                        sub.add_argument(*flags, help=argparse.SUPPRESS, **kwargs)
+                walk(sub)
+
+    walk(root)
+
+
 def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     # PLR0915 (statement count), suppressed HERE rather than for the whole file. argparse
     # construction is inherently one long sequence of near-identical statements, and
@@ -1158,6 +1200,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     s.add_parser("mcp", help="run the MCP stdio server over this repository").set_defaults(
         fn=cmd_mcp
     )
+    _accept_global_options_anywhere(p)
     return p
 
 
