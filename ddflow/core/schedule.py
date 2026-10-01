@@ -21,6 +21,7 @@ losing their work. The asymmetry is not close, so the comparison errs toward "ye
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -180,13 +181,49 @@ def shared_globs(cfg: Config) -> list[str]:
     return [*lease.shared_globs, *lease.append_only_globs]
 
 
+def _gitattributes_re(pattern: str) -> re.Pattern[str]:
+    """``pattern`` as git matches it in `.gitattributes` (gitignore rules).
+
+    `*` and `?` stop at `/`; `**/` is any leading directories (none included), `/**` and
+    `**` anything below; a pattern with no `/` matches the name at any depth, one with a
+    `/` is anchored at the root. fnmatch's `*` crosses `/` and its `**/x` needs a `/`, so
+    it disagreed with the very line `merge=union` is written as (review finding).
+    """
+    anchored = "/" in pattern.rstrip("/")
+    pat = pattern.lstrip("/")
+    out: list[str] = []
+    i = 0
+    while i < len(pat):
+        if pat.startswith("**/", i):
+            out.append("(?:.*/)?")
+            i += 3
+        elif pat.startswith("**", i):
+            out.append(".*")
+            i += 2
+        elif pat[i] == "*":
+            out.append("[^/]*")
+            i += 1
+        elif pat[i] == "?":
+            out.append("[^/]")
+            i += 1
+        elif pat[i] == "[" and "]" in pat[i + 1 :]:
+            j = pat.index("]", i + 1)
+            out.append("[" + pat[i + 1 : j].replace("\\", "\\\\") + "]")
+            i = j + 1
+        else:
+            out.append(re.escape(pat[i]))
+            i += 1
+    return re.compile(("" if anchored else "(?:.*/)?") + "".join(out) + r"\Z")
+
+
 def is_shared(glob: str, shared: list[str]) -> bool:
     """Is ``glob`` (a claim's glob or a staged path) INSIDE one of the ``shared`` globs?
 
     Inside, not overlapping: `docs/**` merely overlaps a shared `docs/CHANGELOG.md` and
-    still claims the rest of `docs/`, so it stays exclusive.
+    still claims the rest of `docs/`, so it stays exclusive. Matched as git matches the
+    `.gitattributes` line (`_gitattributes_re`), so "shared" and "merged with union" agree.
     """
-    return any(glob == s or fnmatch(glob, s) for s in shared)
+    return any(glob == s or _gitattributes_re(s).match(glob) for s in shared)
 
 
 def conflicts(

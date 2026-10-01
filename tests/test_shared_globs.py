@@ -183,3 +183,43 @@ def test_a_bare_merge_attribute_is_not_a_union(repo):
     )
     assert code == O.OK, err
     assert "docs/CHANGELOG.md merge=union" in _attributes(repo)
+
+
+def test_shared_globs_match_as_git_matches_the_attributes_line():
+    from ddflow.core.schedule import is_shared
+
+    assert is_shared("CHANGELOG.md", ["**/CHANGELOG.md"])  # git's **/ includes the root
+    assert is_shared("pkg/CHANGELOG.md", ["CHANGELOG.md"])  # no slash: any depth
+    assert is_shared("docs/b.md", ["docs/*.md"])
+    assert not is_shared("docs/a/b.md", ["docs/*.md"])  # git's * stops at /
+
+
+def test_a_driver_the_project_chose_is_left_alone_and_named(repo):
+    run_cli(repo, "init")
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("CHANGELOG.md merge=union\n*.md merge=ours\n")
+    before = _attributes(repo)
+    code, _o, err = run_cli(repo, "config", "--set", "lease.append_only_globs", '["CHANGELOG.md"]')
+    assert code == O.OK, err
+    assert _attributes(repo) == before, "rewrote the project's own driver"
+    problems, notes = SF.findings(repo, Config.load(repo))
+    assert problems == [] and any("merge=ours" in n for n in notes), (problems, notes)
+
+
+def test_a_driver_from_a_broader_pattern_counts(repo):
+    run_cli(repo, "init")
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("*.md merge=union\n")
+    before = _attributes(repo)
+    assert run_cli(repo, "config", "--set", "lease.append_only_globs", '["NEWS.md"]')[0] == 0
+    assert _attributes(repo) == before
+    assert SF.findings(repo, Config.load(repo)) == ([], [])
+
+
+def test_append_only_written_as_one_string_is_one_glob(repo):
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text().replace("[lease]\n", '[lease]\nappend_only_globs = "NEWS.md"\n', 1)
+    )
+    assert SF.sync_attributes(repo) == ["NEWS.md merge=union"]

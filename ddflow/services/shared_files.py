@@ -28,34 +28,28 @@ def union_line(glob: str) -> str:
     return f"{glob} merge=union"
 
 
-def _attribute_lines(repo: Path) -> list[list[str]]:
-    p = Path(repo) / ".gitattributes"
-    if not p.exists():
-        return []
-    rows = []
-    for line in p.read_text("utf-8").splitlines():
-        parts = line.split()
-        if parts and not parts[0].startswith("#"):
-            rows.append(parts)
-    return rows
+def driver(repo: Path, glob: str) -> str:
+    """The merge driver git applies to ``glob`` -- `union`, `ours`, ... -- or "" for none.
 
-
-def _driver(rows: list[list[str]], glob: str) -> str:
-    """The merge driver `.gitattributes` names for ``glob`` (`merge=<driver>`), or "".
-
-    One pattern per line, the first token (gitattributes(5)); the LAST matching line
-    wins, as in git. A bare `merge` or `-merge` names no driver -- the default text merge
-    or none -- so it does not count as a strategy for a shared file.
+    Asked of git (`git check-attr merge`), not read off the file: patterns match like
+    gitignore and the LAST matching line wins across different patterns, so a later
+    `*.md merge=ours` overrides `CHANGELOG.md merge=union` (review finding). The glob is
+    passed as a path, which for a literal path is exact and for a pattern is the pattern's
+    own name -- covered by the same lines that cover the files it names. A bare `merge`
+    (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; so is a git that
+    cannot answer.
     """
-    found = ""
-    for r in rows:
-        if r[0] == glob:
-            for a in r[1:]:
-                if a.startswith("merge="):
-                    found = a.split("=", 1)[1]
-                elif a in ("merge", "-merge", "!merge"):
-                    found = ""
-    return found
+    from ..infra import proc as P
+
+    r = P.run(
+        ["git", "-C", str(repo), "check-attr", "merge", "--", glob],
+        capture_output=True,
+        text=True,
+    )
+    if r.returncode != 0:
+        return ""
+    value = r.stdout.strip().rsplit(": ", 1)[-1] if r.stdout.strip() else ""
+    return "" if value in ("", "unspecified", "set", "unset") else value
 
 
 def committed_append_only(repo: Path) -> list[str]:
@@ -72,6 +66,10 @@ def committed_append_only(repo: Path) -> list[str]:
     except (OSError, tomllib.TOMLDecodeError):
         return []
     globs = data.get("lease", {}).get("append_only_globs", [])
+    if isinstance(globs, str):
+        globs = [globs]  # hand-written as one string: iterated, it wrote a rule per letter
+    if not isinstance(globs, list):
+        return []
     return [g for g in globs if isinstance(g, str) and g.strip()]
 
 
@@ -87,8 +85,8 @@ def sync_attributes(repo: Path) -> list[str]:
 
     added: list[str] = []
     for glob in committed_append_only(repo):
-        if _driver(_attribute_lines(repo), glob):
-            continue
+        if driver(repo, glob):
+            continue  # union already, or a driver the project chose -- doctor says which
         line = union_line(glob)
         if _append_once(Path(repo) / ".gitattributes", frozenset({line}), line + "\n"):
             added.append(line)
@@ -103,20 +101,29 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     A NOTE: a shared (generated) glob with no merge attribute -- not wrong, but every
     parallel merge of it will conflict until someone regenerates it.
     """
-    rows = _attribute_lines(repo)
-    problems = [
-        f"[lease] append_only_globs has {g!r} but .gitattributes has no merge attribute "
-        f"for it, so parallel items' lines conflict at merge. `ddflow init` (or setting "
-        f"the knob again with `ddflow config --set`) writes '{union_line(g)}'; commit it."
-        for g in committed_append_only(repo)
-        if not _driver(rows, g)
-    ]
-    notes = [
+    problems: list[str] = []
+    notes: list[str] = []
+    for g in committed_append_only(repo):
+        d = driver(repo, g)
+        if not d:
+            problems.append(
+                f"[lease] append_only_globs has {g!r} but git applies no merge driver to "
+                f"it, so parallel items' lines conflict at merge. `ddflow init` (or setting "
+                f"the knob again with `ddflow config --set`) writes '{union_line(g)}'; "
+                f"commit it."
+            )
+        elif d != "union":
+            notes.append(
+                f"[lease] append_only_globs has {g!r}, but .gitattributes gives it "
+                f"merge={d}, not union: parallel items' added lines may be dropped or "
+                f"conflict. ddflow leaves a driver the project chose alone."
+            )
+    notes += [
         f"[lease] shared_globs has {g!r} with no merge strategy in .gitattributes: "
         f"parallel items will conflict on it at merge. If it is generated, regenerate it "
         f"after merging; if it is append-only, move it to append_only_globs (ddflow then "
         f"writes merge=union); or declare a driver yourself ('{g} merge=<driver>')."
         for g in cfg.lease.shared_globs
-        if not _driver(rows, g)
+        if not driver(repo, g)
     ]
     return problems, notes
