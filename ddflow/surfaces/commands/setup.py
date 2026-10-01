@@ -152,6 +152,7 @@ def cmd_config(a, c: Ctx) -> int:
             append_toml=a.append_toml or "",
             filter=a.filter or "",
             explain=bool(a.explain),
+            local=bool(getattr(a, "local", False)),
         ),
         agent=c.requested_agent,
     )
@@ -159,9 +160,10 @@ def cmd_config(a, c: Ctx) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if a.set:
+        where = f"   (in {out.data['path']}, not committed)" if out.data.get("local") else ""
         c.out(
-            f"{out.data['key']} = {out.data['literal']}",
-            out.body(("key", "value", "path")),
+            f"{out.data['key']} = {out.data['literal']}{where}",
+            out.body(("key", "value", "path", "local")),
         )
         return OK
     if a.append_toml:

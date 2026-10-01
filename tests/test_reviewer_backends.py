@@ -235,7 +235,8 @@ def test_reviewers_add_writes_a_block_without_the_key(repo):
     run_cli(repo, "init")
     code, out, _ = run_cli(repo, "reviewers", "add", "--preset", "openai", "--model", "gpt-5")
     assert code == 0
-    cfg = (repo / ".ddflow" / "config.toml").read_text()
+    # Machine-local by default (decision D-no-own-services-local-dir).
+    cfg = (repo / ".ddflow" / "local" / "reviewers.toml").read_text()
     assert 'api_key_env = "OPENAI_API_KEY"' in cfg
     assert "sk-" not in cfg
     assert "OPENAI_API_KEY" in out, "the operator must be told to set the variable"

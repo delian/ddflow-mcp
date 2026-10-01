@@ -857,6 +857,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         default="",
         help="append this TOML to .ddflow/config.toml (validated first)",
     )
+    cf.add_argument(
+        "--local",
+        action="store_true",
+        help="write --set/--append-toml to the git-ignored .ddflow/local/config.toml: "
+        "this machine's endpoints, hosts, key variables and sizing, never committed",
+    )
     cf.set_defaults(fn=cmd_config)
 
     cd = s.add_parser("cadence", help="which periodic passes are due (exit 2 = none)")
@@ -910,7 +916,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rvd.add_argument(
         "--write",
         action="store_true",
-        help="append the discovered reviewers to .ddflow/config.toml",
+        help="append the discovered reviewers to the git-ignored .ddflow/local/reviewers.toml",
+    )
+    rvd.add_argument(
+        "--shared",
+        action="store_true",
+        help="with --write: commit them to .ddflow/config.toml instead, for every clone",
     )
     rvd.set_defaults(fn=cmd_reviewers)
     rv_s.add_parser("list").set_defaults(fn=cmd_reviewers)
@@ -921,6 +932,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rva.add_argument("--model", default="")
     rva.add_argument("--base-url", default="")
     rva.add_argument("--gates", default="")
+    rva.add_argument(
+        "--shared",
+        action="store_true",
+        help="write to the committed .ddflow/config.toml instead of the git-ignored "
+        ".ddflow/local/reviewers.toml -- only for a reviewer every clone should use",
+    )
     rva.add_argument(
         "--no-launch",
         action="store_true",
