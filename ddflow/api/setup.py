@@ -213,13 +213,19 @@ def companions_add(repo: Path, reg: Registration | None = None, *, agent: str = 
 
 @dataclass
 class ConfigEdit:
-    """One config change, or a read. `set`+`value` OR `append_toml`, never both."""
+    """One config change, or a read. `set`+`value` OR `append_toml`, never both.
+
+    `local` sends the change to the git-ignored `.ddflow/local/config.toml`: this
+    machine's endpoints, hosts, keys' variable names and sizing. Without it the change
+    goes to the committed `.ddflow/config.toml`, which every clone receives.
+    """
 
     set: str = ""
     value: str = ""
     append_toml: str = ""
     filter: str = ""
     explain: bool = False
+    local: bool = False
 
 
 def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") -> O.Outcome:
@@ -228,17 +234,14 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     An append is validated against the MERGED text — see the module docstring for why
     validating what is already on disk checks nothing.
     """
-    import tomllib
-
-    from ..config import Config
-    from ..infra import tomlcfg as TC
-    from ..services.configwrite import _toml_literal, _write_config
+    from ..services.configwrite import _append_config, _toml_literal, _write_config, config_file
 
     edit = edit or ConfigEdit()
     _log, cfg, _st = _load(repo, agent)
+    target = str(config_file(repo, local=edit.local))
 
     if edit.set:
-        err, _text = _write_config(repo, [(edit.set, edit.value)])
+        err, _text = _write_config(repo, [(edit.set, edit.value)], local=edit.local)
         if err:
             return O.failed("config", err, key=edit.set, value=edit.value, rows=[], text="")
         return O.ok(
@@ -246,35 +249,27 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             key=edit.set,
             value=edit.value,
             literal=_toml_literal(edit.value),
-            path=str(repo / ".ddflow" / "config.toml"),
+            path=target,
+            local=edit.local,
             rows=[],
-            text=f"{edit.set} = {_toml_literal(edit.value)}",
+            text=f"{edit.set} = {_toml_literal(edit.value)}  ({target})",
         )
 
     if edit.append_toml:
         # Validated BEFORE writing: an agent composing TOML gets a parse error back as a
         # readable message instead of leaving the project with a config no later command
         # can load.
-        try:
-            tomllib.loads(edit.append_toml)
-        except tomllib.TOMLDecodeError as exc:
-            return O.failed("config", f"not valid TOML: {exc}", path="", rows=[], text="")
-        path = repo / ".ddflow" / "config.toml"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        prev = path.read_text("utf-8") if path.exists() else ""
-        merged = prev.rstrip() + "\n\n" + edit.append_toml.strip() + "\n"
-        try:
-            Config.check(tomllib.loads(merged))
-        except (tomllib.TOMLDecodeError, ValueError) as exc:
-            return O.failed(
-                "config",
-                f"appending this would break the config: {exc}",
-                path="",
-                rows=[],
-                text="",
-            )
-        TC.atomic_write(path, merged)
-        return O.ok("config", path=str(path), appended=True, rows=[], text=f"appended to {path}")
+        err, path = _append_config(repo, edit.append_toml, local=edit.local)
+        if err:
+            return O.failed("config", err, path="", rows=[], text="")
+        return O.ok(
+            "config",
+            path=str(path),
+            appended=True,
+            local=edit.local,
+            rows=[],
+            text=f"appended to {path}",
+        )
 
     from ..views import human
 

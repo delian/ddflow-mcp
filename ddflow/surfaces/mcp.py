@@ -1793,7 +1793,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "TOML to the config — the usual use is setting your project's test command:\n"
             '  [gate.unit_tests]\n  command = "pytest -q -n auto"\n'
             "(-n auto runs the suite in parallel and needs pytest-xdist; drop it without.) "
-            "This is how a project is configured without a shell."
+            "This is how a project is configured without a shell. The committed file is "
+            "generic project policy. Anything that belongs to THIS machine or operator — "
+            "a reviewer endpoint, a host, an API-key variable, a worker count sized to "
+            "this box — pass local=true: it goes to the git-ignored "
+            ".ddflow/local/config.toml, which is read last and never committed."
         ),
         "properties": {
             "set": (
@@ -1810,6 +1814,13 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
             "filter": ("string", "Only show knobs whose name contains this.", False),
+            "local": (
+                "boolean",
+                "Write `set`/`toml` to the git-ignored .ddflow/local/config.toml instead "
+                "of the committed config: for this machine's endpoints, hosts, key "
+                "variables and sizing.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().configure(
             repo,
@@ -1819,6 +1830,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 append_toml=a.get("toml", "") or "",
                 filter=a.get("filter", "") or "",
                 explain=True,
+                local=bool(a.get("local")),
             ),
             agent=agent,
         ),
@@ -1835,13 +1847,24 @@ TOOLS: dict[str, dict[str, Any]] = {
             "vLLM, LM Studio, llama.cpp, sglang) and report what is serving, with each "
             "model's pretraining family. Use this to find a reviewer from a DIFFERENT "
             "family than yourself — which the critic gate requires. Pass write=true to "
-            "add what it finds to .ddflow/config.toml."
+            "record what it finds in the git-ignored .ddflow/local/reviewers.toml: an "
+            "endpoint on this machine is this machine's, never committed."
         ),
         "properties": {
-            "write": ("boolean", "Append the discovered reviewers to the config.", False)
+            "write": (
+                "boolean",
+                "Append the discovered reviewers to .ddflow/local/reviewers.toml.",
+                False,
+            ),
+            "shared": (
+                "boolean",
+                "With write: commit them to .ddflow/config.toml instead, for every "
+                "clone. Only for a reviewer the whole team reaches at the same address.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().reviewers_detect(
-            repo, write=bool(a.get("write")), agent=agent
+            repo, write=bool(a.get("write")), shared=bool(a.get("shared")), agent=agent
         ),
         "payload": "text",
         "text": True,
@@ -3062,7 +3085,8 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
                 "No cross-family reviewer is configured, so the `critic` gate cannot "
                 "run and `ddflow_complete` will refuse. Call "
                 "`ddflow_reviewers_detect` with write=true — it finds a local model "
-                "server if one is running."
+                "server if one is running and records it in the git-ignored "
+                ".ddflow/local/reviewers.toml, never the committed config."
             )
     except Exception:
         pass
