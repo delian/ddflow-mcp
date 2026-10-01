@@ -32,10 +32,11 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import textsim
 from ..core.model import State, fold
 from ..infra.log import EventLog
 
-SCHEMA = 8
+SCHEMA = 9
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -109,6 +110,10 @@ class Store:
         create table if not exists memories(
             id text primary key, text text, tags text, at text, origin_at text,
             by text, source text);
+        create table if not exists similar_docs(
+            ord integer primary key, id text, kind text, item text, digest text);
+        create table if not exists similar_terms(
+            term text primary key, docs blob, weights blob) without rowid;
         """)
         if self.fts:
             con.executescript("""
@@ -147,6 +152,8 @@ class Store:
         except sqlite3.DatabaseError:
             return True
         if row.get("schema") != str(SCHEMA):
+            return True
+        if row.get("similar_version") != str(textsim.VERSION):
             return True
         # `EventLog.head()` is O(shards); the old comparison called `read_all()` to
         # decide whether `read_all()` was needed, which is the shape of the problem
@@ -269,6 +276,7 @@ class Store:
             _insert_memories(con, state, self.fts)
             _insert_bugs(con, state, self.fts)
             _insert_sessions(con, state, self.fts)
+            _insert_similar(con, similar_records(state))
             for name, runs in state.cadences.items():
                 for r in runs:
                     con.execute(
@@ -536,6 +544,84 @@ def _insert_decisions(con, state, fts: bool) -> None:
                 "insert into decisions_fts values(?,?,?,?,?,?)",
                 (dc.id, dc.title, dc.context, dc.decision, dc.consequences, dc.alternatives),
             )
+
+
+def similar_records(state: State) -> list[dict[str, str]]:
+    """Every record a new one could duplicate, as the similarity engine reads them: id,
+    kind, title, body, and item (what a bug was filed against, a task's phase).
+
+    Which fields are a record's text is decided here, once, for the stored weights and
+    for anyone building a matcher from a State. Removed items and forgotten memories
+    are out, as they are out of the rest of the index; closed and invalid records stay
+    in -- a new bug that repeats a fixed one is exactly what an add should be shown.
+    """
+    out = [
+        {"id": it.id, "kind": it.kind, "title": it.title, "body": it.body, "item": it.parent}
+        for it in state.items.values()
+        if not it.removed
+    ]
+    out += [
+        {"id": b.id, "kind": "bug", "title": "", "body": b.summary, "item": b.item}
+        for b in state.bugs.values()
+    ]
+    out += [
+        {
+            "id": ls.id,
+            "kind": "lesson",
+            "title": ls.title,
+            "body": "\n".join(x for x in (ls.rule, ls.why, ls.how) if x),
+            "item": "",
+        }
+        for ls in state.lessons.values()
+    ]
+    out += [
+        {
+            "id": d.id,
+            "kind": "decision",
+            "title": d.title,
+            "body": "\n".join(x for x in (d.context, d.decision) if x),
+            "item": d.item,
+        }
+        for d in state.decisions.values()
+    ]
+    out += [
+        {
+            "id": r.id,
+            "kind": "research",
+            "title": r.question,
+            "body": "\n".join(x for x in (r.claim, r.mechanism) if x),
+            "item": r.item,
+        }
+        for r in state.research.values()
+    ]
+    out += [
+        {"id": m.id, "kind": "memory", "title": "", "body": m.text, "item": ""}
+        for m in state.memories.values()
+        if m.live
+    ]
+    return out
+
+
+def _insert_similar(con, records: list[dict[str, str]]) -> None:
+    """The similarity engine's index (``services.similar``): one row per record, and
+    per term its postings -- record ordinals and TF-IDF weights, packed. A term's
+    document frequency is its postings' length, so the IDF is stored with them."""
+    con.executemany(
+        "insert into similar_docs values(?,?,?,?,?)",
+        [
+            (i, r["id"], r["kind"], r["item"], textsim.digest(r["title"], r["body"]))
+            for i, r in enumerate(records)
+        ],
+    )
+    _df, post = textsim.invert([textsim.tokens(r["title"], r["body"]) for r in records])
+    con.executemany(
+        "insert into similar_terms values(?,?,?)",
+        [(t, d.tobytes(), w.tobytes()) for t, (d, w) in post.items()],
+    )
+    con.execute(
+        "insert or replace into meta values('similar_n', ?), ('similar_version', ?)",
+        (str(len(records)), str(textsim.VERSION)),
+    )
 
 
 def _insert_bugs(con, state, fts: bool) -> None:

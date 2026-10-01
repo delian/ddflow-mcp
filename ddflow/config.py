@@ -619,6 +619,56 @@ _doc(
 )
 
 
+#: The record kinds an add is checked for, and that are offered as candidates. Session
+#: prompts and notes are not records anyone duplicates (D-no-duplicates).
+DEDUPE_KINDS = ("bug", "task", "phase", "lesson", "decision", "research", "memory")
+DEDUPE_ON_MATCH = ("ask", "warn", "off")
+
+
+@dataclass
+class DedupeConfig:
+    """Duplicate detection at add time, `[dedupe]` (decision D-no-duplicates)."""
+
+    on_match: str = "ask"  # ask | warn | off
+    show_floor: float = 0.35
+    ask_threshold: float = 0.55
+    max_candidates: int = 3
+    min_words: int = 8
+    kinds: list[str] = field(default_factory=lambda: list(DEDUPE_KINDS))
+
+
+_doc(
+    "dedupe",
+    "on_match",
+    "What an add does when it looks like an existing record. 'ask' (default): it is refused until answered new / extends X / duplicate of X / related X -- a prompt on a terminal, exit 3 with the ready commands for a script, a re-call with relation=... over MCP. 'warn': the candidates are printed and the add goes ahead. 'off': no check. No score can tell a duplicate from a different bug in the same function (research R-dedupe-matchers), which is why the default asks rather than decides.",
+)
+_doc(
+    "dedupe",
+    "show_floor",
+    "Cosine similarity (0-1) at which an existing record is listed beside an add, without asking. 0.35 from the research: below it, related records are rare and listing them is noise.",
+)
+_doc(
+    "dedupe",
+    "ask_threshold",
+    "Cosine similarity (0-1) at which an add must be answered before it proceeds (under on_match = 'ask'). 0.55 from the research: on ddflow's labelled records about half of real duplicates score above it and over three quarters of what does is a duplicate or related record. Identical text, or text naming an existing id, asks whatever the score.",
+)
+_doc(
+    "dedupe",
+    "max_candidates",
+    "Most similar records shown for one add (records whose id the new text names are shown as well). The research found the existing record in the top 3 for 95% of real duplicates.",
+)
+_doc(
+    "dedupe",
+    "min_words",
+    "Distinct content words a record needs before a score alone makes an add ask. A two-word title shares most of its words with something; asking on it is noise. Shorter records still list candidates.",
+)
+_doc(
+    "dedupe",
+    "kinds",
+    "Record kinds checked on add, and offered as candidates -- across kinds, so a new bug is shown the open task that fixes it. Default: bug, task, phase, lesson, decision, research, memory.",
+)
+
+
 @dataclass
 class ImportConfig:
     """Adopting ddflow on a project that already has history: `[importer]`.
@@ -1118,6 +1168,7 @@ class Config:
     schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     importer: ImportConfig = field(default_factory=ImportConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    dedupe: DedupeConfig = field(default_factory=DedupeConfig)
     companions: CompanionsConfig = field(default_factory=CompanionsConfig)
     cadence: CadenceConfig = field(default_factory=CadenceConfig)
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
@@ -1343,6 +1394,12 @@ def _waivers_problem(v: Any) -> str:
     return ""
 
 
+def _unit_interval(v: Any) -> str:
+    """A similarity score bound: a number in [0, 1]. An int is fine (TOML `1`)."""
+    ok = isinstance(v, int | float) and not isinstance(v, bool) and 0.0 <= v <= 1.0
+    return "" if ok else "must be a number between 0 and 1"
+
+
 #: Knobs whose TYPE is not the whole contract: "" means valid, else why not. Checked on
 #: load and by `Config.check`, so `config set` refuses the value instead of writing it.
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
@@ -1364,6 +1421,23 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
         else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
     ),
     "enforce.trailer_waivers": _waivers_problem,
+    "dedupe.on_match": lambda v: (
+        "" if v in DEDUPE_ON_MATCH else f"must be one of {', '.join(DEDUPE_ON_MATCH)}"
+    ),
+    "dedupe.show_floor": _unit_interval,
+    "dedupe.ask_threshold": _unit_interval,
+    "dedupe.max_candidates": lambda v: (
+        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 1
+        else "must be an integer >= 1; to stop the check set [dedupe].on_match = \"off\""
+    ),
+    "dedupe.min_words": lambda v: (
+        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0
+        else "must be an integer >= 0"
+    ),
+    "dedupe.kinds": lambda v: (
+        "" if isinstance(v, list) and all(k in DEDUPE_KINDS for k in v)
+        else f"must be a list drawn from {', '.join(DEDUPE_KINDS)}"
+    ),
 }  # fmt: skip
 
 
