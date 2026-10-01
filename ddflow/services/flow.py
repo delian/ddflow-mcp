@@ -651,6 +651,24 @@ def _set_next(vp: VersionPlan, cfg: Config, version: str, line: str) -> None:
         )
 
 
+def reached(repo: Path, merged: str, ref: str) -> str:
+    """The commit of an item's landing that ``ref`` contains, or "" if none.
+
+    ``merged`` is the landing on the item's merge target: its merge commit. That commit
+    is on the target only. Other lines receive the work as the BRANCH it merged -- the
+    merge commit's second parent -- by gitflow's back-merge or a forward-merge port, so
+    a hotfix landed on main reaches develop with main's merge commit nowhere in it
+    (B9a337697c0). Before B9f8019c521 ``merged`` was the branch head itself, and old
+    logs still say so: the first candidate covers them.
+    """
+    if not merged:
+        return ""
+    for c in (merged, W.rev(repo, f"{merged}^2")):
+        if c and W.git(repo, "merge-base", "--is-ancestor", c, ref).ok:
+            return c
+    return ""
+
+
 def plan_version(
     repo: Path, cfg: Config, st: State, *, bump: str = "", version: str = "", line: str = ""
 ) -> VersionPlan:
@@ -684,8 +702,8 @@ def plan_version(
     for it in sorted(st.items.values(), key=lambda i: i.id):
         if it.removed or it.state != DONE or it.kind != "task" or it.id in released:
             continue
-        sha = it.merged_sha
-        if not sha or not W.git(repo, "merge-base", "--is-ancestor", sha, ref).ok:
+        sha = reached(repo, it.merged_sha, ref)
+        if not sha:
             continue
         if vp.current_tag and W.git(repo, "merge-base", "--is-ancestor", sha, vp.current_tag).ok:
             continue
@@ -958,8 +976,7 @@ def _sync_releases(
             i.id
             for i in st.items.values()
             if i.state == DONE
-            and i.merged_sha
-            and W.git(repo, "merge-base", "--is-ancestor", i.merged_sha, sha).ok
+            and reached(repo, i.merged_sha, sha)
             and i.id not in {x for r in st.releases for x in r.items}
         ]
         c = Cut(version=ver, tag=f"{cfg.flow.tag_prefix}{ver}", sha=sha)
