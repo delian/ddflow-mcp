@@ -1196,7 +1196,12 @@ def _is_index_section(title: str) -> bool:
 #: A lesson heading that carries the project's own id: `### L100 (reinforces L99). Threads
 #: and async share one GIL`. The id is what every cross-reference in the corpus (`[L147]`)
 #: and every summary bullet cites, so it is kept rather than slugged away.
-_LESSON_HEAD = re.compile(r"^(L\d+[a-z]?)\b\s*(?:\([^)]{0,80}\))?\s*[.:—-]?\s*(.*)$")
+#: ONE id grammar, for the heading and for every citation of it: `L100`, `L100a`, and the
+#: hyphenated `L-12` some corpora write. `L\d+` alone imported `## L-12 — ...` as the slug
+#: `L-l-12-...`, so "see L-12" resolved to nothing and a summary bullet citing `(L-12)` was
+#: filed as a second lesson instead of that lesson's summary (B-import-hyphen-ids).
+_LESSON_ID = r"L-?\d+[a-z]?"
+_LESSON_HEAD = re.compile(rf"^({_LESSON_ID})\b\s*(?:\([^)]{{0,80}}\))?\s*[.:—-]?\s*(.*)$")
 _COMPRESSED = re.compile(r"\*\*Compressed:?\*\*:?\s*(.+?)(?:\n\s*\n|\Z)", re.S)
 _SEEN_IN = re.compile(r"\*\*Seen in:?\*\*:?\s*(.+?)(?:\n\s*\n|\Z)", re.S)
 #: Lessons are long; a 2,000-character cap kept roughly the first half of a typical entry
@@ -1303,6 +1308,9 @@ def scan_lessons(
         for title, body, line in sections:
             m = _LESSON_HEAD.match(title) if level else None
             ident = m.group(1) if m else f"L-{_slug(title, 32)}"
+            # The id this lesson was imported under before hyphenated ids were read as
+            # ids, so a re-run recognises it instead of importing it a second time.
+            legacy = f"L-{_slug(title, 32)}" if m and "-" in ident else ""
             shown = m.group(2).strip() if m and m.group(2).strip() else title
             seen = _one_paragraph(_SEEN_IN.search(body))
             found.append(
@@ -1316,6 +1324,7 @@ def scan_lessons(
                         "summary": _one_paragraph(_COMPRESSED.search(body)),
                         "seen_in": [seen[:300]] if seen else [],
                         "tags": [],
+                        **({"legacy_ident": legacy} if legacy else {}),
                     },
                 )
             )
@@ -1324,7 +1333,7 @@ def scan_lessons(
 
 #: `- **bold lead.** explanation [L170]` -- a hand-written summary bullet and what it cites.
 _BULLET = re.compile(r"^[-*]\s+(.*)$")
-_CITES = re.compile(r"\bL\d+[a-z]?\b")
+_CITES = re.compile(rf"\b{_LESSON_ID}\b")
 _TRAILING_CITE = re.compile(r"\s*\[([^\]]*)\]\s*$")
 #: How a generated file announces itself, in the first lines.
 #: How a generated file announces itself: a comment banner, or the literal DO NOT EDIT.
@@ -1423,6 +1432,11 @@ def _norm(s: str) -> str:
     return re.sub(r"\W+", " ", s).strip().lower()
 
 
+def _id_key(ident: str) -> str:
+    """`L-12` and `L12` are one lesson: a summary may cite either spelling."""
+    return ident.replace("-", "")
+
+
 def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
     """Resolve `summary` records against the lessons found beside them. In place.
 
@@ -1439,7 +1453,7 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
     by_id: dict[str, list[Found]] = {}
     for f in scanned:
         if f.kind == "lesson":
-            by_id.setdefault(f.ident, []).append(f)
+            by_id.setdefault(_id_key(f.ident), []).append(f)
     lessons = {i: fs[0] for i, fs in by_id.items() if len(fs) == 1}
     attached = consolidated = 0
     generated: list[str] = []
@@ -1452,7 +1466,7 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
             out.append(f)
             continue
         cites = f.extra.get("cites", [])
-        target = lessons.get(cites[0]) if len(cites) == 1 else None
+        target = lessons.get(_id_key(cites[0])) if len(cites) == 1 else None
         if target is not None and not target.extra.get("summary"):
             target.extra["summary"] = _summary_text(f.body, target.title)
             attached += 1
@@ -1537,9 +1551,24 @@ def scan_research(
         repo,
         globs,
         "research",
-        lambda t, _r: f"R-{_slug(t, 32)}",
-        lambda _t, body, _r: {"verdict": _verdict(body)},
+        _research_ident,
+        lambda t, body, _r: {"verdict": _verdict(body), **_research_legacy(t)},
     )
+
+
+#: A research entry's own id, `R12` or `R-12`, kept like a lesson's (B-import-hyphen-ids).
+#: At most five digits: ddflow's own research ids are `R` + ten hex characters.
+_RESEARCH_HEAD = re.compile(r"^(R-?\d{1,5}[a-z]?)\b")
+
+
+def _research_ident(title: str, _rel: str = "") -> str:
+    m = _RESEARCH_HEAD.match(title.strip())
+    return m.group(1) if m else f"R-{_slug(title, 32)}"
+
+
+def _research_legacy(title: str) -> dict[str, str]:
+    """The slug an id-bearing entry was imported under before its id was kept."""
+    return {"legacy_ident": f"R-{_slug(title, 32)}"} if _RESEARCH_HEAD.match(title.strip()) else {}
 
 
 def _verdict(body: str) -> str:
@@ -2245,7 +2274,7 @@ def plan_import(
         # first run would come out `L-x-2`, `L-x-3` on the second, and an import
         # advertised as idempotent would duplicate its whole corpus on every run.
         f.ident = _unique("", f.ident, proposed)
-        if f.ident in known:
+        if f.ident in known or f.extra.get("legacy_ident") in known:
             plan.skipped_existing.append(f.ident)
             if f.kind == "phase":
                 existing_phases[f.ident] = f
