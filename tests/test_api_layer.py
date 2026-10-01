@@ -226,7 +226,12 @@ def test_the_reason_is_its_OWN_content_block_never_a_prefix():
     from ddflow.surfaces.mcp import _outcome_result
 
     out = _outcome_result(O.refused("k", "lease held by beta", rows=[]))
-    assert _json.loads(out["content"][0]["text"]) == {"rows": []}, out["content"][0]["text"]
+    # Still JSON at `content[0]` -- and, since B9cf58aaeaa, a refusal's JSON leads with
+    # the refusal itself (tests/test_mcp_refusal_shape.py).
+    assert _json.loads(out["content"][0]["text"]) == {
+        "refusal": {"reason": "lease held by beta", "outcome": "refused", "exit": REFUSED},
+        "rows": [],
+    }, out["content"][0]["text"]
     assert out["content"][1]["text"] == "lease held by beta", out["content"]
     assert out["_meta"]["exit"] == REFUSED
 
