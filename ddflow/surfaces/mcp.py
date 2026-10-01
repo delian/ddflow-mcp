@@ -189,10 +189,6 @@ TOOLS: dict[str, dict[str, Any]] = {
         # which repo: adoption turns on whether the caller was already standing in a
         # worktree. The dispatcher passes it only to tools that ask.
         "wants_called_from": True,
-        # ...and only for the connection's OWN identity. A subagent naming itself with
-        # `as_agent` is not standing in the tree the connection was started in -- that
-        # is its parent's -- so it must not adopt it (B7c7a0d9222).
-        "adopts_callers_tree": True,
     },
     "ddflow_heartbeat": {
         "description": (
@@ -420,7 +416,17 @@ TOOLS: dict[str, dict[str, Any]] = {
             agent=agent,
         ),
         "wants_called_from": True,
-        "payload": ("id", "sha", "base", "pr", "branch", "outside_globs"),
+        "payload": (
+            "id",
+            "sha",
+            "branch_head",
+            "base",
+            "pr",
+            "branch",
+            "outside_globs",
+            "worktree",
+            "worktree_removed",
+        ),
     },
     "ddflow_pr_sync": {
         "description": (
@@ -2787,12 +2793,16 @@ class Server:
                     # discarded it, which is why adoption was unreachable from MCP.
                     if spec.get("wants_called_from"):
                         where = self.called_from
-                        if spec.get("adopts_callers_tree") and self._someone_else(per_call):
+                        if self._someone_else(per_call):
                             # Where the connection stands is where the CONNECTION's
-                            # identity works. A subagent sharing it (Claude Code's do)
-                            # adopted its parent's harness tree and branch, and the next
-                            # subagent was refused as "already bound". Asked from the
-                            # primary, it gets a tree of its own -- as the CLI does.
+                            # identity works, for EVERY tool that asks. A subagent sharing
+                            # it (Claude Code's do) is not standing in its parent's
+                            # harness tree: `claim` adopted that tree and branch
+                            # (B7c7a0d9222), and for an item claimed --no-worktree,
+                            # `gate_run` ran the parent's tree as the subagent's pass and
+                            # `merge` landed the parent's branch (B11e4c5a185). Asked from
+                            # the primary, the ITEM decides -- its own tree and branch,
+                            # else the "name the branch" answers -- as from the CLI.
                             where = self.repo
                         result = spec["api"](self.repo, args, agent, called_from=where)
                     else:

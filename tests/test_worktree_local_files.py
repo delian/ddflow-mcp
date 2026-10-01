@@ -102,3 +102,36 @@ def test_a_file_that_cannot_be_copied_is_skipped_not_raised(repo, monkeypatch):
     monkeypatch.setattr(W.shutil, "copy2", copy2)
     assert W.copy_local_files(repo, tree, [".roborev.toml", ".other.toml"]) == [".other.toml"]
     assert not (tree / ".roborev.toml").exists()
+
+
+def test_a_harness_tree_claim_adopts_gets_the_local_file(repo):
+    """Bug B41902e229d: claim binds a tree in three ways and only `W.create` copied
+    the local files. A harness tree adopted where the agent stands got none of them."""
+    from ddflow.api import lifecycle
+
+    _setup(repo)
+    tree = repo.parent / "harness"
+    _git(repo, "worktree", "add", "-q", "-b", "harness", str(tree))
+    out = lifecycle.claim(repo, "T1", called_from=tree)
+    assert out.exit == 0, out.reason
+    assert Path(out.data["worktree"]).resolve() == tree.resolve()
+    assert (tree / ".roborev.toml").read_text() == "agent = 'kilo'\n"
+
+
+def test_a_reclaim_that_rebinds_the_items_tree_gets_the_local_file(repo):
+    """Bug B41902e229d: a re-claim binds the item's recorded tree without `W.create`,
+    so a tree made before the knob listed a file never received it."""
+    from ddflow.api import lifecycle
+
+    _setup(repo)
+    code, _out, err = run_cli(repo, "claim", "T1")
+    assert code == 0, err
+    tree = next(
+        Path(w["worktree"]) for w in W.list_worktrees(repo) if w.get("branch", "").endswith("T1")
+    )
+    (tree / ".roborev.toml").unlink()  # as if made before the knob listed it
+    assert run_cli(repo, "release", "T1")[0] == 0
+    out = lifecycle.claim(repo, "T1")
+    assert out.exit == 0, out.reason
+    assert out.data["rebound"] is True
+    assert (tree / ".roborev.toml").read_text() == "agent = 'kilo'\n"

@@ -55,7 +55,11 @@ class Ctx:
         #: deliberately the primary checkout -- that is what makes every worktree share
         #: one event log -- but resolving loses the one fact `claim` needs to avoid
         #: building a rival worktree: whether the caller was already standing in one.
-        self.called_from = start
+        self._start = start
+        self._where: Path | None = None
+        #: The identity whose working tree the caller stands in, when it is not the
+        #: caller's own -- see `called_from`. Known once `called_from` has been read.
+        self.tree_owner = ""
         try:
             self.repo = W.repo_root(start)
         except W.GitError:
@@ -92,6 +96,27 @@ class Ctx:
         self.store = Store(self.repo, self.cfg)
         self.gates = G.load_gates(self.repo, self.cfg)
         self.json = bool(getattr(args, "json", False))
+
+    @property
+    def called_from(self) -> Path:
+        """Where the caller stands, for the commands that resolve an item's work from it
+        (claim's adoption; gate run/record, merge, review, tests, precommit, heartbeat
+        for an item without a tree of its own).
+
+        Unless it is a linked tree ANOTHER identity is working in: a subagent's shell in
+        its parent's harness tree is not standing in its own work, and answering from
+        there bound its item to the parent's tree, ran the parent's tree as its gate and
+        landed the parent's branch as its merge (B11e4c5a185). Then the primary -- where
+        the item, not the caller's location, decides. Read lazily: it reads the log.
+        """
+        if self._where is None:
+            from ..services.tree_owner import foreign_tree_owner
+
+            self.tree_owner = foreign_tree_owner(
+                self.repo, self._start, self.log.agent_id, self.log.read_all()
+            )
+            self._where = self.repo if self.tree_owner else self._start
+        return self._where
 
     def state(self):
         return fold(self.log.read_all(), strict=False)

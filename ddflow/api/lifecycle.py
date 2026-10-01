@@ -252,6 +252,20 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dic
             "so no release is coming to wake you. `ddflow next` says what blocks the "
             "queue — it needs someone to act, not to wait.",
         }
+    by_item = {b.item: b for b in p.blocked}
+    stuck = [b for b in p.blocked if not _clears_on_release(st, b, others, by_item)]
+    if p.blocked and len(stuck) == len(p.blocked):
+        # Every blocker needs a person: a cycle, an expired lease under "report", an
+        # operator's block, a dependency nobody works on. Some other agent holding an
+        # unrelated lease does not change that, and sleeping to the deadline only to
+        # say "still blocked" hides the one thing to do (B02e99efc75).
+        return {
+            **out,
+            "status": "hopeless",
+            "why": "nothing is ready, and nothing blocked clears when another agent "
+            "finishes -- each needs someone to act: "
+            + "; ".join(f"{b.item}: {b.reason} — {b.detail}" for b in stuck),
+        }
     blocking = _blocking_leases(st, p.blocked, others)
     return {
         **out,
@@ -260,6 +274,36 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dic
         + ", ".join(f"{i} ({others[i].holder})" for i in blocking),
         "waiting_on": blocking,
     }
+
+
+def _clears_on_release(st, b, others, by_item=None, seen=None) -> bool:
+    """Can blocker ``b`` clear when other agents let go, with nobody else acting?
+
+    A file or item conflict, a resource shortfall and a full parallelism cap free on
+    any release. A dependency clears when EVERY dependency still unmet will: one in
+    motion (held, in review, external), or one whose own blocker -- looked up in
+    ``by_item`` -- clears in turn. The rest -- a cycle, an expired lease under
+    `reclaim_policy = "report"`, an operator's block, a contest, an umbrella -- need a
+    person, as the single-item `wait` already says. A dependency with no blocker on
+    record is not judged stuck: when in doubt, waiting is the old behaviour.
+    """
+    if b.reason in ("conflict", "resources"):
+        return True
+    if b.reason == "state":
+        return "cap reached" in b.detail
+    if b.reason != "deps" or not b.waiting_on:
+        return False
+    by_item = by_item or {}
+    seen = (seen or set()) | {b.item}
+    for d in b.waiting_on:
+        if _in_motion(st, d, others):
+            continue
+        own = by_item.get(d)
+        if own is None:
+            continue
+        if d in seen or not _clears_on_release(st, own, others, by_item, seen):
+            return False
+    return True
 
 
 def _blocking_leases(st, blocked, others) -> list[str]:
@@ -648,6 +692,17 @@ def _undo_claim(log, item: str, held_before: bool, note: str) -> None:
         L.release(log, item, note=note)
 
 
+def _bring_local_files(repo: Path, cfg, wt: W.Worktree | None) -> None:
+    """`[worktree].local_files` into the tree a claim bound, however it was bound.
+
+    Not only `W.create`'s tree: an adopted harness tree and the item's own tree rebound
+    on a re-claim are checkouts too, missing the same git-ignored files (bug
+    B41902e229d). The copy never overwrites, so a second pass over a tree is harmless.
+    """
+    if wt is not None and not wt.local_files:
+        wt.local_files = W.copy_local_files(repo, wt.path, cfg.worktree.local_files)
+
+
 def claim(
     repo: Path,
     item: str,
@@ -813,6 +868,7 @@ def claim(
                 return O.failed(
                     "item.claimed", f"lease held, but worktree creation failed: {exc}", id=item
                 )
+    _bring_local_files(repo, cfg, wt)
     log.append("item.started", item, {})
     # The first branch made is where the branching model starts to matter. An unmade
     # choice is defaulted here, on the record, and followed from now on.
@@ -986,6 +1042,9 @@ def complete(
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
     model = model or _session_model(st, log.agent_id)
+    # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
+    # way), so report it rather than an empty string (B9f8019c521).
+    sha = sha or it.merged_sha
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
     base: dict[str, Any] = {
         "id": item,
@@ -1177,9 +1236,22 @@ def merge(
     model: str = "",
     branch: str = "",
     called_from: Path | None = None,
+    shell_cwd: Path | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
+
+    ``sha`` in the result and in `worktree.merged` is the commit the base points at
+    after the landing -- the merge commit, or the branch head on a fast-forward -- as
+    the PR path records the forge's merge commit. It used to be the branch's head
+    (B9f8019c521): a caller citing the merge cited a commit that is not the landing,
+    and under a squash strategy is not on the base at all. That head is
+    ``branch_head``.
+
+    The item's tree is NOT removed when the caller stands in it (``called_from`` or
+    ``shell_cwd``, the CLI process's own directory): deleting a shell's working
+    directory makes its next `pwd` fail, and a harness that runs one after every
+    command reported the landed merge as a failure (B1172da8c35).
 
     With `[flow].integration = "pr"` landing is a person's decision, so this opens (or
     updates) the request instead and parks the item in REVIEW; `pr sync` finishes it.
@@ -1248,7 +1320,7 @@ def merge(
     bad = F.problems(cfg)
     if bad:
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
-    sha = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
+    branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     if not r.ok:
@@ -1259,15 +1331,20 @@ def merge(
             reason=r.err or r.out,
         )
         return out
+    # What the base now points at: the landing. Falls back to the branch head only if
+    # the base cannot be read back, which a merge that just succeeded makes unlikely.
+    landed_after = W.rev(repo, wt.base)
+    sha = landed_after or branch_head
     log.append(
         "worktree.merged",
         item,
         {
             "sha": sha,
+            "branch_head": branch_head,
             "branch": wt.branch,
             # The target's range this merge added -- what a cherry-pick port re-applies.
             "landed_before": landed_before,
-            "landed_after": W.rev(repo, wt.base),
+            "landed_after": landed_after,
             # Landed from a branch the item does not own (claimed --no-worktree).
             **({"borrowed": True, "outside_globs": outside} if borrowed else {}),
         },
@@ -1286,24 +1363,12 @@ def merge(
         item,
         "merge",
         "passed",
-        evidence={"sha": sha, "branch": wt.branch},
+        evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
         gates=G.load_gates(repo, cfg),
     )
-    # NEVER remove an ADOPTED tree -- see the module docstring. Nor a borrowed one: it
-    # is the caller's, or whoever's has that branch checked out.
-    kept_reason = ""
-    removed_tree = False
-    if borrowed:
-        kept_reason = f"no worktree of its own: {wt.branch!r} was landed, no tree touched."
-    elif it.adopted:
-        kept_reason = f"worktree {wt.path} kept: adopted, not created by ddflow."
-    elif cfg.worktree.remove_on_merge and not keep:
-        rr = W.remove(repo, cfg, wt)
-        if rr.ok:
-            log.append("worktree.removed", item, {"path": str(wt.path)})
-            removed_tree = True
-        else:
-            kept_reason = rr.err
+    removed_tree, kept_reason = _dispose_tree(
+        repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
+    )
     if back_failed:
         kept_reason = "; ".join(
             filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
@@ -1312,8 +1377,10 @@ def merge(
         "worktree.merged",
         id=item,
         sha=sha,
+        branch_head=branch_head,
         base=wt.base,
         dirty=list(dirty),
+        worktree=str(wt.path),
         worktree_removed=removed_tree,
         kept_reason=kept_reason,
         back_merged=back_merged,
@@ -1321,6 +1388,52 @@ def merge(
         branch=wt.branch,
         outside_globs=outside,
     )
+
+
+def _dispose_tree(
+    repo: Path, cfg, log, it, wt: W.Worktree, *, borrowed: bool, keep: bool, callers
+) -> tuple[bool, str]:
+    """(removed, why it was kept) for a landed item's tree.
+
+    NEVER remove an ADOPTED tree -- see the module docstring. Nor a borrowed one: it is
+    the caller's, or whoever's has that branch checked out. Nor the one the caller stands
+    in: its shell would be left in a deleted directory (B1172da8c35).
+    """
+    if borrowed:
+        return False, f"no worktree of its own: {wt.branch!r} was landed, no tree touched."
+    if it.adopted:
+        return False, f"worktree {wt.path} kept: adopted, not created by ddflow."
+    if not cfg.worktree.remove_on_merge or keep:
+        return False, ""
+    if _stands_in(wt.path, *callers):
+        return False, (
+            f"worktree {wt.path} kept: you are standing in it, and removing it would leave "
+            f"your shell in a deleted directory. cd {W.repo_root(repo)} -- `ddflow cleanup "
+            f"--apply` removes the tree once {it.id} is complete."
+        )
+    rr = W.remove(repo, cfg, wt)
+    if not rr.ok:
+        return False, rr.err
+    log.append("worktree.removed", it.id, {"path": str(wt.path)})
+    return True, ""
+
+
+def _stands_in(tree: Path, *wheres: Path | None) -> bool:
+    """Is any of ``wheres`` the tree or inside it?"""
+    try:
+        root = tree.resolve()
+    except OSError:
+        return False
+    for where in wheres:
+        if where is None:
+            continue
+        try:
+            here = Path(where).resolve()
+        except OSError:
+            continue
+        if here == root or root in here.parents:
+            return True
+    return False
 
 
 def _what_to_land(
