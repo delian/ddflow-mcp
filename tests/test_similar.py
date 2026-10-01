@@ -271,6 +271,7 @@ def test_dedupe_defaults_are_the_decisions():
         {"max_candidates": 0},
         {"min_words": -1},
         {"kinds": ["prompt"]},
+        {"kinds": []},
     ],
 )
 def test_bad_dedupe_values_are_refused(bad):
@@ -306,3 +307,42 @@ def test_rebuilding_twice_works_and_replaces_the_projection(repo, log, cfg):
     st.rebuild(log)
     with similar.open_store(st) as idx:
         assert idx.ids() == {"T1", "T2"}
+
+
+def test_a_store_index_outliving_a_rebuild_answers_consistently_from_its_snapshot(repo, log, cfg):
+    """critic finding: the instance keeps the file it opened, so a rebuild cannot give it
+    new postings against old records (no IndexError, no wrong ids)."""
+    log.append("task.added", "T1", {"title": "claims bind worktrees", "body": "x"})
+    st = Store(repo, cfg)
+    st.rebuild(log)
+    with similar.open_store(st) as old:
+        before = old.query({"kind": "task", "title": "claims bind worktrees", "body": ""})
+        log.append("task.added", "T2", {"title": "claims bind worktrees too", "body": "x"})
+        st.rebuild(log)
+        assert old.query({"kind": "task", "title": "claims bind worktrees", "body": ""}) == before
+    with similar.open_store(st) as new:
+        assert {i for i, _ in new.query({"kind": "task", "title": "claims", "body": ""})} == {
+            "T1",
+            "T2",
+        }
+
+
+def test_store_and_memory_agree_past_fifty_candidates(tmp_path):
+    """rubber-duck finding, refuted: nothing is shortlisted (no FTS5 top-50), so 300
+    candidates sharing a term come back from the store exactly as from memory."""
+    recs = [
+        {
+            "id": f"R{i}",
+            "kind": "bug",
+            "title": "",
+            "body": f"common word{i % 7} uniq{i}x",
+            "item": "",
+        }
+        for i in range(300)
+    ]
+    db = tmp_path / "index.db"
+    _project(db, recs)
+    q = {"kind": "bug", "title": "common word3", "body": ""}
+    with similar.StoreIndex(db) as disk:
+        got = disk.query(q)
+    assert len(got) == 300 and got == similar.build(recs).query(q)

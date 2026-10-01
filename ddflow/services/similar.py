@@ -166,8 +166,11 @@ def build(records: Iterable[Mapping[str, Any]]) -> Index:
 class StoreIndex(_Exact):
     """A matcher over the weights ``Store.rebuild`` wrote into ``index.db``.
 
-    Reads the record table once (a few ms at 6k records) and only the postings of the
-    query's own terms per query. Opened read-only: the store's rebuild is the only
+    A SNAPSHOT: it reads the record table once (a few ms at 6k records) and only the
+    postings of the query's own terms per query, from the file as it was when opened --
+    ``Store.rebuild`` swaps a new file in and never edits the old one, so an instance
+    that outlives a rebuild answers consistently from the older index. Open one per
+    check, after ``store.ensure(log)``. Opened read-only: the store's rebuild is the only
     writer, and a reader must not take the database's write lock."""
 
     def __init__(self, path: Path) -> None:

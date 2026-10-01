@@ -1435,8 +1435,9 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
         else "must be an integer >= 0"
     ),
     "dedupe.kinds": lambda v: (
-        "" if isinstance(v, list) and all(k in DEDUPE_KINDS for k in v)
-        else f"must be a list drawn from {', '.join(DEDUPE_KINDS)}"
+        "" if isinstance(v, list) and v and all(k in DEDUPE_KINDS for k in v)
+        else f"must be a non-empty list drawn from {', '.join(DEDUPE_KINDS)}; "
+        'to stop the check set [dedupe].on_match = "off"'
     ),
 }  # fmt: skip
 
