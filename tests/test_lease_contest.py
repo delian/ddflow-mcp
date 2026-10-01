@@ -384,3 +384,143 @@ def test_resolve_leaves_bystanders_that_met_each_other_contested(repo: Path, ord
     assert displaced(it) == before  # the resolution did not file them as history
     assert "b (" in it.contest_summary() and "c (" in it.contest_summary()
     assert items.resolve(repo, "T", keep="b", agent="op").exit == 0
+
+
+# -- three pre-existing gaps: a holder's own re-claim, a long handover history, and a ---
+# -- renewal by a contestant that is neither displayed nor displaced --------------------
+
+
+def _contest(events: list[Event]) -> set[str]:
+    """The acquiring events in the contest after folding ``events`` in Lamport order."""
+    it = fold(sorted(events, key=Event.sort_key)).items["T"]
+    return {h["event"] for h in it.lease_contest}
+
+
+def test_a_holders_own_reclaim_keeps_its_first_claim_on_record():
+    """B6ac30c2acb, FAILED before the fix: A re-claimed the item after its first claim
+    lapsed, and the fold simply replaced the first claim. C overlapped only that first
+    window, so C folded as clean history and the double claim was gone."""
+    a1, a2 = _acq(2, "a", 300.0, 50), _acq(3, "a", 700.0, 100)
+    c = _acq(4, "c", 340.0, 20)
+    events = [_ev("task.added", "T", 1, title="t"), a1, a2, c]
+    assert _contest(events) == {a1.id, c.id}
+    it = fold(events).items["T"]
+    assert it.lease.event == a2.id
+
+
+def test_a_holders_own_reclaim_contests_both_of_its_claims_with_a_rival():
+    """B6ac30c2acb's repro: C overlapped both of A's windows; A's first claim was
+    nowhere -- neither in the contest nor on the record."""
+    a1, a2 = _acq(1, "a", 300.0, 50), _acq(2, "a", 400.0, 100)
+    c = _acq(3, "c", 350.0, 300)
+    assert _contest([_ev("task.added", "T", 0, title="t"), a1, a2, c]) == {a1.id, a2.id, c.id}
+
+
+def test_a_claim_nine_handovers_back_is_still_weighed():
+    """B7164b23643, FAILED before the fix: MAX_DISPLACED=8 forgot A after ten clean TTL
+    takeovers, so K -- who overlapped only A -- folded to no contest and was recorded
+    as displaced by J, a claim it never met."""
+    events = [_ev("task.added", "T", 0, title="t")]
+    names = "abcdefghij"
+    for i, who in enumerate(names):
+        events.append(_acq(1 + i, who, 1000.0 + 100 * i, 90))
+    k = _acq(100, "k", 1050.0, 10)
+    events.append(k)
+    it = fold(events).items["T"]
+    assert _holders(it.lease_contest) == ["a", "k"]
+    assert it.lease.holder == "j"
+
+
+def test_a_renewal_by_a_contestant_that_is_not_displayed_widens_its_window():
+    """Bee8e21c547, FAILED before the fix: A's renewal at 1612 kept her live to 2412, but
+    she was a contestant, not the displayed lease and not displaced, so the renewal was
+    dropped -- and C, inside her renewed window, was never contested with her."""
+    b = _acq(2, "b", 1900.0, 50)
+    a = _acq(3, "a", 1150.0, 800)
+    renew = _ev("lease.renewed", "T", 4, "a", holder="a", at=1612.0)
+    c = _acq(5, "c", 2050.0, 50)
+    events = [_ev("task.added", "T", 1, title="t"), b, a, renew, c]
+    assert _contest(events) == {a.id, b.id, c.id}
+
+
+def _history(rnd: random.Random, renewals: bool = True):
+    """A random multi-clone history: 2-4 holders, each with 1-4 claims of its own in
+    sequence (a holder re-claims only after its previous claim lapsed), each claim with
+    0-2 renewals inside its live window. Returns (claims, per-holder event lists): each
+    claim is (holder, event, start, end) with end its last renewal plus TTL."""
+    holders = ["a", "b", "c", "d"][: rnd.choice([2, 3, 4])]
+    claims, streams, lamport = [], {}, 2
+    for who in holders:
+        t, stream = float(rnd.randrange(0, 20) * 50), []
+        for _ in range(rnd.choice([1, 2, 3, 4])):
+            ttl = rnd.choice([50, 100, 300, 800])
+            acq = _acq(lamport, who, t, ttl)
+            lamport += 1
+            stream.append(acq)
+            end = t + ttl
+            for _ in range(rnd.choice([0, 0, 1, 2]) if renewals else 0):
+                at = rnd.uniform(end - ttl, end)
+                at = float(round(max(at, t)))
+                if at + ttl > end:
+                    stream.append(_ev("lease.renewed", "T", lamport, who, holder=who, at=at))
+                    lamport += 1
+                    end = at + ttl
+            claims.append((who, acq.id, t, end))
+            t = end + rnd.choice([1, 50, 400])
+        streams[who] = stream
+    return claims, streams
+
+
+def _interleave(rnd: random.Random, streams: dict[str, list[Event]]) -> list[Event]:
+    """One fold order: each holder's own events in its own order (one clone's Lamport
+    clock), the holders interleaved at random; Lamport renumbered to that order."""
+    left = {w: list(s) for w, s in streams.items()}
+    out = [_ev("task.added", "T", 1, title="t")]
+    while any(left.values()):
+        who = rnd.choice([w for w, s in left.items() if s])
+        ev = left[who].pop(0)
+        out.append(Event(**{**ev.__dict__, "lamport": len(out) + 1}))
+    return out
+
+
+@pytest.mark.parametrize("renewals", [True, False], ids=["renewals", "no-renewals"])
+@pytest.mark.parametrize("seed", range(60))
+def test_no_claim_that_overlapped_another_is_ever_missing_from_the_contest(seed, renewals):
+    """Property, the invariant all three gaps broke: with re-claims by one holder,
+    renewals folded anywhere after their claim, and histories longer than eight
+    handovers, the contest is exactly the claims whose window -- widened by its
+    renewals -- overlapped another holder's, in every fold order sampled."""
+    rnd = random.Random(5000 + seed)
+    claims, streams = _history(rnd, renewals)
+    want = {
+        e
+        for w, e, s, t in claims
+        if any(w2 != w and s <= t2 and s2 <= t for w2, _e2, s2, t2 in claims)
+    }
+    renewed = any(e.kind == "lease.renewed" for st in streams.values() for e in st)
+    for _ in range(25):
+        events = _interleave(rnd, streams)
+        it = fold(events).items["T"]
+        got = {h["event"] for h in it.lease_contest}
+        trace = (claims, [(e.kind, e.agent, e.data.get("at")) for e in events])
+        assert want <= got, trace
+        if not renewed:
+            # Without renewals, nothing else either. With them, a displaced claim a late
+            # renewal brings back also names the lease displayed at that moment
+            # (bug B-late-renewal-overjoin): an over-report, never a loss.
+            assert got == want, trace
+
+
+def test_a_renewal_of_the_displayed_lease_is_weighed_against_the_record():
+    """X's expiry was recorded, so Y -- claimed earlier in another clone -- folded as a
+    clean takeover and X went on the record. Y's renewals, folded after, kept Y live past
+    the moment X claimed: a double claim, which must not depend on whether the renewals
+    happened to fold before X."""
+    x, y = _acq(2, "x", 1000.0, 100), _acq(4, "y", 500.0, 100)
+    expired = _ev("lease.expired", "T", 3, "op", holder="x")
+    renewals = [
+        _ev("lease.renewed", "T", 5 + i, "y", holder="y", at=at)
+        for i, at in enumerate((590.0, 680.0, 770.0, 860.0, 950.0))
+    ]
+    late = [_ev("task.added", "T", 1, title="t"), x, expired, y, *renewals]
+    assert _contest(late) == {x.id, y.id}
