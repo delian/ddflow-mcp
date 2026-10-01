@@ -1040,13 +1040,23 @@ def router_set(model: str, routers: dict[str, list[str]]) -> list[str] | None:
     falling through to `family_for` would refuse with the wrong remedy.
 
     Matched like `family_for`, by case-blind substring, and checked BEFORE it: a router
-    name may contain a family needle and must not be taken for that one family.
+    name may contain a family needle and must not be taken for that one family. But
+    where `family_for` may stop at the first match, this takes the UNION of every
+    matching entry: first-match-wins on key order let `hydra = ["anthropic"]` hide
+    `hydrafusion = ["openai", ...]`, and an openai reviewer then passed as independent
+    of work openai wrote (B15af2d6420). Any matching entry left empty keeps the whole
+    answer "set unknown" -- another entry's members are not the full set.
     """
     low = (model or "").lower()
+    found: set[str] | None = None
     for needle, members in routers.items():
-        if needle and needle.lower() in low:
-            return sorted({m.strip().lower() for m in members if m.strip()})
-    return None
+        if not (needle and needle.lower() in low):
+            continue
+        these = {m.strip().lower() for m in members if m.strip()}
+        if not these:
+            return []
+        found = (found or set()) | these
+    return None if found is None else sorted(found)
 
 
 @dataclass
@@ -1080,7 +1090,7 @@ _doc(
 _doc(
     "agent",
     "routers",
-    'Model-name substring to the SET of families a router author draws on -- a model that routes each task across providers, such as Copilot\'s HydraFusion. A reviewer is independent of a router only when its family is outside the whole set. Checked before `families`. Default {hydrafusion = []}: GitHub publishes no fixed roster, so the set is empty and `complete --model hydrafusion` refuses until you list the families your plan routes to, e.g. routers = { hydrafusion = ["anthropic", "openai", "google"] }. From the env, JSON only.',
+    'Model-name substring to the SET of families a router author draws on -- a model that routes each task across providers, such as Copilot\'s HydraFusion. A reviewer is independent of a router only when its family is outside the whole set; every entry whose name matches adds its families, and one left empty makes the set unknown. Checked before `families`. Default {hydrafusion = []}: GitHub publishes no fixed roster, so the set is empty and `complete --model hydrafusion` refuses until you list the families your plan routes to, e.g. routers = { hydrafusion = ["anthropic", "openai", "google"] }. From the env, JSON only.',
 )
 
 
