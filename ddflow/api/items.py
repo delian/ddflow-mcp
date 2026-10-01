@@ -161,9 +161,11 @@ def _rebind(log, cfg, it, stored: str, branch: str) -> dict[str, str]:
     """Bind ``it`` -- and the caller's live lease on it -- to ``stored`` on ``branch``.
 
     Called under the log lock with ``it`` folded inside it, after `_rebind_target`
-    refused any live lease held by someone else: a live lease here is the caller's.
-    The lease first, so a refusal there records nothing. Recorded as `worktree.adopted`,
-    as a claim that adopts a tree is: ddflow did not make it, so `merge` never removes it.
+    refused any live lease held by someone else: a live lease here is the caller's, and
+    `L.acquire` (which returns a Lease or raises) takes its renew-in-place path, which
+    neither checks nor refuses anything -- so after the field edit, nothing here can
+    fail half-way. Recorded as `worktree.adopted`, as a claim that adopts a tree is:
+    ddflow did not make it, so `merge` never removes it.
     """
     import time
 
