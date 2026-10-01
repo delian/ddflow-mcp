@@ -1460,6 +1460,10 @@ def _coerce_dict(raw: str, ts: str) -> dict[str, Any]:
             # Refused, never `str()`-cast: `{"core": null}` loaded as {"core": "None"},
             # a family nobody declared, in the map reviewer independence reads
             # (B7506c1124a). Keys are strings already: JSON object keys always are.
+            # Only where the values are declared strings (critic): a map of anything
+            # else is returned as JSON gave it.
+            if "dict[str,str]" not in ts.replace(" ", ""):
+                return dict(parsed)
             if bad := [k for k, v in parsed.items() if not isinstance(v, str)]:
                 raise ValueError(
                     f"expected a JSON object of strings; {bad[0]!r} is "
