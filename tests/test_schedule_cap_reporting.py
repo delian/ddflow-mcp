@@ -180,3 +180,22 @@ def test_with_nothing_else_ready_the_cap_line_does_not_say_more(repo):
     assert "2 are ready but held by" in status and "more" not in status, status
     _code, brief, _err = run_cli(repo, "brief")
     assert "2 are ready but held by" in brief, brief
+
+
+def test_status_says_a_ready_task_was_interrupted(repo):
+    """roborev job 897: counting `running` off the plan moved a RUNNING task with no live
+    lease into `ready` -- correct, `next` offers it -- but status dropped the warning that
+    its worktree may hold work."""
+    from ddflow import api
+    from ddflow.infra.log import EventLog
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    log = EventLog(repo, "ghost")
+    log.append("lease.acquired", "T1", {"holder": "ghost", "at": time.time() - 99999, "ttl_s": 60})
+    log.append("item.started", "T1", {})
+    out = api.status(repo)
+    assert out.data["ready_now"] == [{"id": "T1", "title": "", "interrupted": True}], out.data
+    assert out.data["interrupted"] and out.data["interrupted"][0].startswith("T1"), out.data
+    _code, text, _err = run_cli(repo, "status")
+    assert "INTERRUPTED: T1" in text, text
