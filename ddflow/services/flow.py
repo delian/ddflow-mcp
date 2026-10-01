@@ -665,6 +665,9 @@ def reached(repo: Path, it: Item, ref: str) -> str:
     ``landed_before``. Before B9f8019c521 ``merged_sha`` was the branch head itself,
     which the first candidate covers -- and whose own second parent, when the branch
     had merged its base in, is just an old base tip that every line already contains.
+
+    A squash landing has one parent and its back-merge is another squash, so neither
+    commit reaches the other line: such an item is not found there, as before this.
     """
     merged = it.merged_sha
     if not merged:
