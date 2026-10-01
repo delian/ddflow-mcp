@@ -29,9 +29,17 @@ def _mcp_name_present(readme: str, name: str = NAME) -> bool:
 
 
 def _labelled(dockerfile: str, name: str = NAME) -> bool:
-    """A LABEL instruction that is not commented out carries the server name."""
-    live = "\n".join(ln for ln in dockerfile.splitlines() if not ln.lstrip().startswith("#"))
-    return bool(re.search(rf'io\.modelcontextprotocol\.server\.name="{re.escape(name)}"', live))
+    """A LABEL instruction -- not ENV, not RUN, not a comment -- carries the server name.
+
+    Instructions are read whole: continuation lines joined, comment lines dropped, as
+    Docker itself reads them."""
+    live = [ln for ln in dockerfile.splitlines() if not ln.lstrip().startswith("#")]
+    instructions = re.split(r"(?<!\\)\n", "\n".join(live))
+    want = f'io.modelcontextprotocol.server.name="{name}"'
+    return any(
+        re.match(r"\s*LABEL\s", ins, re.I) and want in ins.replace("\\\n", " ")
+        for ins in instructions
+    )
 
 
 def _job(name: str) -> str:
@@ -53,6 +61,10 @@ def test_the_checks_are_not_fooled_by_near_misses():
     assert not _mcp_name_present(f"mcp-name: {NAME}-x\n")
     assert _mcp_name_present(f"<!-- mcp-name: {NAME} -->")
     assert not _labelled(f'# LABEL io.modelcontextprotocol.server.name="{NAME}"\n')
+    assert not _labelled(f'ENV io.modelcontextprotocol.server.name="{NAME}"\n')
+    assert _labelled(
+        f'LABEL a="b" \\\n      io.modelcontextprotocol.server.name="{NAME}" \\\n      c="d"\n'
+    )
 
 
 def test_the_readme_is_the_long_description_that_reaches_pypi():
@@ -72,9 +84,17 @@ def test_verify_runs_this_check_and_every_publishing_job_waits_for_it():
         assert needs and "verify" in needs.group(1), f"{job} does not need verify"
 
 
+def _push_paths() -> list[str]:
+    """The `on: push: paths:` list -- that key under that event, nothing else."""
+    push = re.search(r"^  push:\n((?:    .*\n|\s*\n)+)", WORKFLOW, re.M)
+    assert push, "publish.yml has no on.push block"
+    paths = re.search(r"^    paths:\n((?:      .*\n)+)", push.group(1), re.M)
+    assert paths, "on.push has no paths filter"
+    return re.findall(r'^\s*-\s*"?([^"#\s]+)"?', paths.group(1), re.M)
+
+
 def test_a_readme_change_releases():
     """README.md is the PyPI page: a push that changes only it must publish, or the
-    ownership line never reaches the registry."""
-    on = WORKFLOW[WORKFLOW.index("\non:") : WORKFLOW.index("\njobs:")]
-    for path in ("README.md", "server.json"):
-        assert re.search(rf'^\s*-\s*"?{re.escape(path)}"?\s*(#.*)?$', on, re.M), path
+    ownership line never reaches the registry. Under `push.paths`, not `paths-ignore`."""
+    listed = _push_paths()
+    assert "README.md" in listed and "server.json" in listed, listed
