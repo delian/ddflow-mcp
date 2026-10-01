@@ -123,7 +123,21 @@ def _record_update(log, cfg, it, fields: dict[str, Any]) -> O.Outcome:
         changed=sorted(fields),
         fields=fields,
         lease_retargeted=lease is not None,
+        globs_dropped=_dropped(it, globs),
     )
+
+
+def _dropped(it, globs: list[str] | None) -> list[str]:
+    """What new ``globs`` take away from the item and its lease; [] when left alone.
+
+    `--globs` replaces the list (a field set, like every other `update` field), so an
+    agent widening a claim with only its new paths drops the old ones from every conflict
+    check. That is legitimate when meant -- and invisible when not, so it is reported.
+    """
+    if globs is None:
+        return []
+    before = [*it.globs, *(it.lease.globs if it.lease else [])]
+    return [g for g in dict.fromkeys(before) if g not in globs]
 
 
 def _bad_id(item: str) -> str:
