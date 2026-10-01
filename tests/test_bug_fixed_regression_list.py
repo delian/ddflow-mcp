@@ -161,3 +161,26 @@ def test_tests_joined_by_whitespace_after_a_parametrize_id_are_refused_with_the_
     out = api.bug_fixed(repo, "B1", regression_test=f"tests/test_fix.py::test_p[1,2] {B}")
     assert out.exit == FAIL, out
     assert "several" in out.reason, out.reason
+
+
+def test_separators_alone_name_no_test_on_any_surface(repo):
+    """`;` is a truthy string naming no test: it closed the bug over MCP and the API."""
+    _setup(repo)
+    for spec in (";", ",,", " , ; "):
+        assert api.bug_fixed(repo, "B1", regression_test=spec).exit == FAIL, spec
+    code, _out, err = run_cli(repo, "bug", "fixed", "B1", "--regression-test", ";")
+    assert code == FAIL and "regression-test" in err, err
+    assert not _fixed_events(repo)
+
+
+def test_the_fold_exposes_every_test_and_old_events_still_read(repo):
+    from ddflow.api import _load
+
+    _setup(repo)
+    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "old")
+    api.bug_fixed(repo, "B1", regression_test=[A, B])
+    EventLog(repo, "legacy").append("bug.fixed", "B2", {"regression_test": A, "lesson": ""})
+    _log, _cfg, st = _load(repo)
+    assert st.bugs["B1"].regression_tests == [A, B]
+    assert st.bugs["B1"].regression_test == f"{A}, {B}"
+    assert st.bugs["B2"].regression_tests == [A]

@@ -338,6 +338,9 @@ class Bug:
     found_at: str = ""
     fixed_at: str = ""
     regression_test: str = ""
+    #: The tests one by one (B227585c781). A bug closed before the list was recorded
+    #: has its whole `regression_test` string as the single entry.
+    regression_tests: list[str] = field(default_factory=list)
     lesson: str = ""
     #: Closed as a FALSE finding (`bug invalid`), with why and what showed it. Kept apart
     #: from `fixed_at` because the two closures claim different things: a fix claims a
@@ -1377,6 +1380,9 @@ def _h_bug_fixed(st: State, ev: Event) -> None:
     bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
     bug.fixed_at = ev.ts
     bug.regression_test = ev.data.get("regression_test", "")
+    bug.regression_tests = list(
+        ev.data.get("regression_tests") or ([bug.regression_test] if bug.regression_test else [])
+    )
     bug.lesson = ev.data.get("lesson", "")
 
 
