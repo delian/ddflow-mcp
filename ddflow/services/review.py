@@ -637,6 +637,16 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
     return out, ""
 
 
+def _cut_off(exc: Exception) -> str:
+    """A response that stopped mid-read -- `IncompleteRead`, which is no `OSError`.
+
+    The everyday cause is hedging: the winning copy shuts a loser's socket while the
+    loser is reading its answer. Uncaught, it escaped `_chat` and crashed the whole
+    review, whose contract is never to raise (bug Bf948d29d37).
+    """
+    return f"connection cut off mid-response: {exc!r}"
+
+
 def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tuple[dict | None, str]:
     """POST JSON, returning (body, error). Never raises.
 
@@ -662,6 +672,8 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
         return None, f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
     except (urllib.error.URLError, OSError) as exc:
         return None, f"unreachable: {exc}"
+    except http.client.HTTPException as exc:
+        return None, _cut_off(exc)
     except (ValueError, json.JSONDecodeError) as exc:
         return None, f"bad response body: {exc}"
 
@@ -801,6 +813,8 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         return "", f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
     except (urllib.error.URLError, OSError) as exc:
         return "", f"unreachable: {exc}"
+    except http.client.HTTPException as exc:
+        return "", _cut_off(exc)
     except (ValueError, json.JSONDecodeError) as exc:
         return "", f"bad response body: {exc}"
     try:
@@ -976,6 +990,11 @@ def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[
     return [settled[i] for i in range(n)]
 
 
+def _file_headers(diff: str) -> list[str]:
+    """Every `diff --git` line of a diff, i.e. the files it touches."""
+    return re.findall(r"(?m)^diff --git .*$", diff)
+
+
 def _retry_truncated(
     rev: Reviewer,
     system: str,
@@ -998,7 +1017,12 @@ def _retry_truncated(
         return results
     parts: list[tuple[int, str]] = []
     for i in lost:
-        pieces = split_diff(chunks[i], max(1, (len(chunks[i]) + 1) // 2)) or [chunks[i]]
+        pieces = split_diff(chunks[i], max(1, (len(chunks[i]) + 1) // 2))
+        # `split_diff` drops a file section with no hunk that is larger than the limit
+        # (a big rename or mode change): halves missing a file would let the chunk
+        # count as reviewed without it, so such a chunk is retried whole.
+        if not pieces or not all(any(h in p for p in pieces) for h in _file_headers(chunks[i])):
+            pieces = [chunks[i]]
         parts += [(i, piece) for piece in pieces]
     # Rendered the same way every first copy already was, so it cannot fail here.
     users = [render(piece, i + 1) for i, piece in parts]
