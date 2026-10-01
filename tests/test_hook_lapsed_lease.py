@@ -168,21 +168,34 @@ def test_a_lapsed_lease_matched_by_tree_alone_offers_takeover_too(repo, cfg, mon
     assert "If you are owner" in msg, msg
     assert "ddflow --agent owner heartbeat T1" in msg, msg
     assert "ddflow recover --item T1" in msg, msg
-    assert "ddflow claim T1 --force" in msg, msg
+    assert "ddflow release T1" in msg, msg
+    assert "--force" not in msg, msg
     assert "Your lease" not in msg, msg
 
 
 def test_the_offered_remedies_are_the_ones_that_work(repo, cfg, monkeypatch):
-    """A plain `claim` of an expired lease is refused under the default reclaim policy,
-    which is why the hook offers recover + `--force`; and the holder's heartbeat revives
-    its own lapsed lease, which is why the hook offers that."""
+    """Each remedy the hook offers for a lapsed lease does what it says: the holder's
+    heartbeat revives it; a bare claim by anyone else is refused (default reclaim
+    policy), and release-then-claim -- the path offered -- takes it over with every
+    claim check still applied."""
     _setup(repo, cfg)
     assert cfg.lease.reclaim_policy == "report"
     later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
     monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
-    with pytest.raises(L.LeaseError, match=r"EXPIRED.*recover --item T1.*--force"):
-        L.acquire(EventLog(repo, "stranger"), cfg, "T1", holder="stranger", globs=["src/*"])
+
+    def lease():
+        return fold(EventLog(repo, "r").read_all(), strict=False).items["T1"].lease
+
+    assert lease().expired(later, cfg.lease.grace_s)
     assert L.renew(EventLog(repo, "owner"), "T1"), "the holder's heartbeat was refused"
-    lease = fold(EventLog(repo, "r").read_all(), strict=False).items["T1"].lease
-    assert lease.holder == "owner"
-    assert not lease.expired(later, cfg.lease.grace_s), "the heartbeat did not revive it"
+    assert lease().holder == "owner"
+    assert not lease().expired(later, cfg.lease.grace_s), "the heartbeat did not revive it"
+
+    # Lapse it again, and take it over the way the hook says.
+    later += cfg.lease.ttl_s + cfg.lease.grace_s + 600
+    stranger = EventLog(repo, "stranger")
+    with pytest.raises(L.LeaseError, match="EXPIRED"):
+        L.acquire(stranger, cfg, "T1", holder="stranger", globs=["src/*"])
+    assert L.release(stranger, "T1", note="salvaged")
+    L.acquire(stranger, cfg, "T1", holder="stranger", globs=["src/*"])
+    assert lease().holder == "stranger"
