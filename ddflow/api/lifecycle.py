@@ -1436,10 +1436,12 @@ def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
     Landing it would record the item merged while nothing reached the target -- which
     is what an item bound to the WRONG tree did: its bound branch was empty, the work
     sat on another branch, and `merge` exited 0 (Bec8d5228c9, D-sticky-binding-remedy).
-    Not refused when git cannot answer: that is for `W.merge` to report.
+    Not refused when git cannot answer (`W.is_merged` is then False): that is for
+    `W.merge` to report. ``wt.branch`` is the branch that would land: an item with a tree
+    of its own refuses `--branch` earlier (`_what_to_land`), and a borrowed branch IS
+    the one named, already asked the same question by `_branch_to_land`.
     """
-    ahead = W.git(repo, "rev-list", "--count", f"{wt.base}..{wt.branch}")
-    if not ahead.ok or ahead.out.strip() != "0":
+    if not W.is_merged(repo, wt.branch, wt.base):
         return None
     return O.refused(
         "worktree.merged",

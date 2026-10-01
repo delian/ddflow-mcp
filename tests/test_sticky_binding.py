@@ -162,3 +162,37 @@ def test_complete_after_a_rebind_has_no_false_different_tree_note(repo):
     assert code == OK, out + err
     assert "different tree" not in out + err, out + err
     json.loads(out)
+
+
+def test_a_refused_field_edit_does_not_rebind_either(repo):
+    """`update --worktree P --globs G` with G refused records nothing -- the rebind
+    included (rubber_duck and roborev on the first cut: the rebind was written first)."""
+    _bridge, real = _wrongly_bound(repo)
+    run_cli(repo, "task", "add", "T2", "--globs", "b.py")
+    other = repo.parent / "other"
+    _git(repo, "worktree", "add", "-q", str(other), "-b", "other-work")
+    assert run_cli(other, "claim", "T2", agent="impl2")[0] == OK
+    code, out, err = run_cli(
+        repo, "update", "T1", "--worktree", str(real), "--globs", "b.py", agent="impl"
+    )
+    assert code == REFUSED, out + err
+    it = _item(repo)
+    assert it.branch == "bridge-work" and it.lease.branch == "bridge-work", it
+
+
+def test_merge_branch_on_a_bound_item_is_refused_before_the_empty_check(repo):
+    """The critic's case: `--branch <real>` on an item bound to an empty tree. The empty
+    check never sees it -- `_what_to_land` refuses a --branch for an item with its own
+    tree first -- so the message is that refusal, not a misleading 'nothing ahead'."""
+    _wrongly_bound(repo)
+    code, out, err = run_cli(repo, "merge", "T1", "--branch", "real-work", agent="impl")
+    assert code == REFUSED, out + err
+    assert "Drop --branch" in err and "no commits" not in err, err
+
+
+def test_rebind_refuses_a_detached_tree(repo):
+    _bridge, real = _wrongly_bound(repo)
+    _git(real, "checkout", "-q", "--detach")
+    code, out, err = run_cli(repo, "update", "T1", "--worktree", str(real), agent="impl")
+    assert code == REFUSED, out + err
+    assert _item(repo).branch == "bridge-work"
