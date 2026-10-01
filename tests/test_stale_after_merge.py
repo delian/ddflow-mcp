@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 from conftest import pass_pipeline, run_cli
 
 OK = 0
@@ -131,23 +132,59 @@ def _legacy_pass(repo: Path, tree_sha: str) -> None:
     )  # fmt: skip
 
 
-def test_legacy_evidence_on_a_clean_branch_head_is_not_stale_after_merge(repo):
+#: How a clean tree's fingerprint was spelled before bug B-fingerprint-never-clean.
+LEGACY_CLEAN = "95e0c70caf8cc336"
+
+
+@pytest.mark.parametrize("clean", ["clean", LEGACY_CLEAN])
+def test_legacy_evidence_on_a_clean_branch_head_is_not_stale_after_merge(repo, clean):
     tree = _claimed(repo)
     (tree / "a.py").write_text("a = 1\n")
     _git(tree, "add", "a.py")
     _git(tree, "commit", "-qm", "T1")
-    _legacy_pass(repo, _git(tree, "rev-parse", "HEAD")[:12] + "+clean")
+    _legacy_pass(repo, _git(tree, "rev-parse", "HEAD")[:12] + "+" + clean)
     said = _merge_and_complete(repo)
     assert NOTE not in said, said
 
 
-def test_legacy_evidence_on_an_older_commit_is_stale_after_merge(repo):
+@pytest.mark.parametrize("clean", ["clean", LEGACY_CLEAN])
+def test_legacy_evidence_on_an_older_commit_is_stale_after_merge(repo, clean):
     tree = _claimed(repo)
     (tree / "a.py").write_text("a = 1\n")
     _git(tree, "add", "a.py")
     _git(tree, "commit", "-qm", "T1")
-    _legacy_pass(repo, _git(tree, "rev-parse", "HEAD")[:12] + "+clean")
+    _legacy_pass(repo, _git(tree, "rev-parse", "HEAD")[:12] + "+" + clean)
     (tree / "a.py").write_text("a = 2\n")
     _git(tree, "commit", "-qam", "one more thing")
     said = _merge_and_complete(repo)
     assert "unit_tests " + NOTE in said and "a.py" in said, said
+
+
+def test_a_fast_forwarded_branch_head_that_is_itself_a_merge_is_what_landed(repo):
+    """Main merged INTO the branch, then the branch fast-forwards main: the landed head
+    is a merge commit, but not ddflow's -- its second parent is main's, not the work."""
+    tree = _claimed(repo)
+    assert run_cli(repo, "config", "--set", "worktree.merge_strategy", "ff-only")[0] == OK
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    (repo / "m.txt").write_text("main moved\n")
+    _git(repo, "add", "m.txt")
+    _git(repo, "commit", "-qm", "main moves")
+    _git(tree, "merge", "-q", "--no-ff", "-m", "merge main", "main")
+    assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    head = _git(tree, "rev-parse", "HEAD")
+    said = _merge_and_complete(repo)
+    assert _git(repo, "rev-parse", "main") == head, "expected a fast-forward"
+    assert NOTE not in said, said
+
+
+def test_a_clean_tree_fingerprints_as_clean(repo):
+    """Bug B-fingerprint-never-clean: the three parts were joined with NUL and the
+    joined body tested with `str.strip`, which keeps NUL -- so no tree was ever clean."""
+    from ddflow.services import gates as G
+
+    assert G.tree_fingerprint(repo).endswith("+clean"), G.tree_fingerprint(repo)
+    assert G.digest("\x00\x00") == G.LEGACY_CLEAN == LEGACY_CLEAN
+    (repo / "new.py").write_text("x\n")
+    assert not G.tree_fingerprint(repo).endswith("+clean")
