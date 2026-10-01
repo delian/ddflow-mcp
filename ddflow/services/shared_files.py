@@ -130,9 +130,10 @@ def _merge_rows(rows: list[str]) -> list[tuple[int, str, str]]:
 
 def _witness(pattern: str) -> str:
     """A path ``pattern`` matches, standing for it: `**` -> two segments, `*`/`?`/a class
-    -> one character no pattern holds (U+0001). Read as a path, `docs/**` was matched by
-    `docs/*` (a `*` matches `**`); a plain `x` was matched by a narrower `docs/x*`
-    (review findings). An unprintable stand-in is matched only by wildcards."""
+    -> U+0001, which no literal holds. Read as a path, `docs/**` was matched by `docs/*`
+    (a `*` matches `**`); a plain `x` was matched by a narrower `docs/x*` (review
+    findings). The stand-in is matched only by wildcards -- including a NEGATED class
+    (`[!x]`), which is why `_relation` treats containment both ways as ambiguous."""
     import re
 
     w = re.sub(r"\[[^]]*\]", "\x01", pattern)
@@ -167,7 +168,8 @@ def _relation(glob: str, pattern: str) -> str:
 def _broad_rule(repo: Path, glob: str) -> bool:
     """Does a `.gitattributes` merge rule cover the WHOLE glob -- the glob itself, or a
     pattern it falls inside (`*.md` for `docs/*.md`)? Then the project chose for all of
-    it. A narrower rule (`docs/README.md`, `docs/R*.md`) chose for part only."""
+    it -- by `_relation`, so only one-way containment counts. A narrower rule
+    (`docs/README.md`, `docs/R*.md`) or an ambiguous one chose for part only."""
     path = Path(repo) / ".gitattributes"
     rows = path.read_text("utf-8").splitlines() if path.exists() else []
     return any(_relation(glob, p) == "broader" for _k, p, _v in _merge_rows(rows))
@@ -212,13 +214,13 @@ def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
         if rel == "narrower":
             narrower.append(k)
             continue
-        hit = [p for p in covered if p == pattern or is_shared(p, [pattern])]
-        if not hit:
-            continue
-        if len(hit) < len(covered):
+        # Not positively broader: a rule that covers files the glob covers today, or
+        # whose relation is ambiguous, is treated as the project's narrower choice and
+        # keeps winning -- full coverage of TODAY's files is no proof it is broader
+        # (review finding: `docs/[!x]*` over only `docs/guide.md`).
+        ambiguous = _inside(glob, pattern) and _inside(pattern, glob)
+        if ambiguous or any(p == pattern or is_shared(p, [pattern]) for p in covered):
             narrower.append(k)
-        else:
-            last_broad = k
     # A broader line wins over everything before it; the union line must follow the last
     # one, and precede the first narrower line after it. A narrower line BEFORE the last
     # broad one was already overridden by it, and moving lines around cannot revive it
