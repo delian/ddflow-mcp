@@ -101,7 +101,11 @@ echo "$1" >> "$FAKE_DIR/sleeps"
 def _run(tmp_path: Path, plan: str, *, listed: bool = False, last: str = "504"):
     fake = tmp_path / "fake"
     fake.mkdir(parents=True)
-    for name, body in (("mcp-publisher", FAKE_PUBLISHER), ("curl", FAKE_CURL), ("sleep", FAKE_SLEEP)):
+    for name, body in (
+        ("mcp-publisher", FAKE_PUBLISHER),
+        ("curl", FAKE_CURL),
+        ("sleep", FAKE_SLEEP),
+    ):
         p = fake / name
         p.write_text(body)
         p.chmod(p.stat().st_mode | stat.S_IEXEC)
@@ -119,24 +123,34 @@ def _run(tmp_path: Path, plan: str, *, listed: bool = False, last: str = "504"):
         "FAKE_PLAN": plan,
         "FAKE_LAST": last,
         **ENV,
-        "MCP_CALL_TIMEOUT": "1",   # the hang case; every other call returns at once
+        "MCP_CALL_TIMEOUT": "1",  # the hang case; every other call returns at once
     }
     # GitHub runs `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`.
     proc = subprocess.run(
         ["bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
-        cwd=work, env=env, capture_output=True, text=True, timeout=60,
+        cwd=work,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
 
     def lines(name: str) -> list[str]:
         f = fake / name
         return f.read_text().split() if f.exists() else []
 
-    log = (fake / "publisher.log").read_text().splitlines() if (fake / "publisher.log").exists() else []
+    log = (
+        (fake / "publisher.log").read_text().splitlines()
+        if (fake / "publisher.log").exists()
+        else []
+    )
     return proc, {
         "publishes": len(lines("publishes")),
         "logins": sum(1 for x in log if x.startswith("login")),
         "sleeps": [int(s) for s in lines("sleeps")],
-        "gets": (fake / "curl.log").read_text().splitlines() if (fake / "curl.log").exists() else [],
+        "gets": (fake / "curl.log").read_text().splitlines()
+        if (fake / "curl.log").exists()
+        else [],
         "out": proc.stdout + proc.stderr,
     }
 
@@ -179,7 +193,8 @@ def test_a_504_that_committed_anyway_is_success_without_republishing(tmp_path):
     assert proc.returncode == 0, r["out"]
     assert r["publishes"] == 1
     name = urllib.parse.quote(SERVER["name"], safe="")
-    assert any(f"/v0.1/servers/{name}/versions/{SERVER['version']}" in g for g in r["gets"]), r["gets"]
+    path = f"/v0.1/servers/{name}/versions/{SERVER['version']}"
+    assert any(path in g for g in r["gets"]), r["gets"]
 
 
 def test_an_already_listed_version_is_not_published_again(tmp_path):
