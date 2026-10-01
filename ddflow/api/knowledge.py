@@ -356,8 +356,9 @@ def bug_fixed(
     `regression_test` is one test or several: a list (a repeated CLI flag, an MCP
     array), each entry itself split on ',' and ';' outside a parametrize id's brackets
     (B227585c781). The event keeps `regression_test` as the string every reader already
-    displays -- verbatim when one string was given, ', '-joined from a list -- and
-    `regression_tests` as the split list.
+    displays -- as given (stripped) when one string was given, ', '-joined from a list --
+    and `regression_tests` as the split list. The required-test rule asks the LIST: `;`
+    alone is a truthy string naming no test.
     """
     log, cfg, st = _load(repo, agent)
     parts = [regression_test] if isinstance(regression_test, str) else list(regression_test)
@@ -365,7 +366,7 @@ def bug_fixed(
     regression_test = (
         regression_test.strip() if isinstance(regression_test, str) else ", ".join(tests)
     )
-    if not regression_test and cfg.lessons.require_regression_test:
+    if not tests and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
             "a bug may not be closed without --regression-test naming the test that "
