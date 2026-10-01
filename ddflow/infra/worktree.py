@@ -49,8 +49,20 @@ class GitResult:
         return (self.out or self.err).strip()
 
 
-def git(repo: Path | str, *args: str, timeout: int = 300, check: bool = False) -> GitResult:
-    p = P.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout)
+def git(
+    repo: Path | str,
+    *args: str,
+    timeout: int = 300,
+    check: bool = False,
+    env: dict[str, str] | None = None,
+) -> GitResult:
+    p = P.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env={**os.environ, **env} if env else None,
+    )
     res = GitResult(p.returncode, p.stdout.strip(), p.stderr.strip())
     if check and not res.ok:
         raise GitError(f"git {' '.join(args)} failed ({res.code}): {res.err or res.out}")
@@ -404,8 +416,17 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
     args += ["-m", message, source]
     was_merging = merging(tree)
     r = git(tree, *args)
-    if not r.ok and not was_merging and merging(tree):
-        return _abandon_merge(tree, source, r)
+    if not r.ok and was_merging is False:
+        now = merging(tree)
+        if now:
+            return _abandon_merge(tree, source, r)
+        if now is None:
+            return GitResult(
+                r.code,
+                r.out,
+                f"{r.err or r.out}\n\ngit could not say whether {tree} is left mid-merge: "
+                f"check `git -C {tree} status`.",
+            )
     if r.ok and cfg.worktree.merge_strategy == "squash":
         # `git merge --squash` STAGES the result and commits nothing -- `-m` is accepted
         # and ignored. So a squash "merge" used to report success with the work sitting
@@ -414,7 +435,11 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
         # Nothing to commit means the branch was already contained; that is success.
         if git(tree, "diff", "--cached", "--quiet").ok:
             return r
-        c = git(tree, "commit", "-m", message)
+        # Names what is squashed, so the lease hook can see the commit is exactly the
+        # automatic merge (enforce.clean_merge_conclusion) -- as git's own GITHEAD_
+        # does for a real merge.
+        squashed = git(tree, "rev-parse", "--verify", "--quiet", f"{source}^{{commit}}").out
+        c = git(tree, "commit", "-m", message, env={"DDFLOW_SQUASH_OF": squashed})
         if not c.ok:
             # Unstage it, as a failed merge is aborted: left staged, the next commit
             # anyone makes in this tree would carry it (B6926ec1ad9).
@@ -432,12 +457,15 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
     return r
 
 
-def merging(tree: Path) -> bool:
-    """Is ``tree`` in the middle of a merge: MERGE_HEAD set, or a path left unmerged?"""
+def merging(tree: Path) -> bool | None:
+    """Is ``tree`` in the middle of a merge: MERGE_HEAD set, or a path left unmerged?
+
+    None when git could not list unmerged paths: "could not tell" is not "no".
+    """
     if git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok:
         return True
     unmerged = git_paths(tree, "diff", "--name-only", "--diff-filter=U")
-    return bool(unmerged)
+    return None if unmerged is None else bool(unmerged)
 
 
 #: How many conflicting paths a refused merge names before summarising the rest.
