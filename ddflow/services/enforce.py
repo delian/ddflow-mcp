@@ -39,7 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
-from ..core.model import fold
+from ..core.model import Lease, fold
 from ..core.schedule import globs_overlap
 from ..infra import proc as P
 from ..infra import worktree as W
@@ -948,6 +948,72 @@ _UNKNOWN_STAGED = (
 SELF_MANAGED = (".ddflow/", "docs/ddflow/", "AGENTS.md", "CLAUDE.md", ".cursor/rules/")
 
 
+def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> bool:
+    """A lease is "mine" if I hold it, OR if it created the very tree this commit is
+    happening in. The second test is the robust one: the hook runs inside a worktree,
+    and the lease that produced that worktree is the relevant claim no matter which
+    process id or identity string made it."""
+    if lease.holder == me:
+        return True
+    leased_tree = W.load_path(repo, lease.worktree) if lease.worktree else None
+    return bool(here and leased_tree and leased_tree.resolve() == here)
+
+
+def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
+    """What to say about a lapsed lease on this work: when it lapsed, and how to renew
+    it -- as its holder, since a heartbeat from the tree will not revive an expired one.
+
+    Matched by the tree alone (the holder is not the identity this hook resolved), the
+    committer is USUALLY the holder under a derived name, but may be someone `recover`
+    sent to take the abandoned work over. Both readings are offered rather than telling
+    a newcomer to resurrect a claim its holder abandoned.
+    """
+    idle = int((now - lease.renewed_at) // 60)
+    ago = max(0, int((now - lease.renewed_at - lease.ttl_s) // 60))
+    whose = "Your lease" if lease.holder == me else "The lease"
+    lines = [
+        f"{whose} on {item_id} (held by {lease.holder}) LAPSED {ago} min ago: no",
+        f"heartbeat for {idle} min, past its {lease.ttl_s // 60} min TTL, and nobody has taken",
+        "it over.",
+    ]
+    if lease.holder == me:
+        lines += ["Renew it, then commit again:"]
+    else:
+        lines += [f"This is that item's tree. If you are {lease.holder}, renew it, then commit:"]
+    lines.append(f"    ddflow --agent {lease.holder} heartbeat {item_id}")
+    if lease.holder != me:
+        # The path `claim`'s own refusal names (`_claim_blocker`): a bare claim of an
+        # expired lease is refused, since a crashed agent's tree often holds finished
+        # work, and `--force` would also waive the dependency and overlap checks.
+        lines += [
+            f"If you are not {lease.holder}, the work was abandoned; take it over by:",
+            f"    ddflow recover --item {item_id}    # what its tree holds; salvage it",
+            f"    ddflow release {item_id} --note salvaged",
+            f"    ddflow claim {item_id}",
+        ]
+    return [*lines, ""]
+
+
+def _derived_identity_lines(me: str, held_by: dict[str, Lease]) -> list[str]:
+    """Nobody said who is committing, so the identity was derived from this tree -- and
+    "ANOTHER agent" may be the committer itself, working outside its item's tree under
+    a name it declared only to its claim (an MCP `as_agent`, a `--agent`). The hook
+    cannot tell (B9aeb141b9a); it says how the name was found and what the holder
+    should do, rather than blaming it for its own lease.
+    """
+    lines = [
+        f"Nothing declared who is committing, so this hook named you {me}, from this",
+        "tree. If you ARE one of the holders above, you are outside its item's tree:",
+    ]
+    for item_id, lease in held_by.items():
+        where = lease.worktree or "(no tree recorded)"
+        lines += [
+            f"  {lease.holder} on {item_id}: commit in {where},",
+            f"    or declare yourself:  DDFLOW_AGENT={lease.holder} git commit ...",
+        ]
+    return [*lines, ""]
+
+
 def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
     """(exit_code, message). 0 allows the commit; 1 refuses it.
 
@@ -977,13 +1043,7 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     mine: list[str] = []
     others: dict[str, str] = {}
     for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
-        # A lease is "mine" if I hold it, OR if it created the very tree this commit is
-        # happening in. The second test is the robust one: the hook runs inside a
-        # worktree, and the lease that produced that worktree is the relevant claim no
-        # matter which process id or identity string made it.
-        leased_tree = W.load_path(repo, lease.worktree) if lease.worktree else None
-        same_tree = bool(here and leased_tree and leased_tree.resolve() == here)
-        if lease.holder == me or same_tree:
+        if _counts_as_mine(repo, lease, me, here):
             mine.extend(lease.globs)
         else:
             for g in lease.globs:
@@ -996,6 +1056,21 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     # A path another agent holds is the dangerous case and gets named separately: the
     # remedy is not "claim it", it is "stop".
     stolen = {p: owner for p in uncovered for g, owner in others.items() if globs_overlap(p, g)}
+
+    # A lease that WOULD have been mine, by the same two tests, but has lapsed and was
+    # not taken over. Invisible above, so the message said "(no live lease)" and "claim
+    # the work" to the holder committing in its own tree, and the lapse was misread as
+    # an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
+    # Only one no other agent's live lease overlaps ANYWHERE: a heartbeat revives all its
+    # globs, and reviving them over someone's live paths is the very race the STOP
+    # text warns against.
+    lapsed = [
+        (item_id, lease)
+        for item_id, lease in state.expired_leases(now, cfg.lease.grace_s).items()
+        if _counts_as_mine(repo, lease, me, here)
+        and any(globs_overlap(p, g) for p in uncovered for g in lease.globs)
+        and not any(globs_overlap(g, o) for g in lease.globs for o in others)
+    ]
 
     lines = [
         f"ddflow: {len(uncovered)} staged path(s) are not covered by a lease you hold.",
@@ -1012,10 +1087,26 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
             "that agent's work. Coordinate, or wait for the lease to be released.",
             "",
         ]
+        # `_load` writes the derived name back into cfg.agent.id; its source says so.
+        derived = not cfg.agent.id or cfg.sources.get("agent.id") == "derived"
+        if not agent and derived:
+            held_by = {
+                item_id: lease
+                for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items()
+                if any(globs_overlap(p, g) for p in stolen for g in lease.globs)
+            }
+            lines += _derived_identity_lines(me, held_by)
+    for item_id, lease in lapsed:
+        lines += _lapsed_lines(item_id, lease, now, me)
+    held = ", ".join(mine) if mine else "(no live lease)"
+    if lapsed and not mine:
+        held = "nothing live (the lease above lapsed)"
     lines += [
-        f"You hold: {', '.join(mine) if mine else '(no live lease)'}",
+        f"You hold: {held}",
         "",
-        "Fix by claiming the work, or by widening the claim you already hold:",
+        "Otherwise, claim the work or widen the claim you already hold:"
+        if lapsed
+        else "Fix by claiming the work, or by widening the claim you already hold:",
         "    ddflow next                     # what may be started",
         "    ddflow claim <ID> --globs '...' # lease it and get a worktree",
         "    ddflow update <ID> --globs '...'# widen an existing claim",
