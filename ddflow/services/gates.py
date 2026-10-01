@@ -41,6 +41,7 @@ import time
 import tomllib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -1109,6 +1110,68 @@ def differing_paths(a: TreeEntries, b: TreeEntries) -> list[str]:
     return sorted(p for p in a.keys() | b.keys() if a.get(p) != b.get(p))
 
 
+#: A test runner's own verdict lines, wherever in the output they fall: pytest's
+#: `=== 3 failed, 112 passed in 4.2s ===` banners (bare under `-q`), unittest's `Ran 12 tests in 0.1s`
+#: and `FAILED (failures=2)` / `OK (skipped=1)`.
+_VERDICT = r"(passed|failed|errors?|skipped|xfailed|xpassed|deselected)"
+_SUMMARY_LINE = re.compile(
+    rf"=+ .*\b({_VERDICT[1:-1]}|no tests ran)\b.* =+"
+    # pytest -q: the same verdicts, with no banner
+    rf"|(\d+ {_VERDICT}\b.*|no tests ran) in \d[\d.]*s\b.*"
+    r"|Ran \d+ tests? in \S+"
+    r"|(OK|FAILED) \(.*\)"
+)
+#: How many summary lines are kept: the first and last half of them when there are more.
+MAX_SUMMARY_LINES = 20
+
+
+def summary_lines(out: str) -> list[str]:
+    """The suite's own verdict lines from the WHOLE output, not the tail."""
+    found = [ln.strip() for ln in out.splitlines() if _SUMMARY_LINE.fullmatch(ln.strip())]
+    if len(found) <= MAX_SUMMARY_LINES:
+        return found
+    half = MAX_SUMMARY_LINES // 2
+    return [*found[:half], f"... {len(found) - 2 * half} more ...", *found[-half:]]
+
+
+#: Where `gate run` keeps each run's full output, under the primary's `.ddflow/`.
+#: Machine-local: the directory ignores itself, so no project's .gitignore has to know.
+RUNS_DIR = "runs"
+#: Run logs kept per item and gate; older ones are deleted when a new one is written.
+KEEP_RUN_LOGS = 10
+
+
+def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
+    """A `keep_output` for `run_command_gate`: writes the output to
+    `.ddflow/runs/<item>/<gate>-<UTC time>-<pid>.log` and returns that path relative to
+    ``repo``. The newest KEEP_RUN_LOGS per item and gate are kept."""
+
+    def keep(out: str) -> str:
+        runs = Path(repo) / ".ddflow" / RUNS_DIR
+        runs.mkdir(parents=True, exist_ok=True)
+        ignore = runs / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("# gate run output logs: machine-local, never committed\n*\n")
+        where = runs / item_id
+        where.mkdir(exist_ok=True)
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+        path = where / f"{gate}-{stamp}-{os.getpid()}.log"
+        path.write_text(out, "utf-8", errors="replace")
+        # THIS gate's logs only -- `unit-*.log` would also match gate `unit-fast`'s --
+        # ordered by the stamp in the name, never by mtime (coarse on some filesystems,
+        # which could rank the log just written as the oldest), and never the new one.
+        mine = re.compile(rf"{re.escape(gate)}-\d{{8}}T\d{{6}}(\d{{6}})?Z-\d+\.log")
+        old = sorted(
+            (q for q in where.iterdir() if mine.fullmatch(q.name) and q != path),
+            key=lambda q: q.name[len(gate) + 1 :],
+        )
+        for stale in old[: max(0, len(old) - (KEEP_RUN_LOGS - 1))]:
+            stale.unlink(missing_ok=True)
+        return path.relative_to(repo).as_posix()
+
+    return keep
+
+
 def digest(text: str) -> str:
     return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=8).hexdigest()
 
@@ -1160,8 +1223,13 @@ def run_command_gate(
     env: dict[str, str] | None = None,
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 0,
+    keep_output: Callable[[str], str] | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Execute a command gate. Returns (outcome, evidence).
+
+    ``keep_output`` stores the WHOLE output and returns where (`gate run` passes
+    `run_log_writer`): without it the evidence holds only the tail, and its digest
+    names bytes nobody kept.
 
     The distinction this function exists to preserve: a command that *ran and failed*
     is ``failed``; a command that *could not run* — binary missing, cwd gone, timed out —
@@ -1262,6 +1330,10 @@ def run_command_gate(
         "output_digest": digest(out),
         "output_bytes": len(out),
         "tail": out[-2000:],
+        # The suite's own verdict lines from ALL of it: a gate that reruns its failures
+        # ends on the rerun's "112 passed", and the tail alone hid the first pass's
+        # "115 failed" (bug Bac392907b1).
+        "summary": summary_lines(out),
         # WHICH tree this is evidence about. Without it "the tests passed" names
         # nothing: a concurrent agent can move the tree underneath a running probe, and
         # one agent editing between two gates makes the earlier gate's evidence describe
@@ -1277,6 +1349,13 @@ def run_command_gate(
         # without this the log cannot tell them apart.
         "diff_stat": diff_stat(cwd),
     }
+    if keep_output is not None:
+        # The full output the digest is over, so the digest can be checked. A log that
+        # cannot be written is said so in the evidence; it does not change the outcome.
+        try:
+            ev["output_log"] = keep_output(out)
+        except (OSError, ValueError) as exc:  # ValueError: an encoding the log refused
+            ev["output_log_error"] = str(exc)[:200]
     outcome, why = classify_exit(gdef, p.returncode, out)
     if why:
         ev["reason"] = why
