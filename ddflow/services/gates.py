@@ -1439,6 +1439,9 @@ def reviewer_independence(
             f"model that routes across providers, to [agent].routers with the families "
             f"it draws on), or pass `--model` with a name the map recognises."
         )
+    # `router_set` returns its members stripped and lowercased, so the router side is
+    # case-blind too: `["Anthropic"]` against a reviewer resolved to 'anthropic' must
+    # overlap, or a reviewer from inside the set would pass as independent.
     author_set = routed if routed is not None else [author_fam]
     author_desc = author_fam if routed is None else f"{author_model} ({', '.join(author_set)})"
     if not fams:
