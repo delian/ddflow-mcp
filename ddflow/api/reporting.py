@@ -102,9 +102,14 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
     rec = L.scan(log, cfg, repo)
 
     phases, tasks = st.phases(), st.tasks()
+    # Every bucket is read off the ONE plan `next` and `brief` use, so each task is in
+    # exactly one and `total` is their sum (Bdcce70d036: "blocked" counted reason
+    # "deps" alone, and every item a parallelism cap held back was in no bucket at all).
     done = [t for t in tasks if t.state == "done"]
-    running = [t for t in tasks if t.state == "running"]
-    blocked = [b for b in p.blocked if b.reason == "deps"]
+    abandoned = [t for t in tasks if t.state == "abandoned"]
+    running = p.running
+    capped = [st.items[i] for i in p.capped]
+    blocked = [b for b in p.blocked if b.item not in set(p.capped)]
     hours = sum(w.total_seconds for w in tracked.values()) / 3600
     commits = sum(len(w.commits) for w in tracked.values())
     live_decisions = [d for d in st.decisions.values() if d.live]
@@ -117,14 +122,30 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
             "done": len(done),
             "running": len(running),
             "ready": len(p.ready),
+            "held_by_cap": len(capped),
             "blocked": len(blocked),
+            "review": len(p.review),
+            "abandoned": len(abandoned),
         },
         "completed_tasks": [{"id": t.id, "title": t.title, "sha": t.merged_sha} for t in done],
         "in_flight": [
             {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
             for t in running
         ],
-        "ready_now": [{"id": t.id, "title": t.title} for t in p.ready],
+        # A task RUNNING with no live lease is offered as ready -- someone must resume it
+        # -- but never silently: its worktree may hold uncommitted work. `next` and
+        # `brief` say so; so does this (roborev, job 897).
+        "ready_now": [
+            {
+                "id": t.id,
+                "title": t.title,
+                **({"interrupted": True} if t.state == "running" else {}),
+            }
+            for t in p.ready
+        ],
+        "interrupted": p.interrupted,
+        "held_by_cap": [{"id": t.id, "title": t.title} for t in capped],
+        "cap": p.cap_note if capped else "",
         "agent_hours": round(hours, 2),
         "commits": commits,
         "decisions": len(live_decisions),
@@ -141,6 +162,9 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
         "done": done,
         "running": running,
         "ready": p.ready,
+        "interrupted": p.interrupted,
+        "capped": capped,
+        "cap": p.cap_note,
         "blocked": blocked,
         "recoverable": rec,
         "findings": findings,

@@ -14,6 +14,7 @@ import time
 
 from ...api import reporting as A
 from ...infra import worktree as W
+from ...views.markdown import cap_held
 from ..context import FAIL, NOTHING, OK, Ctx
 
 
@@ -35,10 +36,23 @@ def _queue_lines(r) -> list[str]:
         out.append("")
         out.append("Ready to start:")
         out += [f"  [ ] {t.id:<12} {t.title}" for t in r["ready"][:8]]
+    out += [f"  INTERRUPTED: {note}" for note in r["interrupted"]]
+    if r["capped"]:
+        out.append("")
+        held = _first([t.id for t in r["capped"]])
+        out.append(f"{cap_held(len(r['capped']), bool(r['ready']))} {r['cap']}: {held}")
     if r["blocked"]:
         out.append("")
-        out.append(f"Blocked on dependencies: {', '.join(b.item for b in r['blocked'][:8])}")
+        out.append("Blocked: " + _first([f"{b.item} ({b.reason})" for b in r["blocked"]]))
     return out
+
+
+_SHOWN = 8
+
+
+def _first(names: list[str]) -> str:
+    """The first few of a list, and "..." when there are more."""
+    return ", ".join(names[:_SHOWN]) + (" ..." if len(names) > _SHOWN else "")
 
 
 def _recorded_line(r) -> list[str]:
