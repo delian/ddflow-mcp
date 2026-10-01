@@ -36,6 +36,7 @@ def cmd_review(a, c: Ctx) -> int:
         # watching a hung tool kills it.
         on_progress=lambda line: print(line, flush=True),
         agent=c.requested_agent,
+        chunks=a.chunk or None,
     )
     if out.exit == FAIL or (out.exit == NOTHING and not out.data.get("reviewer")):
         print(out.reason, file=sys.stderr)

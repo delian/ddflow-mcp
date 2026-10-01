@@ -160,6 +160,79 @@ def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
     return tick
 
 
+def _say_result(say: Callable[[str], None], res) -> None:
+    """One reviewer's verdict, then each finding with its detail."""
+    say(
+        f"  {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
+        f"{res.elapsed_s:.1f}s" + (f" — {res.reason}" if res.reason else "")
+    )
+    for f in res.findings:
+        say(f"\n  [{f.severity}] {f.location or f.title}")
+        for line in f.detail.splitlines():
+            if line.strip():
+                say(f"      {line.strip()}")
+
+
+def _chunk_numbers(value) -> list[int] | str:
+    """`--chunk 2 --chunk 5`, `--chunk 2,5`, or an MCP list of numbers: sorted, once each."""
+    items = [value] if isinstance(value, (str, int)) else list(value or [])
+    out: set[int] = set()
+    for item in items:
+        for part in str(item).replace(";", ",").split(","):
+            if not part.strip():
+                continue
+            try:
+                out.add(int(part))
+            except ValueError:
+                return f"--chunk takes chunk numbers, e.g. 5 or 2,5; got {part.strip()!r}"
+    return sorted(out) or "--chunk names no chunk"
+
+
+def _rerun_scope(it, gate: str, revs: list, diff: str, value):
+    """(the reviewer to re-run, the evidence to merge into, the chunks), or why not.
+
+    A chunk number means something only in the cut that printed it: the same diff, the
+    same chunk size, the same reviewer. Checked BEFORE a reviewer is called, so a 30-
+    minute request is never spent on a result that could not be merged.
+    """
+    from ..services import review as R
+
+    chunks = _chunk_numbers(value)
+    if isinstance(chunks, str):
+        return chunks
+    if it is None:
+        return "--chunk re-reviews part of an ITEM's recorded review: name the item"
+    rec = it.gates.get(gate)
+    prior = dict(rec.evidence) if rec and rec.evidence else {}
+    if not prior.get("diff_sha") or "reviewed" not in prior:
+        return (
+            f"no `ddflow review` of {it.id}.{gate} with per-chunk evidence is on record; "
+            f"run the full review first"
+        )
+    if prior["diff_sha"] != R.diff_digest(diff):
+        return (
+            f"the diff changed since the recorded review of {it.id}.{gate}, so its chunk "
+            f"numbers no longer apply: run the full review"
+        )
+    mine = [r for r in revs if r.name == prior.get("reviewer")]
+    if not mine:
+        return (
+            f"reviewer {prior.get('reviewer')!r}, which recorded {it.id}.{gate}, is not "
+            f"configured for {gate!r} now: run the full review"
+        )
+    if mine[0].max_chunk_chars != prior.get("chunk_chars"):
+        return (
+            f"[[reviewer]].max_chunk_chars is {mine[0].max_chunk_chars} now, "
+            f"{prior.get('chunk_chars')} when {it.id}.{gate} was recorded: the chunks "
+            f"differ, run the full review"
+        )
+    total = int(prior.get("chunks_total", 0))
+    outside = [n for n in chunks if not 1 <= n <= total]
+    if outside:
+        return f"no chunk {outside}: the recorded review of {it.id}.{gate} had 1..{total}"
+    return mine[:1], prior, chunks
+
+
 def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     """Every configured reviewer, and which of them cannot satisfy the family rule."""
     from ..services import review as R
@@ -254,8 +327,12 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     branch: str = "",
     called_from: Path | None = None,
     agent: str = "",
+    chunks: list[int] | list[str] | str | None = None,
 ) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
+
+    `chunks` re-reviews only those chunks (numbered as the recorded review printed
+    them) and merges the result into that record -- see `_rerun_scope`.
 
     `commit` reviews that one landed commit instead of the item's branch -- the
     after-merge review, recorded against the item (done or not) all the same. `branch`
@@ -331,6 +408,27 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             text="",
         )
 
+    prior: dict[str, Any] = {}
+    only: list[int] | None = None
+    if chunks:
+        scoped = _rerun_scope(it, gate, revs, diff, chunks)
+        if isinstance(scoped, str):
+            return O.Outcome(
+                kind="review",
+                data={
+                    "id": item,
+                    "gate": gate,
+                    "outcome": "",
+                    "findings": [],
+                    "how": how,
+                    "text": scoped,
+                },
+                exit=O.REFUSED,
+                reason=scoped,
+            )
+        revs, prior, only = scoped
+        say(f"→ re-reviewing chunk(s) {only} of {item}.{gate} (recorded: {prior['coverage']})")
+
     overrides = P.overrides_from(cfg)
     tick_s = min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s))
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
@@ -347,17 +445,16 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             on_progress=say,
             on_tick=keep_lease,
             tick_s=tick_s,
+            only=only,
         )
+        if prior and res.status != R.ERROR:
+            why = R.merge_rerun(prior, res)
+            if why:  # `_rerun_scope` checked all of it; a record is not overwritten blind
+                return O.Outcome(
+                    kind="review", data={"id": item, "gate": gate}, exit=O.REFUSED, reason=why
+                )
         results.append(res)
-        say(
-            f"  {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
-            f"{res.elapsed_s:.1f}s" + (f" — {res.reason}" if res.reason else "")
-        )
-        for f in res.findings:
-            say(f"\n  [{f.severity}] {f.location or f.title}")
-            for line in f.detail.splitlines():
-                if line.strip():
-                    say(f"      {line.strip()}")
+        _say_result(say, res)
 
     best = min(results, key=lambda r: r.status)
     outcome = {

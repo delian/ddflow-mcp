@@ -1949,6 +1949,13 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "connection runs in. With neither, the review is recorded unavailable.",
                 False,
             ),
+            "chunk": (
+                "array",
+                "Re-review ONLY these chunk numbers (as the recorded review numbered them, "
+                "e.g. [5]) and merge the result into that record. Refused unless the "
+                "recorded review is of the same diff, chunk size and reviewer.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent, called_from=None: _api().run_review(
             repo,
@@ -1961,6 +1968,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             branch=a.get("branch", "") or "",
             called_from=called_from,
             agent=agent,
+            chunks=a.get("chunk") or None,
         ),
         "wants_called_from": True,
         # The TRANSCRIPT the run produced — findings already formatted with their
