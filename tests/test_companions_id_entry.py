@@ -77,3 +77,27 @@ def test_a_toml_id_entry_with_a_launch_still_counts(tmp_path):
         '[mcp_servers.context7]\ncommand = "my-wrapper"\n', "utf-8"
     )
     assert _status(tmp_path, "context7").registered_as == {"codex": "context7"}
+
+
+def _codex(repo: Path, text: str) -> None:
+    (repo / ".codex").mkdir()
+    (repo / ".codex" / "config.toml").write_text(text, "utf-8")
+
+
+def test_the_toml_writer_agrees_with_the_reader_about_an_empty_table(tmp_path):
+    """Reader: not registered. Writer: must not answer "already registers" (roborev 894)."""
+    _codex(tmp_path, "[mcp_servers.context7]\n")
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "refused" and "launches nothing" in msg, (status, msg)
+    assert _status(tmp_path, "context7").registered_in == []
+
+
+def test_an_unparseable_toml_file_registers_nothing(tmp_path):
+    """The agent's own parser rejects the file, so nothing in it launches (roborev 894)."""
+    _codex(tmp_path, '[mcp_servers.context7]\ncommand = "npx\n')
+    st = _status(tmp_path, "context7")
+    assert st.registered_in == [] and st.usable is False, st.registered_in
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "refused" and "not valid TOML" in msg, (status, msg)
