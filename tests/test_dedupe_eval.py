@@ -134,10 +134,10 @@ def test_the_fixture_is_redacted():
             assert not _private_addresses(text), (r.get("id") or r, _private_addresses(text))
             assert not build.MODEL_NAME.search(text), (r.get("id") or r, field)
             assert not build.HOME.search(text), (r.get("id") or r, field)
-            # A fixed point: the committed text is exactly what the redactor emits, with
-            # this machine's host name masked too -- on the machine that regenerates the
-            # fixture that is the check that its own name did not leak.
-            assert build.redact(text) == text, (r.get("id") or r, field)
+            # A fixed point: the committed text is exactly what the redactor emits. The
+            # host pass is off (host=""), so the check is a property of the file, not of
+            # the machine running it; build() masks the generating host's name.
+            assert build.redact(text, host="") == text, (r.get("id") or r, field)
 
 
 def test_the_redactor_masks_what_it_promises():
