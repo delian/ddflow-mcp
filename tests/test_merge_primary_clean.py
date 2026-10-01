@@ -142,3 +142,35 @@ def test_a_conflicting_squash_merge_leaves_the_primary_clean(repo, item):
     code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
     assert code == REFUSED, out + err
     assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
+
+
+def _squash(repo: Path) -> None:
+    run_cli(repo, "config", "--set", "worktree.merge_strategy", "squash")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "squash", "--no-verify")
+
+
+def test_the_lease_hook_passes_ddflows_own_squash_commit(repo, item):
+    # A squash concludes with a plain `git commit`: the pre-commit stage, no MERGE_HEAD.
+    _install_check_commit_as(repo, "pre-commit")
+    _squash(repo)
+    (item / "c.txt").write_text("branch\n")
+    _git(item, "commit", "-qam", "branch edit", "--no-verify")
+
+    code, out, err = run_cli(repo, "merge", "T1")
+    assert code == OK, out + err
+    assert _git(repo, "show", "main:c.txt").stdout == "branch\n"
+
+
+def test_a_refused_squash_commit_is_unstaged(repo, item):
+    _squash(repo)
+    (item / "c.txt").write_text("branch\n")
+    _git(item, "commit", "-qam", "branch edit")
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\necho refused-by-test >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code == REFUSED, out + err
+    assert "refused-by-test" in err
+    assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
