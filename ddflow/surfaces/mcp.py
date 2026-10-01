@@ -146,8 +146,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "resources": (
                 "string",
-                "Physical resources this claim holds, overriding the item's declared "
-                "ones, e.g. 'gpu:2'. Refused (exit 3) when live claims already use the "
+                "Physical resources this claim holds, e.g. 'gpu:2'. They REPLACE the "
+                "item's declared resources (recorded on the item, as globs are). Refused (exit 3) when live claims already use the "
                 "capacity ([schedule] resources) -- every holder counts, you included.",
                 False,
             ),

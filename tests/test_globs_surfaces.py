@@ -158,3 +158,19 @@ def test_the_mcp_wait_tool_takes_the_claims_globs(repo):
     args = {"item": "T2", "globs": '["src/b.py", "docs/RESEARCH.md"]', "timeout": 0}
     out = TOOLS["ddflow_wait"]["api"](repo, args, HOLDER)
     assert out.exit != O.OK and "docs/RESEARCH.md" in out.reason
+
+
+def test_a_comma_inside_a_json_array_glob_survives_update_as_it_does_claim(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1")
+    raw = json.dumps(["**/*.{py,pyi}"])
+    code, _o, err = run_cli(repo, "update", "T1", "--globs", raw)
+    assert code == O.OK, err
+    assert _items(repo)["T1"].globs == ["**/*.{py,pyi}"]
+
+
+def test_wait_refuses_globs_without_an_item(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    out = A.wait(repo, globs="a.py", timeout_s=0, agent=HOLDER)
+    assert out.exit == O.FAIL and "item" in out.reason
