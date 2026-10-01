@@ -676,21 +676,30 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
         data = tomllib.loads(text)
     except tomllib.TOMLDecodeError:
         return "refused", f"SKIPPED {rel}: it is not valid TOML; add {c.id} by hand"
-    servers = data.get("mcp_servers")
-    servers = servers if isinstance(servers, dict) else {}
+    servers = data.get("mcp_servers", {})
+    if not isinstance(servers, dict):
+        # `mcp_servers = 5`, or `[[mcp_servers]]`: an appended header would either break
+        # the file or land inside the last array element, where no agent reads it.
+        return "refused", f"SKIPPED {rel}: its `mcp_servers` is not a table; add {c.id} by hand"
     if c.id in servers and _serves(servers[c.id]):
-        return "unchanged", f"{rel} already registers {c.id}"
+        if launches_as(c, servers[c.id]):
+            return "unchanged", f"{rel} already registers {c.id}"
+        # Not refreshed: rewriting a hand-written TOML table is not done here (B662a1ace82),
+        # so the message says what is true instead of "already registers".
+        return "unchanged", (
+            f"{rel} launches its own `{c.id}`, not the registry's launch; left as it is"
+        )
     if other := _launched_elsewhere((servers, text), c, rel):
         return "unchanged", other
     try:
         tomllib.loads(new_text)
-    except tomllib.TOMLDecodeError:
+    except tomllib.TOMLDecodeError as exc:
         what = (
             f"[mcp_servers.{c.id}] is there but launches nothing"
             if c.id in servers
-            else "its `mcp_servers` is not a table"
+            else f"adding [mcp_servers.{c.id}] would not parse ({exc})"
         )
-        return "refused", f"SKIPPED {rel}: {what}; fix or remove it by hand"
+        return "refused", f"SKIPPED {rel}: {what}; fix it by hand"
     return None
 
 
