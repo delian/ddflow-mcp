@@ -220,10 +220,10 @@ def _rerun_scope(it, gate: str, revs: list, diff: str, value):
             f"reviewer {prior.get('reviewer')!r}, which recorded {it.id}.{gate}, is not "
             f"configured for {gate!r} now: run the full review"
         )
-    if mine[0].max_chunk_chars != prior.get("chunk_chars"):
+    if mine[0].max_chunk_chars != prior.get("max_chunk_chars"):
         return (
             f"[[reviewer]].max_chunk_chars is {mine[0].max_chunk_chars} now, "
-            f"{prior.get('chunk_chars')} when {it.id}.{gate} was recorded: the chunks "
+            f"{prior.get('max_chunk_chars')} when {it.id}.{gate} was recorded: the chunks "
             f"differ, run the full review"
         )
     total = int(prior.get("chunks_total", 0))
@@ -447,9 +447,11 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             tick_s=tick_s,
             only=only,
         )
-        if prior and res.status != R.ERROR:
-            why = R.merge_rerun(prior, res)
-            if why:  # `_rerun_scope` checked all of it; a record is not overwritten blind
+        if prior:
+            # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
+            # record holds every other chunk's coverage, and a later --chunk needs it.
+            why = res.reason if res.status == R.ERROR else R.merge_rerun(prior, res)
+            if why:
                 return O.Outcome(
                     kind="review", data={"id": item, "gate": gate}, exit=O.REFUSED, reason=why
                 )

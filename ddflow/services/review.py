@@ -321,7 +321,7 @@ class ReviewResult:
     #: What the chunk numbers refer to: the reviewed diff's digest and the chunk size it
     #: was cut with. A re-review of chunk N merges only into a record of the SAME cut.
     diff_sha: str = ""
-    chunk_chars: int = 0
+    max_chunk_chars: int = 0
 
     @property
     def label(self) -> str:
@@ -351,7 +351,7 @@ class ReviewResult:
             "unreviewed": self.unreviewed,
             "reviewed": self.reviewed,
             "diff_sha": self.diff_sha,
-            "chunk_chars": self.chunk_chars,
+            "max_chunk_chars": self.max_chunk_chars,
             "chunks_total": self.chunks_total,
             "chunk_findings": [
                 {
@@ -1401,7 +1401,7 @@ def review(
     stripped = strip_hunk_context(diff)
     chunks = split_diff(stripped, rev.max_chunk_chars)
     res.chunks_total = len(chunks)
-    res.diff_sha, res.chunk_chars = diff_digest(diff), rev.max_chunk_chars
+    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), rev.max_chunk_chars
     files = [chunk_files(c) for c in chunks]
     wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
     outside = [n for n in wanted if not 1 <= n <= len(chunks)]
@@ -1518,7 +1518,7 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
     for key, mine in (
         ("reviewer", res.reviewer),
         ("diff_sha", res.diff_sha),
-        ("chunk_chars", res.chunk_chars),
+        ("max_chunk_chars", res.max_chunk_chars),
     ):
         if prior.get(key) != mine:
             return (
