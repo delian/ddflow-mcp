@@ -228,6 +228,23 @@ class ConfigEdit:
     local: bool = False
 
 
+def _sync_attributes(repo: Path) -> list[str]:
+    """Write the `merge=union` lines `[lease] append_only_globs` now asks for (D-shared-
+    globs), at the moment the setting changes and beside the config it came from."""
+    from ..config import Config
+    from ..services import shared_files as SF
+
+    return SF.sync_attributes(repo, Config.load(repo))
+
+
+def _said(added: list[str]) -> str:
+    if not added:
+        return ""
+    return "\nadded to .gitattributes (tracked -- commit it with the config):\n" + "\n".join(
+        f"  {ln}" for ln in added
+    )
+
+
 def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") -> O.Outcome:
     """Read every knob with its source, or change one.
 
@@ -244,6 +261,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
         err, _text = _write_config(repo, [(edit.set, edit.value)], local=edit.local)
         if err:
             return O.failed("config", err, key=edit.set, value=edit.value, rows=[], text="")
+        added = _sync_attributes(repo)
         return O.ok(
             "config",
             key=edit.set,
@@ -252,7 +270,8 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
             path=target,
             local=edit.local,
             rows=[],
-            text=f"{edit.set} = {_toml_literal(edit.value)}  ({target})",
+            gitattributes_added=added,
+            text=f"{edit.set} = {_toml_literal(edit.value)}  ({target})" + _said(added),
         )
 
     if edit.append_toml:
@@ -262,13 +281,15 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
         err, path = _append_config(repo, edit.append_toml, local=edit.local)
         if err:
             return O.failed("config", err, path="", rows=[], text="")
+        added = _sync_attributes(repo)
         return O.ok(
             "config",
             path=str(path),
             appended=True,
             local=edit.local,
             rows=[],
-            text=f"appended to {path}",
+            gitattributes_added=added,
+            text=f"appended to {path}" + _said(added),
         )
 
     from ..views import human

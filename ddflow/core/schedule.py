@@ -173,7 +173,33 @@ def globs_overlap(a: str, b: str) -> bool:
     return pa.startswith(pb) or pb.startswith(pa)
 
 
-def conflicts(mine: list[str], theirs: list[str]) -> list[tuple[str, str]]:
+def shared_globs(cfg: Config) -> list[str]:
+    """`[lease] shared_globs` and `append_only_globs`: paths many items may hold at once
+    (D-shared-globs)."""
+    lease = cfg.lease
+    return [*lease.shared_globs, *lease.append_only_globs]
+
+
+def is_shared(glob: str, shared: list[str]) -> bool:
+    """Is ``glob`` (a claim's glob or a staged path) INSIDE one of the ``shared`` globs?
+
+    Inside, not overlapping: `docs/**` merely overlaps a shared `docs/CHANGELOG.md` and
+    still claims the rest of `docs/`, so it stays exclusive.
+    """
+    return any(glob == s or fnmatch(glob, s) for s in shared)
+
+
+def conflicts(
+    mine: list[str], theirs: list[str], shared: list[str] | None = None
+) -> list[tuple[str, str]]:
+    """Overlapping pairs between two glob lists; a glob inside ``shared`` overlaps nothing.
+
+    Every parallel item edits a changelog; exclusive leases on it serialised them all
+    or pushed agents to commit it unleased (B07878037ab).
+    """
+    shared = shared or []
+    mine = [a for a in mine if not is_shared(a, shared)]
+    theirs = [b for b in theirs if not is_shared(b, shared)]
     return [(a, b) for a in mine for b in theirs if globs_overlap(a, b)]
 
 
@@ -448,7 +474,7 @@ def item_blocker(
             # Different release lines are different branches: `src/x.py` on 2.x and on
             # 3.x cannot collide, and refusing it would serialise every port behind its fix.
             continue
-        pairs = conflicts(it.globs, lease.globs)
+        pairs = conflicts(it.globs, lease.globs, shared_globs(cfg))
         if pairs:
             return Blocked(
                 it.id,

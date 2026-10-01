@@ -40,7 +40,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core.model import Lease, fold
-from ..core.schedule import globs_overlap
+from ..core.schedule import globs_overlap, is_shared, shared_globs
 from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -1126,14 +1126,21 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     here = _committing_tree(repo)
     mine: list[str] = []
     others: dict[str, str] = {}
+    holds_any = False
     for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items():
         if _counts_as_mine(repo, lease, me, here):
+            holds_any = True
             mine.extend(lease.globs)
         else:
             for g in lease.globs:
                 others[g] = f"{item_id} ({lease.holder})"
 
-    uncovered = [p for p in paths if not any(globs_overlap(p, g) for g in mine)]
+    # A shared file (`[lease] shared_globs` / `append_only_globs`) is every live holder's
+    # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
+    shared = shared_globs(cfg) if holds_any else []
+    uncovered = [
+        p for p in paths if not is_shared(p, shared) and not any(globs_overlap(p, g) for g in mine)
+    ]
     if not uncovered:
         return 0, ""
 
