@@ -68,7 +68,10 @@ FAKE_PUBLISHER = r"""#!/usr/bin/env bash
 #   504       gateway timeout, nothing committed
 #   504-late  gateway timeout, but the commit landed behind the gateway
 #   dup       400 duplicate version (listing is whatever it already was)
+#   dup-race  400 duplicate version: it was committed by an earlier call whose answer
+#             was lost, and the GET before this call raced it (listed from now on)
 #   bad       400 validation failure -- permanent
+#   hang      the request is accepted and never answered
 echo "$*" >> "$FAKE_DIR/publisher.log"
 [ "$1" = login ] && exit 0
 n=0; [ -e "$FAKE_DIR/publishes" ] && n=$(wc -l < "$FAKE_DIR/publishes"); echo x >> "$FAKE_DIR/publishes"
@@ -78,6 +81,8 @@ case "$word" in
   504-late) touch "$FAKE_DIR/listed"; echo "Error: publish failed: server returned status 504: <html>504 Gateway Time-out</html>" >&2; exit 1 ;;
   504)      echo "Error: publish failed: server returned status 504: <html>504 Gateway Time-out</html>" >&2; exit 1 ;;
   dup)      echo 'Error: publish failed: server returned status 400: {"detail":"Failed to publish server","errors":[{"message":"invalid version: cannot publish duplicate version: x already exists"}]}' >&2; exit 1 ;;
+  dup-race) touch "$FAKE_DIR/listed"; echo 'Error: publish failed: server returned status 400: {"detail":"Failed to publish server","errors":[{"message":"invalid version: cannot publish duplicate version: x already exists"}]}' >&2; exit 1 ;;
+  hang)     exec /bin/sleep 600 ;;
   bad)      echo 'Error: publish failed: server returned status 400: {"detail":"Failed to publish server","errors":[{"message":"description too long"}]}' >&2; exit 1 ;;
 esac
 """
@@ -114,6 +119,7 @@ def _run(tmp_path: Path, plan: str, *, listed: bool = False, last: str = "504"):
         "FAKE_PLAN": plan,
         "FAKE_LAST": last,
         **ENV,
+        "MCP_CALL_TIMEOUT": "1",   # the hang case; every other call returns at once
     }
     # GitHub runs `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`.
     proc = subprocess.run(
@@ -147,8 +153,11 @@ def test_the_step_runs_under_bash_with_a_bounded_job():
     assert m, "mcp-registry declares timeout-minutes"
     delays = _delays()
     assert len(delays) >= 3, "several attempts, not one"
-    # The backoff alone must fit inside the job timeout with room for the attempts.
-    assert sum(delays) + 60 * (len(delays) + 1) <= int(m.group(1)) * 60
+    # Even the worst case -- every login and publish hanging to MCP_CALL_TIMEOUT -- ends
+    # inside the job timeout, so the step's own ::error:: is what the operator sees.
+    call = int(ENV.get("MCP_CALL_TIMEOUT", "0"))
+    assert call > 0, "each mcp-publisher call is bounded"
+    assert sum(delays) + 2 * call * (len(delays) + 1) + 120 <= int(m.group(1)) * 60
 
 
 def test_a_504_then_success_publishes(tmp_path):
@@ -181,12 +190,21 @@ def test_an_already_listed_version_is_not_published_again(tmp_path):
 
 
 def test_duplicate_is_success_only_once_the_registry_confirms_it(tmp_path):
-    proc, r = _run(tmp_path, "504-late dup", listed=False)
+    # Not a permanent 400: retried, and the next GET finds it listed.
+    proc, r = _run(tmp_path, "dup-race", listed=False)
     assert proc.returncode == 0, r["out"]
+    assert r["publishes"] == 1 and r["sleeps"] == _delays()[:1]
     # A duplicate the GET never confirms is not success.
     proc, r = _run(tmp_path / "unconfirmed", "", last="dup")
     assert proc.returncode != 0, r["out"]
     assert r["publishes"] == len(_delays()) + 1
+
+
+def test_a_call_that_hangs_is_cut_off_and_retried(tmp_path):
+    # mcp-publisher's HTTP client has no timeout; a starved request can be held open.
+    proc, r = _run(tmp_path, "hang ok")
+    assert proc.returncode == 0, r["out"]
+    assert r["publishes"] == 2
 
 
 def test_a_permanent_rejection_fails_at_once(tmp_path):
