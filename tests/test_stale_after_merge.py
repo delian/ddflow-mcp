@@ -1,0 +1,153 @@
+"""complete's "passed on a different tree" NOTE fires only when the tree really differs.
+
+Bugs Bd86b05a8f8, Ba84119f707, B613cb67194: after `ddflow merge` (which removes the
+item's worktree) every evidence gate was reported stale, even ones recorded at the
+branch's final commit. `verdict` fingerprinted the PRIMARY checkout instead -- its HEAD
+is main, and the fingerprint is a commit id plus dirt -- so every completion on the
+ordinary path (merge, then complete) warned, and a warning that always fires teaches
+everyone to ignore the one that is real.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from conftest import pass_pipeline, run_cli
+
+OK = 0
+NOTE = "passed on a different tree"
+
+
+def _git(where: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-C", str(where), *args], check=True, capture_output=True, text=True
+    ).stdout.strip()
+
+
+def _claimed(repo: Path) -> Path:
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "gates.toml").write_text(
+        '[gate.unit_tests]\ncommand = "true"\ncwd = "worktree"\n'
+    )
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    code, out, err = run_cli(repo, "claim", "T1")
+    assert code == OK, out + err
+    tree = Path(next(ln.split(":", 1)[1].strip() for ln in out.splitlines() if "worktree:" in ln))
+    assert tree.is_dir()
+    return tree
+
+
+def _merge_and_complete(repo: Path) -> str:
+    code, out, err = run_cli(repo, "merge", "T1")
+    assert code == OK, out + err
+    pass_pipeline(repo, "T1", omit=("unit_tests", "merge"))
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
+    assert code == OK, out + err
+    return out + err
+
+
+def test_a_gate_run_at_the_branch_head_is_not_stale_after_merge(repo):
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    # The primary is busy with other people's work, as it is in practice.
+    (repo / "someone-elses.txt").write_text("not T1's\n")
+    said = _merge_and_complete(repo)
+    assert NOTE not in said, said
+
+
+def test_a_gate_run_on_uncommitted_edits_that_were_then_committed_is_not_stale(repo):
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")  # untracked, exactly as committed below
+    assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    said = _merge_and_complete(repo)
+    assert NOTE not in said, said
+
+
+def test_an_edit_after_the_gate_that_landed_is_still_reported_and_named(repo):
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    (tree / "a.py").write_text("a = 2\n")
+    _git(tree, "commit", "-qam", "one more thing")
+    said = _merge_and_complete(repo)
+    assert "unit_tests " + NOTE in said, said
+    assert "a.py" in said, f"the NOTE should say what differs: {said}"
+
+
+def test_an_edit_after_the_gate_before_merge_is_still_reported(repo):
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    (tree / "a.py").write_text("a = 2\n")
+    pass_pipeline(repo, "T1", omit=("unit_tests", "merge"))
+    run_cli(repo, "gate", "record", "T1", "merge", "--outcome", "passed", "--evidence", "x")
+    _code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5", "--force")
+    assert "unit_tests " + NOTE in out + err, out + err
+
+
+def test_source_tree_of_a_dirty_tree_equals_the_commit_that_records_it(repo):
+    """The identity underneath: the content id of a working tree is the content id of
+    the commit that later records exactly those files, and `.ddflow/` does not count."""
+    from ddflow.services import gates as G
+
+    (repo / "sub").mkdir()
+    (repo / "sub" / "b.py").write_text("b\n")
+    (repo / "README.md").write_text("# changed\n")
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "noise.jsonl").write_text("{}\n")
+    dirty = G.source_tree(repo)
+    assert dirty
+    _git(repo, "add", "sub/b.py", "README.md")
+    _git(repo, "commit", "-qm", "c")
+    assert G.commit_source_tree(repo, "HEAD") == dirty
+    assert G.source_tree(repo) == dirty
+    (repo / "sub" / "b.py").write_text("b2\n")
+    assert G.source_tree(repo) != dirty
+
+
+def _legacy_pass(repo: Path, tree_sha: str) -> None:
+    """A unit_tests pass as recorded before `source_tree` existed: a fingerprint only."""
+    from ddflow.infra.log import EventLog
+
+    EventLog(repo, "legacy-agent").append(
+        "gate.passed",
+        "T1",
+        {"gate": "unit_tests", "by": "legacy-agent", "reason": "",
+         "evidence": {"command": "true", "exit": 0, "tree_sha": tree_sha}},
+    )  # fmt: skip
+
+
+def test_legacy_evidence_on_a_clean_branch_head_is_not_stale_after_merge(repo):
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    _legacy_pass(repo, _git(tree, "rev-parse", "HEAD")[:12] + "+clean")
+    said = _merge_and_complete(repo)
+    assert NOTE not in said, said
+
+
+def test_legacy_evidence_on_an_older_commit_is_stale_after_merge(repo):
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    _legacy_pass(repo, _git(tree, "rev-parse", "HEAD")[:12] + "+clean")
+    (tree / "a.py").write_text("a = 2\n")
+    _git(tree, "commit", "-qam", "one more thing")
+    said = _merge_and_complete(repo)
+    assert "unit_tests " + NOTE in said and "a.py" in said, said

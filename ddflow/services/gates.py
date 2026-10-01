@@ -429,32 +429,97 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
     )
 
 
-def stale_evidence(state: State, cfg: Config, item_id: str, cwd: Path) -> list[str]:
-    """Gates whose evidence describes a tree that has since changed.
+def stale_evidence(
+    state: State, cfg: Config, item_id: str, cwd: Path, *, landed: str = ""
+) -> list[str]:
+    """Gates whose evidence describes a tree that has since changed. See
+    `stale_evidence_detail`, which also says what differs."""
+    return [gid for gid, _why in stale_evidence_detail(state, cfg, item_id, cwd, landed=landed)]
+
+
+def stale_evidence_detail(
+    state: State, cfg: Config, item_id: str, cwd: Path, *, landed: str = ""
+) -> list[tuple[str, str]]:
+    """(gate, what differs) for each gate whose evidence describes another tree.
 
     The hazard B21 names, and the ordinary way it happens: run the tests, edit one more
     thing, complete. The recorded pass is then true about source nobody is shipping —
     and it is indistinguishable, in the log, from a pass about the code that shipped.
+
+    Compared against ``cwd``'s working tree, or -- with ``landed``, a commit -- against
+    what that commit holds. After `merge` the item's worktree is gone, and the tree
+    being completed is the branch that landed, not whatever the primary checkout has
+    checked out: comparing against the primary made every gate stale on the ordinary
+    path (bugs Bd86b05a8f8, Ba84119f707, B613cb67194), and a warning that always fires
+    is one nobody reads.
+
+    CONTENT is compared (`source_tree`), not commit ids: a gate run on uncommitted
+    edits, or at the branch tip, is fresh evidence about the merge commit that records
+    the same files. Evidence from before `source_tree` was recorded falls back to the
+    fingerprint against a working tree, and against a commit only when it was taken on
+    a clean tree (its commit then names the content).
 
     Only gates in `gates.evidence_required` are checked. The others legitimately record
     before the work is finished: `implement` is *supposed* to precede the edits that
     follow it, and flagging that would make this noise, which is how a real warning
     stops being read.
 
-    Returns [] when the tree cannot be fingerprinted — a check that cannot run says so
-    by finding nothing, and `run_command_gate` records "" in exactly that case.
+    Returns [] when the tree cannot be read — a check that cannot run says so by
+    finding nothing, and `run_command_gate` records "" in exactly that case.
     """
     it = state.items.get(item_id)
-    now = tree_fingerprint(cwd)
-    if it is None or not now:
+    if it is None:
         return []
+    label = f"what landed ({landed[:12]})" if landed else "the working tree"
+    entries_cache: dict[str, TreeEntries | None] = {}
+
+    def entries_of(rev: str) -> TreeEntries | None:
+        if rev not in entries_cache:
+            entries_cache[rev] = (
+                worktree_entries(cwd) if rev == "" else commit_tree_entries(cwd, rev)
+            )
+        return entries_cache[rev]
+
+    now = entries_of(landed)
+    now_id = content_id(now)
+    fingerprint = None if landed else tree_fingerprint(cwd)
     stale = []
     for gid in cfg.gates.evidence_required:
         rec = it.gates.get(gid)
-        was = (rec.evidence or {}).get("tree_sha", "") if rec else ""
-        if rec and rec.outcome == "passed" and was and was != now:
-            stale.append(gid)
+        if not rec or rec.outcome != "passed":
+            continue
+        ev = rec.evidence or {}
+        was_sha = ev.get("tree_sha", "") or ""
+        base, _, dirt = was_sha.partition("+")
+        was_id = ev.get("source_tree", "") or ""
+        if was_id:
+            if not now_id or was_id == now_id:
+                continue
+        elif dirt == "clean" and base:
+            then = commit_tree_entries(cwd, base)
+            if then is None or now is None or not differing_paths(then, now):
+                continue
+        elif not landed and was_sha and fingerprint and was_sha != fingerprint:
+            pass  # legacy evidence on a dirty tree: only the fingerprint can tell
+        else:
+            continue
+        stale.append((gid, _what_differs(cwd, base, dirt, now, label)))
     return sorted(stale)
+
+
+def _what_differs(cwd: Path, base: str, dirt: str, now: TreeEntries | None, label: str) -> str:
+    """Name the files, when the tree the gate ran on can be rebuilt (a clean commit)."""
+    then = commit_tree_entries(cwd, base) if base else None
+    paths = differing_paths(then, now) if then is not None and now is not None else []
+    shown = ", ".join(paths[:8]) + (f" (+{len(paths) - 8} more)" if len(paths) > 8 else "")  # noqa: PLR2004
+    if dirt == "clean" and paths:
+        return f"it ran on {base}; {label} differs in {shown}"
+    if paths:
+        return (
+            f"it ran on uncommitted edits over {base}, and {label} holds other content "
+            f"(files changed since {base}: {shown})"
+        )
+    return f"the content it ran on is not the content of {label}"
 
 
 def inert_requirements(cfg: Config) -> list[str]:
@@ -821,6 +886,156 @@ def tree_fingerprint(cwd: Path) -> str:
     return f"{head.out.strip()[:12]}+{dirt}"
 
 
+def _git_z(cwd: Path | str, *args: str) -> list[str] | None:
+    """NUL-separated git output as names exactly as the filesystem spells them, or None
+    when git failed -- "could not tell", never "nothing"."""
+    try:
+        p = P.run(["git", "-C", str(cwd), *args], capture_output=True, timeout=300)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if p.returncode != 0:
+        return None
+    return [os.fsdecode(x) for x in p.stdout.split(b"\0") if x]
+
+
+def _ours(path: str) -> bool:
+    """`.ddflow/` is ddflow's bookkeeping, not the work -- see FINGERPRINT_EXCLUDE."""
+    return path == ".ddflow" or path.startswith(".ddflow/")
+
+
+#: One file's identity inside a content tree: (mode, blob id), as git stores it.
+TreeEntries = dict[str, tuple[str, str]]
+
+
+def commit_tree_entries(cwd: Path | str, rev: str) -> TreeEntries | None:
+    """Every path of commit ``rev`` with its mode and blob id, `.ddflow/` left out."""
+    rows = _git_z(cwd, "ls-tree", "-r", "-z", "--full-tree", rev)
+    if rows is None:
+        return None
+    out: TreeEntries = {}
+    for row in rows:
+        meta, _, path = row.partition("\t")
+        parts = meta.split()
+        if len(parts) == 3 and path and not _ours(path):  # noqa: PLR2004 -- mode type id
+            out[path] = (parts[0], parts[2])
+    return out
+
+
+def _blob_id(data: bytes, fmt: str) -> str:
+    """git's blob id for ``data``, computed here: `hash-object` would follow a symlink."""
+    h = hashlib.new("sha256" if fmt == "sha256" else "sha1")
+    h.update(b"blob %d\0" % len(data) + data)
+    return h.hexdigest()
+
+
+def worktree_entries(cwd: Path | str) -> TreeEntries | None:
+    """What the working tree holds, as the commit that recorded it exactly would.
+
+    The index's entries, overridden by every file whose working copy differs from the
+    index and by every untracked, non-ignored file -- each hashed with `git hash-object`
+    WITHOUT `-w`, so nothing is written (the same rule `tree_fingerprint` keeps). Whole
+    repository, from its top level, `.ddflow/` excluded.
+
+    None when it cannot be told: not a repository, an unmerged index, or more untracked
+    files than MAX_UNTRACKED_HASHED.
+    """
+    from ..infra import worktree as W
+
+    top = W.git(cwd, "rev-parse", "--show-toplevel")
+    if not top.ok:
+        return None
+    root = Path(top.out)
+    index = _git_z(root, "ls-files", "-s", "-z")
+    changed = _git_z(root, "diff", "--name-only", "-z", "--no-renames")
+    untracked = _git_z(root, "ls-files", "--others", "--exclude-standard", "-z")
+    if index is None or changed is None or untracked is None:
+        return None
+    if len(untracked) > MAX_UNTRACKED_HASHED:
+        return None
+    out = _index_entries(index)
+    if out is None:
+        return None
+    fmt = W.git(root, "rev-parse", "--show-object-format").out or "sha1"
+    filemode = W.git(root, "config", "--bool", "core.fileMode").out != "false"
+    to_hash: list[tuple[str, str]] = []
+    for path in [*changed, *untracked]:
+        if _ours(path) or path.endswith("/"):
+            continue  # ours, or a nested repository git lists as a directory
+        full = root / path
+        if not os.path.lexists(full):
+            out.pop(path, None)
+            continue
+        if full.is_symlink():
+            out[path] = ("120000", _blob_id(os.fsencode(os.readlink(full)), fmt))
+            continue
+        if full.is_dir():
+            continue  # a submodule: its recorded commit is what the index says
+        if filemode or path not in out:
+            mode = "100755" if full.stat().st_mode & 0o111 else "100644"
+        else:
+            mode = out[path][0]
+        to_hash.append((path, mode))
+    return out if _hash_into(root, out, to_hash) else None
+
+
+def _index_entries(rows: list[str]) -> TreeEntries | None:
+    """`git ls-files -s -z` rows as entries; None for an unmerged index (no one tree)."""
+    out: TreeEntries = {}
+    for row in rows:
+        meta, _, path = row.partition("\t")
+        parts = meta.split()
+        if len(parts) != 3 or not path or parts[2] != "0":  # noqa: PLR2004 -- mode id stage
+            return None
+        if not _ours(path):
+            out[path] = (parts[0], parts[1])
+    return out
+
+
+def _hash_into(root: Path, out: TreeEntries, to_hash: list[tuple[str, str]]) -> bool:
+    """Blob ids for ``to_hash`` ((path, mode)) into ``out``, without writing objects."""
+    from ..infra import worktree as W
+
+    for i in range(0, len(to_hash), 200):
+        chunk = to_hash[i : i + 200]
+        r = W.git(root, "hash-object", "--", *(p for p, _ in chunk))
+        ids = r.out.splitlines()
+        if not r.ok or len(ids) != len(chunk):
+            return False
+        for (path, mode), oid in zip(chunk, ids, strict=True):
+            out[path] = (mode, oid)
+    return True
+
+
+def content_id(entries: TreeEntries | None) -> str:
+    """One id for a content tree; "" when there is none to name."""
+    if entries is None:
+        return ""
+    body = "\n".join(f"{m} {o} {p}" for p, (m, o) in sorted(entries.items()))
+    return (
+        "st:" + hashlib.blake2b(body.encode("utf-8", "surrogateescape"), digest_size=16).hexdigest()
+    )
+
+
+def source_tree(cwd: Path | str) -> str:
+    """The CONTENT the working tree holds -- every path's mode and blob id.
+
+    `tree_fingerprint` names a commit plus dirt, so the same files under another commit
+    (the merge commit, a rebased head, the branch tip after the edits were committed)
+    read as a different tree. This names only content: a gate run on uncommitted edits
+    has the same source tree as the commit that later records exactly those edits.
+    """
+    return content_id(worktree_entries(cwd))
+
+
+def commit_source_tree(cwd: Path | str, rev: str) -> str:
+    """`source_tree` of a commit, comparable with one taken from a working tree."""
+    return content_id(commit_tree_entries(cwd, rev))
+
+
+def differing_paths(a: TreeEntries, b: TreeEntries) -> list[str]:
+    return sorted(p for p in a.keys() | b.keys() if a.get(p) != b.get(p))
+
+
 def digest(text: str) -> str:
     return hashlib.blake2b(text.encode("utf-8", "replace"), digest_size=8).hexdigest()
 
@@ -979,6 +1194,9 @@ def run_command_gate(
         # one agent editing between two gates makes the earlier gate's evidence describe
         # source that no longer exists.
         "tree_sha": tree_fingerprint(cwd),
+        # ...and its CONTENT, independent of which commit it sits on: what `complete`
+        # compares against the branch that landed once the worktree is gone.
+        "source_tree": source_tree(cwd),
         # HOW MUCH this gate was looking at. `tree_sha` answers "which tree" and is
         # opaque; this answers "how big was the change", which is what makes a recorded
         # pass auditable after the fact. A review gate that passed over 4,000 changed
