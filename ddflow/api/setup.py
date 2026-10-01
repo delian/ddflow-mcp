@@ -261,7 +261,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
         err, _text = _write_config(repo, [(edit.set, edit.value)], local=edit.local)
         if err:
             return O.failed("config", err, key=edit.set, value=edit.value, rows=[], text="")
-        added = _sync_attributes(repo)
+        added = [] if edit.local else _sync_attributes(repo)
         return O.ok(
             "config",
             key=edit.set,
@@ -281,7 +281,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
         err, path = _append_config(repo, edit.append_toml, local=edit.local)
         if err:
             return O.failed("config", err, path="", rows=[], text="")
-        added = _sync_attributes(repo)
+        added = [] if edit.local else _sync_attributes(repo)
         return O.ok(
             "config",
             path=str(path),

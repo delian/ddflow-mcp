@@ -233,3 +233,41 @@ def test_doctor_reports_a_missing_union_line_and_notes_an_unmerged_generated_fil
     assert code != O.OK, text
     assert "docs/CHANGELOG.md" in text and "merge=union" in text, text
     assert "configs/default.toml" in text and "regenerate" in text, text
+
+
+def test_git_glob_edge_cases_match_as_git_does():
+    from ddflow.core.schedule import is_shared
+
+    assert not is_shared("docs/2024/CHANGELOG.md", ["docs/**.md"])  # ** not on a boundary
+    assert is_shared("docs/CHANGELOG.md", ["docs/**.md"])
+    assert is_shared("a/b/c.md", ["a/**"]) and is_shared("x/a/y/c.md", ["**/a/**/c.md"])
+    assert is_shared("file5.txt", ["file[!0-9].txt"]) is False
+    assert is_shared("filex.txt", ["file[!0-9].txt"])
+
+
+def test_a_local_edit_writes_no_tracked_rule_even_when_one_is_missing(repo):
+    _project(repo, append='["docs/CHANGELOG.md"]')
+    (repo / ".gitattributes").write_text("")
+    code, _o, err = run_cli(repo, "config", "--local", "--set", "lease.ttl_s", "3600")
+    assert code == O.OK, err
+    assert _attributes(repo) == []
+
+
+def test_a_character_class_glob_sees_its_own_union_line(repo):
+    run_cli(repo, "init")
+    (repo / "CHANGELOG.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "CHANGELOG.md"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("[Cc]HANGELOG.md merge=ours\n")
+    before = _attributes(repo)
+    assert (
+        run_cli(repo, "config", "--set", "lease.append_only_globs", '["[Cc]HANGELOG.md"]')[0] == 0
+    )
+    assert _attributes(repo) == before, "wrote over the project's own driver"
+
+
+def test_a_glob_with_a_space_is_reported_not_written_broken(repo):
+    _project(repo, append='["docs/Change Log.md"]')
+    assert not any("Change" in ln for ln in _attributes(repo))
+    problems, _n = SF.findings(repo, Config.load(repo))
+    assert any("docs/Change?Log.md" in p for p in problems), problems

@@ -28,21 +28,37 @@ def union_line(glob: str) -> str:
     return f"{glob} merge=union"
 
 
+def _probe_path(repo: Path, glob: str) -> str:
+    """A path to ask git about for ``glob``: the glob itself when it is a literal path,
+    else a tracked file it matches, else the glob's own name.
+
+    A character class does not match its own name (`[Cc]HANGELOG.md` names no `[`), so
+    asking git about the pattern string reported "no driver" for a working line, and
+    then wrote a union line over a driver the project chose (review finding).
+    """
+    from ..core.schedule import is_shared
+    from ..infra import proc as P
+
+    if not any(ch in glob for ch in "*?["):
+        return glob
+    r = P.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True)
+    hits = [p for p in r.stdout.splitlines() if is_shared(p, [glob])] if r.returncode == 0 else []
+    return hits[0] if hits else glob
+
+
 def driver(repo: Path, glob: str) -> str:
     """The merge driver git applies to ``glob`` -- `union`, `ours`, ... -- or "" for none.
 
     Asked of git (`git check-attr merge`), not read off the file: patterns match like
     gitignore and the LAST matching line wins across different patterns, so a later
-    `*.md merge=ours` overrides `CHANGELOG.md merge=union` (review finding). The glob is
-    passed as a path, which for a literal path is exact and for a pattern is the pattern's
-    own name -- covered by the same lines that cover the files it names. A bare `merge`
-    (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; so is a git that
-    cannot answer.
+    `*.md merge=ours` overrides `CHANGELOG.md merge=union` (review finding). A bare
+    `merge` (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; so is a
+    git that cannot answer.
     """
     from ..infra import proc as P
 
     r = P.run(
-        ["git", "-C", str(repo), "check-attr", "merge", "--", glob],
+        ["git", "-C", str(repo), "check-attr", "merge", "--", _probe_path(repo, glob)],
         capture_output=True,
         text=True,
     )
@@ -85,6 +101,8 @@ def sync_attributes(repo: Path) -> list[str]:
 
     added: list[str] = []
     for glob in committed_append_only(repo):
+        if any(ch.isspace() for ch in glob):
+            continue  # one pattern per line, ended by whitespace: doctor says how to write it
         if driver(repo, glob):
             continue  # union already, or a driver the project chose -- doctor says which
         line = union_line(glob)
@@ -104,6 +122,13 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     problems: list[str] = []
     notes: list[str] = []
     for g in committed_append_only(repo):
+        if any(ch.isspace() for ch in g):
+            problems.append(
+                f"[lease] append_only_globs has {g!r}: a .gitattributes pattern ends at the "
+                f"first space, so no union line can be written for it. Write the space as ? "
+                f"(e.g. {g.replace(' ', '?')!r})."
+            )
+            continue
         d = driver(repo, g)
         if not d:
             problems.append(
