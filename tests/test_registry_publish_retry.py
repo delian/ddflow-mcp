@@ -171,7 +171,11 @@ def test_the_step_runs_under_bash_with_a_bounded_job():
     # inside the job timeout, so the step's own ::error:: is what the operator sees.
     call = int(ENV.get("MCP_CALL_TIMEOUT", "0"))
     assert call > 0, "each mcp-publisher call is bounded"
-    assert sum(delays) + 2 * call * (len(delays) + 1) + 120 <= int(m.group(1)) * 60
+    get = re.search(r"curl [^\n]*--max-time (\d+)", SCRIPT)
+    assert get, "the registry GET is bounded"
+    attempts = len(delays) + 1
+    worst = sum(delays) + 2 * call * attempts + int(get.group(1)) * (attempts + 1)
+    assert worst + 5 * 60 <= int(m.group(1)) * 60, "room for checkout and install too"
 
 
 def test_a_504_then_success_publishes(tmp_path):
