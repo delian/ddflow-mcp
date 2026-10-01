@@ -88,37 +88,58 @@ def driver(repo: Path, glob: str) -> str:
     return values[0]
 
 
-def _insert_before_narrower(repo: Path, glob: str, line: str) -> bool:
-    """Write ``line`` into `.gitattributes` BEFORE the first existing line that gives a
-    merge driver to a file ``glob`` covers; at the end when there is none. False when the
-    line is already there.
-
-    git applies the LAST matching line, so a union line appended after
-    `docs/README.md merge=ours` overrode the project's narrower choice. The operator's
-    rule (2026-10-01): the narrower driver wins -- so the broad line goes first.
-    """
-    from ..core.schedule import is_shared
-
-    path = Path(repo) / ".gitattributes"
-    text = path.read_text("utf-8") if path.exists() else ""
-    rows = text.splitlines()
-    if any(" ".join(r.split()) == line for r in rows):
-        return False
-    covered = _probe_paths(repo, glob)
-    at = len(rows)
+def _merge_rows(rows: list[str]) -> list[tuple[int, str]]:
+    """(index, pattern) of every `.gitattributes` line that sets a merge attribute."""
+    out = []
     for k, row in enumerate(rows):
         parts = row.split()
         if not parts or parts[0].startswith("#"):
             continue
-        has_merge = any(
-            a.startswith("merge=") or a in ("merge", "-merge", "!merge") for a in parts[1:]
-        )
-        if has_merge and any(p == parts[0] or is_shared(p, [parts[0]]) for p in covered):
-            at = k
+        if any(a.startswith("merge=") or a in ("merge", "-merge", "!merge") for a in parts[1:]):
+            out.append((k, parts[0]))
+    return out
+
+
+def _has_line(repo: Path, line: str) -> bool:
+    path = Path(repo) / ".gitattributes"
+    rows = path.read_text("utf-8").splitlines() if path.exists() else []
+    return any(" ".join(r.split()) == line for r in rows)
+
+
+def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
+    """(the `.gitattributes` lines now, the lines with ``line`` where it belongs).
+
+    It belongs BEFORE the first line that sets a driver for a NARROWER part of the glob
+    -- some, not all, of the files it covers, or one literal file -- so that line keeps
+    winning (git applies the LAST matching line; operator 2026-10-01: the narrower
+    driver wins). A broader or equal line is not narrower and does not move it. An
+    existing union line after a narrower one -- what 08af811 wrote -- is moved, not
+    duplicated; one already in place is left alone.
+    """
+    from ..core.schedule import is_shared
+
+    path = Path(repo) / ".gitattributes"
+    rows = path.read_text("utf-8").splitlines() if path.exists() else []
+    norm = [" ".join(r.split()) for r in rows]
+    have = norm.index(line) if line in norm else -1
+    covered = _probe_paths(repo, glob)
+    first_narrower = -1
+    for k, pattern in _merge_rows(rows):
+        if k == have or pattern == glob:
+            continue
+        hit = [p for p in covered if p == pattern or is_shared(p, [pattern])]
+        literal = not any(ch in pattern for ch in "*?[")
+        if hit and (len(hit) < len(covered) or literal):
+            first_narrower = k
             break
-    rows.insert(at, line)
-    path.write_text("\n".join(rows) + "\n", "utf-8")
-    return True
+    if have != -1 and (first_narrower == -1 or have < first_narrower):
+        return rows, rows  # present, and nothing narrower precedes it
+    new = [r for k, r in enumerate(rows) if k != have]
+    if first_narrower == -1:
+        new.append(line)
+    else:
+        new.insert(first_narrower - (1 if have != -1 and have < first_narrower else 0), line)
+    return rows, new
 
 
 def committed_append_only(repo: Path) -> list[str]:
@@ -156,10 +177,13 @@ def sync_attributes(repo: Path) -> list[str]:
     for glob in committed_append_only(repo):
         if any(ch.isspace() for ch in glob):
             continue  # one pattern per line, ended by whitespace: doctor says how to write it
-        if driver(repo, glob):
-            continue  # union already, or a driver the project chose -- doctor says which
         line = union_line(glob)
-        if _insert_before_narrower(repo, glob, line):
+        d = driver(repo, glob)
+        if d and not (d == "union" and _has_line(repo, line)):
+            continue  # union from a line of the project's own, or a driver it chose
+        rows, placed = _placed(repo, glob, line)
+        if placed != rows:
+            (Path(repo) / ".gitattributes").write_text("\n".join(placed) + "\n", "utf-8")
             added.append(line)
     return added
 
@@ -197,7 +221,16 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
             )
             continue
         d = driver(repo, g)
-        if not d:
+        rows, placed = (
+            _placed(repo, g, union_line(g)) if _has_line(repo, union_line(g)) else ([], [])
+        )
+        if d == "union" and placed != rows:
+            problems.append(
+                f"[lease] append_only_globs has {g!r}, and its '{union_line(g)}' line comes "
+                f"AFTER a narrower merge driver the project set, overriding it. `ddflow "
+                f"init` (or setting the knob again) moves it before that line; commit it."
+            )
+        elif not d:
             problems.append(
                 f"[lease] append_only_globs has {g!r} but git applies no merge driver to "
                 f"it, so parallel items' lines conflict at merge. `ddflow init` (or setting "
