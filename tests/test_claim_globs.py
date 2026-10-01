@@ -169,3 +169,16 @@ def test_claimed_globs_in_another_order_are_the_same_claim(repo):
     assert [e.kind for e in new if e.kind.endswith(".updated")] == []
     assert [e for e in new if e.kind == "lease.renewed" and "globs" in e.data] == []
     assert _lease_globs(repo, "T1") == ["a.py", "b.py"]
+
+
+def test_an_update_after_the_claim_moves_item_and_lease_together(repo):
+    """claim --globs, then update --globs, then a heartbeat: the update is the last word
+    on both sides -- `update` retargets a live lease (B209) and a heartbeat renews with
+    `leases.renew`, which records no globs of its own."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "src/old.py")
+    assert A.claim(repo, "T1", globs="src/claim.py", no_worktree=True, agent=HOLDER).ok
+    assert AI.update(repo, "T1", AI.ItemEdit(globs=["src/user.py"]), agent=HOLDER).ok
+    assert A.heartbeat(repo, "T1", agent=HOLDER).ok
+    assert _items(repo)["T1"].globs == ["src/user.py"]
+    assert _lease_globs(repo, "T1") == ["src/user.py"]
