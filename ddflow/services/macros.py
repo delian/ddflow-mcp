@@ -77,7 +77,12 @@ class Macro:
                     f"macro {self.name!r}: prompt_file {path} does not exist. A configured "
                     f"body that is missing is an error, never a silent fallback to empty."
                 )
-            return path.read_text("utf-8")
+            try:
+                return path.read_text("utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                # Raised as the macro's own error, so every caller that reports a broken
+                # macro by name reports this one too instead of crashing on it.
+                raise MacroError(f"macro {self.name!r}: prompt_file {path}: {exc}") from exc
         if not self.prompt.strip():
             raise MacroError(
                 f"macro {self.name!r} has no `prompt` and no `prompt_file`. A named mode "
@@ -140,7 +145,7 @@ def macro_problems(root: Path) -> list[str]:
     for m in macros.values():
         try:
             m.body(root)
-        except (MacroError, OSError) as exc:
+        except (MacroError, OSError, ValueError) as exc:
             out.append(str(exc))
     return out
 

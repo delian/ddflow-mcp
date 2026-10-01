@@ -99,3 +99,27 @@ def test_prompts_list_shows_a_prompt_file_macros_file_not_none(repo):
     rc, out, _ = run_cli(repo, "--json", "prompts", "list")
     row = next(r for r in json.loads(out) if r["name"] == "hunting")
     assert row["path"] != "None" and row["path"].endswith("hunt.md"), row
+
+
+def test_mcp_prompts_list_names_the_refused_macro_on_the_shipped_entry(repo):
+    """MCP has no field for notes: the refusal rides on the description of the shipped
+    command the macro collided with, so a client listing prompts sees it."""
+    from ddflow.surfaces.mcp import Server
+
+    _with(repo, CLASH)
+    listed = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "prompts/list"})
+    entry = {p["name"]: p for p in listed["result"]["prompts"]}["code-clean"]
+    assert "shipped workflow command" in entry["description"], entry
+
+
+def test_an_undecodable_prompt_file_is_a_problem_not_a_crash(repo):
+    (repo / "prompts").mkdir()
+    (repo / "prompts" / "blob.md").write_bytes(b"\x93smart quote\x94\xff")
+    _with(repo, '\n[[macro]]\nname = "blob"\nprompt_file = "prompts/blob.md"\n')
+    problems = M.macro_problems(repo)
+    assert any("blob" in p for p in problems), problems
+    rc, out, err = run_cli(repo, "prompts", "list")
+    assert rc == 0 and "Traceback" not in err, err
+    rc, out, err = run_cli(repo, "--json", "doctor")
+    assert "Traceback" not in err, err
+    assert any("blob" in p for p in json.loads(out)["problems"])
