@@ -107,3 +107,18 @@ def test_an_editable_install_is_a_source_checkout_and_never_gets_uvx(installed, 
     entry = installed({"url": "file:///src/ddflow", "dir_info": {"editable": True}})
     assert entry["command"] == str(installed.env / "bin" / "python"), entry
     assert entry["args"] == ["-m", A.MCP_MODULE]
+
+
+def test_a_target_dir_install_outside_site_packages_is_launched_from_that_dir(
+    installed, monkeypatch, tmp_path
+):
+    """`pip install --target=/opt/vendor` puts the package where no path part is named
+    site-packages, so it reads as a source tree: the entry is the interpreter with that
+    directory on PYTHONPATH -- runnable -- and never uvx (critic on 1446b3b)."""
+    vendor = tmp_path / "vendor"
+    (vendor / "ddflow").mkdir(parents=True)
+    monkeypatch.setattr(PATHS, "package_parent", lambda: vendor)
+    monkeypatch.setattr(A, "_running_from_source", lambda: True)
+    entry = installed(GIT)
+    assert entry["command"] != "uvx", entry
+    assert entry["env"] == {"PYTHONPATH": str(vendor)}
