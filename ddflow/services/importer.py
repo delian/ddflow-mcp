@@ -2120,6 +2120,65 @@ def _settle_phases(plan: ImportPlan, state, touched: Touched, existing: dict[str
     _note_settled(plan, s)
 
 
+def _settle_needed_phases(
+    plan: ImportPlan,
+    deferred: dict[str, Found],
+    state,
+    touched: Touched,
+    existing: dict[str, Found],
+) -> None:
+    """Complete, on a PLAIN import, the finished phases that open work depends on.
+
+    A plain import keeps such a phase (dropping it would leave the dependency unknown) but
+    leaves its ticked tasks out -- so it landed EMPTY and OPEN, and the dependent was never
+    offered: "phase P5 has no open tasks but is not marked done" (B-import-empty-needed-
+    phase). The boxes under it are still the source's evidence that it is finished, so the
+    verdict is the one `--include-done` reaches, read from the tasks this import left out;
+    the tasks themselves stay out, as a plain import promises. Only phases that open work
+    NEEDS, judged over every task under them: every other phase is exactly as it was. A phase already in the queue is completed under `_settle_existing`'s rules
+    (imported, still open, untouched since), so a re-run releases work an earlier import
+    left stuck.
+    """
+    needed = {d for f in plan.found for d in f.needs}
+    # ...and what work ALREADY in the queue needs: on a re-run the dependent was imported
+    # last time, so it is not in this plan, and it is the one stuck.
+    for it in getattr(state, "items", {}).values():
+        if it.state not in (DONE, ABANDONED) and not it.removed:
+            needed.update(it.needs)
+    # Judged over EVERY task under the phase once this import has run -- the ones in this
+    # plan (open ones keep it open; a finished one pulled in as a dependency counts as
+    # done) and the ticked ones it leaves out -- plus, inside `_phase_verdict`, the ones
+    # already queued. Skipping a phase because the plan held a task under it left it
+    # empty-open whenever that task was itself a pulled-in dependency (roborev 959).
+    planned = {id(f) for f in plan.found}
+    kids: dict[str, list[Found]] = {}
+    for f in plan.found:
+        if f.kind == "task" and f.extra.get("phase"):
+            kids.setdefault(f.extra["phase"], []).append(f)
+    for f in deferred.values():
+        if f.extra.get("phase") and id(f) not in planned:
+            kids.setdefault(f.extra["phase"], []).append(f)
+    s = _Settled()
+    for f in plan.by_kind("phase"):
+        if f.ident not in needed or f.done:
+            continue
+        verdict, detail = _phase_verdict(
+            f, f.ident, f.source, kids.get(f.ident, []), state, touched
+        )
+        if verdict == "done":
+            f.done = True
+            f.extra["evidence"] = detail
+            s.new_done += 1
+        elif verdict == "unfinished":
+            s.unfinished.append(f"{f.ident} ({detail})")
+    stuck = {pid: f for pid, f in existing.items() if pid in needed}
+    _settle_existing(s, stuck, kids, state, touched)
+    plan.found.extend(s.completions)
+    completed = {c.ident for c in s.completions}
+    plan.skipped_existing = [i for i in plan.skipped_existing if i not in completed]
+    _note_settled(plan, s)
+
+
 def _note_settled(plan: ImportPlan, s: _Settled) -> None:
     def named(ids: list[str]) -> str:
         return ", ".join(ids[:_NOTE_EXAMPLES]) + (", ..." if len(ids) > _NOTE_EXAMPLES else "")
@@ -2345,13 +2404,16 @@ def plan_import(
                 f"imported. They are finished or already in the queue; an empty phase "
                 f"is a container, not work."
             )
+        if events is None and state is not None:
+            # The same `[log]` config every other reader honours (the parse cache).
+            events = EventLog(repo, log_cfg=Config.load(repo).log).read_all()
+        touched = touched_since_import(events or ())
         if include_done:
             # AFTER the tasks are in the plan: a phase is finished or not by what is
             # under it once this import has run, not by what was under it before.
-            if events is None and state is not None:
-                # The same `[log]` config every other reader honours (the parse cache).
-                events = EventLog(repo, log_cfg=Config.load(repo).log).read_all()
-            _settle_phases(plan, state, touched_since_import(events or ()), existing_phases)
+            _settle_phases(plan, state, touched, existing_phases)
+        else:
+            _settle_needed_phases(plan, deferred_done, state, touched, existing_phases)
     for f in scan_branches(repo):
         f.ident = _unique("", f.ident, proposed)
         if f.ident not in known:
