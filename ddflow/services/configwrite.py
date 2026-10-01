@@ -17,6 +17,11 @@ Two of the rules are load-bearing and neither is obvious:
   than trusting the caller — the claim that this was "impossible through the MCP
   surface" was checked and turned out to be false.
 
+* **A reviewer is guarded too** (decision D-reviewer-trust). Every write here goes
+  through `_write_reviewed`: an agent's `kind = "command"` reviewer is undone and
+  refused, and a reviewer whose identity a tool wrote is recorded so its reviews count
+  only after a person approves it (`services/reviewer_trust.py`).
+
 The in-place TOML edit is deliberate rather than a round-trip through a parser: the file
 is written by hand and carries comments explaining every knob, and `tomllib` cannot
 write, so a serialising round-trip would silently delete the documentation that makes
