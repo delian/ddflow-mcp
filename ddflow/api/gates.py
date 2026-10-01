@@ -324,7 +324,11 @@ def run(
     log.append("gate.started", item, {"gate": gate})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = G.run_command_gate(
-        gdef, cwd, on_tick=keeper, tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0
+        gdef,
+        cwd,
+        on_tick=keeper,
+        tick_s=max(1, cfg.lease.heartbeat_s) if keeper else 0,
+        keep_output=G.run_log_writer(repo, item, gate),
     )
     reason = ev.get("reason", "")
     if not reason and result != "passed":
@@ -423,6 +427,10 @@ def record(
         ev["output_digest"] = G.digest(txt)
         ev["output_bytes"] = len(txt)
         ev["tail"] = txt[-2000:]
+        # WHERE the digested output is, so the digest can be checked against it, and
+        # the verdict lines from all of it rather than the tail (bug Bac392907b1).
+        ev["output_file"] = evidence.output_file
+        ev["summary"] = G.summary_lines(txt)
 
     if not skip:
         # WHICH tree and HOW MUCH, for AGENT gates too. These were added to
@@ -449,7 +457,15 @@ def record(
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.
-        measured = {"tree_sha": G.tree_fingerprint(wt), "diff_stat": G.diff_stat(wt)} if wt else {}
+        measured = (
+            {
+                "tree_sha": G.tree_fingerprint(wt),
+                "source_tree": G.source_tree(wt),
+                "diff_stat": G.diff_stat(wt),
+            }
+            if wt
+            else {}
+        )
     else:
         measured = {}
 

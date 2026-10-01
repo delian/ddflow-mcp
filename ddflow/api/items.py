@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import csv_list
+from ..core import globspec as GS
 from ..core import outcome as O
 from ..core.model import fold
 from ..services import leases as L
@@ -53,24 +54,10 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
         if moved:
             return O.refused("item.updated", moved, id=item)
 
-    fields: dict[str, Any] = {}
-    if edit.title is not None:
-        fields["title"] = edit.title
-    if edit.body is not None:
-        fields["body"] = edit.body
-    if edit.needs is not None:
-        fields["needs"] = list(edit.needs)
-    if edit.globs is not None:
-        fields["globs"] = list(edit.globs)
-    if edit.tags is not None:
-        fields["tags"] = list(edit.tags)
-    if edit.resources is not None:
-        fields["resources"] = list(edit.resources)
-    if edit.priority is not None:
-        fields["priority"] = int(edit.priority)
-    if edit.line is not None:
-        fields["line"] = edit.line
-
+    fields = _edit_fields(edit)
+    bad = GS.problem(fields.get("globs", []))
+    if bad:
+        return O.failed("item.updated", f"{item}: {bad}", id=item)
     if not fields:
         return O.nothing(
             "item.updated",
@@ -79,6 +66,32 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             id=item,
         )
     return _record_update(log, cfg, it, fields)
+
+
+def _edit_fields(edit: ItemEdit) -> dict[str, Any]:
+    """The fields ``edit`` sets -- each one not left at None -- as the event records them.
+
+    Globs are read by `globspec`, as everywhere else: an element may be a comma list or a
+    JSON array, and either is taken whole.
+    """
+    fields: dict[str, Any] = {}
+    if edit.title is not None:
+        fields["title"] = edit.title
+    if edit.body is not None:
+        fields["body"] = edit.body
+    if edit.needs is not None:
+        fields["needs"] = list(edit.needs)
+    if edit.globs is not None:
+        fields["globs"] = GS.parse(edit.globs)
+    if edit.tags is not None:
+        fields["tags"] = list(edit.tags)
+    if edit.resources is not None:
+        fields["resources"] = list(edit.resources)
+    if edit.priority is not None:
+        fields["priority"] = int(edit.priority)
+    if edit.line is not None:
+        fields["line"] = edit.line
+    return fields
 
 
 def _record_update(log, cfg, it, fields: dict[str, Any]) -> O.Outcome:
@@ -233,7 +246,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     ``line`` puts the whole phase on a release line; its tasks inherit it. An id already
     in the queue is REFUSED; ``readd`` lets a removed one come back.
     """
-    bad = _bad_id(item)
+    bad = _bad_id(item) or GS.problem(GS.parse(globs))
     if bad:
         return O.failed("phase.added", bad, id=item)
     log, cfg, _st = _load(repo, agent)
@@ -250,7 +263,7 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
             {
                 "title": title,
                 "needs": csv_list(needs),
-                "globs": csv_list(globs),
+                "globs": GS.parse(globs),
                 "body": body,
                 "tags": csv_list(tags),
                 "priority": priority,
@@ -294,7 +307,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     from ..services import choices as CH
     from ..services import leases as L
 
-    bad = _bad_id(item)
+    bad = _bad_id(item) or GS.problem(GS.parse(globs))
     if bad:
         return O.failed("task.added", bad, id=item)
     log, cfg, st = _load(repo, agent)
@@ -324,7 +337,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
             plan = F.plan_ports(cfg, wanted, cfg.flow.port_strategy)
         base = {
             "parent": parent,
-            "globs": csv_list(globs),
+            "globs": GS.parse(globs),
             "body": body,
             "tags": csv_list(tags),
             "priority": priority,
@@ -548,6 +561,9 @@ def split(
     if it is None or it.removed:
         gone = " (it was removed from the queue)" if it is not None else ""
         return O.failed("task.split", f"no such item {item!r}{gone}", id=item, created=[])
+    bad = GS.problem(GS.parse(globs))
+    if bad:
+        return O.failed("task.split", bad, id=item, created=[])
     if it.state in (DONE, ABANDONED):
         return O.refused(
             "task.split",
@@ -607,7 +623,7 @@ def split(
                 # split is half-done the children are the only things being worked, and a
                 # child with no declared globs is a child the conflict detector cannot
                 # protect.
-                "globs": csv_list(globs) or list(it.globs),
+                "globs": GS.parse(globs) or list(it.globs),
                 "needs": csv_list(needs) if i == 1 else [],
                 "priority": it.priority,
             },
@@ -623,4 +639,4 @@ def split(
         item,
         {"body": (it.body + "\n\n" if it.body else "") + f"Split into: {', '.join(created)}."},
     )
-    return O.ok("task.split", item=item, created=created, inherited_globs=not csv_list(globs))
+    return O.ok("task.split", item=item, created=created, inherited_globs=not GS.parse(globs))

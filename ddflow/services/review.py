@@ -39,6 +39,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -250,6 +251,11 @@ class Reviewer:
     #: a cap, for a server with few slots whose queued requests would time out waiting.
     max_concurrency: int = 0
     system_prompt_path: str = ""
+    #: Text added to the reviewer's instructions under "Project-specific rules" -- what
+    #: this project's reviewer should and should not report -- without replacing the
+    #: whole system prompt (bug Bbeb0c7542f: the template rendered the block, but no
+    #: config key ever filled it).
+    extra_rules: str = ""
     extra_body: dict[str, Any] = field(default_factory=dict)
     #: Extra environment for a kind="command" reviewer (e.g. a per-reviewer API key).
     env: dict[str, str] = field(default_factory=dict)
@@ -297,6 +303,10 @@ class ReviewResult:
     chunks_off_contract: int = 0
     elapsed_s: float = 0.0
     raw: str = ""
+    #: One entry per chunk that produced no review: ``{"chunk", "files", "reason"}``.
+    #: Every one of them, not the first -- a PARTIAL that names one cause for three
+    #: missing chunks hides which files nobody reviewed (bug Bd2332f8f2a).
+    unreviewed: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def label(self) -> str:
@@ -323,6 +333,7 @@ class ReviewResult:
             "elapsed_s": round(self.elapsed_s, 1),
             "reason": self.reason,
             "titles": [f.title for f in self.findings[:10]],
+            "unreviewed": self.unreviewed,
         }
 
 
@@ -537,16 +548,22 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
         if len(f) <= max_chars:
             pieces.append(f)
             continue
-        header = f.split("\n@@", 1)[0]
-        hunks = re.split(r"(?m)^(?=@@ )", f[len(header) :])
+        # The header keeps its trailing newline. Cut before it, the rest began with a
+        # bare "\n" that the split below returned as a piece of its own; `current` then
+        # differed from `header`, and the header went out ALONE as a chunk, its hunks
+        # in the next -- reviewers reported a new file with no content (B779270c994).
+        cut = f.find("\n@@ ")
+        header = f if cut < 0 else f[: cut + 1]
+        hunks = [h for h in re.split(r"(?m)^(?=@@ )", f[len(header) :]) if h]
         current = header
         for h in hunks:
             if current != header and len(current) + len(h) > max_chars:
                 pieces.append(current)
                 current = header
             current += h
-        if current.strip() != header.strip():
-            pieces.append(current)
+        # Always: with no hunk at all (a large rename or mode change) the section is
+        # sent whole -- it used to be dropped, unreviewed and unreported.
+        pieces.append(current)
 
     # Pack small pieces back up, so request count follows diff SIZE rather than file
     # count -- a change touching forty tiny files should not be forty requests.
@@ -557,6 +574,74 @@ def split_diff(diff: str, max_chars: int) -> list[str]:
         else:
             packed.append(piece)
     return packed
+
+
+#: A hunk header and whatever git appended after its closing ``@@``.
+_HUNK_CONTEXT_RE = re.compile(r"(?m)^(@{2,} [-+0-9, ]+ @{2,})[ \t][^\n]*$")
+
+
+def strip_hunk_context(diff: str) -> str:
+    """Drop the text git appends after a hunk header's closing ``@@``.
+
+    It is git's funcname GUESS -- the nearest earlier line that looks like a heading --
+    and for a config file that is routinely a line from the PREVIOUS block: a TOML hunk
+    headed ``@@ -104,11 +106,12 @@ default = true`` above a section whose own line reads
+    ``default = false``. Reviewers read it as part of the hunk and reported the wrong
+    value as the change's, three rounds running (bug Bbf41d8f07f). The line numbers stay.
+    """
+    return _HUNK_CONTEXT_RE.sub(r"\1", diff)
+
+
+def _git_path(raw: str, prefix: str) -> str:
+    """A path as a diff header line prints it: C-quoted when it is not plain ASCII
+    (``core.quotePath``), and prefixed ``a/``/``b/`` unless ``diff.noprefix`` is set."""
+    import codecs
+
+    raw = raw.rstrip("\t")
+    if len(raw) > 1 and raw[0] == raw[-1] == '"':
+        try:
+            raw = codecs.escape_decode(raw[1:-1].encode())[0].decode("utf-8", "replace")
+        except ValueError:
+            raw = raw[1:-1]
+    return raw[len(prefix) :] if raw.startswith(prefix) else raw
+
+
+def _section_path(section: str) -> str:
+    """The file one ``diff --git`` section changes: from its ``+++``/``---`` or rename
+    lines, which name ONE path each, and only failing those from the header line, whose
+    two paths cannot be told apart when a path contains `` b/``."""
+    head, *rest = section.split("\n")
+    found = ""
+    for line in rest:
+        if line.startswith("@@"):
+            break
+        if line.startswith("+++ ") and line[4:].rstrip("\t") != "/dev/null":
+            return _git_path(line[4:], "b/")
+        if line.startswith(("rename to ", "copy to ")):
+            found = _git_path(line.split(" to ", 1)[1], "")
+        elif line.startswith("--- ") and not found and line[4:].rstrip("\t") != "/dev/null":
+            found = _git_path(line[4:], "a/")
+    if found:
+        return found
+    pair = head[len("diff --git ") :]
+    quoted = re.findall(r'"(?:[^"\\]|\\.)*"', pair)
+    if quoted:
+        return _git_path(quoted[-1], "b/")
+    # "a/X b/X", or "X X" under diff.noprefix: two halves naming the same file.
+    half = len(pair) // 2
+    if len(pair) % 2 == 1 and pair[half] == " ":
+        left, right = pair[:half], pair[half + 1 :]
+        if left.startswith("a/") and right.startswith("b/") and left[2:] == right[2:]:
+            return left[2:]
+        if left == right:
+            return left
+    return pair
+
+
+def chunk_files(chunk: str) -> list[str]:
+    """The files a chunk's diff touches, in order, each once."""
+    sections = re.split(r"(?m)^(?=diff --git )", chunk)
+    return list(dict.fromkeys(_section_path(s) for s in sections if s.startswith("diff --git ")))
 
 
 def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
@@ -675,12 +760,36 @@ def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tupl
             return json.loads(resp.read().decode("utf-8", "replace")), ""
     except urllib.error.HTTPError as exc:
         return None, f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
+    except TimeoutError:
+        return None, _no_answer_in_time(timeout_s)
     except (urllib.error.URLError, OSError) as exc:
         return None, f"unreachable: {exc}"
     except http.client.HTTPException as exc:
         return None, _cut_off(exc)
     except (ValueError, json.JSONDecodeError) as exc:
         return None, f"bad response body: {exc}"
+
+
+#: Marks a request the endpoint ACCEPTED but did not answer within its timeout.
+DID_NOT_CONVERGE = "DID NOT CONVERGE:"
+
+
+def _no_answer_in_time(timeout_s: float) -> str:
+    """A read timeout, told apart from an endpoint that is not there.
+
+    `urlopen` wraps a CONNECT timeout in `URLError` -- nothing is listening, which is
+    "unreachable". A timeout raised bare came after the request was sent and accepted:
+    the server was still generating. Reported as "unreachable: timed out" it sent
+    operators to check an endpoint that was fine, while the chunk was deterministically
+    running to `max_tokens` (bug B338a8bb598: 32 000 tokens at under 36 tok/s is more
+    than the 900 s timeout).
+    """
+    return (
+        f"{DID_NOT_CONVERGE} the endpoint accepted the request but no answer came within "
+        f"{timeout_s:.0f}s -- the model was still generating, most likely toward "
+        f"max_tokens. Raise [[reviewer]].timeout_s, lower max_tokens, or lower "
+        f"max_chunk_chars so each chunk needs less thinking. The endpoint is reachable."
+    )
 
 
 def _temperature(rev: Reviewer) -> dict[str, float]:
@@ -755,7 +864,7 @@ def _chat_anthropic(rev: Reviewer, system: str, user: str, timeout_s: float) -> 
     except (KeyError, TypeError):
         return "", f"unexpected response shape: {str(body)[:300]}"
     text = "".join(b.get("text", "") for b in blocks if b.get("type") == "text").strip()
-    if not text and body.get("stop_reason") == "max_tokens":
+    if body.get("stop_reason") == "max_tokens" and not parse(text)[1]:
         return "", _truncated(rev)
     return text, ""
 
@@ -788,7 +897,7 @@ def _chat_gemini(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
         fb = (body or {}).get("promptFeedback", {})
         return "", f"no candidate returned{f' ({fb})' if fb else ''}"
     text = "".join(p.get("text", "") for p in cand.get("content", {}).get("parts", [])).strip()
-    if not text and cand.get("finishReason") == "MAX_TOKENS":
+    if cand.get("finishReason") == "MAX_TOKENS" and not parse(text)[1]:
         return "", _truncated(rev)
     return text, ""
 
@@ -816,6 +925,8 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
             body = json.loads(resp.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as exc:
         return "", f"HTTP {exc.code}: {exc.read()[:300].decode('utf-8', 'replace')}"
+    except TimeoutError:
+        return "", _no_answer_in_time(timeout_s)
     except (urllib.error.URLError, OSError) as exc:
         return "", f"unreachable: {exc}"
     except http.client.HTTPException as exc:
@@ -828,7 +939,7 @@ def _chat_openai(rev: Reviewer, system: str, user: str, timeout_s: float) -> tup
     except (KeyError, IndexError, TypeError):
         return "", f"unexpected response shape: {str(body)[:300]}"
     content = (msg.get("content") or "").strip()
-    if not content and choice.get("finish_reason") == "length":
+    if choice.get("finish_reason") == "length" and not parse(content)[1]:
         # Naming the remedy matters: "empty completion" sends an operator hunting for a
         # broken endpoint, when the endpoint is fine and the token budget is too small
         # for a model that thinks before it answers.
@@ -895,10 +1006,15 @@ def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | No
 
 
 def _absorb_chunk(
-    res: ReviewResult, index: int, total: int, content: str, err: str, all_raw: list[str]
+    res: ReviewResult,
+    index: int,
+    content: str,
+    err: str,
+    all_raw: list[str],
+    files: list[str] | None = None,
 ) -> list[Finding] | None:
     """Fold one chunk's reply into the result. Returns its findings, or None if it did
-    not produce a usable review.
+    not produce a usable review -- recorded in `res.unreviewed` with its files.
 
     The three not-a-review cases are kept distinct because their remedies differ:
     a transport error (endpoint, key, binary), an EMPTY completion, and an
@@ -906,20 +1022,24 @@ def _absorb_chunk(
     them. Only the last is easy to mistake for a review, which is why length is never
     treated as a verdict.
     """
+
+    def lost(why: str) -> None:
+        res.unreviewed.append({"chunk": index, "files": list(files or []), "reason": why})
+
     if err:
-        res.reason = res.reason or f"chunk {index}/{total}: {err}"
+        lost(err)
         return None
     if not content:
         res.chunks_off_contract += 1
-        res.reason = res.reason or f"chunk {index}: empty completion"
+        lost("empty completion")
         return None
     all_raw.append(content)
     findings, on_contract = parse(content)
     if not on_contract:
         res.chunks_off_contract += 1
-        res.reason = res.reason or (
-            f"chunk {index} came back OFF CONTRACT: {len(content)} chars with no "
-            f"STATUS: block. Not counted as reviewed."
+        lost(
+            f"came back OFF CONTRACT: {len(content)} chars with no STATUS: block. "
+            f"Not counted as reviewed."
         )
         return None
     res.chunks_reviewed += 1
@@ -940,7 +1060,16 @@ def _concurrency(rev: Reviewer, requests: int) -> int:
     return max(1, min(requests * max(1, int(rev.hedge)), AUTO_CONCURRENCY_CEILING))
 
 
-def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[tuple[str, str]]:
+def _race(
+    rev: Reviewer,
+    system: str,
+    users: list[str],
+    started: float,
+    *,
+    on_settled: Callable[[int, tuple[str, str]], None] | None = None,
+    on_tick: Callable[[list[int]], None] | None = None,
+    tick_s: float = 0,
+) -> list[tuple[str, str]]:
     """(content, error) for every chunk: chunks in parallel, ``rev.hedge`` copies each.
 
     Up to ``_concurrency(rev, len(users))`` requests are in flight. Every chunk's first copy is
@@ -948,8 +1077,16 @@ def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[
     speculation. A chunk is settled by its first copy to come back ON CONTRACT -- the
     others are cancelled (`_Cancel`) and any still queued never start -- or, if every
     copy failed, by its first failure, reported exactly as a sequential review would.
+
+    ``on_settled(i, result)`` is called as each chunk settles, and ``on_tick(waiting)``
+    -- with the indices of the chunks still unsettled -- every ``tick_s`` seconds while
+    any are in flight. Both on THIS thread: the tick renews the caller's lease, and the
+    event log's parse cache is not safe to touch from a worker (roborev 827). A review
+    used to say nothing between its first line and its last for half an hour, and an
+    agent watching a silent tool kills it (bug B9d8bd466c3); meanwhile the lease it
+    held expired (bugs Bc6ec4fd40d, Bf0cccb8fb1).
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
+    from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 
     if not users:  # `review` refuses an empty diff first; this is for any other caller
         return []
@@ -976,22 +1113,35 @@ def _race(rev: Reviewer, system: str, users: list[str], started: float) -> list[
     order = [(i, c) for c in range(hedge) for i in range(n)]
     with ThreadPoolExecutor(max_workers=min(cap, len(order))) as pool:
         futures = {pool.submit(attempt, i, c): (i, c) for i, c in order}
-        for fut in as_completed(futures):
-            i, c = futures[fut]
-            got = fut.result()
-            if got is None or i in settled:
-                continue
-            left[i] -= 1
-            content, err = got
-            if not err and content and parse(content)[1]:
-                settled[i] = got
-                for other in range(hedge):
-                    if other != c:
-                        tokens[(i, other)].cancel()
-            elif left[i] == 0:
-                settled[i] = first_failure.get(i, got)
-            else:
-                first_failure.setdefault(i, got)
+        pending = set(futures)
+        next_tick = time.time() + tick_s
+        while pending:
+            timeout = max(0.0, next_tick - time.time()) if on_tick and tick_s > 0 else None
+            done, pending = wait(pending, timeout=timeout, return_when=FIRST_COMPLETED)
+            for fut in done:
+                i, c = futures[fut]
+                got = fut.result()
+                if got is None or i in settled:
+                    continue
+                left[i] -= 1
+                content, err = got
+                if not err and content and parse(content)[1]:
+                    settled[i] = got
+                    for other in range(hedge):
+                        if other != c:
+                            tokens[(i, other)].cancel()
+                elif left[i] == 0:
+                    settled[i] = first_failure.get(i, got)
+                else:
+                    first_failure.setdefault(i, got)
+                    continue
+                if on_settled:
+                    on_settled(i, settled[i])
+            if on_tick and tick_s > 0 and time.time() >= next_tick:
+                next_tick = time.time() + tick_s
+                waiting = [i for i in range(n) if i not in settled]
+                if waiting:
+                    on_tick(waiting)
     return [settled[i] for i in range(n)]
 
 
@@ -1007,6 +1157,7 @@ def _retry_truncated(
     results: list[tuple[str, str]],
     render,
     started: float,
+    **race_kw: Any,
 ) -> list[tuple[str, str]]:
     """Give a chunk that ran out of budget on EVERY copy one more round.
 
@@ -1023,9 +1174,10 @@ def _retry_truncated(
     parts: list[tuple[int, str]] = []
     for i in lost:
         pieces = split_diff(chunks[i], max(1, (len(chunks[i]) + 1) // 2))
-        # `split_diff` drops a file section with no hunk that is larger than the limit
-        # (a big rename or mode change): halves missing a file would let the chunk
-        # count as reviewed without it, so such a chunk is retried whole.
+        # Halves missing a file would let the chunk count as reviewed without it, so a
+        # chunk whose halves do not carry every file header is retried whole. split_diff
+        # no longer drops a hunkless section (B779270c994); this stays as the invariant
+        # check, not as a workaround.
         headers = _file_headers(chunks[i])
         # No header at all is not "every header kept": without one there is nothing to
         # check the halves against, so the chunk goes again whole (roborev).
@@ -1034,7 +1186,7 @@ def _retry_truncated(
         parts += [(i, piece) for piece in pieces]
     # `render` is the renderer every first copy already went through.
     users = [render(piece, i + 1) for i, piece in parts]
-    again = _race(rev, system, users, started)
+    again = _race(rev, system, users, started, **race_kw)
     out = list(results)
     for i in lost:
         mine = [again[k] for k, (j, _p) in enumerate(parts) if j == i]
@@ -1047,6 +1199,64 @@ def _retry_truncated(
         # An empty or off-contract part has no error of its own: report the truncation.
         out[i] = ("", f"{err} ({note})" if err else f"{results[i][1]} ({note})")
     return out
+
+
+class _Progress:
+    """The lines a running review prints, and the tick it hands its caller.
+
+    One line per chunk as it settles, and one naming what is still awaited every tick:
+    a review that said nothing for half an hour was killed as hung (bug B9d8bd466c3).
+    """
+
+    def __init__(self, files, started, timeout_s, on_progress=None, on_tick=None) -> None:
+        self.files, self.started, self.timeout_s = files, started, timeout_s
+        self.on_progress, self.on_tick = on_progress, on_tick
+
+    def _say(self, line: str) -> None:
+        if self.on_progress:
+            self.on_progress(line)
+
+    def _where(self, i: int) -> str:
+        names = ", ".join(self.files[i]) or "no file header"
+        return f"chunk {i + 1}/{len(self.files)} ({names})"
+
+    def settled(self, i: int, got: tuple[str, str], how: str = "") -> None:
+        content, err = got
+        found, on_contract = parse(content) if content and not err else ([], False)
+        elapsed = f"{time.time() - self.started:.0f}s"
+        if on_contract:
+            self._say(f"  {self._where(i)}: reviewed{how}, {len(found)} finding(s), {elapsed}")
+            return
+        why = (err or ("off contract" if content else "empty completion")).splitlines()[0]
+        self._say(f"  {self._where(i)}: NOT reviewed{how}, {elapsed} -- {why[:200]}")
+
+    def tick(self, waiting: list[int], how: str = "") -> None:
+        if self.on_tick:
+            self.on_tick()
+        self._say(
+            f"  ... waiting on {len(waiting)} of {len(self.files)} chunk(s){how} "
+            f"({', '.join(str(i + 1) for i in waiting)}), "
+            f"{time.time() - self.started:.0f}s elapsed; one request may take up to "
+            f"{self.timeout_s}s"
+        )
+
+
+def _name_unreviewed(res: ReviewResult) -> None:
+    """Put EVERY chunk nobody reviewed, with its files, into the reason.
+
+    The author needs to know what lacks coverage, not only the first thing that went
+    wrong: "6/9 reviewed -- chunk 5: TRUNCATED" left two missing chunks unnamed and
+    every file unnamed (bug Bd2332f8f2a).
+    """
+    if not res.unreviewed:
+        return
+    n = res.chunks_total
+    lines = [
+        f"  chunk {u['chunk']}/{n} ({', '.join(u['files']) or 'no file header'}): {u['reason']}"
+        for u in res.unreviewed
+    ]
+    head = f"{len(res.unreviewed)} of {n} chunk(s) not reviewed:"
+    res.reason = "\n".join([*([res.reason] if res.reason else []), head, *lines])
 
 
 def ensure_running(rev: Reviewer, *, on_log=None) -> tuple[bool, str]:
@@ -1133,12 +1343,20 @@ def review(
     intent: str,
     *,
     context: str = "",
-    on_chunk=None,
     repo: Path | None = None,
     prompt_overrides: dict[str, str] | None = None,
     extra_rules: str = "",
+    on_progress: Callable[[str], None] | None = None,
+    on_tick: Callable[[], None] | None = None,
+    tick_s: float = 60,
 ) -> ReviewResult:
-    """Run one reviewer over one diff. Never raises; encodes everything in the status."""
+    """Run one reviewer over one diff. Never raises; encodes everything in the status.
+
+    ``on_progress`` gets a line as each chunk settles and, every ``tick_s`` while chunks
+    are in flight, one naming what is still awaited; ``on_tick`` is called at the same
+    cadence, on the caller's thread (the api renews the caller's lease there).
+    ``extra_rules`` adds to the reviewer's own ``extra_rules``.
+    """
     res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
     started = time.time()
 
@@ -1146,8 +1364,10 @@ def review(
     if problem is not None:
         return problem
 
-    chunks = split_diff(diff, rev.max_chunk_chars)
+    chunks = split_diff(strip_hunk_context(diff), rev.max_chunk_chars)
     res.chunks_total = len(chunks)
+    files = [chunk_files(c) for c in chunks]
+    rules = "\n\n".join(r.strip() for r in (rev.extra_rules, extra_rules) if r.strip())
 
     from ..services import prompts as P
 
@@ -1157,7 +1377,7 @@ def review(
         # instructions, which a single project-wide template cannot express.
         overrides["review_system"] = rev.system_prompt_path
     try:
-        system = P.render(P.resolve("review_system", repo, overrides), extra_rules=extra_rules)
+        system = P.render(P.resolve("review_system", repo, overrides), extra_rules=rules)
         user_tmpl = P.resolve("review_user", repo, overrides)
     except P.TemplateError as exc:
         res.status, res.reason = ERROR, str(exc)
@@ -1180,16 +1400,39 @@ def review(
         res.status, res.reason = ERROR, f"review_user template: {exc}"
         return res
 
-    results = _retry_truncated(
-        rev, system, chunks, _race(rev, system, users, started), render, started
+    progress = _Progress(files, started, rev.timeout_s, on_progress, on_tick)
+    first = _race(
+        rev,
+        system,
+        users,
+        started,
+        on_settled=progress.settled,
+        on_tick=progress.tick,
+        tick_s=tick_s,
     )
+    # The retry races PARTS of the lost chunks, so its indices are not chunk numbers:
+    # its ticks name the chunks being retried instead (critic).
+    retried = [i for i, (_c, err) in enumerate(first) if err.startswith(TRUNCATED)]
+    results = _retry_truncated(
+        rev,
+        system,
+        chunks,
+        first,
+        render,
+        started,
+        on_tick=lambda _parts: progress.tick(retried, " on retry"),
+        tick_s=tick_s,
+    )
+    for i, (before, after) in enumerate(zip(first, results, strict=True)):
+        if before != after:
+            progress.settled(i, after, " on retry")
+
     all_raw: list[str] = []
     # Absorbed in CHUNK order whatever order they finished in, so the findings, the raw
-    # transcript and the first reported failure do not depend on which copy was quick.
+    # transcript and the reported failures do not depend on which copy was quick.
     for i, (content, err) in enumerate(results, 1):
-        note = _absorb_chunk(res, i, len(chunks), content, err, all_raw)
-        if note is not None and on_chunk:
-            on_chunk(i, len(chunks), note)
+        _absorb_chunk(res, i, content, err, all_raw, files[i - 1])
+    _name_unreviewed(res)
 
     res.raw = "\n\n---\n\n".join(all_raw)
     res.elapsed_s = time.time() - started

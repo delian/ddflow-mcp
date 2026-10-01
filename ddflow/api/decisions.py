@@ -187,7 +187,9 @@ def decision_list(repo: Path, *, all: bool = False) -> O.Outcome:
     dead = [d for d in st.decisions.values() if not d.live]
     rows = live + dead if all else live
     data: dict[str, Any] = {
-        "rows": [_plain(d) for d in sorted(rows, key=lambda x: x.at)],
+        # `live` is a property, so plain() leaves it out; the human renderer reads it
+        # and crashed with KeyError: 'live' (Bb177c2e0e9).
+        "rows": [{**_plain(d), "live": d.live} for d in sorted(rows, key=lambda x: x.at)],
         "live": len(live),
         # How many exist but were not shown -- so the human renderer can say so without
         # folding a second time, and a machine caller can tell "none recorded" from
