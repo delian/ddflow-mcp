@@ -41,12 +41,13 @@ LAN = "<lan-address>"
 MODEL = "<served-model>"
 HOST = "<host>"
 
-#: A versioned model name, with or without its org: `org/Name-4.1-x`, `Name3.8-27B`. The
-#: family word alone ("the LAN Qwen") is generic and stays; the served name goes.
+#: A versioned model name, with or without its org: `org/Name-4.1-x`, `Name3.8-27B`,
+#: `gpt-4`, an Ollama tag `name3:8b`. The family word alone ("the LAN Qwen") is generic
+#: and stays; the served name goes.
 MODEL_NAME = re.compile(
     r"(?i)\b(?:[a-z0-9][\w-]*/)?"
     r"(?:gemma|qwen|deepseek|gemini|llama|mistral|mixtral|gpt|kimi|glm|phi)"
-    r"[\w.-]*?\d(?:[\w.-]*\w)?"
+    r"[\w.:-]*?\d(?:[\w.:-]*\w)?"
 )
 HOME = re.compile(r"/home/(?!user/)[^/\s'\"`]+/")
 #: What the redactor emits. The host-name pass never rewrites these, so a machine named
