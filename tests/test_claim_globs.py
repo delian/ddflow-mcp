@@ -155,3 +155,17 @@ def test_globspec_reads_what_agents_send():
     assert GS.problem(["src/[ab].py", "x/[[]y"]) == ""
     for bad in ('["src/a.py"', '"src/b.py"]', "'c.py", "d.py'", "src/[ab.py"):
         assert GS.problem([bad]), bad
+
+
+def test_claimed_globs_in_another_order_are_the_same_claim(repo):
+    """Item and lease are compared as SETS -- here and in the heartbeat's catch-up -- so
+    a reordered claim records no edit, and no heartbeat rewrites the lease."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py,b.py")
+    before = len(EventLog(repo, "probe").read_all())
+    assert A.claim(repo, "T1", globs="b.py,a.py", no_worktree=True, agent=HOLDER).ok
+    assert A.heartbeat(repo, "T1", agent=HOLDER).ok
+    new = EventLog(repo, "probe").read_all()[before:]
+    assert [e.kind for e in new if e.kind.endswith(".updated")] == []
+    assert [e for e in new if e.kind == "lease.renewed" and "globs" in e.data] == []
+    assert _lease_globs(repo, "T1") == ["a.py", "b.py"]
