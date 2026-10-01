@@ -1798,7 +1798,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             )
         },
         # Where the server stands decides where the committed files go: a linked
-        # worktree's own checkout, never the shared primary (bug B1e7ad10c6c).
+        # worktree's own checkout, not the shared primary (bug B1e7ad10c6c). A foreign
+        # `as_agent` is not standing in the connection's tree (B11e4c5a185), so it is
+        # asked from the primary, as from a CLI run there -- never the parent's branch.
         "wants_called_from": True,
         "api": lambda repo, a, agent, called_from=None: _api().adopt_project(
             repo,

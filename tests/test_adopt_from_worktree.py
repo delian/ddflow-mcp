@@ -131,3 +131,25 @@ def test_mcp_setup_from_a_server_in_a_linked_worktree_writes_there(repo):
     assert [line for line in status if not line[3:].startswith(shared)] == []
     for rel in ("AGENTS.md", ".mcp.json", ".ddflow/config.toml"):
         assert (tree / rel).is_file(), f"{rel} belongs in the server's tree"
+
+
+def test_mcp_setup_under_a_foreign_as_agent_does_not_write_into_the_parents_tree(repo):
+    """A subagent sharing the connection (its own `as_agent`) is not standing in the
+    parent's harness tree: its setup must not land on the parent's branch. It is
+    answered as from the primary, as every `wants_called_from` tool is (B11e4c5a185)."""
+    from ddflow.surfaces.mcp import Server
+
+    tree = _worktree(repo)
+    reply = Server(repo, agent="parent", called_from=tree).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_setup",
+                "arguments": {"agents": "claude", "as_agent": "sub"},
+            },
+        }
+    )
+    assert reply is not None and not reply["result"].get("isError"), reply
+    assert not (tree / "AGENTS.md").exists(), "the parent's branch got the subagent's files"
