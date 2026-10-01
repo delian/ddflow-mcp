@@ -54,12 +54,39 @@ def test_mcp_status_cuts_its_lists_and_keeps_the_counts(repo):
     assert len(text) < 20_000, len(text)
 
 
-def test_the_cli_still_lists_everything(repo):
+def test_the_cli_lists_everything_and_differs_from_mcp_only_in_the_cut_lists(repo):
+    """The deliberate exception to CLI/MCP byte-identity (roborev job 962): pinned on a
+    queue big enough to cross the bound, which the parity test's fixture never is."""
     _big_queue(repo)
     code, out, err = run_cli(repo, "--json", "status")
     assert code == 0, err
-    body = json.loads(out)
-    assert len(body["completed_tasks"]) == DONE and "truncated" not in body
+    cli = json.loads(out)
+    assert len(cli["completed_tasks"]) == DONE and "truncated" not in cli
+    assert [t["id"] for t in cli["completed_tasks"]][-1] == f"T{DONE - 1:03d}"
+    mcp = json.loads(_mcp_status(repo))
+    # 40 ready, 4 offered under max_parallel_tasks = 4, 36 held by the cap.
+    assert mcp["truncated"]["lists"] == {"completed_tasks": DONE, "held_by_cap": 36}
+    assert mcp["completed_tasks"] == cli["completed_tasks"][-25:]
+    assert mcp["held_by_cap"] == cli["held_by_cap"][:25]
+    same = {k for k in cli if k not in ("completed_tasks", "held_by_cap")}
+    assert {k: mcp[k] for k in same} == {k: cli[k] for k in same}
+
+
+def test_interrupted_notes_are_cut_too(repo):
+    """roborev job 962: `interrupted` describes the same items `in_flight` does and was
+    left unbounded."""
+    import time
+
+    run_cli(repo, "init")
+    log = EventLog(repo, "ghost")
+    for i in range(30):
+        log.append("task.added", f"I{i:02d}", {"globs": [f"i{i}"]})
+        log.append(
+            "lease.acquired", f"I{i:02d}", {"holder": "ghost", "at": time.time() - 9e4, "ttl_s": 60}
+        )
+        log.append("item.started", f"I{i:02d}", {})
+    body = json.loads(_mcp_status(repo))
+    assert len(body["interrupted"]) == 25 and body["truncated"]["lists"]["interrupted"] == 30
 
 
 def test_a_small_project_is_not_marked_truncated(repo):

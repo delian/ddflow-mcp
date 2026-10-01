@@ -91,7 +91,8 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     """One answer to "what is the state of this project?".
 
     ``full`` lists everything; otherwise each list is cut to ``STATUS_LIST_LIMIT`` (the
-    most recently completed tasks; the first of the others, in the scheduler's order) and
+    most recently completed tasks, newest last; the first of the others, in the
+    scheduler's order) and
     ``truncated`` names each cut list with its real length. The CLI asks for ``full``; the
     MCP tool takes the bounded answer.
 
@@ -197,12 +198,14 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
 def _bound(data: dict[str, Any]) -> None:
     """Cut `status`'s lists to `STATUS_LIST_LIMIT`, saying which were cut and from what."""
     cut: dict[str, int] = {}
-    for key in ("completed_tasks", "in_flight", "ready_now", "held_by_cap", "loops", "recoverable"):
+    lists = ("completed_tasks", "in_flight", "ready_now", "held_by_cap", "interrupted")
+    for key in (*lists, "loops", "recoverable"):
         rows = data[key]
         if len(rows) > STATUS_LIST_LIMIT:
             cut[key] = len(rows)
-            # The most recent completions are the ones a reader asks about; for the
-            # others the scheduler's order puts what to do first at the top.
+            # The most recent completions are the ones a reader asks about -- kept in
+            # completion order, newest last, as the full list has them; for the others
+            # the scheduler's order puts what to do first at the top.
             keep = (
                 slice(-STATUS_LIST_LIMIT, None)
                 if key == "completed_tasks"
