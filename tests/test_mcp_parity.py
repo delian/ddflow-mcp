@@ -125,6 +125,11 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "writes an API-key env-var name into project config; a config edit an "
         "operator should make deliberately, not an agent mid-task"
     ),
+    ("reviewers", "approve"): (
+        "a PERSON vouches for a tool-written reviewer (decision D-reviewer-trust); an "
+        "agent that could approve the reviewer it wrote would make the record decorative. "
+        "test_approve_is_not_an_mcp_tool asserts there is no such tool."
+    ),
     ("reviewers", "detect"): "covered by ddflow_reviewers_detect",
     ("reviewers", "list"): "covered by ddflow_reviewers_list",
     ("reviewers", "test"): "covered by ddflow_reviewers_detect, which probes the same way",
