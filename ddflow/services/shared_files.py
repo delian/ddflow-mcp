@@ -88,16 +88,51 @@ def driver(repo: Path, glob: str) -> str:
     return values[0]
 
 
+def _split_pattern(row: str) -> tuple[str, list[str]]:
+    """(pattern, attributes) of one `.gitattributes` line, as git reads it.
+
+    A pattern may be C-quoted (`"docs/My File.md" merge=ours`) or hold `\\ ` escapes;
+    a plain `split()` cut it at the space and the rule was never recognised (review).
+    """
+    row = row.strip()
+    if row.startswith('"'):
+        out, i = [], 1
+        while i < len(row) and row[i] != '"':
+            if row[i] == "\\" and i + 1 < len(row):
+                i += 1
+            out.append(row[i])
+            i += 1
+        return "".join(out), row[i + 1 :].split()
+    out, i = [], 0
+    while i < len(row) and not row[i].isspace():
+        if row[i] == "\\" and i + 1 < len(row):
+            i += 1
+        out.append(row[i])
+        i += 1
+    return "".join(out), row[i:].split()
+
+
 def _merge_rows(rows: list[str]) -> list[tuple[int, str]]:
     """(index, pattern) of every `.gitattributes` line that sets a merge attribute."""
     out = []
     for k, row in enumerate(rows):
-        parts = row.split()
-        if not parts or parts[0].startswith("#"):
+        if not row.strip() or row.lstrip().startswith("#"):
             continue
-        if any(a.startswith("merge=") or a in ("merge", "-merge", "!merge") for a in parts[1:]):
-            out.append((k, parts[0]))
+        pattern, attrs = _split_pattern(row)
+        if any(a.startswith("merge=") or a in ("merge", "-merge", "!merge") for a in attrs):
+            out.append((k, pattern))
     return out
+
+
+def _broad_rule(repo: Path, glob: str) -> bool:
+    """Does a `.gitattributes` merge rule cover the WHOLE glob -- the glob itself, or a
+    pattern it falls inside (`*.md` for `docs/*.md`)? Then the project chose for all of
+    it. A narrower rule (`docs/README.md`, `docs/R*.md`) chose for part only."""
+    from ..core.schedule import is_shared
+
+    path = Path(repo) / ".gitattributes"
+    rows = path.read_text("utf-8").splitlines() if path.exists() else []
+    return any(p == glob or is_shared(glob, [p]) for _k, p in _merge_rows(rows))
 
 
 def _has_line(repo: Path, line: str) -> bool:
@@ -127,11 +162,22 @@ def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
     for k, pattern in _merge_rows(rows):
         if k == have:
             continue
+        if pattern == glob:
+            last_broad = k
+            continue
+        # By the patterns themselves first: `docs/R*.md` read as a path matches
+        # `docs/*.md`, so it is narrower whatever files exist today (review finding);
+        # `docs/*.md` read as a path matches `*.md`, so that one is broader.
+        if is_shared(pattern, [glob]):
+            narrower.append(k)
+            continue
+        if is_shared(glob, [pattern]):
+            last_broad = k
+            continue
         hit = [p for p in covered if p == pattern or is_shared(p, [pattern])]
         if not hit:
             continue
-        literal = not any(ch in pattern for ch in "*?[")
-        if pattern != glob and (len(hit) < len(covered) or literal):
+        if len(hit) < len(covered):
             narrower.append(k)
         else:
             last_broad = k
@@ -187,8 +233,8 @@ def sync_attributes(repo: Path) -> list[str]:
             continue  # one pattern per line, ended by whitespace: doctor says how to write it
         line = union_line(glob)
         d = driver(repo, glob)
-        if d and not (d == "union" and _has_line(repo, line)):
-            continue  # union from a line of the project's own, or a driver it chose
+        if d and _broad_rule(repo, glob) and (d != "union" or not _has_line(repo, line)):
+            continue  # the project's own rule covers the whole glob: its call, or union already
         rows, placed = _placed(repo, glob, line)
         if placed != rows:
             (Path(repo) / ".gitattributes").write_text("\n".join(placed) + "\n", "utf-8")
