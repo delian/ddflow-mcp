@@ -112,11 +112,14 @@ class _Exact:
         df = {t: len(p[0]) for t, p in post.items()}
         acc = textsim.cosine(textsim.vector(toks, df, self._n), post)
         wanted = frozenset(kinds) if kinds is not None else None
-        hits = [
-            (self._docs[i].id, min(1.0, round(s, 9)))
-            for i, s in acc.items()
-            if s > 0.0 and (wanted is None or self._docs[i].kind in wanted)
-        ]
+        hits = []
+        for i, raw in acc.items():
+            # The filter sees the ROUNDED score, so a returned hit never reads 0.0 (the
+            # contract says "above zero"). Defensive: the smoothed IDF is >= 1, so a
+            # cosine this small needs a hundred-thousand-term record and none exists.
+            score = min(1.0, round(raw, 9))
+            if score > 0.0 and (wanted is None or self._docs[i].kind in wanted):
+                hits.append((self._docs[i].id, score))
         hits.sort(key=lambda h: (-h[1], h[0]))
         return hits if limit is None else hits[:limit]
 
