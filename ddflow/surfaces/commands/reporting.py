@@ -14,6 +14,7 @@ import time
 
 from ...api import reporting as A
 from ...infra import worktree as W
+from ...views.markdown import cap_held
 from ..context import FAIL, NOTHING, OK, Ctx
 
 
@@ -38,7 +39,7 @@ def _queue_lines(r) -> list[str]:
     if r["capped"]:
         out.append("")
         held = _first([t.id for t in r["capped"]])
-        out.append(f"{len(r['capped'])} more ready but held by {r['cap']}: {held}")
+        out.append(f"{cap_held(len(r['capped']), bool(r['ready']))} {r['cap']}: {held}")
     if r["blocked"]:
         out.append("")
         out.append("Blocked: " + _first([f"{b.item} ({b.reason})" for b in r["blocked"]]))

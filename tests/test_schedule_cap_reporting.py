@@ -116,5 +116,21 @@ def test_status_and_brief_prose_name_the_items_the_cap_holds(repo):
         run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")
     _code, status, _err = run_cli(repo, "status")
     assert "max_parallel_tasks=2" in status and "U3, U4" in status, status
+    assert "2 more are ready but held by" in status, status
     _code, brief, _err = run_cli(repo, "brief")
     assert "2 more are ready but held" in brief and "`U3`, `U4`" in brief, brief
+
+
+def test_with_nothing_else_ready_the_cap_line_does_not_say_more(repo):
+    """Critic finding on B-fix-schedule-cap-reporting: "_Nothing ready._" followed by
+    "N more are ready" read as a contradiction."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("max_parallel_tasks = 4", "max_parallel_tasks = 1"))
+    for i in range(1, 4):
+        run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")
+    assert run_cli(repo, "claim", "U1", "--no-worktree", agent="a1")[0] == 0
+    _code, status, _err = run_cli(repo, "status")
+    assert "2 are ready but held by" in status and "more" not in status, status
+    _code, brief, _err = run_cli(repo, "brief")
+    assert "2 are ready but held by" in brief, brief
