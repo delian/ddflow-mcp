@@ -165,6 +165,56 @@ def test_the_redactor_masks_what_it_promises():
         assert name not in build.redact(f"routed to {name} today", host="")
 
 
+def test_the_builder_folds_the_log_into_redacted_records(tmp_path):
+    """build_fixture.build is what regenerates corpus.jsonl: latest title and body, the
+    state each record ended in, removed and closed records kept, every text redacted."""
+    sys.path.insert(0, str(FIXTURE))
+    try:
+        build = importlib.import_module("build_fixture")
+    finally:
+        sys.path.remove(str(FIXTURE))
+    lan = ".".join(("10", "9", "8", "7"))
+    events = [
+        ("task.added", "T1", {"title": "first title", "body": "old body"}),
+        ("task.updated", "T1", {"body": f"new body naming {lan}"}),
+        ("item.started", "T1", {}),
+        ("item.completed", "T1", {}),
+        ("task.added", "T2", {"title": "gone", "body": ""}),
+        ("task.removed", "T2", {"reason": "duplicate"}),
+        ("phase.added", "P1", {"title": "a phase", "body": ""}),
+        ("bug.found", "B1", {"summary": "served as acme/Qwen9.9-99B-it"}),
+        ("bug.fixed", "B1", {"regression_test": "t"}),
+        ("bug.invalid", "B1", {"reason": "late"}),
+        ("bug.found", "B2", {"summary": "a false finding"}),
+        ("bug.invalid", "B2", {"reason": "not a bug"}),
+        ("bug.found", "B3", {"summary": ""}),
+    ]
+    lines = [
+        json.dumps(
+            {
+                "lamport": n,
+                "agent": "a",
+                "id": f"e{n}",
+                "kind": k,
+                "subject": s,
+                "data": d,
+                "ts": f"2026-10-01T00:00:{n:02d}Z",
+            }
+        )
+        for n, (k, s, d) in enumerate(events)
+    ]
+    (tmp_path / "a.jsonl").write_text("\n".join([*lines, "{torn"]) + "\n", encoding="utf-8")
+    recs = {r["id"]: r for r in build.build(tmp_path)}
+    assert set(recs) == {"T1", "T2", "P1", "B1", "B2"}, "a bug with no text is not a record"
+    assert recs["T1"]["title"] == "first title" and recs["T1"]["state"] == "done"
+    assert recs["T1"]["body"] == "new body naming <lan-address>"
+    assert recs["T1"]["added"] == "2026-10-01T00:00:00Z"
+    assert recs["T2"]["state"] == "removed" and recs["P1"]["kind"] == "phase"
+    assert recs["B1"]["state"] == "fixed", "a fix outranks a later invalid closure"
+    assert recs["B1"]["body"] == "served as <served-model>"
+    assert recs["B2"]["state"] == "invalid"
+
+
 # --------------------------------------------------------------------------- evaluation
 
 
