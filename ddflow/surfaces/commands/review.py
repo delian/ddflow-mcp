@@ -18,7 +18,7 @@ import sys
 # form reads `ddflow.api.review` out of sys.modules and cannot be shadowed.
 import ddflow.api.review as A
 
-from ..context import FAIL, NOTHING, OK, Ctx
+from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
 
 
 def cmd_review(a, c: Ctx) -> int:
@@ -112,12 +112,28 @@ def _reviewers_add(a, c: Ctx) -> int:
         body.append(f"{k} = {_toml_value(v)}")
     if launch:
         body.append("launch = " + _toml_value(launch))
+    from ...services import reviewer_trust as RT
     from ...services.configwrite import append_block
 
     # Local unless --shared: an endpoint and a key variable are one operator's setup,
     # and a reviewer added here is for THIS machine (bug B-reviewers-write-committed).
     shared = bool(getattr(a, "shared", False))
-    path = append_block(c.repo, "\n".join(body), shared=shared, own="reviewers.toml")
+    # A command reviewer only from a person (decision D-reviewer-trust): nothing about
+    # this invocation may say it is an agent's.
+    person = not RT.agent_marker(c.requested_agent)
+    try:
+        path = append_block(
+            c.repo,
+            "\n".join(body),
+            shared=shared,
+            own="reviewers.toml",
+            person=person,
+            agent=c.cfg.agent.id,
+        )
+    except RT.ReviewerRefused as exc:
+        why = RT.agent_marker(c.requested_agent)
+        print(f"{exc}\n  (this command runs as an agent: {why}; a person runs it)", file=sys.stderr)
+        return REFUSED
     note = (
         "\n  Committed config: every clone gets this reviewer."
         if shared
@@ -167,6 +183,42 @@ def _reviewers_test(a, c: Ctx) -> int:
     return worst
 
 
+def _reviewers_approve(a, c: Ctx) -> int:
+    """A PERSON vouches for a tool-written reviewer entry (decision D-reviewer-trust).
+
+    CLI only and refused under an agent identity, like `ddflow approve`: an agent that
+    could approve the reviewer it wrote would make the record decorative. With no name,
+    lists the entries waiting for approval.
+    """
+    from ...api._base import _load
+    from ...services import reviewer_trust as RT
+
+    if not getattr(a, "name", ""):
+        _log, _cfg, st = _load(c.repo, c.requested_agent)
+        rows = RT.pending(c.repo, st)
+        if not rows:
+            c.out("No tool-written reviewer is waiting for approval.", {"pending": []})
+            return NOTHING
+        lines = [
+            f"  {r['name']:<24} {r['kind']:<8} written by {r['agent'] or '?'} at {r['at'][:19]}"
+            for r in rows
+        ]
+        c.out(
+            "Written by a tool, not counted until approved:\n"
+            + "\n".join(lines)
+            + "\n\nCheck each entry, then: ddflow reviewers approve <name>",
+            {"pending": rows},
+        )
+        return OK
+    try:
+        line = RT.approve(c.repo, a.name, requested_agent=c.requested_agent, note=a.note or "")
+    except RT.ReviewerRefused as exc:
+        print(str(exc), file=sys.stderr)
+        return REFUSED
+    c.out(line, {"name": a.name, "approved": True, "line": line})
+    return OK
+
+
 def cmd_reviewers(a, c: Ctx) -> int:
     """A dispatcher. Each subcommand is its own function — they share nothing but the
     config file they read, and the chain of `if` arms was 18 branches."""
@@ -176,4 +228,5 @@ def cmd_reviewers(a, c: Ctx) -> int:
         "presets": _reviewers_presets,
         "add": _reviewers_add,
         "test": _reviewers_test,
+        "approve": _reviewers_approve,
     }.get(a.reviewers_cmd or "list", _reviewers_list)(a, c)

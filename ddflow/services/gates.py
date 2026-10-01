@@ -1715,6 +1715,14 @@ def record(  # noqa: PLR0913 -- the caller's evidence and ddflow's measurements 
             f"`ddflow approve {item_id} {gate}` (or `--reject --reason ...`). "
             f"There is deliberately no MCP tool for this."
         )
+    if evidence and evidence.get("reviewer") and not evidence.get("reviewer_digest"):
+        # WHICH entry reviewed, as configured right now: what reviewer independence
+        # checks against `reviewer.configured`/`reviewer.approved` (D-reviewer-trust).
+        # Only `ddflow review` writes a `reviewer` key; `gate record` cannot.
+        from . import reviewer_trust as RT
+
+        if dig := RT.digest_of(log.root, str(evidence["reviewer"])):
+            evidence = {**evidence, "reviewer_digest": dig}
     if outcome == "skipped":
         if not cfg.gates.allow_skip_with_reason:
             raise ValueError("skipping is disabled ([gates].allow_skip_with_reason)")
@@ -1763,6 +1771,21 @@ def _declared_family(evidence: dict[str, Any]) -> str:
     return "" if fam == "unknown" else fam
 
 
+def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
+    """The reviewer's name when ``evidence`` came from a tool-written, unapproved entry.
+
+    `""` for everything else, and in particular for an entry no tool wrote (the
+    operator's own, which counts as it always did) and for evidence recorded before
+    digests were (nothing to judge it by, so it is judged as before).
+    """
+    dig = str(evidence.get("reviewer_digest") or "")
+    if not dig or not evidence.get("reviewer"):
+        return ""
+    if dig in state.reviewer_writes and dig not in state.reviewer_approvals:
+        return str(evidence["reviewer"])
+    return ""
+
+
 def reviewer_independence(
     state: State, cfg: Config, item_id: str, author_model: str
 ) -> tuple[bool, str]:
@@ -1785,9 +1808,13 @@ def reviewer_independence(
     author_fam = family_of(author_model, cfg).strip().lower() if routed is None else ""
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
+    unapproved: list[tuple[str, str]] = []
     for gname in ("rubber_duck", "critic", "standards"):
         rec = it.gates.get(gname)
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
+            continue
+        if who := _unapproved_reviewer(state, rec.evidence):
+            unapproved.append((gname, who))
             continue
         m = str(rec.evidence.get("model", rec.by) or "").strip()
         fam = _declared_family(rec.evidence) or family_of(m, cfg).strip().lower()
@@ -1822,6 +1849,18 @@ def reviewer_independence(
     # overlap, or a reviewer from inside the set would pass as independent.
     author_set = routed if routed is not None else [author_fam]
     author_desc = author_fam if routed is None else f"{author_model} ({', '.join(author_set)})"
+    if unapproved and not fams:
+        # The names as recorded, never re-parsed out of the text: a name with a space
+        # in it would print an approve command for the wrong reviewer (rubber duck).
+        names = sorted({who for _g, who in unapproved})
+        return False, (
+            f"{'; '.join(f'{g} came from reviewer {w!r}' for g, w in unapproved)}, whose entry a tool wrote and a person has "
+            f"not approved, so it is not counted (decision D-reviewer-trust): an agent can "
+            f"write a reviewer, so it cannot vouch for one. The operator reviews the "
+            f"entry and runs "
+            + " and ".join(f"`ddflow reviewers approve {shlex.quote(n)}`" for n in names)
+            + " from their own terminal."
+        )
     if not fams:
         if anonymous:
             return False, (

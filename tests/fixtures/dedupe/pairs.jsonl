@@ -1,0 +1,84 @@
+{"relation": "duplicate", "a": "B7c7a0d9222", "b": "Bbc250ab27a", "reason": "subagent claim via as_agent adopts the parent connection's worktree; one regression test closes all four"}
+{"relation": "duplicate", "a": "B5c32cbb5c1", "b": "Bbc250ab27a", "reason": "subagent claim via as_agent adopts the parent connection's worktree; one regression test closes all four"}
+{"relation": "duplicate", "a": "Bbc250ab27a", "b": "Bf05ce67c54", "reason": "subagent claim via as_agent adopts the parent connection's worktree; one regression test closes all four"}
+{"relation": "duplicate", "a": "B5c32cbb5c1", "b": "B7c7a0d9222", "reason": "subagent claim via as_agent adopts the parent connection's worktree; one regression test closes all four"}
+{"relation": "duplicate", "a": "B7c7a0d9222", "b": "Bf05ce67c54", "reason": "subagent claim via as_agent adopts the parent connection's worktree; one regression test closes all four"}
+{"relation": "duplicate", "a": "B5c32cbb5c1", "b": "Bf05ce67c54", "reason": "subagent claim via as_agent adopts the parent connection's worktree; one regression test closes all four"}
+{"relation": "duplicate", "a": "Bb3cb64444e", "b": "Bdc85898c40", "reason": "filed as 'additional evidence for' the other: repeated claim --globs flag keeps only the last value"}
+{"relation": "duplicate", "a": "B5fde61b8a9", "b": "B9aeb141b9a", "reason": "same report: the commit hook resolves identity from the tree, not the as_agent lease holder (the first was later shown a lapsed lease)"}
+{"relation": "duplicate", "a": "B568e9def3b", "b": "B769704d1dc", "reason": "LAN reasoning reviewer spends max_tokens on reasoning, chunks truncate; closed by the same tests"}
+{"relation": "duplicate", "a": "Ba84119f707", "b": "Bd86b05a8f8", "reason": "complete's stale-gate note fires after merge because the item's worktree is gone"}
+{"relation": "duplicate", "a": "B613cb67194", "b": "Bd86b05a8f8", "reason": "complete's stale-gate note fires after merge because the item's worktree is gone"}
+{"relation": "duplicate", "a": "B613cb67194", "b": "Ba84119f707", "reason": "complete's stale-gate note fires after merge because the item's worktree is gone"}
+{"relation": "duplicate", "a": "Bc6ec4fd40d", "b": "Bf0cccb8fb1", "reason": "a long ddflow review does not renew the caller's lease"}
+{"relation": "duplicate", "a": "B3eda99e0fe", "b": "B5d98a4da0a", "reason": "update --globs widens the item's globs but not the held lease"}
+{"relation": "duplicate", "a": "B3eda99e0fe", "b": "B78324ec086", "reason": "update --globs widens the item's globs but not the held lease"}
+{"relation": "duplicate", "a": "B3eda99e0fe", "b": "Bbbcb91599c", "reason": "update --globs widens the item's globs but not the held lease"}
+{"relation": "duplicate", "a": "B5d98a4da0a", "b": "B78324ec086", "reason": "update --globs widens the item's globs but not the held lease"}
+{"relation": "duplicate", "a": "B5d98a4da0a", "b": "Bbbcb91599c", "reason": "update --globs widens the item's globs but not the held lease"}
+{"relation": "duplicate", "a": "B78324ec086", "b": "Bbbcb91599c", "reason": "update --globs widens the item's globs but not the held lease"}
+{"relation": "duplicate", "a": "B1c4a2346a9", "b": "B74362ff685", "reason": "older code reading a newer config knob fails with ValueError; closed by the same tests"}
+{"relation": "duplicate", "a": "B1c4a2346a9", "b": "B9cb7dd1c3b", "reason": "older code reading a newer config knob fails with ValueError; closed by the same tests"}
+{"relation": "duplicate", "a": "B1c4a2346a9", "b": "Bcfc0d22a09", "reason": "older code reading a newer config knob fails with ValueError; closed by the same tests"}
+{"relation": "duplicate", "a": "B74362ff685", "b": "B9cb7dd1c3b", "reason": "older code reading a newer config knob fails with ValueError; closed by the same tests"}
+{"relation": "duplicate", "a": "B74362ff685", "b": "Bcfc0d22a09", "reason": "older code reading a newer config knob fails with ValueError; closed by the same tests"}
+{"relation": "duplicate", "a": "B9cb7dd1c3b", "b": "Bcfc0d22a09", "reason": "older code reading a newer config knob fails with ValueError; closed by the same tests"}
+{"relation": "duplicate", "a": "B4179f28f46", "b": "B6ed8b9edb8", "reason": "reviewer family inferred from the served model name instead of the declared family"}
+{"relation": "duplicate", "a": "B779270c994", "b": "Bc1f52d9244", "reason": "split_diff emits a header-only chunk for a file larger than a chunk; two closed invalid as duplicates of the first"}
+{"relation": "duplicate", "a": "B-split-diff-header-chunk", "b": "B779270c994", "reason": "split_diff emits a header-only chunk for a file larger than a chunk; two closed invalid as duplicates of the first"}
+{"relation": "duplicate", "a": "B-split-diff-header-chunk", "b": "Bc1f52d9244", "reason": "split_diff emits a header-only chunk for a file larger than a chunk; two closed invalid as duplicates of the first"}
+{"relation": "duplicate", "a": "B16042585f4", "b": "B6bd279367e", "reason": "task add overwrites an existing id"}
+{"relation": "duplicate", "a": "B-json-failures", "b": "B-json-failures-machine-readable", "reason": "task re-filed by a parallel session; removed as a duplicate"}
+{"relation": "duplicate", "a": "B-one-repo-relative-path-helper", "b": "B-relpath-helper", "reason": "task re-filed by a parallel session; removed as a duplicate"}
+{"relation": "duplicate", "a": "B207", "b": "BUG-companions", "reason": "same companions fix filed twice; B207 removed as a duplicate"}
+{"relation": "duplicate", "a": "B208", "b": "BUG-doctor", "reason": "same doctor fix filed twice; B208 removed as a duplicate"}
+{"relation": "duplicate", "a": "B-add-refuses-dup-id", "b": "BUG-duplicate-add", "reason": "same fix filed by two agents minutes apart; one removed as a duplicate"}
+{"relation": "duplicate", "a": "B-critic-lan-qwen", "b": "B-critic-qwen-lan", "reason": "same operator request filed by two sessions; removed as a duplicate"}
+{"relation": "duplicate", "a": "B-mdc-to-decisions", "b": "B-path-rules-to-decisions", "reason": "identical text re-filed under a new id"}
+{"relation": "duplicate", "a": "B-adopt-agent-commands", "b": "B-cursor-commands-adopt", "reason": "identical text re-filed under a new id"}
+{"relation": "duplicate", "a": "Bbd07ab69fd", "b": "Bc5aec031b3", "reason": "one root cause (a heartbeat resets the lease's claimed globs), two symptoms; both closed by B-fix-claim-globs. The hardest pair: different words"}
+{"relation": "duplicate", "a": "B58e77d23d4", "b": "Bbea42c07bb", "reason": "waiters: a mistyped registration field raises TypeError; a second critic pass on the same class"}
+{"relation": "duplicate", "a": "B-semantic-recall", "b": "B203", "reason": "same feature (optional embeddings beside BM25); B203 removed as a duplicate of B-semantic-recall"}
+{"relation": "related", "a": "B091993a9fc", "b": "B9d8bd466c3", "reason": "both ddflow review exit/timeout behaviour on the LAN reviewer; different defects"}
+{"relation": "related", "a": "B091993a9fc", "b": "Bd2332f8f2a", "reason": "closure reason names the other as the related ask"}
+{"relation": "related", "a": "B11e4c5a185", "b": "B7c7a0d9222", "reason": "residual left open by the other's fix"}
+{"relation": "related", "a": "B3e050cb66a", "b": "B5fde61b8a9", "reason": "closure reason names the other as the real defect"}
+{"relation": "related", "a": "B-update-resources-lease", "b": "B209", "reason": "'same defect as B209 for resources'"}
+{"relation": "related", "a": "Bb8e07a8a97", "b": "Bd6e6d40f1e", "reason": "regression introduced by the other's fix (precommit activation line)"}
+{"relation": "related", "a": "Bd6e6d40f1e", "b": "Bed4fd7ba0c", "reason": "precommit activation-line family"}
+{"relation": "related", "a": "Bb8e07a8a97", "b": "Bed4fd7ba0c", "reason": "precommit activation-line family"}
+{"relation": "related", "a": "B365dadde12", "b": "Bd6e6d40f1e", "reason": "precommit activation-line family"}
+{"relation": "related", "a": "Bbea42c07bb", "b": "Bdbb18464b1", "reason": "waiters robustness, third critic pass"}
+{"relation": "related", "a": "B58e77d23d4", "b": "Bdbb18464b1", "reason": "waiters robustness, third critic pass"}
+{"relation": "related", "a": "B11e15914bb", "b": "Be4ff1f82d3", "reason": "lease-contest join family, found hunting the same bug"}
+{"relation": "related", "a": "Ba73ee6ea72", "b": "Be4ff1f82d3", "reason": "lease-contest join family, found hunting it"}
+{"relation": "related", "a": "B5c32cbb5c1", "b": "Bec8d5228c9", "reason": "filed as a follow-up to the other"}
+{"relation": "related", "a": "B-critic-kilo", "b": "B-critic-qwen-lan", "reason": "the later critic configuration superseded the earlier"}
+{"relation": "related", "a": "B259fd32dbd", "b": "B695d7925bf", "reason": "hooks vs the pre-commit framework: status and install"}
+{"relation": "related", "a": "B166", "b": "B169", "reason": "event-log read cost: two aspects of the same scaling work"}
+{"relation": "related", "a": "B9b57176aac", "b": "Bc50bc7fb58", "reason": "ddflow merge's own commit refused by the lease hook, primary left mid-merge; different causes (stash vs identity)"}
+{"relation": "related", "a": "B-dupes-sweep", "b": "B198", "reason": "B-dupes-sweep absorbs part of B198"}
+{"relation": "related", "a": "B-add-checks-duplicates", "b": "B198", "reason": "B-add-checks-duplicates absorbs part of B198"}
+{"relation": "related", "a": "Bbbcb91599c", "b": "Bd8038b08a1", "reason": "update --globs and the held lease: not widened vs replaced"}
+{"relation": "related", "a": "B-fix-hooks-install-precommit", "b": "B-fix-hooks-status-precommit", "reason": "fix tasks of the related hooks/pre-commit bugs"}
+{"relation": "related", "a": "B7f8060f2f5", "b": "Bc496508f6b", "reason": "resources not reaching the lease: on update, then on a reviving heartbeat"}
+{"relation": "hard_negative", "a": "B1cf7a63a90", "b": "B8bde7453e5", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B1cf7a63a90", "b": "B8fa4fc1218", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B1cf7a63a90", "b": "Bbdc2c0be89", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B1cf7a63a90", "b": "Be9bada9f6a", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B8bde7453e5", "b": "B8fa4fc1218", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B8bde7453e5", "b": "Bbdc2c0be89", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B8bde7453e5", "b": "Be9bada9f6a", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B8fa4fc1218", "b": "Bbdc2c0be89", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B8fa4fc1218", "b": "Be9bada9f6a", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "Bbdc2c0be89", "b": "Be9bada9f6a", "reason": "five distinct docsync regex bugs from one review"}
+{"relation": "hard_negative", "a": "B237495b8a5", "b": "B3d596abd95", "reason": "four distinct remedy texts naming a command that does not exist"}
+{"relation": "hard_negative", "a": "B237495b8a5", "b": "B67ba6899c7", "reason": "four distinct remedy texts naming a command that does not exist"}
+{"relation": "hard_negative", "a": "B237495b8a5", "b": "B84b48b9f71", "reason": "four distinct remedy texts naming a command that does not exist"}
+{"relation": "hard_negative", "a": "B3d596abd95", "b": "B67ba6899c7", "reason": "four distinct remedy texts naming a command that does not exist"}
+{"relation": "hard_negative", "a": "B3d596abd95", "b": "B84b48b9f71", "reason": "four distinct remedy texts naming a command that does not exist"}
+{"relation": "hard_negative", "a": "B67ba6899c7", "b": "B84b48b9f71", "reason": "four distinct remedy texts naming a command that does not exist"}
+{"relation": "hard_negative", "a": "B5189cc5756", "b": "Bf84cccbaa6", "reason": "two doctor bugs fixed in one task"}
+{"relation": "hard_negative", "a": "B40760556f6", "b": "B87d456f1cd", "reason": "two companions bugs fixed in one task"}
+{"relation": "hard_negative", "a": "B-late-renewal-overjoin", "b": "B-resolve-cannot-keep-holder", "reason": "two lease-contest bugs fixed in one task, each with its own test"}
+{"relation": "hard_negative", "a": "B-mcp-registry-504", "b": "B-mcp-registry-ownership", "reason": "two failures of the same registry publish job, different causes and fixes"}

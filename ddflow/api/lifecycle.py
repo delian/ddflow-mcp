@@ -62,10 +62,14 @@ DEFAULT_CHECK_RECOVERY = True
 def next_(
     repo: Path, *, kind: str = DEFAULT_NEXT_KIND, phase: str = "", agent: str = ""
 ) -> O.Outcome:
-    """Offer the next actionable item(s). Exit 2 when nothing is actionable."""
+    """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
+    ``phase`` names no item (`_unknown_phase`)."""
     from ..core.schedule import critical_path, plan
 
     log, cfg, st = _load(repo, agent)
+    unknown = _unknown_phase(st, phase)
+    if unknown:
+        return O.failed("next", unknown, phase=phase)
     promoted: list[str] = []
     if cfg.flow.auto_promote:
         # Continuous delivery where the operator asked for it: an environment in
@@ -110,6 +114,33 @@ def next_(
     if p.ready:
         return O.ok("next", **data)
     return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
+
+
+#: How many ids under an unknown `--phase` prefix the refusal names before "and N more".
+_PREFIX_SHOWN = 12
+
+
+def _unknown_phase(st, phase: str) -> str:
+    """Why ``phase`` names nothing ``next`` can slice by; "" when it is an item.
+
+    An empty slice of an id that is not an item read as "Nothing actionable", exit 2, and
+    a driver took that for "phase done" (Bde0c6e9fad: `--phase 159`, whose work lived
+    under 159.A..159.I). The ids that start with it are named: they are what was meant.
+    """
+    if not phase:
+        return ""
+    it = st.items.get(phase)
+    if it is not None and not it.removed:
+        return ""
+    under = sorted(
+        i.id
+        for i in st.items.values()
+        if not i.removed and i.id.startswith(f"{phase}.") and "." not in i.id[len(phase) + 1 :]
+    )
+    gone = " (it was removed from the queue)" if it is not None else ""
+    more = f" and {len(under) - _PREFIX_SHOWN} more" if len(under) > _PREFIX_SHOWN else ""
+    hint = f" Items under that prefix: {', '.join(under[:_PREFIX_SHOWN])}{more}." if under else ""
+    return f"no such phase or item {phase!r}{gone}.{hint}"
 
 
 def _wait_hint(p) -> str:
@@ -1262,7 +1293,7 @@ def unblock(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outc
     return O.ok("item.unblocked", id=item, was=was, released=targets)
 
 
-def merge(
+def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may override, plus where it stands
     repo: Path,
     item: str,
     *,
@@ -1274,6 +1305,7 @@ def merge(
     called_from: Path | None = None,
     shell_cwd: Path | None = None,
     agent: str = "",
+    allow_empty: bool = False,
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
 
@@ -1328,6 +1360,9 @@ def merge(
             dirty=list(dirty),
             path=str(wt.path),
         )
+    empty = None if allow_empty else _lands_nothing(repo, it, wt)
+    if empty is not None:
+        return empty
     remote_base = f"{cfg.flow.remote}/{wt.base}"
     if it.base and it.base not in (wt.base, remote_base) and FS.stacked_on(st, it) is None:
         # The branch was forked from one line's base and would land on another's,
@@ -1423,6 +1458,32 @@ def merge(
         pr="",
         branch=wt.branch,
         outside_globs=outside,
+    )
+
+
+def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
+    """A refusal when ``wt.branch`` has no commits its target lacks; else None.
+
+    Landing it would record the item merged while nothing reached the target -- which
+    is what an item bound to the WRONG tree did: its bound branch was empty, the work
+    sat on another branch, and `merge` exited 0 (Bec8d5228c9, D-sticky-binding-remedy).
+    Not refused when git cannot answer (`W.is_merged` is then False): that is for
+    `W.merge` to report. ``wt.branch`` is the branch that would land: an item with a tree
+    of its own refuses `--branch` earlier (`_what_to_land`), and a borrowed branch IS
+    the one named, already asked the same question by `_branch_to_land`.
+    """
+    if not W.is_merged(repo, wt.branch, wt.base):
+        return None
+    return O.refused(
+        "worktree.merged",
+        f"{wt.branch!r} has no commits ahead of {wt.base!r}: merging it would land "
+        f"nothing and record {it.id} merged. If {it.id}'s work is on another tree, bind "
+        f"the item to it -- `ddflow update {it.id} --worktree <path>` -- and merge again; "
+        f"if there is truly nothing to land, pass --allow-empty.",
+        id=it.id,
+        sha="",
+        dirty=[],
+        branch=wt.branch,
     )
 
 
