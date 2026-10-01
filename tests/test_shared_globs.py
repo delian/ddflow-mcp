@@ -388,3 +388,37 @@ def test_a_broader_line_between_narrower_and_union_is_not_leapfrogged(repo):
     )
     SF.sync_attributes(repo)
     assert _merge_attr(repo, "docs/guide.md") == "union", _attributes(repo)
+
+
+def _declare(repo: Path, glob: str) -> None:
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text().replace("[lease]\n", f'[lease]\nappend_only_globs = ["{glob}"]\n', 1)
+    )
+
+
+def test_a_wildcard_narrower_rule_covering_every_file_today_still_wins(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "README.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/R*.md merge=ours\n")
+    _declare(repo, "docs/*.md")
+    SF.sync_attributes(repo)
+    assert _merge_attr(repo, "docs/README.md") == "ours", _attributes(repo)
+    assert _merge_attr(repo, "docs/new.md") == "union"
+
+
+def test_a_quoted_narrower_rule_with_a_space_still_wins(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "My File.md").write_text("x\n")
+    (repo / "docs" / "guide.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write('"docs/My File.md" merge=ours\n')
+    _declare(repo, "docs/*.md")
+    SF.sync_attributes(repo)
+    assert _merge_attr(repo, "docs/My File.md") == "ours", _attributes(repo)
+    assert _merge_attr(repo, "docs/guide.md") == "union"
