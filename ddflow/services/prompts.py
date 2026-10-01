@@ -192,7 +192,26 @@ def all_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str
     source too — silent shadowing is the class that once had `api.review` bind a function
     over its own submodule.
     """
-    return {**COMMANDS, **macro_commands(repo)}
+    out = {**COMMANDS, **macro_commands(repo)}
+    # A `[[macro]]` refused for taking a shipped command's name is said ON that command's
+    # entry: MCP `prompts/list` has no field for notes, and a client listing prompts must
+    # still see why the operator's block is not the one it gets (B-macro-clash-silent).
+    for name, why in _refused_macros(repo).items():
+        if name in out:
+            title, desc, args = out[name]
+            out[name] = (title, f"{desc} [NOTE: {why}]".strip(), args)
+    return out
+
+
+def _refused_macros(repo: Path | None) -> dict[str, str]:
+    if repo is None:
+        return {}
+    from .macros import MacroError, load_macros_report
+
+    try:
+        return load_macros_report(repo)[1]
+    except (MacroError, ValueError, OSError):
+        return {}  # the whole file is unreadable: `macro_problems` says so, for doctor
 
 
 def resolve_command(name: str, repo: Path | None = None) -> Template:
