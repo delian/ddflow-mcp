@@ -350,6 +350,16 @@ def _brief_current(
     out.append("")
 
 
+def cap_held(n: int, others_ready: bool) -> str:
+    """ "N more are ready but held by" -- or, with nothing else ready, "N are ready but
+    held by": "more" after "Nothing ready" read as a contradiction."""
+    return f"{n} {'more ' if others_ready else ''}{'is' if n == 1 else 'are'} ready but held by"
+
+
+#: How many cap-held ids the brief names before "...".
+_CAPPED_SHOWN = 8
+
+
 def _brief_ready(out: list[str], plan: Plan) -> None:
     out += ["## Ready now", ""]
     if plan.ready:
@@ -364,9 +374,18 @@ def _brief_ready(out: list[str], plan: Plan) -> None:
             ]
     else:
         out.append("_Nothing ready._")
-    if plan.blocked:
+    if plan.capped:
+        # Ready in every sense but the cap: listed apart from "Blocked", where six lines
+        # of dependency waits buried them and a reader concluded only the ready few
+        # could ever start (Bdcce70d036).
+        shown = ", ".join(f"`{i}`" for i in plan.capped[:_CAPPED_SHOWN])
+        more = " ..." if len(plan.capped) > _CAPPED_SHOWN else ""
+        n = len(plan.capped)
+        out += ["", f"{cap_held(n, bool(plan.ready))} {plan.cap_note}: {shown}{more}"]
+    blocked = [b for b in plan.blocked if b.item not in set(plan.capped)]
+    if blocked:
         out += ["", "## Blocked (and why)", ""]
-        out += [f"- `{b.item}` — {b.reason}: {b.detail}" for b in plan.blocked[:6]]
+        out += [f"- `{b.item}` — {b.reason}: {b.detail}" for b in blocked[:6]]
 
 
 def _brief_decisions(out: list[str], decisions: list) -> None:
