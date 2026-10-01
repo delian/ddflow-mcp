@@ -766,7 +766,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bf.set_defaults(fn=cmd_bug)
     bx = bg_s.add_parser("fixed")
     bx.add_argument("id")
-    bx.add_argument("--regression-test", default="")
+    bx.add_argument(
+        "--regression-test",
+        action="append",
+        default=[],
+        help="the test that now guards this bug; repeat it, or separate with ',' or ';', "
+        "for several",
+    )
     bx.add_argument("--lesson", default="")
     bx.add_argument("--lesson-title", default="")
     bx.add_argument("--lesson-rule", default="")

@@ -345,15 +345,28 @@ def bug_fixed(
     repo: Path,
     item: str,
     *,
-    regression_test: str = "",
+    regression_test: str | list[str] = "",
     lesson: str = "",
     lesson_title: str = "",
     lesson_rule: str = "",
     agent: str = "",
 ) -> O.Outcome:
-    """Close a bug. Refuses without the test that would catch it again."""
+    """Close a bug. Refuses without the test that would catch it again.
+
+    `regression_test` is one test or several: a list (a repeated CLI flag, an MCP
+    array), each entry itself split on ',' and ';' outside a parametrize id's brackets
+    (B227585c781). The event keeps `regression_test` as the string every reader already
+    displays -- as given (stripped) when one string was given, ', '-joined from a list --
+    and `regression_tests` as the split list. The required-test rule asks the LIST: `;`
+    alone is a truthy string naming no test.
+    """
     log, cfg, st = _load(repo, agent)
-    if not regression_test and cfg.lessons.require_regression_test:
+    parts = [regression_test] if isinstance(regression_test, str) else list(regression_test)
+    tests = [t for part in parts for t in _split_outside_brackets(str(part or ""))]
+    regression_test = (
+        regression_test.strip() if isinstance(regression_test, str) else ", ".join(tests)
+    )
+    if not tests and cfg.lessons.require_regression_test:
         return O.failed(
             "bug.fixed",
             "a bug may not be closed without --regression-test naming the test that "
@@ -365,13 +378,25 @@ def bug_fixed(
         return _unknown_bug("bug.fixed", item, st)
     missing, unchecked = _unresolved_tests(repo, regression_test)
     if missing:
+        joined = [m for m in missing if _looks_like_several(m)]
+        hint = (
+            f" {'; '.join(repr(m) for m in joined)} looks like several tests in one entry: "
+            f"separate them with ',' or ';', or repeat --regression-test."
+            if joined
+            else ""
+        )
         return O.failed(
             "bug.fixed",
-            f"--regression-test names a test that exists in no worktree of this "
-            f"repository: {', '.join(missing)}. Name the test that now guards this bug.",
+            f"--regression-test: {len(missing)} of {len(tests)} test(s) exist in no "
+            f"worktree of this repository: {'; '.join(missing)}.{hint} Name the tests "
+            f"that now guard this bug.",
             id=item,
         )
-    log.append("bug.fixed", item, {"regression_test": regression_test, "lesson": lesson})
+    log.append(
+        "bug.fixed",
+        item,
+        {"regression_test": regression_test, "regression_tests": tests, "lesson": lesson},
+    )
     captured = ""
     if cfg.lessons.auto_capture_on_bug and lesson_title:
         captured = f"L-{item}"
@@ -389,6 +414,7 @@ def bug_fixed(
         "bug.fixed",
         id=item,
         regression_test=regression_test,
+        regression_tests=tests,
         lesson_captured=captured,
         unchecked=unchecked,
     )
@@ -475,16 +501,48 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         # `[...]`, and splitting them refused a real test (B-bfu-param-sep).
         wanted = names.split("[", 1)[0].split("::") if sep else []
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
-        if "" in wanted or not any(_defines(_inside(tree, path), wanted) for tree in trees):
+        # Several tests joined by whitespace are never one test: `a.py::t[1] a.py::t2`
+        # resolved `t` and accepted the unchecked rest (B227585c781).
+        if (
+            "" in wanted
+            or _looks_like_several(entry)
+            or not any(_defines(_inside(tree, path), wanted) for tree in trees)
+        ):
             missing.append(entry)
     return missing, unchecked
 
 
+def _looks_like_several(entry: str) -> bool:
+    """A node id followed, after whitespace OUTSIDE its `[...]`, by another test path:
+    tests joined by spaces, not one test (`a.py::t1 a.py::t2`, `a.py::t[1] a.py::t2`).
+
+    Asked of a node id whose path has no whitespace (a command never gets here). Inside
+    the brackets anything goes -- a parameter id may hold spaces, `::` and `.py`
+    (`t[python foo.py -v]`, `t[a b::c]`) -- and a value may hold `]` itself (`t[x] y]`),
+    so only a following token that starts like a test PATH counts. A bare trailing word
+    is not refused: the permissive side, since refusing a real test locks the bug open.
+    """
+    depth, tokens, cur = 0, [], []
+    for ch in entry:
+        if ch.isspace() and depth == 0:
+            tokens.append("".join(cur))
+            cur = []
+            continue
+        depth = max(0, depth + {"[": 1, "]": -1}.get(ch, 0))
+        cur.append(ch)
+    tokens.append("".join(cur))
+    return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
+
+
 def _split_outside_brackets(spec: str) -> list[str]:
-    """Comma-separated entries, ignoring commas inside a parametrize id's brackets."""
+    """Entries separated by ',' or ';', ignoring both inside a parametrize id's brackets.
+
+    ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
+    refused as a single missing test.
+    """
     out, depth, cur = [], 0, []
     for ch in spec:
-        if ch == "," and depth == 0:
+        if ch in ",;" and depth == 0:
             out.append("".join(cur))
             cur = []
             continue
