@@ -49,8 +49,20 @@ class GitResult:
         return (self.out or self.err).strip()
 
 
-def git(repo: Path | str, *args: str, timeout: int = 300, check: bool = False) -> GitResult:
-    p = P.run(["git", "-C", str(repo), *args], capture_output=True, text=True, timeout=timeout)
+def git(
+    repo: Path | str,
+    *args: str,
+    timeout: int = 300,
+    check: bool = False,
+    env: dict[str, str] | None = None,
+) -> GitResult:
+    p = P.run(
+        ["git", "-C", str(repo), *args],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        env={**os.environ, **env} if env else None,
+    )
     res = GitResult(p.returncode, p.stdout.strip(), p.stderr.strip())
     if check and not res.ok:
         raise GitError(f"git {' '.join(args)} failed ({res.code}): {res.err or res.out}")
@@ -402,7 +414,22 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
     elif cfg.worktree.merge_strategy == "squash":
         args.append("--squash")
     args += ["-m", message, source]
+    was_merging = merging(tree)
     r = git(tree, *args)
+    # Not `not was_merging`: None ("could not tell" before) still gets the re-probe and
+    # its warning, and only a merge that was not already in progress is ever aborted.
+    if not r.ok and was_merging is not True:
+        now = merging(tree)
+        if now and was_merging is False:
+            return _abandon_merge(tree, source, r)
+        if now is None or now:
+            return GitResult(
+                r.code,
+                r.out,
+                f"{r.err or r.out}\n\n{tree} may be left mid-merge, and git could not say "
+                f"whether by this merge, so it was not aborted: check `git -C {tree} status`, "
+                f"and `git -C {tree} merge --abort` if it is this one.",
+            )
     if r.ok and cfg.worktree.merge_strategy == "squash":
         # `git merge --squash` STAGES the result and commits nothing -- `-m` is accepted
         # and ignored. So a squash "merge" used to report success with the work sitting
@@ -411,11 +438,84 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
         # Nothing to commit means the branch was already contained; that is success.
         if git(tree, "diff", "--cached", "--quiet").ok:
             return r
-        c = git(tree, "commit", "-m", message)
+        # Names what is squashed, so the lease hook can see the commit is exactly the
+        # automatic merge (enforce.clean_merge_conclusion) -- as git's own GITHEAD_
+        # does for a real merge.
+        squashed = git(tree, "rev-parse", "--verify", "--quiet", f"{source}^{{commit}}").out
+        c = git(tree, "commit", "-m", message, env={SQUASH_OF: squashed})
         if not c.ok:
-            return GitResult(c.code, c.out, f"squash staged but commit failed: {c.err}")
+            # Unstage it, as a failed merge is aborted: left staged, the next commit
+            # anyone makes in this tree would carry it (B6926ec1ad9).
+            undone = git(tree, "reset", "--merge")
+            state = (
+                f"The squash was unstaged; {tree} is as it was."
+                if undone.ok
+                else f"Unstaging it ALSO failed ({undone.err}): run `git -C {tree} reset "
+                f"--merge` by hand."
+            )
+            return GitResult(
+                GIT_REFUSED, c.out, f"squash staged but commit failed: {c.err or c.out}\n\n{state}"
+            )
         return c
     return r
+
+
+#: Set by `ddflow merge` on the commit that concludes a squash: the squashed commit, so
+#: the lease hook can tell the commit is exactly the automatic merge
+#: (`enforce.clean_merge_conclusion`), as git's own GITHEAD_ does for a real merge.
+SQUASH_OF = "DDFLOW_SQUASH_OF"
+
+
+def merging(tree: Path) -> bool | None:
+    """Is ``tree`` in the middle of a merge: MERGE_HEAD set, or a path left unmerged?
+
+    None when git could not list unmerged paths: "could not tell" is not "no".
+    """
+    if git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok:
+        return True
+    unmerged = git_paths(tree, "diff", "--name-only", "--diff-filter=U")
+    return None if unmerged is None else bool(unmerged)
+
+
+#: How many conflicting paths a refused merge names before summarising the rest.
+_NAMED = 10
+
+
+def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
+    """Abort the merge THIS call started and failed, and say why as a refusal.
+
+    It used to be left as it stood: MERGE_HEAD set, the merge staged, a conflict
+    unmerged -- in the PRIMARY, which agents may not touch. Every later merge by every
+    agent then failed until a person ran `git merge --abort` (B6926ec1ad9). Only a merge
+    this call began is aborted: one already in progress is someone's, and git refuses
+    to start another over it anyway.
+    """
+    conflicts = git_paths(tree, "diff", "--name-only", "--diff-filter=U")
+    aborted = git(tree, "merge", "--abort")
+    if not aborted.ok:  # a --squash conflict has no MERGE_HEAD for --abort to find
+        aborted = git(tree, "reset", "--merge")
+    why = r.err or r.out
+    if conflicts is None:
+        head = f"merging {source} failed and git could not list the conflicting paths:\n{why}"
+        fix = "Merge the base into your branch, in your worktree, and run merge again."
+    elif conflicts:
+        head = f"merging {source} conflicts in: " + ", ".join(conflicts[:_NAMED])
+        if len(conflicts) > _NAMED:
+            head += f" (and {len(conflicts) - _NAMED} more)"
+        fix = (
+            "Merge the base into your branch, in your worktree, resolve, commit, and "
+            "run merge again."
+        )
+    else:
+        head = f"merging {source} was refused before its commit:\n{why}"
+        fix = "Fix what refused it, then run merge again."
+    state = (
+        f"The merge was aborted; {tree} is as it was."
+        if aborted.ok
+        else f"Aborting it ALSO failed ({aborted.err}): {tree} is left mid-merge. "
+        f"Run `git -C {tree} merge --abort` by hand."
+    )
+    return GitResult(GIT_REFUSED, r.out, f"{head}\n\n{state} {fix}")
 
 
 def head_sha(path: Path) -> str:
