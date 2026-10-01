@@ -390,7 +390,11 @@ _MIN_EVENT_PREFIX = 6
 
 def _options(it) -> str:
     rows = [f"{d['event']} ({d['agent']}: {d['title']!r})" for d in it.contested]
-    rows += [f"{h['holder']} (claim {h['event']})" for h in it.lease_contest]
+    rows += [
+        f"{h['holder']} ({'current holder, ' if it.lease and h['event'] == it.lease.event else ''}"
+        f"claim {h['event']})"
+        for h in it.lease_candidates()
+    ]
     return "; ".join(rows)
 
 
@@ -412,6 +416,10 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
     to the kept claim and is not released (bug Ba73ee6ea72). Keeping the current holder
     therefore records the claims it met as released; keeping a displaced one hands the
     item back to it. Either way one call settles the whole contest.
+
+    ``keep`` may also name the current holder when it is not a contestant -- it took the
+    item over after every contestant had ended -- and then every contestant is released
+    and the item stays where it is (B-resolve-cannot-keep-holder).
     """
     import time
 
@@ -430,7 +438,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
                 id=item,
             )
         defs = _contestants(it.contested, keep, "agent")
-        claims = _contestants(it.lease_contest, keep, "holder")
+        claims = _contestants(it.lease_candidates(), keep, "holder")
         if not defs and not claims:
             return O.failed(
                 "item.resolved",
