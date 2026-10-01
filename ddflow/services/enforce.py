@@ -982,9 +982,12 @@ def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
         lines += [f"This is that item's tree. If you are {lease.holder}, renew it, then commit:"]
     lines.append(f"    ddflow --agent {lease.holder} heartbeat {item_id}")
     if lease.holder != me:
+        # Not a bare `claim`: under the default reclaim_policy it refuses an expired
+        # lease, since a crashed agent's tree often holds finished work.
         lines += [
-            f"If you are not {lease.holder}, the work was abandoned; take it over instead:",
-            f"    ddflow claim {item_id}",
+            f"If you are not {lease.holder}, the work was abandoned; recover, then take over:",
+            f"    ddflow recover --item {item_id}",
+            f"    ddflow claim {item_id} --force",
         ]
     return [*lines, ""]
 

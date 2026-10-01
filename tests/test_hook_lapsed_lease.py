@@ -17,9 +17,12 @@ import time
 import types
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
+from ddflow.core.model import fold
 from ddflow.infra import worktree as W
 from ddflow.infra.log import EventLog
 from ddflow.services import enforce as E
@@ -164,5 +167,22 @@ def test_a_lapsed_lease_matched_by_tree_alone_offers_takeover_too(repo, cfg, mon
     _code, msg = E.check_commit(repo, cfg, agent="stranger")
     assert "If you are owner" in msg, msg
     assert "ddflow --agent owner heartbeat T1" in msg, msg
-    assert "ddflow claim T1" in msg, msg
+    assert "ddflow recover --item T1" in msg, msg
+    assert "ddflow claim T1 --force" in msg, msg
     assert "Your lease" not in msg, msg
+
+
+def test_the_offered_remedies_are_the_ones_that_work(repo, cfg, monkeypatch):
+    """A plain `claim` of an expired lease is refused under the default reclaim policy,
+    which is why the hook offers recover + `--force`; and the holder's heartbeat revives
+    its own lapsed lease, which is why the hook offers that."""
+    _setup(repo, cfg)
+    assert cfg.lease.reclaim_policy == "report"
+    later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
+    monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
+    with pytest.raises(L.LeaseError, match=r"EXPIRED.*recover --item T1.*--force"):
+        L.acquire(EventLog(repo, "stranger"), cfg, "T1", holder="stranger", globs=["src/*"])
+    assert L.renew(EventLog(repo, "owner"), "T1"), "the holder's heartbeat was refused"
+    lease = fold(EventLog(repo, "r").read_all(), strict=False).items["T1"].lease
+    assert lease.holder == "owner"
+    assert not lease.expired(later, cfg.lease.grace_s), "the heartbeat did not revive it"
