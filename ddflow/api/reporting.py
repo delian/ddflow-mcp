@@ -596,7 +596,7 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
     from .lifecycle import _unknown_phase
 
     _log, cfg, st = _load(repo, agent)
-    unknown = _unknown_phase(st, phase)
+    unknown = _unknown_phase(st, phase, phases_only=True)
     if unknown:  # as `next` refuses it, not an empty board (Bc2acd426f4)
         return O.failed("board", unknown, phase=phase, text="")
     phases = []

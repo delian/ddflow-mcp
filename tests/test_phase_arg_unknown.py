@@ -50,3 +50,13 @@ def test_a_real_phase_still_answers(repo, verb):
     _proj(repo)
     code, out, _err = run_cli(repo, verb, "--phase", "159.A")
     assert code == 0 and "159.A" in out, out
+
+
+def test_board_refuses_a_task_id_naming_its_phase(repo):
+    """roborev and critic: board slices by PHASE id, so a task id -- which next and brief
+    accept -- answered an empty board at exit 0."""
+    _proj(repo)
+    code, out, err = run_cli(repo, "board", "--phase", "159.A.T1")
+    assert code == 1, (out, err)
+    assert "'159.A.T1' is a task, not a phase -- it is under phase '159.A'" in err, err
+    assert run_cli(repo, "brief", "--phase", "159.A.T1")[0] == 0, "brief slices by any item"

@@ -120,7 +120,7 @@ def next_(
 _PREFIX_SHOWN = 12
 
 
-def _unknown_phase(st, phase: str) -> str:
+def _unknown_phase(st, phase: str, *, phases_only: bool = False) -> str:
     """Why ``phase`` names nothing ``next``, ``brief`` or ``board`` can slice by; "" when
     it is an item.
 
@@ -132,7 +132,12 @@ def _unknown_phase(st, phase: str) -> str:
         return ""
     it = st.items.get(phase)
     if it is not None and not it.removed:
-        return ""
+        if not phases_only or it.kind == "phase":
+            return ""
+        # `board` slices by PHASE id: a task id would answer an empty board at exit 0.
+        owner = next((a.id for a in st.ancestors(it.id) if a.kind == "phase"), "")
+        where = f" -- it is under phase {owner!r}" if owner else ""
+        return f"{phase!r} is a {it.kind}, not a phase{where}."
     under = sorted(
         i.id
         for i in st.items.values()
