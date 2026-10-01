@@ -402,7 +402,10 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
     elif cfg.worktree.merge_strategy == "squash":
         args.append("--squash")
     args += ["-m", message, source]
+    was_merging = merging(tree)
     r = git(tree, *args)
+    if not r.ok and not was_merging and merging(tree):
+        return _abandon_merge(tree, source, r)
     if r.ok and cfg.worktree.merge_strategy == "squash":
         # `git merge --squash` STAGES the result and commits nothing -- `-m` is accepted
         # and ignored. So a squash "merge" used to report success with the work sitting
@@ -416,6 +419,46 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
             return GitResult(c.code, c.out, f"squash staged but commit failed: {c.err}")
         return c
     return r
+
+
+def merging(tree: Path) -> bool:
+    """Is ``tree`` in the middle of a merge: MERGE_HEAD set, or a path left unmerged?"""
+    if git(tree, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok:
+        return True
+    unmerged = git_paths(tree, "diff", "--name-only", "--diff-filter=U")
+    return bool(unmerged)
+
+
+def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
+    """Abort the merge THIS call started and failed, and say why as a refusal.
+
+    It used to be left as it stood: MERGE_HEAD set, the merge staged, a conflict
+    unmerged -- in the PRIMARY, which agents may not touch. Every later merge by every
+    agent then failed until a person ran `git merge --abort` (B6926ec1ad9). Only a merge
+    this call began is aborted: one already in progress is someone's, and git refuses
+    to start another over it anyway.
+    """
+    conflicts = git_paths(tree, "diff", "--name-only", "--diff-filter=U") or []
+    aborted = git(tree, "merge", "--abort")
+    why = r.err or r.out
+    if conflicts:
+        head = f"merging {source} conflicts in: " + ", ".join(conflicts[:10])
+        if len(conflicts) > 10:
+            head += f" (and {len(conflicts) - 10} more)"
+        fix = (
+            "Merge the base into your branch, in your worktree, resolve, commit, and "
+            "run merge again."
+        )
+    else:
+        head = f"merging {source} was refused before its commit:\n{why}"
+        fix = "Fix what refused it, then run merge again."
+    state = (
+        f"The merge was aborted; {tree} is as it was."
+        if aborted.ok
+        else f"`git merge --abort` ALSO failed ({aborted.err}): {tree} is left mid-merge. "
+        f"Run `git -C {tree} merge --abort` by hand."
+    )
+    return GitResult(GIT_REFUSED, r.out, f"{head}\n\n{state} {fix}")
 
 
 def head_sha(path: Path) -> str:

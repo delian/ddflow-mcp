@@ -1043,6 +1043,51 @@ def _derived_identity_lines(me: str, held_by: dict[str, Lease]) -> list[str]:
     return [*lines, ""]
 
 
+def _merged_in(tree: Path) -> str:
+    """The one commit being merged into ``tree``'s HEAD, or "" when not exactly one.
+
+    MERGE_HEAD where `git commit` concludes a merge, and at `git merge`'s commit-msg
+    stage. At its pre-merge-commit stage MERGE_HEAD is not written yet, and git exports
+    the merged commit as ``GITHEAD_<sha>`` instead (probed, git 2.43). An octopus merge
+    names several, and gets no answer.
+    """
+    r = W.git(tree, "rev-parse", "--git-path", "MERGE_HEAD")
+    if r.ok and r.out:
+        f = Path(r.out) if Path(r.out).is_absolute() else tree / r.out
+        try:
+            heads = f.read_text().split()
+        except OSError:
+            heads = []
+        if heads:
+            return heads[0] if len(heads) == 1 else ""
+    env = [k[len("GITHEAD_") :] for k in os.environ if k.startswith("GITHEAD_")]
+    return env[0] if len(env) == 1 else ""
+
+
+def clean_merge_conclusion(tree: Path) -> bool:
+    """Is the commit being made exactly the automatic merge of HEAD and one other commit?
+
+    Then every path it stages was already committed on one of its parents -- in the
+    merged branch's own tree, under that tree's lease check -- and it adds nothing a
+    lease could cover. Judging it against the committer's leases only ever went wrong:
+    `ddflow merge` commits in the PRIMARY, whose derived identity holds nothing
+    (B9b57176aac), from an event log the pre-commit framework may have stashed
+    (Bc50bc7fb58), and the refusal left the primary mid-merge.
+
+    Exact, not trusting: the index must equal `git merge-tree --write-tree HEAD <it>`.
+    A hand-resolved conflict, or anything added on top, differs and is checked as
+    usual. A git too old for `merge-tree --write-tree` (< 2.38) answers False.
+    """
+    other = _merged_in(tree)
+    if not other:
+        return False
+    auto = W.git(tree, "merge-tree", "--write-tree", "HEAD", other)
+    if not auto.ok or not auto.out:
+        return False  # conflicts (exit 1), or no --write-tree
+    index = W.git(tree, "write-tree")
+    return index.ok and index.out == auto.out.splitlines()[0]
+
+
 def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
     """(exit_code, message). 0 allows the commit; 1 refuses it.
 
@@ -1062,6 +1107,8 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
         )
     paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
     if not paths:
+        return 0, ""
+    if clean_merge_conclusion(_index_tree(repo)):
         return 0, ""
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)

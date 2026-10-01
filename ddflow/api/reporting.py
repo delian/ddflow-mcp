@@ -338,6 +338,14 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         )
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
+    # B6926ec1ad9: a merge left half-done in the primary fails every later `merge`, by
+    # every agent, and agents may not touch the primary to clear it.
+    if W.merging(repo):
+        problems.append(
+            f"the primary checkout {repo} is mid-merge (MERGE_HEAD or unmerged paths): "
+            "every `ddflow merge` will fail until it is concluded or aborted. If nobody is "
+            f"resolving it by hand, `git -C {repo} merge --abort`."
+        )
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.
