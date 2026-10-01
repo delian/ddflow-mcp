@@ -617,8 +617,8 @@ def _section_path(section: str) -> str:
             break
         if line.startswith("+++ ") and line[4:].rstrip("\t") != "/dev/null":
             return _git_path(line[4:], "b/")
-        if line.startswith("rename to "):
-            found = _git_path(line[len("rename to ") :], "")
+        if line.startswith(("rename to ", "copy to ")):
+            found = _git_path(line.split(" to ", 1)[1], "")
         elif line.startswith("--- ") and not found and line[4:].rstrip("\t") != "/dev/null":
             found = _git_path(line[4:], "a/")
     if found:
@@ -627,9 +627,14 @@ def _section_path(section: str) -> str:
     quoted = re.findall(r'"(?:[^"\\]|\\.)*"', pair)
     if quoted:
         return _git_path(quoted[-1], "b/")
-    half = len(pair) // 2  # "a/X b/X": the two halves name the same file
-    if len(pair) % 2 == 1 and pair[half] == " " and pair[2:half] == pair[half + 3 :]:
-        return pair[2:half]
+    # "a/X b/X", or "X X" under diff.noprefix: two halves naming the same file.
+    half = len(pair) // 2
+    if len(pair) % 2 == 1 and pair[half] == " ":
+        left, right = pair[:half], pair[half + 1 :]
+        if left.startswith("a/") and right.startswith("b/") and left[2:] == right[2:]:
+            return left[2:]
+        if left == right:
+            return left
     return pair
 
 
@@ -1003,7 +1008,6 @@ def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | No
 def _absorb_chunk(
     res: ReviewResult,
     index: int,
-    total: int,
     content: str,
     err: str,
     all_raw: list[str],
@@ -1170,9 +1174,10 @@ def _retry_truncated(
     parts: list[tuple[int, str]] = []
     for i in lost:
         pieces = split_diff(chunks[i], max(1, (len(chunks[i]) + 1) // 2))
-        # `split_diff` drops a file section with no hunk that is larger than the limit
-        # (a big rename or mode change): halves missing a file would let the chunk
-        # count as reviewed without it, so such a chunk is retried whole.
+        # Halves missing a file would let the chunk count as reviewed without it, so a
+        # chunk whose halves do not carry every file header is retried whole. split_diff
+        # no longer drops a hunkless section (B779270c994); this stays as the invariant
+        # check, not as a workaround.
         headers = _file_headers(chunks[i])
         # No header at all is not "every header kept": without one there is nothing to
         # check the halves against, so the chunk goes again whole (roborev).
@@ -1426,7 +1431,7 @@ def review(
     # Absorbed in CHUNK order whatever order they finished in, so the findings, the raw
     # transcript and the reported failures do not depend on which copy was quick.
     for i, (content, err) in enumerate(results, 1):
-        _absorb_chunk(res, i, len(chunks), content, err, all_raw, files[i - 1])
+        _absorb_chunk(res, i, content, err, all_raw, files[i - 1])
     _name_unreviewed(res)
 
     res.raw = "\n\n---\n\n".join(all_raw)

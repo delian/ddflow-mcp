@@ -119,6 +119,15 @@ def test_a_large_file_section_with_no_hunk_is_still_sent():
             "gone.py",
         ),
         ("diff --git a/a b/a\nold mode 100644\nnew mode 100755\n", "a"),
+        # diff.noprefix with no ---/+++ lines (mode-only, binary): roborev 935
+        ("diff --git x.py x.py\nold mode 100644\nnew mode 100755\n", "x.py"),
+        ("diff --git logo.png logo.png\nBinary files logo.png and logo.png differ\n", "logo.png"),
+        # a 100% copy has no ---/+++ lines either
+        (
+            "diff --git a/old.txt b/new.txt\nsimilarity index 100%\ncopy from old.txt\n"
+            "copy to new.txt\n",
+            "new.txt",
+        ),
     ],
 )
 def test_a_chunk_names_its_files_however_git_prints_them(section, expected):
@@ -165,6 +174,8 @@ def test_a_retry_names_the_chunks_it_retries_not_its_part_numbers(monkeypatch):
     R.review(rev, _three_files(bad=()), "i", on_progress=lines.append)
     waiting = [line for line in lines if "waiting" in line]
     assert waiting and "on retry (3)" in waiting[0], lines
+    retried = [line for line in lines if "on retry," in line]
+    assert len(retried) == 1 and retried[0].startswith("  chunk 3/3"), lines
 
 
 # -- Bbf41d8f07f ----------------------------------------------------------------------
@@ -272,6 +283,45 @@ def test_a_dead_endpoint_is_still_unreachable():
         "i",
     )
     assert res.status == UNAVAILABLE and "unreachable" in res.reason, res.reason
+
+
+CAPPED = {
+    "openai": lambda text: {"choices": [{"message": {"content": text}, "finish_reason": "length"}]},
+    "anthropic": lambda text: {
+        "content": [{"type": "text", "text": text}],
+        "stop_reason": "max_tokens",
+    },
+    "gemini": lambda text: {
+        "candidates": [{"content": {"parts": [{"text": text}]}, "finishReason": "MAX_TOKENS"}]
+    },
+}
+
+
+@pytest.mark.parametrize("kind", sorted(CAPPED))
+@pytest.mark.parametrize(
+    ("text", "reviewed"),
+    [
+        ("Let me reconsider the loop once more...", False),  # cut off: no verdict
+        ("FINDING LOW a.py:1\nnit\n\nSTATUS: FINDINGS 1", True),  # a verdict AT the cap
+    ],
+)
+def test_a_reply_at_the_token_cap_is_judged_by_its_verdict(monkeypatch, kind, text, reviewed):
+    """Every backend: text at max_tokens with no STATUS block is TRUNCATED (not off
+    contract); one that carries its verdict is a review. (Two reviewers read the guard
+    `not parse(text)[1]` as inverted: parse returns (findings, on_contract).)"""
+    monkeypatch.setenv("FAKE_KEY", "k")
+    slow = _Slow(0, CAPPED[kind](text))
+    try:
+        rev = Reviewer(name="f", kind=kind, base_url=slow.url, model="m", hedge=1)
+        rev.api_key_env = "FAKE_KEY"
+        res = review(rev, DIFF, "i")
+    finally:
+        slow.server.shutdown()
+    if reviewed:
+        assert res.chunks_reviewed == 1 and len(res.findings) == 1, res.reason
+    else:
+        assert res.chunks_reviewed == 0 and "TRUNCATED" in res.reason, res.reason
+        assert "OFF CONTRACT" not in res.reason
 
 
 def test_a_reply_cut_off_at_max_tokens_is_truncated_not_off_contract():
