@@ -147,13 +147,30 @@ def _inside(a: str, b: str) -> bool:
     return a == b or is_shared(_witness(a), [b])
 
 
+def _relation(glob: str, pattern: str) -> str:
+    """ "broader", "narrower" or "" (unknown) for ``pattern`` against ``glob``.
+
+    Containment one way only. Both ways while different (`docs/[!x]*` vs `docs/*`: a
+    negated class matches the stand-in too) is ambiguous, and left to the files that
+    exist (review finding) -- never assumed broader, which wrote no union line at all.
+    """
+    if pattern == glob:
+        return "broader"
+    up, down = _inside(glob, pattern), _inside(pattern, glob)
+    if up and not down:
+        return "broader"
+    if down and not up:
+        return "narrower"
+    return ""
+
+
 def _broad_rule(repo: Path, glob: str) -> bool:
     """Does a `.gitattributes` merge rule cover the WHOLE glob -- the glob itself, or a
     pattern it falls inside (`*.md` for `docs/*.md`)? Then the project chose for all of
     it. A narrower rule (`docs/README.md`, `docs/R*.md`) chose for part only."""
     path = Path(repo) / ".gitattributes"
     rows = path.read_text("utf-8").splitlines() if path.exists() else []
-    return any(_inside(glob, p) for _k, p, _v in _merge_rows(rows))
+    return any(_relation(glob, p) == "broader" for _k, p, _v in _merge_rows(rows))
 
 
 def _has_line(repo: Path, line: str) -> bool:
@@ -187,11 +204,12 @@ def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
         # `docs/*.md` whatever files exist today (review finding), `*.md` is broader. A
         # broader UNION rule changes nothing for us wherever our line sits, so it does
         # not pull the line after it.
-        if _inside(glob, pattern):
+        rel = _relation(glob, pattern)
+        if rel == "broader":
             if value != "union":
                 last_broad = k
             continue
-        if _inside(pattern, glob):
+        if rel == "narrower":
             narrower.append(k)
             continue
         hit = [p for p in covered if p == pattern or is_shared(p, [pattern])]
