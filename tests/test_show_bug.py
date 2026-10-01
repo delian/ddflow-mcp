@@ -27,19 +27,26 @@ def test_show_resolves_an_open_bug_and_the_items_that_fix_it(repo):
     run_cli(repo, "task", "add", "FIX", "--title", f"Keep the last row (fixes bug {bid})")
     run_cli(repo, "task", "add", "OTHER", "--title", "unrelated", "--body", f"see {bid}x")
     run_cli(repo, "task", "add", "TALK", "--title", f"Investigate {bid}")
+    run_cli(repo, "task", "add", "NEAR", "--title", f"Fixed rows and see {bid}")
+    run_cli(repo, "task", "add", "LIST", "--title", f"Two at once (fixes bugs B0, {bid})")
+    run_cli(repo, "task", "add", "BODY", "--title", "Repair", "--body", f"Fixing {bid} here.")
 
     code, out, err = run_cli(repo, "show", bid)
     assert code == 0, err
     assert f"{bid} [bug] open" in out, out
     assert "the widget drops its last row" in out and " on T1" in out, out
-    assert "fixed by: FIX\n" in out and "OTHER" not in out, out
-    assert "mentioned by: TALK" in out, "a task that only discusses a bug is not its fix"
+    assert "fixed by: BODY, FIX, LIST\n" in out and "OTHER" not in out, out
+    assert "mentioned by: NEAR, TALK" in out, "a task that only discusses a bug is not its fix"
 
     code, out, err = run_cli(repo, "--json", "show", bid)
     assert code == 0, err
     body = json.loads(out)
     assert (body["id"], body["kind"], body["state"]) == (bid, "bug", "open")
-    assert body["summary"] == "the widget drops its last row" and body["fixing"] == ["FIX"]
+    assert body["summary"] == "the widget drops its last row" and body["fixing"] == [
+        "BODY",
+        "FIX",
+        "LIST",
+    ]
 
 
 def test_show_names_a_closed_bugs_regression_tests_and_an_invalid_ones_reason(repo):

@@ -230,19 +230,25 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
 
 def _show_bug(st, bug) -> O.Outcome:
     """A bug id handed to `show` (B-show-bug-id): its record, its state, and the items
-    that fix it -- those whose title or body name the id, the "(fixes bug X)" every fix
-    task carries. The wire body (`item`, as for an item) is the record itself."""
+    that fix it -- those whose title or body say "fixes bug X" (or "fixes bugs A, X",
+    "Fixing X"), the claim every fix task carries; any other mention is listed apart. The wire body (`item`, as for an item) is the record itself."""
     named = re.compile(rf"(?<![\w-]){re.escape(bug.id)}(?![\w-])")
-    claims_fix = re.compile(rf"\bfix(es|ed)?\b[^()]*(?<![\w-]){re.escape(bug.id)}(?![\w-])", re.I)
+    # The convention fix tasks follow: "fixes bug X", "fixes bugs A, B and X", "Fixing X"
+    # -- the verb, then the id or a list holding it, with nothing else in between.
+    claims_fix = re.compile(
+        rf"\bfix(?:es|ed|ing)?\s+(?:bugs?\s+)?(?:[\w-]+\s*,\s*)*(?:and\s+)?"
+        rf"{re.escape(bug.id)}(?![\w-])",
+        re.I,
+    )
     fixing: list[str] = []
     mentions: list[str] = []
     for i in sorted(st.items.values(), key=lambda x: x.id):
         text = f"{i.title or ''}\n{i.body or ''}"
         if i.removed or not named.search(text):
             continue
-        # A title saying "fixes bug X" is the fix's own claim; any other mention is only
-        # that -- a task that discusses a bug is not its fix (roborev, job 954).
-        (fixing if claims_fix.search(i.title or "") else mentions).append(i.id)
+        # "fixes bug X" in the title or body is the fix's own claim; any other mention is
+        # only that -- a task that discusses a bug is not its fix (roborev, job 954).
+        (fixing if claims_fix.search(text) else mentions).append(i.id)
     record = {
         **plain(bug),
         "kind": "bug",
