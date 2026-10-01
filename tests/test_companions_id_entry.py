@@ -101,3 +101,34 @@ def test_an_unparseable_toml_file_registers_nothing(tmp_path):
     c = {c.id: c for c in CO.load(tmp_path)}["context7"]
     status, msg = CO.register(tmp_path, c, "codex")
     assert status == "refused" and "not valid TOML" in msg, (status, msg)
+
+
+def test_a_sub_table_alone_under_the_id_still_lets_the_launch_be_added(tmp_path):
+    """`[mcp_servers.<id>.env]` alone defines no launch; TOML lets the parent table follow."""
+    _codex(tmp_path, '[mcp_servers.context7.env]\nFOO = "bar"\n')
+    assert _status(tmp_path, "context7").registered_in == []
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "written", msg
+    assert _status(tmp_path, "context7").registered_as == {"codex": "context7"}
+
+
+def test_a_junk_id_table_beside_a_real_launch_reads_as_registered_both_ways(tmp_path):
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    launch = c.entry()
+    _codex(
+        tmp_path,
+        "[mcp_servers.context7]\n\n[mcp_servers.ctx]\n"
+        f'command = "{launch["command"]}"\nargs = {json.dumps(launch["args"])}\n',
+    )
+    assert _status(tmp_path, "context7").registered_as == {"codex": "ctx"}
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "unchanged" and "`ctx`" in msg, (status, msg)
+
+
+def test_nothing_is_appended_where_mcp_servers_is_not_a_table(tmp_path):
+    _codex(tmp_path, "mcp_servers = 5\n")
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "refused", (status, msg)
+    assert (tmp_path / ".codex" / "config.toml").read_text() == "mcp_servers = 5\n"
