@@ -79,13 +79,25 @@ def test_the_shipped_router_has_no_members_and_refuses_naming_the_knob(log, cfg,
     assert Config().agent.routers["hydrafusion"] == []
     ok, why = _check(log, cfg, gd, "hydrafusion", _deepseek_review())
     assert not ok, why
-    assert "[agent].routers" in why, why
+    # The ROUTER refusal, not the unknown-author one (which also names [agent].routers):
+    # only the router branch says the set is empty.
+    assert "a router in [agent].routers with no families listed" in why, why
+    assert "[agent].families" not in why, why
 
 
 def test_an_empty_router_is_matched_case_blind_and_still_refused(log, cfg, gd):
+    """Substring and case-blind, like `[agent].families`: a served name such as
+    `copilot/hydrafusion-preview` is still the router, not an unknown author."""
     cfg.agent.routers = {"HydraFusion": []}
     ok, why = _check(log, cfg, gd, "copilot/hydrafusion-preview", _deepseek_review())
-    assert not ok and "[agent].routers" in why, why
+    assert not ok, why
+    assert "a router in [agent].routers with no families listed" in why, why
+
+
+def test_a_configured_router_is_matched_case_blind(log, cfg, gd):
+    cfg.agent.routers = {"HydraFusion": ["anthropic"]}
+    ok, why = _check(log, cfg, gd, "copilot/hydrafusion-preview", _deepseek_review())
+    assert ok and "(anthropic)" in why, why
 
 
 def test_an_unknown_author_refusal_names_both_knobs(log, cfg, gd):
