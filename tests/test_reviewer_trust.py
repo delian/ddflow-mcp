@@ -218,3 +218,19 @@ def test_record_stamps_the_entry_digest(proj, log, cfg):
     _independent(proj, log, cfg, "lan")
     rec = fold(log.read_all()).items["T1"].gates["critic"]
     assert rec.evidence.get("reviewer_digest") == RT.digest_of(proj, "lan")
+
+
+def test_a_write_whose_record_cannot_be_appended_is_undone(proj, monkeypatch):
+    """rubber duck + critic: a tool-written reviewer with no reviewer.configured would
+    count as the operator's, so a failed append undoes the write."""
+    target = proj / ".ddflow" / "local" / "config.toml"
+    before = target.read_text() if target.exists() else None
+
+    def boom(*a, **k):
+        raise TimeoutError("event log lock busy")
+
+    monkeypatch.setattr(RT, "_log", boom)
+    out = AS.configure(proj, AS.ConfigEdit(append_toml=HTTP, local=True))
+    assert out.exit != 0 and "could not record" in out.reason, out.reason
+    assert (target.read_text() if target.exists() else None) == before
+    assert "lan" not in (RT.snapshot(proj) or {})
