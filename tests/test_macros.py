@@ -118,8 +118,11 @@ def test_a_macro_may_not_take_a_shipped_commands_name(repo):
     """Silent shadowing leaves the operator editing a block that does nothing, with every
     surface reporting the shipped description back at them."""
     _with(repo, '\n[[macro]]\nname = "bug-hunt"\nprompt = "mine"\n')
-    with pytest.raises(M.MacroError, match="shipped workflow command"):
-        M.load_macros(repo)
+    # Refused BY NAME, and alone -- raising here hid every other macro with it
+    # (B-macro-clash-silent, tests/test_macro_clash.py).
+    macros, refused = M.load_macros_report(repo)
+    assert "bug-hunt" not in macros
+    assert "shipped workflow command" in refused["bug-hunt"]
 
 
 def test_prompt_and_prompt_file_are_mutually_exclusive(repo):
