@@ -121,7 +121,8 @@ _PREFIX_SHOWN = 12
 
 
 def _unknown_phase(st, phase: str) -> str:
-    """Why ``phase`` names nothing ``next`` can slice by; "" when it is an item.
+    """Why ``phase`` names nothing ``next``, ``brief`` or ``board`` can slice by; "" when
+    it is an item.
 
     An empty slice of an id that is not an item read as "Nothing actionable", exit 2, and
     a driver took that for "phase done" (Bde0c6e9fad: `--phase 159`, whose work lived
@@ -1691,6 +1692,9 @@ def brief(
     log, cfg, _ = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
+    unknown = _unknown_phase(st, phase)
+    if unknown:  # as `next` refuses it (Bc2acd426f4)
+        return O.failed("brief", unknown, phase=phase, text="")
     p = plan(st, cfg, phase=phase, agent=cfg.agent.id or log.agent_id)
     # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
     # ready item was headed "Current" for an agent that had just claimed another one --
