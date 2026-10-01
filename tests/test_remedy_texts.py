@@ -38,26 +38,7 @@ PACKAGE = Path(__file__).resolve().parents[1] / "ddflow"
 #: unrelated bad mention in that file that reduced to the same word.
 #: SHRINK-ONLY: an entry must match exactly one occurrence -- none means the bug was
 #: fixed and the line must go; several means the snippet is too loose to say which.
-KNOWN_OPEN = {
-    (
-        "services/companions.py",
-        "companions show",
-        "`ddflow companions show` prints the entry to paste",
-    ): "B67ba6899c7",
-    ("services/gates.py", "item update", "`ddflow item update <id> --globs ...` FIRST"): (
-        "B84b48b9f71"
-    ),
-    (
-        "templates/prompts/mcp_instructions.md",
-        "ddflow_prompts_show",
-        "this list cannot know about.** `ddflow_prompts_show` with",
-    ): "B237495b8a5",
-    (
-        "templates/prompts/commands/research-companions.md",
-        "ddflow_decision",
-        "a `ddflow_decision` for anything the operator actually chooses",
-    ): "B3d596abd95",
-}
+KNOWN_OPEN: dict[tuple[str, str, str], str] = {}
 
 #: Not defects: PROSE that `command_mentions` reads as code because a markdown list
 #: continuation is indented ("...that is what ddflow writes."). Same key, same
@@ -409,3 +390,20 @@ def test_the_ratchet_catches_a_fake_command():
     joined = 'y = "then `ddflow " + "nosuchcmd` and " + f"`ddflow_nosuchtool {z}`"\n'
     [(_, text)] = _strings(joined)
     assert unknown_mentions(mentions(text)) == ["ddflow_nosuchtool", "nosuchcmd"]
+
+
+def test_a_refused_registration_carries_the_entry_to_paste(repo):
+    """B67ba6899c7: an agent with no project MCP file was told to run `ddflow companions
+    show` for the entry -- no such command. The refusal now carries the entry itself."""
+    import json
+
+    from conftest import run_cli
+
+    from ddflow.services import companions as CO
+
+    run_cli(repo, "init")
+    comp = next(c for c in CO.load(repo) if c.id == "context7")
+    status, message = CO.register(repo, comp, "aider")
+    assert status == "refused", (status, message)
+    assert not _unresolved(message), message
+    assert json.dumps(comp.entry()) in message, message
