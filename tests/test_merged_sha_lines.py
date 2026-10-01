@@ -72,3 +72,35 @@ def test_a_back_merged_hotfix_ships_on_develop(gitflow):
 
 def test_the_merge_body_is_the_same_on_both_surfaces():
     assert tuple(mcp.TOOLS["ddflow_merge"]["payload"]) == MERGE_PAYLOAD
+
+
+def test_an_old_branch_head_record_is_not_shipped_by_its_own_second_parent(repo):
+    """Before B9f8019c521 merged_sha was the branch head. When that branch had merged
+    develop into itself, its second parent is a develop commit -- which says nothing
+    about the item reaching develop."""
+    from ddflow.core.model import Item
+    from ddflow.services.flow import reached
+
+    base = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-qb", "develop")
+    (repo / "d.txt").write_text("d\n")
+    _git(repo, "add", "d.txt")
+    _git(repo, "commit", "-qm", "develop work")
+    _git(repo, "checkout", "-qb", "feature", base)
+    (repo / "f.txt").write_text("f\n")
+    _git(repo, "add", "f.txt")
+    _git(repo, "commit", "-qm", "feature work")
+    _git(repo, "merge", "-q", "--no-ff", "develop", "-m", "sync develop")
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "-q", "--no-ff", "feature", "-m", "land feature")
+    landing = _git(repo, "rev-parse", "HEAD")
+
+    legacy = Item(id="T", kind="task", merged_sha=head, landed_before=base, landed_after=landing)
+    assert reached(repo, legacy, "develop") == ""
+    assert reached(repo, legacy, "main") == head
+    current = Item(
+        id="T", kind="task", merged_sha=landing, landed_before=base, landed_after=landing
+    )
+    assert reached(repo, current, "develop") == ""  # the feature itself never reached it
+    assert reached(repo, current, "main") == landing

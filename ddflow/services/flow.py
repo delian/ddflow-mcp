@@ -651,19 +651,32 @@ def _set_next(vp: VersionPlan, cfg: Config, version: str, line: str) -> None:
         )
 
 
-def reached(repo: Path, merged: str, ref: str) -> str:
+def reached(repo: Path, it: Item, ref: str) -> str:
     """The commit of an item's landing that ``ref`` contains, or "" if none.
 
-    ``merged`` is the landing on the item's merge target: its merge commit. That commit
-    is on the target only. Other lines receive the work as the BRANCH it merged -- the
-    merge commit's second parent -- by gitflow's back-merge or a forward-merge port, so
-    a hotfix landed on main reaches develop with main's merge commit nowhere in it
-    (B9a337697c0). Before B9f8019c521 ``merged`` was the branch head itself, and old
-    logs still say so: the first candidate covers them.
+    ``it.merged_sha`` is the landing on the item's merge target: its merge commit. That
+    commit is on the target only. Other lines receive the work as the BRANCH it merged
+    -- the merge commit's second parent -- by gitflow's back-merge or a forward-merge
+    port, so a hotfix landed on main reaches develop with main's merge commit nowhere in
+    it (B9a337697c0).
+
+    The second parent is the merged branch only when ``merged_sha`` IS that landing
+    merge commit: the recorded ``landed_after``, whose first parent is the recorded
+    ``landed_before``. Before B9f8019c521 ``merged_sha`` was the branch head itself,
+    which the first candidate covers -- and whose own second parent, when the branch
+    had merged its base in, is just an old base tip that every line already contains.
     """
+    merged = it.merged_sha
     if not merged:
         return ""
-    for c in (merged, W.rev(repo, f"{merged}^2")):
+    candidates = [merged]
+    if (
+        merged == it.landed_after
+        and it.landed_before
+        and W.rev(repo, f"{merged}^1") == it.landed_before
+    ):
+        candidates.append(W.rev(repo, f"{merged}^2"))
+    for c in candidates:
         if c and W.git(repo, "merge-base", "--is-ancestor", c, ref).ok:
             return c
     return ""
@@ -702,7 +715,7 @@ def plan_version(
     for it in sorted(st.items.values(), key=lambda i: i.id):
         if it.removed or it.state != DONE or it.kind != "task" or it.id in released:
             continue
-        sha = reached(repo, it.merged_sha, ref)
+        sha = reached(repo, it, ref)
         if not sha:
             continue
         if vp.current_tag and W.git(repo, "merge-base", "--is-ancestor", sha, vp.current_tag).ok:
@@ -976,7 +989,7 @@ def _sync_releases(
             i.id
             for i in st.items.values()
             if i.state == DONE
-            and reached(repo, i.merged_sha, sha)
+            and reached(repo, i, sha)
             and i.id not in {x for r in st.releases for x in r.items}
         ]
         c = Cut(version=ver, tag=f"{cfg.flow.tag_prefix}{ver}", sha=sha)
