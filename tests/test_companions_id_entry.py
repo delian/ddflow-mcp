@@ -132,3 +132,28 @@ def test_nothing_is_appended_where_mcp_servers_is_not_a_table(tmp_path):
     status, msg = CO.register(tmp_path, c, "codex")
     assert status == "refused", (status, msg)
     assert (tmp_path / ".codex" / "config.toml").read_text() == "mcp_servers = 5\n"
+
+
+def test_nothing_is_appended_where_mcp_servers_is_an_array_of_tables(tmp_path):
+    """The append would parse, inside the last array element, where no agent reads it."""
+    _codex(tmp_path, '[[mcp_servers]]\ncommand = "x"\n')
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "refused" and "not a table" in msg, (status, msg)
+    assert (tmp_path / ".codex" / "config.toml").read_text() == '[[mcp_servers]]\ncommand = "x"\n'
+
+
+def test_an_inline_mcp_servers_table_is_refused_with_the_parser_s_reason(tmp_path):
+    text = 'mcp_servers = { other = { command = "some-other-tool" } }\n'
+    _codex(tmp_path, text)
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "refused" and "not a table" not in msg and "would not parse" in msg, msg
+    assert (tmp_path / ".codex" / "config.toml").read_text() == text
+
+
+def test_a_different_launch_under_the_id_is_not_claimed_as_the_registry_s(tmp_path):
+    _codex(tmp_path, '[mcp_servers.context7]\ncommand = "old-launcher"\n')
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, msg = CO.register(tmp_path, c, "codex")
+    assert status == "unchanged" and "already registers" not in msg, msg
