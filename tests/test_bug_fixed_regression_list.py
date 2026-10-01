@@ -39,7 +39,7 @@ def test_p(n):
     pass
 
 
-@pytest.mark.parametrize("v", ["x] y"])
+@pytest.mark.parametrize("v", ["x] y", "python foo.py -v", "a b::c"])
 def test_q(v):
     pass
 """
@@ -204,3 +204,25 @@ def test_mcp_list_only_records_no_phantom_entry(repo):
     assert _regression_tests({"regression_tests": [A]}) == [A]
     assert _regression_tests({"regression_test": A}) == A
     assert _regression_tests({"regression_test": A, "regression_tests": [B]}) == [A, B]
+
+
+def test_spaces_inside_a_parametrize_id_are_one_test(repo):
+    """pytest keeps spaces, `::` and `.py` inside an id verbatim; none of it is a join."""
+    _setup(repo)
+    out = api.bug_fixed(
+        repo,
+        "B1",
+        regression_test=[
+            "tests/test_fix.py::test_q[python foo.py -v]",
+            "tests/test_fix.py::test_q[a b::c]",
+        ],
+    )
+    assert out.exit == OK, out.reason
+
+
+def test_a_trailing_separator_is_not_an_empty_test(repo):
+    _setup(repo)
+    code, _out, err = run_cli(repo, "bug", "fixed", "B1", "--regression-test", f"{A},")
+    assert code == OK, err
+    code, _out, err = run_cli(repo, "bug", "fixed", "B1", "--regression-test", "")
+    assert code != OK and "Traceback" not in err, err
