@@ -60,3 +60,9 @@ def test_a_long_prefix_list_says_how_many_more(repo):
         run_cli(repo, "phase", "add", f"9.{i:02d}", "--title", "p")
     code, _out, err = run_cli(repo, "next", "--phase", "9")
     assert code == 1 and "9.11 and 3 more." in err, err
+
+
+def test_an_unknown_phase_with_nothing_under_it_is_refused_without_a_hint(repo):
+    _proj(repo)
+    code, _out, err = run_cli(repo, "next", "--phase", "NOPE")
+    assert code == 1 and err.strip() == "no such phase or item 'NOPE'.", err
