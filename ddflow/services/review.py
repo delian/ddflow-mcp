@@ -592,9 +592,51 @@ def strip_hunk_context(diff: str) -> str:
     return _HUNK_CONTEXT_RE.sub(r"\1", diff)
 
 
+def _git_path(raw: str, prefix: str) -> str:
+    """A path as a diff header line prints it: C-quoted when it is not plain ASCII
+    (``core.quotePath``), and prefixed ``a/``/``b/`` unless ``diff.noprefix`` is set."""
+    import codecs
+
+    raw = raw.rstrip("\t")
+    if len(raw) > 1 and raw[0] == raw[-1] == '"':
+        try:
+            raw = codecs.escape_decode(raw[1:-1].encode())[0].decode("utf-8", "replace")
+        except ValueError:
+            raw = raw[1:-1]
+    return raw[len(prefix) :] if raw.startswith(prefix) else raw
+
+
+def _section_path(section: str) -> str:
+    """The file one ``diff --git`` section changes: from its ``+++``/``---`` or rename
+    lines, which name ONE path each, and only failing those from the header line, whose
+    two paths cannot be told apart when a path contains `` b/``."""
+    head, *rest = section.split("\n")
+    found = ""
+    for line in rest:
+        if line.startswith("@@"):
+            break
+        if line.startswith("+++ ") and line[4:].rstrip("\t") != "/dev/null":
+            return _git_path(line[4:], "b/")
+        if line.startswith("rename to "):
+            found = _git_path(line[len("rename to ") :], "")
+        elif line.startswith("--- ") and not found and line[4:].rstrip("\t") != "/dev/null":
+            found = _git_path(line[4:], "a/")
+    if found:
+        return found
+    pair = head[len("diff --git ") :]
+    quoted = re.findall(r'"(?:[^"\\]|\\.)*"', pair)
+    if quoted:
+        return _git_path(quoted[-1], "b/")
+    half = len(pair) // 2  # "a/X b/X": the two halves name the same file
+    if len(pair) % 2 == 1 and pair[half] == " " and pair[2:half] == pair[half + 3 :]:
+        return pair[2:half]
+    return pair
+
+
 def chunk_files(chunk: str) -> list[str]:
     """The files a chunk's diff touches, in order, each once."""
-    return list(dict.fromkeys(re.findall(r"(?m)^diff --git a/(.+?) b/", chunk)))
+    sections = re.split(r"(?m)^(?=diff --git )", chunk)
+    return list(dict.fromkeys(_section_path(s) for s in sections if s.startswith("diff --git ")))
 
 
 def _chat(rev: Reviewer, system: str, user: str, timeout_s: float) -> tuple[str, str]:
@@ -1183,11 +1225,11 @@ class _Progress:
         why = (err or ("off contract" if content else "empty completion")).splitlines()[0]
         self._say(f"  {self._where(i)}: NOT reviewed{how}, {elapsed} -- {why[:200]}")
 
-    def tick(self, waiting: list[int]) -> None:
+    def tick(self, waiting: list[int], how: str = "") -> None:
         if self.on_tick:
             self.on_tick()
         self._say(
-            f"  ... waiting on {len(waiting)} of {len(self.files)} chunk(s) "
+            f"  ... waiting on {len(waiting)} of {len(self.files)} chunk(s){how} "
             f"({', '.join(str(i + 1) for i in waiting)}), "
             f"{time.time() - self.started:.0f}s elapsed; one request may take up to "
             f"{self.timeout_s}s"
@@ -1354,9 +1396,28 @@ def review(
         return res
 
     progress = _Progress(files, started, rev.timeout_s, on_progress, on_tick)
-    race_kw: dict[str, Any] = {"on_tick": progress.tick, "tick_s": tick_s}
-    first = _race(rev, system, users, started, on_settled=progress.settled, **race_kw)
-    results = _retry_truncated(rev, system, chunks, first, render, started, **race_kw)
+    first = _race(
+        rev,
+        system,
+        users,
+        started,
+        on_settled=progress.settled,
+        on_tick=progress.tick,
+        tick_s=tick_s,
+    )
+    # The retry races PARTS of the lost chunks, so its indices are not chunk numbers:
+    # its ticks name the chunks being retried instead (critic).
+    retried = [i for i, (_c, err) in enumerate(first) if err.startswith(TRUNCATED)]
+    results = _retry_truncated(
+        rev,
+        system,
+        chunks,
+        first,
+        render,
+        started,
+        on_tick=lambda _parts: progress.tick(retried, " on retry"),
+        tick_s=tick_s,
+    )
     for i, (before, after) in enumerate(zip(first, results, strict=True)):
         if before != after:
             progress.settled(i, after, " on retry")
