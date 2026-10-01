@@ -179,8 +179,34 @@ def test_a_chunk_that_truncated_on_every_copy_is_retried_in_halves(fake):
     res = review(rev, _two_hunks("HALF-A", "HALF-B"), "i")
     assert res.status == REVIEWED, res.reason
     assert (res.chunks_reviewed, res.chunks_total) == (1, 1)
-    halves = [b for b in fake.bodies if "HALF-A" not in b["messages"][-1]["content"]]
-    assert halves, "the halves were never sent"
+    sent = [b["messages"][-1]["content"] for b in fake.bodies]
+    only_a = [c for c in sent if "HALF-A" in c and "HALF-B" not in c]
+    only_b = [c for c in sent if "HALF-B" in c and "HALF-A" not in c]
+    assert only_a and only_b, "both halves must be sent, each on its own"
+
+
+def test_the_halves_replies_keep_every_finding(monkeypatch):
+    """The parts' replies are joined into one; parse() reads every FINDING in it and
+    one STATUS line, so neither half's findings are lost (critic, overruled by test)."""
+
+    def reply(user: str) -> tuple[str, str]:
+        for marker, sev in (("HALF-A", "HIGH"), ("HALF-B", "LOW")):
+            if marker in user:
+                return f"FINDING {sev} g.py:1\n{marker}\n\nSTATUS: FINDINGS 1", ""
+        return "STATUS: NO FINDINGS", ""  # any other part split_diff produced
+
+    monkeypatch.setattr(R, "_race", lambda rev, system, users, started: [reply(u) for u in users])
+    out = R._retry_truncated(
+        Reviewer(name="r"),
+        "s",
+        [_two_hunks("HALF-A", "HALF-B")],
+        [("", "TRUNCATED: x")],
+        lambda d, i: d,
+        0.0,
+    )
+    findings, on_contract = R.parse(out[0][0])
+    assert on_contract and out[0][1] == ""
+    assert sorted(f.severity for f in findings) == ["HIGH", "LOW"]
 
 
 def test_a_retry_that_truncates_again_stays_unreviewed_and_says_why(fake):
