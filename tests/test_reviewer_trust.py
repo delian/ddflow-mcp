@@ -234,3 +234,15 @@ def test_a_write_whose_record_cannot_be_appended_is_undone(proj, monkeypatch):
     assert out.exit != 0 and "could not record" in out.reason, out.reason
     assert (target.read_text() if target.exists() else None) == before
     assert "lan" not in (RT.snapshot(proj) or {})
+
+
+def test_approve_lists_what_waits_and_keeps_the_note(proj, monkeypatch):
+    """roborev: the listing works under any identity, and --note is kept and shown."""
+    assert AS.configure(proj, AS.ConfigEdit(append_toml=HTTP, local=True)).exit == 0
+    code, out, err = run_cli(proj, "reviewers", "approve", agent="bot")
+    assert code == 0 and "lan" in out, err
+    code, out, err = run_cli(proj, "reviewers", "approve", "lan", "--note", "checked endpoint")
+    assert code == 0 and "checked endpoint" in out, err
+    st = fold(AS._load(proj)[0].read_all())
+    assert [a["note"] for a in st.reviewer_approvals.values()] == ["checked endpoint"]
+    assert run_cli(proj, "reviewers", "approve")[0] == 2  # nothing waits any more

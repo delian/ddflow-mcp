@@ -1671,6 +1671,7 @@ def _h_reviewer_approved(st: State, ev: Event) -> None:
             "name": ev.subject,
             "user": ev.data.get("user", ""),
             "host": ev.data.get("host", ""),
+            "note": ev.data.get("note", ""),
             "at": ev.ts,
         }
 

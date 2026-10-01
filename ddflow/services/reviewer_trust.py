@@ -224,4 +224,5 @@ def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "")
     return (
         f"reviewer {name!r} approved by {who}: kind {rev.kind}, {where}, model "
         f"{rev.model or '-'}, family {rev.resolved_family() or 'unknown'} (digest {dig})"
+        + (f" -- {note}" if note else "")
     )
