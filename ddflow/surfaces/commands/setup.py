@@ -324,8 +324,8 @@ def cmd_adopt(a, c: Ctx) -> int:
 
 def cmd_init(a, c: Ctx) -> int:
     """`ddflow init`. The writes are `api.setup.init_project`'s; this only reports them."""
-    A.init_project(c.repo, agent=c.requested_agent)
-    return _report_init(c)
+    out = A.init_project(c.repo, agent=c.requested_agent, called_from=c.called_from)
+    return _report_init(c, Path(out.data["tree"]))
 
 
 def _report_init(c: Ctx, tree: Path | None = None) -> int:

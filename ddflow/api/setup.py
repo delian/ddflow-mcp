@@ -695,7 +695,7 @@ def help_topic(
     return O.ok("help", topic=topic or "index", text=text, topics=list(H.TOPICS))
 
 
-def init_project(repo: Path, *, agent: str = "") -> O.Outcome:
+def init_project(repo: Path, *, agent: str = "", called_from: Path | None = None) -> O.Outcome:
     """`ddflow init`: create `.ddflow/` and the repository files that keep its log safe.
 
     The same `services.adopt.init_files` that `setup` runs as its first step, so `init`,
@@ -704,9 +704,10 @@ def init_project(repo: Path, *, agent: str = "") -> O.Outcome:
     from ..services.adopt import init_files
 
     del agent  # identity is not needed to create files; accepted for surface symmetry
-    actions = init_files(repo)
-    d = Path(repo) / ".ddflow"
-    return O.ok("init", actions=actions, root=str(d), config=str(d / "config.toml"))
+    tree = files_tree(repo, called_from)  # committed files: the caller's tree, as `setup`
+    actions = init_files(tree)
+    d = tree / ".ddflow"
+    return O.ok("init", actions=actions, root=str(d), config=str(d / "config.toml"), tree=str(tree))
 
 
 @dataclass

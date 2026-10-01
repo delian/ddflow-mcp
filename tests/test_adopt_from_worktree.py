@@ -78,3 +78,16 @@ def test_a_command_file_deleted_in_the_worktree_is_judged_there(repo):
     assert p.returncode == 0, p.stderr
     assert "DDFLOW:MANAGED" in (tree / ".claude/commands/implement.md").read_text()
     assert (repo / ".claude/commands/implement.md").read_text() == "the project's own\n"
+
+
+def test_init_in_a_linked_worktree_writes_there_too(repo):
+    """`init` writes tracked files as well (.ddflow/config.toml, .gitignore,
+    .gitattributes): the same defect, found by the review of this fix."""
+    tree = _worktree(repo)
+    p = _ddflow(tree, "init")
+    assert p.returncode == 0, p.stderr
+    status = _git(repo, "status", "--porcelain", "--untracked-files=all").splitlines()
+    shared = (".ddflow/events/", ".ddflow/index.db", ".ddflow/local/")
+    assert [line for line in status if not line[3:].startswith(shared)] == []
+    for rel in (".ddflow/config.toml", ".ddflow/.gitignore", ".gitignore", ".gitattributes"):
+        assert (tree / rel).is_file(), f"{rel} belongs in the caller's tree"
