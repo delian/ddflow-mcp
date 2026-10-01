@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
-from ..core.model import ABANDONED, DONE, REVIEW
+from ..core.model import ABANDONED, DONE, REVIEW, State
 from ..core.plain import plain
 from ..infra import worktree as W
 from ..services import leases as L
@@ -950,6 +950,16 @@ def release(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outc
     return O.nothing("lease.released", f"no lease on {item}", id=item, released=False, woke=[])
 
 
+def _session_model(st: State, agent: str) -> str:
+    """The model `agent` declared on its most recent OPEN session, or "".
+
+    Only this agent's: another agent's session names another author, and borrowing its
+    model would judge reviewer independence against the wrong family.
+    """
+    open_ = [s for s in st.sessions.values() if s.agent == agent and s.model and not s.ended_at]
+    return max(open_, key=lambda s: s.started_at).model if open_ else ""
+
+
 def complete(
     repo: Path,
     item: str,
@@ -972,6 +982,10 @@ def complete(
     if isinstance(it, O.Outcome):
         return it
 
+    # The author is whoever completes; the model it declared at `session start` is its
+    # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
+    # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
+    model = model or _session_model(st, log.agent_id)
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
     base: dict[str, Any] = {
         "id": item,
@@ -1468,8 +1482,24 @@ def brief(
     store = Store(repo, cfg)
     st = store.ensure(log)
     p = plan(st, cfg, phase=phase, agent=cfg.agent.id or log.agent_id)
-    if not item and p.ready:
+    # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
+    # ready item was headed "Current" for an agent that had just claimed another one --
+    # it is the queue's pick, not the agent's work. Most recent claim first.
+    held = sorted(
+        (
+            (lease.acquired_at, iid)
+            for iid, lease in st.active_leases(time.time(), cfg.lease.grace_s).items()
+            if lease.holder == log.agent_id and not st.items[iid].removed
+        ),
+        reverse=True,
+    )
+    held_ids = [iid for _, iid in held]
+    suggested = False
+    if not item and held_ids:
+        item = held_ids[0]
+    elif not item and p.ready:
         item = p.ready[0].id
+        suggested = True
 
     query = ""
     if item and item in st.items:
@@ -1510,6 +1540,8 @@ def brief(
         recovery=[r for r in recovery if r.salvageable],
         decisions=decisions,
         memories=live,
+        held=held_ids,
+        suggested=suggested,
     )
     from ..services import choices as CH
 
@@ -1531,6 +1563,9 @@ def brief(
         brief=text,
         text=text,
         item=item,
+        #: Whether `item` is the agent's work (False) or only the queue's pick (True).
+        suggested=suggested,
+        held=held_ids,
         ready=[i.id for i in p.ready],
         approx_tokens=len(text) // 4,
     )
