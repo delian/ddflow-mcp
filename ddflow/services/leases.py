@@ -386,17 +386,25 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
 
 
 def plan_retarget(
-    log: EventLog, cfg: Config, item_id: str, globs: list[str]
+    log: EventLog,
+    cfg: Config,
+    item_id: str,
+    globs: list[str] | None,
+    resources: list[str] | None = None,
 ) -> tuple[Lease | None, str]:
-    """(the LIVE lease to point at ``globs`` or None, why that is refused or "").
+    """(the LIVE lease to point at ``globs`` / ``resources`` or None, why that is refused
+    or "").
 
     Call with ``log.transaction()`` held, and append nothing if the reason is non-empty.
+    ``None`` leaves that field of the claim alone.
 
     `update --globs` on a claimed item changed `item.globs` only, while the commit hook
     and every conflict check read `lease.globs` -- so the remedy the hook prints for an
     uncovered path did nothing (B3eda99e0fe / B5d98a4da0a). Once an update reaches the
     lease it is a way to take paths, so it gets `claim`'s overlap check (`glob_clash`):
-    widening must not take what another agent's live lease covers.
+    widening must not take what another agent's live lease covers. Resources are the
+    same gap (Bc496508f6b): the capacity check reads `lease.resources`, so a raised
+    reservation gets `claim`'s capacity check, counted against every OTHER live lease.
 
     A released lease has nothing to retarget, and an expired one -- marked, or past its
     TTL and grace -- is left for recovery rather than touched, so no lease is brought
@@ -408,7 +416,7 @@ def plan_retarget(
     lz = it.lease if it else None
     if it is None or lz is None or lz.expired_at or lz.expired(now, cfg.lease.grace_s):
         return None, ""
-    clash = glob_clash(state, cfg, it, lz.holder, globs, now)
+    clash = glob_clash(state, cfg, it, lz.holder, globs, now) if globs is not None else None
     if clash:
         other_id, other, pair = clash
         return lz, (
@@ -416,21 +424,49 @@ def plan_retarget(
             f"{pair[1]!r} held by {other.holder} on {other_id}. Nothing was recorded. "
             f"Wait for {other_id} to finish, or keep {item_id} off those paths."
         )
+    if resources:
+        try:
+            short = resource_shortfall(
+                list(resources),
+                state.active_leases(now, cfg.lease.grace_s),
+                capacities(cfg),
+                exclude=item_id,
+            )
+        except ValueError as exc:
+            return lz, f"{item_id}: {exc}. Nothing was recorded."
+        if short:
+            return lz, (
+                f"{item_id} is claimed, so its resources are its lease's reservation: "
+                f"{item_id} {short}. Nothing was recorded. Wait for one to be released, "
+                f"or ask for less."
+            )
     return lz, ""
 
 
-def retarget(log: EventLog, item_id: str, lease: Lease, globs: list[str]) -> None:
-    """Point ``lease`` (from `plan_retarget`, same lock) at ``globs``.
+def retarget(
+    log: EventLog,
+    item_id: str,
+    lease: Lease,
+    globs: list[str] | None,
+    resources: list[str] | None = None,
+) -> None:
+    """Point ``lease`` (from `plan_retarget`, same lock) at ``globs`` / ``resources``.
 
-    An explicit `lease.renewed`, rather than a fold that copies `task.updated` globs into
+    An explicit `lease.renewed`, rather than a fold that copies `task.updated` fields into
     the lease: the log says when the claim changed shape, old logs replay exactly as they
     were recorded, and the handler's holder guard drops it if shards reorder it after
     someone else's re-acquisition. It must never be a renewal in disguise: the payload
     names the CURRENT holder (an operator may widen a stuck agent's claim; it stays that
     agent's) and carries no ``at``, so ``renewed_at`` stays put -- the lease's life is
-    not extended, and a heartbeat landing first cannot make it look stale.
+    not extended, and a heartbeat landing first cannot make it look stale. A field left
+    ``None`` is left out of the payload, and the fold leaves it alone.
     """
-    log.append("lease.renewed", item_id, {"holder": lease.holder, "globs": list(globs)})
+    data: dict[str, object] = {"holder": lease.holder}
+    if globs is not None:
+        data["globs"] = list(globs)
+    if resources is not None:
+        data["resources"] = list(resources)
+    log.append("lease.renewed", item_id, data)
 
 
 def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bool:

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 from ...api import lifecycle as A
 from ..context import MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
@@ -75,7 +76,8 @@ def cmd_claim(a, c: Ctx) -> int:
         no_worktree=a.no_worktree,
         # WHERE THE CALLER IS, not the resolved primary. Adoption depends on whether the
         # caller was already standing in a worktree, and resolving to the repo root loses
-        # exactly that fact.
+        # exactly that fact -- unless it is a tree another identity is working in, which
+        # is not the caller's to adopt: then it is the primary, and a tree of its own.
         called_from=c.called_from,
         resources=a.resources or "",
         agent=c.requested_agent,
@@ -84,6 +86,13 @@ def cmd_claim(a, c: Ctx) -> int:
         return _refused(out)
     d = out.data
     msg = f"claimed {a.id} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+    owner = c.tree_owner
+    if owner and d["worktree"] and not d["rebound"]:
+        msg += (
+            f"\n  not adopted: the tree you are in is {owner}'s working tree, and you are "
+            f"{c.log.agent_id}. Run claim from the tree without --agent (or as {owner}) "
+            f"to adopt it."
+        )
     if d["worktree"] and d["rebound"] and not d["here"]:
         # The item already had a tree from an earlier claim, possibly holding unmerged
         # work. It stays the item's; the caller's own tree is left alone, so the one
@@ -263,6 +272,7 @@ def cmd_merge(a, c: Ctx) -> int:
         model=a.model or "",
         branch=a.branch or "",
         called_from=c.called_from,
+        shell_cwd=_shell_cwd(),
         agent=c.requested_agent,
     )
     if out.exit == REFUSED and out.data.get("dirty"):
@@ -317,8 +327,27 @@ def cmd_merge(a, c: Ctx) -> int:
     return OK
 
 
-#: The wire body of `merge` on both surfaces. `pr` is empty for a local merge.
-MERGE_PAYLOAD = ("id", "sha", "base", "pr", "branch", "outside_globs")
+def _shell_cwd() -> Path | None:
+    """The directory this process -- and so the caller's shell -- stands in, if any."""
+    try:
+        return Path.cwd()
+    except OSError:
+        return None
+
+
+#: The wire body of `merge` on both surfaces. `pr` is empty for a local merge. `sha` is
+#: the landing on `base`; `branch_head` the merged branch's own head.
+MERGE_PAYLOAD = (
+    "id",
+    "sha",
+    "branch_head",
+    "base",
+    "pr",
+    "branch",
+    "outside_globs",
+    "worktree",
+    "worktree_removed",
+)
 
 
 def cmd_brief(a, c: Ctx) -> int:

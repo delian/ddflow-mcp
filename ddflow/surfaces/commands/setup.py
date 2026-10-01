@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 from ...api import setup as A
 from ...infra import worktree as W
@@ -296,6 +297,7 @@ def cmd_adopt(a, c: Ctx) -> int:
             image=a.image or "",
         ),
         agent=c.requested_agent,
+        called_from=c.called_from,
     )
     if out.exit == FAIL and not out.data.get("actions"):
         print(out.reason, file=sys.stderr)
@@ -306,7 +308,7 @@ def cmd_adopt(a, c: Ctx) -> int:
     # only the report is left. `_report_init` lives HERE, not in `cli`, because reaching
     # back up into the surface this module was extracted out of would recreate the
     # module-level cycle `test_no_mutually_importing_pair_has_a_module_level_edge` forbids.
-    _report_init(c)
+    _report_init(c, Path(out.data.get("tree") or c.repo))
     c.out(
         out.data["text"],
         out.body(("actions", "agents", "companions_ready", "companions_absent")),
@@ -322,18 +324,20 @@ def cmd_adopt(a, c: Ctx) -> int:
 
 def cmd_init(a, c: Ctx) -> int:
     """`ddflow init`. The writes are `api.setup.init_project`'s; this only reports them."""
-    A.init_project(c.repo, agent=c.requested_agent)
-    return _report_init(c)
+    out = A.init_project(c.repo, agent=c.requested_agent, called_from=c.called_from)
+    return _report_init(c, Path(out.data["tree"]))
 
 
-def _report_init(c: Ctx) -> int:
+def _report_init(c: Ctx, tree: Path | None = None) -> int:
     """What `init` and `adopt` print after the init files exist: where, and what to commit.
 
     Presentation only. The files themselves are written below the surfaces
     (`services.adopt.init_files`), because a write that lives here is a write the MCP
     `ddflow_setup` never makes -- which is how bug B185ec008b4 happened.
     """
-    d = c.repo / ".ddflow"
+    # `tree` is where `adopt` wrote: the caller's own checkout (bug Bfeb62112d9).
+    tree = tree or c.repo
+    d = tree / ".ddflow"
     cfgp = d / "config.toml"
     c.store.rebuild(c.log)
     # Setup touches TRACKED files (.gitignore, .gitattributes, AGENTS.md). Leaving them
@@ -350,13 +354,13 @@ def _report_init(c: Ctx) -> int:
             "CLAUDE.md",
             "docs/ddflow",
         )
-        if (c.repo / rel).exists() and W.git(c.repo, "status", "--porcelain", "--", rel).out.strip()
+        if (tree / rel).exists() and W.git(tree, "status", "--porcelain", "--", rel).out.strip()
     ]
     commit_hint = ""
     if touched:
         commit_hint = (
             "\n\n  Setup changed these files — commit them before your first merge, or "
-            "the primary\n  checkout stays dirty and `ddflow merge` will refuse:\n"
+            "this\n  checkout stays dirty and `ddflow merge` will refuse:\n"
             f"    git add {' '.join(touched)} && git commit -m 'ddflow: adopt'"
         )
     # The rules surface, REPORTED not written. `init` creates `.ddflow/`; writing prose into
@@ -366,7 +370,7 @@ def _report_init(c: Ctx) -> int:
     # noticed before, since adoption is judged by the config file alone.
     from ...services.adopt import rules_status
 
-    drift = [r for r in rules_status(c.repo) if r.needs_attention]
+    drift = [r for r in rules_status(tree) if r.needs_attention]
     rules_hint = ""
     if drift:
         rules_hint = (

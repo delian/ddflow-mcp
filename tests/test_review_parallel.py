@@ -218,7 +218,7 @@ def test_a_command_reviewers_losing_copy_is_killed(tmp_path, slow_pid_write):
 
 def test_the_defaults_parallelise_and_hedge():
     r = Reviewer(name="d")
-    assert (r.hedge, r.max_concurrency) == (2, 4)
+    assert (r.hedge, r.max_concurrency) == (2, 0)  # 0: one wave (B289bf87e8d)
 
 
 def test_no_chunks_is_no_results_not_a_crash():
