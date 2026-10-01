@@ -67,4 +67,4 @@ Then hand the operator the list: what you found, what each serves, what it costs
 
 ## 6. Record it
 
-Put the findings where the next session will find them — the research log for the reasoning and the declines, a `ddflow_decision` for anything the operator actually chooses. A verbal recommendation is one that gets re-derived from scratch next month.
+Put the findings where the next session will find them — the research log for the reasoning and the declines, a `ddflow_decision_add` for anything the operator actually chooses. A verbal recommendation is one that gets re-derived from scratch next month.

@@ -144,8 +144,8 @@ gate `unavailable` rather than passing it on your own word.
   assertion, and what you ruled out disappears — which is how an early, plausible-wrong
   cause survives to the end.
 
-**Your stack needs servers this list cannot know about.** `ddflow_prompts_show` with
-`research-companions` walks you from this pipeline's *uncovered* gates, through the
+**Your stack needs servers this list cannot know about.** `ddflow_prompts` with
+action `show` and name `research-companions` walks you from this pipeline's *uncovered* gates, through the
 repository's actual manifests, to candidates checked against their primary sources, and
 produces `[[companion]]` blocks the operator can read and delete. Propose; never install.
 
