@@ -218,6 +218,15 @@ def test_naming_an_existing_id_asks_whatever_the_score():
     assert a.action == "ask" and any(c.id == "T3" and "named" in c.flags for c in a.candidates)
 
 
+def test_a_plain_word_id_is_not_named_by_using_the_word():
+    idx = similar.build([{"id": "cleanup", "kind": "task", "title": "tidy", "body": "x"}])
+    a = similar.assess(idx, {"kind": "task", "title": "cleanup the board", "body": ""}, _cfg())
+    assert a.action == "none"
+    dotted = similar.build([{"id": "34.8g", "kind": "task", "title": "tidy", "body": "x"}])
+    a = similar.assess(dotted, {"kind": "task", "title": "after 34.8g lands", "body": ""}, _cfg())
+    assert a.action == "ask" and a.candidates[0].flags == ("named",)
+
+
 def test_same_item_is_flagged_and_own_id_never_returned():
     rec = {"id": "B1", "kind": "bug", "title": "", "body": LONG, "item": "T9"}
     a = similar.assess(_idx(), {**rec, "id": "B2"}, _cfg())
