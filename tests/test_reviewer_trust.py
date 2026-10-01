@@ -140,9 +140,31 @@ def test_approve_refuses_under_an_agent_identity(proj, monkeypatch, how):
 
 
 def test_approve_is_not_an_mcp_tool():
+    """TOOLS is keyed by tool NAME, so this looks at names (rubber duck asked)."""
     from ddflow.surfaces import mcp
 
-    assert not [t for t in mcp.TOOLS if "approve" in t], "a person's act has no MCP tool"
+    assert isinstance(mcp.TOOLS, dict) and "ddflow_review" in mcp.TOOLS
+    assert not [name for name in mcp.TOOLS if "approve" in name], "a person's act has no tool"
+
+
+def test_the_approve_hint_names_a_reviewer_with_a_space_whole(proj, log, cfg):
+    block = HTTP.replace('name = "lan"', 'name = "lan box"')
+    assert AS.configure(proj, AS.ConfigEdit(append_toml=block, local=True)).exit == 0
+    ok, why = _independent(proj, log, cfg, "lan box")
+    assert not ok and "reviewers approve 'lan box'" in why, why
+
+
+def test_a_write_fails_closed_when_the_reviewers_do_not_load(proj):
+    """roborev: a snapshot that read "no reviewers" whenever the files did not load
+    waved through exactly the write the guard exists to stop."""
+    (proj / ".ddflow" / "local").mkdir(exist_ok=True)
+    (proj / ".ddflow" / "local" / "reviewers.toml").write_text("[[reviewer]\nname = \n")
+    assert RT.snapshot(proj) is None
+    target = proj / ".ddflow" / "local" / "config.toml"
+    before = target.read_text() if target.exists() else None
+    out = AS.configure(proj, AS.ConfigEdit(append_toml=FAKE_CMD, local=True))
+    assert out.exit != 0 and "do not load" in out.reason, out.reason
+    assert (target.read_text() if target.exists() else None) == before
 
 
 # -- nothing the operator configured stops counting ----------------------------------------
