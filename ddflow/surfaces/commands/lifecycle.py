@@ -66,11 +66,6 @@ def cmd_next(a, c: Ctx) -> int:
 
 
 def cmd_claim(a, c: Ctx) -> int:
-    from ...services.tree_owner import foreign_tree_owner
-
-    # A linked tree another identity is working in is not the caller's to adopt: asked
-    # from the primary instead, the claim makes a tree of its own (B11e4c5a185).
-    owner = foreign_tree_owner(c.repo, c.called_from, c.log.agent_id, c.log.read_all())
     out = A.claim(
         c.repo,
         a.id,
@@ -80,8 +75,9 @@ def cmd_claim(a, c: Ctx) -> int:
         no_worktree=a.no_worktree,
         # WHERE THE CALLER IS, not the resolved primary. Adoption depends on whether the
         # caller was already standing in a worktree, and resolving to the repo root loses
-        # exactly that fact.
-        called_from=c.repo if owner else c.called_from,
+        # exactly that fact -- unless it is a tree another identity is working in, which
+        # is not the caller's to adopt: then it is the primary, and a tree of its own.
+        called_from=c.called_from,
         resources=a.resources or "",
         agent=c.requested_agent,
     )
@@ -89,6 +85,7 @@ def cmd_claim(a, c: Ctx) -> int:
         return _refused(out)
     d = out.data
     msg = f"claimed {a.id} (lease {d['ttl_s']}s, renew every {d['heartbeat_s']}s)"
+    owner = c.tree_owner
     if owner and d["worktree"] and not d["rebound"]:
         msg += (
             f"\n  not adopted: the tree you are in is {owner}'s working tree, and you are "

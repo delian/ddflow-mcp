@@ -186,3 +186,32 @@ def test_a_named_agent_alone_in_a_harness_tree_still_adopts_it(repo):
     code, out, err = run_cli(tree, "claim", "T1", agent="worker")
     assert code == OK, out + err
     assert _item(repo, "T1").adopted and _item(repo, "T1").branch == "parent-work"
+
+
+def _cli_no_worktree(repo: Path) -> Path:
+    """T1 claimed --no-worktree by `sub-1`, whose shell is in its parent's tree."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config", "--set", "gate.unit_tests.command", PROBE)
+    assert code == OK, out + err
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    tree = _parent_tree(repo)
+    run_cli(repo, "task", "add", "T1", "--globs", "b.py")
+    _work_there(repo, tree)
+    code, out, err = run_cli(tree, "claim", "T1", "--no-worktree", agent="sub-1")
+    assert code == OK, out + err
+    return tree
+
+
+def test_agent_x_gate_run_from_another_identitys_tree_does_not_run_it(repo):
+    tree = _cli_no_worktree(repo)
+    code, out, err = run_cli(tree, "--json", "gate", "run", "T1", "unit_tests", agent="sub-1")
+    assert code == NOTHING, out + err  # was 0: the parent's a.py, as sub-1's pass
+    assert json.loads(out)["outcome"] == "unavailable"
+
+
+def test_agent_x_merge_from_another_identitys_tree_does_not_land_its_branch(repo):
+    tree = _cli_no_worktree(repo)
+    code, out, err = run_cli(tree, "merge", "T1", agent="sub-1")
+    assert code == REFUSED, out + err  # was 0: parent-work landed as T1
+    assert _git(repo, "ls-tree", "--name-only", "main", "a.py") == "", "parent's work landed"
