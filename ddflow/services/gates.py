@@ -434,13 +434,26 @@ def stale_evidence(
 ) -> list[str]:
     """Gates whose evidence describes a tree that has since changed. See
     `stale_evidence_detail`, which also says what differs."""
-    return [gid for gid, _why in stale_evidence_detail(state, cfg, item_id, cwd, landed=landed)]
+    notes = stale_evidence_detail(state, cfg, item_id, cwd, landed=landed)
+    return [n.gate for n in notes if not n.unverified]
+
+
+@dataclass(frozen=True, order=True)
+class StaleNote:
+    """A passed gate whose evidence is not about the tree being completed -- or, with
+    ``unverified``, one whose evidence could not be compared with it at all. The two
+    are kept apart: "could not tell" rendered as "fresh" is a silent pass, and rendered
+    as "stale" is a false alarm."""
+
+    gate: str
+    why: str
+    unverified: bool = False
 
 
 def stale_evidence_detail(
     state: State, cfg: Config, item_id: str, cwd: Path, *, landed: str = ""
-) -> list[tuple[str, str]]:
-    """(gate, what differs) for each gate whose evidence describes another tree.
+) -> list[StaleNote]:
+    """A note for each gate whose evidence describes another tree, or cannot be checked.
 
     The hazard B21 names, and the ordinary way it happens: run the tests, edit one more
     thing, complete. The recorded pass is then true about source nobody is shipping —
@@ -464,8 +477,10 @@ def stale_evidence_detail(
     follow it, and flagging that would make this noise, which is how a real warning
     stops being read.
 
-    Returns [] when the tree cannot be read — a check that cannot run says so by
-    finding nothing, and `run_command_gate` records "" in exactly that case.
+    Evidence that names content which cannot be compared now -- the landed commit or
+    the worktree unreadable, or legacy evidence taken on uncommitted edits once the
+    worktree is gone -- comes back ``unverified``, not silently fresh. Evidence with no
+    tree at all (a gate recorded where nothing could be measured) is not reported.
     """
     it = state.items.get(item_id)
     if it is None:
@@ -493,17 +508,32 @@ def stale_evidence_detail(
         base, _, dirt = was_sha.partition("+")
         was_id = ev.get("source_tree", "") or ""
         if was_id:
-            if not now_id or was_id == now_id:
+            if not now_id:
+                stale.append(StaleNote(gid, f"{label} could not be read", unverified=True))
+                continue
+            if was_id == now_id:
                 continue
         elif dirt == "clean" and base:
             then = commit_tree_entries(cwd, base)
-            if then is None or now is None or not differing_paths(then, now):
+            if then is None or now is None:
+                why = f"neither {base} nor {label} could be read as a tree"
+                stale.append(StaleNote(gid, why, unverified=True))
                 continue
-        elif not landed and was_sha and fingerprint and was_sha != fingerprint:
-            pass  # legacy evidence on a dirty tree: only the fingerprint can tell
+            if not differing_paths(then, now):
+                continue
+        elif not landed and was_sha and fingerprint:
+            if was_sha == fingerprint:
+                continue  # legacy evidence on a dirty tree: only the fingerprint can tell
+        elif landed and dirt:
+            why = (
+                f"it ran on uncommitted edits over {base}, recorded before ddflow kept "
+                f"their content, so they cannot be compared with {label}"
+            )
+            stale.append(StaleNote(gid, why, unverified=True))
+            continue
         else:
             continue
-        stale.append((gid, _what_differs(cwd, base, dirt, now, label)))
+        stale.append(StaleNote(gid, _what_differs(cwd, base, dirt, now, label)))
     return sorted(stale)
 
 
