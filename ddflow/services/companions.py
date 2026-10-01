@@ -475,11 +475,35 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
     return get_servers(data, shape), text
 
 
+#: The keys agents use for a REMOTE server's address: Claude/Cursor/VS Code `url`, Gemini
+#: CLI `httpUrl`, Windsurf `serverUrl`. A remote server has no launch and is still one.
+_REMOTE_KEYS = ("url", "httpUrl", "serverUrl")
+
+
+def _serves(entry: object) -> bool:
+    """Does one stored entry start or reach SOME server -- a launch, or a remote address?
+
+    What it serves is not asked: an operator's own wrapper under the companion's id is
+    theirs. Only an entry that can serve nothing -- `{}`, `"x"`, `5`, `[]`, a `null`
+    placeholder -- is refused, because counting it reported the gate as covered while no
+    agent could reach the tool, and `register` would have written over it (B768503a43a).
+    """
+    if _launch_of(entry) is not None:
+        return True
+    return isinstance(entry, dict) and any(
+        isinstance(entry.get(k), str) and entry[k].strip() for k in _REMOTE_KEYS
+    )
+
+
 def _registered_name(servers: dict, text: str, shape: str, c: Companion | str) -> str | None:
     """The name one config launches ``c`` under: its id first, else a matching launch."""
     cid = c if isinstance(c, str) else c.id
-    # `is not None`, not `in`: a `"codeguide": null` placeholder launches nothing.
-    if servers.get(cid) is not None or (shape == SHAPE_TOML and f"[mcp_servers.{cid}]" in text):
+    if cid in servers:
+        if _serves(servers[cid]):
+            return cid
+    # The header test only for a TOML file that did not parse (`servers` is then empty):
+    # a parsed table under the id was judged by what it holds, just above.
+    elif shape == SHAPE_TOML and not servers and f"[mcp_servers.{cid}]" in text:
         return cid
     if isinstance(c, str):
         return None

@@ -1,0 +1,79 @@
+"""Bug B768503a43a: an entry under a companion's id counted as registered whatever it held.
+
+`_registered_name` asked `servers.get(cid) is not None`, so `"codeguide": {}`, `"x"`,
+`5` or `[]` read as "registered": `Status.usable` was True and `gate_coverage` counted the
+gate as served while nothing could launch. `register()` meanwhile compared the entry with
+the launch it would write, found them different and wrote -- the reader and the writer
+disagreed about the same file. An id entry now counts only when it launches something
+(a command) or names a remote server (a url).
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from ddflow.services import companions as CO
+
+
+def _status(repo: Path, cid: str) -> CO.Status:
+    return {st.companion.id: st for st in CO.scan(repo, probe=False)}[cid]
+
+
+def _mcp_json(repo: Path, servers: dict) -> None:
+    (repo / ".mcp.json").write_text(json.dumps({"mcpServers": servers}), "utf-8")
+
+
+@pytest.mark.parametrize("junk", [{}, "x", 5, [], {"args": ["-y"]}, {"command": ""}])
+def test_an_id_entry_that_launches_nothing_is_not_registered(tmp_path, junk):
+    _mcp_json(tmp_path, {"context7": junk})
+    st = _status(tmp_path, "context7")
+    assert st.state != "registered", (junk, st.registered_in)
+    assert st.usable is False and st.registered_in == []
+    statuses = CO.scan(tmp_path, probe=False)
+    assert "context7" not in CO.gate_coverage(tmp_path, statuses, ["research"])["research"]
+
+
+def test_the_reader_agrees_with_the_writer_about_a_junk_entry(tmp_path):
+    """`register` would write over the junk entry, so the reader must not call it done."""
+    _mcp_json(tmp_path, {"context7": {}})
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    status, _msg = CO.register(tmp_path, c, "claude", dry_run=True)
+    assert status == "written"
+    assert _status(tmp_path, "context7").state != "registered"
+
+
+def test_a_toml_table_under_the_id_that_launches_nothing_is_not_registered(tmp_path):
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "config.toml").write_text("[mcp_servers.context7]\n", "utf-8")
+    assert _status(tmp_path, "context7").registered_in == []
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [
+        {"command": "npx", "args": ["-y", "some-wrapper-of-context7"]},
+        {"command": ["npx", "-y", "x"]},
+        {"url": "https://mcp.example.invalid/mcp"},
+        {"type": "http", "url": "https://mcp.example.invalid/mcp"},
+        {"httpUrl": "https://mcp.example.invalid/mcp"},
+        {"serverUrl": "https://mcp.example.invalid/mcp"},
+    ],
+)
+def test_an_id_entry_that_launches_or_names_a_server_still_counts(tmp_path, entry):
+    """The operator's own launch (a wrapper, a remote) under the id is theirs to keep."""
+    _mcp_json(tmp_path, {"context7": entry})
+    assert _status(tmp_path, "context7").registered_as == {"claude": "context7"}
+
+
+def test_a_toml_id_entry_with_a_launch_still_counts(tmp_path):
+    (tmp_path / ".codex").mkdir()
+    (tmp_path / ".codex" / "config.toml").write_text(
+        '[mcp_servers.context7]\ncommand = "my-wrapper"\n', "utf-8"
+    )
+    assert _status(tmp_path, "context7").registered_as == {"codex": "context7"}
