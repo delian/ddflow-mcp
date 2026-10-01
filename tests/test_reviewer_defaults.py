@@ -78,6 +78,8 @@ class _Fake:
                     self.send_header("Content-Length", str(len(out)))
                     self.end_headers()
                     self.wfile.write(out)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass  # the client gave up (a timeout test); nothing to answer
                 finally:
                     with fake.lock:
                         fake.in_flight -= 1
