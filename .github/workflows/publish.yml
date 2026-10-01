@@ -305,9 +305,10 @@ jobs:
     runs-on: ubuntu-latest
     # The publish step's retry budget (MCP_PUBLISH_DELAYS): ~7 min of waiting across 6
     # attempts, each typically the registry gateway's 60 s -- about 13 min in all. Each
-    # call is also capped at 3 min; this bounds the pathological case of every call
-    # hanging that long, instead of GitHub's 6-hour default.
-    timeout-minutes: 30
+    # call is capped at MCP_CALL_TIMEOUT (3 min), so even 6 attempts whose login and
+    # publish both hang end at ~43 min -- inside this limit, so the step still prints its
+    # ::error:: and re-run hint rather than being killed silently. GitHub's default is 6 h.
+    timeout-minutes: 45
     permissions:
       id-token: write          # OIDC auth to the MCP registry via GitHub identity
     steps:
@@ -333,7 +334,9 @@ jobs:
         #   attempt's GET confirms it or the loop carries on.
         # - Login every attempt: registry tokens live 5 minutes (internal/auth/jwt.go) and
         #   this window is longer. The GitHub OIDC token is minted fresh by each login.
-        # - `timeout` on each call: mcp-publisher's HTTP client sets none.
+        # - `timeout` on each call: mcp-publisher's HTTP client sets none, and a request
+        #   starved upstream can be held open rather than answered; a hung call is one
+        #   failed attempt (no status -> retried), not a job killed with no annotation.
         # - Any other 4xx (validation, permission) is permanent: fail at once, not after
         #   the whole backoff. 408/429, 5xx and no status at all (network, timeout) retry.
         #
@@ -344,6 +347,7 @@ jobs:
         shell: bash
         env:
           MCP_PUBLISH_DELAYS: "15 30 60 120 180"   # seconds between attempts: 6 attempts
+          MCP_CALL_TIMEOUT: "180"                  # seconds per mcp-publisher call
           MCP_REGISTRY_URL: https://registry.modelcontextprotocol.io
         run: |
           set -u
@@ -362,7 +366,7 @@ jobs:
               echo "$name $version is listed in the registry"; exit 0
             fi
             echo "attempt $attempt: publishing $name $version"
-            if out=$( { timeout 180 mcp-publisher login github-oidc && timeout 180 mcp-publisher publish; } 2>&1 ); then
+            if out=$( { timeout "$MCP_CALL_TIMEOUT" mcp-publisher login github-oidc && timeout "$MCP_CALL_TIMEOUT" mcp-publisher publish; } 2>&1 ); then
               echo "$out"; exit 0
             fi
             echo "$out"
