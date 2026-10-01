@@ -986,8 +986,9 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--launch",
         default="auto",
         choices=["auto", "uvx", "docker", "python"],
-        help="how agents spawn the MCP server: 'auto' prefers uvx; 'docker' needs no "
-        "Python toolchain at all",
+        help="how agents spawn the MCP server: 'auto' prefers uvx for an install from a "
+        "package index and this installation otherwise; 'docker' needs no Python "
+        "toolchain at all",
     )
     ad.add_argument(
         "--image",
