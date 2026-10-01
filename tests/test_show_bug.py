@@ -35,7 +35,7 @@ def test_show_resolves_an_open_bug_and_the_items_that_fix_it(repo):
     assert code == 0, err
     assert f"{bid} [bug] open" in out, out
     assert "the widget drops its last row" in out and " on T1" in out, out
-    assert "fixed by: BODY, FIX, LIST\n" in out and "OTHER" not in out, out
+    assert "fix task(s): BODY, FIX, LIST\n" in out and "OTHER" not in out, out
     assert "mentioned by: NEAR, TALK" in out, "a task that only discusses a bug is not its fix"
 
     code, out, err = run_cli(repo, "--json", "show", bid)

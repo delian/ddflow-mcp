@@ -179,7 +179,7 @@ def _bug_lines(b: dict) -> str:
     found = f"found {b['found_at']}" + (f" on {b['item']}" if b["item"] else "")
     lines = [f"{b['id']} [bug] {b['state']}", f"  {found}"]
     if b["fixing"]:
-        lines.append(f"  fixed by: {', '.join(b['fixing'])}")
+        lines.append(f"  fix task(s): {', '.join(b['fixing'])}")
     if b["mentioned_by"]:
         lines.append(f"  mentioned by: {', '.join(b['mentioned_by'])}")
     if b["fixed_at"]:
