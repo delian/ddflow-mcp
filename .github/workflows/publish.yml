@@ -303,6 +303,11 @@ jobs:
     needs: [gate, pypi, docker]
     if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
+    # The publish step's retry budget (MCP_PUBLISH_DELAYS): ~7 min of waiting across 6
+    # attempts, each typically the registry gateway's 60 s -- about 13 min in all. Each
+    # call is also capped at 3 min; this bounds the pathological case of every call
+    # hanging that long, instead of GitHub's 6-hour default.
+    timeout-minutes: 30
     permissions:
       id-token: write          # OIDC auth to the MCP registry via GitHub identity
     steps:
@@ -314,9 +319,68 @@ jobs:
           curl -fsSL https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz \
             | tar -xz -C /usr/local/bin mcp-publisher
       - name: Publish server.json
+        # Retried, because the registry fails transiently: publish #38 (0.1.6) got "server
+        # returned status 504: 504 Gateway Time-out (nginx)" after 60 s with a valid
+        # manifest -- publish requests starve waiting for a database connection upstream
+        # (modelcontextprotocol/registry#1444; fix in PR #1562). By then PyPI and both
+        # images had shipped, so a single attempt turned a registry hiccup into a failed
+        # release with no tag. tests/test_registry_publish_retry.py runs this script.
+        #
+        # - The registry is asked first, every attempt: a 504 is the GATEWAY giving up, and
+        #   the publish behind it may have committed. A version already listed is done --
+        #   publishing it again would only earn a 400 "duplicate version".
+        # - A 400 "duplicate version" is therefore never success on its own word: the next
+        #   attempt's GET confirms it or the loop carries on.
+        # - Login every attempt: registry tokens live 5 minutes (internal/auth/jwt.go) and
+        #   this window is longer. The GitHub OIDC token is minted fresh by each login.
+        # - `timeout` on each call: mcp-publisher's HTTP client sets none.
+        # - Any other 4xx (validation, permission) is permanent: fail at once, not after
+        #   the whole backoff. 408/429, 5xx and no status at all (network, timeout) retry.
+        #
+        # When the budget runs out: Actions > this run > "Re-run failed jobs". A re-run
+        # reuses the outputs of every job that succeeded -- `gate`'s version and sha
+        # included -- so it publishes the SAME version and mints nothing; `tag`, skipped
+        # because it needs this job, re-runs with it. Re-runs are allowed for 30 days.
+        shell: bash
+        env:
+          MCP_PUBLISH_DELAYS: "15 30 60 120 180"   # seconds between attempts: 6 attempts
+          MCP_REGISTRY_URL: https://registry.modelcontextprotocol.io
         run: |
-          mcp-publisher login github-oidc
-          mcp-publisher publish
+          set -u
+          read -r name version < <(python3 -c 'import json; s = json.load(open("server.json")); print(s["name"], s["version"])')
+          ename=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$name")
+          url="$MCP_REGISTRY_URL/v0.1/servers/$ename/versions/$version"
+
+          # 200 = listed. 404, an error or an unreachable registry all read as "not yet":
+          # the publish that follows is what decides, and it is safe to repeat.
+          listed() { [ "$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 "$url" || true)" = 200 ]; }
+
+          attempt=0
+          for delay in $MCP_PUBLISH_DELAYS last; do
+            attempt=$((attempt + 1))
+            if listed; then
+              echo "$name $version is listed in the registry"; exit 0
+            fi
+            echo "attempt $attempt: publishing $name $version"
+            if out=$( { timeout 180 mcp-publisher login github-oidc && timeout 180 mcp-publisher publish; } 2>&1 ); then
+              echo "$out"; exit 0
+            fi
+            echo "$out"
+            status=$(printf '%s\n' "$out" | grep -oE 'status [0-9]{3}' | tail -n1 | cut -d' ' -f2 || true)
+            case "$status" in
+              408|429|5??|"") ;;
+              400) printf '%s\n' "$out" | grep -q 'duplicate version' || {
+                     echo "::error::the MCP registry refused $name $version (HTTP 400); retrying cannot fix that"; exit 1; } ;;
+              *) echo "::error::the MCP registry refused $name $version (HTTP $status); retrying cannot fix that"; exit 1 ;;
+            esac
+            [ "$delay" = last ] && break
+            echo "transient failure (HTTP ${status:-none}); retrying in ${delay}s"
+            sleep "$delay"
+          done
+          # The last attempt's 504 may also have committed.
+          if listed; then echo "$name $version is listed in the registry"; exit 0; fi
+          echo "::error::$name $version is not in the MCP registry after $attempt attempts (registry-side, see https://github.com/modelcontextprotocol/registry/issues/1444). PyPI and the images are published; finish with Actions > this run > Re-run failed jobs, which reuses this version and mints no new one."
+          exit 1
 
   # ---------------------------------------------------------------- record what shipped
   tag:
