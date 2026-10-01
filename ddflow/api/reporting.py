@@ -198,7 +198,8 @@ def rebuild(repo: Path, *, agent: str = "") -> O.Outcome:
 
 
 def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
-    """One item, with its gate status. The wire body is the item itself.
+    """One item, with its gate status -- or one bug, by its id. The wire body is the item
+    (or the bug's record) itself.
 
     Worktree paths are absolutised on the way out: the log stores them RELATIVE to the
     repo root, which is what makes a committed log true on every checkout, but a caller
@@ -232,12 +233,23 @@ def _show_bug(st, bug) -> O.Outcome:
     that fix it -- those whose title or body name the id, the "(fixes bug X)" every fix
     task carries. The wire body (`item`, as for an item) is the record itself."""
     named = re.compile(rf"(?<![\w-]){re.escape(bug.id)}(?![\w-])")
-    fixing = sorted(
-        i.id
-        for i in st.items.values()
-        if not i.removed and (named.search(i.title or "") or named.search(i.body or ""))
-    )
-    record = {**plain(bug), "kind": "bug", "state": bug.resolution or "open", "fixing": fixing}
+    claims_fix = re.compile(rf"\bfix(es|ed)?\b[^()]*(?<![\w-]){re.escape(bug.id)}(?![\w-])", re.I)
+    fixing: list[str] = []
+    mentions: list[str] = []
+    for i in sorted(st.items.values(), key=lambda x: x.id):
+        text = f"{i.title or ''}\n{i.body or ''}"
+        if i.removed or not named.search(text):
+            continue
+        # A title saying "fixes bug X" is the fix's own claim; any other mention is only
+        # that -- a task that discusses a bug is not its fix (roborev, job 954).
+        (fixing if claims_fix.search(i.title or "") else mentions).append(i.id)
+    record = {
+        **plain(bug),
+        "kind": "bug",
+        "state": bug.resolution or "open",
+        "fixing": fixing,
+        "mentioned_by": mentions,
+    }
     return O.ok("show", id=bug.id, item=record, _render={"bug": record})
 
 

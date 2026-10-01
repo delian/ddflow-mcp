@@ -26,12 +26,14 @@ def test_show_resolves_an_open_bug_and_the_items_that_fix_it(repo):
     bid = _bug(repo, "the widget drops its last row", "--item", "T1")
     run_cli(repo, "task", "add", "FIX", "--title", f"Keep the last row (fixes bug {bid})")
     run_cli(repo, "task", "add", "OTHER", "--title", "unrelated", "--body", f"see {bid}x")
+    run_cli(repo, "task", "add", "TALK", "--title", f"Investigate {bid}")
 
     code, out, err = run_cli(repo, "show", bid)
     assert code == 0, err
     assert f"{bid} [bug] open" in out, out
     assert "the widget drops its last row" in out and " on T1" in out, out
-    assert "fixed by: FIX" in out and "OTHER" not in out, out
+    assert "fixed by: FIX\n" in out and "OTHER" not in out, out
+    assert "mentioned by: TALK" in out, "a task that only discusses a bug is not its fix"
 
     code, out, err = run_cli(repo, "--json", "show", bid)
     assert code == 0, err
@@ -83,3 +85,16 @@ def test_an_id_that_is_neither_says_so(repo):
     run_cli(repo, "init")
     code, _out, err = run_cli(repo, "show", "NOPE")
     assert code == 1 and "no such item or bug 'NOPE'" in err, err
+
+
+def test_a_fix_after_an_invalid_closure_reads_as_fixed(repo):
+    """roborev job 954: a bug closed invalid and later fixed has both closures on record;
+    `Bug.resolution` says fixed, and show must not present it as both."""
+    run_cli(repo, "init")
+    bid = _bug(repo, "third")
+    assert run_cli(repo, "bug", "invalid", bid, "--reason", "works as designed")[0] == 0
+    EventLog(repo, "agent-test").append("bug.fixed", bid, {"regression_test": ""})
+    code, out, _err = run_cli(repo, "show", bid)
+    assert code == 0 and f"{bid} [bug] fixed" in out, out
+    assert "earlier closed" in out and "superseded by the fix" in out, out
+    assert "regression test(s):" not in out, "no test was recorded, so none is announced"
