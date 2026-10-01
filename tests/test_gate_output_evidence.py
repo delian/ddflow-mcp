@@ -9,6 +9,7 @@ showed only the rerun's "112 passed", hiding that the first pass had 115 failure
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -99,11 +100,20 @@ def test_summary_lines_read_pytest_quiet_and_unittest_verdicts():
         "Ran 3 tests in 0.001s\n"
         "FAILED (failures=1)\n"
         "12 passed items, not a verdict\n"
+        "no tests ran in 0.01s\n"
+        "2 deselected in 0.30s\n"
+        "1 xfailed in 0.2s\n"
+        "=============== warnings summary ===============\n"
+        "========== no tests ran in 0.02s ==========\n"
     )
     assert G.summary_lines(out) == [
         "3 failed, 112 passed, 18 warnings in 91.95s (0:01:31)",
         "Ran 3 tests in 0.001s",
         "FAILED (failures=1)",
+        "no tests ran in 0.01s",
+        "2 deselected in 0.30s",
+        "1 xfailed in 0.2s",
+        "========== no tests ran in 0.02s ==========",
     ]
 
 
@@ -115,8 +125,20 @@ def test_run_logs_are_pruned_per_gate_and_never_the_one_just_written(tmp_path):
     for ref in fast:
         assert (tmp_path / ref).is_file(), "another gate's logs were pruned"
     assert (tmp_path / unit[-1]).read_text() == f"unit {G.KEEP_RUN_LOGS + 4}"
-    left = sorted(p.name for p in (tmp_path / ".ddflow" / "runs" / "T1").glob("unit-2*.log"))
+    runs = tmp_path / ".ddflow" / "runs" / "T1"
+    left = sorted(p.name for p in runs.iterdir() if re.fullmatch(r"unit-\d.*\.log", p.name))
     assert len(left) == G.KEEP_RUN_LOGS
     assert [(tmp_path / ".ddflow" / "runs" / "T1" / n).read_text() for n in left] == [
         f"unit {i}" for i in range(5, G.KEEP_RUN_LOGS + 5)
     ]
+
+
+def test_a_log_from_an_earlier_stamp_format_is_pruned_too(tmp_path):
+    runs = tmp_path / ".ddflow" / "runs" / "T1"
+    runs.mkdir(parents=True)
+    older = runs / "unit-20240101T120000Z-999.log"
+    older.write_text("second-resolution stamp")
+    keep = G.run_log_writer(tmp_path, "T1", "unit")
+    for i in range(G.KEEP_RUN_LOGS):
+        keep(f"unit {i}")
+    assert not older.exists()

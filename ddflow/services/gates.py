@@ -1113,9 +1113,11 @@ def differing_paths(a: TreeEntries, b: TreeEntries) -> list[str]:
 #: A test runner's own verdict lines, wherever in the output they fall: pytest's
 #: `=== 3 failed, 112 passed in 4.2s ===` banners (bare under `-q`), unittest's `Ran 12 tests in 0.1s`
 #: and `FAILED (failures=2)` / `OK (skipped=1)`.
+_VERDICT = r"(passed|failed|errors?|skipped|xfailed|xpassed|deselected)"
 _SUMMARY_LINE = re.compile(
-    r"=+ .*\b(passed|failed|errors?|skipped|xfailed|xpassed|deselected|no tests ran)\b.* =+"
-    r"|\d+ (passed|failed|errors?|skipped)\b.* in \d[\d.]*s\b.*"  # pytest -q: no banner
+    rf"=+ .*\b({_VERDICT[1:-1]}|no tests ran)\b.* =+"
+    # pytest -q: the same verdicts, with no banner
+    rf"|(\d+ {_VERDICT}\b.*|no tests ran) in \d[\d.]*s\b.*"
     r"|Ran \d+ tests? in \S+"
     r"|(OK|FAILED) \(.*\)"
 )
@@ -1158,7 +1160,7 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
         # THIS gate's logs only -- `unit-*.log` would also match gate `unit-fast`'s --
         # ordered by the stamp in the name, never by mtime (coarse on some filesystems,
         # which could rank the log just written as the oldest), and never the new one.
-        mine = re.compile(rf"{re.escape(gate)}-\d{{8}}T\d{{12}}Z-\d+\.log")
+        mine = re.compile(rf"{re.escape(gate)}-\d{{8}}T\d{{6}}(\d{{6}})?Z-\d+\.log")
         old = sorted(
             (q for q in where.iterdir() if mine.fullmatch(q.name) and q != path),
             key=lambda q: q.name[len(gate) + 1 :],
@@ -1352,7 +1354,7 @@ def run_command_gate(
         # cannot be written is said so in the evidence; it does not change the outcome.
         try:
             ev["output_log"] = keep_output(out)
-        except OSError as exc:
+        except (OSError, ValueError) as exc:  # ValueError: an encoding the log refused
             ev["output_log_error"] = str(exc)[:200]
     outcome, why = classify_exit(gdef, p.returncode, out)
     if why:
