@@ -26,8 +26,7 @@ The engine interface this file fixes for B-similar-engine (``ddflow.services.sim
     #    candidate the engine scores above zero. The query's own id, if indexed, may be
     #    returned; the evaluation drops it. A record missing from hits scores 0.
 
-``test_the_engine_meets_the_bar`` is a strict xfail until that module exists: it starts
-failing loudly the day the engine passes, and B-similar-engine removes the mark.
+``test_the_engine_meets_the_bar`` holds the engine (B-similar-engine) to the bar.
 ``test_the_reference_matcher_meets_the_bar`` proves the bar is reachable on this fixture
 with the research's stdlib TF-IDF, and that the metric code itself is sound.
 """
@@ -42,8 +41,6 @@ import math
 import re
 import sys
 from pathlib import Path
-
-import pytest
 
 from tests.test_repo_is_generic import _private_addresses
 
@@ -331,11 +328,6 @@ def test_the_reference_matcher_meets_the_bar():
     assert_meets_the_bar(evaluate(_reference_scorer()))
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="B-similar-engine: ddflow.services.similar does not exist yet; remove this mark "
-    "when it lands (strict: an engine that passes turns this into a failure until then)",
-)
 def test_the_engine_meets_the_bar():
     similar = importlib.import_module("ddflow.services.similar")
     index = similar.build([{k: r[k] for k in ("id", "kind", "title", "body")} for r in CORPUS])
