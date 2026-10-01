@@ -128,3 +128,17 @@ def test_doctor_flags_a_primary_left_mid_merge(repo, item):
     code, out, err = run_cli(repo, "doctor")
     assert code != OK, out + err
     assert "mid-merge" in out + err and "merge --abort" in out + err
+
+
+def test_a_conflicting_squash_merge_leaves_the_primary_clean(repo, item):
+    run_cli(repo, "config", "--set", "worktree.merge_strategy", "squash")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "squash", "--no-verify")
+    (item / "c.txt").write_text("branch\n")
+    _git(item, "commit", "-qam", "branch edit")
+    (repo / "c.txt").write_text("main\n")
+    _git(repo, "commit", "-qam", "main edit")
+
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code == REFUSED, out + err
+    assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""

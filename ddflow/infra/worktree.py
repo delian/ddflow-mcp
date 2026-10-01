@@ -416,7 +416,18 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
             return r
         c = git(tree, "commit", "-m", message)
         if not c.ok:
-            return GitResult(c.code, c.out, f"squash staged but commit failed: {c.err}")
+            # Unstage it, as a failed merge is aborted: left staged, the next commit
+            # anyone makes in this tree would carry it (B6926ec1ad9).
+            undone = git(tree, "reset", "--merge")
+            state = (
+                f"The squash was unstaged; {tree} is as it was."
+                if undone.ok
+                else f"Unstaging it ALSO failed ({undone.err}): run `git -C {tree} reset "
+                f"--merge` by hand."
+            )
+            return GitResult(
+                GIT_REFUSED, c.out, f"squash staged but commit failed: {c.err or c.out}\n\n{state}"
+            )
         return c
     return r
 
@@ -444,6 +455,8 @@ def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
     """
     conflicts = git_paths(tree, "diff", "--name-only", "--diff-filter=U") or []
     aborted = git(tree, "merge", "--abort")
+    if not aborted.ok:  # a --squash conflict has no MERGE_HEAD for --abort to find
+        aborted = git(tree, "reset", "--merge")
     why = r.err or r.out
     if conflicts:
         head = f"merging {source} conflicts in: " + ", ".join(conflicts[:_NAMED])
@@ -459,7 +472,7 @@ def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
     state = (
         f"The merge was aborted; {tree} is as it was."
         if aborted.ok
-        else f"`git merge --abort` ALSO failed ({aborted.err}): {tree} is left mid-merge. "
+        else f"Aborting it ALSO failed ({aborted.err}): {tree} is left mid-merge. "
         f"Run `git -C {tree} merge --abort` by hand."
     )
     return GitResult(GIT_REFUSED, r.out, f"{head}\n\n{state} {fix}")
