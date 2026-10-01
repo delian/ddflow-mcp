@@ -38,7 +38,10 @@ ENV DDFLOW_REPO=/repo \
 ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/ddflow-entrypoint"]
 CMD ["ddflow-mcp"]
 
-LABEL org.opencontainers.image.title="ddflow" \
+# `io.modelcontextprotocol.server.name` is how the MCP registry verifies that the server
+# in server.json owns this image; without it `mcp-publisher publish` refuses the OCI entries.
+LABEL io.modelcontextprotocol.server.name="io.github.delian/ddflow-mcp" \
+      org.opencontainers.image.title="ddflow" \
       org.opencontainers.image.description="Work-queue kernel for AI coding agents (MCP server + CLI)" \
       org.opencontainers.image.source="https://github.com/delian/ddflow-mcp" \
       org.opencontainers.image.licenses="MIT"

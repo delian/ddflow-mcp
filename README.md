@@ -1,5 +1,7 @@
 # ddflow
 
+<!-- mcp-name: io.github.delian/ddflow-mcp -->
+
 A portable, agent-agnostic **work-queue kernel** for AI coding agents.
 
 You keep a queue of phases and tasks with declared dependencies. You say *"implement
