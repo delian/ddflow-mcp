@@ -81,6 +81,10 @@ class GateRecord:
         return self.outcome in ("failed",)
 
 
+#: A claim's TTL when its event carries none -- the shipped `[lease] ttl_s`.
+DEFAULT_LEASE_TTL_S = 1800
+
+
 @dataclass
 class Lease:
     holder: str
@@ -893,7 +897,7 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         holder=d.get("holder", ev.agent),
         acquired_at=float(d.get("at", 0.0)),
         renewed_at=float(d.get("at", 0.0)),
-        ttl_s=int(d.get("ttl_s", 1800)),
+        ttl_s=int(d.get("ttl_s", DEFAULT_LEASE_TTL_S)),
         worktree=d.get("worktree", ""),
         branch=d.get("branch", ""),
         globs=list(d.get("globs", [])),
@@ -1160,7 +1164,7 @@ def _h_resolved(st: State, ev: Event) -> None:
             # window runs on the configured TTL the resolution carries (roborev).
             lease.expired_at = ""
             if lease.ttl_s <= 0:
-                lease.ttl_s = int(d.get("ttl_s") or 1800)
+                lease.ttl_s = int(d.get("ttl_s") or DEFAULT_LEASE_TTL_S)
         else:
             lease.renewed_at = max(lease.renewed_at, at)
         # What the resolution did not release stays on the record: claims that still
