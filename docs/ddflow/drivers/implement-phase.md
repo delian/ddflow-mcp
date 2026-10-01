@@ -95,8 +95,13 @@ ddflow claim <ID> --globs "<paths this task will write>"   # [ddflow_claim]
 
 Renew during long work: `ddflow heartbeat <ID>` (interval: `lease.heartbeat_s`).
 
+`claim` prints the globs it recorded -- check them. `--globs` takes a comma list, a
+JSON array, or several flags; the claim's globs become the item's.
+
 If your task needs to write outside its declared globs, run
-`ddflow update <ID> --globs "..."` **first**, so the conflict detector can see it.
+`ddflow update <ID> --globs "<every glob, old and new>"` **first**, so the conflict
+detector can see it. It REPLACES the list (and moves your lease to it), and prints
+anything it dropped.
 
 ### 2c. Run the task pipeline
 
