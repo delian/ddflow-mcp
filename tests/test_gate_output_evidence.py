@@ -89,3 +89,19 @@ def test_gate_record_keeps_the_output_file_it_digests(repo, tmp_path):
     ev = _evidence(repo)
     assert ev["output_file"] == str(out_file)
     assert any("2 failed" in line for line in ev["summary"]), ev
+
+
+def test_summary_lines_read_pytest_quiet_and_unittest_verdicts():
+    out = (
+        "collected 9\n"
+        "3 failed, 112 passed, 18 warnings in 91.95s (0:01:31)\n"
+        "noise\n"
+        "Ran 3 tests in 0.001s\n"
+        "FAILED (failures=1)\n"
+        "12 passed items, not a verdict\n"
+    )
+    assert G.summary_lines(out) == [
+        "3 failed, 112 passed, 18 warnings in 91.95s (0:01:31)",
+        "Ran 3 tests in 0.001s",
+        "FAILED (failures=1)",
+    ]
