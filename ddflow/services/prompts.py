@@ -188,7 +188,10 @@ def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[s
     registry a name came from. A macro that had to be asked for separately is a macro an
     agent never finds.
     """
-    macros, _refused = _macro_report(repo)
+    return _as_commands(_macro_report(repo)[0])
+
+
+def _as_commands(macros: dict) -> dict[str, tuple[str, str, list[str]]]:
     return {name: (m.title or name, m.description, list(m.params)) for name, m in macros.items()}
 
 
@@ -200,10 +203,7 @@ def all_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str
     over its own submodule.
     """
     macros, refused = _macro_report(repo)  # one read of the config, not two
-    out = dict(COMMANDS)
-    out.update(
-        {name: (m.title or name, m.description, list(m.params)) for name, m in macros.items()}
-    )
+    out = {**COMMANDS, **_as_commands(macros)}
     # A `[[macro]]` refused for taking a shipped command's name is said ON that command's
     # entry: MCP `prompts/list` has no field for notes, and a client listing prompts must
     # still see why the operator's block is not the one it gets (B-macro-clash-silent).
