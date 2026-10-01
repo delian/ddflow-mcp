@@ -138,7 +138,7 @@ _doc(
 _doc(
     "worktree",
     "local_files",
-    "Git-IGNORED, machine-local files (repo-relative paths) copied from the primary checkout into every worktree ddflow creates (or finds already at its default path) -- a tool config that must not be committed but is read from each checkout, like .roborev.toml. Never overwrites a file already in the worktree, and never copies a path git tracks (that one arrives with the checkout). A copy that fails is skipped, not raised.",
+    "Git-IGNORED, machine-local files (repo-relative paths) copied from the primary checkout into every worktree a claim binds -- one it creates, the harness tree it adopts, or the item's own tree on a re-claim -- a tool config that must not be committed but is read from each checkout, like .roborev.toml. Never overwrites a file already in the worktree, and never copies a path git tracks (that one arrives with the checkout). A copy that fails is skipped, not raised.",
 )
 
 
