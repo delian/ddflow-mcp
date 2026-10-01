@@ -450,7 +450,11 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         if prior:
             # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
             # record holds every other chunk's coverage, and a later --chunk needs it.
-            why = res.reason if res.status == R.ERROR else R.merge_rerun(prior, res)
+            why = (
+                (res.reason or "the re-run errored")
+                if res.status == R.ERROR
+                else R.merge_rerun(prior, res)
+            )
             if why:
                 return O.Outcome(
                     kind="review", data={"id": item, "gate": gate}, exit=O.REFUSED, reason=why
