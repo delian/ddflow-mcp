@@ -715,7 +715,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 127 knobs.
+cadences, and the rest of the 128 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 ### Publishing and registry
@@ -1708,6 +1708,18 @@ counts as *unknown*, never as *different*. (It used to count as different: `gate
 defaults the reviewer to the agent id, so a `standards` gate recorded with no `--model`
 arrived as family "host-12345", compared unequal to "anthropic", and satisfied the
 independence requirement on its own.)
+
+A **router** author is a set of families. Copilot CLI's HydraFusion is chosen like a model
+but routes each task across models from several providers, so `[agent].routers` maps its
+name to the families it draws on, and a reviewer counts as independent only when its
+family is outside the whole set. HydraFusion ships with an empty set — GitHub publishes no
+fixed roster — so `complete --model hydrafusion` refuses, naming the knob, until you list
+the families your plan routes to:
+
+```toml
+[agent]
+routers = { hydrafusion = ["anthropic", "openai", "google"] }
+```
 
 ```console
 $ ddflow complete P1.T1 --model claude-opus-5
@@ -2728,7 +2740,7 @@ declared once and persists — see
 
 ## Configuration
 
-127 knobs across 17 sections, every one documented in place:
+128 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

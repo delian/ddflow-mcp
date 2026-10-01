@@ -117,7 +117,7 @@ def test_routers_load_from_toml_and_appear_in_config_explain(tmp_path):
     assert cfg.agent.routers == {"hydrafusion": ["anthropic", "openai"]}
     assert cfg.sources["agent.routers"] == "file"
     rows = {k: doc for k, _v, _s, doc in cfg.explain()}
-    assert "agent.routers" in rows and rows["agent.routers"], "the knob must be documented"
+    assert rows.get("agent.routers"), "the knob must be documented"
 
 
 def test_routers_load_from_the_env_as_json():
@@ -136,5 +136,5 @@ def test_routers_load_from_the_env_as_json():
 def test_a_malformed_router_is_refused_not_dropped(bad):
     """A string where a list belongs would iterate as letters ('o', 'p', ...): a set of
     nonsense families that matches no reviewer, and so passes every one."""
-    with pytest.raises(ValueError, match="agent.routers"):
+    with pytest.raises(ValueError, match=r"agent\.routers"):
         Config.check(bad)
