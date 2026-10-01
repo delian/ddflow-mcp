@@ -49,8 +49,11 @@ from ..infra.store import Store
 ACTIONS = ("off", "none", "show", "ask", "warn")
 
 #: A token that could be a record id named in the text: ``B5c32cbb5c1``, ``B198``,
-#: ``B-similar-engine``, ``BL-no-duplicates``. Only those the matcher knows count.
-_NAMED = re.compile(r"[A-Za-z][A-Za-z0-9]*(?:[-_.][A-Za-z0-9]+)*")
+#: ``B-similar-engine``, ``34.8g``. Only ids the matcher knows count, and only ids with a
+#: digit or a separator in them: an imported project can have an item called ``cleanup``,
+#: and every text using that word would otherwise "name" it.
+_NAMED = re.compile(r"[A-Za-z0-9]+(?:[-_.][A-Za-z0-9]+)*")
+_ID_SHAPE = re.compile(r".*(?:\d|[-_.]).*")
 
 
 @dataclass(frozen=True)
@@ -267,7 +270,11 @@ def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessme
     words = textsim.content_words(record_tokens(record))
     text = f"{record.get('title') or ''} {record.get('body') or ''}"
     known = matcher.ids()
-    named = [t for t in dict.fromkeys(_NAMED.findall(text)) if t in known and t != own]
+    named = [
+        t
+        for t in dict.fromkeys(_NAMED.findall(text))
+        if t in known and t != own and _ID_SHAPE.fullmatch(t)
+    ]
     want = textsim.digest(str(record.get("title") or ""), str(record.get("body") or ""))
     hits = [(i, s) for i, s in matcher.query(record, limit=None, kinds=dd.kinds) if i != own]
     scores = dict(hits)
