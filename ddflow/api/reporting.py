@@ -297,6 +297,32 @@ def _finished_phase_remedy(detail: str, st, cfg: Config, item: str, repo: Path) 
     )
 
 
+def _primary_mid_merge(repo: Path, problems: list[str], notes: list[str]) -> None:
+    """B6926ec1ad9: a merge left half-done in the primary fails every later `merge`, by
+    every agent, and agents may not touch the primary to clear it."""
+    from ..infra import worktree as W
+
+    mid = W.merging(repo)
+    if mid is None:
+        notes.append(f"git could not list unmerged paths in {repo}: mid-merge state unknown")
+        return
+    if not mid:
+        return
+    in_merge = W.git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD").ok
+    problems.append(
+        f"the primary checkout {repo} is mid-merge "
+        + (
+            "(MERGE_HEAD set): every `ddflow merge` will fail until it is concluded "
+            f"or aborted. If nobody is resolving it by hand, `git -C {repo} merge --abort`."
+            if in_merge
+            else "(unmerged paths, no MERGE_HEAD: a squash, cherry-pick or rebase left "
+            f"half-done): every `ddflow merge` will fail. `git -C {repo} status` names the "
+            f"operation and its --abort; a squash is cleared with `git -C {repo} reset "
+            "--merge`."
+        )
+    )
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -338,6 +364,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         )
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
+    _primary_mid_merge(repo, problems, notes)
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
     # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.

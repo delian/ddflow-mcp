@@ -70,18 +70,27 @@ class Recovery:
     adopted: bool = False
 
 
-def _record_claimed_globs(log: EventLog, it: Item, globs: list[str] | None) -> None:
-    """Write the globs a claim names onto its ITEM too, when they differ (Bbd07ab69fd).
+def _record_claimed_globs(
+    log: EventLog, it: Item, globs: list[str] | None, resources: list[str] | None = None
+) -> None:
+    """Write the globs (and resources) a claim names onto its ITEM too, when they differ
+    (Bbd07ab69fd, B7f8060f2f5).
 
     A claim's globs used to live on the lease alone. The heartbeat's catch-up
     (Bb21d338f26) points a renewed lease at the item's stored globs whenever the two
     differ, so the first heartbeat after `claim --globs` -- live, or reviving a lapsed
     lease (Bc5aec031b3) -- put the lease back on whatever the item had declared before,
     an empty list included. One answer to "what does this claim cover", recorded in the
-    claim's own transaction, leaves the catch-up nothing to undo.
+    claim's own transaction, leaves the catch-up nothing to undo. Resources likewise,
+    now that the catch-up covers them too.
     """
+    fields: dict[str, list[str]] = {}
     if globs is not None and sorted(globs) != sorted(it.globs):
-        log.append(f"{it.kind}.updated", it.id, {"globs": list(globs)})
+        fields["globs"] = list(globs)
+    if resources is not None and sorted(resources) != sorted(it.resources):
+        fields["resources"] = list(resources)
+    if fields:
+        log.append(f"{it.kind}.updated", it.id, fields)
 
 
 def _renew_in_place(
@@ -228,7 +237,7 @@ def acquire(
         existing = it.lease
         if existing and not existing.expired(now, cfg.lease.grace_s):
             if existing.holder == holder:
-                _record_claimed_globs(log, it, globs)
+                _record_claimed_globs(log, it, globs, resources)
                 return _renew_in_place(
                     log, existing, item_id, holder, now, worktree, branch, globs, note, resources
                 )
@@ -308,7 +317,7 @@ def acquire(
                     alternatives=_alternatives(state, cfg, item_id, holder, now),
                 )
 
-        _record_claimed_globs(log, it, globs)
+        _record_claimed_globs(log, it, globs, resources)
         log.append(
             "lease.acquired",
             item_id,
