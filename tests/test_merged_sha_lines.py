@@ -78,6 +78,7 @@ def test_an_old_branch_head_record_is_not_shipped_by_its_own_second_parent(repo)
     """Before B9f8019c521 merged_sha was the branch head. When that branch had merged
     develop into itself, its second parent is a develop commit -- which says nothing
     about the item reaching develop."""
+    from ddflow.config import Config
     from ddflow.core.model import Item
     from ddflow.services.flow import reached
 
@@ -96,11 +97,38 @@ def test_an_old_branch_head_record_is_not_shipped_by_its_own_second_parent(repo)
     _git(repo, "merge", "-q", "--no-ff", "feature", "-m", "land feature")
     landing = _git(repo, "rev-parse", "HEAD")
 
+    cfg = Config()
     legacy = Item(id="T", kind="task", merged_sha=head, landed_before=base, landed_after=landing)
-    assert reached(repo, legacy, "develop") == ""
-    assert reached(repo, legacy, "main") == head
+    assert reached(repo, cfg, legacy, "develop") == ""
+    assert reached(repo, cfg, legacy, "main") == head
     current = Item(
         id="T", kind="task", merged_sha=landing, landed_before=base, landed_after=landing
     )
-    assert reached(repo, current, "develop") == ""  # the feature itself never reached it
-    assert reached(repo, current, "main") == landing
+    assert reached(repo, cfg, current, "develop") == ""  # the feature itself never reached it
+    assert reached(repo, cfg, current, "main") == landing
+
+
+def test_a_fast_forward_landing_is_not_shipped_by_what_the_branch_merged_in(repo):
+    """ff-only: the landing IS the branch head. A branch that only merged develop in has
+    develop's tip as its second parent -- the item still never reached develop."""
+    from ddflow.config import Config
+    from ddflow.core.model import Item
+    from ddflow.services.flow import reached
+
+    base = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-qb", "develop")
+    (repo / "d.txt").write_text("d\n")
+    _git(repo, "add", "d.txt")
+    _git(repo, "commit", "-qm", "develop work")
+    _git(repo, "checkout", "-qb", "feature", base)
+    _git(repo, "merge", "-q", "--no-ff", "develop", "-m", "sync develop")
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "main")
+    _git(repo, "merge", "-q", "--ff-only", "feature")
+    assert _git(repo, "rev-parse", "main") == head
+
+    cfg = Config()
+    cfg.worktree.merge_strategy = "ff-only"
+    landed = Item(id="T", kind="task", merged_sha=head, landed_before=base, landed_after=head)
+    assert reached(repo, cfg, landed, "develop") == ""
+    assert reached(repo, cfg, landed, "main") == head
