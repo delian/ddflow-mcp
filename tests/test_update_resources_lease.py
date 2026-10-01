@@ -76,3 +76,23 @@ def test_update_resources_keeps_the_lease_life_and_globs(repo):
     lz = _items(repo)["T1"].lease
     assert lz.renewed_at == renewed, "an edit is not a renewal"
     assert lz.globs == ["a.py"] and lz.holder == HOLDER
+
+
+def test_lowering_or_restating_its_own_reservation_is_not_counted_against_itself(repo):
+    _gpus(repo, 2)
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    assert A.claim(repo, "T1", no_worktree=True, resources="gpu:2", agent=HOLDER).ok
+    for want in (["gpu:2"], ["gpu:1"], ["gpu:2"]):
+        out = AI.update(repo, "T1", AI.ItemEdit(resources=want), agent=HOLDER)
+        assert out.ok, (want, out.reason)
+        assert _items(repo)["T1"].lease.resources == want
+
+
+def test_a_globs_only_update_keeps_the_lease_reservation(repo):
+    _gpus(repo, 2)
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    assert A.claim(repo, "T1", no_worktree=True, resources="gpu:2", agent=HOLDER).ok
+    assert AI.update(repo, "T1", AI.ItemEdit(globs=["a.py", "b.py"]), agent=HOLDER).ok
+    lz = _items(repo)["T1"].lease
+    assert lz.resources == ["gpu:2"], "a globs edit dropped the reservation"
+    assert lz.globs == ["a.py", "b.py"]
