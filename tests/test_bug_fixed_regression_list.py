@@ -59,7 +59,7 @@ def test_semicolon_separated_tests_close_the_bug_and_are_all_recorded(repo):
     assert out.exit == OK, out.reason
     (data,) = _fixed_events(repo)
     assert data["regression_tests"] == [A, B]
-    assert data["regression_test"] == f"{A}, {B}"
+    assert data["regression_test"] == f"{A}; {B}", "one string is kept as given"
 
 
 def test_a_repeated_cli_flag_records_every_test_not_just_the_last(repo):

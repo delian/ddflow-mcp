@@ -851,7 +851,12 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Bug id.", True),
-            "regression_test": ("string", "Test that now guards this.", True),
+            "regression_test": (
+                "string",
+                "Test that now guards this. Several: separate them with ',' or ';' (a "
+                "JSON list of strings is accepted too).",
+                True,
+            ),
             "lesson_title": ("string", "Capture a lesson at the same time.", False),
             "lesson_rule": (
                 "string",
@@ -864,7 +869,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().bug_fixed(
             repo,
             a["id"],
-            regression_test=a.get("regression_test", "") or "",
+            regression_test=a.get("regression_test", "") or "",  # a str or a list
             lesson=a.get("lesson", "") or "",
             lesson_title=a.get("lesson_title", "") or "",
             lesson_rule=a.get("lesson_rule", "") or "",
