@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 from ...api import lifecycle as A
 from ..context import MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
@@ -271,6 +272,7 @@ def cmd_merge(a, c: Ctx) -> int:
         model=a.model or "",
         branch=a.branch or "",
         called_from=c.called_from,
+        shell_cwd=_shell_cwd(),
         agent=c.requested_agent,
     )
     if out.exit == REFUSED and out.data.get("dirty"):
@@ -325,8 +327,27 @@ def cmd_merge(a, c: Ctx) -> int:
     return OK
 
 
-#: The wire body of `merge` on both surfaces. `pr` is empty for a local merge.
-MERGE_PAYLOAD = ("id", "sha", "base", "pr", "branch", "outside_globs")
+def _shell_cwd() -> Path | None:
+    """The directory this process -- and so the caller's shell -- stands in, if any."""
+    try:
+        return Path.cwd()
+    except OSError:
+        return None
+
+
+#: The wire body of `merge` on both surfaces. `pr` is empty for a local merge. `sha` is
+#: the landing on `base`; `branch_head` the merged branch's own head.
+MERGE_PAYLOAD = (
+    "id",
+    "sha",
+    "branch_head",
+    "base",
+    "pr",
+    "branch",
+    "outside_globs",
+    "worktree",
+    "worktree_removed",
+)
 
 
 def cmd_brief(a, c: Ctx) -> int:

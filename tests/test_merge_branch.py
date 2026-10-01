@@ -66,7 +66,7 @@ def test_it_lands_the_branch_of_the_tree_the_caller_stands_in(repo):
     assert ev["branch"] == "agent-work"
     # The gate the merge is supposed to record, recorded.
     it = fold(EventLog(repo).read_all(), strict=False).items["T1"]
-    assert it.merged_sha == _git(tree, "rev-parse", "HEAD")
+    assert it.merged_sha == _git(repo, "rev-parse", "main")  # the landing, not the branch head
     # And the tree it borrowed is the caller's, so it is left exactly where it was.
     assert tree.is_dir() and _git(tree, "rev-parse", "--abbrev-ref", "HEAD") == "agent-work"
 
