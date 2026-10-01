@@ -125,6 +125,38 @@ def diff_for(
     return (d.out + "\n") if d.ok and d.out else "", f"{base}...{branch} ({chosen})"
 
 
+#: How often a running review says what it is still waiting for.
+PROGRESS_EVERY_S = 60
+
+
+def _lease_ticker(log, cfg, it) -> Callable[[], None] | None:
+    """A tick renewing the caller's lease on `it` every `lease.heartbeat_s`, or None.
+
+    A review on a reasoning model runs 20-40 minutes against a 30-minute lease, and the
+    caller is blocked in it: the lease expired mid-review, the agent's next commit was
+    refused, and `next` offered the item's files to another agent while its owner was
+    about to merge (bugs Bc6ec4fd40d, Bf0cccb8fb1). `gate run` already renewed; this is
+    the same keeper (`gates._lease_keeper`: only the HOLDER's lease, never a
+    bystander's), throttled because the review ticks more often than it must renew.
+    """
+    import time
+
+    from .gates import _lease_keeper
+
+    renew = _lease_keeper(log, cfg, it) if it else None
+    if renew is None:
+        return None
+    every = max(1, cfg.lease.heartbeat_s)
+    last = [time.time()]
+
+    def tick() -> None:
+        if time.time() - last[0] >= every * 0.9:  # ticks land on the beat, give or take
+            last[0] = time.time()
+            renew()
+
+    return tick
+
+
 def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     """Every configured reviewer, and which of them cannot satisfy the family rule."""
     from ..services import review as R
@@ -297,10 +329,21 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         )
 
     overrides = P.overrides_from(cfg)
+    keep_lease = _lease_ticker(log, cfg, it)
     results = []
     for r in revs:
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
-        res = R.review(r, diff, intent, context=context, repo=repo, prompt_overrides=overrides)
+        res = R.review(
+            r,
+            diff,
+            intent,
+            context=context,
+            repo=repo,
+            prompt_overrides=overrides,
+            on_progress=say,
+            on_tick=keep_lease,
+            tick_s=min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s)),
+        )
         results.append(res)
         say(
             f"  {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
