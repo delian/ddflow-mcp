@@ -719,8 +719,39 @@ class Adoption:
     image: str = ""
 
 
-def setup(repo: Path, plan: Adoption | None = None, *, agent: str = "") -> O.Outcome:
+def files_tree(repo: Path, called_from: Path | None) -> Path:
+    """Where `adopt` writes the files meant to be COMMITTED: the caller's own tree.
+
+    `repo` is the primary checkout (`repo_root`), which is right for the shared event log
+    and the hooks, and wrong for files that reach the project through the caller's
+    branch: from a linked worktree they dirtied the primary and left that branch with
+    nothing (bug Bfeb62112d9). A `called_from` outside this repository is not a tree of it.
+    """
+    from ..infra import worktree as W
+
+    if called_from is None:
+        return Path(repo)
+    top = W.git(called_from, "rev-parse", "--show-toplevel")
+    if not top.ok or not top.out:
+        return Path(repo)
+    try:
+        same = W.repo_root(called_from).resolve() == Path(repo).resolve()
+    except W.GitError:
+        same = False
+    return Path(top.out).resolve() if same else Path(repo)
+
+
+def setup(
+    repo: Path,
+    plan: Adoption | None = None,
+    *,
+    agent: str = "",
+    called_from: Path | None = None,
+) -> O.Outcome:
     """Adopt ddflow into a project: drivers, the agent rules sections, the hook.
+
+    The files are written into the tree the caller stands in (`files_tree`): a linked
+    worktree's own checkout, committed through its branch, never the shared primary.
 
     Names the companion gap at adoption time. A project that adopts ddflow and stops has a
     `standards` gate with nothing behind it and a `rules` gate reading no memory — and
@@ -733,9 +764,10 @@ def setup(repo: Path, plan: Adoption | None = None, *, agent: str = "") -> O.Out
     plan = plan or Adoption()
     _log, cfg, _st = _load(repo, agent)
     agents = csv_list(plan.agents) or list(AGENT_TARGETS)
+    tree = files_tree(repo, called_from)
     try:
         actions = adopt(
-            repo,
+            tree,
             agents,
             docs_dir=plan.docs,
             install_hooks=cfg.enforce.install_hooks_on_setup,
@@ -759,6 +791,7 @@ def setup(repo: Path, plan: Adoption | None = None, *, agent: str = "") -> O.Out
     data = {
         "actions": actions,
         "agents": agents,
+        "tree": str(tree),
         "companions_ready": ready,
         "companions_absent": absent,
         "text": "",
