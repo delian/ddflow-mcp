@@ -20,7 +20,6 @@ committed corpus is one, so a hand edit that reintroduces an address fails.
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import json
 import re
 import socket
@@ -33,6 +32,7 @@ sys.path.insert(0, str(ROOT))
 
 from ddflow.config import Config  # noqa: E402
 from ddflow.services.sessions import redact as redact_secrets  # noqa: E402
+from tests.test_repo_is_generic import _IPV4, _IPV6, _private_addresses  # noqa: E402
 
 CORPUS = HERE / "corpus.jsonl"
 PAIRS = HERE / "pairs.jsonl"
@@ -41,8 +41,6 @@ LAN = "<lan-address>"
 MODEL = "<served-model>"
 HOST = "<host>"
 
-_IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?!\d|\.\d)")
-_IPV6 = re.compile(r"(?<![\w:])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])")
 #: A versioned model name, with or without its org: `org/Name-4.1-x`, `Name3.8-27B`. The
 #: family word alone ("the LAN Qwen") is generic and stays; the served name goes.
 MODEL_NAME = re.compile(
@@ -53,22 +51,14 @@ MODEL_NAME = re.compile(
 HOME = re.compile(r"/home/(?!user/)[^/\s'\"`]+/")
 
 
-def _private(raw: str, kind: type) -> bool:
-    try:
-        ip = kind(raw)
-    except ValueError:
-        return False
-    if ip.is_loopback or ip.is_unspecified or (ip.version == 4 and ip.packed[0] == 0):
-        return False
-    return ip.is_private or ip.is_link_local
-
-
 def redact(text: str, *, host: str | None = None) -> str:
     """The fixture's redaction: deterministic, idempotent, and the same on every machine
     except for the host name it is told (default: this machine's)."""
     out, _ = redact_secrets(text, Config())
-    for rx, kind in ((_IPV4, ipaddress.IPv4Address), (_IPV6, ipaddress.IPv6Address)):
-        out = rx.sub(lambda m, k=kind: LAN if _private(m.group(1), k) else m.group(0), out)
+    # The repository's own address check decides what is private, so the fixture and
+    # test_repo_is_generic can never disagree about an address.
+    for rx in (_IPV4, _IPV6):
+        out = rx.sub(lambda m: LAN if _private_addresses(m.group(1)) else m.group(0), out)
     out = MODEL_NAME.sub(MODEL, out)
     host = socket.gethostname().split(".")[0] if host is None else host
     if len(host) >= 3:
