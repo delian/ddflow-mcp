@@ -290,3 +290,11 @@ def test_a_driver_on_one_covered_file_does_not_stand_for_the_rest(repo):
         f.write("docs/README.md merge=ours\n")
     assert run_cli(repo, "config", "--set", "lease.append_only_globs", '["docs/*.md"]')[0] == 0
     assert "docs/*.md merge=union" in _attributes(repo)
+
+
+def test_a_bracket_as_the_first_class_member_is_a_member():
+    from ddflow.core.schedule import is_shared
+
+    assert is_shared("a].txt", ["a[]].txt"])
+    assert is_shared("ax.txt", ["a[^]].txt"]) and not is_shared("a].txt", ["a[^]].txt"])
+    assert not is_shared("x", ["[^]"])  # unclosed: literal, and no crash

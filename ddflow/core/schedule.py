@@ -182,6 +182,20 @@ def shared_globs(cfg: Config) -> list[str]:
     return [*lease.shared_globs, *lease.append_only_globs]
 
 
+def _class_end(pat: str, i: int) -> int:
+    """Index of the `]` closing the class opened at ``pat[i]``, or -1 (then `[` is literal).
+
+    A `]` right after `[`, `[!` or `[^` is a MEMBER, as in git and Python: `[]]`, `[^]]`.
+    Taken as the closer, it left `[^]` -- an invalid regex that crashed a claim.
+    """
+    k = i + 1
+    if k < len(pat) and pat[k] in "!^":
+        k += 1
+    if k < len(pat) and pat[k] == "]":
+        k += 1
+    return pat.find("]", k)
+
+
 @functools.lru_cache(maxsize=256)
 def _gitattributes_re(pattern: str) -> re.Pattern[str]:
     """``pattern`` as git matches it in `.gitattributes` (gitignore rules).
@@ -211,8 +225,8 @@ def _gitattributes_re(pattern: str) -> re.Pattern[str]:
         elif pat[i] == "?":
             out.append("[^/]")
             i += 1
-        elif pat[i] == "[" and "]" in pat[i + 1 :]:
-            j = pat.index("]", i + 1)
+        elif pat[i] == "[" and _class_end(pat, i) != -1:
+            j = _class_end(pat, i)
             body = pat[i + 1 : j].replace("\\", "\\\\")
             # git negates with `[!...]` as well as `[^...]`; Python knows only `^`.
             if body.startswith("!"):
@@ -232,7 +246,13 @@ def is_shared(glob: str, shared: list[str]) -> bool:
     still claims the rest of `docs/`, so it stays exclusive. Matched as git matches the
     `.gitattributes` line (`_gitattributes_re`), so "shared" and "merged with union" agree.
     """
-    return any(glob == s or _gitattributes_re(s).match(glob) for s in shared)
+    for s in shared:
+        try:
+            if glob == s or _gitattributes_re(s).match(glob):
+                return True
+        except re.error:
+            continue  # a pattern git would read and we cannot: equality only, never a crash
+    return False
 
 
 def conflicts(
