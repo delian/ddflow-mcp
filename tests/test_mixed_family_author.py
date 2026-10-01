@@ -150,3 +150,29 @@ def test_a_malformed_router_is_refused_not_dropped(bad):
     nonsense families that matches no reviewer, and so passes every one."""
     with pytest.raises(ValueError, match=r"agent\.routers"):
         Config.check(bad)
+
+
+@pytest.mark.parametrize(
+    "routers",
+    [
+        {"hydra": ["anthropic"], "hydrafusion": ["openai", "anthropic"]},
+        {"hydrafusion": ["anthropic"], "hydrafusion-pro": ["openai"]},
+        {"hydrafusion-pro": ["openai"], "hydrafusion": ["anthropic"]},
+    ],
+)
+def test_every_matching_router_contributes_to_the_set(log, cfg, gd, routers):
+    """Bug B15af2d6420: first-match-wins on key order returned ONE matching entry, so a
+    shorter needle listed first hid the longer one's members, and an openai reviewer
+    passed as independent of a router that draws on openai. The set is the union of
+    every matching entry, whatever the key order."""
+    cfg.agent.routers = routers
+    ok, why = _check(log, cfg, gd, "hydrafusion-pro", {"model": "gpt-6"})
+    assert not ok and "openai" in why, why
+
+
+def test_an_empty_matching_router_keeps_the_union_unknown(log, cfg, gd):
+    """An entry with no members says "set unknown"; another match's members must not
+    stand in for it as if they were the whole set."""
+    cfg.agent.routers = {"hydra": ["anthropic"], "hydrafusion": []}
+    ok, why = _check(log, cfg, gd, "hydrafusion", _deepseek_review())
+    assert not ok and "no families listed" in why, why
