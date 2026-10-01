@@ -514,7 +514,6 @@ def test_no_claim_that_overlapped_another_is_ever_missing_from_the_contest(seed,
         for w, e, s, t in claims
         if any(w2 != w and s <= t2 and s2 <= t for w2, _e2, s2, t2 in claims)
     }
-    renewed = any(e.kind == "lease.renewed" for st in streams.values() for e in st)
     for _ in range(25):
         events = _interleave(rnd, streams)
         it = fold(events).items["T"]
