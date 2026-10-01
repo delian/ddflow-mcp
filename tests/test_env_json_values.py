@@ -44,3 +44,13 @@ def test_strings_still_load():
 def test_a_map_of_another_value_type_keeps_its_json_values():
     """critic: the string check is for string-valued maps only."""
     assert _coerce('{"core": 5}', "dict[str, int]") == {"core": 5}
+
+
+def test_a_nested_type_that_contains_the_string_spelling_is_not_a_string_container():
+    """rubber duck + critic: a substring test matched these."""
+    assert _coerce('[["a", "b"]]', "list[list[str]]") == [["a", "b"]]
+    assert _coerce('{"a": {"b": "c"}}', "dict[str, dict[str, str]]") == {"a": {"b": "c"}}
+    with pytest.raises(ValueError):
+        _coerce("[null]", "Optional[list[str]]")
+    with pytest.raises(ValueError):
+        _coerce('{"core": null}', "dict[str, str] | None")

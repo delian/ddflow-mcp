@@ -1417,7 +1417,7 @@ def _coerce(raw: Any, typ: Any) -> Any:
             # Refused, never `str()`-cast: `[null]` loaded as ["None"] (B7506c1124a).
             # Only where the elements are declared strings; a list of anything else
             # (`list[dict[str, str]]`) is returned as JSON gave it.
-            if "list[str]" not in ts.replace(" ", ""):
+            if not _is_exactly(ts, "list[str]"):
                 return parsed
             if bad := [x for x in parsed if not isinstance(x, str)]:
                 raise ValueError(
@@ -1428,6 +1428,18 @@ def _coerce(raw: Any, typ: Any) -> Any:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
     return raw
+
+
+def _is_exactly(ts: str, want: str) -> bool:
+    """Is the type spelling ``want`` itself, optionally wrapped as Optional or ``| None``?
+
+    Not a substring test: `list[list[str]]` and `dict[str, dict[str, str]]` CONTAIN
+    `list[str]` and `dict[str, str]`, and their elements are not strings (rubber duck,
+    critic).
+    """
+    t = ts.replace(" ", "")
+    w = want.replace(" ", "")
+    return t in (w, f"Optional[{w}]", f"{w}|None", f"None|{w}")
 
 
 def _outer_is_dict(ts: str) -> bool:
@@ -1462,7 +1474,7 @@ def _coerce_dict(raw: str, ts: str) -> dict[str, Any]:
             # (B7506c1124a). Keys are strings already: JSON object keys always are.
             # Only where the values are declared strings (critic): a map of anything
             # else is returned as JSON gave it.
-            if "dict[str,str]" not in ts.replace(" ", ""):
+            if not _is_exactly(ts, "dict[str, str]"):
                 return dict(parsed)
             if bad := [k for k, v in parsed.items() if not isinstance(v, str)]:
                 raise ValueError(
