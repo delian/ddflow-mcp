@@ -152,3 +152,17 @@ def test_the_hook_reads_ddflow_agent_from_the_environment(repo, cfg):
 
     assert "not covered" not in hook("owner")
     assert "ANOTHER agent" in hook("stranger")
+
+
+def test_a_lapsed_lease_matched_by_tree_alone_offers_takeover_too(repo, cfg, monkeypatch):
+    """Matched only by the tree, the committer may be someone sent to take the abandoned
+    work over, not its holder: the heartbeat is offered to the holder by name, and the
+    takeover alongside it -- never the bare presumption that this is the holder."""
+    tree = _setup(repo, cfg)
+    _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
+    monkeypatch.chdir(tree)
+    _code, msg = E.check_commit(repo, cfg, agent="stranger")
+    assert "If you are owner" in msg, msg
+    assert "ddflow --agent owner heartbeat T1" in msg, msg
+    assert "ddflow claim T1" in msg, msg
+    assert "Your lease" not in msg, msg

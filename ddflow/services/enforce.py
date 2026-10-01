@@ -959,18 +959,34 @@ def _counts_as_mine(repo: Path, lease: Lease, me: str, here: Path | None) -> boo
     return bool(here and leased_tree and leased_tree.resolve() == here)
 
 
-def _lapsed_lines(item_id: str, lease: Lease, now: float) -> list[str]:
-    """What to tell the holder whose lease on this work lapsed: when, and how to renew
-    it -- as its holder, since a heartbeat from the tree will not revive an expired one."""
+def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
+    """What to say about a lapsed lease on this work: when it lapsed, and how to renew
+    it -- as its holder, since a heartbeat from the tree will not revive an expired one.
+
+    Matched by the tree alone (the holder is not the identity this hook resolved), the
+    committer is USUALLY the holder under a derived name, but may be someone `recover`
+    sent to take the abandoned work over. Both readings are offered rather than telling
+    a newcomer to resurrect a claim its holder abandoned.
+    """
     idle = int((now - lease.renewed_at) // 60)
     ago = max(0, int((now - lease.renewed_at - lease.ttl_s) // 60))
-    return [
-        f"Your lease on {item_id} (held by {lease.holder}) LAPSED {ago} min ago: no",
+    whose = "Your lease" if lease.holder == me else "The lease"
+    lines = [
+        f"{whose} on {item_id} (held by {lease.holder}) LAPSED {ago} min ago: no",
         f"heartbeat for {idle} min, past its {lease.ttl_s // 60} min TTL, and nobody has taken",
-        "it over. Renew it, then commit again:",
-        f"    ddflow --agent {lease.holder} heartbeat {item_id}",
-        "",
+        "it over.",
     ]
+    if lease.holder == me:
+        lines += ["Renew it, then commit again:"]
+    else:
+        lines += [f"This is that item's tree. If you are {lease.holder}, renew it, then commit:"]
+    lines.append(f"    ddflow --agent {lease.holder} heartbeat {item_id}")
+    if lease.holder != me:
+        lines += [
+            f"If you are not {lease.holder}, the work was abandoned; take it over instead:",
+            f"    ddflow claim {item_id}",
+        ]
+    return [*lines, ""]
 
 
 def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
@@ -1043,7 +1059,7 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
             "",
         ]
     for item_id, lease in lapsed:
-        lines += _lapsed_lines(item_id, lease, now)
+        lines += _lapsed_lines(item_id, lease, now, me)
     held = ", ".join(mine) if mine else "(no live lease)"
     if lapsed and not mine:
         held = "nothing live (the lease above lapsed)"
