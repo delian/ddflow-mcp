@@ -347,8 +347,10 @@ def test_releases_in_any_position_leave_the_contest_exact(seed):
         assert on_record == set(left), (claims, seq)
         assert _holders(it.lease_contest) == sorted(w for w in left if partners[w]), (claims, seq)
         assert it.lease is not None or not it.lease_contest, (claims, seq)
-        for e in it.displaced:  # a window on record is one the claim really had
-            assert (e["lease"]["acquired_at"], e["lease"]["ttl_s"]) == claims[e["holder"]]
+        for e in it.displaced:  # a window on record is one the claim really had: its
+            # own, or the fresh one a resolution started (since displaced by another)
+            got = (e["lease"]["acquired_at"], e["lease"]["ttl_s"])
+            assert got in (claims[e["holder"]], (at, claims[e["holder"]][1])), (claims, seq)
 
 
 _KEEP_FAR = {"X": (1000.0, 1000), "Y": (1900.0, 1000), "M": (150.0, 150), "K": (100.0, 100)}
@@ -637,7 +639,10 @@ def test_resolve_can_keep_the_holder_that_took_over_after_a_double_claim(
     assert it.lease_contest == [] and it.lease.holder == keep
     # The only history left is the kept claim's own window: every claim it met was
     # released, and a lapsed claim holds the item from the resolution on.
-    assert {e["holder"] for e in it.displaced} <= {keep}
+    assert [(e["holder"], e["lease"]["acquired_at"]) for e in it.displaced] == [
+        (keep, _TAKEN_OVER[keep][0])
+    ]
+    assert it.lease.acquired_at > _TAKEN_OVER["carol"][0], "a fresh window, not a stretch"
     assert not it.contest_summary()
 
 
@@ -756,3 +761,38 @@ def test_keeping_a_claim_still_live_extends_it_as_before():
     it, _kept, _rel = _resolved(_KEEP_FAR, tuple(_KEEP_FAR), "X", 1500.0)
     assert (it.lease.acquired_at, it.lease.renewed_at) == (1000.0, 1500.0)
     assert "X" not in {e["holder"] for e in it.displaced}
+
+
+def test_a_late_renewal_of_the_fresh_window_widens_it_not_the_original():
+    """Reviewer probe: once G has taken the item from D's fresh window, a renewal from D's
+    clone at 5040 belongs to the fresh window (its latest claim before then) -- the
+    original must not be stretched back over the gap."""
+    g = _ev("lease.acquired", "T", 40, "G", holder="G", at=5020.0, ttl_s=100)
+    renew = _ev("lease.renewed", "T", 41, "D", holder="D", at=5040.0)
+    it, _kept, _rel = _resolved(_GAP, ("A", "E", "C", "D"), "D", 5000.0, g, renew)
+    windows = {
+        e["lease"]["acquired_at"]: e["lease"]["renewed_at"]
+        for e in [*it.lease_contest, *it.displaced]
+        if e["holder"] == "D"
+    }
+    assert windows == {250.0: 250.0, 5000.0: 5040.0}, windows
+    assert "A" not in _holders(it.lease_contest)
+
+
+def test_keeping_a_claim_whose_expiry_was_recorded_gives_it_a_live_window():
+    """roborev: an expiry zeroed the claim's TTL, and the fresh window inherited 0 s --
+    the kept holder held nothing."""
+    exp = _ev("lease.expired", "T", 10, "op", holder="D")
+    it = _folded(_GAP, ("A", "E", "C", "D"), exp)
+    kept = next(h for h in it.lease_candidates() if h["holder"] == "D")
+    assert kept["lease"]["ttl_s"] == 0
+    res = Event(
+        "item.resolved", "T", {"kind": "task", "claim": kept, "at": 5000.0, "ttl_s": 900}, "op", 30
+    )
+    rel = [
+        _ev("lease.released", "T", 20 + i, "op", holder=h["holder"], event=h["event"])
+        for i, h in enumerate(it.lease_losers(kept))
+    ]
+    it = _folded(_GAP, ("A", "E", "C", "D"), exp, *rel, res)
+    assert it.lease.holder == "D" and it.lease.ttl_s == 900 and not it.lease.expired_at
+    assert not it.lease.expired(5100.0)

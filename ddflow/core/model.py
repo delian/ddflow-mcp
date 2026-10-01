@@ -833,9 +833,10 @@ def _clashing(claims: list[dict[str, Any]], claim: dict[str, Any]) -> list[dict[
 
 
 def _join(it: Item, claims: list[dict[str, Any]]) -> None:
-    """Add claims to the lease contest, once each. Keyed by the ACQUIRING EVENT, never by
-    holder name: one holder can hold an item twice (claimed, lost, claimed again), and
-    those are two claims that can each be contested. A claim already there keeps the
+    """Add claims to the lease contest, once each. Keyed by the claim WINDOW (`_key`: the
+    acquiring event, and the window's start), never by holder name: one holder can hold
+    an item twice (claimed, lost, claimed again), and those are two claims that can each
+    be contested; one claim kept by a resolution after it lapsed has two windows. A claim already there keeps the
     later evidence -- a renewal since it joined widens the window everything pairwise
     reads."""
     have = {_key(h): h for h in it.lease_contest}
@@ -930,8 +931,8 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
 
 def _known(it: Item) -> list[dict[str, Any]]:
     """Every claim the item still knows: each contested, each displaced, and the
-    displayed lease. A claim can sit in more than one list; `_clashing` and `_join` key
-    by acquiring event, so a duplicate changes nothing."""
+    displayed lease. A claim can sit in more than one list; `_clashing` skips its own
+    event and `_join` keys by window (`_key`), so a duplicate changes nothing."""
     return [
         *it.lease_contest,
         *({k: v for k, v in e.items() if k != "by"} for e in it.displaced),
@@ -1155,6 +1156,11 @@ def _h_resolved(st: State, ev: Event) -> None:
         lapsed = lease.renewed_at + lease.ttl_s < at
         if lapsed:
             lease.acquired_at = lease.renewed_at = at
+            # A recorded expiry zeroed the claim's TTL and marked it expired: the fresh
+            # window runs on the configured TTL the resolution carries (roborev).
+            lease.expired_at = ""
+            if lease.ttl_s <= 0:
+                lease.ttl_s = int(d.get("ttl_s") or 1800)
         else:
             lease.renewed_at = max(lease.renewed_at, at)
         # What the resolution did not release stays on the record: claims that still
