@@ -175,5 +175,9 @@ def test_a_title_that_merely_starts_like_an_id_is_not_one(tmp_path):
     (tmp_path / "docs" / "RESEARCH.md").write_text(
         "# Research\n\n## R2-D2 — droid protocol\n\nx\n\n## R2 — real entry\n\ny\n"
     )
-    ids = _ids(IM.plan_import(tmp_path), "research")
-    assert "R2" in ids and not any(i.startswith("R2-") for i in ids), ids
+    found = {f.title: f.ident for f in IM.plan_import(tmp_path).found if f.kind == "research"}
+    # Exactly one entry owns `R2`, the real one; the droid entry keeps a slug and its
+    # whole title -- a prefix match would have made it `R2` (or `R2-2`) titled `-D2 ...`.
+    assert found["R2 — real entry"] == "R2", found
+    assert found["R2-D2 — droid protocol"].startswith("R-r2-d2"), found
+    assert sorted(found.values()).count("R2") == 1, found
