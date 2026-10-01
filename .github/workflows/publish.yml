@@ -24,9 +24,11 @@
 #                 on main that refuses github-actions[bot] refuses the bump: allow the
 #                 bot to push, or no release gets past `gate`.
 #
-# `environment: release` on the jobs that publish is a deliberate control: point it at a
-# GitHub environment with required reviewers and a release waits for a human, without
-# any change here. If Docker Hub is one credential too many, delete that login step and
+# `environment: release` on the jobs that publish holds the Docker Hub secrets and is the
+# environment PyPI's trusted publisher is bound to. It has NO required reviewers (operator,
+# 2026-10-01: releases publish without a manual approval); adding reviewers to it in the
+# repository settings would make every release wait for a human again, with no change here.
+# If Docker Hub is one credential too many, delete that login step and
 # the two `docker.io/...` tags — ghcr.io alone still satisfies the OCI entries an IDE
 # marketplace needs, and server.json lists both so a client picks whichever resolves.
 name: publish
@@ -37,6 +39,8 @@ on:
     # Only a push that changes what ships releases. The wheel is `ddflow/` and the image is
     # built from it plus these files; a push of docs, tests or the ddflow event log changes
     # neither, and releasing it would mint a permanent PyPI version identical to the last.
+    # README.md is the exception, on purpose: it IS the PyPI page, and it carries the
+    # `mcp-name` line the MCP registry verifies -- so an edit to it releases.
     # (GitHub does not evaluate path filters for tag pushes, so `v*` below still fires.)
     paths:
       - "ddflow/**"
@@ -45,6 +49,8 @@ on:
       - "Dockerfile"
       - "docker-entrypoint.sh"
       - ".dockerignore"
+      - "README.md"            # the PyPI page -- and the line the MCP registry verifies
+      - "server.json"
     tags: ["v*"]               # an explicit tag publishes exactly that version, no bump
   workflow_dispatch:           # release now, by the same rule as a push
 
@@ -170,6 +176,14 @@ jobs:
         with:
           ref: ${{ needs.gate.outputs.sha }}
       - uses: astral-sh/setup-uv@v10.2.0
+      - name: Refuse a release the MCP registry would reject
+        # The registry verifies ownership of every package server.json lists: the PyPI
+        # README must carry `mcp-name: <server name>`, each image the
+        # `io.modelcontextprotocol.server.name` label. It checks the exact version, and a
+        # PyPI version cannot be replaced -- so a miss found by `mcp-publisher` (publish
+        # #36) costs a version number. Run first, in `verify`, which every publishing job
+        # needs; the test file is the one definition of the check.
+        run: uv run pytest tests/test_registry_ownership.py -q
       - name: Test before publishing
         run: uv run pytest tests/ -q --timeout=420 -n auto
       - name: Scenarios before publishing
