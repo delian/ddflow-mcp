@@ -160,15 +160,20 @@ def cmd_config(a, c: Ctx) -> int:
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
+    # What `[lease] append_only_globs` just made ddflow write (D-shared-globs): a tracked
+    # file changed, and the operator commits it with the config.
+    added = "".join(
+        f"\n  added to .gitattributes: {ln}" for ln in out.data.get("gitattributes_added", [])
+    )
     if a.set:
         where = f"   (in {out.data['path']}, not committed)" if out.data.get("local") else ""
         c.out(
-            f"{out.data['key']} = {out.data['literal']}{where}",
-            out.body(("key", "value", "path", "local")),
+            f"{out.data['key']} = {out.data['literal']}{where}{added}",
+            out.body(("key", "value", "path", "local", "gitattributes_added")),
         )
         return OK
     if a.append_toml:
-        c.out(f"appended to {out.data['path']}", out.body(("path",)))
+        c.out(f"appended to {out.data['path']}{added}", out.body(("path", "gitattributes_added")))
         return OK
     if c.json:
         print(json.dumps(out.body("rows"), indent=2, default=str))
