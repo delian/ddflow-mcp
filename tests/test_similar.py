@@ -285,3 +285,31 @@ def test_an_unknown_dedupe_knob_from_a_newer_tree_is_skipped_not_fatal(tmp_path)
     )
     cfg = Config.load(tmp_path)
     assert cfg.dedupe.ask_threshold == 0.6 and "dedupe.future_knob" in cfg.unknown_knobs
+
+
+def test_no_hit_scores_zero():
+    """No returned hit scores 0.0 (critic finding). The critic's premise -- a ubiquitous
+    term weighing ~1e-4 -- is false: the smoothed IDF is log((1+n)/(1+df)) + 1 >= 1, so
+    this passes on the unfixed code too; it pins the contract, the rounding guard is
+    defensive."""
+    recs = [
+        {"id": f"R{i}", "kind": "bug", "title": "", "body": f"common uniq{i} x{i}y"}
+        for i in range(3000)
+    ]
+    recs += [
+        {"id": f"Q{i}", "kind": "bug", "title": "", "body": f"other{i} stuff{i}"} for i in range(5)
+    ]
+    hits = similar.build(recs).query({"kind": "bug", "title": "common", "body": ""}, limit=None)
+    assert hits and all(s > 0.0 for _, s in hits)
+
+
+def test_rebuilding_twice_works_and_replaces_the_projection(repo, log, cfg):
+    """rubber-duck finding, refuted: rebuild writes a fresh database and swaps it in, so
+    the similarity tables are never inserted into twice."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "about claims"})
+    st = Store(repo, cfg)
+    st.rebuild(log)
+    log.append("task.added", "T2", {"title": "another thing", "body": "about claims"})
+    st.rebuild(log)
+    with similar.open_store(st) as idx:
+        assert idx.ids() == {"T1", "T2"}
