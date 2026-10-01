@@ -122,6 +122,11 @@ class ItemWork:
     first_seen: str = ""
     last_touched: str = ""
 
+    def add_commit(self, sha: str) -> None:
+        """Record a commit once: merge and complete both name the landing's sha."""
+        if sha not in self.commits:
+            self.commits.append(sha)
+
     @property
     def total_seconds(self) -> float:
         return sum(a.seconds for a in self.attempts)
@@ -223,7 +228,7 @@ def _absorb(ev: Event, rec, open_attempt: dict[str, Attempt]) -> None:
             att.ended_at = att.ended_at or _epoch(ev.ts)
             att.ended_by = "completed"
         if d.get("sha"):
-            r.commits.append(d["sha"])
+            r.add_commit(d["sha"])
     elif kind == "item.abandoned":
         rec(subj).last_touched = ev.ts
         att = open_attempt.pop(subj, None)
@@ -231,7 +236,7 @@ def _absorb(ev: Event, rec, open_attempt: dict[str, Attempt]) -> None:
             att.ended_at = att.ended_at or _epoch(ev.ts)
             att.ended_by = "abandoned"
     elif kind == "worktree.merged" and d.get("sha"):
-        rec(subj).commits.append(d["sha"])
+        rec(subj).add_commit(d["sha"])
 
 
 def work(events: list[Event], state: State) -> dict[str, ItemWork]:
