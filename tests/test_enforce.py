@@ -235,8 +235,15 @@ def test_the_default_identity_is_stable_across_processes(repo):
     assert str(os.getpid()) not in a, "the pid leaked into the identity"
 
 
-def test_a_claimed_commit_succeeds_with_no_agent_configured_anywhere(repo):
-    """The out-of-box experience. No --agent, no DDFLOW_AGENT, nothing."""
+def test_a_claimed_commit_succeeds_with_no_agent_configured_anywhere(repo, monkeypatch):
+    """The out-of-box experience. No --agent, no DDFLOW_AGENT, nothing.
+
+    Nothing means the CLAIM too: `run_cli` inherits this process's environment, so a
+    DDFLOW_AGENT exported by whoever runs pytest made the claim that agent's while the
+    commit below (env scrubbed) was the derived identity's, and the test failed for
+    every agent following the driver's advice to export it (Bf1fc9823fe).
+    """
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
     run_cli(repo, "adopt", "--agents", "claude")
     run_cli(repo, "config", "--set", "enforce.commit_without_lease", "block")
     (repo / "src").mkdir(exist_ok=True)
