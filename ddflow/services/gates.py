@@ -432,8 +432,13 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
 def stale_evidence(
     state: State, cfg: Config, item_id: str, cwd: Path, *, landed: str = ""
 ) -> list[str]:
-    """Gates whose evidence describes a tree that has since changed. See
-    `stale_evidence_detail`, which also says what differs."""
+    """Gates whose evidence is KNOWN to describe a tree that has since changed.
+
+    Stale only: a gate whose evidence could not be compared at all is NOT in this list,
+    and an empty list therefore does not mean "all evidence is fresh". A caller that
+    needs that distinction -- `complete` does -- reads `stale_evidence_detail`, where
+    such a gate is a note with ``unverified`` set.
+    """
     notes = stale_evidence_detail(state, cfg, item_id, cwd, landed=landed)
     return [n.gate for n in notes if not n.unverified]
 
