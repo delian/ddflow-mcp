@@ -219,9 +219,10 @@ def test_a_retry_that_truncates_again_stays_unreviewed_and_says_why(fake):
     assert len(tries) == 2, "an unsplittable truncated chunk is retried whole, once"
 
 
-def test_halves_that_would_lose_a_file_are_not_used(monkeypatch):
-    """A file section with no hunk, larger than half the chunk, is dropped by split_diff:
-    halves without it must not stand in for the chunk."""
+def test_halves_never_lose_a_file(monkeypatch):
+    """A file section with no hunk, larger than half the chunk, used to be dropped by
+    split_diff, so halves without it could stand in for the chunk. split_diff now keeps
+    it (B779270c994's fix); whatever the retry sends, every file goes with it."""
     big = "diff --git a/big.bin b/big.bin\nrename from x\nrename to y\n" + "similarity 9\n" * 40
     chunk = _two_hunks("HALF-A", "HALF-B") + big
     seen: list[str] = []
@@ -234,7 +235,11 @@ def test_halves_that_would_lose_a_file_are_not_used(monkeypatch):
     out = R._retry_truncated(
         Reviewer(name="r"), "s", [chunk], [("", "TRUNCATED: x")], lambda d, i: d, 0.0
     )
-    assert seen == [chunk], "the chunk should have been retried whole"
+    assert len(seen) > 1, "the chunk was retried whole, not in halves"
+    for marker in ("diff --git a/big.bin", "HALF-A", "HALF-B"):
+        assert any(marker in part for part in seen), f"the retry lost {marker!r}"
+    (big_part,) = [part for part in seen if "diff --git a/big.bin" in part]
+    assert "similarity 9" in big_part, "big.bin's header went without its body"
     assert out[0][1] == ""
 
 
