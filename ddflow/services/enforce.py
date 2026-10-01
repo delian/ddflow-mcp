@@ -1041,14 +1041,15 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     # not taken over. Invisible above, so the message said "(no live lease)" and "claim
     # the work" to the holder committing in its own tree, and the lapse was misread as
     # an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
-    # Only for paths nobody else holds now: reviving it over a live lease's paths would
-    # be the very race the STOP text warns against.
-    free = [p for p in uncovered if p not in stolen]
+    # Only one no other agent's live lease overlaps ANYWHERE: a heartbeat revives all its
+    # globs, and reviving them over someone's live paths is the very race the STOP
+    # text warns against.
     lapsed = [
         (item_id, lease)
         for item_id, lease in state.expired_leases(now, cfg.lease.grace_s).items()
         if _counts_as_mine(repo, lease, me, here)
-        and any(globs_overlap(p, g) for p in free for g in lease.globs)
+        and any(globs_overlap(p, g) for p in uncovered for g in lease.globs)
+        and not any(globs_overlap(g, o) for g in lease.globs for o in others)
     ]
 
     lines = [
