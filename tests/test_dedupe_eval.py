@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import collections
 import importlib
-import ipaddress
 import itertools
 import json
 import math
@@ -45,6 +44,8 @@ import sys
 from pathlib import Path
 
 import pytest
+
+from tests.test_repo_is_generic import _private_addresses
 
 FIXTURE = Path(__file__).resolve().parent / "fixtures" / "dedupe"
 
@@ -114,24 +115,6 @@ def test_duplicates_are_transitive():
     for a, b, c in itertools.permutations(sorted(nodes), 3):
         if frozenset((a, b)) in dup and frozenset((b, c)) in dup:
             assert frozenset((a, c)) in dup, f"{a}~{b}~{c} but {a}~{c} is not labelled"
-
-
-def _private_addresses(text: str) -> set[str]:
-    found = set()
-    v4 = re.findall(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?!\d|\.\d)", text)
-    v6 = re.findall(r"(?<![\w:])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])", text)
-    for raw, kind in [(x, ipaddress.IPv4Address) for x in v4] + [
-        (x, ipaddress.IPv6Address) for x in v6
-    ]:
-        try:
-            ip = kind(raw)
-        except ValueError:
-            continue
-        if ip.is_loopback or ip.is_unspecified or (ip.version == 4 and ip.packed[0] == 0):
-            continue
-        if ip.is_private or ip.is_link_local:
-            found.add(raw)
-    return found
 
 
 def test_the_fixture_is_redacted():
