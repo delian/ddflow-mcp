@@ -189,6 +189,10 @@ TOOLS: dict[str, dict[str, Any]] = {
         # which repo: adoption turns on whether the caller was already standing in a
         # worktree. The dispatcher passes it only to tools that ask.
         "wants_called_from": True,
+        # ...and only for the connection's OWN identity. A subagent naming itself with
+        # `as_agent` is not standing in the tree the connection was started in -- that
+        # is its parent's -- so it must not adopt it (B7c7a0d9222).
+        "adopts_callers_tree": True,
     },
     "ddflow_heartbeat": {
         "description": (
@@ -2586,6 +2590,18 @@ class Server:
         self._calls_since_footer = 0
         self._last_footer_at = 0.0
 
+    def _someone_else(self, per_call: str) -> bool:
+        """Does a per-call `as_agent` name an agent OTHER than this connection's own?
+
+        The connection's own identity is the declared one, else the derived default --
+        the same answer `ddflow_identify` reports. Naming it again per call is the same
+        agent; naming anyone else is a subagent riding this connection.
+        """
+        if not per_call:
+            return False
+        own = self.agent or _default_agent(self.repo)[0]
+        return per_call != own
+
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method = msg.get("method", "")
         mid = msg.get("id")
@@ -2667,6 +2683,7 @@ class Server:
             # api lambda has to know it exists. Validated with the same rule as a
             # declaration: it becomes a log shard filename either way.
             agent = self.agent
+            per_call = ""  # the `as_agent` this call named, if any
             if AS_AGENT in args:
                 args = dict(args)
                 want = args.pop(AS_AGENT)
@@ -2682,6 +2699,7 @@ class Server:
                             error=True,
                         ),
                     )
+                per_call = want
                 agent = want or agent
             # The typed path, when this tool has one. No argv, no re-parsing, no
             # scraping stdout, and no swapping process-global streams -- which is what
@@ -2734,7 +2752,15 @@ class Server:
                     # primary loses the only fact that says so. `main()` computed it and
                     # discarded it, which is why adoption was unreachable from MCP.
                     if spec.get("wants_called_from"):
-                        result = spec["api"](self.repo, args, agent, called_from=self.called_from)
+                        where = self.called_from
+                        if spec.get("adopts_callers_tree") and self._someone_else(per_call):
+                            # Where the connection stands is where the CONNECTION's
+                            # identity works. A subagent sharing it (Claude Code's do)
+                            # adopted its parent's harness tree and branch, and the next
+                            # subagent was refused as "already bound". Asked from the
+                            # primary, it gets a tree of its own -- as the CLI does.
+                            where = self.repo
+                        result = spec["api"](self.repo, args, agent, called_from=where)
                     else:
                         result = spec["api"](self.repo, args, agent)
                 except (KeyError, TypeError, ValueError) as exc:
