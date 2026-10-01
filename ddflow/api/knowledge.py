@@ -513,15 +513,25 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
 
 
 def _looks_like_several(entry: str) -> bool:
-    """A node id followed, after whitespace, by another test path: tests joined by
-    spaces, not one test (`a.py::t1 a.py::t2`, `a.py::t[1] a.py::t2`).
+    """A node id followed, after whitespace OUTSIDE its `[...]`, by another test path:
+    tests joined by spaces, not one test (`a.py::t1 a.py::t2`, `a.py::t[1] a.py::t2`).
 
-    Asked of a node id whose path has no whitespace (a command never gets here). Decided
-    by what follows the space, not by stripping `[...]`: a parameter value may itself
-    hold `]` and a space (`t[x] y]`), and that is still one test.
+    Asked of a node id whose path has no whitespace (a command never gets here). Inside
+    the brackets anything goes -- a parameter id may hold spaces, `::` and `.py`
+    (`t[python foo.py -v]`, `t[a b::c]`) -- and a value may hold `]` itself (`t[x] y]`),
+    so only a following token that starts like a test PATH counts. A bare trailing word
+    is not refused: the permissive side, since refusing a real test locks the bug open.
     """
-    _first, *rest = entry.split()
-    return any("::" in tok or tok.endswith(".py") for tok in rest)
+    depth, tokens, cur = 0, [], []
+    for ch in entry:
+        if ch.isspace() and depth == 0:
+            tokens.append("".join(cur))
+            cur = []
+            continue
+        depth = max(0, depth + {"[": 1, "]": -1}.get(ch, 0))
+        cur.append(ch)
+    tokens.append("".join(cur))
+    return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
 
 
 def _split_outside_brackets(spec: str) -> list[str]:
