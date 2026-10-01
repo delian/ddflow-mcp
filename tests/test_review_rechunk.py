@@ -174,3 +174,20 @@ def test_a_template_syntax_error_is_reported_not_raised(tmp_path):
         assert "Unexpected end of template" in str(exc)
     else:
         raise AssertionError("a broken template rendered")
+
+
+def test_the_cli_says_why_a_rechunk_was_refused(repo, tmp_path):
+    """roborev 991: exit 3 with nothing on stdout or stderr."""
+    _setup(repo, tmp_path, THREE)
+    code, out, err = run_cli(repo, "review", "T1", "--gate", "critic", "--chunk", "1")
+    assert code == REFUSED and "run the full review first" in out + err, (out, err)
+
+
+def test_a_merge_keeps_the_earlier_off_contract_count(repo, tmp_path):
+    """roborev 991: the merged coverage dropped '1 off-contract' for a chunk still lost."""
+    _setup(repo, tmp_path, {**THREE, "a.py": "x = 1  # FINDME"})
+    api.review(repo, gate="critic", item="T1")
+    assert "1 off-contract" in _gate(repo).evidence["coverage"]
+    (finding,) = _gate(repo).evidence["chunk_findings"]
+    api.review(repo, gate="critic", item="T1", chunks=[finding["chunk"]])
+    assert "1 off-contract" in _gate(repo).evidence["coverage"], _gate(repo).evidence

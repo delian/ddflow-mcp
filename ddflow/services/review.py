@@ -1034,6 +1034,11 @@ def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | No
     return None
 
 
+#: The reasons `_absorb_chunk` gives a reply that is not a review.
+EMPTY_COMPLETION = "empty completion"
+OFF_CONTRACT = "came back OFF CONTRACT:"
+
+
 def _absorb_chunk(
     res: ReviewResult,
     index: int,
@@ -1060,16 +1065,13 @@ def _absorb_chunk(
         return None
     if not content:
         res.chunks_off_contract += 1
-        lost("empty completion")
+        lost(EMPTY_COMPLETION)
         return None
     all_raw.append(content)
     findings, on_contract = parse(content)
     if not on_contract:
         res.chunks_off_contract += 1
-        lost(
-            f"came back OFF CONTRACT: {len(content)} chars with no STATUS: block. "
-            f"Not counted as reviewed."
-        )
+        lost(f"{OFF_CONTRACT} {len(content)} chars with no STATUS: block. Not counted as reviewed.")
         return None
     res.chunks_reviewed += 1
     res.reviewed.append(index)
@@ -1550,6 +1552,13 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
         [u for u in prior.get("unreviewed", []) if int(u.get("chunk", 0)) not in again | kept]
         + res.unreviewed,
         key=lambda u: u["chunk"],
+    )
+    # Off-contract chunks are among the unreviewed, by the reason `_absorb_chunk` gives
+    # them; counted again so the merged coverage does not drop the earlier ones.
+    res.chunks_off_contract = sum(
+        1
+        for u in res.unreviewed
+        if u["reason"] == EMPTY_COMPLETION or u["reason"].startswith(OFF_CONTRACT)
     )
     res.reason = ""
     _settle(res)
