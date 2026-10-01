@@ -201,6 +201,14 @@ def test_a_504_that_committed_anyway_is_success_without_republishing(tmp_path):
     assert any(path in g for g in r["gets"]), r["gets"]
 
 
+def test_a_504_that_committed_on_the_last_attempt_is_success(tmp_path):
+    # No attempt follows the last one, so the registry must be asked once more.
+    n = len(_delays()) + 1
+    proc, r = _run(tmp_path, " ".join(["504"] * (n - 1) + ["504-late"]))
+    assert proc.returncode == 0, r["out"]
+    assert r["publishes"] == n and "::error::" not in r["out"]
+
+
 def test_an_already_listed_version_is_not_published_again(tmp_path):
     # A re-run after a 504 that hid a commit.
     proc, r = _run(tmp_path, "bad", listed=True)
