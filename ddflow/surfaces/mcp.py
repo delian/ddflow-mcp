@@ -1797,10 +1797,14 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             )
         },
-        "api": lambda repo, a, agent: _api().adopt_project(
+        # Where the server stands decides where the committed files go: a linked
+        # worktree's own checkout, never the shared primary (bug B1e7ad10c6c).
+        "wants_called_from": True,
+        "api": lambda repo, a, agent, called_from=None: _api().adopt_project(
             repo,
             _api().Adoption(agents=a.get("agents", "") or ""),
             agent=agent,
+            called_from=called_from,
         ),
         # PROSE: a checklist of what it wrote and what to do next.
         "payload": "text",
