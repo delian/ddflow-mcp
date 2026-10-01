@@ -111,3 +111,23 @@ def test_a_needed_phase_a_person_reopened_is_left_alone_by_a_plain_re_run(repo, 
     EventLog(repo, "operator").append("item.unblocked", "P5", {"kind": "phase"})
     run_cli(repo, "import", "--apply")
     assert _state(repo).items["P5"].state == OPEN
+
+
+def test_a_needed_phase_with_open_work_already_queued_is_not_completed(repo, monkeypatch):
+    """P5 imported empty, then an open task added under it and imported: a plain re-run
+    must read the queued open child and leave P5 open (critic's interleaving)."""
+    from ddflow.api.operations import import_project
+    from ddflow.services import importer as IM
+
+    _repo(repo)
+    monkeypatch.setattr(IM, "_settle_needed_phases", lambda *a, **k: None, raising=False)
+    import_project(repo, apply=True)
+    monkeypatch.undo()
+    (repo / "docs" / "todo.md").write_text(
+        PLAN.replace("- [x] **P5.B** — valves", "- [x] **P5.B** — valves\n- [ ] **P5.C** — taps")
+    )
+    run_cli(repo, "import", "--apply")  # P5.C now open in the queue under P5
+    st = _state(repo)
+    assert st.items["P5.C"].state == OPEN and st.items["P5"].state == OPEN
+    run_cli(repo, "import", "--apply")  # no source change: P5.C is skipped as known
+    assert _state(repo).items["P5"].state == OPEN
