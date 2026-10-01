@@ -1042,6 +1042,9 @@ def complete(
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
     # CLI and MCP default alike -- MCP's `clientInfo` names the harness, not a model.
     model = model or _session_model(st, log.agent_id)
+    # No --sha: the commit `merge` recorded is the landing (the fold keeps it either
+    # way), so report it rather than an empty string (B9f8019c521).
+    sha = sha or it.merged_sha
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
     base: dict[str, Any] = {
         "id": item,
@@ -1233,9 +1236,22 @@ def merge(
     model: str = "",
     branch: str = "",
     called_from: Path | None = None,
+    shell_cwd: Path | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """Land an item's branch. The most consequential action in the package.
+
+    ``sha`` in the result and in `worktree.merged` is the commit the base points at
+    after the landing -- the merge commit, or the branch head on a fast-forward -- as
+    the PR path records the forge's merge commit. It used to be the branch's head
+    (B9f8019c521): a caller citing the merge cited a commit that is not the landing,
+    and under a squash strategy is not on the base at all. That head is
+    ``branch_head``.
+
+    The item's tree is NOT removed when the caller stands in it (``called_from`` or
+    ``shell_cwd``, the CLI process's own directory): deleting a shell's working
+    directory makes its next `pwd` fail, and a harness that runs one after every
+    command reported the landed merge as a failure (B1172da8c35).
 
     With `[flow].integration = "pr"` landing is a person's decision, so this opens (or
     updates) the request instead and parks the item in REVIEW; `pr sync` finishes it.
@@ -1304,7 +1320,7 @@ def merge(
     bad = F.problems(cfg)
     if bad:
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
-    sha = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
+    branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
     if not r.ok:
@@ -1315,15 +1331,20 @@ def merge(
             reason=r.err or r.out,
         )
         return out
+    # What the base now points at: the landing. Falls back to the branch head only if
+    # the base cannot be read back, which a merge that just succeeded makes unlikely.
+    landed_after = W.rev(repo, wt.base)
+    sha = landed_after or branch_head
     log.append(
         "worktree.merged",
         item,
         {
             "sha": sha,
+            "branch_head": branch_head,
             "branch": wt.branch,
             # The target's range this merge added -- what a cherry-pick port re-applies.
             "landed_before": landed_before,
-            "landed_after": W.rev(repo, wt.base),
+            "landed_after": landed_after,
             # Landed from a branch the item does not own (claimed --no-worktree).
             **({"borrowed": True, "outside_globs": outside} if borrowed else {}),
         },
@@ -1342,24 +1363,12 @@ def merge(
         item,
         "merge",
         "passed",
-        evidence={"sha": sha, "branch": wt.branch},
+        evidence={"sha": sha, "branch_head": branch_head, "branch": wt.branch},
         gates=G.load_gates(repo, cfg),
     )
-    # NEVER remove an ADOPTED tree -- see the module docstring. Nor a borrowed one: it
-    # is the caller's, or whoever's has that branch checked out.
-    kept_reason = ""
-    removed_tree = False
-    if borrowed:
-        kept_reason = f"no worktree of its own: {wt.branch!r} was landed, no tree touched."
-    elif it.adopted:
-        kept_reason = f"worktree {wt.path} kept: adopted, not created by ddflow."
-    elif cfg.worktree.remove_on_merge and not keep:
-        rr = W.remove(repo, cfg, wt)
-        if rr.ok:
-            log.append("worktree.removed", item, {"path": str(wt.path)})
-            removed_tree = True
-        else:
-            kept_reason = rr.err
+    removed_tree, kept_reason = _dispose_tree(
+        repo, cfg, log, it, wt, borrowed=borrowed, keep=keep, callers=(called_from, shell_cwd)
+    )
     if back_failed:
         kept_reason = "; ".join(
             filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
@@ -1368,8 +1377,10 @@ def merge(
         "worktree.merged",
         id=item,
         sha=sha,
+        branch_head=branch_head,
         base=wt.base,
         dirty=list(dirty),
+        worktree=str(wt.path),
         worktree_removed=removed_tree,
         kept_reason=kept_reason,
         back_merged=back_merged,
@@ -1377,6 +1388,52 @@ def merge(
         branch=wt.branch,
         outside_globs=outside,
     )
+
+
+def _dispose_tree(
+    repo: Path, cfg, log, it, wt: W.Worktree, *, borrowed: bool, keep: bool, callers
+) -> tuple[bool, str]:
+    """(removed, why it was kept) for a landed item's tree.
+
+    NEVER remove an ADOPTED tree -- see the module docstring. Nor a borrowed one: it is
+    the caller's, or whoever's has that branch checked out. Nor the one the caller stands
+    in: its shell would be left in a deleted directory (B1172da8c35).
+    """
+    if borrowed:
+        return False, f"no worktree of its own: {wt.branch!r} was landed, no tree touched."
+    if it.adopted:
+        return False, f"worktree {wt.path} kept: adopted, not created by ddflow."
+    if not cfg.worktree.remove_on_merge or keep:
+        return False, ""
+    if _stands_in(wt.path, *callers):
+        return False, (
+            f"worktree {wt.path} kept: you are standing in it, and removing it would leave "
+            f"your shell in a deleted directory. cd {W.repo_root(repo)} -- `ddflow cleanup "
+            f"--apply` removes the tree once {it.id} is complete."
+        )
+    rr = W.remove(repo, cfg, wt)
+    if not rr.ok:
+        return False, rr.err
+    log.append("worktree.removed", it.id, {"path": str(wt.path)})
+    return True, ""
+
+
+def _stands_in(tree: Path, *wheres: Path | None) -> bool:
+    """Is any of ``wheres`` the tree or inside it?"""
+    try:
+        root = tree.resolve()
+    except OSError:
+        return False
+    for where in wheres:
+        if where is None:
+            continue
+        try:
+            here = Path(where).resolve()
+        except OSError:
+            continue
+        if here == root or root in here.parents:
+            return True
+    return False
 
 
 def _what_to_land(

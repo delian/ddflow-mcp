@@ -58,22 +58,31 @@ class Macro:
     #: quoting gets in the way, which is most of the useful ones.
     prompt_file: str = ""
 
+    def file(self, root: Path) -> Path | None:
+        """The `prompt_file` this body is read from, resolved; None for an inline prompt."""
+        if not self.prompt_file:
+            return None
+        path = Path(self.prompt_file)
+        return path if path.is_absolute() else Path(root) / path
+
     def body(self, root: Path) -> str:
         if self.prompt and self.prompt_file:
             raise MacroError(
                 f"macro {self.name!r} sets both `prompt` and `prompt_file`. Pick one — two "
                 f"sources for one body means one of them is dead and looks live."
             )
-        if self.prompt_file:
-            path = Path(self.prompt_file)
-            if not path.is_absolute():
-                path = Path(root) / path
+        if path := self.file(root):
             if not path.is_file():
                 raise MacroError(
                     f"macro {self.name!r}: prompt_file {path} does not exist. A configured "
                     f"body that is missing is an error, never a silent fallback to empty."
                 )
-            return path.read_text("utf-8")
+            try:
+                return path.read_text("utf-8")
+            except (OSError, UnicodeDecodeError) as exc:
+                # Raised as the macro's own error, so every caller that reports a broken
+                # macro by name reports this one too instead of crashing on it.
+                raise MacroError(f"macro {self.name!r}: prompt_file {path}: {exc}") from exc
         if not self.prompt.strip():
             raise MacroError(
                 f"macro {self.name!r} has no `prompt` and no `prompt_file`. A named mode "
@@ -86,11 +95,18 @@ class MacroError(RuntimeError):
     pass
 
 
-def load_macros(root: Path) -> dict[str, Macro]:
-    """Read `[[macro]]` blocks from `.ddflow/config.toml`, then `.ddflow/macros.toml`.
+def load_macros_report(root: Path) -> tuple[dict[str, Macro], dict[str, str]]:
+    """``(macros, refused)``: the usable `[[macro]]` blocks, and why each other one is not.
 
-    Same two-file precedence as reviewers and companions: one obvious place to configure,
-    plus a dedicated file for operators who prefer to split it out.
+    Read from `.ddflow/config.toml`, then `.ddflow/macros.toml` -- the same two-file
+    precedence as reviewers and companions. A block that cannot be read at all (an
+    unknown field, invalid TOML) still raises: that is the whole file, not one macro.
+
+    A macro named like a shipped command is REFUSED BY NAME rather than left to lose to
+    it silently -- a `bug-hunt` block that does nothing, with every surface reporting the
+    shipped description back. But refused ALONE: this raised, `macro_commands` swallowed
+    the error, and one clashing block made every other macro vanish from `prompts list`,
+    MCP `prompts/list` and `prompts show` while doctor said nothing (B-macro-clash-silent).
     """
     from ..infra import tomlcfg
     from .prompts import COMMANDS
@@ -98,18 +114,40 @@ def load_macros(root: Path) -> dict[str, Macro]:
     blocks = tomlcfg.overlay_array(
         tomlcfg.config_paths(root, "macros.toml"), "macro", Macro, key="name"
     )
-    # REFUSED at the source, not filtered out downstream. A macro named `bug-hunt` that
-    # silently loses to the shipped one leaves the operator editing a block that does
-    # nothing, with every surface reporting the shipped description back at them — the
-    # shadowing class that had `api.review` bind a function over its own submodule.
-    clash = sorted(set(blocks) & set(COMMANDS))
-    if clash:
-        raise MacroError(
-            f"macro(s) {clash} take the name of a shipped workflow command, which would "
-            f"silently lose to it. Rename them, or override the shipped one instead by "
-            f"writing .ddflow/prompts/commands/{clash[0]}.md."
+    refused = {
+        name: (
+            f"macro {name!r} takes the name of a shipped workflow command, which would "
+            f"silently lose to it, so it is not loaded. Rename it, or override the shipped "
+            f"one instead by writing .ddflow/prompts/commands/{name}.md."
         )
-    return {name: Macro(**spec) for name, spec in sorted(blocks.items())}
+        for name in sorted(set(blocks) & set(COMMANDS))
+    }
+    macros = {name: Macro(**spec) for name, spec in sorted(blocks.items()) if name not in refused}
+    return macros, refused
+
+
+def load_macros(root: Path) -> dict[str, Macro]:
+    """The usable `[[macro]]` blocks; see `load_macros_report` for the ones refused."""
+    return load_macros_report(root)[0]
+
+
+def macro_problems(root: Path) -> list[str]:
+    """Every reason a configured macro will not work, one line each -- for doctor.
+
+    A refused name, a body that cannot be read (`prompt_file` missing, both or neither
+    of `prompt`/`prompt_file`), or a file that cannot be read at all.
+    """
+    try:
+        macros, refused = load_macros_report(root)
+    except (MacroError, ValueError, OSError) as exc:
+        return [f"[[macro]]: {exc}"]
+    out = list(refused.values())
+    for m in macros.values():
+        try:
+            m.body(root)
+        except (MacroError, OSError, ValueError) as exc:
+            out.append(str(exc))
+    return out
 
 
 #: Rendered above the operator's own text, so the agent is told the bounded set and the

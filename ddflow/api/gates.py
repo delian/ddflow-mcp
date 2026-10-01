@@ -449,7 +449,15 @@ def record(
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.
-        measured = {"tree_sha": G.tree_fingerprint(wt), "diff_stat": G.diff_stat(wt)} if wt else {}
+        measured = (
+            {
+                "tree_sha": G.tree_fingerprint(wt),
+                "source_tree": G.source_tree(wt),
+                "diff_stat": G.diff_stat(wt),
+            }
+            if wt
+            else {}
+        )
     else:
         measured = {}
 

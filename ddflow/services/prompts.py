@@ -163,6 +163,24 @@ def command_dir() -> Path:
     return builtin_dir() / "commands"
 
 
+def _macro_report(repo: Path | None) -> tuple[dict, dict[str, str]]:
+    """`load_macros_report`, or nothing when the macro config cannot be read at all.
+
+    A malformed macro file must not take `prompts/list` down with it: the shipped commands
+    are still there, and `macro_problems` names the error -- in doctor, `prompts list` and
+    the "unknown prompt" message. Losing the whole list to one bad block is how a feature
+    becomes something people switch off.
+    """
+    if repo is None:
+        return {}, {}
+    from .macros import MacroError, load_macros_report
+
+    try:
+        return load_macros_report(repo)
+    except (MacroError, ValueError, OSError):
+        return {}, {}
+
+
 def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str]]]:
     """Operator-defined `[[macro]]` blocks, in the same shape as `COMMANDS`.
 
@@ -170,18 +188,10 @@ def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[s
     registry a name came from. A macro that had to be asked for separately is a macro an
     agent never finds.
     """
-    if repo is None:
-        return {}
-    from .macros import MacroError, load_macros
+    return _as_commands(_macro_report(repo)[0])
 
-    try:
-        macros = load_macros(repo)
-    except (MacroError, ValueError, OSError):
-        # A malformed macro must not take `prompts/list` down with it: the shipped
-        # commands are still there, and `ddflow prompts show <name>` reports the error
-        # when the operator asks for that one. Losing the whole list to one bad block is
-        # how a feature becomes something people switch off.
-        return {}
+
+def _as_commands(macros: dict) -> dict[str, tuple[str, str, list[str]]]:
     return {name: (m.title or name, m.description, list(m.params)) for name, m in macros.items()}
 
 
@@ -192,7 +202,16 @@ def all_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str
     source too — silent shadowing is the class that once had `api.review` bind a function
     over its own submodule.
     """
-    return {**COMMANDS, **macro_commands(repo)}
+    macros, refused = _macro_report(repo)  # one read of the config, not two
+    out = {**COMMANDS, **_as_commands(macros)}
+    # A `[[macro]]` refused for taking a shipped command's name is said ON that command's
+    # entry: MCP `prompts/list` has no field for notes, and a client listing prompts must
+    # still see why the operator's block is not the one it gets (B-macro-clash-silent).
+    for name, why in refused.items():
+        if name in out:
+            title, desc, args = out[name]
+            out[name] = (title, f"{desc} [NOTE: {why}]".strip(), args)
+    return out
 
 
 def resolve_command(name: str, repo: Path | None = None) -> Template:
@@ -215,7 +234,9 @@ def resolve_command(name: str, repo: Path | None = None) -> Template:
             from .macros import MacroError
 
             try:
-                return Template(name, macro.body(Path(repo)), "config", None, "command")
+                return Template(
+                    name, macro.body(Path(repo)), "config", macro.file(Path(repo)), "command"
+                )
             except MacroError as exc:
                 raise TemplateError(str(exc)) from exc
         known = sorted({*COMMANDS, *(load_macros(repo) if repo else {})})
@@ -483,7 +504,16 @@ def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) 
     invisible from a terminal, which is where an operator goes to edit one.
     """
     out = [resolve(n, repo, overrides) for n in TEMPLATE_NAMES]
-    out += [resolve_command(n, repo) for n in all_commands(repo)]
+    for n in all_commands(repo):
+        try:
+            out.append(resolve_command(n, repo))
+        except TemplateError:
+            # A MACRO whose body cannot be read: listed under `macro_problems` by name,
+            # instead of taking the whole list down with it. A shipped command that fails
+            # is a broken install and still raises.
+            if n in COMMANDS:
+                raise
+            continue
     return out
 
 
@@ -499,8 +529,15 @@ def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] |
         return resolve(name, repo, overrides)
     if name in all_commands(repo):
         return resolve_command(name, repo)
+    # Why a configured macro is not among the commands, said HERE: "unknown prompt" about
+    # a macro the operator can see in their config, with the reason only in doctor, is the
+    # silence B-macro-clash-silent was about.
+    from .macros import macro_problems
+
+    problems = macro_problems(Path(repo)) if repo else []
     raise TemplateError(
         f"unknown prompt {name!r}.\n"
         f"  templates: {', '.join(TEMPLATE_NAMES)}\n"
         f"  commands:  {', '.join(sorted(all_commands(repo)))}"
+        + "".join(f"\n  not loaded: {p}" for p in problems)
     )

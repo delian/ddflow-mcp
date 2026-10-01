@@ -416,7 +416,17 @@ TOOLS: dict[str, dict[str, Any]] = {
             agent=agent,
         ),
         "wants_called_from": True,
-        "payload": ("id", "sha", "base", "pr", "branch", "outside_globs"),
+        "payload": (
+            "id",
+            "sha",
+            "branch_head",
+            "base",
+            "pr",
+            "branch",
+            "outside_globs",
+            "worktree",
+            "worktree_removed",
+        ),
     },
     "ddflow_pr_sync": {
         "description": (
@@ -1787,10 +1797,16 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             )
         },
-        "api": lambda repo, a, agent: _api().adopt_project(
+        # Where the server stands decides where the committed files go: a linked
+        # worktree's own checkout, not the shared primary (bug B1e7ad10c6c). A foreign
+        # `as_agent` is not standing in the connection's tree (B11e4c5a185), so it is
+        # asked from the primary, as from a CLI run there -- never the parent's branch.
+        "wants_called_from": True,
+        "api": lambda repo, a, agent, called_from=None: _api().adopt_project(
             repo,
             _api().Adoption(agents=a.get("agents", "") or ""),
             agent=agent,
+            called_from=called_from,
         ),
         # PROSE: a checklist of what it wrote and what to do next.
         "payload": "text",
