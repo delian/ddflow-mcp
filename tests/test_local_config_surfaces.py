@@ -251,3 +251,14 @@ def test_a_local_edit_that_keeps_the_human_gate_is_allowed(repo):
     assert out.exit == OK, out.reason
     out = AS.configure(repo, AS.ConfigEdit(set="lease.ttl_s", value="999", local=True))
     assert out.exit == OK, out.reason
+
+
+def test_a_local_dry_run_never_leaves_an_unignored_local_dir(repo):
+    """The lock file of a dry run creates `.ddflow/local/`; it must ignore itself."""
+    from ddflow.services.configwrite import _write_config
+
+    (repo / ".ddflow").mkdir()
+    err, text = _write_config(repo, [("lease.ttl_s", "5")], dry_run=True, local=True)
+    assert not err and "ttl_s = 5" in text
+    assert not (repo / ".ddflow" / "local" / "config.toml").exists()
+    assert (repo / ".ddflow" / "local" / ".gitignore").read_text() == "*\n"

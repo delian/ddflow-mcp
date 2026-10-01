@@ -384,7 +384,10 @@ def _write_config(
     from . import workflow as WF
 
     path = config_file(repo, local=local)
-    if local and not dry_run:
+    if local:
+        # Even for a dry run: the lock below creates the directory anyway, and a
+        # `local/` that exists without its own `*` ignore is one `git add` from
+        # committing whatever lands there next.
         ensure_local_dir(repo)
     with TC.locked(path):
         text = path.read_text("utf-8") if path.exists() else ""
