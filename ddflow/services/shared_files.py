@@ -127,8 +127,22 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     A NOTE: a shared (generated) glob with no merge attribute -- not wrong, but every
     parallel merge of it will conflict until someone regenerates it.
     """
+    import re
+
+    from ..core.schedule import _gitattributes_re
+
     problems: list[str] = []
     notes: list[str] = []
+    for g in [*cfg.lease.shared_globs, *cfg.lease.append_only_globs]:
+        try:
+            _gitattributes_re(g)
+        except re.error as exc:
+            # `is_shared` treats it as matching only itself rather than crash a claim;
+            # this is where that is said out loud.
+            problems.append(
+                f"[lease] shared glob {g!r} cannot be read as git reads it ({exc}); it is "
+                f"treated as matching only itself. Rewrite it (e.g. an ascending range)."
+            )
     for g in committed_append_only(repo):
         if any(ch.isspace() for ch in g):
             problems.append(

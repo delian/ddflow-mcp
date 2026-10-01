@@ -298,3 +298,9 @@ def test_a_bracket_as_the_first_class_member_is_a_member():
     assert is_shared("a].txt", ["a[]].txt"])
     assert is_shared("ax.txt", ["a[^]].txt"]) and not is_shared("a].txt", ["a[^]].txt"])
     assert not is_shared("x", ["[^]"])  # unclosed: literal, and no crash
+
+
+def test_doctor_names_a_shared_glob_it_cannot_read(repo):
+    _project(repo, shared='["[z-a]"]')
+    problems, _n = SF.findings(repo, Config.load(repo))
+    assert any("[z-a]" in p and "cannot be read" in p for p in problems), problems
