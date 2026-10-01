@@ -297,14 +297,35 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
 
 
 def _brief_current(
-    out: list[str], state: State, cfg: Config, item: str, repo: Path | None = None
+    out: list[str],
+    state: State,
+    cfg: Config,
+    item: str,
+    repo: Path | None = None,
+    *,
+    held: list[str] | None = None,
+    suggested: bool = False,
 ) -> None:
+    """The item this brief is about. "Current" only when it is the agent's own -- named
+    with `--item` or held under its lease; the queue's top pick for an agent holding
+    nothing is "Suggested next", because calling it Current told an agent it was working
+    on something it never claimed (B226d8db6e8)."""
     from ..services.gates import pipeline_for
 
     it = state.items.get(item)
     if not it:
         return
-    out += [f"## Current: {it.id} — {it.title}", ""]
+    held = held or []
+    if len(held) > 1:
+        out += [
+            f"You hold {len(held)} leases: " + ", ".join(f"`{h}`" for h in held) + ". "
+            "The most recent claim is below; `ddflow brief --item <id>` for another.",
+            "",
+        ]
+    heading = "Suggested next" if suggested else "Current"
+    out += [f"## {heading}: {it.id} — {it.title}", ""]
+    if suggested:
+        out += ["_You hold no lease. This is the top ready item: `ddflow claim` it first._", ""]
     out.append(
         f"- kind `{it.kind}` · state `{it.state}`"
         + (f" · held by `{it.lease.holder}`" if it.lease else "")
@@ -432,7 +453,7 @@ def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict]) -> None:
         out.append(f"- **{ls.get('title', '')}** — {rule}")
 
 
-def brief(
+def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/suggested decide the heading
     state: State,
     cfg: Config,
     plan: Plan,
@@ -444,6 +465,8 @@ def brief(
     recovery: list | None = None,
     decisions: list | None = None,
     memories: list | None = None,
+    held: list[str] | None = None,
+    suggested: bool = False,
 ) -> str:
     """The session-start pack, under ``session.brief_max_tokens``.
 
@@ -456,7 +479,7 @@ def brief(
     _brief_recovery(out, recovery or [])
     _brief_jobs(out, state)
     if item:
-        _brief_current(out, state, cfg, item, repo)
+        _brief_current(out, state, cfg, item, repo, held=held, suggested=suggested)
     _brief_ready(out, plan)
     _brief_decisions(out, decisions or [])
     # `memories` is every LIVE one, newest first; how many to show is this view's call.

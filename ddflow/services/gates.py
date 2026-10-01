@@ -1433,6 +1433,13 @@ def reviewer_independence(
             f"it drew on. List every family your plan routes it to, e.g. "
             f'routers = {{ hydrafusion = ["anthropic", "openai", "google"] }}.'
         )
+    if not author_model.strip():
+        # Quoting `''` back at the agent named nothing it could act on (B7a5c63e3d2).
+        return False, (
+            "the author's model is unknown, so no reviewer can be shown to differ from "
+            "it: pass `--model <author model>` (`model` over MCP), or declare it once "
+            "with `ddflow session start --model <author model>` under the same identity."
+        )
     if routed is None and not author_fam:
         return False, (
             f"the author's model {author_model!r} is not in [agent].families, so no "
