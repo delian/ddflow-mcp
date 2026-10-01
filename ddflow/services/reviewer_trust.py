@@ -116,6 +116,9 @@ def guarded(repo: Path, *, person: bool = False, agent: str = "") -> Iterator[No
     commands = sorted(n for n, (_d, kind) in changed.items() if kind == "command")
     if commands and not person:
         for p, data in saved.items():
+            now = p.read_bytes() if p.exists() else None
+            if now == data:
+                continue  # only what this write changed: another writer's file is theirs
             if data is None:
                 p.unlink(missing_ok=True)
             else:
