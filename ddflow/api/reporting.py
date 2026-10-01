@@ -81,8 +81,20 @@ def progress(repo: Path, item: str = "") -> O.Outcome:
     return O.ok("progress", **data)
 
 
-def status(repo: Path, *, agent: str = "") -> O.Outcome:
+#: How many entries each of `status`'s lists carries unless the caller asks for them all.
+#: The counts are always exact; a 4831-task queue listed every finished task, 721k chars,
+#: past what an MCP client accepts as one tool result (Bd6aa9ffde9).
+STATUS_LIST_LIMIT = 25
+
+
+def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     """One answer to "what is the state of this project?".
+
+    ``full`` lists everything; otherwise each list is cut to ``STATUS_LIST_LIMIT`` (the
+    most recently completed tasks, newest last; the first of the others, in the
+    scheduler's order) and
+    ``truncated`` names each cut list with its real length. The CLI asks for ``full``; the
+    MCP tool takes the bounded answer.
 
     The textbook B37 case: `cmd_status` folded the log, aggregated the work, detected the
     loops, planned and scanned for recoverables — and then built a JSON object and a
@@ -127,7 +139,10 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
             "review": len(p.review),
             "abandoned": len(abandoned),
         },
-        "completed_tasks": [{"id": t.id, "title": t.title, "sha": t.merged_sha} for t in done],
+        "completed_tasks": [
+            {"id": t.id, "title": t.title, "sha": t.merged_sha}
+            for t in sorted(done, key=lambda t: t.completed_at)
+        ],
         "in_flight": [
             {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
             for t in running
@@ -154,6 +169,8 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
         "loops": [f.__dict__ for f in findings],
         "recoverable": [plain(r) for r in rec if r.salvageable],
     }
+    if not full:
+        _bound(data)
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
     # blocked ids, how many recoverables are not salvageable) rather than a second fold.
     # Under `_render`, never on the wire.
@@ -176,6 +193,31 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
         "open_bugs": len(open_bugs),
     }
     return O.ok("status", **data)
+
+
+def _bound(data: dict[str, Any]) -> None:
+    """Cut `status`'s lists to `STATUS_LIST_LIMIT`, saying which were cut and from what."""
+    cut: dict[str, int] = {}
+    lists = ("completed_tasks", "in_flight", "ready_now", "held_by_cap", "interrupted")
+    for key in (*lists, "loops", "recoverable"):
+        rows = data[key]
+        if len(rows) > STATUS_LIST_LIMIT:
+            cut[key] = len(rows)
+            # The most recent completions are the ones a reader asks about -- kept in
+            # completion order, newest last, as the full list has them; for the others
+            # the scheduler's order puts what to do first at the top.
+            keep = (
+                slice(-STATUS_LIST_LIMIT, None)
+                if key == "completed_tasks"
+                else slice(STATUS_LIST_LIMIT)
+            )
+            data[key] = rows[keep]
+    if cut:
+        data["truncated"] = {
+            "lists": cut,
+            "shown": STATUS_LIST_LIMIT,
+            "all": "`ddflow --json status` lists every entry; `tasks` counts are exact",
+        }
 
 
 def rebuild(repo: Path, *, agent: str = "") -> O.Outcome:
