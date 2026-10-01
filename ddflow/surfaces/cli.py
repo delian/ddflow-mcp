@@ -283,6 +283,20 @@ def _accept_global_options_anywhere(root: argparse.ArgumentParser) -> None:
     after the subcommand it sets the same attribute (and wins over one given before),
     and absent there it leaves the root's value alone instead of resetting it.
     """
+    # Derived from the root, so a global option added there later is accepted after the
+    # subcommand too, instead of drifting from a second hand-kept list.
+    mirrored = []
+    for action in root._actions:
+        if not action.option_strings or isinstance(
+            action, (argparse._HelpAction, argparse._SubParsersAction, _PrintVersion)
+        ):
+            continue
+        kwargs: dict = {"dest": action.dest, "default": argparse.SUPPRESS}
+        if isinstance(action, argparse._StoreTrueAction):
+            kwargs["action"] = "store_true"
+        elif type(action) is not argparse._StoreAction:
+            raise TypeError(f"global option {action.option_strings} cannot be mirrored")
+        mirrored.append((action.option_strings, kwargs))
     seen: set[int] = set()
 
     def walk(parser: argparse.ArgumentParser) -> None:
@@ -293,18 +307,9 @@ def _accept_global_options_anywhere(root: argparse.ArgumentParser) -> None:
                 if id(sub) in seen:  # an alias is the same parser under another name
                     continue
                 seen.add(id(sub))
-                taken = set(sub._option_string_actions)
-                if "--repo" not in taken:
-                    sub.add_argument("--repo", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
-                if "--agent" not in taken:
-                    sub.add_argument("--agent", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
-                if "--json" not in taken:
-                    sub.add_argument(
-                        "--json",
-                        action="store_true",
-                        default=argparse.SUPPRESS,
-                        help=argparse.SUPPRESS,
-                    )
+                for flags, kwargs in mirrored:
+                    if not set(flags) & set(sub._option_string_actions):
+                        sub.add_argument(*flags, help=argparse.SUPPRESS, **kwargs)
                 walk(sub)
 
     walk(root)

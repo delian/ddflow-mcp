@@ -63,3 +63,23 @@ def test_end_to_end_the_event_carries_the_trailing_agent(repo):
     json.loads(out)  # --json after the subcommand took effect
     shards = {p.stem for p in (repo / ".ddflow" / "events").glob("*.jsonl")}
     assert "impl-1" in shards, shards
+
+
+def test_every_global_option_on_the_root_is_accepted_after_a_subcommand():
+    """Derived from the root parser, not from a list: a global option added there later
+    must work after the subcommand without anyone remembering to mirror it."""
+    import argparse
+
+    root = build_parser()
+    flags = [
+        a
+        for a in root._actions
+        if a.option_strings and a.dest not in ("help", "version") and a.dest != "cmd"
+    ]
+    assert {"repo", "agent", "json"} <= {a.dest for a in flags}
+    for a in flags:
+        argv = ["status", a.option_strings[-1]]
+        if not isinstance(a, argparse._StoreTrueAction):
+            argv.append("v")
+        ns = root.parse_args(argv)
+        assert getattr(ns, a.dest) in ("v", True), (a.option_strings, ns)
