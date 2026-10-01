@@ -25,7 +25,6 @@ import sys
 from ..api import items as A_ITEMS
 from ..api import lifecycle as A_LIFECYCLE
 from ..api import reporting as A_REPORTING
-from ..core import globspec as GS
 from ..core.model import GATE_OUTCOMES, fold
 from ..infra import worktree as W
 from ..services import gates as G
@@ -134,7 +133,9 @@ def cmd_item_update(a, c: Ctx) -> int:
             title=a.title,
             body=a.body,
             needs=None if a.needs is None else _csv(a.needs),
-            globs=None if a.globs is None else GS.parse(a.globs),
+            # The raw values: the api reads them once. Parsed here as well, a JSON
+            # array's element holding a comma was split by the second read (roborev).
+            globs=a.globs,
             tags=None if a.tags is None else _csv(a.tags),
             priority=a.priority,
             line=a.line,

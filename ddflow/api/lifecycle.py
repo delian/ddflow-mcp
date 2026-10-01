@@ -433,6 +433,17 @@ def _freed(st, cfg, was: list[str], me: str) -> list[str]:
     return out
 
 
+def _wait_globs(globs, item: str) -> tuple[list[str] | None, str]:
+    """(the globs `wait` judges the item's claim on, or None for its stored ones; why
+    they cannot be used, or "")."""
+    want = GS.parse(globs) or None
+    if want and not item:
+        # The any-wait judges every item on its own globs; accepting these and dropping
+        # them would answer READY for a claim they then refuse.
+        return None, "globs need an item: they are the globs you will claim THAT item with"
+    return want, GS.problem(want or [])
+
+
 def wait(
     repo: Path,
     *,
@@ -477,8 +488,7 @@ def wait(
     }
     if timeout < 0 or poll <= 0:
         return O.failed("wait", "timeout must be >= 0 and poll > 0 seconds", **empty)
-    want = GS.parse(globs) or None
-    bad = GS.problem(want or [])
+    want, bad = _wait_globs(globs, item)
     if bad:
         return O.failed("wait", bad, **empty)
     log, cfg, st = _load(repo, agent)
