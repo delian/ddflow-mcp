@@ -42,7 +42,7 @@ driver is `docs/ddflow/drivers/implement-phase.md` in that project.
 server and writes files in their repository.
 
 1. Install: `uv tool install git+https://github.com/delian/ddflow-mcp` (not on PyPI yet).
-2. In the project root: `ddflow adopt --launch python --agents claude` (your agent's
+2. In the project root: `ddflow adopt --agents claude` (your agent's
    name; see [Wiring it into your agent](#wiring-it-into-your-agent)). It writes
    `.ddflow/`, the MCP registration, the commit hook and a rules block in `AGENTS.md`.
    Restart the agent session so it loads the MCP server.
@@ -129,16 +129,18 @@ can edit.
 # ddflow-mcp is not on PyPI yet; until the first release, install from the repository:
 uv tool install git+https://github.com/delian/ddflow-mcp   # or: pipx install git+https://github.com/delian/ddflow-mcp
 cd /path/to/your/project
-ddflow adopt --launch python        # registers the MCP server with your agents, writes .ddflow/ and a block in AGENTS.md
+ddflow adopt                        # registers the MCP server with your agents, writes .ddflow/ and a block in AGENTS.md
 ddflow phase add P1 --title "Password reset"
 ddflow task add P1.T1 --phase P1 --title "Reset-token endpoint" --globs 'src/auth/**'
 ddflow next                          # what can start now, and why the rest is blocked
 ```
 
-`--launch python` writes the full path of the interpreter inside the environment you
-just installed into (plus its `PYTHONPATH`), not a bare `python`. Without it, `adopt`
-registers `uvx ddflow-mcp`, which fetches the package from PyPI and so cannot start until
-the first release is published.
+`adopt` registers the server you just installed, by its full path: an install that did
+not come from a package index (from git, a local directory or an archive) carries a
+`direct_url.json` in its metadata ([PEP 610](https://peps.python.org/pep-0610/)), and
+for one of those `adopt` writes the `ddflow-mcp` installed beside its interpreter rather
+than `uvx ddflow-mcp`, which would fetch from PyPI. Only an install from an index gets
+`uvx`. `--launch python` still forces the interpreter-plus-`PYTHONPATH` form.
 
 Then tell your agent *"implement phase P1"*. The driver `adopt` installed tells it to
 start with `ddflow_brief`, claim the task, work in its own worktree, satisfy each gate
@@ -538,7 +540,8 @@ The design decisions, with the probes that settled each, are in
 **One line in your agent's MCP config. Nothing else.**
 
 > Until the first release is on PyPI, `uvx ddflow-mcp` has nothing to fetch: install from
-> the repository and run `ddflow adopt --launch python`, as in [A first run](#a-first-run).
+> the repository and run `ddflow adopt`, which registers that installation instead, as in
+> [A first run](#a-first-run).
 
 ```json
 { "mcpServers": { "ddflow": { "command": "uvx", "args": ["ddflow-mcp"] } } }
