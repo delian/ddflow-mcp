@@ -1,15 +1,21 @@
 """Reading a list of path globs the way an agent writes one.
 
-One parser for every surface that takes globs to claim, add or update. The plain
-comma-separated string (`config.csv_list`) is the main notation; this adds the two other
-shapes agents actually send, and refuses what can only be a mangled one:
+The plain comma-separated string (`config.csv_list`) is the main notation; this adds the
+two other shapes agents actually send, and refuses what can only be a mangled one:
 
-- several values (a repeated `--globs` flag, a list over MCP) are ALL kept. A plain
-  store kept the last one, and an agent that declared ten paths held one (Bdc85898c40);
-- a JSON array of strings is read as that list. Split on its commas, it became
-  `'["a.py"'` and `'"b.py"]'` -- globs that match nothing, so nothing was protected;
+- several values (a repeated flag, a list over MCP) are ALL kept, each read as a comma
+  list. A plain store kept the last one, and an agent that declared ten paths held one
+  (Bdc85898c40);
+- a JSON array of strings, passed as ONE value, is read as that list. Split on its
+  commas, it became `'["a.py"'` and `'"b.py"]'` -- globs that match nothing, so nothing
+  was protected. A comma inside a glob is only expressible this way;
 - a glob still carrying a JSON/shell quote, or an unbalanced bracket, is refused: a
   real path has neither, and accepting it is a claim that silently covers nothing.
+
+`add`, `update` and `split` read their globs with `parse`; `claim` (through
+`leases.acquire`) refuses what `problem` names. A surface that splits a value on commas
+BEFORE it gets here has already lost a JSON array: it arrives mangled, and is refused
+rather than recorded.
 """
 
 from __future__ import annotations
@@ -67,6 +73,6 @@ def problem(globs: Iterable[str]) -> str:
     return (
         f"these globs cannot be paths: {', '.join(repr(b) for b in bad)} -- a quote or an "
         f"unbalanced bracket is left over from a JSON array or shell quoting that was "
-        f"split on its commas. Pass the paths comma-separated (a,b), as a JSON array "
-        f'(["a","b"]), or repeat the flag (--globs a --globs b). Nothing was recorded.'
+        f"split on its commas. Pass the paths comma-separated, without quotes or "
+        f"brackets: a.py,b/**. Nothing was recorded."
     )
