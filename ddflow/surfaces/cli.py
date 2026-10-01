@@ -104,6 +104,24 @@ from .context import (
     _require_item,
 )
 
+#: Help for every `--globs` that takes paths to claim, add or update.
+GLOBS_HELP = (
+    "path globs, comma-separated (a.py,src/**) or a JSON array; repeat the flag to add "
+    "more -- every value is kept"
+)
+
+
+class _Globs(argparse.Action):
+    """A repeatable `--globs`: every value is KEPT, as a list, for `globspec.parse`.
+
+    A plain store kept only the last value, so an agent that passed the flag ten times
+    held one path -- or none -- and the conflict check never saw the rest (Bdc85898c40).
+    """
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        cur = getattr(namespace, self.dest, None)
+        setattr(namespace, self.dest, [*(cur if isinstance(cur, list) else []), values])
+
 
 def cmd_item_update(a, c: Ctx) -> int:
     # Through the api, like `ddflow_update` -- this wrote the event itself, so a field
@@ -115,7 +133,9 @@ def cmd_item_update(a, c: Ctx) -> int:
             title=a.title,
             body=a.body,
             needs=None if a.needs is None else _csv(a.needs),
-            globs=None if a.globs is None else _csv(a.globs),
+            # The raw values: the api reads them once. Parsed here as well, a JSON
+            # array's element holding a comma was split by the second read (roborev).
+            globs=a.globs,
             tags=None if a.tags is None else _csv(a.tags),
             priority=a.priority,
             line=a.line,
@@ -126,7 +146,18 @@ def cmd_item_update(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
-    c.out(f"{a.id} updated: {', '.join(out.data['changed'])}", out.body(("id", "changed")))
+    msg = f"{a.id} updated: {', '.join(out.data['changed'])}"
+    if "globs" in out.data["fields"]:
+        # `--globs` REPLACES the list. Say what that took away: an agent widening its
+        # claim with only the new paths otherwise drops the old ones from every
+        # conflict check without a word (Bd8038b08a1).
+        msg += f"\n  globs now: {', '.join(out.data['fields']['globs']) or '(none)'}"
+        if out.data["globs_dropped"]:
+            msg += (
+                f"\n  dropped:   {', '.join(out.data['globs_dropped'])}  (--globs replaces "
+                f"the list; pass every glob, old and new, to keep them)"
+            )
+    c.out(msg, out.body(("id", "changed", "globs_dropped")))
     return OK
 
 
@@ -353,7 +384,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         add.add_argument("id")
         add.add_argument("--title", default="")
         add.add_argument("--needs")
-        add.add_argument("--globs")
+        add.add_argument("--globs", action=_Globs, help=GLOBS_HELP)
         add.add_argument("--tags")
         add.add_argument("--body")
         add.add_argument("--priority", type=int, default=A_ITEMS.DEFAULT_PRIORITY)
@@ -391,7 +422,10 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--into", action="append", default=[], help="repeatable: 'sub-id=title', or just 'sub-id'"
     )
     sp.add_argument(
-        "--globs", default="", help="globs for the children (default: inherit the parent's)"
+        "--globs",
+        action=_Globs,
+        default="",
+        help="globs for the children (default: inherit the parent's); " + GLOBS_HELP,
     )
     sp.add_argument("--needs", default="", help="dependencies for the FIRST child")
     sp.set_defaults(fn=cmd_split)
@@ -417,8 +451,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
 
     up = s.add_parser("update", help="change an item's fields")
     up.add_argument("id")
-    for f in ("title", "body", "needs", "globs", "tags", "line", "resources"):
+    for f in ("title", "body", "needs", "tags", "line", "resources"):
         up.add_argument(f"--{f}")
+    up.add_argument(
+        "--globs",
+        action=_Globs,
+        help="REPLACES the item's globs (and a claimed item's lease) with these; " + GLOBS_HELP,
+    )
     up.add_argument("--priority", type=int)
     up.set_defaults(fn=cmd_item_update)
 
@@ -429,14 +468,18 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
 
     cl = s.add_parser("claim", help="lease an item + create its worktree (exit 3 = refused)")
     cl.add_argument("id")
-    cl.add_argument("--globs")
+    cl.add_argument(
+        "--globs",
+        action=_Globs,
+        help="what this claim writes (recorded on the item too); " + GLOBS_HELP,
+    )
     cl.add_argument("--note")
     cl.add_argument("--force", action="store_true")
     cl.add_argument("--no-worktree", action="store_true")
     cl.add_argument(
         "--resources",
         default="",
-        help="override the item's declared resources for this claim, e.g. 'gpu:2'",
+        help="the resources this claim reserves, e.g. 'gpu:2' (recorded on the item too)",
     )
     cl.set_defaults(fn=cmd_claim)
 
@@ -456,6 +499,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     wt.add_argument("--item", default="", help="the item to wait for (default: anything ready)")
     wt.add_argument("--phase", default="", help="with no --item: anything ready in this phase")
     wt.add_argument("--kind", default=A_LIFECYCLE.DEFAULT_NEXT_KIND, choices=["task", "phase"])
+    wt.add_argument(
+        "--globs",
+        action=_Globs,
+        help="with --item: the globs you will claim with, so READY means that claim will "
+        "succeed; " + GLOBS_HELP,
+    )
     # None = unset, so an explicit 0 ("just ask, do not sleep") is not taken as the default.
     wt.add_argument(
         "--timeout",

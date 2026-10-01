@@ -26,6 +26,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..core import globspec as GS
 from ..core import outcome as O
 from ..core.model import ABANDONED, DONE, REVIEW, State
 from ..core.plain import plain
@@ -134,7 +135,9 @@ WAITABLE = frozenset({"conflict", "deps", "resources"})
 DEFAULT_WAIT_TIMEOUT_S = 600
 
 
-def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str, Any]:
+def _judge_wait(
+    st, cfg, me: str, item: str, phase: str, kind: str, globs: list[str] | None = None
+) -> dict[str, Any]:
     """Can the caller start work NOW, must it wait, or would waiting never end?
 
     Returns {"status": "ready"|"blocked"|"hopeless", "why", "waiting_on", "ready",
@@ -163,7 +166,7 @@ def _judge_wait(st, cfg, me: str, item: str, phase: str, kind: str) -> dict[str,
     mine = live.get(item)
     if mine is not None and mine.holder == me:
         return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
-    b = _claim_blocker(st, cfg, it, me, live, now)
+    b = _claim_blocker(st, cfg, it, me, live, now, globs=globs)
     if b is None:
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
     out["blocked"] = [plain(b)]
@@ -327,7 +330,7 @@ def _blocking_leases(st, blocked, others) -> list[str]:
     return sorted(named) or sorted(others)
 
 
-def _claim_blocker(st, cfg, it, me: str, live, now: float):
+def _claim_blocker(st, cfg, it, me: str, live, now: float, *, globs: list[str] | None = None):
     """Why `claim` would refuse ``it`` for ``me`` right now, as a `Blocked`; None if not.
 
     The scheduler's predicate plus the checks `claim` applies unconditionally -- an
@@ -372,7 +375,9 @@ def _claim_blocker(st, cfg, it, me: str, live, now: float):
     held = live.get(it.id)
     if held is not None and held.holder != me:
         return Blocked(it.id, "conflict", f"leased by {held.holder}", [it.id])
-    clash = L.glob_clash(st, cfg, it, me, list(it.globs), now)
+    # The globs the claim will name, when the caller says (`wait --globs`): judged on the
+    # stored ones, READY was followed by a claim refused for its own globs (B7036cf788c).
+    clash = L.glob_clash(st, cfg, it, me, list(it.globs if globs is None else globs), now)
     if clash is not None:
         other_id, lz, pair = clash
         return Blocked(
@@ -428,6 +433,17 @@ def _freed(st, cfg, was: list[str], me: str) -> list[str]:
     return out
 
 
+def _wait_globs(globs, item: str) -> tuple[list[str] | None, str]:
+    """(the globs `wait` judges the item's claim on, or None for its stored ones; why
+    they cannot be used, or "")."""
+    want = GS.parse(globs) or None
+    if want and not item:
+        # The any-wait judges every item on its own globs; accepting these and dropping
+        # them would answer READY for a claim they then refuse.
+        return None, "globs need an item: they are the globs you will claim THAT item with"
+    return want, GS.problem(want or [])
+
+
 def wait(
     repo: Path,
     *,
@@ -438,8 +454,12 @@ def wait(
     poll_s: float | None = None,
     agent: str = "",
     on_progress=None,
+    globs: str | list[str] | None = None,
 ) -> O.Outcome:
     """Block until ``item`` (or, without one, anything) can be started. Exit 0 on wake.
+
+    ``globs`` (with ``item``) are the globs the caller will claim with: READY then means
+    that claim is not refused for them. Without them, the item's stored globs are used.
 
     Exit 2 when the deadline passes with it still blocked, and at once -- without
     sleeping -- when waiting cannot help: the item is done, in review, in a cycle, held
@@ -468,6 +488,9 @@ def wait(
     }
     if timeout < 0 or poll <= 0:
         return O.failed("wait", "timeout must be >= 0 and poll > 0 seconds", **empty)
+    want, bad = _wait_globs(globs, item)
+    if bad:
+        return O.failed("wait", bad, **empty)
     log, cfg, st = _load(repo, agent)
     if item:
         found = _require(st, item, "wait")
@@ -502,7 +525,7 @@ def wait(
             **data,
         )
 
-    v = _judge_wait(st, cfg, me, item, phase, kind)
+    v = _judge_wait(st, cfg, me, item, phase, kind, want)
     if v["status"] != "blocked" or timeout == 0:
         return result(v, 0.0, [])
 
@@ -537,7 +560,7 @@ def wait(
             seen, checked = ext, time.monotonic()
             log, cfg, st = _load(repo, agent)
             was = v
-            v = _judge_wait(st, cfg, me, item, phase, kind)
+            v = _judge_wait(st, cfg, me, item, phase, kind, want)
             if v["status"] != "blocked":
                 freed = _freed(st, cfg, was["waiting_on"], me)
                 if freed:
@@ -751,7 +774,9 @@ def claim(
             id=item,
             looping=[f.__dict__ for f in looping],
         )
-    want = csv_list(globs) or None
+    # One reader for every surface: a repeated flag's values, or a JSON array sent as one
+    # string over MCP, read whole -- split on commas it was refused as mangled.
+    want = GS.parse(globs) or None
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
     prior = st.items[item].lease if item in st.items else None
@@ -907,6 +932,9 @@ def claim(
         ttl_s=cfg.lease.ttl_s,
         heartbeat_s=cfg.lease.heartbeat_s,
         base=wt.base if wt else "",
+        # What the lease now covers, so the caller need not read the log to learn it
+        # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
+        globs=list(lz.globs),
     )
 
 
@@ -954,7 +982,8 @@ def heartbeat(
 
 
 def _catch_up_globs(log, cfg, item: str) -> str:
-    """Point a just-renewed lease at the item's CURRENT globs; "" or why it could not.
+    """Point a just-renewed lease at the item's CURRENT globs and resources; "" or why
+    it could not.
 
     `update --globs` retargets a LIVE lease and leaves a lapsed one for recovery, so an
     edit made while the lease had lapsed reached only the item. The heartbeat that then
@@ -962,22 +991,29 @@ def _catch_up_globs(log, cfg, item: str) -> str:
     just added as unleased (Bb21d338f26). Now that the lease is live again it takes the
     item's globs -- through `plan_retarget`, the same overlap check as any widening, so
     paths another agent took in the meantime are withheld and the holder is told.
+    Resources the same way, through the capacity check (B7f8060f2f5); each is caught up
+    on its own, so a refusal of one does not hold back the other. A claim records its
+    globs and resources on the item, so this never undoes the claim itself.
     """
     from ..core.model import fold
 
-    with log.transaction():
-        it = fold(log.read_all(), strict=False).items.get(item)
-        lease = it.lease if it else None
-        # Globs cleared to none are caught up too: a revived lease left on the old paths
-        # would keep holding them against every other agent.
-        if lease is None or sorted(lease.globs) == sorted(it.globs):
-            return ""
-        live, refusal = L.plan_retarget(log, cfg, item, list(it.globs))
-        if refusal:
-            return refusal
-        if live is not None:
-            L.retarget(log, item, live, list(it.globs))
-    return ""
+    why: list[str] = []
+    for field in ("globs", "resources"):
+        with log.transaction():
+            it = fold(log.read_all(), strict=False).items.get(item)
+            lease = it.lease if it else None
+            # Cleared to none is caught up too: a revived lease left on the old values
+            # would keep holding them against every other agent.
+            if lease is None or sorted(getattr(lease, field)) == sorted(getattr(it, field)):
+                continue
+            new = list(getattr(it, field))
+            args = (new, None) if field == "globs" else (None, new)
+            live, refusal = L.plan_retarget(log, cfg, item, *args)
+            if refusal:
+                why.append(refusal)
+            elif live is not None:
+                L.retarget(log, item, live, *args)
+    return "; ".join(why)
 
 
 def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:

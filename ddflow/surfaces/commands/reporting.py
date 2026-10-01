@@ -155,7 +155,10 @@ def cmd_show(a, c: Ctx) -> int:
     if it.globs:
         print(f"  globs {', '.join(it.globs)}")
     if it.lease:
-        print(f"  lease {it.lease.holder} ({it.lease.remaining_s(time.time()):.0f}s left)")
+        # The lease's OWN globs: what the conflict checks and the commit hook read, which
+        # an operator could otherwise only learn from the event log (Bd8038b08a1).
+        held = f" on {', '.join(it.lease.globs)}" if it.lease.globs else " on no globs"
+        print(f"  lease {it.lease.holder} ({it.lease.remaining_s(time.time()):.0f}s left){held}")
     if it.worktree:
         print(f"  worktree {W.load_path(c.repo, it.worktree)} [{it.branch}]")
     if it.body:

@@ -120,12 +120,25 @@ def cmd_claim(a, c: Ctx) -> int:
             f"\n  worktree: {d['worktree']}\n  branch:   {d['branch']} (from {d['base']})"
             f"\n  cd there and work."
         )
+    # Every claim says what it now covers: an agent that passed ten paths and was
+    # recorded holding one had no way to tell (Bb3cb64444e).
+    msg += f"\n  globs:    {', '.join(d['globs']) or '(none -- nothing is protected)'}"
     if d["port_advice"]:
         msg += f"\n  {d['port_advice']}"
     c.out(
         msg,
         out.body(
-            ("item", "holder", "worktree", "branch", "base", "rebound", "port", "port_advice")
+            (
+                "item",
+                "holder",
+                "worktree",
+                "branch",
+                "base",
+                "rebound",
+                "port",
+                "port_advice",
+                "globs",
+            )
         ),
     )
     return OK
@@ -147,7 +160,7 @@ def cmd_heartbeat(a, c: Ctx) -> int:
     out = A.heartbeat(c.repo, a.id, agent=c.requested_agent, called_from=c.called_from)
     if out.data.get("globs_withheld"):
         print(
-            f"  lease renewed WITHOUT {a.id}'s newer globs: {out.data['globs_withheld']}",
+            f"  lease renewed WITHOUT {a.id}'s newer globs/resources: {out.data['globs_withheld']}",
             file=sys.stderr,
         )
     waiters = out.data.get("waiters", [])
@@ -181,6 +194,7 @@ def cmd_wait(a, c: Ctx) -> int:
         item=a.item or "",
         phase=a.phase or "",
         kind=a.kind,
+        globs=a.globs,
         timeout_s=a.timeout,
         poll_s=a.poll,
         agent=c.requested_agent,

@@ -146,8 +146,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "resources": (
                 "string",
-                "Physical resources this claim holds, overriding the item's declared "
-                "ones, e.g. 'gpu:2'. Refused (exit 3) when live claims already use the "
+                "Physical resources this claim holds, e.g. 'gpu:2'. They REPLACE the "
+                "item's declared resources (recorded on the item, as globs are). Refused (exit 3) when live claims already use the "
                 "capacity ([schedule] resources) -- every holder counts, you included.",
                 False,
             ),
@@ -1982,7 +1982,12 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Item id.", True),
-            "globs": ("string", "Comma-separated path globs this item writes.", False),
+            "globs": (
+                "string",
+                "Path globs this item writes, comma-separated or a JSON array. REPLACES "
+                "the list (a claimed item's lease too); the result names what it dropped.",
+                False,
+            ),
             "needs": (
                 "string",
                 "Comma-separated ids it depends on. Pass an EMPTY string to clear them "
@@ -2020,7 +2025,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 title=a.get("title"),
                 body=a.get("body"),
                 needs=_list_or_none(a, "needs"),
-                globs=_list_or_none(a, "globs"),
+                # Raw, for the api's single read: split on commas here first, a JSON
+                # array (or a glob holding a comma inside one) was lost (roborev).
+                globs=(
+                    None
+                    if a.get("globs") is None
+                    else list(a["globs"])
+                    if isinstance(a["globs"], list)
+                    else [a["globs"]]
+                ),
                 tags=_list_or_none(a, "tags"),
                 priority=a.get("priority"),
                 line=a.get("line"),
@@ -2106,6 +2119,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "item": ("string", "The item to wait for (default: anything ready).", False),
             "phase": ("string", "With no item: anything ready in this phase.", False),
             "kind": ("string", "'task' (default) or 'phase'.", False),
+            "globs": (
+                "string",
+                "With item: the globs you will claim with (comma-separated or a JSON "
+                "array), so ready means that claim will not be refused for them.",
+                False,
+            ),
             "timeout": (
                 "number",
                 f"Seconds to wait (default {MCP_WAIT_DEFAULT_S}, at most {MCP_WAIT_MAX_S}: "
@@ -2120,6 +2139,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             item=a.get("item", "") or "",
             phase=a.get("phase", "") or "",
             kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
+            globs=a.get("globs") or None,
             timeout_s=_wait_timeout(a),
             poll_s=a.get("poll"),
             agent=agent,
