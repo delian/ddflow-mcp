@@ -335,3 +335,40 @@ def test_a_narrower_driver_the_project_set_keeps_winning(repo):
     # Idempotent, and doctor has nothing to say about the narrower file.
     assert SF.sync_attributes(repo) == []
     assert SF.findings(repo, Config.load(repo)) == ([], [])
+
+
+def test_a_union_line_08af811_wrote_after_a_narrower_driver_is_moved_before_it(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    for name in ("README.md", "guide.md"):
+        (repo / "docs" / name).write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/README.md merge=ours\ndocs/*.md merge=union\n")  # the old order
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text().replace("[lease]\n", '[lease]\nappend_only_globs = ["docs/*.md"]\n', 1)
+    )
+    problems, _n = SF.findings(repo, Config.load(repo))
+    assert any("AFTER a narrower" in p for p in problems), problems
+    assert SF.sync_attributes(repo) == ["docs/*.md merge=union"]
+    lines = _attributes(repo)
+    assert lines.count("docs/*.md merge=union") == 1
+    assert _merge_attr(repo, "docs/README.md") == "ours"
+    assert _merge_attr(repo, "docs/guide.md") == "union"
+    assert SF.sync_attributes(repo) == [] and SF.findings(repo, Config.load(repo)) == ([], [])
+
+
+def test_a_broader_earlier_line_does_not_pull_the_union_line_before_it(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "guide.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("*.md merge=binary\ndocs/*.md merge=union\n")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text().replace("[lease]\n", '[lease]\nappend_only_globs = ["docs/*.md"]\n', 1)
+    )
+    assert SF.sync_attributes(repo) == []
+    assert _merge_attr(repo, "docs/guide.md") == "union"
