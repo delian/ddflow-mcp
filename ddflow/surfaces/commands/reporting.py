@@ -35,10 +35,22 @@ def _queue_lines(r) -> list[str]:
         out.append("")
         out.append("Ready to start:")
         out += [f"  [ ] {t.id:<12} {t.title}" for t in r["ready"][:8]]
+    if r["capped"]:
+        out.append("")
+        held = _first([t.id for t in r["capped"]])
+        out.append(f"{len(r['capped'])} more ready but held by {r['cap']}: {held}")
     if r["blocked"]:
         out.append("")
-        out.append(f"Blocked on dependencies: {', '.join(b.item for b in r['blocked'][:8])}")
+        out.append("Blocked: " + _first([f"{b.item} ({b.reason})" for b in r["blocked"]]))
     return out
+
+
+_SHOWN = 8
+
+
+def _first(names: list[str]) -> str:
+    """The first few of a list, and "..." when there are more."""
+    return ", ".join(names[:_SHOWN]) + (" ..." if len(names) > _SHOWN else "")
 
 
 def _recorded_line(r) -> list[str]:

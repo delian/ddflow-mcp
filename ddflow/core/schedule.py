@@ -129,13 +129,22 @@ class Plan:
     #: Waiting on a pull request. Not running (nobody holds it), not blocked (nothing is
     #: wrong), not ready (there is nothing for an agent to do until a reviewer acts).
     review: list[Item] = field(default_factory=list)
+    #: Ids that nothing blocks but a parallelism cap (`schedule.max_parallel_tasks` or
+    #: `worktree.max_parallel`): ready in every other sense, so a count of "ready" plus
+    #: "blocked on something" that leaves them out does not add up (Bdcce70d036). Each
+    #: is ALSO in `blocked` with reason "state", which `next`, `wait` and their callers
+    #: read; `cap_note` is the one sentence that says which cap.
+    capped: list[str] = field(default_factory=list)
+    cap_note: str = ""
 
     def summary(self) -> str:
         parts = [
             f"{len(self.ready)} ready",
             f"{len(self.running)} running",
-            f"{len(self.blocked)} blocked",
+            f"{len(self.blocked) - len(self.capped)} blocked",
         ]
+        if self.capped:
+            parts.append(f"{len(self.capped)} held by {self.cap_note}")
         if self.cycles:
             parts.append(f"{len(self.cycles)} CYCLE(S)")
         if self.interrupted:
@@ -667,18 +676,31 @@ def plan(
         tree_slots = flight_slots  # no trees are made, so no tree cap applies
     slots = min(flight_slots, tree_slots)
     if slots == flight_slots:
-        why = (
-            f"parallelism cap reached (schedule.max_parallel_tasks="
-            f"{cfg.schedule.max_parallel_tasks}); {in_flight} in flight across the queue"
-        )
+        cap = f"schedule.max_parallel_tasks={cfg.schedule.max_parallel_tasks}"
+        live_note = f"{in_flight} in flight across the queue"
+        p.cap_note = f"the parallelism cap ({cap})"
+        reached = f"parallelism cap reached ({cap})"
     else:
-        why = (
-            f"worktree cap reached (worktree.max_parallel={cfg.worktree.max_parallel}); "
-            f"{with_trees} worktrees live across the queue"
-        )
+        cap = f"worktree.max_parallel={cfg.worktree.max_parallel}"
+        live_note = f"{with_trees} worktrees live across the queue"
+        p.cap_note = f"the worktree cap ({cap})"
+        reached = f"worktree cap reached ({cap})"
     if len(p.ready) > slots:
+        if slots:
+            # NOT "cap reached": a slot is free, and a higher-ranked item is offered it.
+            # Said as "reached", an agent waiting for the message to clear waited hours
+            # on an item `claim` would have granted at once (B40386f7a40).
+            taken = ", ".join(i.id for i in p.ready[:slots])
+            why = (
+                f"held by {p.cap_note}: {live_note}; {slots} slot(s) free, offered to "
+                f"higher-ranked {taken}"
+            )
+        else:
+            # `_blocking_leases` (api.lifecycle) keys on "cap reached".
+            why = f"{reached}; {live_note}"
         for it in p.ready[slots:]:
             p.blocked.append(Blocked(it.id, "state", why, []))
+            p.capped.append(it.id)
         p.ready = p.ready[:slots]
     return p
 
@@ -690,10 +712,12 @@ def critical_path(state: State, phase: str = "") -> list[str]:
     whose runtime is set by a four-deep chain: total time equals the longest path, not
     the sum of the work.
     """
+    # The phase and EVERY item below it: a chain of sub-tasks nested under a task is
+    # the phase's work too, and direct parentage dropped it (B13ed484062) -- the same
+    # slice `plan` stopped making for the same reason.
+    inside = ({phase} | state.descendants(phase)) if phase else set()
     items = {
-        i.id: i
-        for i in state.items.values()
-        if not i.removed and (not phase or phase in (i.parent, i.id))
+        i.id: i for i in state.items.values() if not i.removed and (not phase or i.id in inside)
     }
     # On a cyclic graph the memo is unsound: a result computed under one `seen` set is
     # keyed on the node alone, so a truncated sub-path can be cached and returned where
