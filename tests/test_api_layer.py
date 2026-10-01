@@ -424,6 +424,25 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
         "--globs",
         "a.py",
     )
+    # A fixed probe result for every companion, so neither surface shells out to detect
+    # one. Each probe runs the real tool (npx, docker, ...) with a timeout, and two live
+    # probes need not agree: under load one times out (`unknown`) while the other
+    # answers (`installed`), and the comparison fails on the machine, not on a surface.
+    # `flipflop` makes that disagreement certain instead of load-dependent. Its probe
+    # cannot be spawned during the CLI call (no interpreter line: exec format error, the
+    # same "could not tell" a timeout gives, and likewise never cached) and answers
+    # during the MCP call, so a test that lets the surfaces probe live fails every run.
+    from ddflow.services import companions
+
+    probe = repo / "flipflop-probe"
+    probe.write_text("not a program\n", "utf-8")
+    probe.chmod(0o755)
+    (repo / ".ddflow" / "companions.toml").write_text(
+        f'[[companion]]\nid = "flipflop"\nkind = "cli"\ndetect = ["{probe}"]\n', "utf-8"
+    )
+    companions._write_cache(
+        repo, {c.id: (c.id != "optmem", f"fixed for {c.id}") for c in companions.load(repo)}
+    )
 
     argv, arguments = MIGRATED_WIRE_SHAPES[tool]
     # `--json` is passed for the JSON tools only. A text-bodied tool ignores it today,
@@ -432,6 +451,7 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
     head = [] if tool in TEXT_BODIED else ["--json"]
     _code, cli_out, _err = run_cli(repo, *head, *argv)
     from_cli = None if tool in TEXT_BODIED else _json.loads(cli_out)
+    probe.write_text("#!/bin/sh\nexit 0\n", "utf-8")  # flipflop now answers: see above
 
     reply = Server(repo).handle(
         {
