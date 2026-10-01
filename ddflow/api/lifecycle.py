@@ -934,7 +934,7 @@ def claim(
         base=wt.base if wt else "",
         # What the lease now covers, so the caller need not read the log to learn it
         # (Bb3cb64444e: ten --globs flags recorded none, and nothing said so).
-        globs=list(want if want is not None else lz.globs),
+        globs=list(lz.globs),
     )
 
 
