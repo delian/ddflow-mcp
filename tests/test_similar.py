@@ -287,20 +287,13 @@ def test_an_unknown_dedupe_knob_from_a_newer_tree_is_skipped_not_fatal(tmp_path)
     assert cfg.dedupe.ask_threshold == 0.6 and "dedupe.future_knob" in cfg.unknown_knobs
 
 
-def test_no_hit_scores_zero():
-    """No returned hit scores 0.0 (critic finding). The critic's premise -- a ubiquitous
-    term weighing ~1e-4 -- is false: the smoothed IDF is log((1+n)/(1+df)) + 1 >= 1, so
-    this passes on the unfixed code too; it pins the contract, the rounding guard is
-    defensive."""
-    recs = [
-        {"id": f"R{i}", "kind": "bug", "title": "", "body": f"common uniq{i} x{i}y"}
-        for i in range(3000)
-    ]
-    recs += [
-        {"id": f"Q{i}", "kind": "bug", "title": "", "body": f"other{i} stuff{i}"} for i in range(5)
-    ]
-    hits = similar.build(recs).query({"kind": "bug", "title": "common", "body": ""}, limit=None)
-    assert hits and all(s > 0.0 for _, s in hits)
+def test_no_hit_scores_zero(monkeypatch):
+    """No returned hit scores 0.0 (critic finding). Real data cannot produce a cosine
+    under 5e-10 -- the smoothed IDF is >= 1 -- so the cosine is forced here: the filter
+    must see the rounded score, not the raw one."""
+    idx = similar.build([{"id": "A", "kind": "bug", "title": "alpha beta", "body": ""}])
+    monkeypatch.setattr(textsim, "cosine", lambda q, p: {0: 1e-12})
+    assert idx.query({"kind": "bug", "title": "alpha", "body": ""}, limit=None) == []
 
 
 def test_rebuilding_twice_works_and_replaces_the_projection(repo, log, cfg):
