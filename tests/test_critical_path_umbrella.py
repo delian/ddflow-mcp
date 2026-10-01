@@ -47,3 +47,18 @@ def test_a_finished_sub_task_is_no_step(log):
     log.append("item.completed", "P1.T1a", {})
     st = fold(log.read_all())
     assert critical_path(st, "P1") == ["P1.T1b", "P1.T1", "P1.T2"]
+
+
+def test_a_phase_another_depends_on_is_its_whole_chain_and_then_a_step(log):
+    """Reviewers' probe: P2 needs P1, and P1 holds A -> B -> C -> D. P2's task waits on
+    all of it; the phase boundary is a step, the phase at the end is not."""
+    log.append("phase.added", "P1", {"title": "one"})
+    log.append("phase.added", "P2", {"title": "two", "needs": ["P1"]})
+    _add(log, "A", "P1")
+    _add(log, "B", "P1", ["A"])
+    _add(log, "C", "P1", ["B"])
+    _add(log, "D", "P1", ["C"])
+    _add(log, "T2", "P2")
+    st = fold(log.read_all())
+    assert critical_path(st) == ["A", "B", "C", "D", "P1", "T2"]
+    assert critical_path(st, "P1") == ["A", "B", "C", "D"]
