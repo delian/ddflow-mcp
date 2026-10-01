@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 from ...api import lifecycle as A
-from ..context import MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
+from ..context import FAIL, MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
 
 
 def _refused(out) -> int:
@@ -22,12 +22,21 @@ def _refused(out) -> int:
     return out.exit
 
 
+def _next_without_plan(out, c: Ctx) -> int:
+    """`next`'s answers that render no plan: the JSON body, or a refusal (an unknown
+    `--phase`, Bde0c6e9fad) said on stderr with its exit code."""
+    if c.json:
+        print(json.dumps(out.body(), indent=2, default=str))
+    else:
+        print(out.reason, file=sys.stderr)
+    return out.exit
+
+
 def cmd_next(a, c: Ctx) -> int:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable."""
     out = A.next_(c.repo, kind=a.kind, phase=a.phase or "", agent=c.requested_agent)
-    if c.json:
-        print(json.dumps(out.body(), indent=2, default=str))
-        return out.exit
+    if c.json or out.exit == FAIL:
+        return _next_without_plan(out, c)
     p = out.data["_render"]["plan"]
     if p.cycles:
         print("DEPENDENCY CYCLE(S) — nothing can be scheduled inside them:", file=sys.stderr)
