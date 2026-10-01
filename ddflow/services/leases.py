@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
+from ..core import globspec as GS
 from ..core import schedule
 from ..core.flow import line_key
 from ..core.model import DONE, REVIEW, Item, Lease, State, fold
@@ -67,6 +68,20 @@ class Recovery:
     #: directory, which ddflow bound to the item and did not create. Never advised for
     #: removal -- `merge` refuses to delete one for the same reason (B930f5c6b7c).
     adopted: bool = False
+
+
+def _record_claimed_globs(log: EventLog, it: Item, globs: list[str] | None) -> None:
+    """Write the globs a claim names onto its ITEM too, when they differ (Bbd07ab69fd).
+
+    A claim's globs used to live on the lease alone. The heartbeat's catch-up
+    (Bb21d338f26) points a renewed lease at the item's stored globs whenever the two
+    differ, so the first heartbeat after `claim --globs` -- live, or reviving a lapsed
+    lease (Bc5aec031b3) -- put the lease back on whatever the item had declared before,
+    an empty list included. One answer to "what does this claim cover", recorded in the
+    claim's own transaction, leaves the catch-up nothing to undo.
+    """
+    if globs is not None and sorted(globs) != sorted(it.globs):
+        log.append(f"{it.kind}.updated", it.id, {"globs": list(globs)})
 
 
 def _renew_in_place(
@@ -193,6 +208,9 @@ def acquire(
             raise LeaseError(f"no such item {item_id!r}", item=item_id)
         if it.removed:
             raise LeaseError(f"{item_id} was removed", item=item_id)
+        bad = GS.problem(globs or [])
+        if bad:
+            raise LeaseError(f"{item_id}: {bad}", item=item_id)
         if it.state == DONE and not force:
             # An agent decides what to claim from a snapshot it folded a moment ago.
             # Between that fold and this acquire, another agent can finish the item --
@@ -210,6 +228,7 @@ def acquire(
         existing = it.lease
         if existing and not existing.expired(now, cfg.lease.grace_s):
             if existing.holder == holder:
+                _record_claimed_globs(log, it, globs)
                 return _renew_in_place(
                     log, existing, item_id, holder, now, worktree, branch, globs, note, resources
                 )
@@ -289,6 +308,7 @@ def acquire(
                     alternatives=_alternatives(state, cfg, item_id, holder, now),
                 )
 
+        _record_claimed_globs(log, it, globs)
         log.append(
             "lease.acquired",
             item_id,
