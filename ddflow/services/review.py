@@ -638,13 +638,18 @@ def _chat_command(rev: Reviewer, system: str, user: str, timeout_s: float) -> tu
 
 
 def _cut_off(exc: Exception) -> str:
-    """A response that stopped mid-read -- `IncompleteRead`, which is no `OSError`.
+    """An `http.client.HTTPException`, which is no `OSError`: most often a response that
+    stopped mid-read (`IncompleteRead`). Never a `TRUNCATED`, so never retried as one.
 
     The everyday cause is hedging: the winning copy shuts a loser's socket while the
     loser is reading its answer. Uncaught, it escaped `_chat` and crashed the whole
     review, whose contract is never to raise (bug Bf948d29d37).
     """
-    return f"connection cut off mid-response: {exc!r}"
+    if isinstance(exc, http.client.IncompleteRead):
+        return f"connection cut off mid-response: {exc!r}"
+    # The rest of the family is the endpoint, not the reply: an InvalidURL from a bad
+    # base_url port, a BadStatusLine from a proxy that does not speak HTTP (critic).
+    return f"bad HTTP exchange with the endpoint: {exc!r}"
 
 
 def _post_json(url: str, payload: dict, headers: dict, timeout_s: float) -> tuple[dict | None, str]:
