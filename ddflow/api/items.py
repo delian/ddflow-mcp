@@ -67,22 +67,34 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
             "or an empty list to clear it.",
             id=item,
         )
-    target = None
     if edit.worktree is not None:
-        # Decided before anything is written: a refused rebind records no field either.
-        target = _rebind_target(repo, cfg, st, it, edit.worktree, log.agent_id)
+        return _update_and_rebind(repo, log, cfg, item, fields, edit.worktree)
+    return _record_update(log, cfg, it, fields)
+
+
+def _update_and_rebind(repo: Path, log, cfg, item: str, fields: dict, path: str) -> O.Outcome:
+    """Set ``fields`` and rebind ``item`` to ``path``, all or nothing, under ONE lock.
+
+    Decided from a fold taken INSIDE the lock: from the caller's earlier snapshot, a
+    lease of its own that lapsed while another agent claimed the item read as its own,
+    and the rebind re-acquired over the new holder (critic). And no write lands unless
+    every one does: a refused field edit rebinds nothing, a refused rebind sets no field.
+    """
+    with log.transaction():
+        st = fold(log.read_all(), strict=False)
+        it = st.items[item]
+        target = _rebind_target(repo, cfg, st, it, path, log.agent_id)
         if isinstance(target, O.Outcome):
             return target
-    if not fields:
-        rebound = _rebind(log, cfg, it, *target)
-        return O.ok("item.updated", id=it.id, changed=["worktree"], fields={}, **rebound)
-    out = _record_update(log, cfg, it, fields)
-    if target is not None and out.exit == O.OK:
-        # Only after the fields landed: a refused field edit records NOTHING, the rebind
-        # included -- and the rebind itself cannot be refused once `_rebind_target` passed.
+        if fields:
+            out = _record_update(log, cfg, it, fields)
+            if out.exit != O.OK:
+                return out
+        else:
+            out = O.ok("item.updated", id=it.id, changed=[], fields={})
         out.data.update(_rebind(log, cfg, it, *target))
         out.data["changed"] = sorted([*out.data["changed"], "worktree"])
-    return out
+        return out
 
 
 def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
@@ -100,6 +112,9 @@ def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
     from ..infra import worktree as W
     from .lifecycle import _worktree_held_by
 
+    if not path.strip():
+        # Not "here": an empty `$WT` would otherwise rebind to wherever the shell is.
+        return O.refused("item.updated", "--worktree is empty: name the tree.", id=it.id)
     where = Path(path).expanduser()
     if not where.is_absolute():
         where = repo / where
@@ -145,15 +160,21 @@ def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
 def _rebind(log, cfg, it, stored: str, branch: str) -> dict[str, str]:
     """Bind ``it`` -- and the caller's live lease on it -- to ``stored`` on ``branch``.
 
-    Recorded as `worktree.adopted`, as a claim that adopts a tree is: ddflow did not make
-    it, so `merge` never removes it.
+    Called under the log lock with ``it`` folded inside it, after `_rebind_target`
+    refused any live lease held by someone else: a live lease here is the caller's.
+    The lease first, so a refusal there records nothing. Recorded as `worktree.adopted`,
+    as a claim that adopts a tree is: ddflow did not make it, so `merge` never removes it.
     """
+    import time
+
+    lease = it.lease
+    if (
+        lease is not None
+        and not lease.expired_at
+        and not lease.expired(time.time(), cfg.lease.grace_s)
+    ):
+        L.acquire(log, cfg, it.id, worktree=stored, branch=branch, force=True)
     log.append("worktree.adopted", it.id, {"path": stored, "branch": branch, "base": ""})
-    if it.lease is not None and it.lease.holder == log.agent_id and not it.lease.expired_at:
-        try:
-            L.acquire(log, cfg, it.id, worktree=stored, branch=branch, force=True)
-        except L.LeaseError:
-            pass  # lapsed between the check and here: the item is rebound, the lease is not
     return {"worktree": stored, "branch": branch}
 
 

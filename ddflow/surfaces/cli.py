@@ -142,7 +142,8 @@ def cmd_item_update(a, c: Ctx) -> int:
             line=a.line,
             resources=None if a.resources is None else _csv(a.resources),
             # Relative to where the caller stands, like any path typed in a shell.
-            worktree=None if a.worktree is None else os.path.abspath(a.worktree),
+            # An empty value stays empty, for the api to refuse: abspath("") is the cwd.
+            worktree=a.worktree and os.path.abspath(a.worktree),
         ),
         agent=c.requested_agent,
     )
