@@ -943,8 +943,9 @@ an agent must not be able to mint one (decision D-reviewer-trust):
 - A `kind = "command"` reviewer runs any program and can print any verdict, so **only a
   person adds one**: by editing `.ddflow/local/reviewers.toml`, or with `ddflow reviewers
   add` from their own terminal. Every agent surface refuses it — `ddflow_configure`,
-  `config --append-toml`, and any command run under `--agent`, `DDFLOW_AGENT` or inside an
-  agent harness.
+  `config --append-toml`, and any command run under `--agent` or `DDFLOW_AGENT`, or in a
+  Claude Code shell (`CLAUDECODE`, the one harness marker known for certain; another
+  harness is recognised by the `--agent`/`DDFLOW_AGENT` its ddflow setup passes).
 - A reviewer **a tool writes** (`reviewers add`, `reviewers detect --write`,
   `ddflow_configure`) is recorded with who wrote it, and its reviews do not count toward
   the cross-family rule until a person checks the entry and runs

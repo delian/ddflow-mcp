@@ -20,12 +20,10 @@ Like human gates, this makes tampering VISIBLE; it does not stop a shell edit of
 
 from __future__ import annotations
 
-import contextlib
 import getpass
 import hashlib
 import os
 import socket
-from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -38,7 +36,9 @@ from ..infra import tomlcfg as TC
 IDENTITY = ("name", "kind", "base_url", "model", "family", "command")
 
 #: Environment variables an agent harness sets in the shells it runs, so a command it
-#: runs is known not to come from a person at their own terminal.
+#: runs is known not to come from a person at their own terminal. Only the ones known
+#: for certain: Claude Code exports CLAUDECODE=1. Another harness is recognised by
+#: `--agent` or `DDFLOW_AGENT`, which ddflow's own setup has it pass.
 HARNESS_MARKERS = ("CLAUDECODE",)
 
 
@@ -52,19 +52,19 @@ def digest(rev: Any) -> str:
     return hashlib.sha256(canonical(body).encode("utf-8")).hexdigest()[:16]
 
 
-def snapshot(repo: Path) -> dict[str, tuple[str, str]]:
-    """name -> (digest, kind) for every reviewer configured now; {} if none load."""
+def snapshot(repo: Path) -> dict[str, tuple[str, str]] | None:
+    """name -> (digest, kind) for every reviewer configured now; None if they do not load."""
     from .review import load_reviewers
 
     try:
         return {r.name: (digest(r), r.kind) for r in load_reviewers(Path(repo))}
-    except Exception:  # a broken file is reported by whatever reads it next
-        return {}
+    except Exception:
+        return None
 
 
 def digest_of(repo: Path, name: str) -> str:
     """The current digest of reviewer ``name``, or ``""``."""
-    return snapshot(repo).get(name, ("", ""))[0]
+    return (snapshot(repo) or {}).get(name, ("", ""))[0]
 
 
 def agent_marker(requested_agent: str = "") -> str:
@@ -97,32 +97,36 @@ def _log(repo: Path, agent: str):
     return EventLog(repo, who, lock_timeout_s=cfg.lease.acquire_timeout_s, log_cfg=cfg.log)
 
 
-@contextlib.contextmanager
-def guarded(repo: Path, *, person: bool = False, agent: str = "") -> Iterator[None]:
-    """Wrap one tool write of the config: refuse a command reviewer, record the rest.
+def write(repo: Path, path: Path, text: str, *, person: bool = False, agent: str = "") -> None:
+    """Write one config file as a tool: refuse a command reviewer, record the rest.
 
     Judged on the EFFECTIVE reviewers before and after, not on the text written: a
     block can change an entry defined in another layer, and the overlay merges by name.
-    A refused write is undone -- every reviewer file is put back as it was.
+    A refused write is undone -- ``path`` is put back as it was (only ``path``: the
+    caller holds its lock and no other file was touched). The write itself is atomic,
+    so it either lands whole or not at all; nothing can persist half-way and skip the
+    check (critic).
+
+    Fails CLOSED when the reviewers cannot be read before or after: a guard that saw
+    "no reviewers" whenever the files did not load would wave through exactly the write
+    it exists to stop (roborev).
     """
-    repo = Path(repo)
+    repo, path = Path(repo), Path(path)
     before = snapshot(repo)
-    saved = {p: (p.read_bytes() if p.exists() else None) for p in _files(repo)}
-    yield
+    if before is None:
+        raise ReviewerRefused(_unreadable("before"))
+    saved = path.read_bytes() if path.exists() else None
+    TC.atomic_write(path, text)
     after = snapshot(repo)
-    changed = {n: v for n, v in after.items() if before.get(n) != v}
-    if not changed:
-        return
+    changed = {} if after is None else {n: v for n, v in after.items() if before.get(n) != v}
     commands = sorted(n for n, (_d, kind) in changed.items() if kind == "command")
-    if commands and not person:
-        for p, data in saved.items():
-            now = p.read_bytes() if p.exists() else None
-            if now == data:
-                continue  # only what this write changed: another writer's file is theirs
-            if data is None:
-                p.unlink(missing_ok=True)
-            else:
-                TC.atomic_write(p, data.decode("utf-8"))
+    if after is None or (commands and not person):
+        if saved is None:
+            path.unlink(missing_ok=True)
+        else:
+            TC.atomic_write(path, saved.decode("utf-8"))
+        if after is None:
+            raise ReviewerRefused(_unreadable("after"))
         raise ReviewerRefused(
             f"refusing to write the command reviewer(s) {', '.join(commands)}: a "
             f"kind='command' reviewer runs any program and can print any verdict, so only "
@@ -130,6 +134,8 @@ def guarded(repo: Path, *, person: bool = False, agent: str = "") -> Iterator[No
             f".ddflow/local/reviewers.toml, or with `ddflow reviewers add` from your own "
             f"terminal. Nothing was written."
         )
+    if not changed:
+        return
     log = _log(repo, agent)
     for name, (dig, kind) in sorted(changed.items()):
         log.append(
@@ -137,6 +143,15 @@ def guarded(repo: Path, *, person: bool = False, agent: str = "") -> Iterator[No
             name,
             {"digest": dig, "kind": kind, "person": bool(person), "user": _user()},
         )
+
+
+def _unreadable(when: str) -> str:
+    return (
+        f"refusing to write config: the [[reviewer]] entries do not load {when} this "
+        f"write, so whether it adds or changes a reviewer cannot be checked "
+        f"(decision D-reviewer-trust). Fix the reviewer files by hand "
+        f"(`ddflow reviewers list` names the problem). Nothing was written."
+    )
 
 
 def _user() -> str:
@@ -149,7 +164,7 @@ def _user() -> str:
 def pending(repo: Path, st: Any) -> list[dict[str, Any]]:
     """Reviewers whose CURRENT entry a tool wrote and no person has approved."""
     out = []
-    for name, (dig, kind) in sorted(snapshot(repo).items()):
+    for name, (dig, kind) in sorted((snapshot(repo) or {}).items()):
         w = st.reviewer_writes.get(dig)
         if w and dig not in st.reviewer_approvals:
             out.append({"name": name, "digest": dig, "kind": kind, **w})

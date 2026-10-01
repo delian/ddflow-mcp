@@ -547,5 +547,4 @@ def _write_reviewed(repo: Path, path: Path, text: str, *, person: bool, agent: s
     and refused, and any reviewer whose identity a tool created or changed is recorded
     as `reviewer.configured`, to count only after a person approves it.
     """
-    with RT.guarded(repo, person=person, agent=agent):
-        TC.atomic_write(path, text)
+    RT.write(repo, path, text, person=person, agent=agent)

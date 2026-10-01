@@ -1808,13 +1808,13 @@ def reviewer_independence(
     author_fam = family_of(author_model, cfg).strip().lower() if routed is None else ""
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
-    unapproved: list[str] = []
+    unapproved: list[tuple[str, str]] = []
     for gname in ("rubber_duck", "critic", "standards"):
         rec = it.gates.get(gname)
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue
         if who := _unapproved_reviewer(state, rec.evidence):
-            unapproved.append(f"{gname} came from reviewer {who}")
+            unapproved.append((gname, who))
             continue
         m = str(rec.evidence.get("model", rec.by) or "").strip()
         fam = _declared_family(rec.evidence) or family_of(m, cfg).strip().lower()
@@ -1850,13 +1850,15 @@ def reviewer_independence(
     author_set = routed if routed is not None else [author_fam]
     author_desc = author_fam if routed is None else f"{author_model} ({', '.join(author_set)})"
     if unapproved and not fams:
-        names = sorted({u.rsplit(" ", 1)[-1] for u in unapproved})
+        # The names as recorded, never re-parsed out of the text: a name with a space
+        # in it would print an approve command for the wrong reviewer (rubber duck).
+        names = sorted({who for _g, who in unapproved})
         return False, (
-            f"{'; '.join(unapproved)}, whose entry a tool wrote and a person has "
+            f"{'; '.join(f'{g} came from reviewer {w!r}' for g, w in unapproved)}, whose entry a tool wrote and a person has "
             f"not approved, so it is not counted (decision D-reviewer-trust): an agent can "
             f"write a reviewer, so it cannot vouch for one. The operator reviews the "
             f"entry and runs "
-            + " and ".join(f"`ddflow reviewers approve {n}`" for n in names)
+            + " and ".join(f"`ddflow reviewers approve {shlex.quote(n)}`" for n in names)
             + " from their own terminal."
         )
     if not fams:
