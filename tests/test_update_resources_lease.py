@@ -96,3 +96,15 @@ def test_a_globs_only_update_keeps_the_lease_reservation(repo):
     lz = _items(repo)["T1"].lease
     assert lz.resources == ["gpu:2"], "a globs edit dropped the reservation"
     assert lz.globs == ["a.py", "b.py"]
+
+
+def test_clearing_resources_or_globs_reaches_the_lease(repo):
+    """`update` never carries a None field: clearing is an empty list, and it reaches
+    the lease like any other value (`ItemEdit`: None = leave alone, [] = clear)."""
+    _gpus(repo, 2)
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    assert A.claim(repo, "T1", no_worktree=True, resources="gpu:2", agent=HOLDER).ok
+    out = AI.update(repo, "T1", AI.ItemEdit(resources=[], globs=[]), agent=HOLDER)
+    assert out.ok and out.data["fields"] == {"globs": [], "resources": []}
+    lz = _items(repo)["T1"].lease
+    assert lz.resources == [] and lz.globs == []
