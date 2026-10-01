@@ -235,9 +235,11 @@ def test_halves_never_lose_a_file(monkeypatch):
     out = R._retry_truncated(
         Reviewer(name="r"), "s", [chunk], [("", "TRUNCATED: x")], lambda d, i: d, 0.0
     )
-    sent = "".join(seen)
-    for header in ("diff --git a/big.bin", "HALF-A", "HALF-B"):
-        assert header in sent, f"the retry lost {header!r}"
+    assert len(seen) > 1, "the chunk was retried whole, not in halves"
+    for marker in ("diff --git a/big.bin", "HALF-A", "HALF-B"):
+        assert any(marker in part for part in seen), f"the retry lost {marker!r}"
+    (big_part,) = [part for part in seen if "diff --git a/big.bin" in part]
+    assert "similarity 9" in big_part, "big.bin's header went without its body"
     assert out[0][1] == ""
 
 

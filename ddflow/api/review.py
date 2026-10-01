@@ -129,7 +129,7 @@ def diff_for(
 PROGRESS_EVERY_S = 60
 
 
-def _lease_ticker(log, cfg, it) -> Callable[[], None] | None:
+def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
     """A tick renewing the caller's lease on `it` every `lease.heartbeat_s`, or None.
 
     A review on a reasoning model runs 20-40 minutes against a 30-minute lease, and the
@@ -137,7 +137,10 @@ def _lease_ticker(log, cfg, it) -> Callable[[], None] | None:
     refused, and `next` offered the item's files to another agent while its owner was
     about to merge (bugs Bc6ec4fd40d, Bf0cccb8fb1). `gate run` already renewed; this is
     the same keeper (`gates._lease_keeper`: only the HOLDER's lease, never a
-    bystander's), throttled because the review ticks more often than it must renew.
+    bystander's), throttled because the review ticks more often than it must renew:
+    it renews at the last tick before `heartbeat_s` has passed since the lease's own
+    last renewal, so two renewals are never further apart than `heartbeat_s` (critic:
+    a 0.9 x heartbeat threshold let a 60 s tick land a renewal up to a tick late).
     """
     import time
 
@@ -146,11 +149,11 @@ def _lease_ticker(log, cfg, it) -> Callable[[], None] | None:
     renew = _lease_keeper(log, cfg, it) if it else None
     if renew is None:
         return None
-    every = max(1, cfg.lease.heartbeat_s)
-    last = [time.time()]
+    due = max(0.0, max(1, cfg.lease.heartbeat_s) - tick_s)
+    last = [it.lease.renewed_at or time.time()]
 
     def tick() -> None:
-        if time.time() - last[0] >= every * 0.9:  # ticks land on the beat, give or take
+        if time.time() - last[0] >= due:
             last[0] = time.time()
             renew()
 
@@ -329,7 +332,8 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         )
 
     overrides = P.overrides_from(cfg)
-    keep_lease = _lease_ticker(log, cfg, it)
+    tick_s = min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s))
+    keep_lease = _lease_ticker(log, cfg, it, tick_s)
     results = []
     for r in revs:
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
@@ -342,7 +346,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             prompt_overrides=overrides,
             on_progress=say,
             on_tick=keep_lease,
-            tick_s=min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s)),
+            tick_s=tick_s,
         )
         results.append(res)
         say(

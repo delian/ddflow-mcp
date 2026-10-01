@@ -16,6 +16,7 @@ Each test is one filed bug, reproduced first against the unfixed code:
 
 from __future__ import annotations
 
+import itertools
 import json
 import stat
 import sys
@@ -91,6 +92,79 @@ def test_a_large_file_section_with_no_hunk_is_still_sent():
     diff = "diff --git a/old.py b/new.py\nsimilarity index 100%\n" + renames + _new_file("n.py", 3)
     chunks = split_diff(diff, 200)
     assert any("rename from old/0.py" in c for c in chunks), "a hunkless section was dropped"
+
+
+@pytest.mark.parametrize(
+    ("section", "expected"),
+    [
+        ("diff --git a/x.py b/x.py\n--- a/x.py\n+++ b/x.py\n@@ -1 +1 @@\n", "x.py"),
+        # core.quotePath: a non-ASCII name is C-quoted on every line.
+        (
+            'diff --git "a/docs/\\303\\274ber.md" "b/docs/\\303\\274ber.md"\n'
+            '--- "a/docs/\\303\\274ber.md"\n+++ "b/docs/\\303\\274ber.md"\n@@ -1 +1 @@\n',
+            "docs/\u00fcber.md",
+        ),
+        # diff.noprefix
+        ("diff --git x.py x.py\n--- x.py\n+++ x.py\n@@ -1 +1 @@\n", "x.py"),
+        # a directory whose name ends in " b"
+        ("diff --git a/x b/y.c b/x b/y.c\n--- a/x b/y.c\n+++ b/x b/y.c\n@@ -1 +1 @@\n", "x b/y.c"),
+        # a rename names the NEW path
+        (
+            "diff --git a/old.py b/new.py\nsimilarity index 90%\nrename from old.py\n"
+            "rename to new.py\n--- a/old.py\n+++ b/new.py\n@@ -1 +1 @@\n",
+            "new.py",
+        ),
+        (
+            "diff --git a/gone.py b/gone.py\ndeleted file mode 100644\n--- a/gone.py\n+++ /dev/null\n",
+            "gone.py",
+        ),
+        ("diff --git a/a b/a\nold mode 100644\nnew mode 100755\n", "a"),
+    ],
+)
+def test_a_chunk_names_its_files_however_git_prints_them(section, expected):
+    from ddflow.services.review import chunk_files
+
+    assert chunk_files(section) == [expected]
+
+
+def test_a_failed_chunk_of_a_split_file_names_that_file(tmp_path):
+    """Files are looked up per CHUNK, not per file of the diff: a large file split into
+    several chunks, followed by other files, names the right file for the chunk lost."""
+    rev, _ = _command_reviewer(
+        tmp_path,
+        "case \"$in\" in *HUNK7*) echo 'no verdict';; *) echo 'STATUS: NO FINDINGS';; esac",
+        max_chunk_chars=3000,
+    )
+    hunks = "".join(
+        f"@@ -{h * 50 + 1},1 +{h * 50 + 1},1 @@\n-old\n+HUNK{h} {'q' * 1000}\n" for h in range(10)
+    )
+    big = "diff --git a/big.py b/big.py\n--- a/big.py\n+++ b/big.py\n" + hunks
+    res = review(rev, big + _three_files(bad=()), "i")
+    assert res.chunks_total > 3, res.chunks_total
+    assert [u["files"] for u in res.unreviewed] == [["big.py"]], res.unreviewed
+    assert res.unreviewed[0]["chunk"] < res.chunks_total, "the lost chunk is big.py's, not last"
+
+
+def test_a_retry_names_the_chunks_it_retries_not_its_part_numbers(monkeypatch):
+    """critic: the retry races PARTS of the lost chunks; its tick indices are positions
+    in that list, and were printed as if they were chunk numbers."""
+    import ddflow.services.review as R
+
+    calls: list[int] = []
+
+    def race(rev, system, users, started, **kw):
+        calls.append(len(users))
+        if len(calls) == 1:  # first pass: chunk 3 of 3 runs out of budget
+            return [("STATUS: NO FINDINGS", ""), ("STATUS: NO FINDINGS", ""), ("", R.TRUNCATED)]
+        kw["on_tick"]([0])  # the retry's own index 0 is chunk 3
+        return [("STATUS: NO FINDINGS", "")] * len(users)
+
+    monkeypatch.setattr(R, "_race", race)
+    lines: list[str] = []
+    rev = Reviewer(name="r", base_url="http://127.0.0.1:9/v1", model="m", max_chunk_chars=150)
+    R.review(rev, _three_files(bad=()), "i", on_progress=lines.append)
+    waiting = [line for line in lines if "waiting" in line]
+    assert waiting and "on retry (3)" in waiting[0], lines
 
 
 # -- Bbf41d8f07f ----------------------------------------------------------------------
@@ -280,6 +354,33 @@ def test_review_renews_the_callers_lease_while_it_waits(repo, tmp_path, monkeypa
     assert len(renewed) - before >= 2, "nothing renewed the lease while the review ran"
     assert {e.data.get("holder") for e in renewed} == {"worker"}
     assert set(threads) == {threading.main_thread()}, "renewed from another thread"
+
+
+def test_renewals_are_never_further_apart_than_the_heartbeat(monkeypatch):
+    """critic: a 0.9 x heartbeat threshold checked on 60 s ticks renewed up to a tick
+    late (heartbeat 90 -> every 120 s)."""
+    from types import SimpleNamespace
+
+    import ddflow.api.gates as G
+    import ddflow.api.review as api
+
+    renewed: list[float] = []
+    now = [1000.0]
+    monkeypatch.setattr("time.time", lambda: now[0])
+    monkeypatch.setattr(G, "_lease_keeper", lambda *_a: lambda: renewed.append(now[0]))
+    for heartbeat in (60, 90, 150, 300, 301):
+        renewed.clear()
+        cfg = SimpleNamespace(lease=SimpleNamespace(heartbeat_s=heartbeat))
+        it = SimpleNamespace(lease=SimpleNamespace(renewed_at=now[0]))
+        tick_s = min(api.PROGRESS_EVERY_S, heartbeat)
+        tick = api._lease_ticker(None, cfg, it, tick_s)
+        start = now[0]
+        for _ in range(40):
+            now[0] += tick_s
+            tick()
+        beats = [start, *renewed]
+        gaps = [b - a for a, b in itertools.pairwise(beats)]
+        assert gaps and max(gaps) <= heartbeat, (heartbeat, gaps)
 
 
 def test_a_bystanders_review_does_not_renew_a_lease_it_does_not_hold(repo, tmp_path):
