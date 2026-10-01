@@ -271,3 +271,22 @@ def test_a_glob_with_a_space_is_reported_not_written_broken(repo):
     assert not any("Change" in ln for ln in _attributes(repo))
     problems, _n = SF.findings(repo, Config.load(repo))
     assert any("docs/Change?Log.md" in p for p in problems), problems
+
+
+def test_a_caret_class_negates_as_in_git():
+    from ddflow.core.schedule import is_shared
+
+    assert is_shared("filex.txt", ["file[^0-9].txt"])
+    assert not is_shared("file5.txt", ["file[^0-9].txt"])
+
+
+def test_a_driver_on_one_covered_file_does_not_stand_for_the_rest(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    for name in ("README.md", "guide.md"):
+        (repo / "docs" / name).write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/README.md merge=ours\n")
+    assert run_cli(repo, "config", "--set", "lease.append_only_globs", '["docs/*.md"]')[0] == 0
+    assert "docs/*.md merge=union" in _attributes(repo)

@@ -28,44 +28,51 @@ def union_line(glob: str) -> str:
     return f"{glob} merge=union"
 
 
-def _probe_path(repo: Path, glob: str) -> str:
-    """A path to ask git about for ``glob``: the glob itself when it is a literal path,
-    else a tracked file it matches, else the glob's own name.
+def _probe_paths(repo: Path, glob: str) -> list[str]:
+    """The paths to ask git about for ``glob``: the glob itself when it is a literal path,
+    else every tracked file it matches, else the glob's own name.
 
     A character class does not match its own name (`[Cc]HANGELOG.md` names no `[`), so
-    asking git about the pattern string reported "no driver" for a working line, and
-    then wrote a union line over a driver the project chose (review finding).
+    asking git about the pattern string reported "no driver" for a working line. And one
+    sample is not enough: a driver the project set on `docs/README.md` says nothing about
+    `docs/guide.md` under the same `docs/*.md` (review findings).
     """
     from ..core.schedule import is_shared
     from ..infra import proc as P
 
     if not any(ch in glob for ch in "*?["):
-        return glob
+        return [glob]
     r = P.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True)
     hits = [p for p in r.stdout.splitlines() if is_shared(p, [glob])] if r.returncode == 0 else []
-    return hits[0] if hits else glob
+    return hits or [glob]
 
 
 def driver(repo: Path, glob: str) -> str:
-    """The merge driver git applies to ``glob`` -- `union`, `ours`, ... -- or "" for none.
+    """The merge driver git applies to EVERY file ``glob`` covers -- `union`, `ours`, ...
+    -- or "" when any of them has none.
 
     Asked of git (`git check-attr merge`), not read off the file: patterns match like
     gitignore and the LAST matching line wins across different patterns, so a later
     `*.md merge=ours` overrides `CHANGELOG.md merge=union` (review finding). A bare
     `merge` (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; so is a
-    git that cannot answer.
+    git that cannot answer. When the covered files disagree, `union` is reported only if
+    all are union, and otherwise the first other driver found.
     """
     from ..infra import proc as P
 
+    paths = _probe_paths(repo, glob)
     r = P.run(
-        ["git", "-C", str(repo), "check-attr", "merge", "--", _probe_path(repo, glob)],
+        ["git", "-C", str(repo), "check-attr", "merge", "--", *paths],
         capture_output=True,
         text=True,
     )
     if r.returncode != 0:
         return ""
-    value = r.stdout.strip().rsplit(": ", 1)[-1] if r.stdout.strip() else ""
-    return "" if value in ("", "unspecified", "set", "unset") else value
+    values = [ln.rsplit(": ", 1)[-1] for ln in r.stdout.splitlines() if ln.strip()]
+    if not values or any(v in ("unspecified", "set", "unset") for v in values):
+        return ""
+    others = [v for v in values if v != "union"]
+    return others[0] if others else "union"
 
 
 def committed_append_only(repo: Path) -> list[str]:
@@ -91,7 +98,8 @@ def committed_append_only(repo: Path) -> list[str]:
 
 def sync_attributes(repo: Path) -> list[str]:
     """Append `<glob> merge=union` for each committed append-only glob that lacks a
-    driver; the lines added.
+    driver; the lines added. A glob holding whitespace is skipped -- a pattern ends at the
+    first space -- and `findings` says how to write it.
 
     Idempotent and append-only (`adopt._append_once`): the project's own lines stay, and a
     glob already given a merge DRIVER is left alone -- the project chose one. Reads the
