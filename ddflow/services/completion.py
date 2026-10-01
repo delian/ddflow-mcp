@@ -144,10 +144,16 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
         v.coverage_note = _coverage_note(it, s.unavailable)
 
     cwd, landed = _tree_being_completed(repo, it)
-    for gid, why in G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed):
+    for note in G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed):
+        if note.unverified:
+            v.warnings.append(
+                f"{note.gate} passed, but whether on the tree you are completing could "
+                f"not be checked — {note.why}. Re-run it if that matters."
+            )
+            continue
         v.warnings.append(
-            f"{gid} passed on a different tree than the one you are completing — {why}. "
-            f"Re-run it if the change was not cosmetic."
+            f"{note.gate} passed on a different tree than the one you are completing — "
+            f"{note.why}. Re-run it if the change was not cosmetic."
         )
     return v
 
@@ -179,7 +185,14 @@ def _tree_being_completed(repo: Path, it) -> tuple[Path, str]:
         parents = W.git(repo, "rev-list", "--parents", "-n", "1", sha).out.split()
         # OUR merge commit only: its first parent is the target before it. A branch
         # head that is itself a merge (main merged into it), fast-forwarded, is not.
-        ours = ref == it.landed_after and parents[1:2] == [W.rev(repo, it.landed_before)]
+        # The forge path records `landed_before` as the landed commit's own first
+        # parent, so there a fast-forward is told apart by the PR's head instead.
+        head = W.rev(repo, it.pr.head_sha) if it.pr and it.pr.head_sha else ""
+        ours = (
+            ref == it.landed_after
+            and parents[1:2] == [W.rev(repo, it.landed_before)]
+            and sha != head
+        )
         if ours and len(parents) > 2:  # noqa: PLR2004 -- self + 2 parents
             return repo, parents[2]
         return repo, sha

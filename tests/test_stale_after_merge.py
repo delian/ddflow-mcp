@@ -226,3 +226,44 @@ def test_with_filemode_an_executable_is_recorded_as_git_records_it(repo):
     other.write_text("#!/bin/sh\n")
     other.chmod(0o654)  # group-executable only: git records 100644
     _commit_all_matches(repo)
+
+
+def test_a_forge_fast_forward_of_a_merge_head_is_what_landed(repo):
+    """The forge path records `landed_before` as the landed commit's own first parent,
+    so only the PR's head tells a fast-forwarded merge head from ddflow's merge."""
+    from ddflow.core.model import Item, PullRequest
+    from ddflow.services.completion import _tree_being_completed
+
+    _git(repo, "checkout", "-qb", "feature")
+    (repo / "a.py").write_text("a = 1\n")
+    _git(repo, "add", "a.py")
+    _git(repo, "commit", "-qm", "T1")
+    _git(repo, "checkout", "-q", "main")
+    (repo / "m.txt").write_text("main moved\n")
+    _git(repo, "add", "m.txt")
+    _git(repo, "commit", "-qm", "main moves")
+    main_tip = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "feature")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "merge main", "main")
+    head = _git(repo, "rev-parse", "HEAD")
+    it = Item(id="T1", kind="task")
+    it.landed_after = head
+    it.landed_before = _git(repo, "rev-parse", "HEAD^1")
+    it.merged_sha = head
+    it.pr = PullRequest(head_sha=head, merge_sha=head, state="merged")
+    assert _tree_being_completed(repo, it) == (repo, head)
+    it.pr = None  # without the PR's head the first-parent rule takes the second parent
+    assert _tree_being_completed(repo, it) == (repo, main_tip)
+
+
+def test_legacy_evidence_on_uncommitted_edits_is_unverified_after_merge_not_fresh(repo):
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    _legacy_pass(repo, _git(tree, "rev-parse", "HEAD")[:12] + "+0123456789abcdef")
+    said = _merge_and_complete(repo)
+    assert NOTE not in said, said
+    assert (
+        "unit_tests passed, but whether on the tree you are completing could not be checked" in said
+    ), said
