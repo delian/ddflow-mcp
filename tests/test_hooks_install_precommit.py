@@ -43,3 +43,33 @@ def test_checks_the_framework_already_runs_are_not_refused(repo):
     assert "REFUSED" not in out + err and "NOT INSTALLED" not in out + err, out + err
     assert "pre-commit framework" in out, out
     assert {n: (hooks / n).read_text() for n in before} == before, "generated hooks untouched"
+
+
+_CHECK_COMMIT_ONLY = """\
+default_install_hook_types: [pre-commit, commit-msg]
+repos:
+  - repo: local
+    hooks:
+      - id: ddflow-check-commit
+        name: ddflow lease covers the staged paths
+        entry: ddflow hooks check-commit
+        language: system
+        always_run: true
+        pass_filenames: false
+"""
+
+
+def test_an_unarmed_commit_msg_is_reported_with_the_config_remedy(repo):
+    """The lease check armed through the framework, the trailer check not: the same
+    contract as ddflow's own pre-commit hook beside a foreign commit-msg one
+    (test_commit_trailer: exit 0, NOT INSTALLED with what to add) -- the remedy being
+    the config's, not a line in the generated file."""
+    run_cli(repo, "init")
+    _framework(repo, _CHECK_COMMIT_ONLY)
+
+    code, out, err = run_cli(repo, "hooks", "install")
+
+    assert code == 0, out + err
+    assert "nothing to install" in out, out
+    assert "NOT INSTALLED" in out and "hooks check-msg" in out, out
+    assert "Add this line to it yourself" not in out and "repo: local" in out, out
