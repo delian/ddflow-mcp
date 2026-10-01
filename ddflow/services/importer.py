@@ -1196,7 +1196,12 @@ def _is_index_section(title: str) -> bool:
 #: A lesson heading that carries the project's own id: `### L100 (reinforces L99). Threads
 #: and async share one GIL`. The id is what every cross-reference in the corpus (`[L147]`)
 #: and every summary bullet cites, so it is kept rather than slugged away.
-_LESSON_HEAD = re.compile(r"^(L\d+[a-z]?)\b\s*(?:\([^)]{0,80}\))?\s*[.:—-]?\s*(.*)$")
+#: ONE id grammar, for the heading and for every citation of it: `L100`, `L100a`, and the
+#: hyphenated `L-12` some corpora write. `L\d+` alone imported `## L-12 — ...` as the slug
+#: `L-l-12-...`, so "see L-12" resolved to nothing and a summary bullet citing `(L-12)` was
+#: filed as a second lesson instead of that lesson's summary (B-import-hyphen-ids).
+_LESSON_ID = r"L-?\d+[a-z]?"
+_LESSON_HEAD = re.compile(rf"^({_LESSON_ID})\b\s*(?:\([^)]{{0,80}}\))?\s*[.:—-]?\s*(.*)$")
 _COMPRESSED = re.compile(r"\*\*Compressed:?\*\*:?\s*(.+?)(?:\n\s*\n|\Z)", re.S)
 _SEEN_IN = re.compile(r"\*\*Seen in:?\*\*:?\s*(.+?)(?:\n\s*\n|\Z)", re.S)
 #: Lessons are long; a 2,000-character cap kept roughly the first half of a typical entry
@@ -1303,6 +1308,9 @@ def scan_lessons(
         for title, body, line in sections:
             m = _LESSON_HEAD.match(title) if level else None
             ident = m.group(1) if m else f"L-{_slug(title, 32)}"
+            # The id this lesson was imported under before hyphenated ids were read as
+            # ids, so a re-run recognises it instead of importing it a second time.
+            legacy = f"L-{_slug(title, 32)}" if m and "-" in ident else ""
             shown = m.group(2).strip() if m and m.group(2).strip() else title
             seen = _one_paragraph(_SEEN_IN.search(body))
             found.append(
@@ -1316,6 +1324,7 @@ def scan_lessons(
                         "summary": _one_paragraph(_COMPRESSED.search(body)),
                         "seen_in": [seen[:300]] if seen else [],
                         "tags": [],
+                        **({"legacy_ident": legacy} if legacy else {}),
                     },
                 )
             )
@@ -1324,7 +1333,7 @@ def scan_lessons(
 
 #: `- **bold lead.** explanation [L170]` -- a hand-written summary bullet and what it cites.
 _BULLET = re.compile(r"^[-*]\s+(.*)$")
-_CITES = re.compile(r"\bL\d+[a-z]?\b")
+_CITES = re.compile(rf"\b{_LESSON_ID}\b")
 _TRAILING_CITE = re.compile(r"\s*\[([^\]]*)\]\s*$")
 #: How a generated file announces itself, in the first lines.
 #: How a generated file announces itself: a comment banner, or the literal DO NOT EDIT.
@@ -1423,6 +1432,11 @@ def _norm(s: str) -> str:
     return re.sub(r"\W+", " ", s).strip().lower()
 
 
+def _id_key(ident: str) -> str:
+    """`L-12` and `L12` are one lesson: a summary may cite either spelling."""
+    return ident.replace("-", "")
+
+
 def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
     """Resolve `summary` records against the lessons found beside them. In place.
 
@@ -1437,10 +1451,16 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
     # whichever was scanned LAST, and the bullet meant for the current lesson landed on
     # an unrelated old one that the uniquifier later renamed `L1-2` (rubber-duck).
     by_id: dict[str, list[Found]] = {}
+    by_key: dict[str, list[Found]] = {}
     for f in scanned:
         if f.kind == "lesson":
             by_id.setdefault(f.ident, []).append(f)
+            by_key.setdefault(_id_key(f.ident), []).append(f)
+    # The spelling cited first (`L12` names the lesson headed `L12`), and only then the
+    # spelling-blind key (`L-12` also names it) -- so a corpus holding BOTH an `L12` and an
+    # `L-12` still resolves each exact citation instead of finding the key ambiguous.
     lessons = {i: fs[0] for i, fs in by_id.items() if len(fs) == 1}
+    keyed = {k: fs[0] for k, fs in by_key.items() if len(fs) == 1}
     attached = consolidated = 0
     generated: list[str] = []
     out: list[Found] = []
@@ -1452,7 +1472,9 @@ def _attach_summaries(scanned: list[Found], plan: ImportPlan) -> None:
             out.append(f)
             continue
         cites = f.extra.get("cites", [])
-        target = lessons.get(cites[0]) if len(cites) == 1 else None
+        target = (
+            (lessons.get(cites[0]) or keyed.get(_id_key(cites[0]))) if len(cites) == 1 else None
+        )
         if target is not None and not target.extra.get("summary"):
             target.extra["summary"] = _summary_text(f.body, target.title)
             attached += 1
@@ -1537,9 +1559,25 @@ def scan_research(
         repo,
         globs,
         "research",
-        lambda t, _r: f"R-{_slug(t, 32)}",
-        lambda _t, body, _r: {"verdict": _verdict(body)},
+        _research_ident,
+        lambda t, body, _r: {"verdict": _verdict(body), **_research_legacy(t)},
     )
+
+
+#: A research entry's own id, `R12` or `R-12`, kept like a lesson's (B-import-hyphen-ids).
+#: Unhyphenated, at most five digits: ddflow's own research ids are `R` + ten hex
+#: characters. The id must END there (`R2-D2 — ...` and `R-12-3 — ...` are titles, not ids).
+_RESEARCH_HEAD = re.compile(r"^(R-\d+[a-z]?|R\d{1,5}[a-z]?)(?![-\w])")
+
+
+def _research_ident(title: str, _rel: str = "") -> str:
+    m = _RESEARCH_HEAD.match(title.strip())
+    return m.group(1) if m else f"R-{_slug(title, 32)}"
+
+
+def _research_legacy(title: str) -> dict[str, str]:
+    """The slug an id-bearing entry was imported under before its id was kept."""
+    return {"legacy_ident": f"R-{_slug(title, 32)}"} if _RESEARCH_HEAD.match(title.strip()) else {}
 
 
 def _verdict(body: str) -> str:
@@ -2082,6 +2120,65 @@ def _settle_phases(plan: ImportPlan, state, touched: Touched, existing: dict[str
     _note_settled(plan, s)
 
 
+def _settle_needed_phases(
+    plan: ImportPlan,
+    deferred: dict[str, Found],
+    state,
+    touched: Touched,
+    existing: dict[str, Found],
+) -> None:
+    """Complete, on a PLAIN import, the finished phases that open work depends on.
+
+    A plain import keeps such a phase (dropping it would leave the dependency unknown) but
+    leaves its ticked tasks out -- so it landed EMPTY and OPEN, and the dependent was never
+    offered: "phase P5 has no open tasks but is not marked done" (B-import-empty-needed-
+    phase). The boxes under it are still the source's evidence that it is finished, so the
+    verdict is the one `--include-done` reaches, read from the tasks this import left out;
+    the tasks themselves stay out, as a plain import promises. Only phases that open work
+    NEEDS, judged over every task under them: every other phase is exactly as it was. A phase already in the queue is completed under `_settle_existing`'s rules
+    (imported, still open, untouched since), so a re-run releases work an earlier import
+    left stuck.
+    """
+    needed = {d for f in plan.found for d in f.needs}
+    # ...and what work ALREADY in the queue needs: on a re-run the dependent was imported
+    # last time, so it is not in this plan, and it is the one stuck.
+    for it in getattr(state, "items", {}).values():
+        if it.state not in (DONE, ABANDONED) and not it.removed:
+            needed.update(it.needs)
+    # Judged over EVERY task under the phase once this import has run -- the ones in this
+    # plan (open ones keep it open; a finished one pulled in as a dependency counts as
+    # done) and the ticked ones it leaves out -- plus, inside `_phase_verdict`, the ones
+    # already queued. Skipping a phase because the plan held a task under it left it
+    # empty-open whenever that task was itself a pulled-in dependency (roborev 959).
+    planned = {id(f) for f in plan.found}
+    kids: dict[str, list[Found]] = {}
+    for f in plan.found:
+        if f.kind == "task" and f.extra.get("phase"):
+            kids.setdefault(f.extra["phase"], []).append(f)
+    for f in deferred.values():
+        if f.extra.get("phase") and id(f) not in planned:
+            kids.setdefault(f.extra["phase"], []).append(f)
+    s = _Settled()
+    for f in plan.by_kind("phase"):
+        if f.ident not in needed or f.done:
+            continue
+        verdict, detail = _phase_verdict(
+            f, f.ident, f.source, kids.get(f.ident, []), state, touched
+        )
+        if verdict == "done":
+            f.done = True
+            f.extra["evidence"] = detail
+            s.new_done += 1
+        elif verdict == "unfinished":
+            s.unfinished.append(f"{f.ident} ({detail})")
+    stuck = {pid: f for pid, f in existing.items() if pid in needed}
+    _settle_existing(s, stuck, kids, state, touched)
+    plan.found.extend(s.completions)
+    completed = {c.ident for c in s.completions}
+    plan.skipped_existing = [i for i in plan.skipped_existing if i not in completed]
+    _note_settled(plan, s)
+
+
 def _note_settled(plan: ImportPlan, s: _Settled) -> None:
     def named(ids: list[str]) -> str:
         return ", ".join(ids[:_NOTE_EXAMPLES]) + (", ..." if len(ids) > _NOTE_EXAMPLES else "")
@@ -2245,7 +2342,7 @@ def plan_import(
         # first run would come out `L-x-2`, `L-x-3` on the second, and an import
         # advertised as idempotent would duplicate its whole corpus on every run.
         f.ident = _unique("", f.ident, proposed)
-        if f.ident in known:
+        if f.ident in known or f.extra.get("legacy_ident") in known:
             plan.skipped_existing.append(f.ident)
             if f.kind == "phase":
                 existing_phases[f.ident] = f
@@ -2307,13 +2404,16 @@ def plan_import(
                 f"imported. They are finished or already in the queue; an empty phase "
                 f"is a container, not work."
             )
+        if events is None and state is not None:
+            # The same `[log]` config every other reader honours (the parse cache).
+            events = EventLog(repo, log_cfg=Config.load(repo).log).read_all()
+        touched = touched_since_import(events or ())
         if include_done:
             # AFTER the tasks are in the plan: a phase is finished or not by what is
             # under it once this import has run, not by what was under it before.
-            if events is None and state is not None:
-                # The same `[log]` config every other reader honours (the parse cache).
-                events = EventLog(repo, log_cfg=Config.load(repo).log).read_all()
-            _settle_phases(plan, state, touched_since_import(events or ()), existing_phases)
+            _settle_phases(plan, state, touched, existing_phases)
+        else:
+            _settle_needed_phases(plan, deferred_done, state, touched, existing_phases)
     for f in scan_branches(repo):
         f.ident = _unique("", f.ident, proposed)
         if f.ident not in known:

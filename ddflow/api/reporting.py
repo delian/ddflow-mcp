@@ -81,8 +81,20 @@ def progress(repo: Path, item: str = "") -> O.Outcome:
     return O.ok("progress", **data)
 
 
-def status(repo: Path, *, agent: str = "") -> O.Outcome:
+#: How many entries each of `status`'s lists carries unless the caller asks for them all.
+#: The counts are always exact; a 4831-task queue listed every finished task, 721k chars,
+#: past what an MCP client accepts as one tool result (Bd6aa9ffde9).
+STATUS_LIST_LIMIT = 25
+
+
+def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     """One answer to "what is the state of this project?".
+
+    ``full`` lists everything; otherwise each list is cut to ``STATUS_LIST_LIMIT`` (the
+    most recently completed tasks, newest last; the first of the others, in the
+    scheduler's order) and
+    ``truncated`` names each cut list with its real length. The CLI asks for ``full``; the
+    MCP tool takes the bounded answer.
 
     The textbook B37 case: `cmd_status` folded the log, aggregated the work, detected the
     loops, planned and scanned for recoverables — and then built a JSON object and a
@@ -127,7 +139,10 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
             "review": len(p.review),
             "abandoned": len(abandoned),
         },
-        "completed_tasks": [{"id": t.id, "title": t.title, "sha": t.merged_sha} for t in done],
+        "completed_tasks": [
+            {"id": t.id, "title": t.title, "sha": t.merged_sha}
+            for t in sorted(done, key=lambda t: t.completed_at)
+        ],
         "in_flight": [
             {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
             for t in running
@@ -154,6 +169,8 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
         "loops": [f.__dict__ for f in findings],
         "recoverable": [plain(r) for r in rec if r.salvageable],
     }
+    if not full:
+        _bound(data)
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
     # blocked ids, how many recoverables are not salvageable) rather than a second fold.
     # Under `_render`, never on the wire.
@@ -178,6 +195,31 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
     return O.ok("status", **data)
 
 
+def _bound(data: dict[str, Any]) -> None:
+    """Cut `status`'s lists to `STATUS_LIST_LIMIT`, saying which were cut and from what."""
+    cut: dict[str, int] = {}
+    lists = ("completed_tasks", "in_flight", "ready_now", "held_by_cap", "interrupted")
+    for key in (*lists, "loops", "recoverable"):
+        rows = data[key]
+        if len(rows) > STATUS_LIST_LIMIT:
+            cut[key] = len(rows)
+            # The most recent completions are the ones a reader asks about -- kept in
+            # completion order, newest last, as the full list has them; for the others
+            # the scheduler's order puts what to do first at the top.
+            keep = (
+                slice(-STATUS_LIST_LIMIT, None)
+                if key == "completed_tasks"
+                else slice(STATUS_LIST_LIMIT)
+            )
+            data[key] = rows[keep]
+    if cut:
+        data["truncated"] = {
+            "lists": cut,
+            "shown": STATUS_LIST_LIMIT,
+            "all": "`ddflow --json status` lists every entry; `tasks` counts are exact",
+        }
+
+
 def rebuild(repo: Path, *, agent: str = "") -> O.Outcome:
     """Rebuild the sqlite projection from the log. The log is the source of truth; this
     is a cache, and saying how long it took is how you notice it has stopped being one."""
@@ -198,7 +240,8 @@ def rebuild(repo: Path, *, agent: str = "") -> O.Outcome:
 
 
 def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
-    """One item, with its gate status. The wire body is the item itself.
+    """One item, with its gate status -- or one bug, by its id. The wire body is the item
+    (or the bug's record) itself.
 
     Worktree paths are absolutised on the way out: the log stores them RELATIVE to the
     repo root, which is what makes a committed log true on every checkout, but a caller
@@ -210,9 +253,14 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
 
     _log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
+    if it is None and item in st.bugs:
+        return _show_bug(st, st.bugs[item])
     if it is None or it.removed:
-        gone = " (it was removed from the queue)" if it is not None else ""
-        return O.failed("show", f"no such item {item!r}{gone}", id=item, item=None)
+        if it is not None:
+            return O.failed(
+                "show", f"no such item {item!r} (it was removed from the queue)", id=item, item=None
+            )
+        return O.failed("show", f"no such item or bug {item!r}", id=item, item=None)
     return O.ok(
         "show",
         id=item,
@@ -220,6 +268,37 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
         gates=plain(G.status(st, cfg, item)),
         _render={"item": it, "gate_status": G.status(st, cfg, item)},
     )
+
+
+def _show_bug(st, bug) -> O.Outcome:
+    """A bug id handed to `show` (B-show-bug-id): its record, its state, and the items
+    that fix it -- those whose title or body say "fixes bug X" (or "fixes bugs A, X",
+    "Fixing X"), the claim every fix task carries; any other mention is listed apart. The wire body (`item`, as for an item) is the record itself."""
+    named = re.compile(rf"(?<![\w-]){re.escape(bug.id)}(?![\w-])")
+    # The convention fix tasks follow: "fixes bug X", "fixes bugs A, B and X", "Fixing X"
+    # -- the verb, then the id or a list holding it, with nothing else in between.
+    claims_fix = re.compile(
+        rf"\bfix(?:es|ed|ing)?\s+(?:bugs?\s+)?(?:[\w-]+\s*,\s*)*(?:and\s+)?"
+        rf"{re.escape(bug.id)}(?![\w-])",
+        re.I,
+    )
+    fixing: list[str] = []
+    mentions: list[str] = []
+    for i in sorted(st.items.values(), key=lambda x: x.id):
+        text = f"{i.title or ''}\n{i.body or ''}"
+        if i.removed or not named.search(text):
+            continue
+        # "fixes bug X" in the title or body is the fix's own claim; any other mention is
+        # only that -- a task that discusses a bug is not its fix (roborev, job 954).
+        (fixing if claims_fix.search(text) else mentions).append(i.id)
+    record = {
+        **plain(bug),
+        "kind": "bug",
+        "state": bug.resolution or "open",
+        "fixing": fixing,
+        "mentioned_by": mentions,
+    }
+    return O.ok("show", id=bug.id, item=record, _render={"bug": record})
 
 
 def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
