@@ -416,7 +416,17 @@ TOOLS: dict[str, dict[str, Any]] = {
             agent=agent,
         ),
         "wants_called_from": True,
-        "payload": ("id", "sha", "base", "pr", "branch", "outside_globs"),
+        "payload": (
+            "id",
+            "sha",
+            "branch_head",
+            "base",
+            "pr",
+            "branch",
+            "outside_globs",
+            "worktree",
+            "worktree_removed",
+        ),
     },
     "ddflow_pr_sync": {
         "description": (
