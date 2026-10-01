@@ -648,6 +648,17 @@ def _undo_claim(log, item: str, held_before: bool, note: str) -> None:
         L.release(log, item, note=note)
 
 
+def _bring_local_files(repo: Path, cfg, wt: W.Worktree | None) -> None:
+    """`[worktree].local_files` into the tree a claim bound, however it was bound.
+
+    Not only `W.create`'s tree: an adopted harness tree and the item's own tree rebound
+    on a re-claim are checkouts too, missing the same git-ignored files (bug
+    B41902e229d). The copy never overwrites, so a second pass over a tree is harmless.
+    """
+    if wt is not None and not wt.local_files:
+        wt.local_files = W.copy_local_files(repo, wt.path, cfg.worktree.local_files)
+
+
 def claim(
     repo: Path,
     item: str,
@@ -813,6 +824,7 @@ def claim(
                 return O.failed(
                     "item.claimed", f"lease held, but worktree creation failed: {exc}", id=item
                 )
+    _bring_local_files(repo, cfg, wt)
     log.append("item.started", item, {})
     # The first branch made is where the branching model starts to matter. An unmade
     # choice is defaulted here, on the record, and followed from now on.
