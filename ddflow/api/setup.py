@@ -230,11 +230,11 @@ class ConfigEdit:
 
 def _sync_attributes(repo: Path) -> list[str]:
     """Write the `merge=union` lines `[lease] append_only_globs` now asks for (D-shared-
-    globs), at the moment the setting changes and beside the config it came from."""
-    from ..config import Config
+    globs), at the moment the setting changes and beside the config it came from. Only
+    the COMMITTED config's globs: a `--local` edit writes no tracked rule."""
     from ..services import shared_files as SF
 
-    return SF.sync_attributes(repo, Config.load(repo))
+    return SF.sync_attributes(repo)
 
 
 def _said(added: list[str]) -> str:
