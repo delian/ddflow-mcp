@@ -808,18 +808,7 @@ def critical_path(state: State, phase: str = "") -> list[str]:
     whose runtime is set by a four-deep chain: total time equals the longest path, not
     the sum of the work.
     """
-    # The phase and EVERY item below it: a chain of sub-tasks nested under a task is
-    # the phase's work too, and direct parentage dropped it (B13ed484062) -- the same
-    # slice `plan` stopped making for the same reason.
-    inside = ({phase} | state.descendants(phase)) if phase else set()
-    items = {
-        i.id: i for i in state.items.values() if not i.removed and (not phase or i.id in inside)
-    }
 
-    # On a cyclic graph the memo is unsound: a result computed under one `seen` set is
-    # keyed on the node alone, so a truncated sub-path can be cached and returned where
-    # it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
-    # than return a confidently wrong number.
     def before(it: Item) -> list[str]:
         """What must finish before ``it`` can: its dependencies, inherited ones too, and
         -- an umbrella, task or phase, closing only when what is under it does -- its
@@ -828,6 +817,26 @@ def critical_path(state: State, phase: str = "") -> list[str]:
         deps = [d for _owner, d in inherited_deps(state, it)]
         return deps + [c.id for c in state.children(it.id) if not c.removed]
 
+    live = {i.id: i for i in state.items.values() if not i.removed}
+    if phase:
+        # The phase, EVERY item below it -- a chain of sub-tasks nested under a task is
+        # the phase's work too (B13ed484062) -- and everything those wait on, wherever
+        # it lives: a phase that needs another cannot start before that one's chain is
+        # done, so that chain is part of this phase's floor.
+        inside, todo = set(), [phase]
+        while todo:
+            n = todo.pop()
+            if n in inside or n not in live:
+                continue
+            inside.add(n)
+            todo += before(live[n])
+        live = {k: v for k, v in live.items() if k in inside}
+    items = live
+
+    # On a cyclic graph the memo is unsound: a result computed under one `seen` set is
+    # keyed on the node alone, so a truncated sub-path can be cached and returned where
+    # it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
+    # than return a confidently wrong number.
     if find_cycles(items, edges=before):
         return []
     memo: dict[str, list[str]] = {}
@@ -852,11 +861,14 @@ def critical_path(state: State, phase: str = "") -> list[str]:
         memo[n] = [*best, n]
         return memo[n]
 
-    chains = [longest(i, frozenset()) for i, it in items.items() if it.state != DONE]
-    best = max(chains, key=len) if chains else []
-    # A phase at the END only closes the chain it holds -- no work of its own, and nothing
-    # after it waits on it here. Inside the chain it stays: it is the boundary a phase
-    # dependency waits on.
-    while best and items[best[-1]].kind != "task":
-        best = best[:-1]
-    return best
+    def trimmed(chain: list[str]) -> list[str]:
+        """A phase at the END only closes the chain it holds -- no work of its own, and
+        nothing after it waits on it here. Inside a chain it stays: it is the boundary a
+        phase dependency waits on. Trimmed BEFORE the chains are compared, or a chain
+        long only by its trailing phases beat a longer chain of real work."""
+        while chain and items[chain[-1]].kind != "task":
+            chain = chain[:-1]
+        return chain
+
+    chains = [trimmed(longest(i, frozenset())) for i, it in items.items() if it.state != DONE]
+    return max(chains, key=len) if chains else []

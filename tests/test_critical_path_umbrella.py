@@ -62,3 +62,16 @@ def test_a_phase_another_depends_on_is_its_whole_chain_and_then_a_step(log):
     st = fold(log.read_all())
     assert critical_path(st) == ["A", "B", "C", "D", "P1", "T2"]
     assert critical_path(st, "P1") == ["A", "B", "C", "D"]
+    # Scoped to P2, the floor still runs through what P2 waits on (roborev).
+    assert critical_path(st, "P2") == ["A", "B", "C", "D", "P1", "T2"]
+
+
+def test_trailing_phases_do_not_win_against_a_longer_task_chain(log):
+    """Reviewers' probe: phase P1 holding A gives a chain A, P1 as long as B -> C; picked
+    first and trimmed afterwards it reported [A] while B -> C was the real floor."""
+    log.append("phase.added", "P1", {"title": "one"})
+    _add(log, "A", "P1")
+    _add(log, "B", "")
+    _add(log, "C", "", ["B"])
+    st = fold(log.read_all())
+    assert critical_path(st) == ["B", "C"]
