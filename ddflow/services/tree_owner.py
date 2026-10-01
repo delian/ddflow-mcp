@@ -15,6 +15,12 @@ as from the primary, with a tree of its own. Everything else still adopts:
 * the tree's own identity named explicitly;
 * a named agent alone in a tree nobody has worked in under its derived identity -- the
   harness-isolated agent that names itself, which adoption exists for.
+
+Not "never adopt under a foreign --agent", which is what MCP does: MCP KNOWS the
+connection's identity is the one standing in the tree, and the CLI does not -- a named
+agent adopting its own harness tree is established behaviour that tests rely on. The
+limit that leaves: a tree whose occupant has never written under its derived identity
+cannot be told from a harness-isolated agent's fresh tree, and is adopted.
 """
 
 from __future__ import annotations
