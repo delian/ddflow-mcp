@@ -196,3 +196,45 @@ def test_rebind_refuses_a_detached_tree(repo):
     code, out, err = run_cli(repo, "update", "T1", "--worktree", str(real), agent="impl")
     assert code == REFUSED, out + err
     assert _item(repo).branch == "bridge-work"
+
+
+def test_an_empty_worktree_is_refused_not_read_as_here(repo):
+    """`--worktree "$WT"` with WT unset must not rebind to wherever the shell stands."""
+    import os
+
+    _bridge, real = _wrongly_bound(repo)
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    env.pop("DDFLOW_AGENT", None)
+    p = subprocess.run(  # standing IN `real`: an empty path read as "here" is that tree
+        [sys.executable, "-m", "ddflow", "--agent", "impl", "update", "T1", "--worktree", ""],
+        cwd=real,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert p.returncode == REFUSED, p.stdout + p.stderr
+    assert _item(repo).branch == "bridge-work"
+
+
+def test_rebind_is_decided_inside_the_lock_from_a_fresh_fold(repo, monkeypatch):
+    """The critic's race: the caller's own lease lapses and another agent claims between
+    the caller's snapshot and its write. Decided from the snapshot, the rebind read the
+    lease as the caller's and re-acquired over the new holder."""
+    from ddflow.api import items as I
+
+    _bridge, real = _wrongly_bound(repo)
+    real_load = I._load
+
+    def load_then_someone_claims(r, agent):
+        snap = real_load(r, agent)  # the caller's snapshot: impl holds T1
+        log = EventLog(repo, "impl")
+        log.append("lease.released", "T1", {"holder": "impl", "reason": "lapsed"})
+        assert run_cli(repo, "claim", "T1", "--no-worktree", agent="intruder")[0] == OK
+        return snap
+
+    monkeypatch.setattr(I, "_load", load_then_someone_claims)
+    out = I.update(repo, "T1", I.ItemEdit(worktree=str(real)), agent="impl")
+    assert out.exit == REFUSED, out
+    it = _item(repo)
+    assert it.lease.holder == "intruder" and it.branch == "bridge-work", it
