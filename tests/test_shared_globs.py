@@ -489,3 +489,16 @@ def test_a_negated_class_rule_is_narrower_not_whole_glob(repo):
     assert SF.sync_attributes(repo) == ["docs/* merge=union"]
     assert _merge_attr(repo, "docs/guide.md") == "ours", _attributes(repo)
     assert _merge_attr(repo, "docs/xa.md") == "union"
+
+
+def test_an_ambiguous_rule_covering_every_file_today_still_wins(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "guide.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/[!x]* merge=ours\n")
+    _declare(repo, "docs/*")
+    SF.sync_attributes(repo)
+    assert _merge_attr(repo, "docs/guide.md") == "ours", _attributes(repo)
+    assert _merge_attr(repo, "docs/xb.md") == "union"
