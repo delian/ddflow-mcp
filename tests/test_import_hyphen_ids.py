@@ -9,6 +9,7 @@ entry already imported under its old slug is recognised rather than imported twi
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -83,23 +84,96 @@ def test_a_summary_bullet_citing_a_hyphenated_id_becomes_that_lessons_summary(tm
     assert "cited with a hyphen" in lessons["L14"].extra["summary"]
 
 
+def _pre_fix_import(repo: Path) -> None:
+    """The events the importer wrote BEFORE the fix, shaped as `apply_import` writes them:
+    a slug id, the human heading as the title, the source line in `seen_in`/`sources`.
+    (Research ids were never kept before, so `R8` was slugged too.)"""
+    log = EventLog(repo, agent_id="ddflow-import")
+    for line, heading in (
+        (3, "L-12 — Agent branches must be rebased"),
+        (7, "L-13 — Never force a push"),
+    ):
+        log.append(
+            "lesson.recorded",
+            f"L-{IM._slug(heading, 32)}",
+            {
+                "title": heading,
+                "rule": "x",
+                "tags": ["imported"],
+                "seen_in": [f"docs/lessons.md:{line}"],
+            },
+        )
+    for line, heading in (
+        (3, "R-7 — Does the cache survive a restart"),
+        (7, "R8 — Unhyphenated research id"),
+    ):
+        log.append(
+            "research.recorded",
+            f"R-{IM._slug(heading, 32)}",
+            {
+                "question": heading,
+                "claim": "x",
+                "verdict": "CONFIRMED",
+                "sources": [f"docs/RESEARCH.md:{line}"],
+                "tags": ["imported"],
+            },
+        )
+    # L14 was an id before the fix too.
+    log.append(
+        "lesson.recorded",
+        "L14",
+        {
+            "title": "Unhyphenated ids still work",
+            "rule": "x",
+            "tags": ["imported"],
+            "seen_in": ["docs/lessons.md:11"],
+        },
+    )
+
+
 def test_a_re_import_over_the_old_slug_ids_imports_nothing_twice(repo):
     """A log imported before the fix holds `L-l-12-...` and `R-r-7-...`; a re-run must
-    recognise them, and `import --verify` must not report them as drift."""
+    recognise them rather than import each a second time under its kept id."""
     _corpus(repo, summary=False)
     run_cli(repo, "init")
-    log = EventLog(repo, agent_id="old-importer")
-    for kind, slug in (
-        ("lesson", f"L-{IM._slug('L-12 — Agent branches must be rebased', 32)}"),
-        ("lesson", f"L-{IM._slug('L-13 — Never force a push', 32)}"),
-        ("research", f"R-{IM._slug('R-7 — Does the cache survive a restart', 32)}"),
-        ("research", f"R-{IM._slug('R8 — Unhyphenated research id', 32)}"),
-    ):
-        if kind == "lesson":
-            log.append("lesson.recorded", slug, {"title": slug, "rule": "x"})
-        else:
-            log.append("research.recorded", slug, {"question": slug, "verdict": "CONFIRMED"})
-    state = fold(log.read_all())
-    plan = IM.plan_import(repo, state)
+    _pre_fix_import(repo)
+    plan = IM.plan_import(repo, fold(EventLog(repo).read_all()))
     new = sorted(f.ident for f in plan.found if f.kind in ("lesson", "research"))
-    assert new == ["L14"], new
+    assert new == [], new
+    _rc, out, err = run_cli(repo, "import")
+    assert "Nothing to import" in out, (out, err)
+
+
+def test_import_verify_reports_no_drift_over_a_pre_fix_import(repo):
+    _corpus(repo, summary=False)
+    run_cli(repo, "init")
+    _pre_fix_import(repo)
+    rc, out, err = run_cli(repo, "--json", "import", "--verify")
+    report = json.loads(out)
+    assert report["new_since_import"] == [], report["new_since_import"]
+    assert rc == 0, (out, err)
+
+
+def test_an_exact_citation_still_resolves_when_both_spellings_exist(tmp_path):
+    """`L12` and `L-12` as two lessons: each exact citation resolves to its own."""
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "lessons.md").write_text(
+        "# Lessons\n\n## L12 — Caching\n\nBody.\n\n## L-12 — Sockets\n\nBody.\n"
+    )
+    (tmp_path / "docs" / "lessons-summary.md").write_text(
+        "# Summary\n\n- **Cache.** the caching rule [L12]\n- **Sock.** the socket rule [L-12]\n"
+    )
+    plan = IM.plan_import(tmp_path)
+    lessons = {f.ident: f for f in plan.found if f.kind == "lesson"}
+    assert sorted(lessons) == ["L-12", "L12"], sorted(lessons)
+    assert "caching rule" in lessons["L12"].extra["summary"]
+    assert "socket rule" in lessons["L-12"].extra["summary"]
+
+
+def test_a_title_that_merely_starts_like_an_id_is_not_one(tmp_path):
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs" / "RESEARCH.md").write_text(
+        "# Research\n\n## R2-D2 — droid protocol\n\nx\n\n## R2 — real entry\n\ny\n"
+    )
+    ids = _ids(IM.plan_import(tmp_path), "research")
+    assert "R2" in ids and not any(i.startswith("R2-") for i in ids), ids
