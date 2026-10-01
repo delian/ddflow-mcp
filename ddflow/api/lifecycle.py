@@ -252,7 +252,8 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dic
             "so no release is coming to wake you. `ddflow next` says what blocks the "
             "queue — it needs someone to act, not to wait.",
         }
-    stuck = [b for b in p.blocked if not _clears_on_release(st, b, others)]
+    by_item = {b.item: b for b in p.blocked}
+    stuck = [b for b in p.blocked if not _clears_on_release(st, b, others, by_item)]
     if len(stuck) == len(p.blocked):
         # Every blocker needs a person: a cycle, an expired lease under "report", an
         # operator's block, a dependency nobody works on. Some other agent holding an
@@ -275,21 +276,34 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dic
     }
 
 
-def _clears_on_release(st, b, others) -> bool:
-    """Can blocker ``b`` clear when another agent lets go, with nobody else acting?
+def _clears_on_release(st, b, others, by_item=None, seen=None) -> bool:
+    """Can blocker ``b`` clear when other agents let go, with nobody else acting?
 
     A file or item conflict, a resource shortfall and a full parallelism cap free on
-    any release. A dependency does when one it waits on is in motion. The rest -- a
-    cycle, an expired lease under `reclaim_policy = "report"`, an operator's block, a
-    contest, an umbrella -- need a person, as the single-item `wait` already says.
+    any release. A dependency clears when EVERY dependency still unmet will: one in
+    motion (held, in review, external), or one whose own blocker -- looked up in
+    ``by_item`` -- clears in turn. The rest -- a cycle, an expired lease under
+    `reclaim_policy = "report"`, an operator's block, a contest, an umbrella -- need a
+    person, as the single-item `wait` already says. A dependency with no blocker on
+    record is not judged stuck: when in doubt, waiting is the old behaviour.
     """
     if b.reason in ("conflict", "resources"):
         return True
     if b.reason == "state":
         return "cap reached" in b.detail
-    if b.reason == "deps":
-        return any(_in_motion(st, d, others) for d in b.waiting_on)
-    return False
+    if b.reason != "deps" or not b.waiting_on:
+        return False
+    by_item = by_item or {}
+    seen = (seen or set()) | {b.item}
+    for d in b.waiting_on:
+        if _in_motion(st, d, others):
+            continue
+        own = by_item.get(d)
+        if own is None:
+            continue
+        if d in seen or not _clears_on_release(st, own, others, by_item, seen):
+            return False
+    return True
 
 
 def _blocking_leases(st, blocked, others) -> list[str]:
