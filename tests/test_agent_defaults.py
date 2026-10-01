@@ -69,7 +69,8 @@ def test_brief_current_is_the_agents_own_lease_not_the_top_ready_item(repo):
 
 def test_brief_with_several_leases_says_so_and_lists_them(repo):
     _queue(repo)
-    for iid in ("T2", "T3"):
+    # Claimed against id order, so "most recent claim" and "highest id" disagree.
+    for iid in ("T3", "T2"):
         code, out, err = run_cli(repo, "claim", iid, agent="impl")
         assert code == 0, out + err
 
@@ -79,7 +80,7 @@ def test_brief_with_several_leases_says_so_and_lists_them(repo):
     assert "`T2`" in out and "`T3`" in out, out
     assert "Current: C11" not in out, out
     # The most recent claim is the one in focus.
-    assert "## Current: T3" in out, out
+    assert "## Current: T2" in out, out
 
 
 def test_brief_for_an_agent_holding_nothing_suggests_rather_than_claims(repo):
