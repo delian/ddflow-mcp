@@ -210,9 +210,14 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
 
     _log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
+    if it is None and item in st.bugs:
+        return _show_bug(st, st.bugs[item])
     if it is None or it.removed:
-        gone = " (it was removed from the queue)" if it is not None else ""
-        return O.failed("show", f"no such item {item!r}{gone}", id=item, item=None)
+        if it is not None:
+            return O.failed(
+                "show", f"no such item {item!r} (it was removed from the queue)", id=item, item=None
+            )
+        return O.failed("show", f"no such item or bug {item!r}", id=item, item=None)
     return O.ok(
         "show",
         id=item,
@@ -220,6 +225,20 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
         gates=plain(G.status(st, cfg, item)),
         _render={"item": it, "gate_status": G.status(st, cfg, item)},
     )
+
+
+def _show_bug(st, bug) -> O.Outcome:
+    """A bug id handed to `show` (B-show-bug-id): its record, its state, and the items
+    that fix it -- those whose title or body name the id, the "(fixes bug X)" every fix
+    task carries. The wire body (`item`, as for an item) is the record itself."""
+    named = re.compile(rf"(?<![\w-]){re.escape(bug.id)}(?![\w-])")
+    fixing = sorted(
+        i.id
+        for i in st.items.values()
+        if not i.removed and (named.search(i.title or "") or named.search(i.body or ""))
+    )
+    record = {**plain(bug), "kind": "bug", "state": bug.resolution or "open", "fixing": fixing}
+    return O.ok("show", id=bug.id, item=record, _render={"bug": record})
 
 
 def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "") -> O.Outcome:
