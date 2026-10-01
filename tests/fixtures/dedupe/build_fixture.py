@@ -46,9 +46,12 @@ HOST = "<host>"
 MODEL_NAME = re.compile(
     r"(?i)\b(?:[a-z0-9][\w-]*/)?"
     r"(?:gemma|qwen|deepseek|gemini|llama|mistral|mixtral|gpt|kimi|glm|phi)"
-    r"[\w.-]*?\d[\w.-]*\w"
+    r"[\w.-]*?\d(?:[\w.-]*\w)?"
 )
 HOME = re.compile(r"/home/(?!user/)[^/\s'\"`]+/")
+#: What the redactor emits. The host-name pass never rewrites these, so a machine named
+#: `host`, `lan` or `user` cannot corrupt a marker and the redactor stays a fixed point.
+MARKERS = re.compile(r"(<host>|<lan-address>|<served-model>|\[REDACTED\]|/home/user/)")
 
 
 def redact(text: str, *, host: str | None = None) -> str:
@@ -62,7 +65,10 @@ def redact(text: str, *, host: str | None = None) -> str:
     out = MODEL_NAME.sub(MODEL, out)
     host = socket.gethostname().split(".")[0] if host is None else host
     if len(host) >= 3:
-        out = re.sub(rf"(?i)\b{re.escape(host)}\b", HOST, out)
+        name = re.compile(rf"(?i)\b{re.escape(host)}\b")
+        out = "".join(
+            part if i % 2 else name.sub(HOST, part) for i, part in enumerate(MARKERS.split(out))
+        )
     return HOME.sub("/home/user/", out)
 
 
