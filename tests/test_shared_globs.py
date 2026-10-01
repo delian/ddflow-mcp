@@ -135,7 +135,7 @@ def test_setting_append_only_globs_writes_the_union_line_once_and_says_so(repo):
 def test_a_generated_shared_file_never_gets_merge_union(repo):
     _project(repo, shared='["configs/default.toml"]')
     assert not any(ln.startswith("configs/default.toml") for ln in _attributes(repo))
-    assert SF.sync_attributes(repo, Config.load(repo)) == []
+    assert SF.sync_attributes(repo) == []
 
 
 def test_init_resyncs_a_hand_edited_config(repo):
@@ -161,3 +161,25 @@ def test_findings_name_a_missing_union_line_and_an_unmerged_generated_file(repo)
     (repo / ".gitattributes").write_text("configs/default.toml merge=ours\n")
     _p, notes = SF.findings(repo, cfg)
     assert not any("configs/default.toml" in n for n in notes), notes
+
+
+def test_a_local_only_append_only_glob_writes_no_tracked_rule(repo):
+    run_cli(repo, "init")
+    before = _attributes(repo)
+    code, out, err = run_cli(
+        repo, "config", "--local", "--set", "lease.append_only_globs", '["NOTES.md"]'
+    )
+    assert code == O.OK, err
+    assert _attributes(repo) == before, "a machine-local setting wrote a committed rule"
+    assert ".gitattributes" not in out
+
+
+def test_a_bare_merge_attribute_is_not_a_union(repo):
+    run_cli(repo, "init")
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/CHANGELOG.md merge\n")
+    code, _o, err = run_cli(
+        repo, "config", "--set", "lease.append_only_globs", '["docs/CHANGELOG.md"]'
+    )
+    assert code == O.OK, err
+    assert "docs/CHANGELOG.md merge=union" in _attributes(repo)
