@@ -34,7 +34,7 @@ heartbeat_s = 300
 
 [worktree]
 enabled = true
-max_parallel = 8
+max_parallel = 4
 
 # .roborev.toml is git-ignored (decision D-roborev-local) but roborev reads it from each
 # checkout, so every worktree ddflow creates gets the primary's copy.
@@ -43,7 +43,7 @@ max_parallel = 8
 local_files = [".roborev.toml"]
 
 [schedule]
-max_parallel_tasks = 8
+max_parallel_tasks = 4
 
 [enforce]
 # "block" makes the pre-commit hook REFUSE a commit touching paths no lease of yours
