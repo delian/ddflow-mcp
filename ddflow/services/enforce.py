@@ -1087,7 +1087,9 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
             "that agent's work. Coordinate, or wait for the lease to be released.",
             "",
         ]
-        if not (agent or cfg.agent.id):
+        # `_load` writes the derived name back into cfg.agent.id; its source says so.
+        derived = not cfg.agent.id or cfg.sources.get("agent.id") == "derived"
+        if not agent and derived:
             held_by = {
                 item_id: lease
                 for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items()
