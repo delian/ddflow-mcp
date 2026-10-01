@@ -215,7 +215,9 @@ def resolve_command(name: str, repo: Path | None = None) -> Template:
             from .macros import MacroError
 
             try:
-                return Template(name, macro.body(Path(repo)), "config", None, "command")
+                return Template(
+                    name, macro.body(Path(repo)), "config", macro.file(Path(repo)), "command"
+                )
             except MacroError as exc:
                 raise TemplateError(str(exc)) from exc
         known = sorted({*COMMANDS, *(load_macros(repo) if repo else {})})
@@ -483,7 +485,13 @@ def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) 
     invisible from a terminal, which is where an operator goes to edit one.
     """
     out = [resolve(n, repo, overrides) for n in TEMPLATE_NAMES]
-    out += [resolve_command(n, repo) for n in all_commands(repo)]
+    for n in all_commands(repo):
+        try:
+            out.append(resolve_command(n, repo))
+        except TemplateError:
+            # A macro whose body cannot be read: listed under `macro_problems` by name,
+            # instead of taking the whole list down with it.
+            continue
     return out
 
 
@@ -499,8 +507,15 @@ def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] |
         return resolve(name, repo, overrides)
     if name in all_commands(repo):
         return resolve_command(name, repo)
+    # Why a configured macro is not among the commands, said HERE: "unknown prompt" about
+    # a macro the operator can see in their config, with the reason only in doctor, is the
+    # silence B-macro-clash-silent was about.
+    from .macros import macro_problems
+
+    problems = macro_problems(Path(repo)) if repo else []
     raise TemplateError(
         f"unknown prompt {name!r}.\n"
         f"  templates: {', '.join(TEMPLATE_NAMES)}\n"
         f"  commands:  {', '.join(sorted(all_commands(repo)))}"
+        + "".join(f"\n  not loaded: {p}" for p in problems)
     )
