@@ -662,27 +662,35 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -
     return ""
 
 
-def _toml_present(path: Path, text: str, c: Companion, rel: str) -> tuple[str, str] | None:
-    """What a TOML config already says about ``c``, or None when the block may be added.
+def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str, str] | None:
+    """What a TOML config already says about ``c``, or None when ``new_text`` may be written.
 
-    The same judgement the reader makes (`_registered_name`): a table under the id counts
-    only when it launches something. One that launches nothing cannot be refreshed by
-    appending -- a second `[mcp_servers.<id>]` is invalid TOML -- so it is refused BY
-    NAME, never reported as already registered (B768503a43a). Nor is anything appended to
-    a file that does not parse.
+    The same judgement the reader makes (`_registered_name`): an entry under the id counts
+    only when it launches something, and a launch under another name counts too. Anything
+    else is appended -- but only when the result still PARSES. A table under the id that
+    launches nothing, or an `mcp_servers` that is not a table, would turn the append into
+    a file the agent rejects whole; that is refused by name, never reported as already
+    registered (B768503a43a). Nor is anything appended to a file that does not parse.
     """
-    read = _servers_in(path, SHAPE_TOML) if text else ({}, "")
-    if read is None:
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
         return "refused", f"SKIPPED {rel}: it is not valid TOML; add {c.id} by hand"
-    if c.id in read[0]:
-        if _serves(read[0][c.id]):
-            return "unchanged", f"{rel} already registers {c.id}"
-        return "refused", (
-            f"SKIPPED {rel}: [mcp_servers.{c.id}] is there but launches nothing; "
-            f"fix or remove it by hand"
-        )
-    if other := _launched_elsewhere(read, c, rel):
+    servers = data.get("mcp_servers")
+    servers = servers if isinstance(servers, dict) else {}
+    if c.id in servers and _serves(servers[c.id]):
+        return "unchanged", f"{rel} already registers {c.id}"
+    if other := _launched_elsewhere((servers, text), c, rel):
         return "unchanged", other
+    try:
+        tomllib.loads(new_text)
+    except tomllib.TOMLDecodeError:
+        what = (
+            f"[mcp_servers.{c.id}] is there but launches nothing"
+            if c.id in servers
+            else "its `mcp_servers` is not a table"
+        )
+        return "refused", f"SKIPPED {rel}: {what}; fix or remove it by hand"
     return None
 
 
@@ -728,14 +736,14 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     # change that could not happen, which is the failure the preview exists to prevent.
     if target.shape == SHAPE_TOML:
         text = path.read_text("utf-8") if path.exists() else ""
-        if verdict := _toml_present(path, text, c, rel):
-            return verdict
         block = (
             f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
         )
         if c.env:
             block += f"env = {_toml(dict(c.env))}\n"
         new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
+        if verdict := _toml_present(text, new_text, c, rel):
+            return verdict
         if dry_run:
             # The block as it will be APPENDED, minus the leading blank line that only
             # separates it from what is above. `test_the_preview_matches_the_write_for_a
