@@ -670,7 +670,8 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     if not target.config:
         return "refused", (
             f"{agent} has no project-level MCP config file; register {c.id} in its own "
-            f"settings with this entry: {json.dumps(c.entry())}"
+            f"settings as server `{c.id}`, in that agent's own config format, launched "
+            f"with: {json.dumps(c.entry())}"
         )
     rel = target.config
     path = Path(repo) / rel
