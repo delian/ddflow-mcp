@@ -214,3 +214,19 @@ def test_a_lapsed_lease_is_not_offered_for_paths_another_agent_now_holds(repo, c
     _code, msg = E.check_commit(repo, cfg, agent="owner")
     assert "ANOTHER agent" in msg, msg
     assert "heartbeat" not in msg, msg
+
+
+def test_a_lapsed_lease_straddling_another_agents_paths_is_not_offered(repo, cfg, monkeypatch):
+    """Per lease, not per path: the heartbeat revives every glob of the lapsed lease, so
+    one overlapping another agent's live lease anywhere is not offered -- even when the
+    staged path itself is free."""
+    tree = _setup(repo, cfg)
+    assert run_cli(repo, "task", "add", "T2", "--globs", "src/taken.py")[0] == 0
+    later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
+    _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
+    monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
+    L.acquire(EventLog(repo, "other"), cfg, "T2", holder="other", globs=["src/taken.py"])
+    monkeypatch.chdir(tree)
+    _code, msg = E.check_commit(repo, cfg, agent="owner")  # stages only src/new.py
+    assert "src/new.py" in msg and "ANOTHER agent" not in msg, msg
+    assert "heartbeat" not in msg, msg
