@@ -524,3 +524,45 @@ def test_a_renewal_of_the_displayed_lease_is_weighed_against_the_record():
     ]
     late = [_ev("task.added", "T", 1, title="t"), x, expired, y, *renewals]
     assert _contest(late) == {x.id, y.id}
+
+
+# -- what the record does NOT do: pinned after review findings that assumed otherwise ---
+
+
+def test_a_holders_own_overlapping_reclaim_is_not_a_contest():
+    """A claim never contests its own holder's: the earlier claim goes on the record,
+    and the item is not contested (review finding, refuted by this fold)."""
+    a1, a2 = _acq(2, "a", 0.0, 100), _acq(3, "a", 50.0, 100)
+    it = fold([_ev("task.added", "T", 1, title="t"), a1, a2]).items["T"]
+    assert it.lease_contest == [] and it.lease.event == a2.id
+    assert [e["event"] for e in it.displaced] == [a1.id]
+
+
+@pytest.mark.parametrize("renew_first", [True, False], ids=["renewal-first", "release-first"])
+def test_a_released_claim_is_not_revived_by_a_late_renewal_of_its_rival(renew_first):
+    """H2 took the item over by TTL from H1 and later released it. H1's late renewal
+    proves it was still live when H2 claimed -- but a released claim is withdrawn from
+    every contest, so whichever folds first, nothing is contested. On main this
+    depended on the order: the release first left a contest naming the released claim
+    and displaying none."""
+    h1, h2 = _acq(2, "h1", 0.0, 10), _acq(3, "h2", 15.0, 10)
+    renew = _ev("lease.renewed", "T", 0, "h1", holder="h1", at=8.0)
+    release = _ev("lease.released", "T", 0, "h2", holder="h2", event=h2.id)
+    tail = [renew, release] if renew_first else [release, renew]
+    tail = [Event(**{**e.__dict__, "lamport": 4 + i}) for i, e in enumerate(tail)]
+    it = fold([_ev("task.added", "T", 1, title="t"), h1, h2, *tail]).items["T"]
+    assert it.lease_contest == []
+    on_record = {e["event"] for e in it.displaced} | ({it.lease.event} if it.lease else set())
+    assert on_record == {h1.id}
+
+
+def test_a_renewal_belongs_to_the_holders_latest_claim_before_it():
+    """A holder id is one clone's, and its claims follow one another there: H's renewal
+    at 14, after H re-claimed at 12, renews that second claim -- not the first, which
+    had lapsed at 10. So the first is not contested with G's claim at 13."""
+    h1, h2, g = _acq(2, "h", 0.0, 10), _acq(3, "h", 12.0, 10), _acq(4, "g", 13.0, 10)
+    renew = _ev("lease.renewed", "T", 5, "h", holder="h", at=14.0)
+    it = fold([_ev("task.added", "T", 1, title="t"), h1, h2, g, renew]).items["T"]
+    assert {h["event"] for h in it.lease_contest} == {h2.id, g.id}
+    widened = next(h for h in it.lease_contest if h["event"] == h2.id)
+    assert widened["lease"]["renewed_at"] == 14.0
