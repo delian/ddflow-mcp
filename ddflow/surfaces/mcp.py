@@ -2027,7 +2027,13 @@ TOOLS: dict[str, dict[str, Any]] = {
                 needs=_list_or_none(a, "needs"),
                 # Raw, for the api's single read: split on commas here first, a JSON
                 # array (or a glob holding a comma inside one) was lost (roborev).
-                globs=None if a.get("globs") is None else [a["globs"]],
+                globs=(
+                    None
+                    if a.get("globs") is None
+                    else list(a["globs"])
+                    if isinstance(a["globs"], list)
+                    else [a["globs"]]
+                ),
                 tags=_list_or_none(a, "tags"),
                 priority=a.get("priority"),
                 line=a.get("line"),
