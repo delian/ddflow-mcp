@@ -39,6 +39,7 @@ import subprocess
 import tempfile
 import time
 import tomllib
+from datetime import UTC, datetime
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1110,10 +1111,11 @@ def differing_paths(a: TreeEntries, b: TreeEntries) -> list[str]:
 
 
 #: A test runner's own verdict lines, wherever in the output they fall: pytest's
-#: `=== 3 failed, 112 passed in 4.2s ===` banners, unittest's `Ran 12 tests in 0.1s`
+#: `=== 3 failed, 112 passed in 4.2s ===` banners (bare under `-q`), unittest's `Ran 12 tests in 0.1s`
 #: and `FAILED (failures=2)` / `OK (skipped=1)`.
 _SUMMARY_LINE = re.compile(
     r"=+ .*\b(passed|failed|errors?|skipped|xfailed|xpassed|deselected|no tests ran)\b.* =+"
+    r"|\d+ (passed|failed|errors?|skipped)\b.* in \d[\d.]*s\b.*"  # pytest -q: no banner
     r"|Ran \d+ tests? in \S+"
     r"|(OK|FAILED) \(.*\)"
 )
@@ -1150,7 +1152,7 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
             ignore.write_text("# gate run output logs: machine-local, never committed\n*\n")
         where = runs / item_id
         where.mkdir(exist_ok=True)
-        stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+        stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         path = where / f"{gate}-{stamp}-{os.getpid()}.log"
         path.write_text(out, "utf-8", errors="replace")
         old = sorted(where.glob(f"{gate}-*.log"), key=lambda q: q.stat().st_mtime)
