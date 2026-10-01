@@ -123,3 +123,15 @@ def test_an_undecodable_prompt_file_is_a_problem_not_a_crash(repo):
     rc, out, err = run_cli(repo, "--json", "doctor")
     assert "Traceback" not in err, err
     assert any("blob" in p for p in json.loads(out)["problems"])
+
+
+def test_a_broken_shipped_command_still_fails_the_listing(repo, monkeypatch):
+    """Skipping an unreadable MACRO must not also hide a broken install."""
+    import pytest
+
+    from ddflow.services import prompts as P
+
+    run_cli(repo, "init")
+    monkeypatch.setitem(P.COMMANDS, "no-such-shipped-command", ("x", "x", []))
+    with pytest.raises(P.TemplateError, match="missing from the package"):
+        P.list_all(repo)
