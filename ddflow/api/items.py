@@ -82,22 +82,28 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
 
 
 def _record_update(log, cfg, it, fields: dict[str, Any]) -> O.Outcome:
-    """Append the edit, and retarget the item's live lease when its globs change.
+    """Append the edit, and retarget the item's live lease when its globs or resources
+    change.
 
-    A claim's globs live on its LEASE, which the commit hook and the conflict checks
-    read -- so new globs on a claimed item go to the lease too. Decided and appended
-    under one lock, and a refusal (the new globs overlap another agent's live lease)
-    records NOTHING: not the edit, not the lease event.
+    A claim's globs and resources live on its LEASE, which the commit hook, the conflict
+    checks and the capacity check read -- so new values on a claimed item go to the lease
+    too. Decided and appended under one lock, and a refusal (the new globs overlap another
+    agent's live lease, or the new resources exceed what is free) records NOTHING: not the
+    edit, not the lease event.
     """
+    globs = fields.get("globs")
+    resources = fields.get("resources")
     with log.transaction():
         lease, refusal = (
-            L.plan_retarget(log, cfg, it.id, fields["globs"]) if "globs" in fields else (None, "")
+            L.plan_retarget(log, cfg, it.id, globs, resources)
+            if globs is not None or resources is not None
+            else (None, "")
         )
         if refusal:
             return O.refused("item.updated", refusal, id=it.id)
         log.append(f"{it.kind}.updated", it.id, fields)
         if lease is not None:
-            L.retarget(log, it.id, lease, fields["globs"])
+            L.retarget(log, it.id, lease, globs, resources)
     return O.ok(
         "item.updated",
         id=it.id,
