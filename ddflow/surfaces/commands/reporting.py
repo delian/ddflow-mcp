@@ -216,7 +216,8 @@ def cmd_doctor(a, c: Ctx) -> int:
 
 
 def cmd_board(a, c: Ctx) -> int:
-    print(A.board(c.repo, phase=a.phase or "", agent=c.requested_agent).data["text"])
+    out = A.board(c.repo, phase=a.phase or "", agent=c.requested_agent)
+    c.out(out.data["text"], out.body())
     return OK
 
 
