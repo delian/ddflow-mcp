@@ -295,12 +295,35 @@ class Item:
         """The contestants whose windows overlapped ``claim``'s: the claims it met."""
         return _clashing(self.lease_contest, claim)
 
+    def lease_candidates(self) -> list[dict[str, Any]]:
+        """The claims `resolve --keep` may name: every contestant, and the displayed lease
+        when it is not one -- the current holder, which overlapped none of them, can win
+        the contest too (B-resolve-cannot-keep-holder). Empty without a lease contest."""
+        if not self.lease_contest:
+            return []
+        cur = self.lease
+        if cur is None or any(h["event"] == cur.event for h in self.lease_contest):
+            return list(self.lease_contest)
+        return [*self.lease_contest, _claim(cur)]
+
     def lease_losers(self, kept: dict[str, Any]) -> list[dict[str, Any]]:
         """The claims `resolve` releases when ``kept`` wins: every one that overlapped it,
         and the displayed lease if that is another claim -- ``kept`` is about to take the
-        item from it. A contestant that met neither lost nothing to ``kept``."""
-        losers = self.lease_clashes(kept)
+        item from it. A contestant that met neither lost nothing to ``kept``.
+
+        Keeping the displayed lease when it is not a contestant releases EVERY contestant:
+        it overlapped none of them -- the fold displays the later claim, so they had
+        lapsed when it took the item -- and they all lost the item to it. Without this
+        the current holder could not win a contest it was never in, and the only ways
+        out took the item from it and handed it back to a lapsed claim."""
         cur = self.lease
+        if (
+            cur is not None
+            and cur.event == kept["event"]
+            and all(h["event"] != cur.event for h in self.lease_contest)
+        ):
+            return list(self.lease_contest)
+        losers = self.lease_clashes(kept)
         if cur is not None and cur.event != kept["event"]:
             if all(h["event"] != cur.event for h in losers):
                 losers.append(_claim(cur))
@@ -938,16 +961,13 @@ def _late_renewal(it: Item, d: dict[str, Any]) -> None:
     if not rivals:
         return
     by = next((e["by"] for e in it.displaced if e["event"] == hit["event"]), None)
-    shown_claim = []
     if by is not None and any(r["event"] == by["event"] for r in rivals):
         claim["overlapped_by"] = by["holder"]
-        # The takeover of it was of a live claim: that contest also names the displayed
-        # lease, as it always has, overlap or not, so `resolve --keep` can hand the item
-        # back to its current holder. An over-report, the safe direction (bug
-        # B-late-renewal-overjoin).
-        shown_claim = [_claim(it.lease)] if it.lease is not None else []
+    # Only what it overlapped: the lease displayed now is not joined unless it is one of
+    # them -- `resolve` can keep the current holder without it being a contestant (bug
+    # B-late-renewal-overjoin, which joined it overlap or not).
     it.displaced = [e for e in it.displaced if e["event"] != hit["event"]]
-    _join(it, [claim, *rivals, *shown_claim])
+    _join(it, [claim, *rivals])
 
 
 def _h_lease_renewed(st: State, ev: Event) -> None:
