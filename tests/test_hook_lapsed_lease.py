@@ -199,3 +199,18 @@ def test_the_offered_remedies_are_the_ones_that_work(repo, cfg, monkeypatch):
     assert L.release(stranger, "T1", note="salvaged")
     L.acquire(stranger, cfg, "T1", holder="stranger", globs=["src/*"])
     assert lease().holder == "stranger"
+
+
+def test_a_lapsed_lease_is_not_offered_for_paths_another_agent_now_holds(repo, cfg, monkeypatch):
+    """Reviving the lapsed lease over a path someone else has since leased is the race
+    the STOP text warns against, so only STOP is said for that path."""
+    tree = _setup(repo, cfg)
+    assert run_cli(repo, "task", "add", "T2", "--globs", "src/new.py")[0] == 0
+    later = time.time() + cfg.lease.ttl_s + cfg.lease.grace_s + 600
+    _later(monkeypatch, cfg.lease.ttl_s + cfg.lease.grace_s + 600)
+    monkeypatch.setattr(L, "time", types.SimpleNamespace(time=lambda: later))
+    L.acquire(EventLog(repo, "other"), cfg, "T2", holder="other", globs=["src/new.py"])
+    monkeypatch.chdir(tree)
+    _code, msg = E.check_commit(repo, cfg, agent="owner")
+    assert "ANOTHER agent" in msg, msg
+    assert "heartbeat" not in msg, msg

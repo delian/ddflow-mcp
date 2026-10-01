@@ -1033,20 +1033,23 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     if not uncovered:
         return 0, ""
 
+    # A path another agent holds is the dangerous case and gets named separately: the
+    # remedy is not "claim it", it is "stop".
+    stolen = {p: owner for p in uncovered for g, owner in others.items() if globs_overlap(p, g)}
+
     # A lease that WOULD have been mine, by the same two tests, but has lapsed and was
     # not taken over. Invisible above, so the message said "(no live lease)" and "claim
     # the work" to the holder committing in its own tree, and the lapse was misread as
     # an identity bug (B3e050cb66a, B5fde61b8a9). Still not a pass: named, not counted.
+    # Only for paths nobody else holds now: reviving it over a live lease's paths would
+    # be the very race the STOP text warns against.
+    free = [p for p in uncovered if p not in stolen]
     lapsed = [
         (item_id, lease)
         for item_id, lease in state.expired_leases(now, cfg.lease.grace_s).items()
         if _counts_as_mine(repo, lease, me, here)
-        and any(globs_overlap(p, g) for p in uncovered for g in lease.globs)
+        and any(globs_overlap(p, g) for p in free for g in lease.globs)
     ]
-
-    # A path another agent holds is the dangerous case and gets named separately: the
-    # remedy is not "claim it", it is "stop".
-    stolen = {p: owner for p in uncovered for g, owner in others.items() if globs_overlap(p, g)}
 
     lines = [
         f"ddflow: {len(uncovered)} staged path(s) are not covered by a lease you hold.",
