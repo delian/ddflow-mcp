@@ -47,16 +47,14 @@ def _probe_paths(repo: Path, glob: str) -> list[str]:
     return hits or [glob]
 
 
-def driver(repo: Path, glob: str) -> str:
-    """The merge driver git applies to EVERY file ``glob`` covers -- `union`, `ours`, ...
-    -- or "" when any of them has none.
+def drivers(repo: Path, glob: str) -> dict[str, str]:
+    """{covered path: the merge driver git applies to it, or ""} for ``glob``.
 
     Asked of git (`git check-attr merge`), not read off the file: patterns match like
     gitignore and the LAST matching line wins across different patterns, so a later
     `*.md merge=ours` overrides `CHANGELOG.md merge=union` (review finding). A bare
-    `merge` (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; so is a
-    git that cannot answer. When the covered files disagree, `union` is reported only if
-    all are union, and otherwise the first other driver found.
+    `merge` (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; a git
+    that cannot answer gives every path "".
     """
     from ..infra import proc as P
 
@@ -67,12 +65,60 @@ def driver(repo: Path, glob: str) -> str:
         text=True,
     )
     if r.returncode != 0:
+        return dict.fromkeys(paths, "")
+    out: dict[str, str] = {}
+    for ln in r.stdout.splitlines():
+        if not ln.strip():
+            continue
+        path, _attr, value = ln.rsplit(": ", 2)
+        out[path] = "" if value in ("unspecified", "set", "unset") else value
+    return out or dict.fromkeys(paths, "")
+
+
+def driver(repo: Path, glob: str) -> str:
+    """The merge driver ``glob`` has as a whole: "" when any covered file has none;
+    `union` when union applies to some file -- the rest carry narrower drivers the
+    project set, which win by design (operator 2026-10-01); otherwise the project's
+    driver for all of it."""
+    values = list(drivers(repo, glob).values())
+    if not values or "" in values:
         return ""
-    values = [ln.rsplit(": ", 1)[-1] for ln in r.stdout.splitlines() if ln.strip()]
-    if not values or any(v in ("unspecified", "set", "unset") for v in values):
-        return ""
-    others = [v for v in values if v != "union"]
-    return others[0] if others else "union"
+    if "union" in values:
+        return "union"
+    return values[0]
+
+
+def _insert_before_narrower(repo: Path, glob: str, line: str) -> bool:
+    """Write ``line`` into `.gitattributes` BEFORE the first existing line that gives a
+    merge driver to a file ``glob`` covers; at the end when there is none. False when the
+    line is already there.
+
+    git applies the LAST matching line, so a union line appended after
+    `docs/README.md merge=ours` overrode the project's narrower choice. The operator's
+    rule (2026-10-01): the narrower driver wins -- so the broad line goes first.
+    """
+    from ..core.schedule import is_shared
+
+    path = Path(repo) / ".gitattributes"
+    text = path.read_text("utf-8") if path.exists() else ""
+    rows = text.splitlines()
+    if any(" ".join(r.split()) == line for r in rows):
+        return False
+    covered = _probe_paths(repo, glob)
+    at = len(rows)
+    for k, row in enumerate(rows):
+        parts = row.split()
+        if not parts or parts[0].startswith("#"):
+            continue
+        has_merge = any(
+            a.startswith("merge=") or a in ("merge", "-merge", "!merge") for a in parts[1:]
+        )
+        if has_merge and any(p == parts[0] or is_shared(p, [parts[0]]) for p in covered):
+            at = k
+            break
+    rows.insert(at, line)
+    path.write_text("\n".join(rows) + "\n", "utf-8")
+    return True
 
 
 def committed_append_only(repo: Path) -> list[str]:
@@ -101,12 +147,11 @@ def sync_attributes(repo: Path) -> list[str]:
     driver; the lines added. A glob holding whitespace is skipped -- a pattern ends at the
     first space -- and `findings` says how to write it.
 
-    Idempotent and append-only (`adopt._append_once`): the project's own lines stay, and a
-    glob already given a merge DRIVER is left alone -- the project chose one. Reads the
+    Idempotent; the project's own lines stay and keep working: the union line goes before
+    any narrower line that sets a driver for a file inside the glob (the narrower driver
+    wins), and a glob already given a merge DRIVER is left alone -- the project chose one. Reads the
     committed config (`committed_append_only`), never the local layer.
     """
-    from .adopt import _append_once
-
     added: list[str] = []
     for glob in committed_append_only(repo):
         if any(ch.isspace() for ch in glob):
@@ -114,7 +159,7 @@ def sync_attributes(repo: Path) -> list[str]:
         if driver(repo, glob):
             continue  # union already, or a driver the project chose -- doctor says which
         line = union_line(glob)
-        if _append_once(Path(repo) / ".gitattributes", frozenset({line}), line + "\n"):
+        if _insert_before_narrower(repo, glob, line):
             added.append(line)
     return added
 

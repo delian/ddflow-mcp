@@ -304,3 +304,34 @@ def test_doctor_names_a_shared_glob_it_cannot_read(repo):
     _project(repo, shared='["[z-a]"]')
     problems, _n = SF.findings(repo, Config.load(repo))
     assert any("[z-a]" in p and "cannot be read" in p for p in problems), problems
+
+
+def _merge_attr(repo: Path, path: str) -> str:
+    r = subprocess.run(
+        ["git", "-C", str(repo), "check-attr", "merge", "--", path],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return r.stdout.strip().rsplit(": ", 1)[-1]
+
+
+def test_a_narrower_driver_the_project_set_keeps_winning(repo):
+    """Operator 2026-10-01: the NARROWER driver wins. git applies the last matching line,
+    so the union line for the glob goes BEFORE the narrower one."""
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    for name in ("README.md", "guide.md"):
+        (repo / "docs" / name).write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/README.md merge=ours\n")
+    assert run_cli(repo, "config", "--set", "lease.append_only_globs", '["docs/*.md"]')[0] == 0
+    assert _merge_attr(repo, "docs/README.md") == "ours"
+    assert _merge_attr(repo, "docs/guide.md") == "union"
+    lines = _attributes(repo)
+    assert lines.count("docs/*.md merge=union") == 1
+    assert lines.index("docs/*.md merge=union") < lines.index("docs/README.md merge=ours")
+    # Idempotent, and doctor has nothing to say about the narrower file.
+    assert SF.sync_attributes(repo) == []
+    assert SF.findings(repo, Config.load(repo)) == ([], [])
