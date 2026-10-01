@@ -568,7 +568,7 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
     """
     import time
 
-    log, _cfg, _st = _load(repo, agent)
+    log, cfg, _st = _load(repo, agent)
     with log.transaction():
         st = _fresh(log)
         it = st.items.get(item)
@@ -632,6 +632,9 @@ def resolve(repo: Path, item: str, *, keep: str, refile_as: str = "", agent: str
             data["definition"] = defs[0]
         if claims:
             data["claim"] = claims[0]
+            # The TTL a kept claim that had lapsed runs its fresh window on: a recorded
+            # expiry zeroed the claim's own, and a window of 0 s is dead on arrival.
+            data["ttl_s"] = cfg.lease.ttl_s
         # Releases FIRST: folded before the resolution, each withdraws a losing claim,
         # and the resolution then re-applies the kept one whichever was displayed.
         for h in losers:
