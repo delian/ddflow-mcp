@@ -100,7 +100,9 @@ def cmd_status(a, c: Ctx) -> int:
     exemption — written for `build_parser` — had been covering this function's 16
     branches too.
     """
-    out = A.status(c.repo, agent=c.requested_agent)
+    # Everything: a terminal or a `--json` pipe is where the full lists are asked for. The
+    # bounded answer is the MCP tool's (Bd6aa9ffde9).
+    out = A.status(c.repo, agent=c.requested_agent, full=True)
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
         return out.exit
