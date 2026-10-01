@@ -1043,10 +1043,6 @@ def _derived_identity_lines(me: str, held_by: dict[str, Lease]) -> list[str]:
     return [*lines, ""]
 
 
-#: Set by `ddflow merge` on the commit that concludes a squash: the squashed commit.
-SQUASH_OF = "DDFLOW_SQUASH_OF"
-
-
 def _merged_in(tree: Path) -> str:
     """The one commit being merged into ``tree``'s HEAD, or "" when not exactly one.
 
@@ -1072,7 +1068,7 @@ def _merged_in(tree: Path) -> str:
     env = [k[len("GITHEAD_") :] for k in os.environ if k.startswith("GITHEAD_")]
     if env:
         return env[0] if len(env) == 1 else ""
-    return os.environ.get(SQUASH_OF, "").strip()
+    return os.environ.get(W.SQUASH_OF, "").strip()
 
 
 def clean_merge_conclusion(tree: Path) -> bool:

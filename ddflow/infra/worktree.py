@@ -416,16 +416,19 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
     args += ["-m", message, source]
     was_merging = merging(tree)
     r = git(tree, *args)
-    if not r.ok and was_merging is False:
+    # Not `not was_merging`: None ("could not tell" before) still gets the re-probe and
+    # its warning, and only a merge that was not already in progress is ever aborted.
+    if not r.ok and was_merging is not True:
         now = merging(tree)
-        if now:
+        if now and was_merging is False:
             return _abandon_merge(tree, source, r)
-        if now is None:
+        if now is None or now:
             return GitResult(
                 r.code,
                 r.out,
-                f"{r.err or r.out}\n\ngit could not say whether {tree} is left mid-merge: "
-                f"check `git -C {tree} status`.",
+                f"{r.err or r.out}\n\n{tree} may be left mid-merge, and git could not say "
+                f"whether by this merge, so it was not aborted: check `git -C {tree} status`, "
+                f"and `git -C {tree} merge --abort` if it is this one.",
             )
     if r.ok and cfg.worktree.merge_strategy == "squash":
         # `git merge --squash` STAGES the result and commits nothing -- `-m` is accepted
@@ -439,7 +442,7 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
         # automatic merge (enforce.clean_merge_conclusion) -- as git's own GITHEAD_
         # does for a real merge.
         squashed = git(tree, "rev-parse", "--verify", "--quiet", f"{source}^{{commit}}").out
-        c = git(tree, "commit", "-m", message, env={"DDFLOW_SQUASH_OF": squashed})
+        c = git(tree, "commit", "-m", message, env={SQUASH_OF: squashed})
         if not c.ok:
             # Unstage it, as a failed merge is aborted: left staged, the next commit
             # anyone makes in this tree would carry it (B6926ec1ad9).
@@ -455,6 +458,12 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
             )
         return c
     return r
+
+
+#: Set by `ddflow merge` on the commit that concludes a squash: the squashed commit, so
+#: the lease hook can tell the commit is exactly the automatic merge
+#: (`enforce.clean_merge_conclusion`), as git's own GITHEAD_ does for a real merge.
+SQUASH_OF = "DDFLOW_SQUASH_OF"
 
 
 def merging(tree: Path) -> bool | None:
@@ -481,12 +490,15 @@ def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
     this call began is aborted: one already in progress is someone's, and git refuses
     to start another over it anyway.
     """
-    conflicts = git_paths(tree, "diff", "--name-only", "--diff-filter=U") or []
+    conflicts = git_paths(tree, "diff", "--name-only", "--diff-filter=U")
     aborted = git(tree, "merge", "--abort")
     if not aborted.ok:  # a --squash conflict has no MERGE_HEAD for --abort to find
         aborted = git(tree, "reset", "--merge")
     why = r.err or r.out
-    if conflicts:
+    if conflicts is None:
+        head = f"merging {source} failed and git could not list the conflicting paths:\n{why}"
+        fix = "Merge the base into your branch, in your worktree, and run merge again."
+    elif conflicts:
         head = f"merging {source} conflicts in: " + ", ".join(conflicts[:_NAMED])
         if len(conflicts) > _NAMED:
             head += f" (and {len(conflicts) - _NAMED} more)"

@@ -174,3 +174,34 @@ def test_a_refused_squash_commit_is_unstaged(repo, item):
     assert code == REFUSED, out + err
     assert "refused-by-test" in err
     assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
+
+
+def test_a_hook_refusing_the_merge_commit_leaves_the_primary_clean(repo, item):
+    """MERGE_HEAD set, nothing unmerged: the hook-refused shape B9b5/Bc50 left behind."""
+    (item / "c.txt").write_text("branch\n")
+    _git(item, "commit", "-qam", "branch edit")
+    hook = repo / ".git" / "hooks" / "commit-msg"
+    hook.write_text("#!/bin/sh\necho refused-by-test >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code == REFUSED, out + err
+    assert "refused-by-test" in err
+    assert not _mid_merge(repo)
+    assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
+
+
+def test_a_merge_already_in_progress_is_never_aborted(repo, item):
+    """Someone's merge in the primary is theirs: merge fails, and leaves it exactly so."""
+    (item / "c.txt").write_text("branch\n")
+    _git(item, "commit", "-qam", "branch edit")
+    (repo / "c.txt").write_text("main\n")
+    _git(repo, "commit", "-qam", "main edit")
+    _git(repo, "merge", "ddflow/T1", check=False)  # a person's merge, mid-resolution
+    (repo / "c.txt").write_text("resolved by hand\n")
+    before = _git(repo, "rev-parse", "MERGE_HEAD").stdout
+
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code != OK, out + err
+    assert _git(repo, "rev-parse", "MERGE_HEAD").stdout == before
+    assert (repo / "c.txt").read_text() == "resolved by hand\n"
