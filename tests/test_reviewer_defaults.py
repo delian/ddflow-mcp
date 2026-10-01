@@ -82,7 +82,10 @@ class _Fake:
                     with fake.lock:
                         fake.in_flight -= 1
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
+        class S(ThreadingHTTPServer):
+            request_queue_size = 64  # the default backlog of 5 staggers a burst of 10
+
+        self.server = S(("127.0.0.1", 0), H)
         self.server.daemon_threads = True
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         self.url = f"http://127.0.0.1:{self.server.server_address[1]}/v1"
@@ -157,7 +160,7 @@ def test_truncated_names_temperature_as_a_remedy():
 
 def test_by_default_every_chunk_and_copy_goes_out_in_one_wave(fake):
     rev = Reviewer(name="r", base_url=fake.url, model="m", max_chunk_chars=120, hedge=2)
-    res = review(rev, _files(*["DELAY=0.6"] * 5), "i")
+    res = review(rev, _files(*["DELAY=1.5"] * 5), "i")
     assert res.status == REVIEWED, res.reason
     assert fake.peak == 10, f"5 chunks x hedge 2 ran {fake.peak} at a time, i.e. in waves"
 
@@ -188,3 +191,51 @@ def test_a_retry_that_truncates_again_stays_unreviewed_and_says_why(fake):
     assert "TRUNCATED" in res.reason
     tries = [b for b in fake.bodies if "ALWAYS_TRUNC" in b["messages"][-1]["content"]]
     assert len(tries) == 2, "an unsplittable truncated chunk is retried whole, once"
+
+
+def test_halves_that_would_lose_a_file_are_not_used(monkeypatch):
+    """A file section with no hunk, larger than half the chunk, is dropped by split_diff:
+    halves without it must not stand in for the chunk."""
+    big = "diff --git a/big.bin b/big.bin\nrename from x\nrename to y\n" + "similarity 9\n" * 40
+    chunk = _two_hunks("HALF-A", "HALF-B") + big
+    seen: list[str] = []
+
+    def race(rev, system, users, started):
+        seen.extend(users)
+        return [("STATUS: NO FINDINGS", "")] * len(users)
+
+    monkeypatch.setattr(R, "_race", race)
+    out = R._retry_truncated(
+        Reviewer(name="r"), "s", [chunk], [("", "TRUNCATED: x")], lambda d, i: d, 0.0
+    )
+    assert seen == [chunk], "the chunk should have been retried whole"
+    assert out[0][1] == ""
+
+
+# -- a cancelled copy cut off mid-read (bug Bf948d29d37) -------------------------------
+
+
+class _CutOff:
+    """A response whose socket the winning copy shut while this one was reading it."""
+
+    status = 200
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self, *a):
+        import http.client
+
+        raise http.client.IncompleteRead(b"", 154)
+
+
+@pytest.mark.parametrize("kind", ["openai", "anthropic", "gemini"])
+def test_a_response_cut_off_mid_read_is_an_error_not_a_crash(monkeypatch, kind):
+    monkeypatch.setattr(R, "_open", lambda *a, **k: _CutOff())
+    monkeypatch.setenv("K", "key")
+    rev = Reviewer(name="r", kind=kind, base_url="http://x", model="m", api_key_env="K")
+    content, err = R._chat(rev, "s", "u", 5)
+    assert content == "" and "IncompleteRead" in err, err
