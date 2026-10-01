@@ -77,6 +77,17 @@ def _as_human(repo: Path, kind: str, subject: str, data: dict) -> None:
     EventLog(repo, "operator").append(kind, subject, data)
 
 
+def _pre_fix_plain_import(repo: Path, monkeypatch) -> None:
+    """A plain `import --apply` as importers before B-import-empty-needed-phase wrote it:
+    P5 -- finished, and needed by 3.B -- lands EMPTY and OPEN. Logs like that exist, and a
+    re-run has to repair them."""
+    from ddflow.api.operations import import_project
+
+    monkeypatch.setattr(IM, "_settle_needed_phases", lambda *a, **k: None)
+    import_project(repo, apply=True)
+    monkeypatch.undo()
+
+
 def _assert_true_picture(st) -> None:
     items = st.items
     # A CLOSED phase: every box ticked or declined, so the phase is done -- and says why.
@@ -129,11 +140,11 @@ def test_a_plain_import_says_which_ticked_tasks_it_left_out(repo):
     assert "7 ticked" in out, f"the apply report must say what it left out:\n{out}"
 
 
-def test_a_re_run_with_include_done_fills_in_the_plain_import(repo):
+def test_a_re_run_with_include_done_fills_in_the_plain_import(repo, monkeypatch):
     """The run_nemo_run path: a plain import, then `--include-done` over it."""
     _repo(repo)
     run_cli(repo, "init")
-    _import(repo, "--apply")
+    _pre_fix_plain_import(repo, monkeypatch)
     st = _state(repo)
     assert st.items["P5"].state == OPEN and not st.children("P5"), "fixture: P5 lands empty"
     assert "2.A" not in st.items
@@ -219,13 +230,13 @@ def test_every_box_ticked_under_words_that_say_otherwise_stays_open(repo):
     assert any("7 (its heading says IN PROGRESS)" in n for n in plan.notes), plan.notes
 
 
-def test_globs_given_to_an_imported_done_task_do_not_make_it_hand_finished(repo):
+def test_globs_given_to_an_imported_done_task_do_not_make_it_hand_finished(repo, monkeypatch):
     """`--apply` tells the operator to give every task its globs. Doing that is a touch,
     but not of the task's STATE: its done still comes from the source, and its phase is
     still the import's to complete."""
     _repo(repo)
     run_cli(repo, "init")
-    _import(repo, "--apply")
+    _pre_fix_plain_import(repo, monkeypatch)
     # P5 lands empty; a first --include-done run adds P5.A/P5.B -- simulate an older
     # importer that added them but never completed the phase, then someone adds globs.
     log = EventLog(repo, "old-importer")

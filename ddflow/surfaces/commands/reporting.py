@@ -100,7 +100,9 @@ def cmd_status(a, c: Ctx) -> int:
     exemption — written for `build_parser` — had been covering this function's 16
     branches too.
     """
-    out = A.status(c.repo, agent=c.requested_agent)
+    # Everything: a terminal or a `--json` pipe is where the full lists are asked for. The
+    # bounded answer is the MCP tool's (Bd6aa9ffde9).
+    out = A.status(c.repo, agent=c.requested_agent, full=True)
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
         return out.exit
@@ -148,6 +150,9 @@ def cmd_show(a, c: Ctx) -> int:
     if c.json:
         print(json.dumps(out.body("item"), indent=2, default=str))
         return OK
+    if "bug" in out.data["_render"]:
+        print(_bug_lines(out.data["_render"]["bug"]))
+        return OK
     it = out.data["_render"]["item"]
     print(f"{it.id} [{it.kind}] {it.title}\n  state {it.state}")
     if it.needs:
@@ -168,6 +173,34 @@ def cmd_show(a, c: Ctx) -> int:
     if contest:
         print(contest)
     return OK
+
+
+def _bug_lines(b: dict) -> str:
+    """`show`'s answer for a bug id: what it is, where it was found, what fixes it, and
+    how it was closed."""
+    found = f"found {b['found_at']}" + (f" on {b['item']}" if b["item"] else "")
+    lines = [f"{b['id']} [bug] {b['state']}", f"  {found}"]
+    if b["fixing"]:
+        lines.append(f"  fix task(s): {', '.join(b['fixing'])}")
+    if b["mentioned_by"]:
+        lines.append(f"  mentioned by: {', '.join(b['mentioned_by'])}")
+    if b["fixed_at"]:
+        tests = [t for t in b["regression_tests"] or [b["regression_test"]] if t]
+        lines.append(
+            f"  closed {b['fixed_at']} as fixed" + ("; regression test(s):" if tests else "")
+        )
+        lines += [f"    {t}" for t in tests]
+    if b["invalid_at"]:
+        # A fix wins over an invalid closure (`Bug.resolution`): shown as what it now is.
+        was = "earlier closed" if b["fixed_at"] else "closed"
+        tail = " -- superseded by the fix" if b["fixed_at"] else ""
+        lines.append(f"  {was} {b['invalid_at']} as invalid: {b['invalid_reason']}{tail}")
+        if b["evidence"]:
+            lines.append(f"    evidence: {b['evidence']}")
+    if b["lesson"]:
+        lines.append(f"  lesson {b['lesson']}")
+    lines += ["", b["summary"]]
+    return "\n".join(lines)
 
 
 def cmd_recover(a, c: Ctx) -> int:

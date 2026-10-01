@@ -282,6 +282,7 @@ def cmd_merge(a, c: Ctx) -> int:
         a.id,
         message=a.message or "",
         allow_dirty=a.allow_dirty,
+        allow_empty=a.allow_empty,
         keep=a.keep,
         model=a.model or "",
         branch=a.branch or "",
