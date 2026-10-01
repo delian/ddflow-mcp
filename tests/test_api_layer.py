@@ -777,7 +777,10 @@ def test_status_counts_what_actually_happened(repo):
         "done": 0,
         "running": 0,
         "ready": 2,
+        "held_by_cap": 0,
         "blocked": 0,
+        "review": 0,
+        "abandoned": 0,
     }, before.data["tasks"]
 
     run_cli(repo, "claim", "T1")
