@@ -74,6 +74,52 @@ def test_a_full_cap_still_says_cap_reached(log, cfg):
     assert "1 held by" in p.summary() and "0 blocked" in p.summary(), p.summary()
 
 
+def test_a_cap_lowered_below_what_is_in_flight_holds_everything(log, cfg):
+    """Reviewer probe: three in flight, cap lowered to one. No slot is free, so nothing
+    is offered and every ready item is held -- never a negative count of free slots."""
+    _queue(log, 5)
+    for i, who in ((1, "a"), (2, "b"), (3, "c")):
+        _hold(log, f"U{i}", who)
+    cfg.schedule.max_parallel_tasks = 1
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert not p.ready and p.capped == ["U4", "U5"]
+    assert all("cap reached" in b.detail and "free" not in b.detail for b in p.blocked)
+
+
+def test_a_cap_held_item_waits_on_every_item_in_flight(log, cfg):
+    """Any release frees a slot. Named in `waiting_on`, so an any-wait registers against
+    every holder whether or not the wording says "cap reached" (critic finding)."""
+    _queue(log, 4)
+    _hold(log, "U1", "x")
+    _hold(log, "U2", "y")
+    cfg.schedule.max_parallel_tasks = 3
+    p = plan(fold(log.read_all()), cfg, agent="me")
+    assert [i.id for i in p.ready] == ["U3"] and p.capped == ["U4"]
+    assert p.blocked[0].waiting_on == ["U1", "U2"]
+
+
+def test_a_free_slot_any_wait_still_waits_on_every_holder(repo):
+    """The case the wording change could have narrowed: under deps_only the one offered
+    item conflicts with X's lease, so the any-wait falls through to the blockers -- and a
+    release by Y frees the slot the held item needs, so Y must be waited on too."""
+    from ddflow.api import lifecycle as LA
+
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    text = cfg.read_text().replace("max_parallel_tasks = 4", "max_parallel_tasks = 3")
+    cfg.write_text(text.replace("[schedule]", '[schedule]\nready_policy = "deps_only"', 1))
+    run_cli(repo, "task", "add", "A", "--globs", "a.py")
+    run_cli(repo, "task", "add", "D", "--globs", "d.py")
+    run_cli(repo, "task", "add", "B", "--globs", "a.py")
+    run_cli(repo, "task", "add", "C", "--globs", "c.py")
+    assert LA.claim(repo, "A", no_worktree=True, agent="x").ok
+    assert LA.claim(repo, "D", no_worktree=True, agent="y").ok
+    out = LA.wait(repo, timeout_s=0, agent="w")
+    held = [b for b in out.data["blocked"] if b["item"] == "C"]
+    assert held and "free" in held[0]["detail"], out.data["blocked"]
+    assert out.data["waiting_on"] == ["A", "D"], out.data
+
+
 def _buckets(t: dict) -> int:
     return sum(t[k] for k in ("done", "running", "ready", "held_by_cap", "blocked", "review"))
 
