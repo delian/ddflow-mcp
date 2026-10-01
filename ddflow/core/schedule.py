@@ -815,11 +815,21 @@ def critical_path(state: State, phase: str = "") -> list[str]:
     items = {
         i.id: i for i in state.items.values() if not i.removed and (not phase or i.id in inside)
     }
+
     # On a cyclic graph the memo is unsound: a result computed under one `seen` set is
     # keyed on the node alone, so a truncated sub-path can be cached and returned where
     # it is wrong. Cycles are reachable via `cycle_policy = "warn"`, so refuse rather
     # than return a confidently wrong number.
-    if find_cycles(items, edges=lambda it: [d for _owner, d in inherited_deps(state, it)]):
+    def before(it: Item) -> list[str]:
+        """What must finish before ``it`` can: its dependencies, inherited ones too, and
+        -- an umbrella closing only when its sub-tasks do -- its children (B79c2f6e17a:
+        without them a split task's chain read one step short per level)."""
+        deps = [d for _owner, d in inherited_deps(state, it)]
+        if it.kind != "task":
+            return deps  # a phase is not a step of its own chain
+        return deps + [c.id for c in state.children(it.id) if not c.removed]
+
+    if find_cycles(items, edges=before):
         return []
     memo: dict[str, list[str]] = {}
 
@@ -835,7 +845,7 @@ def critical_path(state: State, phase: str = "") -> list[str]:
             # `it.needs` alone, so a phase-level dependency did not lengthen the
             # reported floor at all — and the number exists precisely to stop someone
             # adding a fifth agent to a phase whose runtime is set by a chain.
-            for _owner, dep in inherited_deps(state, it):
+            for dep in before(it):
                 if dep in items and items[dep].state != DONE:
                     cand = longest(dep, seen | {n})
                     if len(cand) > len(best):

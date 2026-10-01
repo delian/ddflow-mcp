@@ -30,9 +30,10 @@ def test_the_critical_path_of_a_phase_walks_sub_tasks_nested_under_a_task(log):
     log.append("task.added", "S2", {"parent": "T", "needs": ["S1"], "globs": ["s2"]})
     log.append("task.added", "S3", {"parent": "T", "needs": ["S2"], "globs": ["s3"]})
     st = fold(log.read_all())
-    assert critical_path(st) == ["S1", "S2", "S3"]
-    assert critical_path(st, "P") == ["S1", "S2", "S3"]
-    assert critical_path(st, "T") == ["S1", "S2", "S3"]
+    # T closes when its sub-tasks do, so it is the chain's last step (B79c2f6e17a).
+    assert critical_path(st) == ["S1", "S2", "S3", "T"]
+    assert critical_path(st, "P") == ["S1", "S2", "S3", "T"]
+    assert critical_path(st, "T") == ["S1", "S2", "S3", "T"]
 
 
 def _queue(log, n: int):

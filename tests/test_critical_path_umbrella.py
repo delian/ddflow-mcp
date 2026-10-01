@@ -1,0 +1,49 @@
+"""critical_path counts an umbrella's open sub-tasks (bug B79c2f6e17a).
+
+P1.T1 split into sub-task P1.T1a, and P1.T2 needs P1.T1: T1 closes only when T1a does,
+so the chain is T1a -> T1 -> T2. The path walked `needs` (inherited) alone and reported
+two steps -- one short per level of nesting, on the number meant to stop someone adding
+an agent to a phase whose runtime a chain sets.
+"""
+
+from __future__ import annotations
+
+from ddflow.core.model import fold
+from ddflow.core.schedule import critical_path
+
+
+def _add(log, tid, parent, needs=()):
+    log.append("task.added", tid, {"parent": parent, "needs": list(needs), "globs": [tid]})
+
+
+def test_an_umbrellas_sub_task_is_a_step_before_it(log):
+    log.append("phase.added", "P1", {"title": "p"})
+    _add(log, "P1.T1", "P1")
+    _add(log, "P1.T1a", "P1.T1")
+    _add(log, "P1.T2", "P1", ["P1.T1"])
+    st = fold(log.read_all())
+    assert critical_path(st, "P1") == ["P1.T1a", "P1.T1", "P1.T2"]
+    assert critical_path(st) == ["P1.T1a", "P1.T1", "P1.T2"]
+
+
+def test_nested_umbrellas_count_every_level_and_the_longest_child_chain(log):
+    log.append("phase.added", "P1", {"title": "p"})
+    _add(log, "T", "P1")
+    _add(log, "T.a", "T")
+    _add(log, "T.a.x", "T.a")
+    _add(log, "T.a.y", "T.a", ["T.a.x"])
+    _add(log, "T.b", "T")
+    _add(log, "U", "P1", ["T"])
+    st = fold(log.read_all())
+    assert critical_path(st, "P1") == ["T.a.x", "T.a.y", "T.a", "T", "U"]
+
+
+def test_a_finished_sub_task_is_no_step(log):
+    log.append("phase.added", "P1", {"title": "p"})
+    _add(log, "P1.T1", "P1")
+    _add(log, "P1.T1a", "P1.T1")
+    _add(log, "P1.T1b", "P1.T1")
+    _add(log, "P1.T2", "P1", ["P1.T1"])
+    log.append("item.completed", "P1.T1a", {})
+    st = fold(log.read_all())
+    assert critical_path(st, "P1") == ["P1.T1b", "P1.T1", "P1.T2"]

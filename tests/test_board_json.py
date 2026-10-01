@@ -30,7 +30,7 @@ def test_json_board_is_json_with_the_boards_structure(repo):
     assert rows["P1.T1a"]["owner"] == "a1" and rows["P1.T1a"]["state"] == "running"
     assert rows["P1.T2"]["needs"] == ["P1.T1"] and rows["P1.T1"]["globs"] == ["a.py"]
     assert rows["P1.T1"]["gates"]["research"] == ""  # every configured gate, recorded or not
-    assert body["critical_path"] == ["P1.T1", "P1.T2"]
+    assert body["critical_path"] == ["P1.T1a", "P1.T1", "P1.T2"]  # T1 closes after T1a
     assert body["text"].startswith("<!--"), "the markdown rides along for a JSON caller"
 
 
