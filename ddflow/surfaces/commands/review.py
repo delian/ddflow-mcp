@@ -38,7 +38,9 @@ def cmd_review(a, c: Ctx) -> int:
         agent=c.requested_agent,
         chunks=a.chunk or None,
     )
-    if out.exit == FAIL or (out.exit == NOTHING and not out.data.get("reviewer")):
+    # A refusal (exit 3) with no reviewer behind it -- a `--chunk` re-review that
+    # cannot merge -- has printed nothing else (roborev 991).
+    if out.exit == FAIL or (out.exit in (NOTHING, REFUSED) and not out.data.get("reviewer")):
         print(out.reason, file=sys.stderr)
     return out.exit
 
