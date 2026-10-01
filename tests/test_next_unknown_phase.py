@@ -31,8 +31,9 @@ def test_an_unknown_phase_over_json_and_mcp(repo):
     from ddflow.surfaces.mcp import Server
 
     _proj(repo)
-    code, out, _err = run_cli(repo, "--json", "next", "--phase", "NOPE")
-    assert code == 1, out
+    code, out, err = run_cli(repo, "--json", "next", "--phase", "159")
+    assert code == 1 and json.loads(out)["phase"] == "159", out
+    assert "no such phase or item '159'" in err and "159.A" in err, "the remedy is not dropped"
     r = Server(repo, agent="agent-test").handle(
         {
             "jsonrpc": "2.0",
@@ -51,3 +52,11 @@ def test_a_known_phase_still_answers(repo):
     run_cli(repo, "remove", "159.B.T1", "--reason", "gone")
     code, _out, _err = run_cli(repo, "next", "--phase", "159.B")
     assert code == 2, "a real phase with nothing left is 'nothing actionable', not an error"
+
+
+def test_a_long_prefix_list_says_how_many_more(repo):
+    run_cli(repo, "init")
+    for i in range(15):
+        run_cli(repo, "phase", "add", f"9.{i:02d}", "--title", "p")
+    code, _out, err = run_cli(repo, "next", "--phase", "9")
+    assert code == 1 and "9.11 and 3 more." in err, err

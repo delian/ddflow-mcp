@@ -62,7 +62,8 @@ DEFAULT_CHECK_RECOVERY = True
 def next_(
     repo: Path, *, kind: str = DEFAULT_NEXT_KIND, phase: str = "", agent: str = ""
 ) -> O.Outcome:
-    """Offer the next actionable item(s). Exit 2 when nothing is actionable."""
+    """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
+    ``phase`` names no item (`_unknown_phase`)."""
     from ..core.schedule import critical_path, plan
 
     log, cfg, st = _load(repo, agent)
@@ -115,6 +116,10 @@ def next_(
     return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
 
 
+#: How many ids under an unknown `--phase` prefix the refusal names before "and N more".
+_PREFIX_SHOWN = 12
+
+
 def _unknown_phase(st, phase: str) -> str:
     """Why ``phase`` names nothing ``next`` can slice by; "" when it is an item.
 
@@ -133,7 +138,8 @@ def _unknown_phase(st, phase: str) -> str:
         if not i.removed and i.id.startswith(f"{phase}.") and "." not in i.id[len(phase) + 1 :]
     )
     gone = " (it was removed from the queue)" if it is not None else ""
-    hint = f" Items under that prefix: {', '.join(under[:12])}." if under else ""
+    more = f" and {len(under) - _PREFIX_SHOWN} more" if len(under) > _PREFIX_SHOWN else ""
+    hint = f" Items under that prefix: {', '.join(under[:_PREFIX_SHOWN])}{more}." if under else ""
     return f"no such phase or item {phase!r}{gone}.{hint}"
 
 
