@@ -1,4 +1,4 @@
-"""Whose working tree a CLI claim is standing in (B11e4c5a185).
+"""Whose working tree a CLI command is standing in (B11e4c5a185).
 
 `claim` adopts the linked worktree it is run from: an agent its harness already isolated
 works there, and a second tree would strand its work. But a subagent's shell often runs
@@ -8,8 +8,10 @@ the connection's identity and can compare. The CLI has no connection, so it asks
 
 A linked tree is someone ELSE's when the identity derived from it -- what an agent
 standing in it is called by default -- is not the caller, and that identity has written
-to the log: somebody has been working there under that name. Then the claim is answered
-as from the primary, with a tree of its own. Everything else still adopts:
+to the log: somebody has been working there under that name. Then the command is
+answered as from the primary (`Ctx.called_from`): a claim makes a tree of its own, and
+gate run, merge, review and tests take the item's tree or branch, not the parent's.
+Everything else still adopts:
 
 * no identity named (the caller IS the derived one, as before);
 * the tree's own identity named explicitly;
