@@ -288,6 +288,13 @@ class Finding:
     title: str
     detail: str = ""
     location: str = ""
+    #: The chunk (1-based) the finding came from, so a re-review of that chunk can
+    #: replace it and leave the other chunks' findings standing.
+    chunk: int = 0
+
+
+#: How much of a finding's detail the gate evidence keeps for a later merge.
+FINDING_DETAIL_KEPT = 2000
 
 
 @dataclass
@@ -307,6 +314,14 @@ class ReviewResult:
     #: Every one of them, not the first -- a PARTIAL that names one cause for three
     #: missing chunks hides which files nobody reviewed (bug Bd2332f8f2a).
     unreviewed: list[dict[str, Any]] = field(default_factory=list)
+    #: The chunks (1-based) that came back with a verdict.
+    reviewed: list[int] = field(default_factory=list)
+    #: The chunks this run was asked for (`ddflow review --chunk`); empty = all.
+    requested: list[int] = field(default_factory=list)
+    #: What the chunk numbers refer to: the reviewed diff's digest and the chunk size it
+    #: was cut with. A re-review of chunk N merges only into a record of the SAME cut.
+    diff_sha: str = ""
+    max_chunk_chars: int = 0
 
     @property
     def label(self) -> str:
@@ -334,6 +349,20 @@ class ReviewResult:
             "reason": self.reason,
             "titles": [f.title for f in self.findings[:10]],
             "unreviewed": self.unreviewed,
+            "reviewed": self.reviewed,
+            "diff_sha": self.diff_sha,
+            "max_chunk_chars": self.max_chunk_chars,
+            "chunks_total": self.chunks_total,
+            "chunk_findings": [
+                {
+                    "chunk": f.chunk,
+                    "severity": f.severity,
+                    "title": f.title,
+                    "location": f.location,
+                    "detail": f.detail[:FINDING_DETAIL_KEPT],
+                }
+                for f in self.findings
+            ],
         }
 
 
@@ -1005,6 +1034,11 @@ def _preflight(rev: Reviewer, diff: str, res: ReviewResult) -> ReviewResult | No
     return None
 
 
+#: The reasons `_absorb_chunk` gives a reply that is not a review.
+EMPTY_COMPLETION = "empty completion"
+OFF_CONTRACT = "came back OFF CONTRACT:"
+
+
 def _absorb_chunk(
     res: ReviewResult,
     index: int,
@@ -1031,18 +1065,18 @@ def _absorb_chunk(
         return None
     if not content:
         res.chunks_off_contract += 1
-        lost("empty completion")
+        lost(EMPTY_COMPLETION)
         return None
     all_raw.append(content)
     findings, on_contract = parse(content)
     if not on_contract:
         res.chunks_off_contract += 1
-        lost(
-            f"came back OFF CONTRACT: {len(content)} chars with no STATUS: block. "
-            f"Not counted as reviewed."
-        )
+        lost(f"{OFF_CONTRACT} {len(content)} chars with no STATUS: block. Not counted as reviewed.")
         return None
     res.chunks_reviewed += 1
+    res.reviewed.append(index)
+    for f in findings:
+        f.chunk = index
     res.findings.extend(findings)
     return findings
 
@@ -1345,7 +1379,7 @@ def review(
     context: str = "",
     repo: Path | None = None,
     prompt_overrides: dict[str, str] | None = None,
-    extra_rules: str = "",
+    only: list[int] | None = None,
     on_progress: Callable[[str], None] | None = None,
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 60,
@@ -1355,7 +1389,9 @@ def review(
     ``on_progress`` gets a line as each chunk settles and, every ``tick_s`` while chunks
     are in flight, one naming what is still awaited; ``on_tick`` is called at the same
     cadence, on the caller's thread (the api renews the caller's lease there).
-    ``extra_rules`` adds to the reviewer's own ``extra_rules``.
+    ``only`` names the chunks (1-based, as a full run numbers them) to send; the rest
+    are neither sent nor counted as lost -- `merge_rerun` folds such a run into the
+    record of the full one.
     """
     res = ReviewResult(reviewer=rev.name, model=rev.model, family=rev.resolved_family())
     started = time.time()
@@ -1364,10 +1400,18 @@ def review(
     if problem is not None:
         return problem
 
-    chunks = split_diff(strip_hunk_context(diff), rev.max_chunk_chars)
+    stripped = strip_hunk_context(diff)
+    chunks = split_diff(stripped, rev.max_chunk_chars)
     res.chunks_total = len(chunks)
+    res.diff_sha, res.max_chunk_chars = diff_digest(stripped), rev.max_chunk_chars
     files = [chunk_files(c) for c in chunks]
-    rules = "\n\n".join(r.strip() for r in (rev.extra_rules, extra_rules) if r.strip())
+    wanted = sorted(set(only or ())) or list(range(1, len(chunks) + 1))
+    outside = [n for n in wanted if not 1 <= n <= len(chunks)]
+    if outside:
+        res.status = ERROR
+        res.reason = f"no chunk {outside} -- this diff has chunks 1..{len(chunks)}"
+        return res
+    res.requested = sorted(set(only or ()))
 
     from ..services import prompts as P
 
@@ -1377,7 +1421,9 @@ def review(
         # instructions, which a single project-wide template cannot express.
         overrides["review_system"] = rev.system_prompt_path
     try:
-        system = P.render(P.resolve("review_system", repo, overrides), extra_rules=rules)
+        system = P.render(
+            P.resolve("review_system", repo, overrides), extra_rules=rev.extra_rules.strip()
+        )
         user_tmpl = P.resolve("review_user", repo, overrides)
     except P.TemplateError as exc:
         res.status, res.reason = ERROR, str(exc)
@@ -1395,53 +1441,125 @@ def review(
         )
 
     try:
-        users = [render(chunk, i) for i, chunk in enumerate(chunks, 1)]
+        users = [render(chunks[n - 1], n) for n in wanted]
     except P.TemplateError as exc:
         res.status, res.reason = ERROR, f"review_user template: {exc}"
         return res
 
     progress = _Progress(files, started, rev.timeout_s, on_progress, on_tick)
+    # `_race` and the retry index the SENT chunks (positions in `wanted`); progress and
+    # absorption speak chunk numbers.
     first = _race(
         rev,
         system,
         users,
         started,
-        on_settled=progress.settled,
-        on_tick=progress.tick,
+        on_settled=lambda k, got: progress.settled(wanted[k] - 1, got),
+        on_tick=lambda waiting: progress.tick([wanted[k] - 1 for k in waiting]),
         tick_s=tick_s,
     )
     # The retry races PARTS of the lost chunks, so its indices are not chunk numbers:
     # its ticks name the chunks being retried instead (critic).
-    retried = [i for i, (_c, err) in enumerate(first) if err.startswith(TRUNCATED)]
+    retried = [wanted[k] - 1 for k, (_c, err) in enumerate(first) if err.startswith(TRUNCATED)]
     results = _retry_truncated(
         rev,
         system,
-        chunks,
+        [chunks[n - 1] for n in wanted],
         first,
-        render,
+        lambda chunk, k: render(chunk, wanted[k - 1]),
         started,
         on_tick=lambda _parts: progress.tick(retried, " on retry"),
         tick_s=tick_s,
     )
-    for i, (before, after) in enumerate(zip(first, results, strict=True)):
+    for k, (before, after) in enumerate(zip(first, results, strict=True)):
         if before != after:
-            progress.settled(i, after, " on retry")
+            progress.settled(wanted[k] - 1, after, " on retry")
 
     all_raw: list[str] = []
     # Absorbed in CHUNK order whatever order they finished in, so the findings, the raw
     # transcript and the reported failures do not depend on which copy was quick.
-    for i, (content, err) in enumerate(results, 1):
-        _absorb_chunk(res, i, content, err, all_raw, files[i - 1])
-    _name_unreviewed(res)
-
+    for n, (content, err) in zip(wanted, results, strict=True):
+        _absorb_chunk(res, n, content, err, all_raw, files[n - 1])
     res.raw = "\n\n---\n\n".join(all_raw)
     res.elapsed_s = time.time() - started
+    _settle(res)
+    return res
+
+
+def _settle(res: ReviewResult) -> None:
+    """Status and reason from coverage: every chunk, some, or none."""
+    _name_unreviewed(res)
     if res.chunks_reviewed == 0:
         res.status = UNAVAILABLE
         res.reason = res.reason or "no chunk produced a usable review"
     elif res.chunks_reviewed < res.chunks_total:
         res.status = PARTIAL
+        if not res.unreviewed:  # a --chunk run with nothing to merge into
+            res.reason = f"only chunk(s) {res.requested} were sent; the rest were not reviewed here"
     else:
         res.status = REVIEWED
         res.reason = ""
-    return res
+
+
+def diff_digest(diff: str) -> str:
+    """What a chunk number refers to: the diff as reviewers are sent it."""
+    import hashlib
+
+    return hashlib.sha256(strip_hunk_context(diff).encode("utf-8", "replace")).hexdigest()
+
+
+def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
+    """Fold a `--chunk` re-review into the evidence of the review it re-runs part of.
+
+    Returns why it cannot ("" when merged). Only into a record of the SAME cut -- the
+    same diff, chunk size and reviewer -- because a chunk number means nothing across
+    two cuts (bug Bd2332f8f2a: a deterministically truncated chunk forced a 25-40 min
+    full re-run, or an out-of-band model call ddflow could not verify). The re-run
+    chunks' outcomes replace theirs; every other chunk keeps what it had.
+    """
+    for key, mine in (
+        ("reviewer", res.reviewer),
+        ("diff_sha", res.diff_sha),
+        ("max_chunk_chars", res.max_chunk_chars),
+    ):
+        if prior.get(key) != mine:
+            return (
+                f"the recorded review differs in {key} ({prior.get(key)!r} vs {mine!r}), "
+                f"so its chunk numbers are not this diff's: run the full review"
+            )
+    if "reviewed" not in prior:
+        return "the recorded review predates per-chunk evidence: run the full review"
+    again = set(res.requested)
+    kept = {int(n) for n in prior["reviewed"]} - again
+    res.reviewed = sorted(kept | set(res.reviewed))
+    res.chunks_reviewed = len(res.reviewed)
+    res.findings = sorted(
+        [
+            Finding(
+                severity=f.get("severity", ""),
+                title=f.get("title", ""),
+                detail=f.get("detail", ""),
+                location=f.get("location", ""),
+                chunk=int(f.get("chunk", 0)),
+            )
+            for f in prior.get("chunk_findings", [])
+            if int(f.get("chunk", 0)) not in again
+        ]
+        + res.findings,
+        key=lambda f: f.chunk,
+    )
+    res.unreviewed = sorted(
+        [u for u in prior.get("unreviewed", []) if int(u.get("chunk", 0)) not in again | kept]
+        + res.unreviewed,
+        key=lambda u: u["chunk"],
+    )
+    # Off-contract chunks are among the unreviewed, by the reason `_absorb_chunk` gives
+    # them; counted again so the merged coverage does not drop the earlier ones.
+    res.chunks_off_contract = sum(
+        1
+        for u in res.unreviewed
+        if u["reason"] == EMPTY_COMPLETION or u["reason"].startswith(OFF_CONTRACT)
+    )
+    res.reason = ""
+    _settle(res)
+    return ""

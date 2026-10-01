@@ -1091,6 +1091,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="review this branch against base -- for an item claimed without a worktree "
         "(default: the branch checked out in the worktree you are standing in)",
     )
+    rw.add_argument(
+        "--chunk",
+        action="append",
+        default=[],
+        help="re-review only chunk N (as the recorded review numbered it; repeatable, or "
+        "'2,5') and merge it into that record -- same diff, chunk size and reviewer",
+    )
     rw.set_defaults(fn=cmd_review)
 
     ad = s.add_parser("adopt", help="install ddflow into this project for one or more agents")
