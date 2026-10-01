@@ -105,3 +105,18 @@ def test_summary_lines_read_pytest_quiet_and_unittest_verdicts():
         "Ran 3 tests in 0.001s",
         "FAILED (failures=1)",
     ]
+
+
+def test_run_logs_are_pruned_per_gate_and_never_the_one_just_written(tmp_path):
+    keep_unit = G.run_log_writer(tmp_path, "T1", "unit")
+    keep_fast = G.run_log_writer(tmp_path, "T1", "unit-fast")
+    fast = [keep_fast(f"fast {i}") for i in range(3)]
+    unit = [keep_unit(f"unit {i}") for i in range(G.KEEP_RUN_LOGS + 5)]
+    for ref in fast:
+        assert (tmp_path / ref).is_file(), "another gate's logs were pruned"
+    assert (tmp_path / unit[-1]).read_text() == f"unit {G.KEEP_RUN_LOGS + 4}"
+    left = sorted(p.name for p in (tmp_path / ".ddflow" / "runs" / "T1").glob("unit-2*.log"))
+    assert len(left) == G.KEEP_RUN_LOGS
+    assert [(tmp_path / ".ddflow" / "runs" / "T1" / n).read_text() for n in left] == [
+        f"unit {i}" for i in range(5, G.KEEP_RUN_LOGS + 5)
+    ]

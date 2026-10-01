@@ -1155,8 +1155,15 @@ def run_log_writer(repo: Path, item_id: str, gate: str) -> Callable[[str], str]:
         stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         path = where / f"{gate}-{stamp}-{os.getpid()}.log"
         path.write_text(out, "utf-8", errors="replace")
-        old = sorted(where.glob(f"{gate}-*.log"), key=lambda q: q.stat().st_mtime)
-        for stale in old[:-KEEP_RUN_LOGS]:
+        # THIS gate's logs only -- `unit-*.log` would also match gate `unit-fast`'s --
+        # ordered by the stamp in the name, never by mtime (coarse on some filesystems,
+        # which could rank the log just written as the oldest), and never the new one.
+        mine = re.compile(rf"{re.escape(gate)}-\d{{8}}T\d{{12}}Z-\d+\.log")
+        old = sorted(
+            (q for q in where.iterdir() if mine.fullmatch(q.name) and q != path),
+            key=lambda q: q.name[len(gate) + 1 :],
+        )
+        for stale in old[: max(0, len(old) - (KEEP_RUN_LOGS - 1))]:
             stale.unlink(missing_ok=True)
         return path.relative_to(repo).as_posix()
 
