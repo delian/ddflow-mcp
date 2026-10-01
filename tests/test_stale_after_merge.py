@@ -188,3 +188,41 @@ def test_a_clean_tree_fingerprints_as_clean(repo):
     assert G.digest("\x00\x00") == G.LEGACY_CLEAN == LEGACY_CLEAN
     (repo / "new.py").write_text("x\n")
     assert not G.tree_fingerprint(repo).endswith("+clean")
+
+
+def _commit_all_matches(repo: Path) -> None:
+    """The content id of the working tree must equal that of the commit recording it."""
+    from ddflow.services import gates as G
+
+    before = G.source_tree(repo)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "record it")
+    assert G.commit_source_tree(repo, "HEAD") == before
+
+
+def test_a_tracked_file_replaced_by_a_directory_leaves_no_phantom_entry(repo):
+    (repo / "foo").write_text("file\n")
+    _git(repo, "add", "foo")
+    _git(repo, "commit", "-qm", "foo")
+    (repo / "foo").unlink()
+    (repo / "foo").mkdir()
+    (repo / "foo" / "bar").write_text("hi\n")
+    _commit_all_matches(repo)
+
+
+def test_without_filemode_a_new_executable_is_recorded_as_git_records_it(repo):
+    _git(repo, "config", "core.fileMode", "false")
+    run = repo / "run.sh"
+    run.write_text("#!/bin/sh\n")
+    run.chmod(0o755)
+    _commit_all_matches(repo)
+
+
+def test_with_filemode_an_executable_is_recorded_as_git_records_it(repo):
+    run = repo / "run.sh"
+    run.write_text("#!/bin/sh\n")
+    run.chmod(0o755)
+    other = repo / "group.sh"
+    other.write_text("#!/bin/sh\n")
+    other.chmod(0o654)  # group-executable only: git records 100644
+    _commit_all_matches(repo)

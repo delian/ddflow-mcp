@@ -163,6 +163,12 @@ def _tree_being_completed(repo: Path, it) -> tuple[Path, str]:
     the merge commit itself also holds whatever the target gained meanwhile, and that
     is not a reason to distrust the item's gates. A fast-forward or squash lands one
     parent, and is itself the branch's content. Before it lands, the item's worktree.
+
+    `merged_sha` is only the fallback for an event without `landed_after`: `pr.merged`
+    with no merge sha, which records the branch's HEAD -- so it is taken as it is, with
+    no second-parent rule (that rule needs `landed_before` to tell OUR merge commit from
+    a branch head that is itself a merge). Every `worktree.merged` in this project's
+    log carries `landed_after`.
     """
     from ..infra import worktree as W
 

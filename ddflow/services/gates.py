@@ -983,11 +983,19 @@ def worktree_entries(cwd: Path | str) -> TreeEntries | None:
             out[path] = ("120000", _blob_id(os.fsencode(os.readlink(full)), fmt))
             continue
         if full.is_dir():
-            continue  # a submodule: its recorded commit is what the index says
-        if filemode or path not in out:
-            mode = "100755" if full.stat().st_mode & 0o111 else "100644"
+            # A submodule keeps the commit the index records. Any other directory has
+            # REPLACED a tracked file of that name: the file is gone, and the files
+            # under the directory arrive as untracked paths of their own.
+            if out.get(path, ("",))[0] != "160000":
+                out.pop(path, None)
+            continue
+        if filemode:
+            # git's own test: the OWNER's execute bit (S_IXUSR), not any of the three.
+            mode = "100755" if full.stat().st_mode & 0o100 else "100644"
         else:
-            mode = out[path][0]
+            # core.fileMode=false: git ignores the bit -- the index's mode, or 100644
+            # for a file it has not seen.
+            mode = out.get(path, ("100644",))[0]
         to_hash.append((path, mode))
     return out if _hash_into(root, out, to_hash) else None
 
