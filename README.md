@@ -720,6 +720,36 @@ reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce
 cadences, and the rest of the 128 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
+#### What is committed, and what stays on your machine
+
+ddflow **recommends** services; it never ships one person's configuration. Two layers:
+
+| Layer | Files | Holds |
+|---|---|---|
+| committed | `.ddflow/config.toml`, `.ddflow/gates.toml` | generic project policy: the test command, the pipelines, the gates (human checkpoints included) — what every clone must agree on |
+| machine-local, git-ignored | `.ddflow/local/config.toml`, `.ddflow/local/gates.toml`, `.ddflow/local/reviewers.toml` | *your* services: reviewer endpoints, model names of a private deployment, API-key variable names, LAN hosts, a worker count sized to this machine |
+
+The local files are read **last**, so they win; `ddflow config --explain` reports such a
+value's source as `local`. Every writer of an operator-specific value targets the local
+layer by default:
+
+```sh
+ddflow reviewers add --preset ollama --model qwen3:8b   # -> .ddflow/local/reviewers.toml
+ddflow reviewers detect --write                         # -> .ddflow/local/reviewers.toml
+ddflow config --local --set gate.unit_tests.command "pytest -q -n 48"
+ddflow config --local --append-toml "$(cat my-reviewer.toml)"
+```
+
+`--shared` on `reviewers add` / `reviewers detect --write` commits the block to
+`.ddflow/config.toml` instead — only for a service every clone reaches at the same
+address. `config --set` and `--append-toml` stay committed unless you pass `--local`
+(over MCP: `ddflow_configure` with `local=true`, `ddflow_reviewers_detect` with
+`shared=true`), because a test command or a pipeline is project policy. The human-gate
+guards hold on both layers: no writer sets `gate.<id>.human`, and none can drop a human
+gate from a pipeline. `.ddflow/local/` carries its own `*` `.gitignore`, so it stays
+uncommitted even in a project whose `.ddflow/.gitignore` predates it. API keys are never
+written anywhere — only the *name* of the variable that holds one.
+
 ### Publishing and registry
 
 **Nobody should have to paste JSON into an IDE to use this.** `server.json` is the
@@ -887,7 +917,7 @@ Point them at whatever you have:
 ```sh
 ddflow reviewers presets            # 19 ready-made provider settings
 ddflow reviewers add --preset ollama --model qwen3:8b
-ddflow reviewers detect --write     # probe local ports and register what is serving
+ddflow reviewers detect --write     # probe local ports, register what is serving (machine-local)
 ddflow reviewers test               # send a known-buggy diff, check the reply
 ```
 
@@ -2720,7 +2750,7 @@ ddflow doctor                   integrity + health
 ddflow rebuild                  re-derive the index
 ddflow cadence [--ran NAME]     which periodic passes are due  (2 = none)
 ddflow config --explain         every knob, its value, its source and its docs
-ddflow config --append-toml ..  add config without a shell editor (validated first)
+ddflow config --append-toml ..  add config without a shell editor (validated first; --local: not committed)
 ddflow reviewers detect|list|test   find and check cross-family review endpoints
 ddflow review <id> --gate ..    run the configured reviewer, record the evidence
 ddflow mcp                      run the MCP stdio server

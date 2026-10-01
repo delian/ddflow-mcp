@@ -32,6 +32,76 @@ from pathlib import Path
 from ..config import Config
 from ..infra import tomlcfg as TC
 
+#: The git-ignored machine-local layer (decision D-no-own-services-local-dir). Read
+#: LAST by `Config.load` and `tomlcfg.config_paths`, so what is written here wins.
+LOCAL_DIR = Path(".ddflow") / "local"
+
+
+def config_file(repo: Path, *, local: bool = False, own: str = "config.toml") -> Path:
+    """The file a writer targets: the committed `.ddflow/<own>`, or its local twin.
+
+    One function so every writer agrees on where "local" is. A writer that guessed its
+    own path is how a reviewer endpoint ended up in the committed config while the
+    reader looked for it under `local/` (bug B-reviewers-write-committed).
+    """
+    base = Path(repo) / (LOCAL_DIR if local else Path(".ddflow"))
+    return base / own
+
+
+def ensure_local_dir(repo: Path) -> Path:
+    """Create `.ddflow/local/` with its own `*` `.gitignore`, and return it.
+
+    The directory ignores itself rather than trusting `.ddflow/.gitignore`: a project
+    whose ignore file predates `local/`, or that never ran `init`, must still not commit
+    the endpoint, key variable or worker count it is about to receive.
+    """
+    d = Path(repo) / LOCAL_DIR
+    d.mkdir(parents=True, exist_ok=True)
+    ignore = d / ".gitignore"
+    if not ignore.exists():
+        ignore.write_text("*\n", "utf-8")
+    return d
+
+
+def _human_cleared(data: dict) -> list[str]:
+    """Every `gate.<id>.human` an appended TOML document sets to anything but `true`.
+
+    Only the clearing direction: declaring a NEW checkpoint by appending
+    `human = true` is how a project adds one (tests/test_human_gate.py does exactly
+    that), and making a gate stricter takes nothing from the operator.
+    """
+    gates = data.get("gate") if isinstance(data, dict) else None
+    if not isinstance(gates, dict):
+        return []
+    return [
+        f"gate.{gid}.human"
+        for gid, spec in gates.items()
+        if isinstance(spec, dict) and "human" in spec and spec["human"] is not True
+    ]
+
+
+def _effective(repo: Path, text: str, local: bool):
+    """`(data, cfg)` for a candidate TEXT of the file being written.
+
+    A committed write is judged ALONE: it is what every other clone gets, and a local
+    layer that happens to mask a problem here masks nothing there. A local write is
+    judged MERGED over the committed config, because it only ever takes effect on top
+    of it -- a local `task_pipeline` that drops a committed human gate is a deletion
+    of the operator's checkpoint even though the local file never names the gate.
+    """
+    import tomllib
+
+    data = tomllib.loads(text)
+    cfg = Config()
+    if local:
+        committed = config_file(repo)
+        if committed.is_file():
+            cfg._apply(tomllib.loads(committed.read_text("utf-8")), "file")
+        cfg._apply(data, "local")
+    else:
+        cfg._apply(data, "file")
+    return data, cfg
+
 
 def _toml_literal(value: str) -> str:
     """A TOML literal for `value`, quoting it unless it already is one."""
@@ -194,7 +264,7 @@ def _toml_upsert(text: str, dotted: str, literal: str) -> str:
     return "\n".join(ln for ln, _ in lines).rstrip() + "\n"
 
 
-def _workflow_problems(repo: Path, text: str) -> set[str]:
+def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str]:
     """The workflow problems a given config TEXT would have. Never raises.
 
     Loaded from the text rather than from disk, so the result can be judged before it
@@ -202,15 +272,11 @@ def _workflow_problems(repo: Path, text: str) -> set[str]:
     report -- `Config.check` is what catches that, and reporting it twice in different
     words is how an operator learns to read neither message.
     """
-    import tomllib
-
     from . import workflow as WF
     from .gates import GateDef, load_gates
 
     try:
-        data = tomllib.loads(text)
-        cfg = Config()
-        cfg._apply(data, "file")
+        data, cfg = _effective(repo, text, local)
         gates = load_gates(repo, cfg)
         # `load_gates` overlays `[gate.*]` from the FILE, and this text is not on disk
         # yet -- so a gate being defined in the very same call was invisible, and
@@ -232,7 +298,7 @@ def _workflow_problems(repo: Path, text: str) -> set[str]:
 _GATE_KEY_PARTS = 3
 
 
-def _guarded_human_gates(repo: Path, text: str) -> set[str]:
+def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[str]:
     """Human gates that a given config TEXT places in a pipeline. Never raises.
 
     Used to refuse an edit that would REMOVE one. Blocking `gate.<id>.human` was not
@@ -241,14 +307,10 @@ def _guarded_human_gates(repo: Path, text: str) -> set[str]:
     omission. Whether the operator's approval step exists is the operator's decision, and
     the flag and the pipeline membership are two ways of saying it.
     """
-    import tomllib
-
     from .gates import load_gates
 
     try:
-        data = tomllib.loads(text)
-        cfg = Config()
-        cfg._apply(data, "file")
+        data, cfg = _effective(repo, text, local)
         gates = load_gates(repo, cfg)
         for gid, spec in (data.get("gate") or {}).items():
             if gid in gates and isinstance(spec, dict) and "human" in spec:
@@ -260,7 +322,12 @@ def _guarded_human_gates(repo: Path, text: str) -> set[str]:
 
 
 def _write_config(
-    repo: Path, pairs: list[tuple[str, str]], *, dry_run: bool = False, check_workflow: bool = True
+    repo: Path,
+    pairs: list[tuple[str, str]],
+    *,
+    dry_run: bool = False,
+    check_workflow: bool = True,
+    local: bool = False,
 ) -> tuple[str, str]:
     """Apply every `(dotted, value)` edit, validate ONCE, write ONCE, under a lock.
 
@@ -278,6 +345,10 @@ def _write_config(
 
     Only NEW problems are refused. Refusing on any problem at all would mean a config
     already broken could never be repaired by the tool that reports it broken.
+
+    `local=True` writes the git-ignored `.ddflow/local/config.toml` instead: this
+    machine's endpoints, hosts and sizing, which must never reach the committed file.
+    The same guards apply, judged on the committed config with the local one over it.
     """
     import tomllib
 
@@ -312,11 +383,16 @@ def _write_config(
 
     from . import workflow as WF
 
-    path = repo / ".ddflow" / "config.toml"
+    path = config_file(repo, local=local)
+    if local:
+        # Even for a dry run: the lock below creates the directory anyway, and a
+        # `local/` that exists without its own `*` ignore is one `git add` from
+        # committing whatever lands there next.
+        ensure_local_dir(repo)
     with TC.locked(path):
         text = path.read_text("utf-8") if path.exists() else ""
-        before = _workflow_problems(repo, text) if check_workflow else set()
-        human_before = _guarded_human_gates(repo, text)
+        before = _workflow_problems(repo, text, local=local) if check_workflow else set()
+        human_before = _guarded_human_gates(repo, text, local=local)
         for dotted, value in pairs:
             if "." not in dotted:
                 return f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command", text
@@ -331,7 +407,7 @@ def _write_config(
         # approval step without ever touching `human`. Checked on the RESULT, at the
         # choke point, because a guard in one branch is a guard the other branch does
         # not have, which is how the first version of this shipped.
-        removed = sorted(human_before - _guarded_human_gates(repo, text))
+        removed = sorted(human_before - _guarded_human_gates(repo, text, local=local))
         if removed:
             return (
                 f"that edit would remove the human-approval gate(s) "
@@ -341,7 +417,7 @@ def _write_config(
                 text,
             )
         if check_workflow:
-            introduced = sorted(_workflow_problems(repo, text) - before)
+            introduced = sorted(_workflow_problems(repo, text, local=local) - before)
             if introduced:
                 return (
                     "that edit would leave the workflow incoherent:\n  "
@@ -354,3 +430,85 @@ def _write_config(
         if not dry_run:
             TC.atomic_write(path, text)
     return "", text
+
+
+def _append_config(repo: Path, toml_text: str, *, local: bool = False) -> tuple[str, Path]:
+    """Append a TOML block to the committed or the local config. `(error, path)`.
+
+    Validated against the MERGED text before anything is written, and held to the same
+    human-gate rule as `_write_config`: the local file is read after the committed
+    `gates.toml`, so an appended `[gates] task_pipeline` there could otherwise drop the
+    operator's checkpoint on this machine with nothing in any diff to show it.
+    """
+    import tomllib
+
+    try:
+        data = tomllib.loads(toml_text)
+    except tomllib.TOMLDecodeError as exc:
+        return f"not valid TOML: {exc}", Path()
+    if blocked := _human_cleared(data):
+        return (
+            f"refusing to append {', '.join(blocked)}: whether a gate is a human "
+            f"checkpoint is the operator's decision, not a configurable preference. "
+            f"Set `human` in .ddflow/gates.toml, which no tool writes.",
+            Path(),
+        )
+    path = config_file(repo, local=local)
+    if local:
+        ensure_local_dir(repo)
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    with TC.locked(path):
+        prev = path.read_text("utf-8") if path.exists() else ""
+        merged = (prev.rstrip() + "\n\n" if prev.strip() else "") + toml_text.strip() + "\n"
+        try:
+            Config.check(tomllib.loads(merged))
+        except (tomllib.TOMLDecodeError, ValueError) as exc:
+            return f"appending this would break the config: {exc}", Path()
+        removed = sorted(
+            _guarded_human_gates(repo, prev, local=local)
+            - _guarded_human_gates(repo, merged, local=local)
+        )
+        if removed:
+            return (
+                f"appending this would remove the human-approval gate(s) "
+                f"{', '.join(removed)} from the pipeline. Edit .ddflow/gates.toml, "
+                f"which no tool writes.",
+                Path(),
+            )
+        TC.atomic_write(path, merged)
+    return "", path
+
+
+def append_block(repo: Path, block: str, *, shared: bool = False, own: str = "") -> Path:
+    """Append a hand-built block (a `[[reviewer]]`) to the local layer, or the committed
+    config when `shared`. Returns the path written.
+
+    Local by DEFAULT: what these writers carry -- an endpoint, a model of a private
+    deployment, an API-key variable's name -- is one operator's setup, and ddflow
+    recommends services but never ships someone's configuration to every clone.
+    `own` names the dedicated local file (`reviewers.toml`); the shared target is
+    always `.ddflow/config.toml`, the one committed file a project is configured in.
+    """
+    if shared:
+        path = config_file(repo)
+        path.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        ensure_local_dir(repo)
+        path = config_file(repo, local=True, own=own or "config.toml")
+    import tomllib
+
+    with TC.locked(path):
+        prev = path.read_text("utf-8") if path.exists() else ""
+        merged = prev.rstrip() + "\n" + block.rstrip() + "\n"
+        # Parsed before it replaces anything: a block that does not parse would leave
+        # a config no later command can load, and the reader's error would blame a file
+        # the operator never edited.
+        try:
+            tomllib.loads(merged)
+        except tomllib.TOMLDecodeError as exc:
+            raise ValueError(
+                f"refusing to write {path}: the result is not valid TOML: {exc}"
+            ) from exc
+        TC.atomic_write(path, merged)
+    return path

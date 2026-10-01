@@ -108,6 +108,12 @@ A tool or reviewer that could not run is recorded `unavailable`, **never** `pass
 Exit code 2 means "could not run / nothing to do" — it is a result, not an error, and
 never a success.
 
+**Your services stay on this machine.** Reviewer endpoints, private model names, API-key
+variable names, hosts and worker counts sized to this box go to the git-ignored
+`.ddflow/local/` layer (read last, so it wins): `ddflow_configure` with `local=true`,
+`ddflow_reviewers_detect` with `write=true`. The committed config is generic project
+policy. Recommend a service to the operator; never commit their setup.
+
 ## Tools this workflow expects you to use
 
 ddflow imposes the order and demands the evidence. It does not perform the judgement
@@ -281,6 +287,13 @@ present on this machine and which are missing.
 
 Then set the project's test command with `ddflow_configure`, wire up what
 `ddflow_companions` reports missing, and add work.
+
+What is committed is generic project policy (`.ddflow/config.toml`, `.ddflow/gates.toml`).
+The operator's own services — reviewer endpoints, private model names, API-key variable
+names, LAN hosts, a worker count sized to this machine — belong in the git-ignored
+`.ddflow/local/` layer: `ddflow_configure` with `local=true`, and
+`ddflow_reviewers_detect` with `write=true` writes there by default. Recommend services;
+never commit someone's setup.
 
 **If this project is not brand new, call `ddflow_import` before adding anything by
 hand.** It reads the todo checklists, lessons, ADRs, research log, engineering journal,
