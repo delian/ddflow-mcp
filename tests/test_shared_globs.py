@@ -422,3 +422,29 @@ def test_a_quoted_narrower_rule_with_a_space_still_wins(repo):
     SF.sync_attributes(repo)
     assert _merge_attr(repo, "docs/My File.md") == "ours", _attributes(repo)
     assert _merge_attr(repo, "docs/guide.md") == "union"
+
+
+def test_an_all_union_setup_is_quiet_and_untouched(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "guide.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/*.md merge=union\n*.md merge=union\n")
+    _declare(repo, "docs/*.md")
+    assert SF.findings(repo, Config.load(repo)) == ([], [])
+    assert SF.sync_attributes(repo) == []
+
+
+def test_a_narrower_star_rule_under_a_double_star_glob(repo):
+    run_cli(repo, "init")
+    (repo / "docs" / "sub").mkdir(parents=True)
+    (repo / "docs" / "top.md").write_text("x\n")
+    (repo / "docs" / "sub" / "c.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/* merge=ours\n")
+    _declare(repo, "docs/**")
+    SF.sync_attributes(repo)
+    assert _merge_attr(repo, "docs/top.md") == "ours", _attributes(repo)
+    assert _merge_attr(repo, "docs/sub/c.md") == "union"

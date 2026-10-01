@@ -112,27 +112,47 @@ def _split_pattern(row: str) -> tuple[str, list[str]]:
     return "".join(out), row[i:].split()
 
 
-def _merge_rows(rows: list[str]) -> list[tuple[int, str]]:
-    """(index, pattern) of every `.gitattributes` line that sets a merge attribute."""
+def _merge_rows(rows: list[str]) -> list[tuple[int, str, str]]:
+    """(index, pattern, merge value) of every `.gitattributes` line setting a merge
+    attribute; the value is the driver after `merge=`, or the bare form itself."""
     out = []
     for k, row in enumerate(rows):
         if not row.strip() or row.lstrip().startswith("#"):
             continue
         pattern, attrs = _split_pattern(row)
-        if any(a.startswith("merge=") or a in ("merge", "-merge", "!merge") for a in attrs):
-            out.append((k, pattern))
+        for a in attrs:
+            if a.startswith("merge="):
+                out.append((k, pattern, a.split("=", 1)[1]))
+            elif a in ("merge", "-merge", "!merge"):
+                out.append((k, pattern, a))
     return out
+
+
+def _witness(pattern: str) -> str:
+    """A path ``pattern`` matches, standing for it: `**` -> two segments, `*`/`?`/a class
+    -> one character. Read as a path, `docs/**` was matched by `docs/*` (a `*` matches
+    `**`), so a broader glob looked narrower (review finding)."""
+    import re
+
+    w = re.sub(r"\[[^]]*\]", "x", pattern)
+    return w.replace("**", "x/y").replace("*", "x").replace("?", "x")
+
+
+def _inside(a: str, b: str) -> bool:
+    """Is every file pattern ``a`` names also named by ``b``? (Judged on a witness of
+    ``a``: exact for literals, a sound sample for the patterns agents write.)"""
+    from ..core.schedule import is_shared
+
+    return a == b or is_shared(_witness(a), [b])
 
 
 def _broad_rule(repo: Path, glob: str) -> bool:
     """Does a `.gitattributes` merge rule cover the WHOLE glob -- the glob itself, or a
     pattern it falls inside (`*.md` for `docs/*.md`)? Then the project chose for all of
     it. A narrower rule (`docs/README.md`, `docs/R*.md`) chose for part only."""
-    from ..core.schedule import is_shared
-
     path = Path(repo) / ".gitattributes"
     rows = path.read_text("utf-8").splitlines() if path.exists() else []
-    return any(p == glob or is_shared(glob, [p]) for _k, p in _merge_rows(rows))
+    return any(_inside(glob, p) for _k, p, _v in _merge_rows(rows))
 
 
 def _has_line(repo: Path, line: str) -> bool:
@@ -159,20 +179,19 @@ def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
     have = norm.index(line) if line in norm else -1
     covered = _probe_paths(repo, glob)
     last_broad, narrower = -1, []
-    for k, pattern in _merge_rows(rows):
+    for k, pattern, value in _merge_rows(rows):
         if k == have:
             continue
-        if pattern == glob:
-            last_broad = k
+        # By the patterns themselves first (`_inside`): `docs/R*.md` is narrower than
+        # `docs/*.md` whatever files exist today (review finding), `*.md` is broader. A
+        # broader UNION rule changes nothing for us wherever our line sits, so it does
+        # not pull the line after it.
+        if _inside(glob, pattern):
+            if value != "union":
+                last_broad = k
             continue
-        # By the patterns themselves first: `docs/R*.md` read as a path matches
-        # `docs/*.md`, so it is narrower whatever files exist today (review finding);
-        # `docs/*.md` read as a path matches `*.md`, so that one is broader.
-        if is_shared(pattern, [glob]):
+        if _inside(pattern, glob):
             narrower.append(k)
-            continue
-        if is_shared(glob, [pattern]):
-            last_broad = k
             continue
         hit = [p for p in covered if p == pattern or is_shared(p, [pattern])]
         if not hit:
@@ -224,7 +243,9 @@ def sync_attributes(repo: Path) -> list[str]:
 
     Idempotent; the project's own lines stay and keep working: the union line goes before
     any narrower line that sets a driver for a file inside the glob (the narrower driver
-    wins), and a glob already given a merge DRIVER is left alone -- the project chose one. Reads the
+    wins). A glob whose WHOLE extent a project rule already covers (the glob itself, or a
+    broader pattern) is left alone when that rule is not union -- the project chose; a
+    rule covering only part of the glob does not stop the union line. Reads the
     committed config (`committed_append_only`), never the local layer.
     """
     added: list[str] = []
