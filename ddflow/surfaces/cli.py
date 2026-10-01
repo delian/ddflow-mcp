@@ -1060,8 +1060,8 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rva.set_defaults(fn=cmd_reviewers)
     rvp = rv_s.add_parser(
         "approve",
-        help="a PERSON vouches for a tool-written reviewer entry; with no name, list the "
-        "entries waiting (refused under an agent identity)",
+        help="a PERSON vouches for a tool-written reviewer entry (refused under an agent "
+        "identity); with no name, list the entries waiting (anyone may)",
     )
     rvp.add_argument("name", nargs="?", default="")
     rvp.add_argument("--note", default="")
