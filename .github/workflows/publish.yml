@@ -304,9 +304,10 @@ jobs:
     if: needs.gate.outputs.publish == 'true'
     runs-on: ubuntu-latest
     # The publish step's retry budget (MCP_PUBLISH_DELAYS): ~7 min of waiting across 6
-    # attempts, each typically the registry gateway's 60 s -- about 13 min in all. Each
-    # call is capped at MCP_CALL_TIMEOUT (3 min), so even 6 attempts whose login and
-    # publish both hang end at ~43 min -- inside this limit, so the step still prints its
+    # attempts, each typically the registry gateway's 60 s -- about 13 min in all. The
+    # worst case is every call hanging to its cap: 6 x (login + publish) at
+    # MCP_CALL_TIMEOUT (2 min) plus 7 registry GETs at 30 s plus the waits, ~34 min --
+    # inside this limit with room for checkout and install, so the step still prints its
     # ::error:: and re-run hint rather than being killed silently. GitHub's default is 6 h.
     timeout-minutes: 45
     permissions:
@@ -347,7 +348,7 @@ jobs:
         shell: bash
         env:
           MCP_PUBLISH_DELAYS: "15 30 60 120 180"   # seconds between attempts: 6 attempts
-          MCP_CALL_TIMEOUT: "180"                  # seconds per mcp-publisher call
+          MCP_CALL_TIMEOUT: "120"                  # seconds per mcp-publisher call: 2x the gateway's 60 s
           MCP_REGISTRY_URL: https://registry.modelcontextprotocol.io
         run: |
           set -u
