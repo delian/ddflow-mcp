@@ -238,3 +238,39 @@ def test_rebind_is_decided_inside_the_lock_from_a_fresh_fold(repo, monkeypatch):
     assert out.exit == REFUSED, out
     it = _item(repo)
     assert it.lease.holder == "intruder" and it.branch == "bridge-work", it
+
+
+def test_the_empty_check_judges_the_named_branch_for_a_borrowed_item(repo):
+    """Review claim: for an item claimed --no-worktree, the check judged the caller's
+    tree's branch, not --branch. It judges the branch that lands: `_what_to_land` builds
+    the borrowed tree with the NAMED branch."""
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    here = repo.parent / "here"
+    _git(repo, "worktree", "add", "-q", str(here), "-b", "empty-here")  # nothing ahead
+    _git(repo, "branch", "feature")
+    feat = repo.parent / "feat"
+    _git(repo, "worktree", "add", "-q", str(feat), "feature")
+    (feat / "a.py").write_text("a = 1\n")
+    _git(feat, "add", "a.py")
+    _git(feat, "commit", "-qm", "work")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    assert run_cli(here, "claim", "T1", "--no-worktree", agent="impl")[0] == OK
+    code, out, err = run_cli(here, "merge", "T1", "--branch", "feature", agent="impl")
+    assert code == OK, out + err
+    assert _git(repo, "show", "main:a.py") == "a = 1"
+    # ...and the caller's own empty branch, named, is refused for having nothing.
+    assert run_cli(repo, "task", "add", "T2", "--globs", "b.py")[0] == OK
+    assert run_cli(here, "claim", "T2", "--no-worktree", agent="impl")[0] == OK
+    code, out, err = run_cli(here, "merge", "T2", "--branch", "empty-here", agent="impl")
+    assert code != OK, out + err
+
+
+def test_the_primary_checkout_is_not_a_tree_to_rebind_to(repo):
+    """Review claim: `W.current` returns the primary's branch. It returns None there."""
+    _wrongly_bound(repo)
+    for path in (str(repo), "."):
+        out_ = run_cli(repo, "update", "T1", "--worktree", path, agent="impl")
+        assert out_[0] == REFUSED, out_
+    assert _item(repo).branch == "bridge-work"
