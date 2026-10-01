@@ -994,6 +994,26 @@ def _lapsed_lines(item_id: str, lease: Lease, now: float, me: str) -> list[str]:
     return [*lines, ""]
 
 
+def _derived_identity_lines(me: str, held_by: dict[str, Lease]) -> list[str]:
+    """Nobody said who is committing, so the identity was derived from this tree -- and
+    "ANOTHER agent" may be the committer itself, working outside its item's tree under
+    a name it declared only to its claim (an MCP `as_agent`, a `--agent`). The hook
+    cannot tell (B9aeb141b9a); it says how the name was found and what the holder
+    should do, rather than blaming it for its own lease.
+    """
+    lines = [
+        f"Nothing declared who is committing, so this hook named you {me}, from this",
+        "tree. If you ARE one of the holders above, you are outside its item's tree:",
+    ]
+    for item_id, lease in held_by.items():
+        where = lease.worktree or "(no tree recorded)"
+        lines += [
+            f"  {lease.holder} on {item_id}: commit in {where},",
+            f"    or declare yourself:  DDFLOW_AGENT={lease.holder} git commit ...",
+        ]
+    return [*lines, ""]
+
+
 def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
     """(exit_code, message). 0 allows the commit; 1 refuses it.
 
@@ -1067,6 +1087,13 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
             "that agent's work. Coordinate, or wait for the lease to be released.",
             "",
         ]
+        if not (agent or cfg.agent.id):
+            held_by = {
+                item_id: lease
+                for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items()
+                if any(globs_overlap(p, g) for p in stolen for g in lease.globs)
+            }
+            lines += _derived_identity_lines(me, held_by)
     for item_id, lease in lapsed:
         lines += _lapsed_lines(item_id, lease, now, me)
     held = ", ".join(mine) if mine else "(no live lease)"
