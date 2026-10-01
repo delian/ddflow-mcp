@@ -186,3 +186,6 @@ def test_the_mcp_update_tool_reads_a_json_array_whole(repo):
     assert _items(repo)["T1"].globs == ["**/*.{py,pyi}"]
     out = TOOLS["ddflow_update"]["api"](repo, {"id": "T1", "globs": ""}, "")
     assert out.ok and _items(repo)["T1"].globs == [], "an empty string still clears"
+    out = TOOLS["ddflow_update"]["api"](repo, {"id": "T1", "globs": ["x.py", "y.py"]}, "")
+    assert out.ok, out.reason
+    assert _items(repo)["T1"].globs == ["x.py", "y.py"], "a native JSON array"
