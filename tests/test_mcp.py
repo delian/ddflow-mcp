@@ -66,7 +66,9 @@ def test_every_tool_has_a_valid_schema_and_a_real_description():
         assert schema["type"] == "object"
         assert len(spec["description"]) > 40, f"{name} needs a usable description"
         for prop, body in schema["properties"].items():
-            assert body["type"] in ("string", "integer", "boolean", "number")
+            assert body["type"] in ("string", "integer", "boolean", "number", "array")
+            if body["type"] == "array":
+                assert body["items"] == {"type": "string"}, f"{name}.{prop} has no items"
             assert body["description"], f"{name}.{prop} is undocumented"
 
 

@@ -258,7 +258,7 @@ def cmd_bug(a, c: Ctx) -> int:
     out = A.bug_fixed(
         c.repo,
         a.id,
-        regression_test=a.regression_test or "",
+        regression_test=a.regression_test or [],
         lesson=a.lesson or "",
         lesson_title=getattr(a, "lesson_title", "") or "",
         lesson_rule=getattr(a, "lesson_rule", "") or "",
@@ -269,7 +269,7 @@ def cmd_bug(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
-    c.out(f"bug {a.id} closed (regression: {a.regression_test})", out.body(("id",)))
+    c.out(f"bug {a.id} closed (regression: {out.data['regression_test']})", out.body(("id",)))
     return OK
 
 
