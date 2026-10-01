@@ -119,10 +119,45 @@ def test_mcp_takes_a_list_and_still_takes_the_string(repo):
         )
         return reply["result"]
 
-    listed = call(id="B1", regression_test=[A, B])
+    run_cli(repo, "bug", "found", "--id", "B3", "--summary", "z")
+    run_cli(repo, "bug", "found", "--id", "B4", "--summary", "w")
+    p12 = "tests/test_fix.py::test_p[1,2]"
+    listed = call(id="B1", regression_tests=[A, p12])
     assert not listed.get("isError"), listed
     single = call(id="B2", regression_test=A)
     assert not single.get("isError"), single
+    raw_list = call(id="B3", regression_test=[A, B])  # a client that ignores the schema
+    assert not raw_list.get("isError"), raw_list
     events = _fixed_events(repo)
-    assert [e["regression_tests"] for e in events] == [[A, B], [A]]
+    assert [e["regression_tests"] for e in events] == [[A, p12], [A], [A, B]]
+    assert events[1]["regression_test"] == A
     assert json.loads(listed["content"][0]["text"])["id"] == "B1"
+    neither = call(id="B4")
+    assert neither.get("isError") and "regression-test" in json.dumps(neither), neither
+
+
+def test_mcp_schema_offers_the_list_form():
+    from ddflow.surfaces.mcp import TOOLS, _schema
+
+    props = _schema(TOOLS["ddflow_bug_fixed"])["properties"]
+    assert props["regression_tests"] == {**props["regression_tests"], "type": "array"}
+    assert props["regression_tests"]["items"] == {"type": "string"}
+
+
+def test_a_blank_repeated_flag_is_still_no_regression_test(repo):
+    """The CLI now always passes a list; a whitespace-only value must not slip past the
+    required-test rule as a truthy string."""
+    _setup(repo)
+    code, _out, err = run_cli(repo, "bug", "fixed", "B1", "--regression-test", "   ")
+    assert code == FAIL and "regression-test" in err, err
+    out = api.bug_fixed(repo, "B1", regression_test=["  ", " ; , "])
+    assert out.exit == FAIL, out
+    assert not _fixed_events(repo)
+
+
+def test_tests_joined_by_whitespace_after_a_parametrize_id_are_refused_with_the_hint(repo):
+    """`test_p[1,2] other` resolved `test_p` and accepted the rest unchecked."""
+    _setup(repo)
+    out = api.bug_fixed(repo, "B1", regression_test=f"tests/test_fix.py::test_p[1,2] {B}")
+    assert out.exit == FAIL, out
+    assert "several" in out.reason, out.reason

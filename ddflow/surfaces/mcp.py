@@ -853,9 +853,15 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Bug id.", True),
             "regression_test": (
                 "string",
-                "Test that now guards this. Several: separate them with ',' or ';' (a "
-                "JSON list of strings is accepted too).",
-                True,
+                "Test that now guards this. Several: separate them with ',' or ';', or "
+                "pass regression_tests.",
+                False,
+            ),
+            "regression_tests": (
+                "array",
+                "The tests that now guard this, one per element -- the list form of "
+                "regression_test. One of the two is required.",
+                False,
             ),
             "lesson_title": ("string", "Capture a lesson at the same time.", False),
             "lesson_rule": (
@@ -869,7 +875,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().bug_fixed(
             repo,
             a["id"],
-            regression_test=a.get("regression_test", "") or "",  # a str or a list
+            regression_test=_regression_tests(a),
             lesson=a.get("lesson", "") or "",
             lesson_title=a.get("lesson_title", "") or "",
             lesson_rule=a.get("lesson_rule", "") or "",
@@ -2406,7 +2412,16 @@ def _properties(spec: dict[str, Any]) -> dict[str, tuple[str, str, bool]]:
 
 def _schema(spec: dict[str, Any]) -> dict[str, Any]:
     all_props = _properties(spec)
-    props = {name: {"type": t, "description": desc} for name, (t, desc, _req) in all_props.items()}
+    props = {
+        name: {
+            "type": t,
+            "description": desc,
+            # An array is always of strings here; a schema without `items` is refused by
+            # some clients' validators.
+            **({"items": {"type": "string"}} if t == "array" else {}),
+        }
+        for name, (t, desc, _req) in all_props.items()
+    }
     required = [n for n, (_t, _d, req) in all_props.items() if req]
     return {
         "type": "object",
@@ -2422,6 +2437,20 @@ def _api():
     from .. import api
 
     return api
+
+
+def _regression_tests(args: dict[str, Any]) -> str | list[str]:
+    """`regression_test` (a string -- or a list, from a client that sent one anyway) and
+    `regression_tests` as one value for `api.bug_fixed`, which does the splitting.
+
+    Not `_list_or_none`: its plain comma split cuts a parametrize id like `t[1,2]`. A
+    lone string stays a string, so it is recorded verbatim as before (B227585c781).
+    """
+    single, many = args.get("regression_test") or "", args.get("regression_tests") or []
+    if isinstance(single, str) and not many:
+        return single
+    as_list = [single] if isinstance(single, str) else list(single)
+    return [*as_list, *([many] if isinstance(many, str) else many)]
 
 
 def _list_or_none(args: dict[str, Any], key: str) -> list[str] | None:

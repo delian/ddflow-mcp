@@ -500,7 +500,13 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         # `[...]`, and splitting them refused a real test (B-bfu-param-sep).
         wanted = names.split("[", 1)[0].split("::") if sep else []
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
-        if "" in wanted or not any(_defines(_inside(tree, path), wanted) for tree in trees):
+        # Whitespace outside the brackets is several tests in one entry, never one test:
+        # `t[1] other.py::t2` resolved `t` and accepted the unchecked rest (B227585c781).
+        if (
+            "" in wanted
+            or _looks_like_several(entry)
+            or not any(_defines(_inside(tree, path), wanted) for tree in trees)
+        ):
             missing.append(entry)
     return missing, unchecked
 
@@ -511,7 +517,9 @@ def _looks_like_several(entry: str) -> bool:
     Only a refused entry is asked, so a command (unchecked, never refused) is not.
     """
     _path, _sep, names = entry.partition("::")
-    return any(c.isspace() for c in names.split("[", 1)[0])
+    # Every bracketed parametrize id is cut, not everything after the first `[`: the
+    # space that joins `t[1] other.py::t2` comes after one.
+    return any(c.isspace() for c in re.sub(r"\[[^\]]*\]", "", names))
 
 
 def _split_outside_brackets(spec: str) -> list[str]:
