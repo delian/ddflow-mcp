@@ -37,11 +37,16 @@ def test_the_readme_is_the_long_description_that_reaches_pypi():
 
 
 def test_the_publish_workflow_checks_ownership_before_uploading_anything():
-    """A release the registry will refuse must fail BEFORE PyPI holds the version: a
-    PyPI version cannot be replaced, so the next attempt needs a new number."""
+    """A release the registry will refuse must fail BEFORE PyPI or an image registry holds
+    the version: a PyPI version cannot be replaced, and `:latest` cannot be taken back."""
     wf = (ROOT / ".github" / "workflows" / "publish.yml").read_text("utf-8")
-    pypi_job = wf[wf.index("\n  pypi:") : wf.index("\n  docker:")]
-    assert "mcp-name:" in pypi_job and "io.modelcontextprotocol.server.name" in pypi_job
+    verify = wf[wf.index("\n  verify:") : wf.index("\n  pypi:")]
+    assert "mcp-name:" in verify and "io.modelcontextprotocol.server.name" in verify
+    # ...and every job that publishes waits for it: `docker` once needed only `gate`.
+    for job in ("pypi", "docker"):
+        block = wf[wf.index(f"\n  {job}:") :]
+        needs = block[: block.index("\n    runs-on:")]
+        assert "verify" in needs, f"{job} does not need verify"
 
 
 def test_a_readme_change_releases():
