@@ -21,6 +21,7 @@ losing their work. The asymmetry is not close, so the comparison errs toward "ye
 
 from __future__ import annotations
 
+import functools
 import re
 import time
 from collections.abc import Callable
@@ -181,6 +182,7 @@ def shared_globs(cfg: Config) -> list[str]:
     return [*lease.shared_globs, *lease.append_only_globs]
 
 
+@functools.lru_cache(maxsize=256)
 def _gitattributes_re(pattern: str) -> re.Pattern[str]:
     """``pattern`` as git matches it in `.gitattributes` (gitignore rules).
 
@@ -212,11 +214,9 @@ def _gitattributes_re(pattern: str) -> re.Pattern[str]:
         elif pat[i] == "[" and "]" in pat[i + 1 :]:
             j = pat.index("]", i + 1)
             body = pat[i + 1 : j].replace("\\", "\\\\")
-            # git negates with `[!...]` and takes `^` literally; Python the other way.
+            # git negates with `[!...]` as well as `[^...]`; Python knows only `^`.
             if body.startswith("!"):
                 body = "^" + body[1:]
-            elif body.startswith("^"):
-                body = "\\" + body
             out.append("[" + body + "]")
             i = j + 1
         else:

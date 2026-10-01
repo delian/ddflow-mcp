@@ -720,7 +720,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 128 knobs.
+cadences, and the rest of the 130 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -1949,6 +1949,24 @@ These are independent — run them in parallel worktrees.
 
 `ddflow claim <ID>` leases the item and binds it to a worktree.
 
+**Files every item touches** — a changelog, a research log, a regenerated config — would
+make every pair of items collide. Declare them, and many leases may hold them at once:
+
+```toml
+[lease]
+append_only_globs = ["docs/CHANGELOG.md"]   # every item adds lines
+shared_globs = ["configs/default.toml"]     # generated: regenerate after merging
+```
+
+A path inside either is exempt from the overlap check (`claim`, `update`, `next`,
+`wait`) and counts as covered at commit time for anyone holding a live lease. For each
+append-only glob in the committed config ddflow **writes** `<glob> merge=union` to
+`.gitattributes` — when the knob is set through `ddflow config --set` /
+`ddflow_configure`, and again on `ddflow init` / `adopt` after a hand edit — and prints
+the line; commit it with the config. A generated file never gets `union` (it would be
+interleaved): `doctor` notes a shared glob git has no merge driver for, and reports an
+append-only glob git does not union-merge.
+
 **If you are already in one, it adopts that one.** Agent harnesses — Claude Code, Cursor
 — often isolate the agent themselves. Claiming from inside a linked worktree binds the
 item to *that* tree and branch rather than building a rival and telling you to leave the
@@ -2805,7 +2823,7 @@ declared once and persists — see
 
 ## Configuration
 
-128 knobs across 17 sections, every one documented in place:
+130 knobs across 17 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
