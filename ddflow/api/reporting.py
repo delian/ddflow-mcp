@@ -132,7 +132,18 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
             {"id": t.id, "title": t.title, "holder": t.lease.holder if t.lease else ""}
             for t in running
         ],
-        "ready_now": [{"id": t.id, "title": t.title} for t in p.ready],
+        # A task RUNNING with no live lease is offered as ready -- someone must resume it
+        # -- but never silently: its worktree may hold uncommitted work. `next` and
+        # `brief` say so; so does this (roborev, job 897).
+        "ready_now": [
+            {
+                "id": t.id,
+                "title": t.title,
+                **({"interrupted": True} if t.state == "running" else {}),
+            }
+            for t in p.ready
+        ],
+        "interrupted": p.interrupted,
         "held_by_cap": [{"id": t.id, "title": t.title} for t in capped],
         "cap": p.cap_note if capped else "",
         "agent_hours": round(hours, 2),
@@ -151,6 +162,7 @@ def status(repo: Path, *, agent: str = "") -> O.Outcome:
         "done": done,
         "running": running,
         "ready": p.ready,
+        "interrupted": p.interrupted,
         "capped": capped,
         "cap": p.cap_note,
         "blocked": blocked,
