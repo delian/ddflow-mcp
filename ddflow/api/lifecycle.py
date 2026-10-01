@@ -66,6 +66,9 @@ def next_(
     from ..core.schedule import critical_path, plan
 
     log, cfg, st = _load(repo, agent)
+    unknown = _unknown_phase(st, phase)
+    if unknown:
+        return O.failed("next", unknown, phase=phase)
     promoted: list[str] = []
     if cfg.flow.auto_promote:
         # Continuous delivery where the operator asked for it: an environment in
@@ -110,6 +113,28 @@ def next_(
     if p.ready:
         return O.ok("next", **data)
     return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
+
+
+def _unknown_phase(st, phase: str) -> str:
+    """Why ``phase`` names nothing ``next`` can slice by; "" when it is an item.
+
+    An empty slice of an id that is not an item read as "Nothing actionable", exit 2, and
+    a driver took that for "phase done" (Bde0c6e9fad: `--phase 159`, whose work lived
+    under 159.A..159.I). The ids that start with it are named: they are what was meant.
+    """
+    if not phase:
+        return ""
+    it = st.items.get(phase)
+    if it is not None and not it.removed:
+        return ""
+    under = sorted(
+        i.id
+        for i in st.items.values()
+        if not i.removed and i.id.startswith(f"{phase}.") and "." not in i.id[len(phase) + 1 :]
+    )
+    gone = " (it was removed from the queue)" if it is not None else ""
+    hint = f" Items under that prefix: {', '.join(under[:12])}." if under else ""
+    return f"no such phase or item {phase!r}{gone}.{hint}"
 
 
 def _wait_hint(p) -> str:
