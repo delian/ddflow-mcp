@@ -796,3 +796,23 @@ def test_keeping_a_claim_whose_expiry_was_recorded_gives_it_a_live_window():
     it = _folded(_GAP, ("A", "E", "C", "D"), exp, *rel, res)
     assert it.lease.holder == "D" and it.lease.ttl_s == 900 and not it.lease.expired_at
     assert not it.lease.expired(5100.0)
+
+
+def test_resolve_carries_the_configured_ttl_to_a_fresh_window(repo: Path):
+    """roborev: the payload's TTL had no test of its writer -- an operator's `[lease]
+    ttl_s` must reach a kept claim whose recorded expiry zeroed its own."""
+    log = EventLog(repo, "op")
+    log.shard.parent.mkdir(parents=True, exist_ok=True)
+    (repo / ".ddflow" / "config.toml").write_text("[lease]\nttl_s = 77\n")
+    events = [
+        _ev("task.added", "T", 1, title="t"),
+        *(_acq(2 + i, w, *_GAP[w]) for i, w in enumerate(_GAP)),
+        _ev("lease.expired", "T", 10, "op", holder="D"),
+    ]
+    log.shard.write_text("".join(ev.to_json() + "\n" for ev in events))
+    from ddflow.api import items
+
+    out = items.resolve(repo, "T", keep="D", agent="op")
+    assert out.exit == 0, out.reason
+    it = fold(log.read_all()).items["T"]
+    assert it.lease.holder == "D" and it.lease.ttl_s == 77 and not it.lease.expired_at
