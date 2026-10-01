@@ -64,7 +64,7 @@ def _setup(repo: Path) -> tuple[Server, Path]:
 
 def test_a_subagents_claim_does_not_adopt_the_parents_tree(repo):
     """The bug as filed: two subagents on one connection, each its own item."""
-    srv, tree = _setup(repo)
+    srv, _tree = _setup(repo)
 
     first = _call(srv, "ddflow_claim", id="T1", as_agent="sub-1")
     assert first["_meta"]["exit"] == 0, first
@@ -112,7 +112,7 @@ def test_no_as_agent_still_adopts(repo):
 def test_an_item_already_bound_to_the_parents_tree_keeps_it(repo):
     """The live bindings this bug already made must not be torn away mid-flight: a
     re-claim by the subagent that holds the item rebinds to its recorded tree."""
-    srv, tree = _setup(repo)
+    srv, _tree = _setup(repo)
     _call(srv, "ddflow_claim", id="T1")  # bound to the parent's tree, as before the fix
     run_cli(repo, "release", "T1")
     out = _call(srv, "ddflow_claim", id="T1", as_agent="sub-1")
