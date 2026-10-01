@@ -670,7 +670,7 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     if not target.config:
         return "refused", (
             f"{agent} has no project-level MCP config file; register {c.id} in its own "
-            f"settings. `ddflow companions show` prints the entry to paste."
+            f"settings with this entry: {json.dumps(c.entry())}"
         )
     rel = target.config
     path = Path(repo) / rel

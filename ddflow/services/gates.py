@@ -163,7 +163,7 @@ DEFAULT_GATES: dict[str, GateDef] = {
         prompt=(
             "Implement in the worktree ddflow created. Touch only files inside "
             "this task's declared globs; if you must widen them, run "
-            "`ddflow item update <id> --globs ...` FIRST so the conflict detector "
+            "`ddflow update <id> --globs ...` FIRST so the conflict detector "
             "can see it."
         ),
     ),
