@@ -1415,6 +1415,10 @@ def _coerce(raw: Any, typ: Any) -> Any:
         parsed = _maybe_json(raw, list)
         if parsed is not None:
             # Refused, never `str()`-cast: `[null]` loaded as ["None"] (B7506c1124a).
+            # Only where the elements are declared strings; a list of anything else
+            # (`list[dict[str, str]]`) is returned as JSON gave it.
+            if "list[str]" not in ts.replace(" ", ""):
+                return parsed
             if bad := [x for x in parsed if not isinstance(x, str)]:
                 raise ValueError(
                     f"expected a JSON list of strings; got {json.dumps(bad[0])} in {raw!r}"
