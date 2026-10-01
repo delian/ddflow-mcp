@@ -414,7 +414,11 @@ def test_one_resolve_settles_a_three_way_contest_whoever_is_kept(repo: Path, kee
     assert sorted(out.data["released"]) == released
     after = fold(log.read_all()).items["T"]
     assert after.lease_contest == [] and after.lease.holder == keep
-    assert after.displaced == []  # every claim not kept was released: none is history
+    # Every claim not kept was released: none is history -- except the kept claim's own
+    # window, which had lapsed before the resolution and so stays on the record while it
+    # holds the item in a fresh window (D-resolve-fresh-window).
+    assert [(e["holder"], e["by"]["holder"]) for e in after.displaced] == [(keep, keep)]
+    assert after.lease.acquired_at > 10_000, "the fresh window starts at the resolution"
 
 
 def test_resolve_settles_a_three_way_contest_on_a_real_log(repo: Path):

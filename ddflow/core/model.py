@@ -81,6 +81,10 @@ class GateRecord:
         return self.outcome in ("failed",)
 
 
+#: A claim's TTL when its event carries none -- the shipped `[lease] ttl_s`.
+DEFAULT_LEASE_TTL_S = 1800
+
+
 @dataclass
 class Lease:
     holder: str
@@ -800,6 +804,14 @@ def _claim(lease: Lease) -> dict[str, Any]:
     return {"holder": lease.holder, "event": lease.event, "lease": asdict(lease)}
 
 
+def _key(claim: dict[str, Any]) -> tuple[str, float]:
+    """One WINDOW of a claim. A claim is its acquiring event -- except after `resolve`
+    kept it once it had lapsed: then it holds the item in a fresh window from the
+    resolution while its original window stays on the record (D-resolve-fresh-window),
+    and the two must not be merged, widened or deduplicated into each other."""
+    return claim["event"], claim["lease"]["acquired_at"]
+
+
 def _span(lease: dict[str, Any]) -> tuple[float, float]:
     """A claim's interval by its own evidence: acquired, to its last renewal plus TTL."""
     return lease["acquired_at"], lease["renewed_at"] + lease["ttl_s"]
@@ -825,17 +837,18 @@ def _clashing(claims: list[dict[str, Any]], claim: dict[str, Any]) -> list[dict[
 
 
 def _join(it: Item, claims: list[dict[str, Any]]) -> None:
-    """Add claims to the lease contest, once each. Keyed by the ACQUIRING EVENT, never by
-    holder name: one holder can hold an item twice (claimed, lost, claimed again), and
-    those are two claims that can each be contested. A claim already there keeps the
+    """Add claims to the lease contest, once each. Keyed by the claim WINDOW (`_key`: the
+    acquiring event, and the window's start), never by holder name: one holder can hold
+    an item twice (claimed, lost, claimed again), and those are two claims that can each
+    be contested; one claim kept by a resolution after it lapsed has two windows. A claim already there keeps the
     later evidence -- a renewal since it joined widens the window everything pairwise
     reads."""
-    have = {h["event"]: h for h in it.lease_contest}
+    have = {_key(h): h for h in it.lease_contest}
     for c in claims:
-        old = have.get(c["event"])
+        old = have.get(_key(c))
         if old is None:
             it.lease_contest.append(c)
-            have[c["event"]] = c
+            have[_key(c)] = c
             continue
         old["lease"]["renewed_at"] = max(old["lease"]["renewed_at"], c["lease"]["renewed_at"])
         if "overlapped_by" in c:
@@ -847,7 +860,7 @@ def _displace(it: Item, lost: dict[str, Any], by: dict[str, Any]) -> None:
     deliver a claim or a renewal from any point in the past, and a claim forgotten here
     is a double claim nobody is told about (B7164b23643: a cap of eight lost one after
     the ninth clean handover)."""
-    if any(e["event"] == lost["event"] for e in it.displaced):
+    if any(_key(e) == _key(lost) for e in it.displaced):
         return
     it.displaced = [*it.displaced, {**lost, "by": by}]
 
@@ -884,7 +897,7 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         holder=d.get("holder", ev.agent),
         acquired_at=float(d.get("at", 0.0)),
         renewed_at=float(d.get("at", 0.0)),
-        ttl_s=int(d.get("ttl_s", 1800)),
+        ttl_s=int(d.get("ttl_s", DEFAULT_LEASE_TTL_S)),
         worktree=d.get("worktree", ""),
         branch=d.get("branch", ""),
         globs=list(d.get("globs", [])),
@@ -922,8 +935,8 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
 
 def _known(it: Item) -> list[dict[str, Any]]:
     """Every claim the item still knows: each contested, each displaced, and the
-    displayed lease. A claim can sit in more than one list; `_clashing` and `_join` key
-    by acquiring event, so a duplicate changes nothing."""
+    displayed lease. A claim can sit in more than one list; `_clashing` skips its own
+    event and `_join` keys by window (`_key`), so a duplicate changes nothing."""
     return [
         *it.lease_contest,
         *({k: v for k, v in e.items() if k != "by"} for e in it.displaced),
@@ -931,11 +944,13 @@ def _known(it: Item) -> list[dict[str, Any]]:
     ]
 
 
-def _widen(it: Item, event: str, at: float) -> None:
-    """A renewal of claim ``event`` at ``at``: every record of that claim -- contested
-    or displaced -- now runs to at least ``at`` plus its TTL."""
+def _widen(it: Item, key: tuple[str, float], at: float) -> None:
+    """A renewal at ``at`` of the claim window ``key`` (`_key`): every record of that
+    window -- contested or displaced -- now runs to at least ``at`` plus its TTL. Never
+    another window of the same claim: renewing the fresh window a resolution started
+    must not stretch the original back over the gap (D-resolve-fresh-window)."""
     for h in [*it.lease_contest, *it.displaced]:
-        if h["event"] == event:
+        if _key(h) == key:
             h["lease"]["renewed_at"] = max(h["lease"]["renewed_at"], at)
 
 
@@ -955,27 +970,27 @@ def _late_renewal(it: Item, d: dict[str, Any]) -> None:
     if "at" not in d:
         return
     at = float(d["at"])
-    shown = it.lease.event if it.lease is not None else ""
+    shown = _key(_claim(it.lease)) if it.lease is not None else None
     own = [
         c
         for c in [*it.lease_contest, *it.displaced]
-        if c["holder"] == d["holder"] and c["event"] != shown and c["lease"]["acquired_at"] <= at
+        if c["holder"] == d["holder"] and _key(c) != shown and c["lease"]["acquired_at"] <= at
     ]
     if not own:
         return
     hit = max(own, key=lambda c: c["lease"]["acquired_at"])
-    _widen(it, hit["event"], at)
+    _widen(it, _key(hit), at)
     claim = {k: v for k, v in hit.items() if k != "by"}
     rivals = _clashing(_known(it), claim)
     if not rivals:
         return
-    by = next((e["by"] for e in it.displaced if e["event"] == hit["event"]), None)
+    by = next((e["by"] for e in it.displaced if _key(e) == _key(hit)), None)
     if by is not None and any(r["event"] == by["event"] for r in rivals):
         claim["overlapped_by"] = by["holder"]
     # Only what it overlapped: the lease displayed now is not joined unless it is one of
     # them -- `resolve` can keep the current holder without it being a contestant (bug
     # B-late-renewal-overjoin, which joined it overlap or not).
-    it.displaced = [e for e in it.displaced if e["event"] != hit["event"]]
+    it.displaced = [e for e in it.displaced if _key(e) != _key(hit)]
     _join(it, [claim, *rivals])
 
 
@@ -1006,7 +1021,7 @@ def _h_lease_renewed(st: State, ev: Event) -> None:
     it.lease.renewed_at = at
     # The displayed claim may be contested or on the record too: its window widens
     # there as well, and whatever it now overlapped joins it.
-    _widen(it, it.lease.event, at)
+    _widen(it, _key(_claim(it.lease)), at)
     rivals = _clashing(_known(it), _claim(it.lease))
     if rivals:
         _join(it, [_claim(it.lease), *rivals])
@@ -1134,9 +1149,24 @@ def _h_resolved(st: State, ev: Event) -> None:
     claim = d.get("claim")
     if claim:
         lease = Lease(**claim["lease"])
+        at = float(d.get("at", 0.0))
         # The operator's decision is itself a sign of life: the kept holder's TTL runs
-        # from here, not from a claim that may be hours old.
-        lease.renewed_at = max(lease.renewed_at, float(d.get("at", 0.0)))
+        # from here, not from a claim that may be hours old. But a claim that had LAPSED
+        # by then was not held in between, and stretching it over the gap made every
+        # claim taken there -- a clean takeover -- sit inside it (B6805b48aca). It holds
+        # the item in a fresh window from the resolution, and its own window stays on
+        # the record, where a claim that met its real tenure is still weighed against
+        # it (D-resolve-fresh-window).
+        lapsed = lease.renewed_at + lease.ttl_s < at
+        if lapsed:
+            lease.acquired_at = lease.renewed_at = at
+            # A recorded expiry zeroed the claim's TTL and marked it expired: the fresh
+            # window runs on the configured TTL the resolution carries (roborev).
+            lease.expired_at = ""
+            if lease.ttl_s <= 0:
+                lease.ttl_s = int(d.get("ttl_s") or DEFAULT_LEASE_TTL_S)
+        else:
+            lease.renewed_at = max(lease.renewed_at, at)
         # What the resolution did not release stays on the record: claims that still
         # overlap each other are still a contest -- this one settled the kept claim's,
         # not theirs -- and a claim with no partner left is history the kept claim
@@ -1152,6 +1182,14 @@ def _h_resolved(st: State, ev: Event) -> None:
         it.displaced = [e for e in it.displaced if e["event"] != claim["event"]]
         _hold(it, lease)
         it.lease_contest = standing
+        held = _claim(lease)
+        if lapsed:
+            _displace(it, {k: v for k, v in claim.items() if k != "by"}, held)
+        # Only what the window it now holds overlaps is weighed again: for a fresh
+        # window, the claims taken in the gap met nobody and stay out of it.
+        rivals = _clashing(_known(it), held)
+        if rivals:
+            _join(it, [held, *rivals])
 
 
 def _h_state(new_state: str):
