@@ -78,7 +78,10 @@ class Outcome:
 
         One implementation, because the CLI's `--json` and the MCP body being
         byte-identical is the property `MIGRATED_WIRE_SHAPES` checks, and two copies of
-        the projection rule is how they would come apart.
+        the projection rule is how they would come apart. The one deliberate exception
+        is an operation that asks for less on MCP: `status` cuts its lists there and
+        says so in `truncated` (Bd6aa9ffde9), so the two agree only while no list
+        passes `STATUS_LIST_LIMIT` -- pinned by tests/test_status_bound.py.
         """
         if not payload:
             # `_`-prefixed keys are for the LOCAL renderer and never cross the wire.
