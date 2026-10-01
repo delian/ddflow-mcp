@@ -935,6 +935,12 @@ def _launch_entry(
     """
     import shutil
 
+    if launch == "auto" and not _running_from_source() and not _installed_from_index():
+        # Installed, but not from an index: from git, a local path or an archive URL
+        # (bug B8ff258154d). `uvx ddflow-mcp` resolves the name against PyPI, which is
+        # a different version at best and a 404 before the first release, so the entry
+        # must name THIS installation.
+        return _installed_entry()
     if launch == "docker" or (
         launch == "auto"
         and not shutil.which("uvx")
@@ -978,6 +984,55 @@ def _running_from_source() -> bool:
     """True when this module lives in a checkout rather than in site-packages."""
     here = Path(__file__).resolve()
     return not any(part in ("site-packages", "dist-packages") for part in here.parts)
+
+
+#: The distribution name on the index, and what `uvx` resolves.
+DIST_NAME = "ddflow-mcp"
+
+
+def _own_distribution():
+    """The installed distribution that THIS `ddflow` package came from, or None.
+
+    Looked up in the directory holding the package rather than by name across
+    `sys.path`: a second copy installed elsewhere says nothing about this one."""
+    from importlib import metadata
+
+    from ..infra.paths import package_parent
+
+    for dist in metadata.distributions(name=DIST_NAME, path=[str(package_parent())]):
+        return dist
+    return None
+
+
+def _installed_from_index() -> bool:
+    """True when this installation came from a package index, so `uvx ddflow-mcp`
+    reaches the same project.
+
+    PEP 610: an installer writes `direct_url.json` into the dist-info for every install
+    that did NOT come from an index -- a VCS URL, a local directory, an archive URL, an
+    editable install -- and never for one that did. No distribution metadata at all is
+    not evidence of an index either, so it counts as not from one."""
+    dist = _own_distribution()
+    if dist is None:
+        return False
+    return dist.read_text("direct_url.json") is None
+
+
+def _installed_entry() -> dict[str, object]:
+    """Launch THIS installation: the `ddflow-mcp` script installed beside the running
+    interpreter when there is one (what `uv tool install` / `pipx install` put in the
+    tool's environment), else that interpreter with the package's directory on
+    PYTHONPATH. Absolute paths both: an agent's environment need not share this PATH."""
+    exe = Path(_python())
+    for name in (DIST_NAME, DIST_NAME + ".exe"):
+        script = exe.parent / name
+        if script.is_file():
+            return {"command": str(script), "args": []}
+    return {
+        "command": str(exe),
+        "args": ["-m", MCP_MODULE],
+        "env": {"PYTHONPATH": _package_parent()},
+    }
 
 
 class Refused(str):
