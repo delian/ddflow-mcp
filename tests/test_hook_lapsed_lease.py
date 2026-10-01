@@ -262,3 +262,25 @@ def test_a_declared_identity_gets_no_derived_identity_hint(repo, cfg, monkeypatc
     _code, msg = E.check_commit(repo, cfg, agent="stranger")
     assert "ANOTHER agent" in msg, msg
     assert "Nothing declared" not in msg and "DDFLOW_AGENT=" not in msg, msg
+
+
+def test_the_derived_identity_hint_reaches_the_real_hook(repo, cfg):
+    """Through `ddflow hooks check-commit` as git runs it, with nothing declared: the
+    command resolves the derived name INTO cfg.agent.id, so the hint must key on how
+    the name was found, not on whether one is set."""
+    _setup(repo, cfg)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "other.py").write_text("y = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/other.py"], check=True)
+    env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    p = subprocess.run(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "hooks", "check-commit"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    out = p.stdout + p.stderr
+    assert "ANOTHER agent" in out, out
+    assert "DDFLOW_AGENT=owner git commit" in out, out
