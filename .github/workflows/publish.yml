@@ -39,6 +39,8 @@ on:
     # Only a push that changes what ships releases. The wheel is `ddflow/` and the image is
     # built from it plus these files; a push of docs, tests or the ddflow event log changes
     # neither, and releasing it would mint a permanent PyPI version identical to the last.
+    # README.md is the exception, on purpose: it IS the PyPI page, and it carries the
+    # `mcp-name` line the MCP registry verifies -- so an edit to it releases.
     # (GitHub does not evaluate path filters for tag pushes, so `v*` below still fires.)
     paths:
       - "ddflow/**"
@@ -176,17 +178,12 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Refuse a release the MCP registry would reject
         # The registry verifies ownership of every package server.json lists: the PyPI
-        # README must carry `mcp-name: <server name>`, each image the label below. It
-        # checks the exact version, and a PyPI version cannot be replaced -- so a miss
-        # found by `mcp-publisher` (publish #36) costs a version number. Checked here,
-        # before anything is uploaded -- in `verify`, which every publishing job needs, so
-        # neither PyPI nor an image registry receives a release the registry would refuse.
-        run: |
-          name=$(python -c 'import json;print(json.load(open("server.json"))["name"])')
-          grep -qF "mcp-name: $name" README.md \
-            || { echo "::error::README.md lacks 'mcp-name: $name' (MCP registry ownership)"; exit 1; }
-          grep -qF "io.modelcontextprotocol.server.name=\"$name\"" Dockerfile \
-            || { echo "::error::Dockerfile lacks LABEL io.modelcontextprotocol.server.name=\"$name\""; exit 1; }
+        # README must carry `mcp-name: <server name>`, each image the
+        # `io.modelcontextprotocol.server.name` label. It checks the exact version, and a
+        # PyPI version cannot be replaced -- so a miss found by `mcp-publisher` (publish
+        # #36) costs a version number. Run first, in `verify`, which every publishing job
+        # needs; the test file is the one definition of the check.
+        run: uv run pytest tests/test_registry_ownership.py -q
       - name: Test before publishing
         run: uv run pytest tests/ -q --timeout=420 -n auto
       - name: Scenarios before publishing
