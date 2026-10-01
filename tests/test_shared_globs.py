@@ -372,3 +372,19 @@ def test_a_broader_earlier_line_does_not_pull_the_union_line_before_it(repo):
     )
     assert SF.sync_attributes(repo) == []
     assert _merge_attr(repo, "docs/guide.md") == "union"
+
+
+def test_a_broader_line_between_narrower_and_union_is_not_leapfrogged(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    for name in ("README.md", "guide.md"):
+        (repo / "docs" / name).write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/README.md merge=ours\n*.md merge=binary\ndocs/*.md merge=union\n")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text().replace("[lease]\n", '[lease]\nappend_only_globs = ["docs/*.md"]\n', 1)
+    )
+    SF.sync_attributes(repo)
+    assert _merge_attr(repo, "docs/guide.md") == "union", _attributes(repo)

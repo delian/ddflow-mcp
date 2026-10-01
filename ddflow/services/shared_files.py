@@ -123,22 +123,30 @@ def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
     norm = [" ".join(r.split()) for r in rows]
     have = norm.index(line) if line in norm else -1
     covered = _probe_paths(repo, glob)
-    first_narrower = -1
+    last_broad, narrower = -1, []
     for k, pattern in _merge_rows(rows):
-        if k == have or pattern == glob:
+        if k == have:
             continue
         hit = [p for p in covered if p == pattern or is_shared(p, [pattern])]
+        if not hit:
+            continue
         literal = not any(ch in pattern for ch in "*?[")
-        if hit and (len(hit) < len(covered) or literal):
-            first_narrower = k
-            break
-    if have != -1 and (first_narrower == -1 or have < first_narrower):
-        return rows, rows  # present, and nothing narrower precedes it
+        if pattern != glob and (len(hit) < len(covered) or literal):
+            narrower.append(k)
+        else:
+            last_broad = k
+    # A broader line wins over everything before it; the union line must follow the last
+    # one, and precede the first narrower line after it. A narrower line BEFORE the last
+    # broad one was already overridden by it, and moving lines around cannot revive it
+    # without reordering the project's own rules -- which ddflow does not do.
+    after = [k for k in narrower if k > last_broad]
+    target = after[0] if after else None
+    if have != -1 and have > last_broad and (target is None or have < target):
+        return rows, rows  # present, and in place
+    # Indices below are in ``rows``; removing an existing line before them shifts by one.
+    at = target if target is not None else (last_broad + 1 if have != -1 else len(rows))
     new = [r for k, r in enumerate(rows) if k != have]
-    if first_narrower == -1:
-        new.append(line)
-    else:
-        new.insert(first_narrower - (1 if have != -1 and have < first_narrower else 0), line)
+    new.insert(at - (1 if have != -1 and have < at else 0), line)
     return rows, new
 
 
@@ -192,7 +200,8 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     """(problems, notes) for doctor.
 
     A PROBLEM: an append-only glob whose `merge=union` line is missing -- two items'
-    lines will conflict at merge, the exact thing the setting promises not to happen.
+    lines will conflict at merge, the exact thing the setting promises not to happen --
+    or whose union line sits after a narrower driver the project set, overriding it.
     A NOTE: a shared (generated) glob with no merge attribute -- not wrong, but every
     parallel merge of it will conflict until someone regenerates it.
     """
