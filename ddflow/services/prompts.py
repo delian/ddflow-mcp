@@ -163,6 +163,24 @@ def command_dir() -> Path:
     return builtin_dir() / "commands"
 
 
+def _macro_report(repo: Path | None) -> tuple[dict, dict[str, str]]:
+    """`load_macros_report`, or nothing when the macro config cannot be read at all.
+
+    A malformed macro file must not take `prompts/list` down with it: the shipped commands
+    are still there, and `macro_problems` names the error -- in doctor, `prompts list` and
+    the "unknown prompt" message. Losing the whole list to one bad block is how a feature
+    becomes something people switch off.
+    """
+    if repo is None:
+        return {}, {}
+    from .macros import MacroError, load_macros_report
+
+    try:
+        return load_macros_report(repo)
+    except (MacroError, ValueError, OSError):
+        return {}, {}
+
+
 def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str]]]:
     """Operator-defined `[[macro]]` blocks, in the same shape as `COMMANDS`.
 
@@ -170,18 +188,7 @@ def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[s
     registry a name came from. A macro that had to be asked for separately is a macro an
     agent never finds.
     """
-    if repo is None:
-        return {}
-    from .macros import MacroError, load_macros
-
-    try:
-        macros = load_macros(repo)
-    except (MacroError, ValueError, OSError):
-        # A malformed macro must not take `prompts/list` down with it: the shipped
-        # commands are still there, and `ddflow prompts show <name>` reports the error
-        # when the operator asks for that one. Losing the whole list to one bad block is
-        # how a feature becomes something people switch off.
-        return {}
+    macros, _refused = _macro_report(repo)
     return {name: (m.title or name, m.description, list(m.params)) for name, m in macros.items()}
 
 
@@ -192,26 +199,19 @@ def all_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str
     source too — silent shadowing is the class that once had `api.review` bind a function
     over its own submodule.
     """
-    out = {**COMMANDS, **macro_commands(repo)}
+    macros, refused = _macro_report(repo)  # one read of the config, not two
+    out = dict(COMMANDS)
+    out.update(
+        {name: (m.title or name, m.description, list(m.params)) for name, m in macros.items()}
+    )
     # A `[[macro]]` refused for taking a shipped command's name is said ON that command's
     # entry: MCP `prompts/list` has no field for notes, and a client listing prompts must
     # still see why the operator's block is not the one it gets (B-macro-clash-silent).
-    for name, why in _refused_macros(repo).items():
+    for name, why in refused.items():
         if name in out:
             title, desc, args = out[name]
             out[name] = (title, f"{desc} [NOTE: {why}]".strip(), args)
     return out
-
-
-def _refused_macros(repo: Path | None) -> dict[str, str]:
-    if repo is None:
-        return {}
-    from .macros import MacroError, load_macros_report
-
-    try:
-        return load_macros_report(repo)[1]
-    except (MacroError, ValueError, OSError):
-        return {}  # the whole file is unreadable: `macro_problems` says so, for doctor
 
 
 def resolve_command(name: str, repo: Path | None = None) -> Template:
@@ -508,8 +508,11 @@ def list_all(repo: Path | None = None, overrides: dict[str, str] | None = None) 
         try:
             out.append(resolve_command(n, repo))
         except TemplateError:
-            # A macro whose body cannot be read: listed under `macro_problems` by name,
-            # instead of taking the whole list down with it.
+            # A MACRO whose body cannot be read: listed under `macro_problems` by name,
+            # instead of taking the whole list down with it. A shipped command that fails
+            # is a broken install and still raises.
+            if n in COMMANDS:
+                raise
             continue
     return out
 
