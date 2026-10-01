@@ -146,3 +146,15 @@ def test_a_revived_lease_catches_up_resources_and_keeps_a_claimed_override(repo,
     assert AI.update(repo, "T1", AI.ItemEdit(resources=["gpu:3"]), agent=HOLDER).ok
     assert run_cli(repo, "heartbeat", "T1", agent=HOLDER)[0] == O.OK
     assert _items(repo)["T1"].lease.resources == ["gpu:3"]
+
+
+def test_the_mcp_wait_tool_takes_the_claims_globs(repo):
+    from ddflow.surfaces.mcp import TOOLS
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "docs/RESEARCH.md")
+    run_cli(repo, "task", "add", "T2", "--globs", "src/b.py")
+    assert A.claim(repo, "T1", no_worktree=True, agent=OTHER).ok
+    args = {"item": "T2", "globs": '["src/b.py", "docs/RESEARCH.md"]', "timeout": 0}
+    out = TOOLS["ddflow_wait"]["api"](repo, args, HOLDER)
+    assert out.exit != O.OK and "docs/RESEARCH.md" in out.reason

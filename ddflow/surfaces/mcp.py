@@ -2106,6 +2106,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "item": ("string", "The item to wait for (default: anything ready).", False),
             "phase": ("string", "With no item: anything ready in this phase.", False),
             "kind": ("string", "'task' (default) or 'phase'.", False),
+            "globs": (
+                "string",
+                "With item: the globs you will claim with (comma-separated or a JSON "
+                "array), so ready means that claim will not be refused for them.",
+                False,
+            ),
             "timeout": (
                 "number",
                 f"Seconds to wait (default {MCP_WAIT_DEFAULT_S}, at most {MCP_WAIT_MAX_S}: "
@@ -2120,6 +2126,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             item=a.get("item", "") or "",
             phase=a.get("phase", "") or "",
             kind=a.get("kind") or _api().DEFAULT_NEXT_KIND,
+            globs=a.get("globs") or None,
             timeout_s=_wait_timeout(a),
             poll_s=a.get("poll"),
             agent=agent,
