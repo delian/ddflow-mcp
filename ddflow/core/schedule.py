@@ -194,10 +194,13 @@ def _gitattributes_re(pattern: str) -> re.Pattern[str]:
     out: list[str] = []
     i = 0
     while i < len(pat):
-        if pat.startswith("**/", i):
+        # `**` is "any depth" only on a path boundary -- a leading `**/`, a `/**/`, a
+        # trailing `/**`; elsewhere it is two plain `*`s, which stop at `/` (gitignore(5)).
+        at_start = i == 0 or pat[i - 1] == "/"
+        if at_start and pat.startswith("**/", i):
             out.append("(?:.*/)?")
             i += 3
-        elif pat.startswith("**", i):
+        elif at_start and pat.startswith("**", i) and i + 2 == len(pat):
             out.append(".*")
             i += 2
         elif pat[i] == "*":
@@ -208,7 +211,13 @@ def _gitattributes_re(pattern: str) -> re.Pattern[str]:
             i += 1
         elif pat[i] == "[" and "]" in pat[i + 1 :]:
             j = pat.index("]", i + 1)
-            out.append("[" + pat[i + 1 : j].replace("\\", "\\\\") + "]")
+            body = pat[i + 1 : j].replace("\\", "\\\\")
+            # git negates with `[!...]` and takes `^` literally; Python the other way.
+            if body.startswith("!"):
+                body = "^" + body[1:]
+            elif body.startswith("^"):
+                body = "\\" + body
+            out.append("[" + body + "]")
             i = j + 1
         else:
             out.append(re.escape(pat[i]))
