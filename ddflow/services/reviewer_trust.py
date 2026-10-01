@@ -120,11 +120,15 @@ def write(repo: Path, path: Path, text: str, *, person: bool = False, agent: str
     after = snapshot(repo)
     changed = {} if after is None else {n: v for n, v in after.items() if before.get(n) != v}
     commands = sorted(n for n, (_d, kind) in changed.items() if kind == "command")
-    if after is None or (commands and not person):
+
+    def undo() -> None:
         if saved is None:
             path.unlink(missing_ok=True)
         else:
             TC.atomic_write(path, saved.decode("utf-8"))
+
+    if after is None or (commands and not person):
+        undo()
         if after is None:
             raise ReviewerRefused(_unreadable("after"))
         raise ReviewerRefused(
@@ -136,13 +140,26 @@ def write(repo: Path, path: Path, text: str, *, person: bool = False, agent: str
         )
     if not changed:
         return
-    log = _log(repo, agent)
-    for name, (dig, kind) in sorted(changed.items()):
-        log.append(
-            "reviewer.configured",
-            name,
-            {"digest": dig, "kind": kind, "person": bool(person), "user": _user()},
-        )
+    # The record is part of the write: a tool-written reviewer with no
+    # `reviewer.configured` would count as the operator's. If it cannot be recorded --
+    # the event lock busy past its timeout, a config that fails to load -- the write is
+    # undone (rubber duck, critic). An event already appended for a digest no longer in
+    # effect is harmless: it can only withhold trust, never grant it.
+    try:
+        log = _log(repo, agent)
+        for name, (dig, kind) in sorted(changed.items()):
+            log.append(
+                "reviewer.configured",
+                name,
+                {"digest": dig, "kind": kind, "person": bool(person), "user": _user()},
+            )
+    except Exception as exc:
+        undo()
+        raise ReviewerRefused(
+            f"could not record who wrote reviewer(s) {', '.join(sorted(changed))} "
+            f"({exc}), so the write was undone: an unrecorded tool-written reviewer would "
+            f"count as the operator's (decision D-reviewer-trust). Try again."
+        ) from exc
 
 
 def _unreadable(when: str) -> str:
