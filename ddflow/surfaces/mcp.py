@@ -1797,7 +1797,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             "generic project policy. Anything that belongs to THIS machine or operator — "
             "a reviewer endpoint, a host, an API-key variable, a worker count sized to "
             "this box — pass local=true: it goes to the git-ignored "
-            ".ddflow/local/config.toml, which is read last and never committed."
+            ".ddflow/local/config.toml, which is read last and never committed. A "
+            "reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` with "
+            "write=true writes one for a server it finds."
         ),
         "properties": {
             "set": (
