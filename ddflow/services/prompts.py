@@ -307,7 +307,10 @@ def render(tmpl: Template | str, **vars: Any) -> str:
     )
     try:
         return env.from_string(text).render(**vars)
-    except jinja2.UndefinedError as exc:
+    except jinja2.TemplateError as exc:
+        # Every template failure, not only an undefined variable: a SYNTAX error escaped
+        # as jinja2's own exception, through callers that promise never to raise
+        # (`services.review.review`), as a traceback (bug Baf7d5082f5).
         raise TemplateError(f"template {getattr(tmpl, 'name', '?')}: {exc}") from exc
 
 

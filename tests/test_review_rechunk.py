@@ -148,3 +148,29 @@ def test_the_cli_takes_chunk_numbers(repo, tmp_path):
     assert _gate(repo).outcome == "passed" and f"re-reviewing chunk(s) [{bad}]" in out
     code, _out, err = run_cli(repo, "review", "T1", "--gate", "critic", "--chunk", f"{bad},1")
     assert code == OK, err
+
+
+def test_a_rerun_that_errors_leaves_the_record_alone(repo, tmp_path):
+    """critic: an ERROR re-run fell through to the record, replacing every other
+    chunk's coverage with nothing -- and the next --chunk had nothing to merge into."""
+    _setup(repo, tmp_path, THREE)
+    api.review(repo, gate="critic", item="T1")
+    recorded = _gate(repo)
+    prompts = repo / ".ddflow" / "prompts"
+    prompts.mkdir(exist_ok=True)
+    (prompts / "review_user.md").write_text("{% if diff %}never closed\n")
+    out = api.review(repo, gate="critic", item="T1", chunks=[_bad_chunk(repo)])
+    assert out.exit == REFUSED, out.reason
+    assert _gate(repo) == recorded, "the record was overwritten by an errored re-run"
+
+
+def test_a_template_syntax_error_is_reported_not_raised(tmp_path):
+    """Bug Baf7d5082f5: only an undefined variable was a TemplateError."""
+    from ddflow.services import prompts as P
+
+    try:
+        P.render("{% if diff %}never closed\n", diff="x")
+    except P.TemplateError as exc:
+        assert "Unexpected end of template" in str(exc)
+    else:
+        raise AssertionError("a broken template rendered")
