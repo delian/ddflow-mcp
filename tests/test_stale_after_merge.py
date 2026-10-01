@@ -267,3 +267,41 @@ def test_legacy_evidence_on_uncommitted_edits_is_unverified_after_merge_not_fres
     assert (
         "unit_tests passed, but whether on the tree you are completing could not be checked" in said
     ), said
+
+
+def _sub_repo(where: Path) -> Path:
+    sub = where / "subsrc"
+    sub.mkdir()
+    _git(sub, "init", "-q", "-b", "main")
+    _git(sub, "config", "user.email", "t@example.com")
+    _git(sub, "config", "user.name", "T")
+    (sub / "s.txt").write_text("one\n")
+    _git(sub, "add", "s.txt")
+    _git(sub, "commit", "-qm", "one")
+    (sub / "s.txt").write_text("two\n")
+    _git(sub, "commit", "-qam", "two")
+    return sub
+
+
+def test_a_moved_submodule_is_its_checked_out_commit(repo, tmp_path):
+    src = _sub_repo(tmp_path)
+    _git(repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", str(src), "sub")
+    _git(repo, "commit", "-qm", "add sub")
+    _git(repo / "sub", "checkout", "-q", "HEAD~1")  # moved, not yet recorded
+    _commit_all_matches(repo)
+
+
+def test_an_untracked_nested_repository_is_recorded_as_git_add_would(repo, tmp_path):
+    nested = _sub_repo(repo)
+    assert nested.parent == repo
+    _commit_all_matches(repo)
+
+
+def test_without_filemode_a_symlink_replaced_by_a_file_is_a_regular_file(repo):
+    _git(repo, "config", "core.fileMode", "false")
+    (repo / "link").symlink_to("README.md")
+    _git(repo, "add", "link")
+    _git(repo, "commit", "-qm", "link")
+    (repo / "link").unlink()
+    (repo / "link").write_text("now a file\n")
+    _commit_all_matches(repo)
