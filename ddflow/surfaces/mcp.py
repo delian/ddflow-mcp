@@ -2449,7 +2449,7 @@ def _regression_tests(args: dict[str, Any]) -> str | list[str]:
     single, many = args.get("regression_test") or "", args.get("regression_tests") or []
     if isinstance(single, str) and not many:
         return single
-    as_list = [single] if isinstance(single, str) else list(single)
+    as_list = ([single] if single else []) if isinstance(single, str) else list(single)
     return [*as_list, *([many] if isinstance(many, str) else many)]
 
 
