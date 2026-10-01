@@ -42,7 +42,12 @@ def test_a_job_is_launched_detached_watched_and_its_exit_code_collected(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "TRAIN", "--globs", "a.py")
     run_cli(repo, "claim", "TRAIN", "--no-worktree")
-    code, out, err = run_cli(repo, "--json", "job", "run", "TRAIN", "sleep 1.5; echo done; exit 3")
+    # Held open on a file, not on a clock: a 1.5 s sleep raced the two CLI calls below,
+    # and under a loaded suite the job had exited before `job end` asked (Bba19573760).
+    # Bounded at 60 s, so a failing test leaves its job behind no longer than that.
+    release = repo.parent / "release-job"
+    hold = f"for i in $(seq 600); do [ -e {release} ] && break; sleep 0.1; done"
+    code, out, err = run_cli(repo, "--json", "job", "run", "TRAIN", f"{hold}; echo done; exit 3")
     assert code == OK, err
     job = json.loads(out)
     assert [j["status"] for j in _jobs(repo)] == ["running"]
@@ -50,6 +55,7 @@ def test_a_job_is_launched_detached_watched_and_its_exit_code_collected(repo):
     code, _o, err = run_cli(repo, "job", "end", job["id"])
     assert code == REFUSED, "a running job was recorded as ended"
 
+    release.touch()
     assert _wait(lambda: _jobs(repo)[0]["status"] == "exited")
     row = _jobs(repo)[0]
     assert row["exit_code"] == 3, "an exit code the command itself chose was lost"
