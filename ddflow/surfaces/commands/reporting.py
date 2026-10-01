@@ -253,6 +253,11 @@ def cmd_doctor(a, c: Ctx) -> int:
 
 def cmd_board(a, c: Ctx) -> int:
     out = A.board(c.repo, phase=a.phase or "", agent=c.requested_agent)
+    if out.exit == FAIL:
+        if c.json:
+            print(json.dumps(out.body(), indent=2, default=str))
+        print(out.reason, file=sys.stderr)
+        return FAIL
     c.out(out.data["text"], out.body())
     return OK
 

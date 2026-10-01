@@ -593,8 +593,12 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
     from ..core.schedule import critical_path
     from ..services.gates import pipeline_for
     from ..views import markdown as render_md
+    from .lifecycle import _unknown_phase
 
     _log, cfg, st = _load(repo, agent)
+    unknown = _unknown_phase(st, phase)
+    if unknown:  # as `next` refuses it, not an empty board (Bc2acd426f4)
+        return O.failed("board", unknown, phase=phase, text="")
     phases = []
     for ph in sorted(st.phases(), key=lambda p: (p.priority, p.id)):
         if phase and ph.id != phase:
