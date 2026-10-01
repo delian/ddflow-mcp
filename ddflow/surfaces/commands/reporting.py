@@ -180,12 +180,19 @@ def _bug_lines(b: dict) -> str:
     lines = [f"{b['id']} [bug] {b['state']}", f"  {found}"]
     if b["fixing"]:
         lines.append(f"  fixed by: {', '.join(b['fixing'])}")
+    if b["mentioned_by"]:
+        lines.append(f"  mentioned by: {', '.join(b['mentioned_by'])}")
     if b["fixed_at"]:
-        tests = b["regression_tests"] or [b["regression_test"]]
-        lines.append(f"  closed {b['fixed_at']}; regression test(s):")
-        lines += [f"    {t}" for t in tests if t]
+        tests = [t for t in b["regression_tests"] or [b["regression_test"]] if t]
+        lines.append(
+            f"  closed {b['fixed_at']} as fixed" + ("; regression test(s):" if tests else "")
+        )
+        lines += [f"    {t}" for t in tests]
     if b["invalid_at"]:
-        lines.append(f"  closed {b['invalid_at']} as invalid: {b['invalid_reason']}")
+        # A fix wins over an invalid closure (`Bug.resolution`): shown as what it now is.
+        was = "earlier closed" if b["fixed_at"] else "closed"
+        tail = " -- superseded by the fix" if b["fixed_at"] else ""
+        lines.append(f"  {was} {b['invalid_at']} as invalid: {b['invalid_reason']}{tail}")
         if b["evidence"]:
             lines.append(f"    evidence: {b['evidence']}")
     if b["lesson"]:
