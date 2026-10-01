@@ -1414,7 +1414,12 @@ def _coerce(raw: Any, typ: Any) -> Any:
         # config still looked set.
         parsed = _maybe_json(raw, list)
         if parsed is not None:
-            return [str(x) for x in parsed]
+            # Refused, never `str()`-cast: `[null]` loaded as ["None"] (B7506c1124a).
+            if bad := [x for x in parsed if not isinstance(x, str)]:
+                raise ValueError(
+                    f"expected a JSON list of strings; got {json.dumps(bad[0])} in {raw!r}"
+                )
+            return parsed
         if "," not in raw:
             return [raw.strip()] if raw.strip() else []
         return csv_list(raw)
@@ -1448,7 +1453,15 @@ def _coerce_dict(raw: str, ts: str) -> dict[str, Any]:
     parsed = _maybe_json(raw, dict)
     if parsed is not None:
         if "list" not in ts:
-            return {str(k): str(v) for k, v in parsed.items()}
+            # Refused, never `str()`-cast: `{"core": null}` loaded as {"core": "None"},
+            # a family nobody declared, in the map reviewer independence reads
+            # (B7506c1124a). Keys are strings already: JSON object keys always are.
+            if bad := [k for k, v in parsed.items() if not isinstance(v, str)]:
+                raise ValueError(
+                    f"expected a JSON object of strings; {bad[0]!r} is "
+                    f"{json.dumps(parsed[bad[0]])} in {raw!r}"
+                )
+            return dict(parsed)
         # Refused HERE, not left to a per-knob check, and never `str()`-cast: a string
         # where the type says a list, or `null` where it says a word (read as "None"),
         # passed through as valid-looking strings (critic).
