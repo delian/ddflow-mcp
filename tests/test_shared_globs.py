@@ -448,3 +448,30 @@ def test_a_narrower_star_rule_under_a_double_star_glob(repo):
     SF.sync_attributes(repo)
     assert _merge_attr(repo, "docs/top.md") == "ours", _attributes(repo)
     assert _merge_attr(repo, "docs/sub/c.md") == "union"
+
+
+def test_a_narrower_rule_starting_with_a_literal_is_still_narrower(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    for name in ("xa.md", "guide.md"):
+        (repo / "docs" / name).write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/x* merge=ours\n")
+    _declare(repo, "docs/*")
+    SF.sync_attributes(repo)
+    assert _merge_attr(repo, "docs/xa.md") == "ours", _attributes(repo)
+    assert _merge_attr(repo, "docs/guide.md") == "union"
+
+
+def test_a_narrower_star_rule_is_not_whole_glob_coverage_for_a_double_star(repo):
+    run_cli(repo, "init")
+    (repo / "docs").mkdir()
+    (repo / "docs" / "top.md").write_text("x\n")
+    subprocess.run(["git", "-C", str(repo), "add", "docs"], check=True)
+    with (repo / ".gitattributes").open("a") as f:
+        f.write("docs/* merge=ours\n")
+    _declare(repo, "docs/**")
+    assert SF.sync_attributes(repo) == ["docs/** merge=union"]
+    assert _merge_attr(repo, "docs/top.md") == "ours"
+    assert _merge_attr(repo, "docs/later/new.md") == "union"

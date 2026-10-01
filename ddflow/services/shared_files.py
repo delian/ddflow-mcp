@@ -130,17 +130,18 @@ def _merge_rows(rows: list[str]) -> list[tuple[int, str, str]]:
 
 def _witness(pattern: str) -> str:
     """A path ``pattern`` matches, standing for it: `**` -> two segments, `*`/`?`/a class
-    -> one character. Read as a path, `docs/**` was matched by `docs/*` (a `*` matches
-    `**`), so a broader glob looked narrower (review finding)."""
+    -> one character no pattern holds (U+0001). Read as a path, `docs/**` was matched by
+    `docs/*` (a `*` matches `**`); a plain `x` was matched by a narrower `docs/x*`
+    (review findings). An unprintable stand-in is matched only by wildcards."""
     import re
 
-    w = re.sub(r"\[[^]]*\]", "x", pattern)
-    return w.replace("**", "x/y").replace("*", "x").replace("?", "x")
+    w = re.sub(r"\[[^]]*\]", "\x01", pattern)
+    return w.replace("**", "\x01/\x01").replace("*", "\x01").replace("?", "\x01")
 
 
 def _inside(a: str, b: str) -> bool:
     """Is every file pattern ``a`` names also named by ``b``? (Judged on a witness of
-    ``a``: exact for literals, a sound sample for the patterns agents write.)"""
+    ``a``: exact for literals; for wildcards, a path only another wildcard matches.)"""
     from ..core.schedule import is_shared
 
     return a == b or is_shared(_witness(a), [b])
