@@ -174,3 +174,15 @@ def test_wait_refuses_globs_without_an_item(repo):
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     out = A.wait(repo, globs="a.py", timeout_s=0, agent=HOLDER)
     assert out.exit == O.FAIL and "item" in out.reason
+
+
+def test_the_mcp_update_tool_reads_a_json_array_whole(repo):
+    from ddflow.surfaces.mcp import TOOLS
+
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    out = TOOLS["ddflow_update"]["api"](repo, {"id": "T1", "globs": '["**/*.{py,pyi}"]'}, "")
+    assert out.ok, out.reason
+    assert _items(repo)["T1"].globs == ["**/*.{py,pyi}"]
+    out = TOOLS["ddflow_update"]["api"](repo, {"id": "T1", "globs": ""}, "")
+    assert out.ok and _items(repo)["T1"].globs == [], "an empty string still clears"

@@ -1982,7 +1982,12 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Item id.", True),
-            "globs": ("string", "Comma-separated path globs this item writes.", False),
+            "globs": (
+                "string",
+                "Path globs this item writes, comma-separated or a JSON array. REPLACES "
+                "the list (a claimed item's lease too); the result names what it dropped.",
+                False,
+            ),
             "needs": (
                 "string",
                 "Comma-separated ids it depends on. Pass an EMPTY string to clear them "
@@ -2020,7 +2025,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                 title=a.get("title"),
                 body=a.get("body"),
                 needs=_list_or_none(a, "needs"),
-                globs=_list_or_none(a, "globs"),
+                # Raw, for the api's single read: split on commas here first, a JSON
+                # array (or a glob holding a comma inside one) was lost (roborev).
+                globs=None if a.get("globs") is None else [a["globs"]],
                 tags=_list_or_none(a, "tags"),
                 priority=a.get("priority"),
                 line=a.get("line"),
