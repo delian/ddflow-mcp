@@ -16,6 +16,21 @@ Only the items below differ.
 4. **Asking the operator.** CLI: ask and stop. Cloud agent: leave it in the PR.
 5. **Where the rules live.** `AGENTS.md`, or `.github/copilot-instructions.md`. The CLI
    also reads `CLAUDE.md` and follows `@relative/path` includes.
+6. **HydraFusion (`/experimental`).** It is selected like a model but routes each task
+   across models from several providers, so it has no single family.
+   - **Drive it per step, not per phase.** GitHub tunes the preview for first-turn,
+     single-prompt tasks; its multi-turn sessions come later. So: `ddflow claim`, then
+     ONE HydraFusion turn for `implement` with the brief and the gate's instructions in
+     the prompt, then the remaining gates from `ddflow gate status` — not the whole
+     loop in one conversation.
+   - **Its internal critique is not gate evidence.** HydraFusion may have a model from
+     another family review its own draft, but that review never reaches the queue: no
+     model, no verdict, nothing to audit. `rubber_duck` and `critic` still run through
+     `ddflow review`.
+   - **Author model.** `complete --model hydrafusion` refuses until `[agent].routers`
+     lists the families your plan routes it to (GitHub publishes no fixed roster), e.g.
+     `routers = { hydrafusion = ["anthropic", "openai", "google"] }`. A reviewer counts
+     as independent only when its family is outside that whole set.
 
 ## MCP registration
 
