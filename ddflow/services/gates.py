@@ -1003,31 +1003,47 @@ def worktree_entries(cwd: Path | str) -> TreeEntries | None:
     filemode = W.git(root, "config", "--bool", "core.fileMode").out != "false"
     to_hash: list[tuple[str, str]] = []
     for path in [*changed, *untracked]:
-        if _ours(path) or path.endswith("/"):
-            continue  # ours, or a nested repository git lists as a directory
-        full = root / path
-        if not os.path.lexists(full):
+        if _ours(path):
+            continue
+        path = path.rstrip("/")  # noqa: PLW2901 -- an untracked nested repository
+        kind, value = _working_entry(root, path, out.get(path), fmt, filemode)
+        if kind == "drop":
             out.pop(path, None)
-            continue
-        if full.is_symlink():
-            out[path] = ("120000", _blob_id(os.fsencode(os.readlink(full)), fmt))
-            continue
-        if full.is_dir():
-            # A submodule keeps the commit the index records. Any other directory has
-            # REPLACED a tracked file of that name: the file is gone, and the files
-            # under the directory arrive as untracked paths of their own.
-            if out.get(path, ("",))[0] != "160000":
-                out.pop(path, None)
-            continue
-        if filemode:
-            # git's own test: the OWNER's execute bit (S_IXUSR), not any of the three.
-            mode = "100755" if full.stat().st_mode & 0o100 else "100644"
-        else:
-            # core.fileMode=false: git ignores the bit -- the index's mode, or 100644
-            # for a file it has not seen.
-            mode = out.get(path, ("100644",))[0]
-        to_hash.append((path, mode))
+        elif kind == "set":
+            out[path] = value
+        elif kind == "hash":
+            to_hash.append((path, value))
     return out if _hash_into(root, out, to_hash) else None
+
+
+def _working_entry(
+    root: Path, path: str, prior: tuple[str, str] | None, fmt: str, filemode: bool
+) -> tuple[str, Any]:
+    """How ``path``'s working copy enters the tree, as `git add` would record it:
+    ("drop", None), ("set", (mode, id)), ("hash", mode) or ("keep", None)."""
+    from ..infra import worktree as W
+
+    full = root / path
+    if not os.path.lexists(full):
+        return "drop", None
+    if full.is_symlink():
+        return "set", ("120000", _blob_id(os.fsencode(os.readlink(full)), fmt))
+    if full.is_dir():
+        # A repository (a submodule, or a nested repository `git add` would record as
+        # one) is its checked-out commit. Any other directory has REPLACED a tracked
+        # file of that name: the file is gone, and what is under the directory arrives
+        # as untracked paths of its own.
+        if (full / ".git").exists():
+            head = W.git(full, "rev-parse", "HEAD")
+            return ("set", ("160000", head.out)) if head.ok else ("keep", None)
+        return "drop", None
+    if filemode:
+        # git's own test: the OWNER's execute bit (S_IXUSR), not any of the three.
+        return "hash", "100755" if full.stat().st_mode & 0o100 else "100644"
+    # core.fileMode=false: git ignores the bit -- a regular file keeps the index's
+    # mode; anything else (new, or replacing a symlink or a submodule) is 100644.
+    regular = prior is not None and prior[0] in ("100644", "100755")
+    return "hash", prior[0] if prior is not None and regular else "100644"
 
 
 def _index_entries(rows: list[str]) -> TreeEntries | None:
