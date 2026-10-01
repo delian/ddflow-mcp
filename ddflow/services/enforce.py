@@ -1106,9 +1106,8 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
             (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
         )
     paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
-    if not paths:
-        return 0, ""
-    if clean_merge_conclusion(_index_tree(repo)):
+    # A clean merge commit stages only what its parents already committed.
+    if not paths or clean_merge_conclusion(_index_tree(repo)):
         return 0, ""
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)

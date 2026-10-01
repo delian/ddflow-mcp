@@ -429,6 +429,10 @@ def merging(tree: Path) -> bool:
     return bool(unmerged)
 
 
+#: How many conflicting paths a refused merge names before summarising the rest.
+_NAMED = 10
+
+
 def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
     """Abort the merge THIS call started and failed, and say why as a refusal.
 
@@ -442,9 +446,9 @@ def _abandon_merge(tree: Path, source: str, r: GitResult) -> GitResult:
     aborted = git(tree, "merge", "--abort")
     why = r.err or r.out
     if conflicts:
-        head = f"merging {source} conflicts in: " + ", ".join(conflicts[:10])
-        if len(conflicts) > 10:
-            head += f" (and {len(conflicts) - 10} more)"
+        head = f"merging {source} conflicts in: " + ", ".join(conflicts[:_NAMED])
+        if len(conflicts) > _NAMED:
+            head += f" (and {len(conflicts) - _NAMED} more)"
         fix = (
             "Merge the base into your branch, in your worktree, resolve, commit, and "
             "run merge again."
