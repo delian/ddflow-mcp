@@ -191,3 +191,17 @@ def test_a_merge_keeps_the_earlier_off_contract_count(repo, tmp_path):
     (finding,) = _gate(repo).evidence["chunk_findings"]
     api.review(repo, gate="critic", item="T1", chunks=[finding["chunk"]])
     assert "1 off-contract" in _gate(repo).evidence["coverage"], _gate(repo).evidence
+
+
+def test_an_errored_rerun_with_no_reason_is_still_refused(repo, tmp_path, monkeypatch):
+    """critic: the refusal keyed on the reason's truthiness, not on the ERROR status."""
+    from ddflow.services import review as R
+
+    _setup(repo, tmp_path, THREE)
+    api.review(repo, gate="critic", item="T1")
+    recorded = _gate(repo)
+    monkeypatch.setattr(
+        R, "review", lambda rev, *a, **k: R.ReviewResult(rev.name, rev.model, "x", status=R.ERROR)
+    )
+    out = api.review(repo, gate="critic", item="T1", chunks=[1])
+    assert out.exit == REFUSED and _gate(repo) == recorded, out.reason
