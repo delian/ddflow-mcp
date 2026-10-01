@@ -698,8 +698,12 @@ def plan(
         else:
             # `_blocking_leases` (api.lifecycle) keys on "cap reached".
             why = f"{reached}; {live_note}"
+        # Any release frees a slot, so a cap-held item waits on every item in flight --
+        # named here, so that a waiter registers against all of them whatever the wording
+        # (the free-slot wording no longer says "cap reached").
+        holders = sorted(live_items)
         for it in p.ready[slots:]:
-            p.blocked.append(Blocked(it.id, "state", why, []))
+            p.blocked.append(Blocked(it.id, "state", why, holders))
             p.capped.append(it.id)
         p.ready = p.ready[:slots]
     return p
