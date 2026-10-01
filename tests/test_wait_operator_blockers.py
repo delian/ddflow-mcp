@@ -96,3 +96,13 @@ def test_a_dependency_whose_own_blocker_clears_is_waited_for(repo):
     assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
     out = A.wait(repo, timeout_s=0.3, poll_s=0.05, agent=WAITER)
     assert out.data["waitable"] is True, out.reason
+
+
+def test_an_any_wait_with_nothing_blocked_but_work_held_still_waits(repo):
+    """Nothing blocked is not "everything blocked needs a person": the only open item is
+    held by another agent, and if it lets go without finishing, the item is free."""
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--globs", "src/a.py")
+    assert A.claim(repo, "T1", no_worktree=True, agent=HOLDER).ok
+    out = A.wait(repo, timeout_s=0.3, poll_s=0.05, agent=WAITER)
+    assert out.data["waitable"] is True, out.reason

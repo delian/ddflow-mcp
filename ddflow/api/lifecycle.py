@@ -254,7 +254,7 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dic
         }
     by_item = {b.item: b for b in p.blocked}
     stuck = [b for b in p.blocked if not _clears_on_release(st, b, others, by_item)]
-    if len(stuck) == len(p.blocked):
+    if p.blocked and len(stuck) == len(p.blocked):
         # Every blocker needs a person: a cycle, an expired lease under "report", an
         # operator's block, a dependency nobody works on. Some other agent holding an
         # unrelated lease does not change that, and sleeping to the deadline only to
