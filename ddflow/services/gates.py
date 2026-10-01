@@ -489,7 +489,7 @@ def stale_evidence_detail(
         if not rec or rec.outcome != "passed":
             continue
         ev = rec.evidence or {}
-        was_sha = ev.get("tree_sha", "") or ""
+        was_sha = normal_fingerprint(ev.get("tree_sha", "") or "")
         base, _, dirt = was_sha.partition("+")
         was_id = ev.get("source_tree", "") or ""
         if was_id:
@@ -882,8 +882,22 @@ def tree_fingerprint(cwd: Path) -> str:
     parts = [status.out if status.ok else "", diff.out if diff.ok else ""]
     parts.append(_untracked_digest(cwd))
     body = "\x00".join(parts)
-    dirt = digest(body) if body.strip() else "clean"
+    # Each PART, not the joined body: `str.strip` keeps NUL, so a clean tree's body
+    # "\0\0" never tested empty and every fingerprint read as dirty
+    # (bug B-fingerprint-never-clean). `LEGACY_CLEAN` is what that recorded.
+    dirt = digest(body) if any(p.strip() for p in parts) else "clean"
     return f"{head.out.strip()[:12]}+{dirt}"
+
+
+#: The "dirt" every CLEAN tree recorded before bug B-fingerprint-never-clean was fixed:
+#: the digest of the two NULs joining three empty parts. Read as "clean".
+LEGACY_CLEAN = "95e0c70caf8cc336"  # == digest("\x00\x00"), pinned by a test
+
+
+def normal_fingerprint(fp: str) -> str:
+    """``fp`` with the pre-fix spelling of a clean tree read as `clean`."""
+    base, sep, dirt = fp.partition("+")
+    return f"{base}+clean" if sep and dirt == LEGACY_CLEAN else fp
 
 
 def _git_z(cwd: Path | str, *args: str) -> list[str] | None:
