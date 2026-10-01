@@ -31,6 +31,8 @@ class ItemEdit:
     priority: int | None = None
     line: str | None = None
     resources: list[str] | None = None
+    #: Rebind the item to this linked worktree and its branch (D-sticky-binding-remedy).
+    worktree: str | None = None
 
 
 def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outcome:
@@ -58,14 +60,105 @@ def update(repo: Path, item: str, edit: ItemEdit, *, agent: str = "") -> O.Outco
     bad = GS.problem(fields.get("globs", []))
     if bad:
         return O.failed("item.updated", f"{item}: {bad}", id=item)
-    if not fields:
+    if not fields and edit.worktree is None:
         return O.nothing(
             "item.updated",
             "nothing to change: every field was left unset. Pass a value to set one, "
             "or an empty list to clear it.",
             id=item,
         )
-    return _record_update(log, cfg, it, fields)
+    rebound: dict[str, str] = {}
+    if edit.worktree is not None:
+        # Decided before anything is written: a refused rebind records no field either.
+        target = _rebind_target(repo, cfg, st, it, edit.worktree, log.agent_id)
+        if isinstance(target, O.Outcome):
+            return target
+        rebound = _rebind(log, cfg, it, *target)
+    if not fields:
+        return O.ok("item.updated", id=it.id, changed=["worktree"], fields={}, **rebound)
+    out = _record_update(log, cfg, it, fields)
+    if rebound and out.exit == O.OK:
+        out.data["changed"] = sorted([*out.data["changed"], "worktree"])
+        out.data.update(rebound)
+    return out
+
+
+def _rebind_target(repo: Path, cfg, st, it, path: str, me: str):
+    """(stored path, branch) to rebind ``it`` to, or the refusal.
+
+    The way out of a WRONG binding (Bec8d5228c9): an item adopted into somebody else's
+    tree re-bound to it on every claim, and `merge` landed that tree's empty branch.
+    Refused for anything that is not a linked worktree of this repository with a branch
+    checked out, for a tree another open item is bound to (two items in one tree cannot
+    be merged or recovered apart), and for an item whose LIVE lease another agent holds
+    -- moving someone's work out from under them is theirs to do.
+    """
+    import time
+
+    from ..infra import worktree as W
+    from .lifecycle import _worktree_held_by
+
+    where = Path(path).expanduser()
+    if not where.is_absolute():
+        where = repo / where
+    here = W.current(where) if where.is_dir() else None
+    try:
+        same_repo = here is not None and W.repo_root(where) == W.repo_root(repo)
+    except W.GitError:
+        same_repo = False
+    if here is None or not same_repo:
+        return O.refused(
+            "item.updated",
+            f"{path} is not a linked worktree of this repository (the primary checkout is "
+            f"nobody's tree in particular). Name the worktree {it.id}'s work is in.",
+            id=it.id,
+        )
+    if not here.branch:
+        return O.refused(
+            "item.updated",
+            f"{here.path} has a detached HEAD: there is no branch to bind {it.id} to. "
+            f"Check out its branch there first.",
+            id=it.id,
+        )
+    stored = W.store_path(repo, here.path)
+    held = _worktree_held_by(st, stored, it.id, repo, cfg)
+    if held:
+        return O.refused(
+            "item.updated",
+            f"{here.path} is bound to {held}, which is still open. Two items sharing one "
+            f"tree cannot be merged or recovered separately.",
+            id=it.id,
+            conflicts_with=held,
+        )
+    lease = it.lease
+    live = (
+        lease is not None
+        and not lease.expired_at
+        and not lease.expired(time.time(), cfg.lease.grace_s)
+    )
+    if live and lease.holder != me:
+        return O.refused(
+            "item.updated",
+            f"{it.id} is held by {lease.holder}; only the holder rebinds its tree.",
+            id=it.id,
+            holder=lease.holder,
+        )
+    return stored, here.branch
+
+
+def _rebind(log, cfg, it, stored: str, branch: str) -> dict[str, str]:
+    """Bind ``it`` -- and the caller's live lease on it -- to ``stored`` on ``branch``.
+
+    Recorded as `worktree.adopted`, as a claim that adopts a tree is: ddflow did not make
+    it, so `merge` never removes it.
+    """
+    log.append("worktree.adopted", it.id, {"path": stored, "branch": branch, "base": ""})
+    if it.lease is not None and it.lease.holder == log.agent_id and not it.lease.expired_at:
+        try:
+            L.acquire(log, cfg, it.id, worktree=stored, branch=branch, force=True)
+        except L.LeaseError:
+            pass  # lapsed between the check and here: the item is rebound, the lease is not
+    return {"worktree": stored, "branch": branch}
 
 
 def _edit_fields(edit: ItemEdit) -> dict[str, Any]:
