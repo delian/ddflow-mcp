@@ -39,3 +39,8 @@ def test_strings_still_load():
     assert _coerce('{"core": "anthropic"}', "dict[str, str]") == {"core": "anthropic"}
     assert _coerce('["a", "b,c"]', "list[str]") == ["a", "b,c"]
     assert _coerce("core=anthropic", "dict[str, str]") == {"core": "anthropic"}
+
+
+def test_a_map_of_another_value_type_keeps_its_json_values():
+    """critic: the string check is for string-valued maps only."""
+    assert _coerce('{"core": 5}', "dict[str, int]") == {"core": 5}
