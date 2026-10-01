@@ -369,3 +369,24 @@ def test_ddflow_version_runs_and_prints_the_declared_version():
     )
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == f"ddflow {proj}", r.stdout
+
+
+def test_server_json_fits_the_registry_schema_limits():
+    """server.json within the MCP Registry schema's string limits.
+
+    The registry validates on publish, not before: a 251-char `description` passed every
+    local check and failed publish #34 with 422 ("expected length <= 100") AFTER PyPI and
+    the image had shipped, so 0.1.3 reached two registries and not the third, untagged.
+    Limits from https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json
+    (ServerDetail); pinned here because a test must not fetch the schema from the network.
+    """
+    srv = json.loads((ROOT / "server.json").read_text())
+    assert srv["$schema"].endswith("/2025-12-11/server.schema.json"), (
+        f"server.json moved to {srv['$schema']}: re-read its limits and update this test"
+    )
+    assert 1 <= len(srv["description"]) <= 100, (
+        f"description is {len(srv['description'])} chars; the registry allows 100"
+    )
+    assert 1 <= len(srv["title"]) <= 100, f"title is {len(srv['title'])} chars; max 100"
+    assert 3 <= len(srv["name"]) <= 200
+    assert re.fullmatch(r"[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+", srv["name"]), srv["name"]
