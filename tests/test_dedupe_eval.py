@@ -161,8 +161,10 @@ def test_the_redactor_masks_what_it_promises():
     for host in ("host", "lan", "address", "served", "model", "user", "home", "redacted"):
         assert build.redact(markers, host=host) == markers, host
     # A served name ending in its version digit is a served name too.
-    for name in ("qwen2", "gpt-4", "llama3", "deepseek-v3"):
-        assert name not in build.redact(f"routed to {name} today", host="")
+    for name in ("qwen2", "gpt-4", "llama3", "deepseek-v3", "phi-3", "qwen3:8b"):
+        assert (
+            build.redact(f"routed to {name}: today", host="") == "routed to <served-model>: today"
+        )
 
 
 def test_the_builder_folds_the_log_into_redacted_records(tmp_path):
