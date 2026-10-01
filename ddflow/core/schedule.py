@@ -822,11 +822,10 @@ def critical_path(state: State, phase: str = "") -> list[str]:
     # than return a confidently wrong number.
     def before(it: Item) -> list[str]:
         """What must finish before ``it`` can: its dependencies, inherited ones too, and
-        -- an umbrella closing only when its sub-tasks do -- its children (B79c2f6e17a:
-        without them a split task's chain read one step short per level)."""
+        -- an umbrella, task or phase, closing only when what is under it does -- its
+        children (B79c2f6e17a: without them a split task's chain, or the chain inside a
+        phase another depends on, read one step short per level)."""
         deps = [d for _owner, d in inherited_deps(state, it)]
-        if it.kind != "task":
-            return deps  # a phase is not a step of its own chain
         return deps + [c.id for c in state.children(it.id) if not c.removed]
 
     if find_cycles(items, edges=before):
@@ -854,4 +853,10 @@ def critical_path(state: State, phase: str = "") -> list[str]:
         return memo[n]
 
     chains = [longest(i, frozenset()) for i, it in items.items() if it.state != DONE]
-    return max(chains, key=len) if chains else []
+    best = max(chains, key=len) if chains else []
+    # A phase at the END only closes the chain it holds -- no work of its own, and nothing
+    # after it waits on it here. Inside the chain it stays: it is the boundary a phase
+    # dependency waits on.
+    while best and items[best[-1]].kind != "task":
+        best = best[:-1]
+    return best
