@@ -68,8 +68,8 @@ def test_a_git_install_registers_its_own_server_not_uvx(installed):
     assert entry == {"command": str(installed.env / "bin" / "ddflow-mcp"), "args": []}
 
 
-def test_a_local_or_editable_install_registers_its_own_server(installed):
-    entry = installed({"url": "file:///src/ddflow", "dir_info": {"editable": True}})
+def test_a_local_directory_install_registers_its_own_server(installed):
+    entry = installed({"url": "file:///src/ddflow", "dir_info": {}})
     assert entry["command"] == str(installed.env / "bin" / "ddflow-mcp"), entry
 
 
@@ -97,3 +97,13 @@ def test_explicit_launch_choices_are_untouched(installed):
     installed(GIT)
     assert A._launch_entry("python")["args"] == ["-m", A.MCP_MODULE]
     assert A._launch_entry("docker")["command"] == "docker"
+
+
+def test_an_editable_install_is_a_source_checkout_and_never_gets_uvx(installed, monkeypatch):
+    """An editable install imports from the checkout, so `_running_from_source()` is
+    True and the checkout's own entry is written -- before and after this fix. Guards
+    the claim (rubber_duck on 825bb53) that the editable case falls through to uvx."""
+    monkeypatch.setattr(A, "_running_from_source", lambda: True)
+    entry = installed({"url": "file:///src/ddflow", "dir_info": {"editable": True}})
+    assert entry["command"] == str(installed.env / "bin" / "python"), entry
+    assert entry["args"] == ["-m", A.MCP_MODULE]
