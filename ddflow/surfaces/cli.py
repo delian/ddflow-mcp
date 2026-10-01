@@ -1058,6 +1058,14 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="do not auto-start a local server for this reviewer",
     )
     rva.set_defaults(fn=cmd_reviewers)
+    rvp = rv_s.add_parser(
+        "approve",
+        help="a PERSON vouches for a tool-written reviewer entry (refused under an agent "
+        "identity); with no name, list the entries waiting (anyone may)",
+    )
+    rvp.add_argument("name", nargs="?", default="")
+    rvp.add_argument("--note", default="")
+    rvp.set_defaults(fn=cmd_reviewers)
     rvt = rv_s.add_parser("test", help="send a tiny known-buggy diff and check the reply")
     rvt.add_argument("name", nargs="?", default="")
     rvt.set_defaults(fn=cmd_reviewers)

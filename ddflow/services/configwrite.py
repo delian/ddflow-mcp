@@ -17,6 +17,11 @@ Two of the rules are load-bearing and neither is obvious:
   than trusting the caller — the claim that this was "impossible through the MCP
   surface" was checked and turned out to be false.
 
+* **A reviewer is guarded too** (decision D-reviewer-trust). Every write here goes
+  through `_write_reviewed`: an agent's `kind = "command"` reviewer is undone and
+  refused, and a reviewer whose identity a tool wrote is recorded so its reviews count
+  only after a person approves it (`services/reviewer_trust.py`).
+
 The in-place TOML edit is deliberate rather than a round-trip through a parser: the file
 is written by hand and carries comments explaining every knob, and `tomllib` cannot
 write, so a serialising round-trip would silently delete the documentation that makes
@@ -31,6 +36,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..infra import tomlcfg as TC
+from . import reviewer_trust as RT
 
 #: The git-ignored machine-local layer (decision D-no-own-services-local-dir). Read
 #: LAST by `Config.load` and `tomlcfg.config_paths`, so what is written here wins.
@@ -328,6 +334,8 @@ def _write_config(
     dry_run: bool = False,
     check_workflow: bool = True,
     local: bool = False,
+    person: bool = False,
+    agent: str = "",
 ) -> tuple[str, str]:
     """Apply every `(dotted, value)` edit, validate ONCE, write ONCE, under a lock.
 
@@ -428,11 +436,16 @@ def _write_config(
                     text,
                 )
         if not dry_run:
-            TC.atomic_write(path, text)
+            try:
+                _write_reviewed(repo, path, text, person=person, agent=agent)
+            except RT.ReviewerRefused as exc:
+                return str(exc), text
     return "", text
 
 
-def _append_config(repo: Path, toml_text: str, *, local: bool = False) -> tuple[str, Path]:
+def _append_config(
+    repo: Path, toml_text: str, *, local: bool = False, person: bool = False, agent: str = ""
+) -> tuple[str, Path]:
     """Append a TOML block to the committed or the local config. `(error, path)`.
 
     Validated against the MERGED text before anything is written, and held to the same
@@ -476,11 +489,22 @@ def _append_config(repo: Path, toml_text: str, *, local: bool = False) -> tuple[
                 f"which no tool writes.",
                 Path(),
             )
-        TC.atomic_write(path, merged)
+        try:
+            _write_reviewed(repo, path, merged, person=person, agent=agent)
+        except RT.ReviewerRefused as exc:
+            return str(exc), Path()
     return "", path
 
 
-def append_block(repo: Path, block: str, *, shared: bool = False, own: str = "") -> Path:
+def append_block(
+    repo: Path,
+    block: str,
+    *,
+    shared: bool = False,
+    own: str = "",
+    person: bool = False,
+    agent: str = "",
+) -> Path:
     """Append a hand-built block (a `[[reviewer]]`) to the local layer, or the committed
     config when `shared`. Returns the path written.
 
@@ -510,5 +534,17 @@ def append_block(repo: Path, block: str, *, shared: bool = False, own: str = "")
             raise ValueError(
                 f"refusing to write {path}: the result is not valid TOML: {exc}"
             ) from exc
-        TC.atomic_write(path, merged)
+        # Raises RT.ReviewerRefused (a ValueError) for an agent's command reviewer.
+        _write_reviewed(repo, path, merged, person=person, agent=agent)
     return path
+
+
+def _write_reviewed(repo: Path, path: Path, text: str, *, person: bool, agent: str) -> None:
+    """The one place a tool writes config: under the reviewer-trust guard.
+
+    Every writer here goes through it, so no surface can add a reviewer the guard does
+    not see (decision D-reviewer-trust): an agent's `kind = "command"` reviewer is undone
+    and refused, and any reviewer whose identity a tool created or changed is recorded
+    as `reviewer.configured`, to count only after a person approves it.
+    """
+    RT.write(repo, path, text, person=person, agent=agent)

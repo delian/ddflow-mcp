@@ -937,6 +937,28 @@ Four backends, because "any LLM" means four wire formats in practice:
 model with no HTTP API, behind a corporate gateway, or wrapped in an in-house tool is
 still usable, with no SDK and no dependency.
 
+**Who may add a reviewer.** A reviewer decides whether a review counts as independent, so
+an agent must not be able to mint one (decision D-reviewer-trust):
+
+- A `kind = "command"` reviewer runs any program and can print any verdict, so **only a
+  person adds one**: by editing `.ddflow/local/reviewers.toml`, or with `ddflow reviewers
+  add` from their own terminal. Every agent surface refuses it — `ddflow_configure`,
+  `config --append-toml`, and any command run under `--agent` or `DDFLOW_AGENT`, or in a
+  Claude Code shell (`CLAUDECODE`, the one harness marker known for certain; another
+  harness is recognised by the `--agent`/`DDFLOW_AGENT` its ddflow setup passes).
+- A reviewer **a tool writes** (`reviewers add`, `reviewers detect --write`,
+  `ddflow_configure`) is recorded with who wrote it, and its reviews do not count toward
+  the cross-family rule until a person checks the entry and runs
+  `ddflow reviewers approve <name>` (`ddflow reviewers approve` alone lists what is
+  waiting). Approval is for the entry as it was: a tool changing its endpoint, model,
+  family or command makes a new, unapproved reviewer; tuning `max_tokens` or `hedge` does
+  not. `reviewers approve` has no MCP tool and refuses under an agent identity.
+- A reviewer **no tool wrote** — every entry configured by hand, including all of them
+  from before this rule — counts exactly as before.
+
+Like human gates, this makes a forged reviewer visible in the log; it cannot stop a shell
+edit of the local files.
+
 ```toml
 [[reviewer]]
 name   = "local-qwen"
