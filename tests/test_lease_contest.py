@@ -53,6 +53,11 @@ def _holders(claims) -> list[str]:
     return sorted(h["holder"] for h in claims)
 
 
+def _shown(it) -> dict:
+    """The displayed lease as a claim record, the way `resolve` names it."""
+    return next(c for c in it.lease_candidates() if c["event"] == it.lease.event)
+
+
 def _partners(claims: dict[str, tuple[float, int]]) -> dict[str, set[str]]:
     """The oracle: who overlapped whom, brute force over the windows, both ends closed."""
     return {
@@ -202,6 +207,9 @@ def test_the_contest_is_exactly_the_claims_with_an_overlap_partner(seed):
         for h in it.lease_contest:
             also = {it.lease.holder} - {h["holder"]}
             assert {g["holder"] for g in it.lease_losers(h)} == partners[h["holder"]] | also
+        if it.lease_contest and it.lease.holder not in want:
+            # The current holder met none of them: each ended before it took the item.
+            assert _holders(it.lease_losers(_shown(it))) == want, (claims, order)
 
 
 def test_show_names_who_each_contested_claim_overlapped(repo: Path):
@@ -230,7 +238,8 @@ def _run(claims: dict[str, tuple[float, int]], seq, holders: dict[str, str] | No
     """Fold ``seq`` of ("acq" | "rel", name): each claim acquired as ``holders[name]``
     (default: its own name), each release naming the claim's acquiring event. A
     ("res", n) step is `resolve` at that point, keeping the n-th contestant (mod the
-    count) as `api.items.resolve` would: releases of `lease_losers`, then the
+    count) as `api.items.resolve` would -- ("hold", _) keeps the displayed lease, the
+    current holder, whether or not it is a contestant: releases of `lease_losers`, then the
     resolution, dated 0 so the kept claim's window stays its own. The claims those
     releases name are added to ``seq``'s ``gone`` attribute when it has one."""
     holders = holders or {}
@@ -249,7 +258,12 @@ def _run(claims: dict[str, tuple[float, int]], seq, holders: dict[str, str] | No
             it = fold(evs).items["T"]
             if not it.lease_contest:
                 continue
-            kept = sorted(it.lease_contest, key=lambda h: h["holder"])[w % len(it.lease_contest)]
+            if kind == "hold":
+                kept = _shown(it)
+            else:
+                kept = sorted(it.lease_contest, key=lambda h: h["holder"])[
+                    w % len(it.lease_contest)
+                ]
             for h in it.lease_losers(kept):
                 evs.append(
                     _ev(
@@ -311,7 +325,8 @@ def test_releases_in_any_position_leave_the_contest_exact(seed):
         for w in list(seq.gone):
             seq.insert(rnd.randrange(seq.index(("acq", w)) + 1, len(seq) + 1), ("rel", w))
         for _ in range(rnd.choice([0, 1, 2])):
-            seq.insert(rnd.randrange(len(seq) + 1), ("res", rnd.randrange(5)))
+            step = rnd.choice(["res", "res", "hold"])
+            seq.insert(rnd.randrange(len(seq) + 1), (step, rnd.randrange(5)))
         it = _run(claims, seq)
         gone = seq.gone
         left = {w: claims[w] for w in names if w not in gone}
@@ -489,7 +504,9 @@ def test_no_claim_that_overlapped_another_is_ever_missing_from_the_contest(seed,
     """Property, the invariant all three gaps broke: with re-claims by one holder,
     renewals folded anywhere after their claim, and histories longer than eight
     handovers, the contest is exactly the claims whose window -- widened by its
-    renewals -- overlapped another holder's, in every fold order sampled."""
+    renewals -- overlapped another holder's, in every fold order sampled. Exactly, with
+    renewals too: B-late-renewal-overjoin, FAILED before its fix, joined the lease
+    displayed when a late renewal folded, whether or not it overlapped anyone."""
     rnd = random.Random(5000 + seed)
     claims, streams = _history(rnd, renewals)
     want = {
@@ -503,12 +520,11 @@ def test_no_claim_that_overlapped_another_is_ever_missing_from_the_contest(seed,
         it = fold(events).items["T"]
         got = {h["event"] for h in it.lease_contest}
         trace = (claims, [(e.kind, e.agent, e.data.get("at")) for e in events])
-        assert want <= got, trace
-        if not renewed:
-            # Without renewals, nothing else either. With them, a displaced claim a late
-            # renewal brings back also names the lease displayed at that moment
-            # (bug B-late-renewal-overjoin): an over-report, never a loss.
-            assert got == want, trace
+        assert got == want, trace
+        if got and it.lease is not None and it.lease.event not in got:
+            # A displayed lease that overlapped nobody is not contested, and keeping it
+            # settles the whole contest (B-resolve-cannot-keep-holder).
+            assert {h["event"] for h in it.lease_losers(_shown(it))} == got, trace
 
 
 def test_a_renewal_of_the_displayed_lease_is_weighed_against_the_record():
@@ -566,3 +582,68 @@ def test_a_renewal_belongs_to_the_holders_latest_claim_before_it():
     assert {h["event"] for h in it.lease_contest} == {h2.id, g.id}
     widened = next(h for h in it.lease_contest if h["event"] == h2.id)
     assert widened["lease"]["renewed_at"] == 14.0
+
+
+# -- the current holder can win a contest it was never in --------------------------------
+
+
+_TAKEN_OVER = {"alice": (1000.0, 1800), "bob": (1500.0, 1800), "carol": (9000.0, 1800)}
+
+
+@pytest.mark.parametrize("order", list(permutations(_TAKEN_OVER)), ids="-".join)
+@pytest.mark.parametrize(
+    ("keep", "released"),
+    [("carol", ["alice", "bob"]), ("alice", ["bob", "carol"]), ("bob", ["alice", "carol"])],
+)
+def test_resolve_can_keep_the_holder_that_took_over_after_a_double_claim(
+    repo: Path, order, keep, released
+):
+    """B-resolve-cannot-keep-holder, FAILED before the fix for carol: Alice and Bob
+    claimed at once in two clones; long after both lapsed, Carol took the item over
+    cleanly. She is not in the contest -- she overlapped nobody -- and `resolve --keep
+    carol` was refused as naming no contestant: the only ways out took the item from
+    the live holder and handed it to a lapsed one."""
+    log = EventLog(repo, "op")
+    log.shard.parent.mkdir(parents=True, exist_ok=True)
+    events = [
+        _ev("task.added", "T", 1, title="t"),
+        *(_acq(2 + i, w, *_TAKEN_OVER[w]) for i, w in enumerate(order)),
+    ]
+    log.shard.write_text("".join(ev.to_json() + "\n" for ev in events))
+    it = fold(log.read_all()).items["T"]
+    assert _holders(it.lease_contest) == ["alice", "bob"] and it.lease.holder == "carol"
+    from ddflow.api import items
+
+    out = items.resolve(repo, "T", keep=keep, agent="op")
+    assert out.exit == 0, out.reason
+    assert sorted(out.data["released"]) == released
+    it = fold(log.read_all()).items["T"]
+    assert it.lease_contest == [] and it.lease.holder == keep and it.displaced == []
+    assert not it.contest_summary()
+
+
+def test_resolve_names_the_current_holder_among_the_choices(repo: Path):
+    """A keep that names nobody lists what it may name -- the current holder too."""
+    log = EventLog(repo, "op")
+    log.shard.parent.mkdir(parents=True, exist_ok=True)
+    events = [
+        _ev("task.added", "T", 1, title="t"),
+        *(_acq(2 + i, w, *_TAKEN_OVER[w]) for i, w in enumerate(_TAKEN_OVER)),
+    ]
+    log.shard.write_text("".join(ev.to_json() + "\n" for ev in events))
+    from ddflow.api import items
+
+    out = items.resolve(repo, "T", keep="zed", agent="op")
+    assert out.exit == 1
+    assert "carol" in out.reason and "alice" in out.reason and "bob" in out.reason
+
+
+def test_keeping_the_current_holder_when_no_lease_contest_is_refused(repo: Path):
+    """Nothing to settle: an item with a holder and no contest is not contested."""
+    log = EventLog(repo, "op")
+    log.shard.parent.mkdir(parents=True, exist_ok=True)
+    events = [_ev("task.added", "T", 1, title="t"), _acq(2, "carol", 9000.0, 1800)]
+    log.shard.write_text("".join(ev.to_json() + "\n" for ev in events))
+    from ddflow.api import items
+
+    assert items.resolve(repo, "T", keep="carol", agent="op").exit == 3

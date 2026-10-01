@@ -381,12 +381,15 @@ def _three_hops(renew_at: float) -> list[Event]:
 
 
 def test_a_late_renewal_two_takeovers_back_makes_a_contest():
-    """FAILED before the fix: one displaced slot, overwritten by Carol's takeover."""
+    """FAILED before the fix: one displaced slot, overwritten by Carol's takeover. Then
+    B-late-renewal-overjoin, FAILED before its fix: Carol -- the lease displayed when
+    the renewal folded, who began long after both had ended -- was joined too."""
     it = fold(_three_hops(1500.0)).items["T"]
-    assert [h["holder"] for h in it.lease_contest] == ["alice", "bob", "carol"]
+    assert [h["holder"] for h in it.lease_contest] == ["alice", "bob"]
     assert "alice" in it.contest_summary() and "still live when bob claimed" in (
         it.contest_summary()
     )
+    assert "carol" not in it.contest_summary()
     assert it.lease.holder == "carol"
 
 
@@ -395,19 +398,23 @@ def test_a_lapsed_renewal_two_takeovers_back_is_not_a_contest():
     assert it.lease_contest == [] and it.lease.holder == "carol"
 
 
-@pytest.mark.parametrize("keep", ["alice", "bob", "carol"])
-def test_one_resolve_settles_a_three_way_contest_whoever_is_kept(keep):
-    """What `resolve` appends: a release for every other contestant, then the kept claim."""
-    it = fold(_three_hops(1500.0)).items["T"]
-    claim = next(h for h in it.lease_contest if h["holder"] == keep)
-    releases = [
-        _ev("lease.released", "T", 51, "op", holder=h["holder"])
-        for h in it.lease_contest
-        if h["holder"] != keep
-    ]
-    resolved = Event("item.resolved", "T", {"kind": "task", "claim": claim, "at": 9000.0}, "op", 52)
-    after = fold([*_three_hops(1500.0), *releases, resolved]).items["T"]
+@pytest.mark.parametrize(
+    ("keep", "released"),
+    [("alice", ["bob", "carol"]), ("bob", ["alice", "carol"]), ("carol", ["alice", "bob"])],
+)
+def test_one_resolve_settles_a_three_way_contest_whoever_is_kept(repo: Path, keep, released):
+    """One `resolve` call settles it, whoever is kept -- the current holder included,
+    though she overlapped neither (B-resolve-cannot-keep-holder, FAILED before the fix:
+    keeping Carol exited 0, released nobody, and left Alice and Bob contested)."""
+    log = _write(repo, _three_hops(1500.0))
+    from ddflow.api import items
+
+    out = items.resolve(repo, "T", keep=keep, agent="op")
+    assert out.exit == 0, out.reason
+    assert sorted(out.data["released"]) == released
+    after = fold(log.read_all()).items["T"]
     assert after.lease_contest == [] and after.lease.holder == keep
+    assert after.displaced == []  # every claim not kept was released: none is history
 
 
 def test_resolve_settles_a_three_way_contest_on_a_real_log(repo: Path):
