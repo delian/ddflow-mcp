@@ -131,3 +131,15 @@ def test_a_needed_phase_with_open_work_already_queued_is_not_completed(repo, mon
     assert st.items["P5.C"].state == OPEN and st.items["P5"].state == OPEN
     run_cli(repo, "import", "--apply")  # no source change: P5.C is skipped as known
     assert _state(repo).items["P5"].state == OPEN
+
+
+def test_a_needed_phase_whose_ticked_task_is_also_a_dependency_completes(repo):
+    """3.B needs both P5 and P5.A: P5.A is pulled into the plan as done, and P5 must
+    still be judged -- not skipped for having a task in the plan (roborev 959)."""
+    _repo(repo, PLAN.replace("**Needs:** P5", "**Needs:** P5, P5.A"))
+    run_cli(repo, "import", "--apply")
+    st = _state(repo)
+    assert st.items["P5.A"].state == DONE
+    assert st.items["P5"].state == DONE, st.items["P5"].state
+    rc, out, _ = run_cli(repo, "--json", "next")
+    assert rc == 0 and "3.B" in json.dumps(json.loads(out)["ready"]), out

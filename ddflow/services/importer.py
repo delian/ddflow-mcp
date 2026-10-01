@@ -2135,8 +2135,7 @@ def _settle_needed_phases(
     phase). The boxes under it are still the source's evidence that it is finished, so the
     verdict is the one `--include-done` reaches, read from the tasks this import left out;
     the tasks themselves stay out, as a plain import promises. Only phases that open work
-    NEEDS and that have nothing in this plan under them: every other phase is exactly as
-    it was. A phase already in the queue is completed under `_settle_existing`'s rules
+    NEEDS, judged over every task under them: every other phase is exactly as it was. A phase already in the queue is completed under `_settle_existing`'s rules
     (imported, still open, untouched since), so a re-run releases work an earlier import
     left stuck.
     """
@@ -2146,18 +2145,25 @@ def _settle_needed_phases(
     for it in getattr(state, "items", {}).values():
         if it.state not in (DONE, ABANDONED) and not it.removed:
             needed.update(it.needs)
-    in_plan = {f.extra.get("phase") for f in plan.found if f.kind == "task"}
+    # Judged over EVERY task under the phase once this import has run -- the ones in this
+    # plan (open ones keep it open; a finished one pulled in as a dependency counts as
+    # done) and the ticked ones it leaves out -- plus, inside `_phase_verdict`, the ones
+    # already queued. Skipping a phase because the plan held a task under it left it
+    # empty-open whenever that task was itself a pulled-in dependency (roborev 959).
     planned = {id(f) for f in plan.found}
-    left_out: dict[str, list[Found]] = {}
+    kids: dict[str, list[Found]] = {}
+    for f in plan.found:
+        if f.kind == "task" and f.extra.get("phase"):
+            kids.setdefault(f.extra["phase"], []).append(f)
     for f in deferred.values():
         if f.extra.get("phase") and id(f) not in planned:
-            left_out.setdefault(f.extra["phase"], []).append(f)
+            kids.setdefault(f.extra["phase"], []).append(f)
     s = _Settled()
     for f in plan.by_kind("phase"):
-        if f.ident not in needed or f.ident in in_plan or f.done:
+        if f.ident not in needed or f.done:
             continue
         verdict, detail = _phase_verdict(
-            f, f.ident, f.source, left_out.get(f.ident, []), state, touched
+            f, f.ident, f.source, kids.get(f.ident, []), state, touched
         )
         if verdict == "done":
             f.done = True
@@ -2165,8 +2171,8 @@ def _settle_needed_phases(
             s.new_done += 1
         elif verdict == "unfinished":
             s.unfinished.append(f"{f.ident} ({detail})")
-    stuck = {pid: f for pid, f in existing.items() if pid in needed and pid not in in_plan}
-    _settle_existing(s, stuck, left_out, state, touched)
+    stuck = {pid: f for pid, f in existing.items() if pid in needed}
+    _settle_existing(s, stuck, kids, state, touched)
     plan.found.extend(s.completions)
     completed = {c.ident for c in s.completions}
     plan.skipped_existing = [i for i in plan.skipped_existing if i not in completed]
