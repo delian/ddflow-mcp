@@ -1401,12 +1401,17 @@ def reviewer_independence(
     even when every reviewer passed, because agreement among models trained on the same
     distribution measures shared priors, not correctness.
     """
+    from ..config import router_set
+
     it = state.items.get(item_id)
     if not it:
         return False, f"no such item {item_id}"
+    # A router author (Copilot's HydraFusion) is a SET of families: any of them may
+    # have written the diff, so a reviewer must sit outside all of them.
+    routed = router_set(author_model, cfg.agent.routers)
     # Compared case-blind on BOTH sides: a map value 'Alibaba' and a declared
     # 'ALIBABA' are one family (B-fam-case).
-    author_fam = family_of(author_model, cfg).strip().lower()
+    author_fam = family_of(author_model, cfg).strip().lower() if routed is None else ""
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     for gname in ("rubber_duck", "critic", "standards"):
@@ -1420,24 +1425,46 @@ def reviewer_independence(
             anonymous.append(f"{gname}={m or 'no model'}")
             continue
         fams.append((gname, fam))
-    if not author_fam:
+    if routed == []:
+        return False, (
+            f"the author's model {author_model!r} is a router in [agent].routers with "
+            f"no families listed, so no reviewer can be shown to sit outside the models "
+            f"it drew on. List every family your plan routes it to, e.g. "
+            f'routers = {{ hydrafusion = ["anthropic", "openai", "google"] }}.'
+        )
+    if routed is None and not author_fam:
         return False, (
             f"the author's model {author_model!r} is not in [agent].families, so no "
-            f"reviewer can be shown to differ from it. Add it to the map, or pass "
-            f"`--model` with a name the map recognises."
+            f"reviewer can be shown to differ from it. Add it to the map (or, for a "
+            f"model that routes across providers, to [agent].routers with the families "
+            f"it draws on), or pass `--model` with a name the map recognises."
         )
+    # `router_set` returns its members stripped and lowercased, so the router side is
+    # case-blind too: `["Anthropic"]` against a reviewer resolved to 'anthropic' must
+    # overlap, or a reviewer from inside the set would pass as independent.
+    author_set = routed if routed is not None else [author_fam]
+    author_desc = author_fam if routed is None else f"{author_model} ({', '.join(author_set)})"
     if not fams:
         if anonymous:
             return False, (
                 f"no reviewer named a model this project recognises "
                 f"({', '.join(anonymous)}), so nothing shows the review came from a "
-                f"different family than the author ({author_fam}). Re-record with "
+                f"different family than the author ({author_desc}). Re-record with "
                 f"`--model <the reviewer's model>`, or teach [agent].families the name."
             )
         return False, "no reviewer ran at all"
-    different = [(g, f) for g, f in fams if f != author_fam]
+    different = [(g, f) for g, f in fams if f not in author_set]
     if different:
-        return True, f"{different[0][0]} was {different[0][1]} vs author {author_fam}"
+        return True, f"{different[0][0]} was {different[0][1]} vs author {author_desc}"
+    if routed is not None:
+        return False, (
+            f"every identified reviewer was inside the families the router "
+            f"{author_model!r} draws on: "
+            + ", ".join(f"{g}={f}" for g, f in fams)
+            + f" overlaps [agent].routers ({', '.join(author_set)}). A reviewer from a "
+            f"family the router used may be reviewing its own work."
+            + (f" ({', '.join(anonymous)} named no model at all.)" if anonymous else "")
+        )
     return False, (
         f"every identified reviewer ({', '.join(g for g, _ in fams)}) was family "
         f"{author_fam!r}, the same as the author. Same-family agreement is not "
