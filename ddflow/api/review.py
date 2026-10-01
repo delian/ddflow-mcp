@@ -157,8 +157,16 @@ def reviewers_list(repo: Path, *, agent: str = "") -> O.Outcome:
     return out
 
 
-def reviewers_detect(repo: Path, *, write: bool = False, agent: str = "") -> O.Outcome:
-    """Probe well-known local ports for an OpenAI-compatible endpoint."""
+def reviewers_detect(
+    repo: Path, *, write: bool = False, shared: bool = False, agent: str = ""
+) -> O.Outcome:
+    """Probe well-known local ports for an OpenAI-compatible endpoint.
+
+    `write` records what answered in the git-ignored `.ddflow/local/reviewers.toml`:
+    an endpoint on this machine is this machine's, and committing it hands every clone
+    an address that does not exist there (bug B-reviewers-write-committed). `shared`
+    commits it to `.ddflow/config.toml` instead, deliberately.
+    """
     from ..services import review as R
 
     _log, _cfg, _st = _load(repo, agent)
@@ -181,11 +189,9 @@ def reviewers_detect(repo: Path, *, write: bool = False, agent: str = "") -> O.O
             )
     written = ""
     if write:
-        path = repo / ".ddflow" / "config.toml"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        prev = path.read_text("utf-8") if path.exists() else ""
-        path.write_text(prev.rstrip() + "\n" + "".join(blocks), "utf-8")
-        written = str(path)
+        from ..services.configwrite import append_block
+
+        written = str(append_block(repo, "".join(blocks), shared=shared, own="reviewers.toml"))
     from ..views import human
 
     out = O.ok(

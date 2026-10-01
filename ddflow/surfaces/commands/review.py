@@ -43,7 +43,9 @@ def cmd_review(a, c: Ctx) -> int:
 
 
 def _reviewers_detect(a, c: Ctx) -> int:
-    out = A.reviewers_detect(c.repo, write=a.write, agent=c.requested_agent)
+    out = A.reviewers_detect(
+        c.repo, write=a.write, shared=bool(getattr(a, "shared", False)), agent=c.requested_agent
+    )
     if out.exit == NOTHING:
         print(out.reason, file=sys.stderr)
         return NOTHING
@@ -70,6 +72,21 @@ def _reviewers_presets(_a, _c: Ctx) -> int:
     return OK
 
 
+def _toml_value(v) -> str:
+    """A TOML literal for a preset value.
+
+    `json.dumps` is TOML for strings, numbers and lists of them, but NOT for a dict:
+    `launch = {"command": ...}` is JSON, the file stopped parsing, and every later
+    command reading reviewers failed (bug B-reviewers-add-launch-json). A dict becomes
+    an inline table.
+    """
+    if isinstance(v, dict):
+        return "{ " + ", ".join(f"{k} = {_toml_value(x)}" for k, x in v.items()) + " }"
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    return json.dumps(v)
+
+
 def _reviewers_add(a, c: Ctx) -> int:
     """Append a `[[reviewer]]` block. Writes the KEY's variable NAME, never the key."""
     from ...config import csv_list
@@ -92,21 +109,30 @@ def _reviewers_add(a, c: Ctx) -> int:
     body = [f'\n[[reviewer]]\nname = "{name}"']
     launch = preset.pop("launch", None)
     for k, v in preset.items():
-        body.append(f"{k} = {json.dumps(v)}")
+        body.append(f"{k} = {_toml_value(v)}")
     if launch:
-        body.append("launch = " + json.dumps(launch))
-    path = c.repo / ".ddflow" / "config.toml"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    prev = path.read_text("utf-8") if path.exists() else ""
-    path.write_text(prev.rstrip() + "\n" + "\n".join(body) + "\n", "utf-8")
-    note = ""
+        body.append("launch = " + _toml_value(launch))
+    from ...services.configwrite import append_block
+
+    # Local unless --shared: an endpoint and a key variable are one operator's setup,
+    # and a reviewer added here is for THIS machine (bug B-reviewers-write-committed).
+    shared = bool(getattr(a, "shared", False))
+    path = append_block(c.repo, "\n".join(body), shared=shared, own="reviewers.toml")
+    note = (
+        "\n  Committed config: every clone gets this reviewer."
+        if shared
+        else "\n  Git-ignored, machine-local: not committed. --shared commits a reviewer "
+        "every clone should use."
+    )
     if preset.get("api_key_env"):
-        note = (
+        note += (
             f"\n  Set ${preset['api_key_env']} in your environment. The KEY is never "
-            f"written to the config — only the variable's name, because this file is "
-            f"committed."
+            f"written to any config — only the variable's name."
         )
-    c.out(f"added reviewer {name!r} to {path}{note}", {"name": name})
+    c.out(
+        f"added reviewer {name!r} to {path}{note}",
+        {"name": name, "path": str(path), "shared": shared},
+    )
     return OK
 
 

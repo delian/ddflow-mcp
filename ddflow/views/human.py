@@ -90,7 +90,8 @@ def reviewers_list(out) -> str:
             "",
             f"  {', '.join(d['unclassified'])} have no known family (shown as '?'), so they cannot",
             '  satisfy [agent].reviewer_family_must_differ. Set `family = "..."` on each',
-            "  in .ddflow/config.toml, or add the model name to [agent].families.",
+            "  where it is declared (.ddflow/local/reviewers.toml, or .ddflow/config.toml),",
+            "  or add the model name to [agent].families.",
         ]
     return "\n".join(lines)
 
@@ -105,7 +106,10 @@ def reviewers_detect(out) -> str:
     if d["written"]:
         lines.append(f"\nappended {d['count']} reviewer block(s) to {d['written']}")
     else:
-        lines.append("\nAdd to .ddflow/config.toml (or re-run with --write):")
+        lines.append(
+            "\nAdd to the git-ignored .ddflow/local/reviewers.toml (or re-run with "
+            "--write; --shared commits them to .ddflow/config.toml for every clone):"
+        )
         lines.append(d["blocks"])
     return "\n".join(lines)
 
