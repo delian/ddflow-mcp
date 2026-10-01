@@ -278,3 +278,18 @@ def test_other_http_client_errors_are_named_and_never_retried_as_truncation(monk
     content, err = R._chat(Reviewer(name="r", base_url="http://x", model="m"), "s", "u", 5)
     assert content == "" and exc in err and "cut off" not in err, err
     assert not err.startswith(R.TRUNCATED)
+
+
+def test_a_headerless_chunk_is_retried_whole(monkeypatch):
+    chunk = "@@ -1 +1 @@\n+# HALF-A\n@@ -40 +40 @@\n+# HALF-B\n" * 3
+    seen: list[str] = []
+
+    def race(rev, system, users, started):
+        seen.extend(users)
+        return [("STATUS: NO FINDINGS", "")] * len(users)
+
+    monkeypatch.setattr(R, "_race", race)
+    R._retry_truncated(
+        Reviewer(name="r"), "s", [chunk], [("", "TRUNCATED: x")], lambda d, i: d, 0.0
+    )
+    assert seen == [chunk]
