@@ -197,5 +197,7 @@ def test_status_says_a_ready_task_was_interrupted(repo):
     out = api.status(repo)
     assert out.data["ready_now"] == [{"id": "T1", "title": "", "interrupted": True}], out.data
     assert out.data["interrupted"] and out.data["interrupted"][0].startswith("T1"), out.data
+    t = out.data["tasks"]
+    assert t["ready"] == 1 and _buckets(t) + t["abandoned"] == t["total"] == 1, t
     _code, text, _err = run_cli(repo, "status")
     assert "INTERRUPTED: T1" in text, text
