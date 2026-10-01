@@ -174,15 +174,25 @@ def test_findings_come_back_in_chunk_order_whatever_finished_first(fake):
     assert [f.detail.strip() for f in res.findings] == ["first", "second", "third"]
 
 
-def test_a_command_reviewers_losing_copy_is_killed(tmp_path):
+@pytest.mark.parametrize("slow_pid_write", [0, 0.5])
+def test_a_command_reviewers_losing_copy_is_killed(tmp_path, slow_pid_write):
     """A CLI reviewer: the first copy sleeps (and records its pid), the second answers.
-    The review returns in the second's time and the first's process is gone."""
+    The review returns in the second's time and the first's process is gone.
+
+    The second copy answers only once the first's pid is on disk, written atomically.
+    It used to answer at once while the first wrote its pid with `echo $$ > pid`, which
+    truncates before it writes: the review could return and cancel the loser in between,
+    and the test read '' (seen in the pre-push hook). `slow_pid_write` widens that
+    window on purpose, so the race is pinned rather than left to scheduling luck.
+    """
     stamp = tmp_path / "first"
     pidfile = tmp_path / "pid"
     cli = tmp_path / "reviewer.sh"
     cli.write_text(
         "#!/bin/sh\ncat > /dev/null\n"
-        f'if mkdir "{stamp}" 2>/dev/null; then echo $$ > "{pidfile}"; exec sleep 60; fi\n'
+        f'if mkdir "{stamp}" 2>/dev/null; then sleep {slow_pid_write}; '
+        f'echo $$ > "{pidfile}.tmp"; mv "{pidfile}.tmp" "{pidfile}"; exec sleep 60; fi\n'
+        f'while [ ! -s "{pidfile}" ]; do sleep 0.01; done\n'
         f"echo '{CONTRACT}'\n"
     )
     cli.chmod(0o755)
