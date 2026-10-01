@@ -230,3 +230,35 @@ def test_a_lapsed_lease_straddling_another_agents_paths_is_not_offered(repo, cfg
     _code, msg = E.check_commit(repo, cfg, agent="owner")  # stages only src/new.py
     assert "src/new.py" in msg and "ANOTHER agent" not in msg, msg
     assert "heartbeat" not in msg, msg
+
+
+def test_a_derived_identity_is_told_how_the_holder_would_be_covered(repo, cfg, monkeypatch):
+    """B9aeb141b9a: an agent whose identity was declared only to its claim (an MCP
+    `as_agent`) commits outside its item's tree; the hook, told nothing, derives a name
+    from the tree and says ANOTHER agent holds the paths. It cannot know better -- it
+    says how it named the committer and what the holder would do."""
+    _setup(repo, cfg)
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    cfg.agent.id = ""
+    monkeypatch.chdir(repo)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "other.py").write_text("y = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/other.py"], check=True)
+    _code, msg = E.check_commit(repo, cfg)
+    assert "ANOTHER agent" in msg, msg
+    assert "Nothing declared who is committing" in msg, msg
+    assert "DDFLOW_AGENT=owner git commit" in msg, msg
+    assert "commit in " in msg and "T1" in msg, msg
+
+
+def test_a_declared_identity_gets_no_derived_identity_hint(repo, cfg, monkeypatch):
+    """A committer that said who it is, and is not the holder, is another agent: the
+    STOP stands on its own."""
+    _setup(repo, cfg)
+    monkeypatch.chdir(repo)
+    (repo / "src").mkdir(exist_ok=True)
+    (repo / "src" / "other.py").write_text("y = 1\n")
+    subprocess.run(["git", "-C", str(repo), "add", "src/other.py"], check=True)
+    _code, msg = E.check_commit(repo, cfg, agent="stranger")
+    assert "ANOTHER agent" in msg, msg
+    assert "Nothing declared" not in msg and "DDFLOW_AGENT=" not in msg, msg
