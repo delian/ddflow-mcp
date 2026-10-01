@@ -91,3 +91,21 @@ def test_init_in_a_linked_worktree_writes_there_too(repo):
     assert [line for line in status if not line[3:].startswith(shared)] == []
     for rel in (".ddflow/config.toml", ".ddflow/.gitignore", ".gitignore", ".gitattributes"):
         assert (tree / rel).is_file(), f"{rel} belongs in the caller's tree"
+
+
+def test_files_tree_falls_back_to_the_repo_only_outside_it(repo, tmp_path):
+    """The fallbacks: no caller, a non-git directory, another repository -> `repo`;
+    a detached linked worktree of this repository is still the caller's tree."""
+    from ddflow.api.setup import files_tree
+
+    tree = _worktree(repo)
+    assert files_tree(repo, None) == repo
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert files_tree(repo, plain) == repo
+    other = tmp_path / "other"
+    other.mkdir()
+    _git(other, "init", "-q")
+    assert files_tree(repo, other) == repo
+    _git(tree, "checkout", "-q", "--detach")
+    assert files_tree(repo, tree) == tree.resolve()

@@ -727,6 +727,9 @@ def files_tree(repo: Path, called_from: Path | None) -> Path:
     and the hooks, and wrong for files that reach the project through the caller's
     branch: from a linked worktree they dirtied the primary and left that branch with
     nothing (bug Bfeb62112d9). A `called_from` outside this repository is not a tree of it.
+    Not `W.current`: that answers None for a DETACHED linked worktree (nothing to adopt
+    for a claim), which is still the caller's checkout here, and it does not ask whether
+    the tree belongs to `repo` at all.
     """
     from ..infra import worktree as W
 
@@ -751,8 +754,9 @@ def setup(
 ) -> O.Outcome:
     """Adopt ddflow into a project: drivers, the agent rules sections, the hook.
 
-    The files are written into the tree the caller stands in (`files_tree`): a linked
+    The files are written into the tree `called_from` stands in (`files_tree`): a linked
     worktree's own checkout, committed through its branch, never the shared primary.
+    Without `called_from` they go to `repo`.
 
     Names the companion gap at adoption time. A project that adopts ddflow and stops has a
     `standards` gate with nothing behind it and a `rules` gate reading no memory — and
