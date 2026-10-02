@@ -1,0 +1,60 @@
+# Rules
+
+What binds work on this project, generated from its decisions, lessons and workflow settings.
+
+## Decisions in force
+
+{{ decision_count }} decision(s), grouped by the path each governs.
+{% for g in decision_groups %}
+
+### {{ g.path | md_escape }}
+
+{% for d in g.decisions %}
+- **{{ d.title | md_escape }}** `{{ d.id }}`{% if d.status != "accepted" %} ({{ d.status }}){% endif %}{% if d.decision %} - {{ d.decision | md_escape }}{% endif %}
+
+{% endfor %}
+{% endfor %}
+{% if decisions_without_path %}
+
+### No governing path
+
+{% for d in decisions_without_path %}
+- **{{ d.title | md_escape }}** `{{ d.id }}`{% if d.status != "accepted" %} ({{ d.status }}){% endif %}{% if d.decision %} - {{ d.decision | md_escape }}{% endif %}
+
+{% endfor %}
+{% endif %}
+
+## Lessons{% if tag %} tagged {{ tag | md_escape }}{% endif %}
+
+{{ lessons_shown }} live lesson(s), by tag.
+{% for g in lesson_groups %}
+
+### {{ g.tag | md_escape }}
+
+{% for l in g.lessons %}
+- **{{ l.title | md_escape }}.** {{ l.text | md_escape }} `{{ l.id }}`
+{% endfor %}
+{% endfor %}
+{% if lessons_omitted %}
+
+{{ lessons_omitted }} older lesson(s) not shown; use --limit or --tag.
+{% endif %}
+{% if workflow %}
+
+## The enforced workflow
+
+Every task passes through these gates, in order.
+
+{% for g in workflow.gates %}
+{{ g.position }}. `{{ g.id }}` ({{ g.kind }}{% if g.marks %}; {{ g.marks }}{% endif %}){% if g.run %} - {% if g.is_command %}`{{ g.run }}`{% else %}{{ g.run | md_escape }}{% endif %}{% endif %}
+
+{% endfor %}
+
+A phase passes through: {{ workflow.phase_pipeline | join(", ") }}.
+
+### Rules
+
+{% for r in workflow.rules %}
+- `{{ r.key }}` = {{ r.value | md_escape }}
+{% endfor %}
+{% endif %}
