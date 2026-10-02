@@ -49,7 +49,7 @@ _MAX_CODE_BYTES = 1_000_000
 
 _FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 #: A line that cannot continue a paragraph: a list item, a quote or a table row.
-_NOT_PARAGRAPH = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\|)")
+_NOT_PARAGRAPH = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\||(?:[-*_]\s*){3,}$)")
 _SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 _SPAN = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 _LINK = re.compile(
@@ -166,7 +166,7 @@ def check_docs(
         docs = [p for p in files if is_doc(p) and not any(r.fullmatch(p) for r in exclude)]
     docs = sorted(set(docs))
     corpus = _Corpus.build(
-        root, [p for p in files if not is_doc(p) and not p.startswith(".ddflow/")]
+        root, [p for p in files if not is_doc(p) and p not in docs and not p.startswith(".ddflow/")]
     )
     cmds = set(_project_commands(root) if commands is None else commands)
     ignore = [glob_regex(g) for g in ignore_paths]
