@@ -152,8 +152,10 @@ def test_an_inline_mcp_servers_table_is_refused_with_the_parser_s_reason(tmp_pat
     assert (tmp_path / ".codex" / "config.toml").read_text() == text
 
 
-def test_a_different_launch_under_the_id_is_not_claimed_as_the_registry_s(tmp_path):
+def test_a_different_launch_under_the_id_is_refreshed_not_claimed_as_the_registry_s(tmp_path):
+    """Refreshed since B662a1ace82 (it was left alone and said so)."""
     _codex(tmp_path, '[mcp_servers.context7]\ncommand = "old-launcher"\n')
     c = {c.id: c for c in CO.load(tmp_path)}["context7"]
     status, msg = CO.register(tmp_path, c, "codex")
-    assert status == "unchanged" and "already registers" not in msg, msg
+    assert status == "written" and "already registers" not in msg, msg
+    assert "old-launcher" not in (tmp_path / ".codex" / "config.toml").read_text()
