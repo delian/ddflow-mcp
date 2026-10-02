@@ -100,3 +100,10 @@ def test_a_gate_with_undigested_findings_still_counts_as_having_findings(repo, t
     out = api.triage(repo, "T1", finding=1, verdict="refuted", probe="ran it")
     assert out.exit == FAIL and "critic" in out.reason and "rubber_duck" in out.reason
     assert _triaged(repo) == []
+
+
+def test_omitted_gate_with_no_findings_anywhere_is_refused_without_naming_a_default(repo, tmp_path):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "*.py")
+    out = api.triage(repo, "T1", finding=1, verdict="refuted", probe="ran it")
+    assert out.exit == FAIL and "any gate" in out.reason and "critic" not in out.reason
