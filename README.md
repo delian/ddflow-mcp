@@ -1958,7 +1958,7 @@ ddflow loops       # circular references and runtime loops (exit 2 = none)
 `progress` counts a landing once (`commits` holds distinct shas). `ddflow show <id>` takes a
 **bug** id too: its state, where it was found, the fix task(s) — a task that says "fixes
 bug X" is a fix, a mention is not — the regression tests it was closed with, and an
-invalid closure a later fix superseded. `ddflow --json board` prints the board as JSON;
+invalid closure a later fix superseded. `ddflow --json board` prints the board as JSON (a task under no phase is listed in an **Unphased** section of the board, and under `unphased` in the JSON);
 `--agent`, `--repo` and `--json` are accepted after the subcommand as well as before it.
 
 `next --phase`, `brief --phase` and `board --phase` refuse an id that is not an item
@@ -2294,7 +2294,8 @@ append-only glob in the committed config ddflow **writes** `<glob> merge=union` 
 `.gitattributes` — when the knob is set through `ddflow config --set` /
 `ddflow_configure`, and again on `ddflow init` / `adopt` after a hand edit — and prints
 the line; commit it with the config. A generated file never gets `union` (it would be
-interleaved): `doctor` notes a shared glob git has no merge driver for, and reports an
+interleaved): `doctor` notes a shared glob git has no merge driver for (a document items edit by hand in sections, like `README.md`,
+is merged right by git's default text merge: declare it with a `README.md merge=text` line in `.gitattributes` and the note stops), and reports an
 append-only glob git does not union-merge. Git decides which driver a file gets
 (`check-attr`), globs match as `.gitattributes` does, and a union line never overrides a
 narrower driver the project set for a file inside the glob: it is written before that
@@ -3175,7 +3176,7 @@ rendering across an upgrade. The kinds' top-level variables:
 (The authoritative list is the kind's `data()` in `ddflow/services/export/kind_<name>.py`; the
 shipped template in `ddflow/templates/export/` shows each variable in use, and
 `ddflow export eject <kind>` gives you a copy to read.) The filters, besides Jinja's
-built-ins: `md_escape` (escape markdown in free text), `wrap(width)`, `date` (the `YYYY-MM-DD`
+built-ins: `md_escape` (escape what would change rendering in free text -- emphasis markers, pipes, backticks, line-start list/heading/quote markers, tag-like `<` -- and leave identifiers such as `run_nemo_run` alone), `wrap(width)`, `date` (the `YYYY-MM-DD`
 of a timestamp), `truncate(limit)` and `bar(done, total, width)` (a `[###.......]` bar).
 Templates run in Jinja2's sandbox (strict undefined variables, no autoescape): no attribute
 walks to `__class__`/`__globals__`, no `open`, no imports, a time limit and ceilings on output
