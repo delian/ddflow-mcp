@@ -317,6 +317,7 @@ def _environment() -> SandboxedEnvironment:
     env = _Sandbox(  # nosec B701
         undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
     )
+    env.globals.pop("lipsum", None)  # backed by `random`: a template must be deterministic
     env.filters.update(FILTERS)
     env.filters["center"] = _center  # the built-ins allocate `width` bytes unchecked
     env.filters["indent"] = _indent
@@ -358,9 +359,10 @@ def _run_limited(fn: Callable[[], str], seconds: float) -> str:
     t.start()
     t.join(seconds)
     if t.is_alive():
-        ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_ulong(t.ident or 0), ctypes.py_object(TimeoutError)
-        )
+        tid = ctypes.c_ulong(t.ident or 0)
+        hit = ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, ctypes.py_object(TimeoutError))
+        if hit > 1:  # more than one thread state matched: undo, never hit a bystander
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
         t.join(2.0)
         raise TimeoutError(f"template ran longer than {seconds:g}s")
     if "error" in box:
