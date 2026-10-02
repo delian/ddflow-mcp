@@ -109,7 +109,7 @@ def _calendar_due(
 
 def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.Outcome:
     """Which periodic passes are due? Derived from the log, so there is no state file."""
-    from ..services.cadence import lessons_cadence
+    from ..services.cadence import export_cadence, lessons_cadence
 
     log, cfg, st = _load(repo, agent)
     done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
@@ -157,6 +157,7 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
         if every > 0 and since >= every:
             due.append({"cadence": name, "since": since, "every": every, "unit": unit})
     due += lessons_cadence(st, cfg)
+    due += export_cadence(repo, cfg)
     due += _calendar_due(st, cfg, calendar=calendar)
     data: dict[str, Any] = {"due": due, "tasks_done": done_tasks, "phases_done": done_phases}
     if not due:

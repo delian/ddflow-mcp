@@ -250,12 +250,17 @@ def cmd_complete(a, c: Ctx) -> int:
     if out.data["note"] and not c.json:
         print(f"NOTE: {out.data['note']}")
     blockers = out.data["blockers"]
+    if out.data.get("export_refresh"):
+        print(f"  {out.data['export_refresh']['summary']}", file=sys.stderr)
     c.out(
         f"{a.id} completed"
         + (f" as {a.sha}" if a.sha else "")
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
         + _waiting(out.data.get("woke", []), "woke:"),
-        out.body(("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke")),
+        out.body(
+            ("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke")
+            + (("export_refresh",) if "export_refresh" in out.data else ())
+        ),
     )
     return OK
 
@@ -360,9 +365,11 @@ def cmd_merge(a, c: Ctx) -> int:
             print(f"    {p}", file=sys.stderr)
     for extra in out.data["back_merged"]:
         print(f"  back-merged into {extra}", file=sys.stderr)
+    if out.data.get("export_refresh"):
+        print(f"  {out.data['export_refresh']['summary']}", file=sys.stderr)
     c.out(
         f"merged {a.id} ({out.data['sha'][:8]}) into {out.data['base']}",
-        out.body(MERGE_PAYLOAD),
+        out.body(MERGE_PAYLOAD + (("export_refresh",) if "export_refresh" in out.data else ())),
     )
     return OK
 
