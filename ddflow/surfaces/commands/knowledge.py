@@ -13,6 +13,7 @@ import json
 import sys
 
 from ...api import knowledge as A
+from ...core import provenance as PV
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 
@@ -199,6 +200,9 @@ def cmd_recall(a, c: Ctx) -> int:
 
     results = out.data["_render"]["results"]
     budget, used = out.data["max_chars"], 0
+    # BEFORE the records, so a recall cut short by the budget still carried it.
+    print(PV.DATA_RULE)
+    used += len(PV.DATA_RULE)
     for table, label, why in out.data["_render"]["sources"]:
         rows = results.get(table)
         if not rows:
@@ -208,7 +212,7 @@ def cmd_recall(a, c: Ctx) -> int:
         used += len(header)
         for r in rows:
             head, body = summarise_row(table, r)
-            block = f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
+            block = _recall_block(table, r, head, body)
             if used + len(block) > budget:
                 print(f"      … truncated at {budget} chars (--max-chars to raise)")
                 return OK
@@ -220,6 +224,26 @@ def cmd_recall(a, c: Ctx) -> int:
         "context."
     )
     return OK
+
+
+def _recall_block(table: str, r: dict, head: str, body: str) -> str:
+    """One hit. A decision, lesson, memory or recorded prompt/note is somebody's words:
+    it carries who recorded it and is fenced as data (`core/provenance.py`). A hit the
+    index holds but the state cannot name is `unknown`, not unlabelled."""
+    if table not in PV.TABLE_KIND:
+        return f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
+    prov = r.get("provenance")
+    if prov:
+        origin = PV.Origin(
+            prov.get("trust", PV.UNKNOWN), prov.get("by", ""), prov.get("source", "")
+        )
+    else:
+        # A prompt or note is recorded by an agent, whoever's words it quotes.
+        origin = PV.Origin(PV.AGENT if table == "prompts" else PV.UNKNOWN)
+    kind = "note" if r.get("role") == "note" else PV.TABLE_KIND[table]
+    text = head + (f"\n{body}" if body else "")
+    fenced = PV.fence(kind, r.get("id", ""), text, origin, inline=False)
+    return f"  [{r.get('id', '?')}] ({origin.label()})\n      {fenced}\n"
 
 
 def cmd_similar(a, c: Ctx) -> int:

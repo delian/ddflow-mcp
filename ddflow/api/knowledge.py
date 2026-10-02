@@ -201,6 +201,43 @@ def lesson_search(
     return O.ok("lesson.search", **data)
 
 
+def _wire_hit(table: str, label: str, r: dict) -> dict:
+    """One hit as the `--json` / MCP body carries it.
+
+    A decision, lesson or memory is somebody's words: its headline and body travel inside
+    the data fence with the author and trust (`core/provenance.py`), and the headline
+    outside it is only the id and the provenance sentence. JSON quoting is not a fence --
+    an agent reads the string, not the quotes -- so this is the surface that matters most.
+    """
+    from ..core import provenance as PV
+    from ..infra.store import summarise_row
+
+    head, body = summarise_row(table, r)
+    hit: dict[str, Any] = {"id": r.get("id"), "kind": label, "headline": head, "body": body}
+    prov = r.get("provenance")
+    if prov:
+        origin = PV.Origin(prov["trust"], prov["by"], prov["source"])
+        kind = PV.TABLE_KIND[table]
+        hit["headline"] = f"{r.get('id')} ({origin.label()})"
+        hit["body"] = PV.fence(kind, str(r.get("id")), head + (f": {body}" if body else ""), origin)
+        hit["provenance"] = prov
+    hit["raw"] = r
+    return hit
+
+
+def _origin(st, table: str, ident):
+    """The `Origin` of a recalled decision, lesson or memory; None for the other kinds."""
+    from ..core import provenance as PV
+
+    if table == "decisions" and ident in st.decisions:
+        return PV.decision_origin(st.decisions[ident])
+    if table == "lessons" and ident in st.lessons:
+        return PV.lesson_origin(st.lessons[ident])
+    if table == "memories" and ident in st.memories:
+        return PV.memory_origin(st.memories[ident])
+    return None
+
+
 def recall(
     repo: Path,
     query: str,
@@ -221,7 +258,7 @@ def recall(
     have to learn the same thing twice. Both failures are invisible in the moment and
     obvious in the log.
     """
-    from ..infra.store import RECALL_SOURCES, summarise_row
+    from ..infra.store import RECALL_SOURCES
 
     log, cfg, _st = _load(repo, agent)
     store = _store(repo, log, cfg)
@@ -242,18 +279,16 @@ def recall(
             results[table] = hits
 
     labels = {table: label for table, label, _ in RECALL_SOURCES}
+    # Who recorded each hit (`core/provenance.py`): decisions, lessons and memories are
+    # somebody's words, and a hit shown without its author reads as the tool's own.
+    # Looked up in the folded state by id -- the index holds no author column.
+    for table, rows in results.items():
+        for r in rows:
+            o = _origin(_st, table, r.get("id"))
+            if o is not None:
+                r["provenance"] = {"trust": o.trust, "by": o.by, "source": o.source}
     wire = {
-        table: [
-            {
-                "id": r.get("id"),
-                "kind": labels[table],
-                "headline": summarise_row(table, r)[0],
-                "body": summarise_row(table, r)[1],
-                "raw": r,
-            }
-            for r in rows
-        ]
-        for table, rows in results.items()
+        table: [_wire_hit(table, labels[table], r) for r in rows] for table, rows in results.items()
     }
     data: dict[str, Any] = {
         "results": wire,

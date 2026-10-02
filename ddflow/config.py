@@ -885,7 +885,7 @@ _doc(
 _doc(
     "prompts",
     "review_user",
-    "Path to the per-chunk review message template. Variables: intent, context, diff, chunk_index, chunk_total.",
+    "Path to the per-chunk review message template. Variables: intent, context, diff, fence (the backtick fence that safely holds the diff), chunk_index, chunk_total.",
 )
 _doc(
     "prompts",
