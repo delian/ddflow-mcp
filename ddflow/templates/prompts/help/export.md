@@ -7,11 +7,11 @@ write the document, you ask for it.
 
 ## The kinds
 
-`ddflow export` lists every kind with its default target and, for the selected ones, its
-state: `fresh` (the file is exactly what a write would produce), `stale`, `hand-edited`
+`ddflow export` lists every kind with its default target and its state: `not selected` (the
+default for all of them), or for the selected ones `fresh` (the file is exactly what a write would produce), `stale`, `hand-edited`
 (its body no longer matches the digest in its header, or it is not a ddflow file at all:
 ddflow will not overwrite it) or `missing`. Kinds: roadmap, bugs, status, worklog,
-sessions, decisions, rules.
+sessions, decisions, rules, changelog.
 
 ## Review on demand
 
@@ -21,6 +21,8 @@ sessions, decisions, rules.
     ddflow export status --max-bytes 4000     a cut document ends in [truncated: N more]
     ddflow export bugs --item B-export-core   bugs: the same as --phase
     ddflow export roadmap --diff              what writing it would change
+    ddflow export roadmap --template my.j2    render once with your template; writes nothing
+    ddflow export changelog --version 1.2.0   one release's notes (X or vX, or unreleased)
 
 Any kind can be printed whether or not it is selected, and nothing is written. Filters a
 kind does not take are refused (exit 3) rather than ignored; `ddflow export <kind> --help`
@@ -38,8 +40,8 @@ with nothing selected it does nothing and says so (exit 2). Three update modes, 
 `[export.<doc>].mode`: `whole` (the file is generated; a header carries the kind, the
 ddflow version and a digest of the body), `region` (only the text between
 `<!-- ddflow:begin doc=<kind> ... -->` and `<!-- ddflow:end doc=<kind> -->` in a
-hand-written file) and `append` (kinds that grow a log; entries after the last exported
-event). A hand-edited generated file, an unmarked file or an edited region is never
+hand-written file) and `append` (a kind that can grow a log, today the changelog; entries after the last
+exported event). A hand-edited generated file, an unmarked file or an edited region is never
 overwritten without `--force`. Paths outside the repo, symlinks, `.git` and `.ddflow` are
 refused. Every selected target is a shared path for leases: regenerate it without a claim.
 
@@ -54,6 +56,7 @@ refused. Every selected target is a shared path for leases: regenerate it withou
     [export.roadmap]
     path = "docs/ROADMAP.md"
     mode = "whole"
+    template = "tools/roadmap.md.j2"   # a Jinja2 template of your own for this kind
     filters = { limit = 50 }
 
 Unknown keys are skipped with a warning, so a newer release's config does not stop an older

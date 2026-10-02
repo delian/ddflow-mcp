@@ -14,7 +14,6 @@ written unless ``update`` or ``out`` is given; the MCP tool maps ``write=true`` 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import fields
 from pathlib import Path
 from typing import Any
 
@@ -48,16 +47,14 @@ def export_list(repo: Path) -> O.Outcome:
     )
 
 
-def _filters(**kw: Any) -> R.Filters:
-    names = {f.name for f in fields(R.Filters)}
-    unknown = {k: v for k, v in kw.items() if v not in ("", 0, None) and k not in names}
-    if unknown:
-        raise ExportError(
-            f"this ddflow's document kinds take no --{next(iter(unknown))} filter "
-            f"(they take: {', '.join(sorted(names))})",
-            EXIT_REFUSED,
-        )
-    return R.Filters(**{k: v for k, v in kw.items() if k in names and v not in ("", 0, None)})
+def _filters(*, version: str = "", tag: str = "", **kw: Any) -> R.Filters:
+    """The core Filters from the flags. ``--version X`` is the ``tag`` filter (the changelog
+    kind reads a version from it: ``X`` or ``vX``, or ``unreleased``); asking for both a
+    different ``--version`` and ``--tag`` is refused."""
+    if version and tag and version != tag:
+        raise ExportError("--version and --tag are the same filter; give one", EXIT_REFUSED)
+    given = {k: v for k, v in {**kw, "tag": tag or version}.items() if v not in ("", 0, None)}
+    return R.Filters(**given)
 
 
 def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the filters are the core vocabulary
@@ -91,8 +88,14 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
                 "name one document (ddflow export <doc>) or pass --all for the selected set",
                 EXIT_REFUSED,
             )
-        if sum(map(bool, (diff, check, update, out))) > 1:
-            raise ExportError("--diff, --check, --update and --out are alternatives", EXIT_REFUSED)
+        # --out is also the TARGET of a --diff or --check (compare against that file), so it
+        # only conflicts with the two comparisons being asked for at once, or with --update.
+        if (diff and check) or ((diff or check) and update) or (update and out):
+            raise ExportError(
+                "--diff, --check and --update are alternatives (--out names the file for "
+                "any of them)",
+                EXIT_REFUSED,
+            )
         if all_docs and (out or template):
             raise ExportError("--out and --template name one document, not --all", EXIT_REFUSED)
         flt = _filters(
@@ -197,10 +200,14 @@ def export_tool(repo: Path, a: dict[str, Any]) -> O.Outcome:
     renderer an arbitrary file.
     """
     doc, every = str(a.get("doc") or ""), bool(a.get("all"))
-    if not doc and not every:
-        return export_list(repo)
     write, path = bool(a.get("write")), str(a.get("path") or "")
     diff, check = bool(a.get("diff")), bool(a.get("check"))
+    if not doc and not every:
+        if write or path or diff or check:  # an argument is never silently dropped
+            return O.refused(
+                "export", "write, path, diff and check need a doc (or all)", results=[]
+            )
+        return export_list(repo)
     if write and not path:
         return O.refused(
             "export", "write=true needs path: a repo-relative file to write", results=[]
@@ -214,6 +221,8 @@ def export_tool(repo: Path, a: dict[str, Any]) -> O.Outcome:
         )
     if write and (diff or check):
         return O.refused("export", "write, diff and check are alternatives", results=[])
+    if every and path:
+        return O.refused("export", "path names one document, not all", results=[])
     mb = a.get("max_bytes")
     return export(
         repo,

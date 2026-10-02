@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import ast
 import sys
-from dataclasses import fields
 from pathlib import Path
 
 import pytest
@@ -20,6 +19,7 @@ from conftest import run_cli
 from ddflow import api
 from ddflow.config import EXPORT_DEFAULT_TARGETS, Config
 from ddflow.core.schedule import shared_globs
+from ddflow.services.export import ExportError
 from ddflow.services.export import registry as R
 from ddflow.services.export import write as W
 
@@ -152,12 +152,45 @@ def test_item_filters_bugs_as_phase(proj):
     assert bad.exit == 3
 
 
-def test_version_filter_maps_or_is_refused(proj):
-    from ddflow.services.export.registry import Filters
+def test_version_is_the_tag_filter(proj):
+    from ddflow.api.export import _filters
 
-    out = api.export_documents(proj, "roadmap", version="0.1.0")
-    if "version" not in {f.name for f in fields(Filters)}:
-        assert out.exit == 3 and "version" in out.reason
+    assert _filters(version="1.2.3").tag == "1.2.3"
+    assert _filters(tag="1.2.3", version="1.2.3").tag == "1.2.3"
+    with pytest.raises(ExportError):
+        _filters(tag="a", version="b")
+    # a kind that does not take `tag` refuses --version instead of ignoring it
+    assert api.export_documents(proj, "roadmap", version="0.1.0").exit == 3
+    # the changelog kind: an unknown version is refused (exit 3), the Unreleased section prints
+    assert api.export_documents(proj, "changelog", version="9.9.9").exit == 3
+    assert api.export_documents(proj, "changelog", version="unreleased").exit == 0
+
+
+def test_changelog_appends_through_the_kinds_producer(proj):
+    _select(proj, '[export.changelog]\nmode = "append"\npath = "CHANGES.md"\n')
+    out = api.export_documents(proj, "changelog", update=True)
+    assert out.exit == 0 and not (proj / "CHANGES.md").exists()  # nothing finished: no entries
+    code, _o, err = run_cli(proj, "bug", "found", "--id", "B9", "--summary", "rounding error")
+    assert code == 0, err
+    (proj / "tests").mkdir()
+    (proj / "tests" / "t.py").write_text("def t():\n    pass\n")
+    code, _o, err = run_cli(
+        proj,
+        "bug",
+        "fixed",
+        "B9",
+        "--regression-test",
+        "tests/t.py::t",
+        "--changelog",
+        "Fixed: tax rounding",
+    )
+    assert code == 0, err
+    out = api.export_documents(proj, "changelog", update=True)
+    assert out.exit == 0, out.reason
+    assert "ddflow:generated doc=changelog" in (proj / "CHANGES.md").read_text()
+    # roadmap has no producer: append is refused for it
+    _select(proj, '[export.roadmap]\nmode = "append"\n')
+    assert api.export_documents(proj, "roadmap", update=True).exit == 3
 
 
 def test_selecting_nothing_then_all_does_nothing_and_says_so(proj):
@@ -191,12 +224,55 @@ def test_check_exit_one_when_stale_and_diff_shows_the_change(proj):
     _select(proj, '[export]\ndocuments = ["roadmap"]\n')
     assert api.export_documents(proj, "roadmap", update=True).exit == 0
     run_cli(proj, "task", "add", "P1.T2", "--phase", "P1", "--title", "Added later")
+    before = (proj / "ROADMAP.md").read_bytes()
     chk = api.export_documents(proj, "roadmap", check=True)
     assert chk.exit == 1 and _results(chk)[0]["action"] == "stale"
     d = api.export_documents(proj, "roadmap", diff=True)
     assert d.exit == 0 and "+" in _results(d)[0]["text"] and "Added later" in _results(d)[0]["text"]
-    before = (proj / "ROADMAP.md").read_text()
-    assert before == (proj / "ROADMAP.md").read_text()  # neither wrote
+    assert (proj / "ROADMAP.md").read_bytes() == before  # neither wrote
+
+
+def test_diff_and_check_against_another_path(proj):
+    """--out names the file a --diff or --check compares against (CLI and MCP)."""
+    assert api.export_documents(proj, "status", out="docs/S.md").exit == 0
+    chk = api.export_documents(proj, "status", check=True, out="docs/S.md")
+    assert chk.exit == 0 and _results(chk)[0]["action"] == "fresh"
+    via_tool = api.export_tool(proj, {"doc": "status", "check": True, "path": "docs/S.md"})
+    assert via_tool.exit == 0 and _results(via_tool)[0]["path"] == "docs/S.md"
+    via_tool = api.export_tool(proj, {"doc": "status", "diff": True, "path": "docs/none.md"})
+    assert via_tool.exit == 0 and "+# Status" in _results(via_tool)[0]["text"]
+    assert not (proj / "docs" / "none.md").exists()
+    # still alternatives: two comparisons at once, or a comparison and a write
+    assert api.export_documents(proj, "status", check=True, diff=True).exit == 3
+    assert api.export_documents(proj, "status", check=True, update=True).exit == 3
+
+
+def test_a_tool_argument_is_never_silently_dropped(proj):
+    for args in ({"path": "x.md"}, {"write": True}, {"diff": True}, {"check": True}):
+        assert api.export_tool(proj, args).exit == 3, args
+    assert api.export_tool(proj, {"all": True, "write": True, "path": "x.md"}).exit == 3
+
+
+def test_an_unreadable_target_is_listed_as_hand_edited_not_a_traceback(proj):
+    _select(proj, '[export]\ndocuments = ["status"]\n')
+    (proj / "STATUS.md").write_bytes(b"\xff\xfe\x00 not utf-8")
+    rows = {r["doc"]: r for r in api.export_list_documents(proj).data["documents"]}
+    assert rows["status"]["state"] == "hand-edited"
+    assert api.export_documents(proj, all_docs=True, update=True).exit in (2, 3)
+
+
+def test_export_tables_knob_is_validated_like_the_sub_tables():
+    for bad in (
+        {"R": {"mode": "nonsense"}},
+        {"R": {"path": "x", "nope": 1}},
+        {"R": {"filters": {"limit": True}}},
+        "not a table",
+    ):
+        with pytest.raises(ValueError):
+            Config.check({"export": {"tables": bad}})
+    Config.check({"export": {"tables": {"roadmap": {"path": "a.md", "filters": {"limit": 3}}}}})
+    with pytest.raises(ValueError):
+        Config.check({"export": {"roadmap": {"filters": {"limit": True}}}})
 
 
 def test_update_refuses_a_hand_edited_file_and_force_replaces_it(proj):
@@ -310,12 +386,14 @@ def test_tool_has_no_force_or_template_and_is_bounded(proj):
 
 def test_no_dependency_beyond_the_standard_library_and_jinja():
     root = Path(__file__).resolve().parents[1] / "ddflow"
-    allowed = {"jinja2"}
-    for f in (
-        root / "services/export/ops.py",
+    allowed = {"jinja2", "ddflow"}  # ddflow itself: `import ddflow` for the version
+    files = [
+        *sorted((root / "services" / "export").glob("*.py")),
         root / "api/export.py",
         root / "surfaces/commands/export.py",
-    ):
+    ]
+    assert len(files) > 10
+    for f in files:
         for node in ast.walk(ast.parse(f.read_text())):
             if isinstance(node, ast.Import):
                 for a in node.names:
