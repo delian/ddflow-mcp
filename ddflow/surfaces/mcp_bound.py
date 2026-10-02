@@ -198,8 +198,8 @@ def bound_decisions(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             {k: v for k, v in row.items() if k not in ("context", "consequences", "alternatives")}
         )
         text = r.get("decision")
-        if isinstance(text, str) and len(text) > DECISION_TEXT_SHOWN:
-            r["decision"] = text[:DECISION_TEXT_SHOWN].rstrip() + " [...]"
+        if isinstance(text, str) and len(text) > DECISION_TEXT_SHOWN + len(CUT_MARK):
+            r["decision"] = text[:DECISION_TEXT_SHOWN].rstrip() + CUT_MARK
             clipped = True
         slim.append(r)
     extra = (
