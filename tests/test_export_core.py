@@ -682,4 +682,6 @@ def test_exit_codes_are_the_documented_numbers():
 def test_template_is_deterministic_no_random_globals():
     with pytest.raises(ExportError):
         registry.render("{{ lipsum() }}", {})
+    with pytest.raises(ExportError):
+        registry.render("{{ [1, 2, 3]|random }}", {})
     assert registry.render("{{ range(3)|list }}", {}) == "[0, 1, 2]\n"
