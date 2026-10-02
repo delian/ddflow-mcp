@@ -161,6 +161,7 @@ def test_extending_a_claimed_task_files_a_new_linked_task(repo):
     assert refused.data["candidates"][0]["state"].startswith("claimed")
     out = A.task_add(repo, "T2", title=title + " too", answer=DD.Answer("extends", "T1"), agent="b")
     assert out.exit == 0 and out.data["id"] == "T2" and out.data["holder"]["id"] == "T1"
+    assert out.data["holder"]["holder"] == "a"
     assert state(repo).links["T2"].linked("extends") == {"T1"}
 
 
@@ -179,10 +180,13 @@ def test_a_bug_filed_against_the_task_that_fixes_it_asks_nothing(repo):
     run_cli(repo, "init")
     title = "update must widen the held lease globs as well as the item globs on a claimed item"
     A.task_add(repo, "T1", title=title, agent="a")
-    assert A.bug_found(repo, summary=title, item="T1", id="Bx", agent="a").exit == 3 or True
-    out = A.bug_found(repo, summary=title + " today", item="T1", id="By", agent="a")
-    assert out.exit == 0, out.reason
-    assert out.data["candidates"][0]["id"] == "T1"
+    same = A.bug_found(repo, summary=title, item="T1", id="Bx", agent="a")
+    assert same.exit == 0 and same.data["id"] == "Bx", same.reason
+    assert same.data["candidates"][0]["id"] == "T1"
+    assert "filed_against" in same.data["candidates"][0]["flags"]
+    # a second bug of the same words is another matter: it matches the first bug
+    again = A.bug_found(repo, summary=title + " today", item="T1", id="By", agent="a")
+    assert again.exit == 3 and again.data["candidates"][0]["id"] == "Bx"
 
 
 def test_below_the_ask_threshold_the_add_goes_through_and_lists_candidates(repo):
@@ -283,3 +287,16 @@ def test_the_check_is_callable_for_the_importer(filed):
     assert DD.check_add(filed, log, cfg, st, rec).refusal.exit == 3
     off = DD.with_check(cfg, on_match="off")
     assert DD.check_add(filed, log, off, st, rec).refusal is None
+
+
+def test_an_exact_recurrence_without_an_id_is_a_new_linked_bug(repo):
+    """Auto ids differ per filing, so the recurrence of a FIXED bug is a new record linked
+    to it, not a merge into the closed one."""
+    run_cli(repo, "init")
+    text = "the commit hook reads the lease globs and ignores the item globs after an update"
+    first = A.bug_found(repo, summary=text, agent="a")
+    EventLog(repo, "a").append("bug.fixed", first.data["id"], {"regression_test": "t::x"})
+    again = A.bug_found(repo, summary=text, agent="a")
+    assert again.exit == 0 and again.data["id"] != first.data["id"]
+    assert again.data["holder"]["state"] == "fixed"
+    assert state(repo).links[again.data["id"]].linked("duplicate_of") == {first.data["id"]}

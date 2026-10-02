@@ -122,8 +122,9 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
         return chk.refusal
     if chk.extension:
         return DD.extend(log, cfg, chk, "lesson.recorded")
-    log.append("lesson.recorded", lid, data | chk.fields)
-    DD.after_add(log, cfg, lid, chk)
+    with log.transaction():
+        log.append("lesson.recorded", lid, data | chk.fields)
+        DD.after_add(log, cfg, lid, chk)
     return O.ok("lesson.recorded", id=lid, sites=len(sites), inventory=sites, **chk.data())
 
 
@@ -396,24 +397,25 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
         return chk.refusal
     if chk.extension:
         return DD.extend(log, cfg, chk, "research.recorded")
-    log.append(
-        "research.recorded",
-        rid,
-        {
-            "question": finding.question,
-            "claim": finding.claim,
-            "mechanism": finding.mechanism,
-            "falsifier": finding.falsifier,
-            "probe": finding.probe,
-            "probe_output": finding.probe_output,
-            "verdict": finding.verdict,
-            "sources": csv_list(finding.sources),
-            "budget": finding.budget,
-            "item": finding.item,
-            **chk.fields,
-        },
-    )
-    DD.after_add(log, cfg, rid, chk)
+    with log.transaction():
+        log.append(
+            "research.recorded",
+            rid,
+            {
+                "question": finding.question,
+                "claim": finding.claim,
+                "mechanism": finding.mechanism,
+                "falsifier": finding.falsifier,
+                "probe": finding.probe,
+                "probe_output": finding.probe_output,
+                "verdict": finding.verdict,
+                "sources": csv_list(finding.sources),
+                "budget": finding.budget,
+                "item": finding.item,
+                **chk.fields,
+            },
+        )
+        DD.after_add(log, cfg, rid, chk)
     return O.ok("research.recorded", id=rid, verdict=finding.verdict, **chk.data())
 
 
@@ -443,8 +445,9 @@ def bug_found(
         return chk.refusal
     if chk.extension:
         return DD.extend(log, cfg, chk, "bug.found")
-    log.append("bug.found", bid, {"item": item, "summary": summary, **chk.fields})
-    DD.after_add(log, cfg, bid, chk)
+    with log.transaction():
+        log.append("bug.found", bid, {"item": item, "summary": summary, **chk.fields})
+        DD.after_add(log, cfg, bid, chk)
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
     # out loud, because otherwise a real recurrence filed under an id already closed --
     # the same summary and item give the same auto id -- vanishes without a word.
@@ -943,8 +946,9 @@ def memory_add(
         # always-present `tags: []` made correcting a fact by `--id` wipe its tags
         # (cross-family critic).
         data["tags"] = csv_list(tags)
-    log.append("memory.recorded", mid, data)
-    DD.after_add(log, cfg, mid, chk)
+    with log.transaction():
+        log.append("memory.recorded", mid, data)
+        DD.after_add(log, cfg, mid, chk)
     replaced = bool(id) and id in st.memories
     return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())
 

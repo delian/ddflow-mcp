@@ -1774,8 +1774,9 @@ prompt or note — runs the same check against the log **before it writes**, wit
 `[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
 entirely. Adding an id that already exists keeps the refusal or merge it always had. The
-importer reaches the check through `api.dedupe_check_add` and can hand it a config with
-`on_match` replaced, rather than going through the add paths.
+check is also a function, `api.dedupe_check_add`, taking a config that may have `on_match`
+replaced (`api._dedupe.with_check`), so a bulk caller need not go through the add paths. The
+importer does not call it yet: it writes its events directly (task B-importer-dedupe).
 
 ## Operational memory
 
