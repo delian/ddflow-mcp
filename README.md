@@ -3775,7 +3775,8 @@ part that matters.
   twice records once. Gemini CLI is wired the same way through its `BeforeAgent` hook
   (`ddflow hooks install --gemini`, `.gemini/settings.json`). Cursor (`beforeSubmitPrompt`
   in `.cursor/hooks.json`), Codex, Kilo and opencode have no wiring yet: known gaps.
-  `ddflow hooks status` reports whether the prompt hook is installed.
+  `ddflow hooks status` reports whether the prompt hook is installed, and
+  `ddflow hooks uninstall --claude` (or `--gemini`) removes only ddflow's own hooks.
 
 **Not automated, on purpose:**
 
