@@ -124,3 +124,21 @@ def test_a_landed_task_is_judged_by_what_landed(repo, tree):
     assert code == OK, out + err
     assert not tree.exists()
     assert len(_reported(repo)) == 1
+
+
+def test_a_nested_readme_is_not_the_projects_readme(repo, tree):
+    _commit(tree, {"ddflow/feature.py": "x = 1\n", "docs/README.md": "# docs\n"})
+    assert len(_reported(repo)) == 1
+
+
+def test_a_task_with_no_diff_to_read_says_the_check_could_not_run(repo):
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "a task", "--globs", "ddflow/**")
+    code, out, err = run_cli(repo, "claim", "T1", "--no-worktree")
+    assert code == OK, out + err
+    run_cli(repo, "config", "--set", "enforce.readme_with_code", "block")
+    out = completion_verdict(repo, "T1")
+    assert any("README check could not run" in w for w in out.data["warnings"])
+    assert not any("README" in b for b in out.data["blockers"]), "could not run is not a block"

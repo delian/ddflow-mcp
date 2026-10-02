@@ -1034,7 +1034,7 @@ _doc(
 _doc(
     "enforce",
     "readme_with_code",
-    "What `complete`, `gate status` and `brief` do about a TASK whose diff changes a path in readme_code_globs but none of readme_files, with no 'docs' outcome recorded for it (`gate skip <id> docs --reason ...`, or `gate record <id> docs --outcome passed --evidence ...` naming the section changed). 'warn' reports it (a `complete` warning, a line in `gate status` and in the item's `brief`), 'block' makes `complete` refuse, 'off' disables. Test-only and docs-only changes, and ddflow's own event-log commits (`.ddflow/**`), never match. Default 'warn': a README is the user's, and the report names the one-line remedy.",
+    "What `complete`, `gate status` and `brief` do about a TASK whose diff changes a path in readme_code_globs but none of readme_files, with no 'docs' outcome recorded for it (`gate skip <id> docs --reason ...`, or `gate record <id> docs --outcome passed --evidence ...` naming the section changed). 'warn' reports it (a `complete` warning, a line in `gate status` and in the item's `brief`), 'block' makes `complete` refuse, 'off' disables. Test files (a `tests/` directory, `test_*.py`, `*_test.py`, conftest.py), docs-only changes and ddflow's own event-log commits (`.ddflow/**`) never count as code. When git cannot say what the task changed, `complete` says the check could not run (a warning, never a blocker). Default 'warn': a README is the user's, and the report names the one-line remedy.",
 )
 _doc(
     "enforce",
@@ -1044,7 +1044,7 @@ _doc(
 _doc(
     "enforce",
     "readme_files",
-    "The files that count as updating the README for readme_with_code. Default README.md.",
+    "The files that count as updating the README for readme_with_code, as paths from the repository root (`docs/README.md` is not `README.md`). Default README.md.",
 )
 _doc(
     "enforce",
