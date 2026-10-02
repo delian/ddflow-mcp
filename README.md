@@ -1509,8 +1509,7 @@ real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson we
 reported this way. Tasks and phases are not checked (they carry dependencies);
 `[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
 `"off"` turns the check off. Under the shipped default, `ask`, near-duplicates are
-withheld; set `on_match = "warn"` to list them and import them anyway. Re-running over the same files adds
-nothing.
+withheld. Re-running over the same files adds nothing.
 
 ### Verifying an import, at any time
 
