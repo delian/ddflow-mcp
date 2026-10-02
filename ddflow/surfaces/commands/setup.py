@@ -281,7 +281,7 @@ def _hook_stdin(timeout_s: float = 2.0) -> str:
 
         def _read() -> None:
             try:
-                box.append(sys.stdin.read())
+                box.append(sys.stdin.buffer.read().decode("utf-8", "replace"))
             except Exception:
                 pass
 
