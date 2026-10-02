@@ -517,3 +517,45 @@ def test_ad_hoc_template_renders_once(tmp_path, toy, builtin):
     q = _log(tmp_path)
     got = registry.render_body("toyroad", q, builtin=builtin, template="{{ phases|length }} phases")
     assert got == "2 phases\n"
+
+
+def test_deadline_also_holds_off_the_main_thread():
+    import threading
+
+    box = {}
+
+    def go():
+        try:
+            registry.render(
+                "{% for i in range(90000) %}{% for j in range(90000) %}{% endfor %}{% endfor %}",
+                {},
+                timeout_s=0.3,
+            )
+        except ExportError as exc:
+            box["err"] = exc
+
+    t = threading.Thread(target=go)
+    t.start()
+    t.join(10)
+    assert not t.is_alive() and "longer than" in str(box["err"])
+
+
+def test_deadline_leaves_the_process_timer_alone():
+    import signal
+
+    seen = []
+    old = signal.signal(signal.SIGALRM, lambda *a: seen.append(1))
+    signal.setitimer(signal.ITIMER_REAL, 30)
+    try:
+        registry.render("x", {}, timeout_s=1)
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 20  # the caller's timer survived
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old)
+
+
+def test_non_mapping_data_is_an_export_error_and_bar_never_underflows():
+    for bad in (5, ["a"], "x"):
+        with pytest.raises(ExportError):
+            registry.render("{{ a }}", bad)
+    assert registry.render("{{ -1|bar(4, 10) }}", {}) == "[..........]\n"
