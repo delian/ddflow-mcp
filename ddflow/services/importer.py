@@ -2843,6 +2843,9 @@ def _resolve_chains(dropped: dict[int, Duplicate], in_plan: dict[str, Found]) ->
                 break
             seen.add(nxt.of)
             d.of, d.where = nxt.of, nxt.where
+            # Word for word only if every hop was; the score is the weakest hop's.
+            d.identical = d.identical and nxt.identical
+            d.score = min(d.score, nxt.score)
 
 
 #: Identical repeats named in the plan's note (the rest are counted).
@@ -2913,7 +2916,7 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     near = [d for d in plan.duplicates if not d.identical]
     if same:
         plan.notes.append(
-            f"{len(same)} record(s) repeat existing ones word for word and were not "
+            f"{len(same)} record(s) repeat ones already held word for word and were not "
             f"imported: "
             + ", ".join(f"{d.found.ident} = {d.of}" for d in same[:_SHOWN_IDENTICAL])
             + (" ..." if len(same) > _SHOWN_IDENTICAL else "")

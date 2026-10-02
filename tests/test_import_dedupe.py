@@ -174,3 +174,15 @@ def test_the_outcome_does_not_depend_on_the_order_records_were_read(repo):
         plan = found(order)
         assert not plan.found, (order, [f.ident for f in plan.found])
         assert {d.found.ident: d.of for d in plan.duplicates} == {"A": "Q", "LS-s": "Q"}, order
+
+
+def test_a_chain_through_a_near_duplicate_is_not_reported_as_word_for_word():
+    q = IM.Found("lesson", "B", "t", "x:1")
+    s = IM.Found("lesson", "S", "t", "x:2")
+    dropped = {
+        id(q): IM.Duplicate(q, "C", 0.85, False, "queue"),
+        id(s): IM.Duplicate(s, "B", 1.0, True, "import"),
+    }
+    IM._resolve_chains(dropped, {"B": q, "S": s})
+    d = dropped[id(s)]
+    assert (d.of, d.where, d.identical, d.score) == ("C", "queue", False, 0.85), d
