@@ -789,6 +789,11 @@ gate from a pipeline. `.ddflow/local/` carries its own `*` `.gitignore`, so it s
 uncommitted even in a project whose `.ddflow/.gitignore` predates it. API keys are never
 written anywhere — only the *name* of the variable that holds one.
 
+A fresh `ddflow init` says the same in the `config.toml` it writes: the commented
+`[[reviewer]]` example points at `.ddflow/local/reviewers.toml` (not at `config.toml`), and a
+short comment block separates what is committed (generic project policy) from what is local
+(your endpoints, hosts, key variable names, machine sizing: `ddflow config --local`).
+
 ### Publishing and registry
 
 **Nobody should have to paste JSON into an IDE to use this.** `server.json` is the
