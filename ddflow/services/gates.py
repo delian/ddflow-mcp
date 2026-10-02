@@ -380,6 +380,9 @@ class GateStatus:
     #: neither a pass nor a failure, and `gates.require_outcome` decides whether it
     #: blocks completion.
     silent: list[str] = field(default_factory=list)
+    #: gate -> "3 finding(s): 2 refuted, 1 confirmed, 0 untriaged" for a recorded review
+    #: that reported findings (`triage_counts`). The gate's outcome is NOT changed by it.
+    triage: dict[str, str] = field(default_factory=dict)
 
     def render(self) -> str:
         marks = {
@@ -390,9 +393,41 @@ class GateStatus:
             "skipped": "[-]",
             "": "[ ]",
         }
-        return "\n".join(f"  {marks.get(o, '[ ]')} {g}" for g, o in self.rows)
+        return "\n".join(
+            f"  {marks.get(o, '[ ]')} {g}" + (f"  -- {self.triage[g]}" if g in self.triage else "")
+            for g, o in self.rows
+        )
 
     rows: list[tuple[str, str]] = field(default_factory=list)
+
+
+def triage_counts(it, gate: str) -> dict[str, int] | None:
+    """How the findings of ``gate``'s recorded review stand: ``{"findings", "refuted",
+    "confirmed", "untriaged"}``, or None when it reported none -- or is not a `ddflow
+    review` that numbered them (a hand-recorded gate, or one from before triage).
+
+    A finding is triaged when a `review.triaged` event names the DIGEST of its exact text,
+    so a re-review carries a triage over only when the finding is unchanged.
+    """
+    rec = it.gates.get(gate)
+    found = (rec.evidence or {}).get("chunk_findings") if rec else None
+    if not found or not all(f.get("digest") for f in found):
+        return None
+    mine = it.triage.get(gate, {})
+    verdicts = [mine.get(f["digest"], {}).get("verdict", "") for f in found]
+    return {
+        "findings": len(found),
+        "refuted": verdicts.count("refuted"),
+        "confirmed": verdicts.count("confirmed"),
+        "untriaged": sum(1 for v in verdicts if v not in ("refuted", "confirmed")),
+    }
+
+
+def triage_line(counts: dict[str, int]) -> str:
+    return (
+        f"{counts['findings']} finding(s): {counts['refuted']} refuted, "
+        f"{counts['confirmed']} confirmed, {counts['untriaged']} untriaged"
+    )
 
 
 def status(state: State, cfg: Config, item_id: str) -> GateStatus:
@@ -427,6 +462,7 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         complete=complete,
         rows=rows,
         silent=[g for g, o in rows if not o],
+        triage={g: triage_line(c) for g, _o in rows if (c := triage_counts(it, g))},
     )
 
 
