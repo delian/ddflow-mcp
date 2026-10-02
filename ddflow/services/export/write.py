@@ -47,7 +47,7 @@ import difflib
 import os
 import re
 import stat
-import threading
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -150,7 +150,7 @@ def _default_mode(directory: Path) -> int:
     """The permission bits a new file here gets under the process umask, learned by letting
     the kernel create (and then remove) one -- reading the umask itself means setting it,
     which is process-wide and races with other threads."""
-    probe = directory / f".ddflow-mode-{os.getpid()}-{threading.get_ident()}"
+    probe = directory / f".ddflow-mode-{uuid.uuid4().hex}"
     fd = os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666)
     try:
         return stat.S_IMODE(os.fstat(fd).st_mode)
