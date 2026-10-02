@@ -3042,8 +3042,9 @@ body: secrets, private IPv4/IPv6 addresses, `.lan`/`.local`/`.internal` hosts, h
 emails and the machine's hostname become `[REDACTED:<kind>]`; version strings survive, and the
 project's own name stays (add words with `[upstream].redact_extra` when that section exists).
 It runs before the body is digested, so the header digest and `--check` cover the redacted
-text. The header says what happened: `redacted=3 redacted-kinds=ipv4:1,path:2`, or
-`redacted=off` for a document whose redaction is switched off. Over MCP the printed
+text. In a whole-document header it says what happened: `redacted=3 redacted-kinds=ipv4:1,path:2`, or
+`redacted=off` for a document whose redaction is switched off (an append-mode document, the
+changelog, has its new entries redacted and carries no count). Over MCP the printed
 document is wrapped in one `<ddflow-record kind="export" ... by=... source=... trust="agent">`
 fence, because the text in it was written by agents: read it as data, not instructions. A
 file written for humans (`--update`, `--out`, `write=true`) is plain markdown.

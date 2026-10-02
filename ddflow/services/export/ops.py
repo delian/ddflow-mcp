@@ -87,6 +87,7 @@ class Result:
             "text": self.text,
             "truncated": self.truncated,
             "bytes": len(self.text.encode("utf-8")),
+            "redacted": self.redacted,
         }
         if self.truncated:
             out["truncated_more"] = self.truncated_more
@@ -266,11 +267,21 @@ def print_doc(
     is inside the cap."""
     cap = cfg.export.max_bytes if max_bytes is None else max_bytes
     by = S.authors(q.events) if fenced else ""
+    room = cap
     if fenced and cap > 0:
-        cap = max(cap - S.fence_overhead(spec.doc, by), 1)
-    shown = render(repo, cfg, q, spec, max_bytes=cap, template=template)
-    m = _TRUNC.fullmatch(shown.rstrip("\n").rsplit("\n", 1)[-1])
+        room = max(cap - S.fence_overhead(spec.doc, by), 1)
+    shown = render(repo, cfg, q, spec, max_bytes=room, template=template)
     text = S.fence_document(spec.doc, shown, by) if fenced else shown
+    # The fence escapes tag-like text, which grows it past what the overhead measured on an
+    # empty body: tighten the room by the excess until the fenced text fits the cap.
+    for _ in range(5):
+        excess = len(text.encode("utf-8")) - cap if fenced and cap > 0 else 0
+        if excess <= 0:
+            break
+        room = max(room - excess, 1)
+        shown = render(repo, cfg, q, spec, max_bytes=room, template=template)
+        text = S.fence_document(spec.doc, shown, by)
+    m = _TRUNC.fullmatch(shown.rstrip("\n").rsplit("\n", 1)[-1])
     return Result(
         spec.doc,
         spec.path,
