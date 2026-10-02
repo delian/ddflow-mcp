@@ -1532,17 +1532,16 @@ def _h_bug_found(st: State, ev: Event) -> None:
 
 
 def _h_bug_reported_upstream(st: State, ev: Event) -> None:
-    """The report about a ddflow-scoped bug was sent (or prepared) upstream. Keeps the
-    FIRST report: a second event for the same bug does not overwrite where it went."""
+    """A report about a ddflow-scoped bug went (or was prepared) upstream. Merge, never
+    replace: a later event fills what an earlier one (say, a prepared report with no url
+    yet) left empty, and an empty field never blanks one that is set."""
     bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
-    if bug.upstream_sent_at:
-        return
     d = ev.data
-    bug.upstream_url = str(d.get("url", "") or "")
-    bug.upstream_number = str(d.get("number", "") or "")
-    bug.upstream_delivery = str(d.get("delivery", "") or "")
-    bug.upstream_sent_at = str(d.get("sent_at", "") or "") or ev.ts
-    bug.upstream_digest = str(d.get("digest", "") or "")
+    bug.upstream_url = str(d.get("url", "") or "") or bug.upstream_url
+    bug.upstream_number = str(d.get("number", "") or "") or bug.upstream_number
+    bug.upstream_delivery = str(d.get("delivery", "") or "") or bug.upstream_delivery
+    bug.upstream_digest = str(d.get("digest", "") or "") or bug.upstream_digest
+    bug.upstream_sent_at = str(d.get("sent_at", "") or "") or bug.upstream_sent_at or ev.ts
 
 
 def _h_bug_fixed(st: State, ev: Event) -> None:

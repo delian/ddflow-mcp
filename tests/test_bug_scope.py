@@ -77,6 +77,24 @@ def test_reported_upstream_is_registered_and_folds_onto_the_bug():
     assert (b.upstream_sent_at, b.upstream_digest) == ("t1", "d")
 
 
+def test_a_later_upstream_event_fills_what_a_prepared_one_left_empty():
+    prepared = Event(
+        kind="bug.reported_upstream",
+        subject="B1",
+        data={"delivery": "propose", "digest": "d0"},
+        ts="t1",
+    )
+    sent = Event(
+        kind="bug.reported_upstream",
+        subject="B1",
+        data={"url": "https://x/9", "number": 9, "delivery": "sent", "sent_at": "t2"},
+        ts="t2",
+    )
+    b = fold([prepared, sent]).bugs["B1"]
+    assert (b.upstream_url, b.upstream_number, b.upstream_delivery) == ("https://x/9", "9", "sent")
+    assert (b.upstream_sent_at, b.upstream_digest) == ("t2", "d0")
+
+
 def test_the_title_takes_part_in_the_duplicate_match(repo):
     run_cli(repo, "init")
     run_cli(
