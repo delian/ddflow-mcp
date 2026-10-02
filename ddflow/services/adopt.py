@@ -519,8 +519,15 @@ def starter_config() -> str:
 # documented way to configure the project would fail on a fresh install.
 
 # ---------------------------------------------------------------------------------
+# What is committed here vs what is local: this file is GENERIC project policy (the
+# test command, pipelines, gates) that every clone must agree on. Your own endpoints,
+# hosts, API-key variable names and machine sizing are git-ignored and go in
+# .ddflow/local/ (`ddflow config --local --set ...`).
+#
 # A cross-family reviewer makes the `critic` gate real rather than self-reported.
-# `ddflow reviewers detect --write` finds a local model server and fills this in.
+# `ddflow reviewers detect --write` finds a local model server and writes it to
+# .ddflow/local/reviewers.toml (`reviewers add` does the same; --shared commits it here
+# instead). The block below is only the shape such an entry takes.
 # ---------------------------------------------------------------------------------
 # [[reviewer]]
 # name     = "local"
