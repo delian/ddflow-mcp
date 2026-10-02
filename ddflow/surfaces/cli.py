@@ -906,6 +906,15 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bf.add_argument("--id", default="")
     bf.add_argument("--summary", required=True)
     bf.add_argument("--item", default="")
+    bf.add_argument("--title", default="", help="a short headline for the bug")
+    bf.add_argument(
+        "--severity", default="", help="low | medium | high | critical (optional)"
+    )
+    bf.add_argument(
+        "--scope",
+        default="project",
+        help="project (default), or ddflow for a bug in ddflow itself",
+    )
     dedupe_flags.add_flags(bf)
     bf.set_defaults(fn=cmd_bug)
     bx = bg_s.add_parser("fixed")
