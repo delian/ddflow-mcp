@@ -18,6 +18,8 @@ the body carries its own `truncated` field.
 
 from __future__ import annotations
 
+import copy
+import json
 import re
 from typing import Any
 
@@ -49,7 +51,7 @@ ITEM_PLUMBING = ("landed_before", "landed_after")
 #: A string inside a gate record or a triage record is cut here. They are where agents and
 #: reviewers wrote what they did and found; the long ones run to 700+ characters, and
 #: `ddflow --json show` has them whole.
-TEXT_SHOWN = 200
+TEXT_SHOWN = 160
 
 
 def _lean(value: Any) -> Any:
@@ -124,6 +126,7 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
                 slim[name] = rec
                 continue
             one = {k: v for k, v in rec.items() if k != "gate"}
+            stripped = True  # the record's own `gate` key (its name is the key) is left out
             if isinstance(one.get("at"), str):
                 # Whole seconds: only a UTC stamp's fraction goes, anything else is as written.
                 one["at"] = _FRACTION.sub("Z", one["at"])
@@ -134,18 +137,21 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
                 one["evidence"] = _lean(kept)
             slim[name] = _lean(one)
         out["gates"] = slim
+    if "triage" in out:
+        out["triage"] = copy.deepcopy(out["triage"])  # the caller's body is not edited
+    for recs in (out.get("triage") or {}).values():
+        for rec in recs.values() if isinstance(recs, dict) else ():
+            if isinstance(rec, dict) and rec.get("location") == rec.get("title"):
+                rec.pop("location", None)  # before the cut, so it compares whole strings
+                stripped = True
     cut = [0]
     for key in ("gates", "triage"):
         if key in out:
             out[key] = _clip(out[key], cut)
-    for recs in (out.get("triage") or {}).values():
-        for rec in recs.values() if isinstance(recs, dict) else ():
-            if isinstance(rec, dict) and rec.get("location") == rec.get("title"):
-                rec.pop("location", None)
     if stripped or cut[0]:
         out["truncated"] = {
             "strings_cut": cut[0],
-            "left_out": "gate evidence tree ids, landed_before/after",
+            "left_out": "tree ids, gate names, sub-second times, landed_before/after",
             "all": "ddflow --json show <id>",
         }
     return out, None
@@ -197,8 +203,8 @@ def bound_decisions(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
 
 def bound_recall(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_recall`: each hit's id, kind, headline and body -- not the raw record --
-    within `max_chars` (default 4000), taken one per kind in turn so no source is
-    crowded out, and the first hit of each kind always kept."""
+    within `max_chars` (default 4000, counted as the JSON returned), taken one per kind in
+    turn so no source is crowded out; the first hit overall is always kept."""
     if not isinstance(body, dict):
         return body, None
     try:
@@ -214,8 +220,10 @@ def bound_recall(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             if not isinstance(hits, list) or rank >= len(hits):
                 continue
             hit = {k: v for k, v in hits[rank].items() if k != "raw"}
-            size = len(str(hit.get("headline") or "")) + len(str(hit.get("body") or ""))
-            if rank and used + size > budget:
+            size = len(json.dumps(hit, default=str))
+            # The budget is the size of what is returned. The very first hit is kept
+            # whatever it costs, so a tiny budget still answers.
+            if used and used + size > budget:
                 continue
             out[kind].append(hit)
             used += size
