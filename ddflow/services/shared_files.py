@@ -8,7 +8,10 @@ Two kinds, declared under `[lease]`, both exempt from lease-overlap checks:
   automatic over advice, since an advised line nobody added is a conflict at merge.
 - `shared_globs` -- generated files. Union-merging one interleaves it into nonsense, so
   ddflow writes NOTHING for them; the remedy is to regenerate after merging, or to
-  declare a driver. Doctor notes a shared glob with no merge attribute at all.
+  declare a driver. Doctor notes a shared glob with no merge attribute at all. A document
+  edited by hand in sections (README.md, D-readme-current) is merged right by git's
+  default text merge; `<glob> merge=text` says so, and counts as a strategy (git's
+  built-in driver of that name -- `driver()` reads any value).
 
 The line is written by `sync_attributes`, called where the setting changes -- the
 `configure` api (CLI `config --set/--append-toml`, MCP `ddflow_configure`), in the same
@@ -369,10 +372,11 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
                 f"conflict. ddflow leaves a driver the project chose alone."
             )
     notes += [
-        f"[lease] shared_globs has {g!r} with no merge strategy in .gitattributes: "
-        f"parallel items will conflict on it at merge. If it is generated, regenerate it "
-        f"after merging; if it is append-only, move it to append_only_globs (ddflow then "
-        f"writes merge=union); or declare a driver yourself ('{g} merge=<driver>')."
+        f"[lease] shared_globs has {g!r} with no merge strategy in .gitattributes. A "
+        f"generated file will conflict on it at merge: regenerate it after merging; an "
+        f"append-only one belongs in append_only_globs (ddflow then writes merge=union). "
+        f"A document items edit by hand in different sections (a README) merges cleanly "
+        f"under git's default text merge: say so with '{g} merge=text'."
         for g in cfg.lease.shared_globs
         if not driver(repo, g)
     ]

@@ -170,9 +170,44 @@ def resolve_template(
 RENDER_TIMEOUT_S = 10.0
 
 
+def _flanked(m: re.Match[str]) -> str:
+    """Escape an emphasis marker unless it is a lone one between spaces (``a * b``) or,
+    for ``_``, sits INSIDE a word (``run_nemo_run``: CommonMark does not read an intraword
+    underscore as emphasis, so there is nothing to protect)."""
+    text, i = m.string, m.start()
+    prev = text[i - 1] if i else " "
+    nxt = text[i + 1] if i + 1 < len(text) else " "
+    if prev.isspace() and nxt.isspace():
+        return m.group(0)
+    if m.group(0) == "_" and prev.isalnum() and nxt.isalnum():
+        return m.group(0)
+    return "\\" + m.group(0)
+
+
 def md_escape(value: object) -> str:
-    """Escape Markdown syntax in free text and fold it onto one line."""
-    return re.sub(r"([\\`*_{}\[\]<>#|~])", r"\\\1", " ".join(str(value).split()))
+    """Escape what would change how free text RENDERS, and fold it onto one line.
+
+    Not every punctuation mark: an identifier (``run_nemo_run``) or a bracketed id reads
+    as itself, and a backslash before each of them is noise in the document's source
+    (B3da43a71bb). Escaped: backslashes, backticks, pipes (they split a table cell),
+    emphasis markers (``*``, and ``_`` except inside a word), ``~~``, a link opener
+    (``](`` / ``][``), a ``<`` that opens a tag, comment, autolink or declaration, an
+    ``&`` that opens an entity, and a line-start list, heading, quote or rule marker.
+    """
+    s = " ".join(str(value).split())
+    s = re.sub(r"([\\`|])", r"\\\1", s)
+    s = re.sub(r"[*_]", _flanked, s)
+    s = s.replace("~~", "\\~\\~")
+    s = re.sub(r"\](?=[(\[])", r"\\]", s)
+    s = re.sub(r"<(?=[A-Za-z/!?])", r"\\<", s)
+    s = re.sub(r"&(?=#?\w+;)", r"\\&", s)
+    return re.sub(r"^(?:([#>+*])|(-)(?=[- ])|(\d+)([.)])(?= ))", _line_start, s)
+
+
+def _line_start(m: re.Match[str]) -> str:
+    if m.group(3):
+        return m.group(3) + "\\" + m.group(4)
+    return "\\" + m.group(0)
 
 
 def wrap(value: object, width: int = 72) -> str:

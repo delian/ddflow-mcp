@@ -1,1 +1,2 @@
 .ddflow/events/*.jsonl merge=union
+README.md merge=text

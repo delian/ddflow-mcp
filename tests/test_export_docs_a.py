@@ -294,10 +294,10 @@ def test_bugs_filter_by_phase_and_refuse_bad_values():
 
 def test_bugs_deterministic_and_markdown_safe():
     g = bug_log(5)
-    g.bug("Bc0ffee0001", "Pipe | star * and `tick` <tag>", 6)
+    g.bug("Bc0ffee0001", "Pipe | star *x* and `tick` <tag>", 6)
     a = registry.render_document("bugs", g.query())
     assert a == registry.render_document("bugs", g.query(reverse=True))
-    assert "\\|" in a and "\\*" in a and "\\`tick\\`" in a and "\\<tag\\>" in a
+    assert "\\|" in a and "\\*" in a and "\\`tick\\`" in a and "\\<tag>" in a
 
 
 def test_a_bug_with_an_unreadable_date_does_not_break_the_document():

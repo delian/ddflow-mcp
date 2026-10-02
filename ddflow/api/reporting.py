@@ -812,24 +812,27 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
     unknown = _unknown_phase(st, phase, phases_only=True)
     if unknown:  # as `next` refuses it, not an empty board (Bc2acd426f4)
         return O.failed("board", unknown, phase=phase, text="")
-    phases = []
-    for ph in sorted(st.phases(), key=lambda p: (p.priority, p.id)):
-        if phase and ph.id != phase:
-            continue
-        tasks = [
+
+    def rows(tasks: list, root: str) -> list[dict]:
+        return [
             {
                 "id": t.id,
                 "title": t.title,
                 "state": t.state,
                 "parent": t.parent,
-                "depth": render_md._depth(st, t, ph.id),
+                "depth": render_md._depth(st, t, root),
                 "needs": list(t.needs),
                 "globs": list(t.globs),
                 "owner": t.lease.holder if t.lease else "",
                 "gates": {g: t.gate_outcome(g) for g in pipeline_for(t, cfg)},
             }
-            for t in render_md._nested(st, ph.id)
+            for t in tasks
         ]
+
+    phases = []
+    for ph in sorted(st.phases(), key=lambda p: (p.priority, p.id)):
+        if phase and ph.id != phase:
+            continue
         phases.append(
             {
                 "id": ph.id,
@@ -837,14 +840,18 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
                 "state": ph.state,
                 "needs": list(ph.needs),
                 "holder": ph.lease.holder if ph.lease else "",
-                "tasks": tasks,
+                "tasks": rows(render_md._nested(st, ph.id), ph.id),
             }
         )
+    # Tasks under no phase (Bc896ea5d16): their own section, never silently dropped. Not
+    # shown when the board is narrowed to one phase.
+    loose = [] if phase else render_md.unphased(st)
     return O.ok(
         "board",
         text=render_md.board(st, cfg, phase=phase),
         phase=phase,
         phases=phases,
+        unphased=rows(loose, ""),
         critical_path=critical_path(st, phase),
     )
 
