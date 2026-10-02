@@ -322,3 +322,43 @@ def test_cap_below_the_frame_overhead_is_refused(tmp_path, toy, builtin):
         with pytest.raises(ExportError) as e:
             registry.render_document("toyroad", q, builtin=builtin, max_bytes=cap)
         assert e.value.code == EXIT_REFUSED
+
+
+def test_digest_is_12_lowercase_hex_of_sha256():
+    import hashlib
+
+    assert frame.body_digest("x\n") == hashlib.sha256(b"x\n").hexdigest()[:12]
+    d = frame.body_digest("anything")
+    assert len(d) == 12 and set(d) <= set("0123456789abcdef")
+    # a known vector, so a different hash or width cannot pass by being self-consistent
+    assert frame.body_digest("abc") == "ba7816bf8f01"
+
+
+def test_log_of_only_unreadable_lines_is_could_not_run(tmp_path):
+    ev = tmp_path / ".ddflow" / "events"
+    ev.mkdir(parents=True)
+    (ev / "a1.jsonl").write_text('{"ts": "2024-05-0')
+    with pytest.raises(ExportError) as e:
+        query.load(tmp_path)
+    assert e.value.code == EXIT_UNAVAILABLE
+
+
+def test_since_compares_instants_not_strings():
+    from ddflow.core.events import Event
+
+    def ev(ts):
+        return Event(kind="note", subject="x", ts=ts, lamport=1, agent="a")
+
+    q = query.Query(
+        State(),
+        [
+            ev("2024-05-01T12:00:00+00:00"),  # exactly the cutoff
+            ev("2024-05-01T10:00:00+02:00"),  # 08:00Z, before it
+            ev("2024-05-02T00:00:00+00:00"),
+        ],
+    )
+    got = [e.ts for e in q.events_of(since="2024-05-01T12:00:00Z")]
+    assert got == ["2024-05-01T12:00:00+00:00", "2024-05-02T00:00:00+00:00"]
+    assert len(q.events_of(since="2024-05-02")) == 1  # a bare date is a calendar day
+    with pytest.raises(ExportError):
+        q.events_of(since="last tuesday")
