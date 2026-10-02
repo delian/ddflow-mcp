@@ -77,6 +77,23 @@ def direct_url(dist=None) -> dict | None:
     return data if isinstance(data, dict) else {}
 
 
+def _editable_record(root: Path) -> dict | None:
+    """The PEP 610 record of an editable install of the tree at `root`, or None.
+
+    An editable install leaves its dist-info in site-packages, not beside the package,
+    so `own_distribution()` (which looks beside the package) cannot see it."""
+    from importlib import metadata
+
+    for dist in metadata.distributions(name=DIST_NAME):
+        record = direct_url(dist)
+        if not record or not (record.get("dir_info") or {}).get("editable"):
+            continue
+        url = str(record.get("url", ""))
+        if url.startswith("file://") and Path(url[7:]).resolve() == root.resolve():
+            return record
+    return None
+
+
 def installed_from_index() -> bool:
     """True when this installation came from a package index, so `uvx ddflow-mcp`
     reaches the same project. No distribution metadata is not evidence of an index."""
@@ -86,11 +103,11 @@ def installed_from_index() -> bool:
 
 def normalise_path(value: str | Path) -> str:
     """`value` with the home directory replaced by `~` wherever it occurs."""
-    text = str(value)
     home = str(Path.home())
-    if home and home != "/":
-        text = text.replace(home, "~")
-    return text
+    if not home or home == "/":
+        return str(value)
+    # Only at a path-component boundary: `/home/ann` must not eat `/home/anna`.
+    return re.sub(re.escape(home) + r"(?=/|$|[^\w.-])", "~", str(value))
 
 
 def is_own_dev_tree(root: Path | None = None) -> bool:
@@ -118,17 +135,17 @@ def _git(root: Path, *args: str) -> str | None:
 
 
 def _kind(dist, record: dict | None, from_source: bool) -> str:
-    if dist is None:
-        return "source-tree" if from_source else "unknown"
-    if record is None:
-        return "index"
-    if "vcs_info" in record:
-        return "vcs"
-    if "dir_info" in record:
-        return "editable" if (record["dir_info"] or {}).get("editable") else "local-dir"
-    if "archive_info" in record:
-        return "archive"
-    return "unknown"
+    if record is not None:
+        if "vcs_info" in record:
+            return "vcs"
+        if "dir_info" in record:
+            return "editable" if (record["dir_info"] or {}).get("editable") else "local-dir"
+        if "archive_info" in record:
+            return "archive"
+        return "unknown"
+    if from_source:
+        return "source-tree"
+    return "index" if dist is not None else "unknown"
 
 
 def _version(dist) -> str:
@@ -148,7 +165,12 @@ def install_info(root: Path | None = None) -> InstallInfo:
     root = Path(root) if root is not None else _paths.package_parent()
     from_source = running_from_source()
     dist = own_distribution()
+    version = _version(dist)
     record = direct_url(dist)
+    if from_source:
+        # A checkout is never an index install, even when a build leaves an egg-info
+        # (no direct_url.json) beside it; it is an editable install when one says so.
+        record = _editable_record(root)
     kind = _kind(dist, record, from_source)
     commit = None
     if record and isinstance(record.get("vcs_info"), dict):
@@ -157,7 +179,7 @@ def install_info(root: Path | None = None) -> InstallInfo:
         commit = _git(root, "rev-parse", "HEAD")
     location = normalise_path(root) if kind in ("source-tree", "editable", "local-dir") else None
     return InstallInfo(
-        version=_version(dist),
+        version=version,
         kind=kind,
         commit=commit,
         is_own_dev_tree=is_own_dev_tree(root),
