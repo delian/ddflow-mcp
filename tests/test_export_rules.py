@@ -139,7 +139,7 @@ def test_tag_filter_and_limit(tmp_path):
     q = _repo(tmp_path)
     t = _body(q, tag="storage")
     assert "`L-a`" in t and "`L-b`" in t and "`L-c`" not in t and "`L-e`" not in t
-    assert "`D-store`" in t and "`D-free`" not in t
+    assert "`D-store`" in t and "`D-free`" in t  # --tag narrows lessons, never decisions
     lim = _body(q, limit=2)
     assert "2 older lesson(s) not shown" in lim  # 4 live lessons, 2 kept
     assert "2 live lesson(s)" in lim and "`D-store`" in lim  # decisions are not limited
