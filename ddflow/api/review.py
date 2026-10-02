@@ -232,7 +232,11 @@ def triage(
                 f"{item} has findings on gates {', '.join(withf)} and finding numbers are "
                 "per gate: say which with --gate"
             )
-        gate = withf[0] if withf else "critic"
+        if not withf:
+            return bad(
+                f"{item} has no `ddflow review` with numbered findings on any gate to triage"
+            )
+        gate = withf[0]
     rec = it.gates.get(gate)
     found = (rec.evidence or {}).get("chunk_findings") if rec else None
     if not found or not all(f.get("digest") for f in found):
