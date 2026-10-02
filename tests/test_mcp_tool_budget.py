@@ -6,7 +6,9 @@ text now lives once (ddflow_identify, ddflow_help and the handshake instructions
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
+from ddflow.surfaces import mcp as mcp_module
 from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 
 #: Compact `tools/list` bytes. Raise only with a reason in the commit; lowering is welcome.
@@ -36,3 +38,14 @@ def test_shared_parameter_descriptions_are_not_repeated_in_full():
                 long_ones.append((name, arg))
     assert not long_ones, long_ones
     assert ADD_TOOLS  # the add tools still carry the answer arguments
+
+
+def test_the_trimmed_text_still_has_a_home():
+    """Shortening must not delete the semantics: `as_agent` is explained on
+    ddflow_identify, and the relation values in the handshake instructions."""
+    ident = TOOLS["ddflow_identify"]["description"]
+    assert "as_agent" in ident and "--agent" in ident
+    template = Path(mcp_module.__file__).parent.parent / "templates/prompts/mcp_instructions.md"
+    text = template.read_text()
+    for value in ("extends:ID", "duplicate_of:ID", "related:ID"):
+        assert value in text, value
