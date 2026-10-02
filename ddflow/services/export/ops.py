@@ -277,6 +277,12 @@ def write_doc(
     if spec.mode == R.REGION:
         body = _body(repo, cfg, q, spec, template)
         return W.write_region(repo, path, spec.doc, body, check=check, diff=diff, force=force)
+    if template is not None or spec.template:
+        raise ExportError(
+            "append mode writes the entries the kind produces itself; a template applies to "
+            "mode whole or region",
+            EXIT_REFUSED,
+        )
     make = appender(spec.doc)
     if make is None:  # update_mode APPEND declared but no producer: a kind bug, not a user error
         raise ExportError(f"document {spec.doc!r} has no append producer", EXIT_UNAVAILABLE)

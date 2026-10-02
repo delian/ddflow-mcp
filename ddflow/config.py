@@ -1613,13 +1613,11 @@ _TOLERANT_VALUES = frozenset({"mcp.tools", "export.refresh"})
 
 
 def _export_tables_problem(v: Any) -> str:
-    """`[export].tables` as one map: each value is a valid `[export.<doc>]` table with only
-    known keys (the same rules the sub-table form gets)."""
+    """`[export].tables` as one map: each value is a valid `[export.<doc>]` table (the
+    same value rules the sub-table form gets; a key a newer release adds is tolerated)."""
     if not isinstance(v, dict):
         return "must be a table of [export.<doc>] tables"
-    for doc, t in v.items():
-        if isinstance(t, dict) and (bad := sorted(set(t) - EXPORT_TABLE_KEYS)):
-            return f"[export.{doc}] has unknown key(s) {', '.join(bad)}"
+    for doc, t in v.items():  # unknown keys are tolerated, as in a file's [export.<doc>]
         if why := _export_table_problem(str(doc), t):
             return why
     return ""

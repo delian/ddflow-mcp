@@ -155,10 +155,11 @@ def test_item_filters_bugs_as_phase(proj):
 def test_version_is_the_tag_filter(proj):
     from ddflow.api.export import _filters
 
-    assert _filters(version="1.2.3").tag == "1.2.3"
-    assert _filters(tag="1.2.3", version="1.2.3").tag == "1.2.3"
+    none = {"since": "", "phase": "", "status": "", "limit": 0, "session": ""}
+    assert _filters(version="1.2.3", tag="", **none).tag == "1.2.3"
+    assert _filters(tag="1.2.3", version="1.2.3", **none).tag == "1.2.3"
     with pytest.raises(ExportError):
-        _filters(tag="a", version="b")
+        _filters(tag="a", version="b", **none)
     # a kind that does not take `tag` refuses --version instead of ignoring it
     assert api.export_documents(proj, "roadmap", version="0.1.0").exit == 3
     # the changelog kind: an unknown version is refused (exit 3), the Unreleased section prints
@@ -264,13 +265,15 @@ def test_an_unreadable_target_is_listed_as_hand_edited_not_a_traceback(proj):
 def test_export_tables_knob_is_validated_like_the_sub_tables():
     for bad in (
         {"R": {"mode": "nonsense"}},
-        {"R": {"path": "x", "nope": 1}},
         {"R": {"filters": {"limit": True}}},
+        {"R": 1},
+        {"R": "docs/x.md"},
         "not a table",
     ):
         with pytest.raises(ValueError):
             Config.check({"export": {"tables": bad}})
     Config.check({"export": {"tables": {"roadmap": {"path": "a.md", "filters": {"limit": 3}}}}})
+    Config.check({"export": {"tables": {"roadmap": {"a_future_key": 1}}}})  # forward-compat
     with pytest.raises(ValueError):
         Config.check({"export": {"roadmap": {"filters": {"limit": True}}}})
 
@@ -349,6 +352,13 @@ def test_listing_selected_documents_over_an_unreadable_log_is_exit_two_not_stale
     (tmp_path / ".ddflow" / "config.toml").write_text('[export]\ndocuments = ["roadmap"]\n')
     out = api.export_list_documents(tmp_path)
     assert out.exit == 2 and "event log" in out.reason
+
+
+def test_append_mode_refuses_a_template_instead_of_ignoring_it(proj):
+    (proj / "t.j2").write_text("X\n")
+    _select(proj, '[export.changelog]\nmode = "append"\npath = "CHANGES.md"\ntemplate = "t.j2"\n')
+    out = api.export_documents(proj, "changelog", update=True)
+    assert out.exit == 3 and "template" in out.reason and not (proj / "CHANGES.md").exists()
 
 
 def test_template_never_writes(proj):
