@@ -189,7 +189,7 @@ def triage(
     repo: Path,
     item: str,
     *,
-    gate: str = "critic",
+    gate: str = "",
     finding: int = 0,
     verdict: str = "",
     probe: str = "",
@@ -203,6 +203,10 @@ def triage(
     that answers it. Appends a `review.triaged` event; the gate's outcome is untouched
     (decision D-review-triage: a review that reported findings stays `failed`, and that
     does not block completion -- the log now shows what became of each finding).
+
+    Finding numbers are per gate, so an omitted ``gate`` is never defaulted (bug
+    Bca71987363): it resolves only when exactly one gate has numbered findings, else it
+    is refused naming the gates that do.
     """
     from ..services import gates as G
 
@@ -221,6 +225,19 @@ def triage(
             "--probe is required: for --refuted the run that shows the finding false, for "
             "--confirmed the fix or test that answers it"
         )
+    if not gate:
+        withf = sorted(
+            g
+            for g, r in it.gates.items()
+            if (r.evidence or {}).get("chunk_findings")
+            and all(f.get("digest") for f in r.evidence["chunk_findings"])
+        )
+        if len(withf) > 1:
+            return bad(
+                f"{item} has findings on gates {', '.join(withf)} and finding numbers are "
+                "per gate: say which with --gate"
+            )
+        gate = withf[0] if withf else "critic"
     rec = it.gates.get(gate)
     found = (rec.evidence or {}).get("chunk_findings") if rec else None
     if not found or not all(f.get("digest") for f in found):

@@ -1172,7 +1172,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     # `*`, not `?`: `ddflow review triage <id> ...` is a verb followed by the item.
     rw.add_argument("id", nargs="*", default=[], help="the item; or `triage <item>`")
-    rw.add_argument("--gate", default="critic")
+    rw.add_argument("--gate", default=None, help="gate to review (default critic)")
     rw.add_argument(
         "--intent",
         default="",

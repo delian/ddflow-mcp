@@ -1118,6 +1118,9 @@ only for a finding whose text is identical (decision D-review-triage). Over MCP 
 `ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`. The `triage` verb is
 required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` are refused
 (exit 1) before any reviewer is contacted, as is `--chunk` on `review triage`.
+Finding numbers are per gate, so `--gate` is never defaulted on `review triage`: omitted, it is
+refused (exit 1) naming the gates that have findings when several do, and resolved to that gate
+(the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
 
 ### Companion tools
 
