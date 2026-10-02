@@ -63,6 +63,10 @@ def test_a_conflicted_waiter_wakes_when_the_holder_releases(proj):
     assert time.monotonic() - started < 10, "woke by timeout, not by the release"
     # The release is what woke it, and the release SAYS so to the holder.
     assert [w["agent"] for w in box["out"].data["woke"]] == [WAITER]
+    # What stays is not a wait but the place in line it earned (a woken, deadline-only
+    # registration): the claim follows from another process, and spends it.
+    assert [(w.agent, w.woken) for w in WT.live_waiters(proj)] == [(WAITER, True)]
+    assert A.claim(proj, "T2", no_worktree=True, agent=WAITER).ok
     assert WT.live_waiters(proj) == [], "a finished wait left its registration behind"
 
 
