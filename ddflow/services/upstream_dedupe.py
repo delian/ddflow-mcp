@@ -210,6 +210,8 @@ def check(
     ``repo``. ``fetch`` defaults to the real unauthenticated GET."""
     if not _REPO.fullmatch(repo or "") or ".." in repo:
         raise ValueError(f"upstream repo {repo!r} must look like owner/name")
+    if max_pages < 1:
+        raise ValueError("max_pages must be at least 1: an unasked upstream is not 'no issues'")
     res = Result(repo=repo)
     record = {"title": title, "body": body}
     if local is not None:
