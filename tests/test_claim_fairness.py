@@ -317,7 +317,6 @@ def test_a_registration_with_a_non_finite_time_is_not_read(proj):
 
 
 def test_a_registration_with_a_huge_integer_time_is_skipped_not_fatal(proj):
-    import json
 
     _queue(proj, B, "TB", time.time() - 120)
     f = next((proj / ".ddflow" / "local" / "waits").glob("*.json"))
