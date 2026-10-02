@@ -185,7 +185,7 @@ def _bug_lines(b: dict) -> str:
     lines = [f"{b['id']} [bug] {b['state']}"]
     if b.get("title"):
         lines.append(f"  title {b['title']}")
-    marks = [f"{k} {b[k]}" for k in ("severity", "scope") if b.get(k)]
+    marks = [f"{k} {b[k]}" for k in ("severity", "scope") if b.get(k) and b[k] != "project"]
     if marks:
         lines.append(f"  {'; '.join(marks)}")
     lines.append(f"  {found}")

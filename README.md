@@ -2988,7 +2988,7 @@ ddflow bug found --summary "claim drops the lease on crash" \
 three are the `title`, `severity` and `scope` parameters of `ddflow_bug_found`. All are
 optional event fields: an old log folds unchanged and an older ddflow ignores them. The
 title takes part in the duplicate check, and `show <bug>` and `ddflow similar` display
-all three. A later `bug.reported_upstream` event (`url`, `number`, `delivery`, `sent_at`,
+the title, the severity and a scope other than `project`. A later `bug.reported_upstream` event (`url`, `number`, `delivery`, `sent_at`,
 `digest`) records where a ddflow-scoped bug's report went; an older ddflow reports it as
 a skipped kind. Once a command to prepare that report exists, filing a `ddflow`-scoped bug ends with a
 one-line offer to run it.

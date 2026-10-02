@@ -54,7 +54,7 @@ def test_an_unknown_scope_or_severity_is_refused_and_writes_nothing(repo):
 def test_an_event_without_the_new_fields_folds_unchanged():
     ev = Event(kind="bug.found", subject="B1", data={"summary": "old", "item": ""}, ts="t")
     b = fold([ev]).bugs["B1"]
-    assert (b.title, b.severity, b.scope, b.upstream_url) == ("", "", "", "")
+    assert (b.title, b.severity, b.scope, b.upstream_url) == ("", "", "project", "")
 
 
 def test_reported_upstream_is_registered_and_folds_onto_the_bug():
@@ -84,6 +84,7 @@ def test_a_later_upstream_event_fills_what_a_prepared_one_left_empty():
         data={"delivery": "propose", "digest": "d0"},
         ts="t1",
     )
+    assert fold([prepared]).bugs["B1"].upstream_sent_at == "", "a prepared report is not sent"
     sent = Event(
         kind="bug.reported_upstream",
         subject="B1",
@@ -133,6 +134,33 @@ def test_the_mcp_tool_takes_the_same_fields(repo):
     assert result["_meta"]["exit"] == 1
 
 
+def _parser_accepts(command: str) -> bool:
+    import shlex
+
+    argv = shlex.split(command)[1:]
+    try:
+        cli.build_parser().parse_args(argv)
+    except SystemExit:
+        return False
+    return True
+
+
+def test_a_plain_re_report_keeps_a_ddflow_scoped_bug_ddflow_scoped(repo):
+    run_cli(repo, "init")
+    args = ("bug", "found", "--summary", "crash on load", "--item", "T1")
+    assert run_cli(repo, *args, "--scope", "ddflow")[0] == 0
+    code, _, _ = run_cli(repo, "--json", *args)
+    assert code == 0
+    assert next(iter(_bugs(repo).values())).scope == "ddflow"
+
+
+def test_the_default_project_call_carries_a_null_offer(repo):
+    run_cli(repo, "init")
+    body, result = call(repo, "ddflow_bug_found", id="B-p", summary="plain")
+    # A stable wire shape: the key is present, null when there is nothing to offer.
+    assert not result.get("isError") and body["offer"] is None, body
+
+
 def _parser_has_bug_report() -> bool:
     bug = next(
         a for a in cli.build_parser()._subparsers._group_actions[0].choices["bug"]._actions
@@ -149,6 +177,8 @@ def test_the_upstream_offer_is_made_only_while_the_command_exists(repo):
     assert code == 0
     assert bool(K.BUG_REPORT_COMMAND) == ("prepares an upstream report" in out)
     assert K.upstream_offer("project", "B1") == ""
+    if K.BUG_REPORT_COMMAND:
+        assert _parser_accepts(K.BUG_REPORT_COMMAND.format(id="B1")), K.BUG_REPORT_COMMAND
 
 
 def test_show_displays_title_severity_and_scope(repo):
