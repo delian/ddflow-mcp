@@ -268,14 +268,16 @@ def test_a_refused_reclaim_keeps_the_lease_the_caller_already_held(repo):
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent="lead")[0] == OK
     bound = repo.parent / "bound-tree"
     _git(repo, "worktree", "add", "-q", str(bound), "-b", "bound")
-    assert run_cli(bound, "claim", "T2", agent="other")[0] == OK
+    # The occupant is the caller itself: a tree another identity ADOPTED is that identity's
+    # (B-declared-tree-owner) and a foreign claim makes its own tree instead of refusing.
+    assert run_cli(bound, "claim", "T2", agent="lead")[0] == OK
 
     code, out, err = run_cli(bound, "claim", "T1", agent="lead")
     assert code == REFUSED, out + err
     lease = _item(repo, "T1").lease
     assert lease and lease.holder == "lead", lease
 
-    code, out, err = run_cli(bound, "claim", "T3", agent="fresh")
+    code, out, err = run_cli(bound, "claim", "T3", agent="lead")
     assert code == REFUSED, out + err
     lease = _item(repo, "T3").lease
     assert not (lease and lease.holder), lease

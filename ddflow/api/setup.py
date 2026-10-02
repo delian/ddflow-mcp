@@ -258,7 +258,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     target = str(config_file(repo, local=edit.local))
 
     if edit.set:
-        err, _text = _write_config(repo, [(edit.set, edit.value)], local=edit.local)
+        err, _text = _write_config(repo, [(edit.set, edit.value)], local=edit.local, agent=agent)
         if err:
             return O.failed("config", err, key=edit.set, value=edit.value, rows=[], text="")
         added = [] if edit.local else _sync_attributes(repo)
@@ -278,7 +278,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
         # Validated BEFORE writing: an agent composing TOML gets a parse error back as a
         # readable message instead of leaving the project with a config no later command
         # can load.
-        err, path = _append_config(repo, edit.append_toml, local=edit.local)
+        err, path = _append_config(repo, edit.append_toml, local=edit.local, agent=agent)
         if err:
             return O.failed("config", err, path="", rows=[], text="")
         added = [] if edit.local else _sync_attributes(repo)
