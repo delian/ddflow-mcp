@@ -45,6 +45,11 @@ def _repo(root: Path, order: str = "forward", with_extras: bool = True) -> query
         ),
         (
             "decision.recorded",
+            "D-rej",
+            {"title": "Rejected idea", "status": "rejected", "globs": ["x/**"]},
+        ),
+        (
+            "decision.recorded",
             "D-prop",
             {"title": "Maybe a cache", "status": "proposed", "globs": ["ddflow/api/**"]},
         ),
@@ -105,6 +110,7 @@ def test_superseded_decisions_and_lessons_excluded(tmp_path):
     body = _body(_repo(tmp_path))
     assert "D-old" not in body and "Use sqlite" not in body
     assert "L-d" not in body and "Old way" not in body
+    assert "D-rej" not in body and "x/" not in body  # only accepted/proposed are in force
     assert "D-new" in body and "L-e" in body
 
 
