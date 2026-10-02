@@ -472,3 +472,22 @@ def test_region_in_a_crlf_file_keeps_the_prose_bytes(repo):
     W.write_region(repo, "README.md", "status", "- b\n")
     raw = p.read_bytes()
     assert raw.startswith(b"intro\r\n") and raw.endswith(b"outro\r\n") and b"- b\n" in raw
+
+
+def test_concurrent_first_appends_to_different_targets_all_register(repo):
+    from ddflow.services.shared_files import committed_append_only
+
+    names = [f"logs/L{i}.md" for i in range(8)]
+    errs: list[BaseException] = []
+
+    def go(n: str) -> None:
+        try:
+            W.append_entries(repo, n, "worklog", _produce("- e\n", "ev"), version="1")
+        except BaseException as exc:
+            errs.append(exc)
+
+    ts = [threading.Thread(target=go, args=(n,)) for n in names]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert not errs
+    assert sorted(committed_append_only(repo)) == sorted(names)  # none lost
