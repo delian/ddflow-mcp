@@ -206,3 +206,14 @@ def test_a_stored_record_sharing_an_id_with_an_imported_one_is_still_a_queue_mat
     assert sorted(_lessons(plan)) == ["L1"], sorted(_lessons(plan))
     (dup,) = plan.duplicates
     assert (dup.found.ident, dup.of, dup.where) == ("L2", "L2", "queue"), dup
+
+
+def test_warn_mode_reports_but_still_imports(repo):
+    _corpus(repo)
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + '\n[dedupe]\non_match = "warn"\n')
+    plan = _plan(repo)
+    assert len(plan.duplicates) == 1
+    assert sum(1 for i in _lessons(plan) if i.startswith("LS-")) == 2, "nothing withheld"
+    assert any("WILL be imported anyway" in n for n in plan.notes), plan.notes

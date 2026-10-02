@@ -1436,7 +1436,8 @@ written for it, and filing one anyway is `ddflow lesson add` (or `decision add` 
 duplicate from a related record, which is why it is reported rather than decided. On a
 real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson were
 reported this way. Tasks and phases are not checked (they carry dependencies);
-`[dedupe].on_match = "off"` turns the check off. Re-running over the same files adds
+`[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
+`"off"` turns the check off. Re-running over the same files adds
 nothing.
 
 ### Verifying an import, at any time
