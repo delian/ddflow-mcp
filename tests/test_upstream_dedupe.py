@@ -115,6 +115,15 @@ def test_each_other_filing_is_a_duplicate_of_the_report(other):
     assert res.upstream[0].id == "#7" and res.upstream[0].score >= 0.55
 
 
+def test_search_shaped_response_is_read_too():
+    body = {"total_count": 5, "incomplete_results": False, "items": corpus()}
+    res = U.check(FILINGS["B5d98a4da0a"], "", repo=REPO, fetch=Fake(raw=json.dumps(body)))
+    assert res.upstream_state == "checked" and res.offer and res.offer.id == "#7"
+    assert res.offer.score >= 0.55
+    empty = U.check("t", "b", repo=REPO, fetch=Fake(raw='{"total_count": 0, "items": []}'))
+    assert empty.upstream_state == "no_issues"
+
+
 def test_unrelated_report_is_not_offered():
     res = U.check(
         "Installer fails on Windows paths",
