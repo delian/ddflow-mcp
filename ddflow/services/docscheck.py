@@ -143,7 +143,8 @@ def check_docs(
     (default: the project's own `[project.scripts]` / package.json `bin`). ``ignore_names``
     are fnmatch patterns of identifiers and flags another tool owns (`ddflow_*` in an
     agent-instructions page of a project that merely uses ddflow). Raises
-    OSError when git cannot list the tree: "could not tell" is never a clean report.
+    OSError when git cannot list the tree or a named document cannot be read: "could not tell" is
+    never a clean report.
     """
     from pathlib import Path
 
@@ -162,12 +163,15 @@ def check_docs(
     ignore = [glob_regex(g) for g in ignore_paths]
     names = [re.compile(fnmatch.translate(g)) for g in ignore_names]
     tree = _Tree(files)
-    texts = {}
+    texts, unreadable = {}, []
     for d in docs:
         try:
             texts[d] = (root / d).read_text("utf-8", errors="replace")
         except OSError:
-            continue
+            unreadable.append(d)
+    if unreadable:
+        # a document nobody read is "could not tell", never a clean report
+        raise OSError(f"cannot read: {', '.join(unreadable)}")
     heads = _Headings(root, texts)
 
     report = Report()
@@ -234,7 +238,6 @@ class _Corpus:
     words: set[str] = field(default_factory=set)
     flags: set[str] = field(default_factory=set)
     verbs: set[str] = field(default_factory=set)
-    verbs: set[str] = field(default_factory=set)
 
     @classmethod
     def build(cls, root, paths: list[str]) -> _Corpus:
@@ -291,16 +294,18 @@ class _Headings:
     def __init__(self, root, texts: dict[str, str]) -> None:
         self.root = root
         self.texts = texts
-        self._cache: dict[str, set[str]] = {}
+        self._cache: dict[str, set[str] | None] = {}
 
-    def of(self, path: str) -> set[str]:
+    def of(self, path: str) -> set[str] | None:
+        """The anchors ``path`` offers; None when it cannot be read (could not tell)."""
         if path not in self._cache:
             text = self.texts.get(path)
             if text is None:
                 try:
                     text = (self.root / path).read_text("utf-8", errors="replace")
                 except OSError:
-                    text = ""
+                    self._cache[path] = None
+                    return None
             self._cache[path] = anchors_of(text)
         return self._cache[path]
 
@@ -467,7 +472,8 @@ class _Scan:
             resolved = self.path
         if frag and resolved in self.tree.files and resolved.lower().endswith((".md", ".markdown")):
             self.counts["anchors"] += 1
-            if frag.lower() not in self.heads.of(resolved):
+            offered = self.heads.of(resolved)
+            if offered is not None and frag.lower() not in offered:
                 self.report.findings.append(
                     Finding("anchor", self.path, n, url, f"no heading #{frag} in {resolved}")
                 )
