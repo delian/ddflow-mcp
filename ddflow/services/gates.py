@@ -205,7 +205,11 @@ DEFAULT_GATES: dict[str, GateDef] = {
         prompt=(
             "Run the project's standards tools. Apply their FINDINGS; verify their "
             "FIXES by running the tests — a suggested fix reasoning from general "
-            "language rules does not know your types' operator overloads."
+            "language rules does not know your types' operator overloads. Review an "
+            "EXPLICIT commit: `roborev review <sha>` with your branch head's sha, never "
+            "`roborev review HEAD` from a worktree (it can enqueue the primary's HEAD), "
+            "and record it with `gate record --reviewed-sha <sha>`: ddflow refuses a sha "
+            "that is not your branch."
         ),
     ),
     "unit_tests": GateDef(
