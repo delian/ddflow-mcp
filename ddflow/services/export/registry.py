@@ -201,7 +201,7 @@ def md_escape(value: object) -> str:
     s = re.sub(r"\](?=[(\[])", r"\\]", s)
     s = re.sub(r"<(?=[A-Za-z/!?])", r"\\<", s)
     s = re.sub(r"&(?=#?\w+;)", r"\\&", s)
-    return re.sub(r"^(?:([#>+])|(-)(?=[- ])|(\d+)([.)])(?= ))", _line_start, s)
+    return re.sub(r"^(?:([#>+*])|(-)(?=[- ])|(\d+)([.)])(?= ))", _line_start, s)
 
 
 def _line_start(m: re.Match[str]) -> str:
