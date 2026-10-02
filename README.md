@@ -1090,7 +1090,9 @@ fix or test that answers it. The gate's outcome is not changed — a review that
 findings stays `failed`, and that does not block completion; the log now shows what became
 of each finding. Triage appears in `gate status` and `show`, and a re-review carries it over
 only for a finding whose text is identical (decision D-review-triage). Over MCP it is
-`ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`.
+`ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`. The `triage` verb is
+required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` are refused
+(exit 1) before any reviewer is contacted, as is `--chunk` on `review triage`.
 
 ### Companion tools
 
