@@ -2699,6 +2699,26 @@ mutation-verified in `tests/test_log_read_cache.py` — including that the diges
 whole prefix rather than a trailing window of it, which a smaller fixture cannot tell
 apart.
 
+### A log from a newer ddflow, and the link event kinds
+
+Checkouts of one repository can run different ddflow versions, and a shard merged from a
+newer one may hold event kinds this code has no handler for. They are skipped, as an
+unknown config key is, but **not silently**: `ddflow doctor` adds a note naming each
+unknown kind and how many events were skipped (`this log has events from a newer ddflow
+... skipped: record.extended x2`), and `ddflow status` carries them as `skipped_kinds`.
+Every number the older ddflow shows is computed without those events, so the remedy is the
+same as for a config key: merge main, or run the newer ddflow.
+
+Two such kinds describe how records relate (decision D-no-duplicates). Add events
+(`task.added`, `phase.added`, `bug.found`, `lesson.recorded`, `research.recorded`,
+`decision.recorded`, `memory.recorded`) may carry `extends`, `duplicate_of`, `related`
+and `dedupe` (the recorded answer, its score and the candidates shown). A later
+`record.extended` is a **verbatim addition** to an existing record (text, who, when,
+score), and a later `link.recorded` is a link or a `distinct` dismissal. Both accumulate,
+keyed by event: two additions made at once by two clones both survive in any fold order,
+and an addition never replaces the record's own text (a bug's summary stays as written).
+`ddflow replay` renders both. No command writes them yet.
+
 ### The compaction that was declined
 
 An event kind `log.compacted` was reserved for a retention pass that shrank the log. It
