@@ -5,12 +5,11 @@ See the package docstring (``ddflow.services.export``) for the plug-in contract.
 
 from __future__ import annotations
 
-import contextlib
+import ctypes
 import hashlib
 import importlib
 import pkgutil
 import re
-import signal
 import textwrap
 import threading
 from collections.abc import Callable, Mapping
@@ -185,7 +184,7 @@ def truncate_text(value: object, limit: int = 140) -> str:
 def bar(done: object, total: object, width: int = 10) -> str:
     """A text progress bar, ``[####......]``; an empty total renders an empty bar."""
     w, t = int(width), int(total)  # type: ignore[call-overload]
-    n = 0 if t <= 0 else min(w, round(w * int(done) / t))  # type: ignore[call-overload]
+    n = 0 if t <= 0 else max(0, min(w, round(w * int(done) / t)))  # type: ignore[call-overload]
     return "[" + "#" * n + "." * (w - n) + "]"
 
 
@@ -233,33 +232,36 @@ def _environment() -> SandboxedEnvironment:
     return env
 
 
-@contextlib.contextmanager
-def _time_limit(seconds: float):
-    """Raise ``TimeoutError`` after ``seconds`` (main thread, where SIGALRM exists).
+def _run_limited(fn: Callable[[], str], seconds: float) -> str:
+    """Run ``fn`` in a helper thread; past ``seconds`` raise ``TimeoutError`` INTO it.
 
-    Elsewhere (a server worker thread, a platform with no SIGALRM) the sandbox's own
-    limits still apply (range() is capped, output is size-capped by the caller) but this
-    deadline cannot interrupt a pure-compute loop.
+    Works from any thread  and touches no process-wide
+    state (no signal handler, no itimer another component might be using). A compiled
+    template is pure Python bytecode, so the asynchronous exception lands inside the
+    runaway loop and ends it; the caller always gets an error, never a hang.
     """
-    usable = (
-        seconds > 0
-        and hasattr(signal, "setitimer")
-        and threading.current_thread() is threading.main_thread()
-    )
-    if not usable:
-        yield
-        return
+    if seconds <= 0:
+        return fn()
+    box: dict[str, Any] = {}
 
-    def fire(_sig, _frame):
+    def work() -> None:
+        try:
+            box["value"] = fn()
+        except BaseException as exc:
+            box["error"] = exc
+
+    t = threading.Thread(target=work, name="ddflow-export-render", daemon=True)
+    t.start()
+    t.join(seconds)
+    if t.is_alive():
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_ulong(t.ident or 0), ctypes.py_object(TimeoutError)
+        )
+        t.join(2.0)
         raise TimeoutError(f"template ran longer than {seconds:g}s")
-
-    old = signal.signal(signal.SIGALRM, fire)
-    signal.setitimer(signal.ITIMER_REAL, seconds)
-    try:
-        yield
-    finally:
-        signal.setitimer(signal.ITIMER_REAL, 0)
-        signal.signal(signal.SIGALRM, old)
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
 
 
 def render(
@@ -279,11 +281,13 @@ def render(
     name = template.name if isinstance(template, Template) else "<template>"
     where = str(template.path) if isinstance(template, Template) and template.path else name
     text = template.text if isinstance(template, Template) else template
+    if not isinstance(data, Mapping):
+        raise ExportError(f"{where}: template data must be a mapping, not {type(data).__name__}")
     ctx = plain(dict(data))
     ctx["schema_version"] = schema_version
     try:
-        with _time_limit(timeout_s):
-            return normalize(_environment().from_string(text).render(**ctx))
+        env = _environment()
+        return normalize(_run_limited(lambda: env.from_string(text).render(**ctx), timeout_s))
     except jinja2.TemplateSyntaxError as exc:
         raise ExportError(f"{where}:{exc.lineno}: {exc.message}") from exc
     except jinja2.TemplateError as exc:  # undefined variable, SecurityError, ...
