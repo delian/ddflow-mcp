@@ -274,13 +274,15 @@ def print_doc(
     text = S.fence_document(spec.doc, shown, by) if fenced else shown
     # The fence escapes tag-like text, which grows it past what the overhead measured on an
     # empty body: tighten the room by the excess until the fenced text fits the cap.
-    for _ in range(5):
+    for _ in range(64):
         excess = len(text.encode("utf-8")) - cap if fenced and cap > 0 else 0
         if excess <= 0:
             break
         room = max(room - excess, 1)
         shown = render(repo, cfg, q, spec, max_bytes=room, template=template)
         text = S.fence_document(spec.doc, shown, by)
+    else:
+        raise ExportError(f"--max-bytes {cap} is too small for the fenced document", EXIT_REFUSED)
     m = _TRUNC.fullmatch(shown.rstrip("\n").rsplit("\n", 1)[-1])
     return Result(
         spec.doc,
