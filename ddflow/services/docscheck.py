@@ -52,7 +52,9 @@ _FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 _NOT_PARAGRAPH = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\|)")
 _SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 _SPAN = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
-_LINK = re.compile(r"(?<!\\)!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
+_LINK = re.compile(
+    r"(?<!\\)!?\[[^\]\n]*\]\(\s*<?((?:[^()\s>]|\([^()\s]*\))+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)"
+)
 #: `[label]: destination "optional title"`. A footnote (`[^1]: prose`) is not one, and the
 #: destination must end the line or be followed only by a title, so prose never reads as a link.
 _REFDEF = re.compile(
@@ -67,7 +69,7 @@ _CAMEL = re.compile(r"[a-z]+(?:[A-Z][a-z0-9]*)+")
 _DOTTED = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+")
 _FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _WORD = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_CORPUS_FLAG = re.compile(r"(?<![\w-])--[a-z][a-z0-9-]*[a-z0-9]")
+_CORPUS_FLAG = re.compile(r"(?<![\w-])--[a-z](?:[a-z0-9-]*[a-z0-9])?")
 _QUOTED = re.compile(r"""["']([a-z][a-z0-9-]*)["']""")
 #: A file that registers command-line verbs (argparse, click, typer, cobra, commander). Only
 #: the quoted strings and function names of such files can be a verb: `"setup"` is quoted all
@@ -488,8 +490,9 @@ class _Scan:
         if _SCHEME.match(url) or url.startswith("//") or "{" in url or "<" in url:
             return
         self.counts["links"] += 1
-        target, _, frag = unquote(url).partition("#")
-        target = target.partition("?")[0]
+        target, _, frag = url.partition("#")
+        target = unquote(target.partition("?")[0])
+        frag = unquote(frag)
         if target:
             base = (
                 target.lstrip("/") if target.startswith("/") else posixpath.join(self.dir, target)
