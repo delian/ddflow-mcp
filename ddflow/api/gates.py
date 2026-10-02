@@ -20,8 +20,9 @@ Two rules here are worth reading before changing anything:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -406,6 +407,117 @@ class Evidence:
     exit_code: int | None = None
     model: str = ""
     output_file: str = ""
+    #: The commit a review tool was run on (`roborev review <sha>`), checked against the
+    #: item's branch head (B1ed2b4fde6).
+    reviewed_sha: str = ""
+    #: ``model`` was given as `--reviewer-model`: the caller states it IS the reviewer's,
+    #: so an author-family name on a reviewer gate is not refused (B1979dac602).
+    model_is_reviewer: bool = False
+
+
+@dataclass
+class _Vetted:
+    refusal: str = ""
+    note: str = ""
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+
+def _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence: Evidence, skip: bool) -> _Vetted:
+    """Check the caller's ``--model`` and ``--reviewed-sha`` claims against the project."""
+    if skip:
+        return _Vetted()
+    if evidence.model and not evidence.model_is_reviewer:
+        if why := _author_model_on_reviewer_gate(st, cfg, log, gate, evidence.model):
+            return _Vetted(refusal=why)
+    if not evidence.reviewed_sha:
+        return _Vetted()
+    full, why, note = _reviewed_sha_check(repo, cfg, it, wt, evidence.reviewed_sha)
+    return _Vetted(refusal=why, note=note, evidence={"reviewed_sha": full} if full else {})
+
+
+def _author_model_on_reviewer_gate(st, cfg, log, gate: str, model: str) -> str:
+    """A refusal when ``model`` is the AUTHOR's family on a reviewer gate, else "".
+
+    `gate record --model` names the REVIEWER's model; `complete --model` the author's.
+    Recording the author's own model on a reviewer gate overwrote the reviewer's, and
+    `complete` then judged independence against the author's family (B1979dac602). The
+    author is the model this agent declared at `session start`; with none declared there
+    is nothing to compare, and the record stands.
+    """
+    if gate not in G.REVIEWER_GATES:
+        return ""
+    from .lifecycle import _session_model
+
+    author = _session_model(st, log.agent_id)
+    if not author:
+        return ""
+    fam = G.family_of(model, cfg).strip().lower()
+    if not fam or fam != G.family_of(author, cfg).strip().lower():
+        return ""
+    return (
+        f"--model {model!r} is the author's own family ({fam}, the model {log.agent_id} "
+        f"declared at `session start`), and --model on a reviewer gate names the "
+        f"REVIEWER's model (the author's is `complete --model`). Pass the model that "
+        f"reviewed, or --reviewer-model {model} to state that this reviewer really is "
+        f"of that family (it will not count as independent)."
+    )
+
+
+def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple[str, str, str]:
+    """(full sha, refusal, warning) for a ``--reviewed-sha``; the sha is "" when refused.
+
+    `roborev review HEAD` run from an item's worktree enqueued the PRIMARY's HEAD
+    (B1ed2b4fde6): the review was of main, recorded against the item. The branch head
+    passes; an older commit of the item's own branch passes with a warning (it was
+    reviewed, but not what will merge); anything else -- main, another branch, an
+    unknown sha -- is refused.
+    """
+    from ..infra import worktree as W
+
+    if not re.fullmatch(r"[0-9a-fA-F]{7,64}", sha):
+        # `HEAD` resolves to a different commit in every checkout: it is the very input
+        # that was wrong, so it cannot be told apart from a right one.
+        return (
+            "",
+            (
+                f"--reviewed-sha {sha!r} is not a commit sha: a symbolic ref such as HEAD "
+                f"means a different commit in the primary and in a worktree. Pass the "
+                f"hex sha the review ran on (`git rev-parse HEAD` in the item's worktree)."
+            ),
+            "",
+        )
+    where = wt if wt is not None and wt.exists() else repo
+    full = W.rev(where, sha)
+    if not full:
+        return "", f"--reviewed-sha {sha!r} is not a commit in this repository.", ""
+    head = W.head_sha(wt) if wt is not None and wt.exists() else ""
+    if not head and it.branch:
+        head = W.rev(repo, it.branch)
+    if not head:
+        return full, "", "NOTE: no branch head to compare --reviewed-sha with; recorded as given."
+    if full == head:
+        return full, "", ""
+    base = cfg.worktree.base_ref or W.default_branch(repo)
+    own = W.git(where, "rev-list", f"{base}..{head}")
+    if own.ok and full in own.out.split():
+        return (
+            full,
+            "",
+            (
+                f"NOTE: --reviewed-sha {full[:10]} is an older commit of the branch; its head "
+                f"is {head[:10]}. What merges is not what was reviewed."
+            ),
+        )
+    return (
+        "",
+        (
+            f"--reviewed-sha {full[:10]} is not the item's branch head ({head[:10]}) nor a "
+            f"commit of its branch: the review was of another commit (`roborev review HEAD` "
+            f"from a worktree can enqueue the primary's HEAD). Re-run it with the explicit "
+            f"sha: `roborev review {head[:10]}`."
+        ),
+        "",
+    )
 
 
 def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
@@ -490,6 +602,7 @@ def record(
     if not skip and gate == "docs" and it.kind == "phase" and result == "passed":
         warning = _docs_gate_export(repo, cfg, ev, warning)
 
+    wt: Path | None = None
     if not skip:
         # WHICH tree and HOW MUCH, for AGENT gates too. These were added to
         # `run_command_gate` only, so they never reached the gates the rationale was
@@ -526,6 +639,12 @@ def record(
         )
     else:
         measured = {}
+
+    vetted = _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence, skip)
+    if vetted.refusal:
+        return O.refused("gate.record", vetted.refusal, id=item, gate=gate, outcome=result)
+    ev.update(vetted.evidence)
+    warning = " ".join(filter(None, [warning, vetted.note]))
 
     try:
         G.record(

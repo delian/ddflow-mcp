@@ -205,7 +205,11 @@ DEFAULT_GATES: dict[str, GateDef] = {
         prompt=(
             "Run the project's standards tools. Apply their FINDINGS; verify their "
             "FIXES by running the tests — a suggested fix reasoning from general "
-            "language rules does not know your types' operator overloads."
+            "language rules does not know your types' operator overloads. Review an "
+            "EXPLICIT commit: `roborev review <sha>` with your branch head's sha, never "
+            "`roborev review HEAD` from a worktree (it can enqueue the primary's HEAD), "
+            "and record it with `gate record --reviewed-sha <sha>`: ddflow refuses a sha "
+            "that is not your branch."
         ),
     ),
     "unit_tests": GateDef(
@@ -1822,6 +1826,10 @@ def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
     return ""
 
 
+#: The gates whose recorded model counts toward reviewer independence.
+REVIEWER_GATES = ("rubber_duck", "critic", "standards")
+
+
 def reviewer_independence(
     state: State, cfg: Config, item_id: str, author_model: str
 ) -> tuple[bool, str]:
@@ -1845,7 +1853,7 @@ def reviewer_independence(
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     unapproved: list[tuple[str, str]] = []
-    for gname in ("rubber_duck", "critic", "standards"):
+    for gname in REVIEWER_GATES:
         rec = it.gates.get(gname)
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue

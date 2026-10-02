@@ -581,7 +581,25 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         gr.add_argument("--evidence", default="", help="what you observed: output, a summary")
         gr.add_argument("--command", default="")
         gr.add_argument("--exit-code", type=int)
-        gr.add_argument("--model", default="", help="reviewer model, for family independence")
+        gr.add_argument(
+            "--model",
+            default="",
+            help="the REVIEWER's model, for family independence (the author's is "
+            "`complete --model`); an author-family name on a reviewer gate is refused",
+        )
+        if name == "record":
+            gr.add_argument(
+                "--reviewer-model",
+                default="",
+                help="like --model, stating that this model IS the reviewer, so an "
+                "author-family name is recorded rather than refused",
+            )
+            gr.add_argument(
+                "--reviewed-sha",
+                default="",
+                help="the commit the review tool ran on (roborev review <sha>); refused "
+                "when it is not the item's branch head or a commit of its branch",
+            )
         gr.add_argument("--output-file", default="")
         gr.set_defaults(fn=cmd_gate)
 
