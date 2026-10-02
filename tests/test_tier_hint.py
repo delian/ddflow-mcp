@@ -74,3 +74,15 @@ def test_driver_and_readme_say_advisory():
         ROOT / "ddflow/templates/drivers/implement-phase.md"
     ).read_text()
     assert "### Model-tier hint (advisory)" in (ROOT / "README.md").read_text()
+
+
+def test_unknown_tier_notes_skip_removed_and_finished_items():
+    from types import SimpleNamespace as NS
+
+    from ddflow.core.tier import unknown_tier_notes
+
+    mk = lambda i, **kw: NS(id=i, tags=["tier:foo"], state="open", removed=False, **kw)  # noqa: E731
+    notes = unknown_tier_notes(
+        [mk("live"), NS(id="gone", tags=["tier:foo"], state="open", removed=True)]
+    )
+    assert [n.split(":")[0] for n in notes] == ["live"]
