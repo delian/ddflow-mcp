@@ -113,6 +113,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
         )
     rows.sort(key=lambda r: r["_sort"], reverse=True)  # newest session first
     total = len(rows)
+    with_summary = sum(1 for r in rows if r["has_summary"])  # of the whole set, not the page
     if f.limit:
         rows = rows[: f.limit]
     for r in rows:
@@ -121,7 +122,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
         "sessions": rows,
         "total": total,
         "shown": len(rows),
-        "with_summary": sum(1 for r in rows if r["has_summary"]),
+        "with_summary": with_summary,
     }
 
 
