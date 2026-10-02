@@ -327,3 +327,33 @@ def test_session_without_started_at_uses_its_first_prompt_and_does_not_crash():
 def test_decisions_live_count_is_of_the_whole_set_not_the_page(q):
     body = registry.render_body("decisions", q, Filters(limit=1))
     assert "1 of 3 decisions; 2 accepted in all" in body
+
+
+def test_worklog_limit_across_days_is_the_newest_n_in_order():
+    evs = [
+        Event("item.completed", f"T-{i}", {}, agent=AG, lamport=i, ts=ts)
+        for i, ts in enumerate(
+            ["2026-09-01T09:00:00Z", "2026-09-02T10:00:00Z", "2026-09-02T11:00:00Z"], 1
+        )
+    ]
+    body = registry.render_body("worklog", query.build(evs), Filters(since="2026-09-01", limit=2))
+    assert "`T-1`" not in body
+    assert body.index("`T-2`") < body.index("`T-3`")
+    assert "## 2026-09-01" not in body
+
+
+def test_a_session_with_no_start_and_no_prompt_claims_no_items_by_agent():
+    evs = [
+        Event("session.note", "s-y", {"text": "n"}, agent=SA, lamport=1, ts="2026-09-01T09:00:00Z"),
+        Event(
+            "task.added",
+            "T-1",
+            {"title": "t", "parent": ""},
+            agent=SA,
+            lamport=0,
+            ts="2026-09-01T08:00:00Z",
+        ),
+        Event("item.started", "T-1", {}, agent=SA, lamport=2, ts="2026-09-01T09:05:00Z"),
+    ]
+    body = registry.render_body("sessions", query.build(evs), Filters())
+    assert "items: none recorded" in body

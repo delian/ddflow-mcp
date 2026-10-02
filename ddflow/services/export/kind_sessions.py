@@ -56,8 +56,8 @@ def _touched(q: Query) -> dict[str, set[str]]:
         ids = {p.get("item", "") for p in s.prompts} | {n.get("item", "") for n in s.notes}
         lo = _opened(s)
         hi = s.ended_at or "9999"
-        for ts, subject in by_agent.get(s.agent, ()):
-            if ts >= lo and ts <= hi:
+        for ts, subject in by_agent.get(s.agent, ()) if lo else ():  # no start: no window
+            if lo <= ts <= hi:
                 ids.add(subject)
         out[s.id] = {i for i in ids if i}
     return out
