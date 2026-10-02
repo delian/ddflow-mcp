@@ -2090,14 +2090,18 @@ independence requirement on its own.)
 gate used to overwrite the reviewer's, and `complete` then judged independence against the
 author's family. Now a `--model` in the author's family on `rubber_duck`/`critic` is refused
 (exit 3, naming `--reviewer-model`); `--reviewer-model <m>` (MCP `reviewer_model`) is the
-explicit spelling for a reviewer that really is of that family.
+explicit spelling for a reviewer that really is of that family. The author is the model the
+agent declared at `session start --model`; with none declared there is nothing to compare
+and the record stands. `standards` is covered too, since it counts toward independence.
 
 **`--reviewed-sha` ties a review to the commit that merges.** `roborev review HEAD` run from
 an item's worktree has enqueued the primary checkout's HEAD, so a `standards` gate was
 recorded against the wrong commit. Run `roborev review <sha>` with your branch head and
 record `gate record <id> standards --reviewed-sha <sha>`: the full sha is stored in the
 evidence, an older commit of the item's branch is accepted with a warning, and any other
-commit (main, another branch, an unknown sha) is refused with exit 3.
+commit (main, another branch, an unknown sha, or a symbolic ref such as `HEAD`, which means
+a different commit in each checkout) is refused with exit 3. An item with no branch to
+compare against records the sha with a note.
 
 `ddflow review` of an item reviews the branch's commits plus tracked edits in its worktree.
 Untracked files are *not* sent to the reviewer; they are listed in the output and in the

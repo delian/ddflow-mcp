@@ -20,6 +20,7 @@ Two rules here are worth reading before changing anything:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -443,7 +444,7 @@ def _author_model_on_reviewer_gate(st, cfg, log, gdef, gate: str, model: str) ->
     author is the model this agent declared at `session start`; with none declared there
     is nothing to compare, and the record stands.
     """
-    if gdef is None or gdef.reviewer != "different_family":
+    if gate not in G.REVIEWER_GATES:
         return ""
     from .lifecycle import _session_model
 
@@ -473,6 +474,18 @@ def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple
     """
     from ..infra import worktree as W
 
+    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", sha):
+        # `HEAD` resolves to a different commit in every checkout: it is the very input
+        # that was wrong, so it cannot be told apart from a right one.
+        return (
+            "",
+            (
+                f"--reviewed-sha {sha!r} is not a commit sha: a symbolic ref such as HEAD "
+                f"means a different commit in the primary and in a worktree. Pass the "
+                f"hex sha the review ran on (`git rev-parse HEAD` in the item's worktree)."
+            ),
+            "",
+        )
     where = wt if wt is not None and wt.exists() else repo
     full = W.rev(where, sha)
     if not full:

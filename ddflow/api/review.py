@@ -71,8 +71,9 @@ def diff_for(
 
     Untracked files in an item's tree are NOT in the diff (B2bf4d38cc1): a draft left
     untracked was reviewed as part of the change. `how` names them -- "untracked, not
-    reviewed" -- so a reviewer's "no tests" is explained by a file the author has not
-    committed. Commit what is to be reviewed.
+    reviewed" -- in the output and the recorded `diff_source`, for whoever triages a
+    "no tests" finding; the reviewer itself does not see them. Commit what is to be
+    reviewed.
 
     For an item, the item's work (B60de9a57ed): ``branch`` when named; else its tree;
     else its recorded branch (the tree is gone); else the branch checked out in the
