@@ -360,6 +360,18 @@ class Bug:
     invalid_at: str = ""
     invalid_reason: str = ""
     evidence: str = ""
+    #: Optional, from `bug found --title/--severity/--scope`; an old event carries none
+    #: and folds to "" (an unrecorded scope reads as `project`).
+    title: str = ""
+    severity: str = ""
+    scope: str = ""
+    #: `bug.reported_upstream`: where the report about this bug went (a ddflow bug filed
+    #: against ddflow itself).
+    upstream_url: str = ""
+    upstream_number: str = ""
+    upstream_delivery: str = ""
+    upstream_sent_at: str = ""
+    upstream_digest: str = ""
 
     @property
     def resolution(self) -> str:
@@ -1513,7 +1525,24 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
     bug.item = ev.data.get("item", "") or bug.item
     bug.summary = ev.data.get("summary", "") or bug.summary
+    bug.title = ev.data.get("title", "") or bug.title
+    bug.severity = ev.data.get("severity", "") or bug.severity
+    bug.scope = ev.data.get("scope", "") or bug.scope
     bug.found_at = bug.found_at or ev.ts
+
+
+def _h_bug_reported_upstream(st: State, ev: Event) -> None:
+    """The report about a ddflow-scoped bug was sent (or prepared) upstream. Keeps the
+    FIRST report: a second event for the same bug does not overwrite where it went."""
+    bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
+    if bug.upstream_sent_at:
+        return
+    d = ev.data
+    bug.upstream_url = str(d.get("url", "") or "")
+    bug.upstream_number = str(d.get("number", "") or "")
+    bug.upstream_delivery = str(d.get("delivery", "") or "")
+    bug.upstream_sent_at = str(d.get("sent_at", "") or "") or ev.ts
+    bug.upstream_digest = str(d.get("digest", "") or "")
 
 
 def _h_bug_fixed(st: State, ev: Event) -> None:
@@ -1923,6 +1952,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "bug.found": _linking(_h_bug_found),
     "bug.fixed": _h_bug_fixed,
     "bug.invalid": _h_bug_invalid,
+    "bug.reported_upstream": _h_bug_reported_upstream,
     "lesson.recorded": _linking(_h_lesson),
     "research.recorded": _linking(_h_research),
     "decision.recorded": _linking(_h_decision),
