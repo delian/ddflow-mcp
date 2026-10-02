@@ -53,9 +53,20 @@ def _depth(state: State, item, root: str) -> int:
     return min(depth, 6)
 
 
-def _nested(state: State, phase: str) -> list:
-    """Tasks under a phase, each sub-task immediately after its parent."""
-    tasks = state.tasks(phase)
+def unphased(state: State) -> list:
+    """Live tasks that sit under no phase, a sub-task after its parent (Bc896ea5d16: the
+    board listed only phases' tasks, so a task added with no phase never appeared)."""
+    under: set[str] = set()
+    for ph in state.phases():
+        under |= set(state.descendants(ph.id))
+    return _nested(state, "", [t for t in state.tasks() if t.id not in under])
+
+
+def _nested(state: State, phase: str, tasks: list | None = None) -> list:
+    """Tasks under a phase, each sub-task immediately after its parent. ``tasks``
+    overrides the set (the unphased ones, whose root is the empty id)."""
+    if tasks is None:
+        tasks = state.tasks(phase)
     by_parent: dict[str, list] = {}
     for t in tasks:
         by_parent.setdefault(t.parent, []).append(t)
@@ -90,9 +101,38 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
 
     out = [GENERATED, "", "# Work queue", ""]
     phases = [p for p in state.phases() if not phase or p.id == phase]
-    if not phases:
+    loose = [] if phase else unphased(state)
+    if not phases and not loose:
         out.append("_No phases yet. `ddflow phase add <id> --title '...'`_")
         return "\n".join(out)
+
+    def table(tasks: list, root: str) -> None:
+        out.append("| | Task | State | Needs | Globs | Gates | Owner |")
+        out.append("|---|---|---|---|---|---|---|")
+        for t in tasks:
+            mark = {DONE: "x", RUNNING: "~", REVIEW: "r", BLOCKED: "!", ABANDONED: "-"}.get(
+                t.state, " "
+            )
+            pipeline = (
+                pipeline_for(t, cfg) if cfg is not None else list(Config().gates.task_pipeline)
+            )
+            gates = "".join(OUTCOME_MARK.get(t.gate_outcome(g), " ") for g in pipeline)
+            indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * _depth(state, t, root)
+            out.append(
+                f"| [{mark}] | {indent}**{t.id}** {t.title} | {t.state} | "
+                f"{', '.join(t.needs) or '—'} | {', '.join(f'`{g}`' for g in t.globs) or '—'} | "
+                f"`{gates}` | {t.lease.holder if t.lease else '—'} |"
+            )
+        out.append("")
+        caption = " · ".join(
+            pipeline_for(tasks[0], cfg) if cfg is not None else list(Config().gates.task_pipeline)
+        )
+        out.append(
+            f"<sub>Gate column order: {caption}. "
+            "`x` passed `!` failed `?` unavailable `~` partial `-` skipped</sub>"
+        )
+        out.append("")
+
     for ph in sorted(phases, key=lambda p: (p.priority, p.id)):
         # Ordered so a sub-task follows its parent, and indented by depth: a flat list
         # of "P1.T1, P1.T1a, P1.T1b" hides that two of them are halves of the first.
@@ -118,33 +158,19 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             out.append(textwrap.indent(ph.body.strip(), "> "))
             out.append("")
         if tasks:
-            out.append("| | Task | State | Needs | Globs | Gates | Owner |")
-            out.append("|---|---|---|---|---|---|---|")
-            for t in tasks:
-                mark = {DONE: "x", RUNNING: "~", REVIEW: "r", BLOCKED: "!", ABANDONED: "-"}.get(
-                    t.state, " "
-                )
-                pipeline = (
-                    pipeline_for(t, cfg) if cfg is not None else list(Config().gates.task_pipeline)
-                )
-                gates = "".join(OUTCOME_MARK.get(t.gate_outcome(g), " ") for g in pipeline)
-                indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * _depth(state, t, ph.id)
-                out.append(
-                    f"| [{mark}] | {indent}**{t.id}** {t.title} | {t.state} | "
-                    f"{', '.join(t.needs) or '—'} | {', '.join(f'`{g}`' for g in t.globs) or '—'} | "
-                    f"`{gates}` | {t.lease.holder if t.lease else '—'} |"
-                )
-            out.append("")
-            caption = " · ".join(
-                pipeline_for(tasks[0], cfg)
-                if cfg is not None
-                else list(Config().gates.task_pipeline)
-            )
-            out.append(
-                f"<sub>Gate column order: {caption}. "
-                "`x` passed `!` failed `?` unavailable `~` partial `-` skipped</sub>"
-            )
-            out.append("")
+            table(tasks, ph.id)
+    if loose:
+        abandoned = [t for t in loose if t.state == ABANDONED]
+        live = [t for t in loose if t.state != ABANDONED]
+        done = sum(1 for t in live if t.state == DONE)
+        out.append("## Unphased — tasks under no phase")
+        out.append("")
+        bits = [f"{_bar(done, len(live))} {done}/{len(live)} tasks"]
+        if abandoned:
+            bits.append(f"{len(abandoned)} abandoned")
+        out.append(" · ".join(bits))
+        out.append("")
+        table(loose, "")
     cp = critical_path(state, phase)
     if len(cp) > 1:
         out.append(

@@ -502,3 +502,19 @@ def test_an_ambiguous_rule_covering_every_file_today_still_wins(repo):
     SF.sync_attributes(repo)
     assert _merge_attr(repo, "docs/guide.md") == "ours", _attributes(repo)
     assert _merge_attr(repo, "docs/xb.md") == "union"
+
+
+def test_a_declared_text_merge_silences_the_note_for_a_hand_edited_shared_doc(repo):
+    """Bbcca327127: README.md is shared and edited by hand in sections, where git's default
+    three-way text merge is right. `merge=text` says so and counts as a strategy; the note
+    for a doc with no line separates 'will conflict' (generated) from 'edited in sections'."""
+    _project(repo, shared='["README.md"]')
+    cfg = Config.load(repo)
+    (repo / ".gitattributes").write_text("")
+    _p, notes = SF.findings(repo, cfg)
+    note = next(n for n in notes if "README.md" in n)
+    assert "will conflict" in note and "by hand" in note and "README.md merge=text" in note
+    (repo / ".gitattributes").write_text("README.md merge=text\n")
+    _p, notes = SF.findings(repo, cfg)
+    assert not [n for n in notes if "README.md" in n], notes
+    assert "no merge strategy" not in run_cli(repo, "doctor")[1]

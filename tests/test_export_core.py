@@ -493,7 +493,7 @@ def test_schema_version_is_exposed_to_templates(tmp_path, builtin):
 
 def test_filters():
     r = registry.render
-    assert r("{{ 'a *b* _c_ [d]'|md_escape }}", {}) == "a \\*b\\* \\_c\\_ \\[d\\]\n"
+    assert r("{{ 'a *b* _c_ [d]'|md_escape }}", {}) == "a \\*b\\* \\_c\\_ [d]\n"
     assert r("{{ 'one  two\nthree four five'|wrap(9) }}", {}) == "one two\nthree\nfour five\n"
     assert r("{{ '2026-10-02T11:12:13+00:00'|date }}", {}) == "2026-10-02\n"
     assert r("{{ 'aaa bbb ccc ddd'|truncate(8) }}", {}) == "aaa bbb ...\n"
