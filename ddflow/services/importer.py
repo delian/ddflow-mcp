@@ -2848,6 +2848,9 @@ def _resolve_chains(dropped: dict[int, Duplicate], in_plan: dict[str, Found]) ->
             d.score = min(d.score, nxt.score)
 
 
+#: Marks a record of THIS import in the similarity index (see `_dedupe_found`).
+_THIS_IMPORT = "\x00import:"
+
 #: Identical repeats named in the plan's note (the rest are counted).
 _SHOWN_IDENTICAL = 12
 
@@ -2884,7 +2887,16 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     base = similar_records(state) if state is not None else []
 
     def rec(f: Found) -> dict[str, str]:
-        return {"id": f.ident, "kind": f.kind, "title": f.title, "body": f.body, "item": ""}
+        # Marked, so a record of this import never shares an id with a stored one (a
+        # bug or an item can carry the same word): the marker says which side a
+        # candidate came from.
+        return {
+            "id": _THIS_IMPORT + f.ident,
+            "kind": f.kind,
+            "title": f.title,
+            "body": f.body,
+            "item": "",
+        }
 
     # Another record of this import is a target only for a summary-born lesson, and a
     # target must outrank it: a summary bullet repeats the corpus, never the reverse.
@@ -2897,15 +2909,17 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     for f in mine:
         a = similar.assess(index, rec(f), cfg)
         for c in a.candidates:
-            tgt = in_plan.get(c.id)
+            tgt = in_plan.get(c.id.removeprefix(_THIS_IMPORT))
             where = "queue"
-            if tgt is not None:
+            if c.id.startswith(_THIS_IMPORT) and tgt is not None:
                 where = "import"
                 if not is_summary(f) or is_summary(tgt):
                     continue
             ident = "identical" in c.flags
             if ident or (c.score >= dd.ask_threshold and a.words >= dd.min_words):
-                dropped[id(f)] = Duplicate(f, c.id, c.score, ident, where)
+                dropped[id(f)] = Duplicate(
+                    f, c.id.removeprefix(_THIS_IMPORT), c.score, ident, where
+                )
                 break
     if not dropped:
         return

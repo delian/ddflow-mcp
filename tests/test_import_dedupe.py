@@ -186,3 +186,23 @@ def test_a_chain_through_a_near_duplicate_is_not_reported_as_word_for_word():
     IM._resolve_chains(dropped, {"B": q, "S": s})
     d = dropped[id(s)]
     assert (d.of, d.where, d.identical, d.score) == ("C", "queue", False, 0.85), d
+
+
+def test_a_stored_record_sharing_an_id_with_an_imported_one_is_still_a_queue_match(repo):
+    """Candidates are told apart by which side they came from, not by their id: a stored
+    bug called `L2` must not be mistaken for the imported lesson `L2`."""
+    _corpus(repo, summary=False)
+    run_cli(repo, "init")
+    EventLog(repo, agent_id="someone").append(
+        "bug.found",
+        "L2",
+        {
+            "summary": "Never force a push to a shared branch\\n"
+            "Force pushing rewrites history other worktrees are built on; use a revert "
+            "commit instead."
+        },
+    )
+    plan = _plan(repo)
+    assert sorted(_lessons(plan)) == ["L1"], sorted(_lessons(plan))
+    (dup,) = plan.duplicates
+    assert (dup.found.ident, dup.of, dup.where) == ("L2", "L2", "queue"), dup
