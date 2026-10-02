@@ -390,3 +390,11 @@ def test_check_is_a_failure_not_a_clean_bill_when_the_index_cannot_be_read(filed
     out = A.task_add(filed, "T-new", title=SECOND, answer=DD.Answer(check_only=True), agent="a")
     assert out.exit == 1 and "could not run" in out.reason
     assert out.data["dedupe_unavailable"] == "OSError: index is locked"
+
+
+def test_the_commands_put_the_flag_before_an_end_of_options_separator():
+    from ddflow.surfaces.dedupe_flags import commands
+
+    got = commands(["task", "add", "T1", "--", "-retry storm"], [{"id": "T-old"}])
+    assert got[1] == "ddflow task add T1 --extends T-old -- '-retry storm'"
+    assert got[0] == "ddflow task add T1 --new -- '-retry storm'"
