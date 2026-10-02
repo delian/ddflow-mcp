@@ -2105,7 +2105,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "The item whose review it is.", True),
-            "gate": ("string", "critic (default) or rubber_duck.", False),
+            "gate": ("string", "Omit if one gate has findings.", False),
             "finding": (
                 "integer",
                 "The finding's number: #N in the review's output -- of the RECORDED "
@@ -2118,7 +2118,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().review_triage(
             repo,
             a.get("id", "") or "",
-            gate=a.get("gate") or "critic",
+            gate=a.get("gate") or "",
             finding=int(a.get("finding") or 0),
             verdict=a.get("verdict", "") or "",
             probe=a.get("probe", "") or "",
