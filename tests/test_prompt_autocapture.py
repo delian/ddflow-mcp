@@ -219,7 +219,10 @@ def test_hook_stdin_falls_back_to_a_thread_read_when_select_cannot_take_the_fd(m
         def fileno(self):
             return 99
 
+    called = []
+
     def boom(*a, **k):
+        called.append(1)
         raise OSError("select only takes sockets here")
 
     monkeypatch.setattr(select, "select", boom)
@@ -227,3 +230,4 @@ def test_hook_stdin_falls_back_to_a_thread_read_when_select_cannot_take_the_fd(m
     t0 = time.monotonic()
     assert json.loads(S._hook_stdin(timeout_s=5)) == {"prompt": "café"}
     assert time.monotonic() - t0 < 5
+    assert called, "the fallback ran for some reason other than select refusing the fd"
