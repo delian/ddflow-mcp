@@ -96,7 +96,9 @@ def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
 
 
 def _clip(value: Any, cut: list[int]) -> Any:
-    """``value`` with every string over `TEXT_SHOWN` cut and ended in ' [...]'; ``cut[0]``
+    """``value`` with each string that is more than `TEXT_SHOWN` plus the marker long cut to
+    `TEXT_SHOWN` and ended in `CUT_MARK` (a shorter one stays whole: cutting would not
+    save a byte); ``cut[0]``
     counts them."""
     if isinstance(value, str):
         # Only when the cut is a saving: the " [...]" marker is six characters.
@@ -114,7 +116,7 @@ def _clip(value: Any, cut: list[int]) -> Any:
 def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     """`ddflow_show`: the item without its empty fields; each gate record without the
     tree-identity boilerplate (`GATE_BOILERPLATE`); the gate and triage records' long
-    strings cut to `TEXT_SHOWN`. The outcome, who, when, the reason and the evidence's
+    strings cut (see `_clip`). The outcome, who, when, the reason and the evidence's
     own words stay, and `truncated` names what was left out."""
     if not isinstance(body, dict) or ("state" not in body and "gates" not in body):
         return body, None
