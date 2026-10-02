@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 
 import pytest
 from conftest import run_cli
@@ -34,6 +35,7 @@ def _log(repo):
 
 
 def _addition(repo, record, text, score=0.61):
+    time.sleep(0.01)  # past the claim's timestamp on any clock granularity
     _log(repo).append("record.extended", record, {"text": text, "who": "reporter", "score": score})
 
 
