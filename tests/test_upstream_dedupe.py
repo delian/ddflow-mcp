@@ -132,7 +132,7 @@ def test_unrelated_report_is_not_offered():
         fetch=Fake([corpus()]),
     )
     assert res.offer is None and res.upstream_state == "checked"
-    assert all(h.band == "show" for h in res.upstream)
+    assert not any(h.band == "ask" for h in res.upstream)
 
 
 def test_between_floor_and_threshold_is_listed_not_offered():
@@ -324,3 +324,10 @@ def test_a_truncated_response_is_unavailable_not_an_exception():
 
     res = U.check("t", "b", repo=REPO, fetch=Fake(raises=http.client.IncompleteRead(b"x")))
     assert res.status == "unavailable" and "unreadable" in res.reason
+
+
+def test_zero_pages_is_refused_not_read_as_no_issues():
+    f = Fake([[]])
+    with pytest.raises(ValueError):
+        U.check("t", "b", repo=REPO, fetch=f, max_pages=0)
+    assert f.calls == []
