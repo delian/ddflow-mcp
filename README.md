@@ -1928,9 +1928,9 @@ is all, and a second content block states the cut; `ddflow_recall` drops each hi
 record and keeps hits within `max_chars` (default 4000, counted as the JSON returned), one per kind in
 turn, and says so when it cut any. MCP bodies are
 compact JSON. `--json` on the CLI is the whole, indented body in every case. On this repository
-that took `next` from 33 KB to 2.6 KB, `show` of a finished task from 8.9 KB to 4.1 KB,
-`recall` from 49 KB to 3.9 KB, `decision_list` from 44 KB to 16 KB and `progress` from
-152 KB to 8.4 KB. `doctor` and `status` also say when the log holds events from a **newer
+that took `next` from 38 KB to 3.9 KB, `show` of a finished task from 8.9 KB to 4.1 KB,
+`recall` from 51 KB to 4.1 KB, `decision_list` from 54 KB to 18 KB and `progress` from
+158 KB to 8.4 KB. `doctor` and `status` also say when the log holds events from a **newer
 ddflow** than this checkout runs — they were skipped, so the numbers are computed without
 them — and the remedy is to merge main or run the newer ddflow.
 
