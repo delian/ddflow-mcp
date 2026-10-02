@@ -3163,7 +3163,7 @@ wins, so `refresh = "off"` there opts one document out):
 | `off` (default) | never: nothing writes unless you run `ddflow export --update` |
 | `merge` | `ddflow merge` regenerates the document into the item's branch and commits it there, so it lands in the merge commit (as of just before the landing) |
 | `phase_close` | completing a phase regenerates it in the working tree (not committed) |
-| `docs_gate` | the phase `docs` gate's export step: regenerate, verify (`export --check`) and return the documents with their body digests as evidence |
+| `docs_gate` | the phase `docs` gate's export step: recording that gate `passed` on a phase regenerates the documents, verifies them (`export --check`) and stores them with their body digests in the gate's evidence (`evidence.export`) |
 
 Every mode keeps the same guards: a hand-edited or unmarked file is never touched (the result
 says `skipped`), a region or append document is not refreshed automatically, a refresh that

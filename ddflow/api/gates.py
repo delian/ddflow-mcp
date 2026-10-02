@@ -408,6 +408,21 @@ class Evidence:
     output_file: str = ""
 
 
+def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
+    """`[export].refresh = docs_gate`: the docs gate's export step. Regenerates and verifies
+    the selected documents and records them with their body digests in ``ev``; returns the
+    warning, extended when a document was skipped, failed or is not fresh. Never fails."""
+    from ..services.export import refresh as RF
+
+    rr = RF.refresh_selected(repo, "docs_gate", cfg=cfg)
+    if not rr.outcomes:
+        return warning
+    ev["export"] = rr.evidence()
+    if rr.problems or any(o.verified is False for o in rr.outcomes):
+        return " ".join(filter(None, [warning, f"NOTE: {rr.summary()}"]))
+    return warning
+
+
 def record(
     repo: Path,
     item: str,
@@ -471,6 +486,9 @@ def record(
         # the verdict lines from all of it rather than the tail (bug Bac392907b1).
         ev["output_file"] = evidence.output_file
         ev["summary"] = G.summary_lines(txt)
+
+    if not skip and gate == "docs" and it.kind == "phase" and result == "passed":
+        warning = _docs_gate_export(repo, cfg, ev, warning)
 
     if not skip:
         # WHICH tree and HOW MUCH, for AGENT gates too. These were added to
