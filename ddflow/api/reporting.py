@@ -266,7 +266,7 @@ def record_summary(st, rid: str) -> dict[str, Any]:
         return {"kind": "bug", "title": "", "state": b.resolution or "open", "text": b.summary}
     if rid in st.lessons:
         ls = st.lessons[rid]
-        return {"kind": "lesson", "title": ls.title, "state": "", "text": ls.text}
+        return {"kind": "lesson", "title": ls.title, "state": "", "text": ls.text()}
     for kind, pool in (
         ("research", st.research),
         ("decision", st.decisions),
@@ -274,11 +274,19 @@ def record_summary(st, rid: str) -> dict[str, Any]:
     ):
         if rid in pool:
             r = pool[rid]
+            # `text` is a field on a memory and a METHOD on a decision: call what is callable.
+            text = (
+                getattr(r, "summary", "")
+                or getattr(r, "text", "")
+                or getattr(r, "claim", "")
+                or getattr(r, "question", "")
+                or ""
+            )
             return {
                 "kind": kind,
-                "title": getattr(r, "title", "") or "",
+                "title": getattr(r, "title", "") or getattr(r, "question", "") or "",
                 "state": "",
-                "text": getattr(r, "summary", "") or getattr(r, "text", "") or "",
+                "text": text() if callable(text) else text,
             }
     return {"kind": "", "title": "", "state": "", "text": ""}
 
