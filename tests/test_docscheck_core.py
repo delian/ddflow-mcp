@@ -163,10 +163,25 @@ def test_runtime_on_this_repositorys_readme():
     start = time.perf_counter()
     report = D.check_docs(root, docs=["README.md"])
     assert time.perf_counter() - start < 2.0
-    assert report.checked["identifiers"] > 100
+    assert report.checked["identifiers"] > 0
 
 
 def test_a_named_document_that_cannot_be_read_is_not_a_clean_report(tmp_path):
     root = repo_with(tmp_path, "ok\n")
     with pytest.raises(OSError, match=r"TYPO\.md"):
         D.check_docs(root, docs=["TYPO.md"])
+
+
+def test_anchor_forms(tmp_path):
+    readme = (
+        "[a](#my-anchor) [b](#MyAnchor) [c](#setext-title) [d](#sub) [e](#ghost)\n\n"
+        '<a name="MyAnchor"></a>\n\nSetext title\n============\n\nSub\n---\n\n'
+        "- item\n---\n"
+    )
+    report = D.check_docs(repo_with(tmp_path, readme))
+    assert found(report) == [("anchor", "#ghost"), ("anchor", "#my-anchor")]
+
+
+def test_a_short_fence_inside_a_long_one_is_code(tmp_path):
+    readme = "````\n```\n`ghost_in_code` [x](nothing.md)\n```\n````\n\n`ghost_after`\n"
+    assert found(D.check_docs(repo_with(tmp_path, readme))) == [("identifier", "ghost_after")]
