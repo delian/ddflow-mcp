@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from ...api import lifecycle as A
+from ...views.markdown import new_reports_line
 from ..context import FAIL, MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
 
 
@@ -181,8 +182,13 @@ def cmd_heartbeat(a, c: Ctx) -> int:
             waiters,
             f"{len(waiters)} agent(s) are waiting on {a.id}. Finishing, narrowing its "
             f"globs, or releasing it wakes them:",
+        )
+        + (
+            "\n" + new_reports_line(a.id, out.data.get("new_reports", 0))
+            if out.data.get("new_reports")
+            else ""
         ),
-        out.body(("renewed", "waiters", "globs_withheld")),
+        out.body(("renewed", "waiters", "globs_withheld", "new_reports")),
     )
     return out.exit
 

@@ -282,6 +282,83 @@ def _approx_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+def _score(x: dict) -> str:
+    return f", score {x['score']:.2f}" if isinstance(x.get("score"), int | float) else ""
+
+
+def _clip(text: str, cap: int) -> str:
+    text = (text or "").strip()
+    return text if len(text) <= cap else text[: cap - 1].rstrip() + "…"
+
+
+def _ref(x: dict, key: str) -> str:
+    """`B2 [bug open] title`: a linked record, named."""
+    tag = " ".join(t for t in (x.get("kind"), x.get("state")) if t)
+    return " ".join(p for p in (f"{x[key]}", f"[{tag}]" if tag else "", x.get("title") or "") if p)
+
+
+def addenda_lines(a: dict) -> list[str]:
+    """`show`'s block for one record: what was added to it (verbatim, who, when, score)
+    and the links in both directions."""
+    out: list[str] = []
+    if a["additions"]:
+        out.append(f"  additions ({len(a['additions'])}):")
+        for x in a["additions"]:
+            out.append(f"    {x['at']} by {x['who']}{_score(x)}")
+            out += [f"      | {ln}" for ln in (x["text"] or "").splitlines()]
+    if a["links"]:
+        out.append("  links:")
+        out += [
+            f"    {x['relation']} {_ref(x, 'target')} (by {x['by']}, {x['at']}{_score(x)})"
+            for x in a["links"]
+        ]
+    if a["linked_from"]:
+        out.append("  linked from:")
+        out += [
+            f"    {_ref(x, 'record')} {x['relation']} this (by {x['by']}, {x['at']}{_score(x)})"
+            for x in a["linked_from"]
+        ]
+    return out
+
+
+def new_reports_line(item: str, count: int) -> str:
+    """The one line heartbeat and `gate status` carry; "" when there is nothing new."""
+    if not count:
+        return ""
+    s = "" if count == 1 else "s"
+    return f"{count} new report{s} on {item} since you claimed -- `ddflow show {item}`"
+
+
+#: At most this many reports are quoted in a brief, each at most this long: the brief has
+#: a budget, and the rest is one `show` away.
+_REPORTS_SHOWN = 5
+_REPORT_CAP = 400
+
+
+def new_reports_block(item: str, rep: dict) -> str:
+    """The brief's lead for a claimed item: the count, then the additions verbatim and the
+    records filed against it (because it was claimed or closed)."""
+    if not rep["count"]:
+        return ""
+    s = "" if rep["count"] == 1 else "s"
+    lines = [f"## {rep['count']} new report{s} on your item since you claimed", ""]
+    entries = [(x["at"], "add", x) for x in rep["additions"]] + [
+        (x["at"], "link", x) for x in rep["linked_from"]
+    ]
+    entries.sort(key=lambda e: e[0])
+    for _at, kind, x in entries[:_REPORTS_SHOWN]:
+        if kind == "add":
+            lines.append(f"- added by {x['who']}{_score(x)}: {_clip(x['text'], _REPORT_CAP)}")
+        else:
+            lines.append(
+                f"- {_ref(x, 'record')} {x['relation']} {item} (by {x['by']}{_score(x)}): "
+                f"{_clip(x['text'], _REPORT_CAP)}"
+            )
+    if len(entries) > _REPORTS_SHOWN:
+        lines.append(f"- _{len(entries) - _REPORTS_SHOWN} more: `ddflow show {item}`._")
+    return "\n".join(lines) + "\n\n"
+
+
 def _brief_recovery(out: list[str], recovery: list) -> None:
     if not recovery:
         return
@@ -492,6 +569,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     memories: list | None = None,
     held: list[str] | None = None,
     suggested: bool = False,
+    reserve: int = 0,
 ) -> str:
     """The session-start pack, under ``session.brief_max_tokens``.
 
@@ -520,7 +598,9 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     _brief_lessons(out, cfg, lessons or [])
 
     text = "\n".join(out)
-    budget = cfg.session.brief_max_tokens
+    # `reserve`: tokens a caller will PREPEND (the new-reports block), so the whole stays
+    # inside the budget and it is the bottom that gives way.
+    budget = max(1, cfg.session.brief_max_tokens - reserve)
     if _approx_tokens(text) > budget:
         text = text[: budget * 4].rsplit("\n", 1)[0]
         text += (

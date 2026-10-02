@@ -976,6 +976,16 @@ def claim(
     )
 
 
+def _new_report_count(st, item: str) -> int:
+    """Reports on `item` since its lease was taken (additions and records linked to it)."""
+    from .reporting import new_reports
+
+    it = st.items.get(item)
+    if it is None or it.lease is None:
+        return 0
+    return new_reports(st, item, it.lease.acquired_at)["count"]
+
+
 def heartbeat(
     repo: Path, item: str, *, agent: str = "", called_from: Path | None = None
 ) -> O.Outcome:
@@ -1008,6 +1018,7 @@ def heartbeat(
             renewed=True,
             waiters=_waiters(repo, item),
             globs_withheld=withheld,
+            new_reports=_new_report_count(st, item),
         )
     return O.nothing(
         "lease.renewed",
@@ -1749,6 +1760,18 @@ def brief(
         key=lambda m: (m.origin_at or m.at, m.at),
         reverse=True,
     )
+    from .reporting import new_reports
+
+    reports_block = ""
+    if item and item in st.items and st.items[item].lease:
+        reports_block = render_md.new_reports_block(
+            item, new_reports(st, item, st.items[item].lease.acquired_at)
+        )
+        # The block is prepended to a budgeted brief: it may take at most half of it, so a
+        # small `brief_max_tokens` still leaves the head of the brief itself.
+        cap = cfg.session.brief_max_tokens * 4 // 2
+        if len(reports_block) > cap:
+            reports_block = reports_block[:cap].rsplit("\n", 1)[0] + "\n\n"
     text = render_md.brief(
         st,
         cfg,
@@ -1762,12 +1785,14 @@ def brief(
         memories=live,
         held=held_ids,
         suggested=suggested,
+        reserve=render_md._approx_tokens(reports_block) if reports_block else 0,
     )
     from ..services import choices as CH
 
     undecided = CH.brief_block(cfg)
     if undecided:
         text = undecided + "\n" + text
+    text = reports_block + text
     if item and item in st.items:
         pr = st.items[item].pr
         if pr is not None and pr.review == "changes_requested" and pr.feedback:
