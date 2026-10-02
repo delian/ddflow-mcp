@@ -83,5 +83,6 @@ def test_help_says_the_verb_is_required() -> None:
         text=True,
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
     )
-    assert "ddflow review triage <id>" in p.stdout
-    assert "REQUIRES the\n`triage` verb" in p.stdout
+    flat = " ".join(p.stdout.split())  # argparse wraps to $COLUMNS
+    assert "ddflow review triage <id>" in flat
+    assert "REQUIRES the `triage` verb" in flat
