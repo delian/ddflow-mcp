@@ -189,3 +189,10 @@ def test_show_displays_title_severity_and_scope(repo):
     )  # fmt: skip
     _, out, _ = run_cli(repo, "show", "B-s")
     assert "Headline" in out and "medium" in out and "ddflow" in out, out
+
+
+def test_similar_hides_the_default_scope(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "bug", "found", "--id", "B-q", "--summary", "lease expiry drops claims silently")
+    _, out, _ = run_cli(repo, "similar", "lease expiry drops claims silently")
+    assert "B-q" in out and "project" not in out, out
