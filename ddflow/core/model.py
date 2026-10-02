@@ -397,6 +397,9 @@ class Lesson:
     pattern: str = ""
     globs: list[str] = field(default_factory=list)
     sites: list[str] = field(default_factory=list)
+    #: The agent id on the event that first recorded it: who a reader is trusting
+    #: (`core/provenance.py`). Not a field an event carries -- the event's own `agent`.
+    by: str = ""
 
     def text(self) -> str:
         return "\n".join(x for x in (self.title, self.rule, self.why, self.how) if x)
@@ -565,6 +568,9 @@ class Decision:
     superseded_by: str = ""
     at: str = ""
     item: str = ""
+    #: The agent id on the event that first recorded it (`core/provenance.py`); distinct
+    #: from `decided_by`, which is what the recorder CLAIMED about who decided.
+    by: str = ""
 
     @property
     def live(self) -> bool:
@@ -1559,6 +1565,7 @@ def _h_lesson(st: State, ev: Event) -> None:
         sites=list(d.get("sites", prev.sites if prev else [])),
         at=prev.at if prev and prev.at else ev.ts,
         superseded_by=prev.superseded_by if prev else "",
+        by=prev.by if prev and prev.by else ev.agent,
     )
     for sid in d.get("supersedes", []):
         if sid in st.lessons:
@@ -1594,6 +1601,7 @@ def _h_decision(st: State, ev: Event) -> None:
         superseded_by=prev.superseded_by if prev else "",
         at=prev.at if prev and prev.at else ev.ts,
         item=d.get("item", "") or (prev.item if prev else ""),
+        by=prev.by if prev and prev.by else ev.agent,
     )
     # `superseded_by` and `status` are one fact, so derive the second from the first
     # instead of storing it twice and hoping they agree. A shard merge can deliver

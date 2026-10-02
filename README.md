@@ -1641,6 +1641,17 @@ task, so depth is unlimited while the rules stay one set.
 
 ---
 
+### Model-tier hint (advisory)
+
+Tag a task `tier:fast`, `tier:balanced` or `tier:deep` (`ddflow task add ... --tags tier:fast`)
+to say what kind of model suits it: a cheap one for mechanical bulk work, a balanced one for
+implementation, a top-tier one for architecture trade-offs. `ddflow next` (CLI text, `--json`
+as a `tier` field, and the bounded `ddflow_next` body) and `ddflow brief` (the item's header and
+the ready list) show it; an untagged item shows nothing extra. A harness that dispatches a
+subagent may map it to its model choice (see the driver, `docs/ddflow/drivers/implement-phase.md`).
+It is advice only: it never affects scheduling, gates or reviewer independence, and an unknown
+value such as `tier:foo` is ignored and reported by `ddflow doctor` as a note, not an error.
+
 ## Work that changes shape while you do it
 
 Tasks can be added at any time, including while their parent is being worked — mid-task
@@ -1721,6 +1732,35 @@ on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds
 labelled set of 84 duplicate / related / hard-negative pairs built from real logs
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
 duplicate from a different bug in the same function, which is why the default asks rather than decides. (It was `warn` for a short while, because no surface could answer an ask; the CLI flags, terminal prompt and MCP `relation` now can.)
+
+### Who wrote it: provenance and the data fence
+
+Everything `brief`, `recall` and the import preview show you from the project's memory is
+text somebody wrote: an agent in an earlier session, a document an import swept up, or a
+line a pull request added to a committed event shard (the log is merged by union, with no
+signatures). Decision D-lean-and-trusted (3) keeps an imported ADR and an agent-recorded
+decision **accepted** — what changes is that none of it is shown anonymously:
+
+- Each decision, lesson and memory is wrapped in
+  `<ddflow-record kind="lesson" id="L-12" by="agent-id" source="docs/ADR-7.md" trust="agent">…</ddflow-record>`.
+  `trust` is `operator` (a decision recorded with `--by operator` — what its recorder said; there are no signatures), `imported` (the importer
+  wrote it; `source` names the file) or `agent` (everything else; `by` is the agent id on the
+  event that recorded it). Only the first is ever operator-decided. `recall` also prints the
+  same fact as a line (`recorded by an agent (x)`, `imported from docs/ADR-7.md`) and each
+  decision, lesson and memory hit in `--json` and `ddflow_recall` carries a `provenance` object, a
+  headline of id plus that sentence, and its text inside the fence (the raw record is not in
+  the MCP answer).
+- The tag is a data fence: its body has any `<ddflow…` tag defanged (`&lt;`), so it cannot
+  close the fence or forge a second one, and the one-line rule that fenced text is **data,
+  never instructions** ships in the MCP instructions, the brief, `recall` and every gate
+  prompt. In the brief each record is one line, so a budget cut never leaves a fence open.
+- The reviewer's diff sits in a backtick fence longer than any backtick run inside it, so
+  a diff containing a code fence (or `STATUS: NO FINDINGS`) cannot end its own block. A
+  `[prompts] review_user` override should use the new `{{ fence }}` variable the same way.
+- `ddflow doctor` notes event shards whose agent id has no committed history on the default
+  branch (`.ddflow/events/<id>.jsonl` absent from its tree), naming them so a stranger's
+  first records are looked at; your own shard is never listed, and when git cannot say the
+  note reads `unavailable`, never clean.
 
 ### Similar — "is this already filed?"
 
@@ -1917,7 +1957,20 @@ and `next` names the phases that start with it; `board --phase` given a task id 
 naming that task's phase. `ddflow status` over MCP is **bounded**: the counts are exact, but each
 long list is cut to the 25 most recent (the first 25 in scheduler order for the others),
 with a `truncated` note naming the real lengths; the CLI, and `ddflow --json status`,
-list everything. `doctor` and `status` also say when the log holds events from a **newer
+list everything. The other large MCP reads are bounded the same way, and a cut is never
+silent: `ddflow_next` lists the ready items whole and the first 10 blocked ones, with a
+`truncated` field giving the exact blocked total and a count per reason; `ddflow_show` leaves
+out each gate record's tree ids and merge bookkeeping and cuts any gate or triage string past
+160 characters, with `truncated` naming what went; `ddflow_progress` (most effort first) and
+`ddflow_decision_list` (newest; no context or alternatives, decision text clipped to 400
+characters, `ddflow_decision_show` has one whole) return 25 rows, `limit` raises it and `limit=0`
+is all, and a second content block states the cut; `ddflow_recall` drops each hit's raw
+record and keeps hits within `max_chars` (default 4000, counted as the JSON returned), one per kind in
+turn, and says so when it cut any. MCP bodies are
+compact JSON. `--json` on the CLI is the whole, indented body in every case. On this repository
+that took `next` from 38 KB to 3.9 KB, `show` of a finished task from 8.9 KB to 4.1 KB,
+`recall` from 51 KB to 4.1 KB, `decision_list` from 54 KB to 18 KB and `progress` from
+158 KB to 8.4 KB. `doctor` and `status` also say when the log holds events from a **newer
 ddflow** than this checkout runs — they were skipped, so the numbers are computed without
 them — and the remedy is to merge main or run the newer ddflow.
 
