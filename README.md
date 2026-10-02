@@ -3119,6 +3119,18 @@ $ ddflow export --all --update --yes
 $ ddflow export roadmap --template my.md.j2   # render once with another template; writes nothing
 ```
 
+**Enforcement.** The pre-commit check behind `[enforce].generated_views` (`block` | `warn` |
+`off`) covers exported documents as well as the rendered views: a staged file whose FIRST line
+is a `ddflow:generated doc=<kind>` header of a known kind must equal a fresh export (body and
+kind compared, not the ddflow version), the event log must be fully staged beside it, and a
+stale or hand-edited document is named with `ddflow export <kind> --update` as the remedy. A
+hand-written file that only holds a marker region has no such first line, so it is not treated
+as a generated file; an append-mode log (`last=` in its header) grows by design and is skipped.
+Every SELECTED export target is also excluded from `[enforce].stale_docs`
+(`shared_files.doc_exclude`) and from docscheck (generated documents are judged by `export
+--check`), is a shared path (no claim needed), and draws no "no merge strategy" note from
+`doctor`; `doctor` instead reports a selected target that is stale or hand-edited as a NOTE.
+
 Exit codes: 0 done or fresh, 1 stale (`--check`), 2 could not run (unreadable log, template
 error, nothing selected) or declined at the prompt, 3 refused. A failure is never an empty
 clean document.
