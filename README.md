@@ -588,6 +588,12 @@ ddflow adopt            # every supported agent
 ddflow adopt --agents claude,cursor,vscode,kimi   # or name the ones you use
 ```
 
+After upgrading ddflow, `ddflow doctor` notes any driver doc (`implement-phase.md`, an
+adopted agent's delta) that differs byte-for-byte from the template the running ddflow
+ships. `ddflow adopt --refresh-docs` (MCP: `ddflow_setup` with `refresh_docs`) rewrites
+only those docs, the AGENTS.md/CLAUDE.md blocks and the agents' native rules -- never the
+MCP launch, hooks or command files -- and refuses a project that was never adopted.
+
 `adopt` is idempotent and writes managed blocks, so re-running after an upgrade updates
 them and leaves your own prose alone. It writes the MCP registration into each agent's
 own config location, **merged** with whatever servers are already there. From a source
@@ -2803,7 +2809,8 @@ Five states are detected — `current`, `stale` (drifted from what this version 
 
 **The two surfaces repair it differently, on purpose.**
 
-- **From a shell**, the operator is right there: `ddflow adopt` rewrites the block. It
+- **From a shell**, the operator is right there: `ddflow adopt --refresh-docs` rewrites
+  the block (plain `ddflow adopt` does too, and also rewrites MCP launches). It
   replaces only what is between the `DDFLOW:BEGIN`/`DDFLOW:END` markers and leaves the rest
   of your file alone, and re-running it is a no-op. `ddflow init` **reports** the problem
   and does not write — writing prose into your `AGENTS.md` is not what `init` was asked to
@@ -2940,6 +2947,7 @@ now carries its justification in `PROSE_TOOLS`.
 
 ```
 ddflow adopt [--agents ...]     install into a project, for one or more agents
+ddflow adopt --refresh-docs     rewrite only the driver docs + rules blocks (doctor says when)
 ddflow init                     create .ddflow/ only
 
 ddflow phase add <id> [...]     add a phase
