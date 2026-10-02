@@ -47,7 +47,8 @@ Rules a kind follows:
   width)`` beside Jinja's built-ins. It runs in ``jinja2.sandbox.SandboxedEnvironment``
   (StrictUndefined, trim_blocks, lstrip_blocks, no autoescape) with a time limit, because a
   template may come from a cloned repository: no ``__class__``/``__globals__`` walk, no
-  ``open``, no imports. Any template failure is ``ExportError`` exit 2 naming file and line.
+  ``open``, no imports; best-effort ceilings (time, output, one operation's size) contain
+  runaway templates but are not a hard guarantee. Any template failure is ``ExportError`` exit 2 naming file and line.
 * Templates resolve ``[export.<name>].template`` -> ``.ddflow/templates/export/<name>.md.j2``
   -> shipped ``ddflow/templates/export/<name>.md.j2`` (same order as ``services/prompts.py``;
   ``registry.resolve_template``). ``registry.shipped_digest(kind)`` is the digest an eject
