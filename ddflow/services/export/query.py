@@ -12,6 +12,7 @@ the fold happened to produce.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -126,7 +127,9 @@ class Query:
     def events_of(self, *kinds: str, since: str = "") -> list[Event]:
         """Events (log order, which is the deterministic ``sort_key`` order) of ``kinds``.
 
-        ``since`` is an ISO date or timestamp prefix compared against ``ts``. A document
+        ``since`` is an ISO date (a calendar day, compared on the ``ts`` text) or a full
+        timestamp (compared as an instant); anything else is refused. Events whose ``ts``
+        cannot be read are left out of a ``since``-filtered result. A document
         that needs *when* something happened for display must take it from event data,
         never from the clock at render time.
         """
@@ -156,6 +159,12 @@ def _cutoff(since: str) -> Callable[[str], bool] | None:
     if not since:
         return None
     if len(since) <= _DATE_LEN:
+        if not _DATE_PREFIX.match(since):
+            raise ExportError(f"--since {since!r} is not an ISO date or timestamp", EXIT_REFUSED)
+        try:  # a real calendar value: not 2024-13-99
+            datetime.fromisoformat((since + "-01-01")[:10] if len(since) < _DATE_LEN else since)
+        except ValueError:
+            raise ExportError(f"--since {since!r} is not a real date", EXIT_REFUSED) from None
         return lambda ts: ts[: len(since)] >= since
     try:
         floor = _parse_ts(since)
@@ -174,6 +183,7 @@ def _cutoff(since: str) -> Callable[[str], bool] | None:
 
 
 _DATE_LEN = len("2026-10-01")
+_DATE_PREFIX = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 
 def _parse_ts(text: str) -> datetime:
