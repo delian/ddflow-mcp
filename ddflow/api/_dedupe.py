@@ -353,23 +353,28 @@ def _dry_run(repo: Path, log, cfg: Config, st, rec: Record) -> Checked:
     ``Checked.refusal``, which every add already hands back unchanged."""
     found, shown, unavailable = _assess(repo, log, cfg, st, rec)
     exact = getattr(found, "identical", None)
-    would_ask = found.action == "ask" and not (exact is not None and exact.kind == rec.kind)
+    same_kind_copy = exact is not None and exact.kind == rec.kind
     data: dict[str, Any] = {
         "id": rec.rid,
         "check_only": True,
         "on_match": cfg.dedupe.on_match,
-        "would_ask": would_ask,
+        "would_ask": found.action == "ask" and not same_kind_copy,
+        # An exact copy is merged without asking: the id the text would be added to.
+        "would_extend": exact.id if found.action == "ask" and same_kind_copy else "",
         "candidates": shown,
         "options": options(shown) if shown else [],
     }
     if unavailable:
         data["dedupe_unavailable"] = unavailable
     if not shown:
-        why = unavailable or (
-            "the check is off ([dedupe].on_match = off)"
-            if cfg.dedupe.on_match == "off" or rec.kind not in cfg.dedupe.kinds
-            else f"nothing scores {cfg.dedupe.show_floor:g} or more against it"
-        )
+        if unavailable:
+            why = unavailable
+        elif cfg.dedupe.on_match == "off":
+            why = "the check is off ([dedupe].on_match = off)"
+        elif rec.kind not in cfg.dedupe.kinds:
+            why = f"{rec.kind} is not checked ([dedupe].kinds = {', '.join(cfg.dedupe.kinds)})"
+        else:
+            why = f"nothing scores {cfg.dedupe.show_floor:g} or more against it"
         return Checked(
             refusal=O.nothing(rec.event_kind, f"no existing record reads like this: {why}", **data)
         )
