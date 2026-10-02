@@ -291,6 +291,22 @@ class Finding:
     #: The chunk (1-based) the finding came from, so a re-review of that chunk can
     #: replace it and leave the other chunks' findings standing.
     chunk: int = 0
+    #: Digest of the finding's FULL text; what a triage is keyed by (`finding_digest`).
+    digest: str = ""
+
+
+def finding_digest(severity: str, location: str, title: str, detail: str) -> str:
+    """A finding's identity for triage: its whole text, so a re-review's finding is the
+    same one only when the reviewer said the same thing (decision D-review-triage).
+
+    Word-for-word identical findings -- one claim made twice -- share a digest, so a
+    triage of one is a triage of both. Telling them apart by position was tried and
+    dropped: a position moves when an earlier chunk is re-reviewed, and the triage then
+    lands on the wrong copy (three reviewers, d2b337f)."""
+    import hashlib
+
+    text = "\x1f".join((severity.upper(), location.strip(), title.strip(), detail.strip()))
+    return hashlib.sha256(text.encode("utf-8", "replace")).hexdigest()[:16]
 
 
 #: How much of a finding's detail the gate evidence keeps for a later merge.
@@ -356,6 +372,7 @@ class ReviewResult:
             "chunk_findings": [
                 {
                     "chunk": f.chunk,
+                    "digest": f.digest,
                     "severity": f.severity,
                     "title": f.title,
                     "location": f.location,
@@ -1077,6 +1094,7 @@ def _absorb_chunk(
     res.reviewed.append(index)
     for f in findings:
         f.chunk = index
+        f.digest = finding_digest(f.severity, f.location, f.title, f.detail)
     res.findings.extend(findings)
     return findings
 
@@ -1541,6 +1559,7 @@ def merge_rerun(prior: dict[str, Any], res: ReviewResult) -> str:
                 detail=f.get("detail", ""),
                 location=f.get("location", ""),
                 chunk=int(f.get("chunk", 0)),
+                digest=f.get("digest", ""),
             )
             for f in prior.get("chunk_findings", [])
             if int(f.get("chunk", 0)) not in again
