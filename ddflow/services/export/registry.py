@@ -118,6 +118,12 @@ def get(name: str) -> DocKind:
     try:
         return _KINDS[name]
     except KeyError:
+        if name == "replay":
+            raise ExportError(
+                "replay is not an export kind: it carries private paths and addresses "
+                "and is built only for the machine that asks (use `ddflow replay`)",
+                EXIT_REFUSED,
+            ) from None
         raise ExportError(
             f"unknown document kind {name!r}. Known: {', '.join(sorted(_KINDS)) or '(none)'}",
             EXIT_REFUSED,
@@ -497,7 +503,7 @@ def render_body(
     return render(tmpl, k.data(query, f), schema_version=k.schema_version, timeout_s=timeout_s)
 
 
-def render_document(
+def render_document(  # noqa: PLR0913 -- the document kind's whole vocabulary: filters, cap, frame and the body hook
     kind: DocKind | str,
     query: Query,
     filters: Filters | None = None,
@@ -509,6 +515,7 @@ def render_document(
     extra: dict[str, str] | None = None,
     version: str = "",
     template: Template | str | None = None,
+    post: Callable[[str], tuple[str, dict[str, str]]] | None = None,
 ) -> str:
     """The full framed document (header + body), capped to ``max_bytes`` (0 = uncapped).
 
@@ -517,11 +524,17 @@ def render_document(
     whole document already fits in it. Truncation happens BEFORE framing, so the header digest always
     matches the bytes shown and ``frame.hand_edited`` is False for any output. Pure: same
     inputs, same bytes.
+
+    ``post(body) -> (body, header attributes)`` runs on the whole rendered body BEFORE it is
+    truncated and digested (redaction, B-export-redact-fence).
     """
     k = get(kind) if isinstance(kind, str) else kind
     body = render_body(
         k, query, filters, repo=repo, overrides=overrides, builtin=builtin, template=template
     )
+    if post is not None:
+        body, more = post(body)
+        extra = {**(extra or {}), **more}
     if not version:
         import ddflow
 
