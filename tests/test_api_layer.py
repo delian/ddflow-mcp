@@ -489,6 +489,13 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
         f"{tool}: the MCP body is a {type(from_mcp).__name__} and the CLI's is a "
         f"{type(from_cli).__name__} — a migration changed the wire shape"
     )
+    # The five bounded reads (B-mcp-payload-bound) are the deliberate exception: the MCP
+    # body is the CLI's body put through `mcp_bound`, and nothing else. Their cuts are
+    # pinned by tests/test_mcp_payload_bound.py.
+    from ddflow.surfaces.mcp_bound import BOUNDS
+
+    if tool in BOUNDS:
+        from_cli = BOUNDS[tool](from_cli, arguments)[0]
     assert from_mcp == from_cli, f"{tool}: the surfaces disagree\nCLI: {from_cli}\nMCP: {from_mcp}"
 
 

@@ -1917,7 +1917,20 @@ and `next` names the phases that start with it; `board --phase` given a task id 
 naming that task's phase. `ddflow status` over MCP is **bounded**: the counts are exact, but each
 long list is cut to the 25 most recent (the first 25 in scheduler order for the others),
 with a `truncated` note naming the real lengths; the CLI, and `ddflow --json status`,
-list everything. `doctor` and `status` also say when the log holds events from a **newer
+list everything. The other large MCP reads are bounded the same way, and a cut is never
+silent: `ddflow_next` lists the ready items whole and the first 10 blocked ones, with a
+`truncated` field giving the exact blocked total and a count per reason; `ddflow_show` leaves
+out each gate record's tree ids and merge bookkeeping and cuts any gate or triage string past
+160 characters, with `truncated` naming what went; `ddflow_progress` (most effort first) and
+`ddflow_decision_list` (newest; no context or alternatives, decision text clipped to 400
+characters, `ddflow_decision_show` has one whole) return 25 rows, `limit` raises it and `limit=0`
+is all, and a second content block states the cut; `ddflow_recall` drops each hit's raw
+record and keeps hits within `max_chars` (default 4000, counted as the JSON returned), one per kind in
+turn, and says so when it cut any. MCP bodies are
+compact JSON. `--json` on the CLI is the whole, indented body in every case. On this repository
+that took `next` from 38 KB to 3.9 KB, `show` of a finished task from 8.9 KB to 4.1 KB,
+`recall` from 51 KB to 4.1 KB, `decision_list` from 54 KB to 18 KB and `progress` from
+158 KB to 8.4 KB. `doctor` and `status` also say when the log holds events from a **newer
 ddflow** than this checkout runs — they were skipped, so the numbers are computed without
 them — and the remedy is to merge main or run the newer ddflow.
 
