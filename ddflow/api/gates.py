@@ -275,6 +275,32 @@ def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     return (repo, "") if gdef.cwd != "worktree" else _item_tree(repo, cfg, st, it, called_from)
 
 
+def _refuse_repeated_failure(log, cfg, st, item: str, gate: str, cwd) -> O.Outcome | None:
+    """`[loops].on_detect = "block"`: a gate that has failed the same way N times is not
+    run again on the work that last failed it. Changing the work lifts the refusal --
+    the fingerprint is the tree's, so there is no deadlock. Warn mode never gets here."""
+    if cfg.loops.on_detect != "block":
+        return None
+    from ..core import progress as PR
+
+    for f in PR.detect(log.read_all(), st, cfg):
+        if f.kind != "repeated_failure" or f.item != item or f.gate != gate:
+            continue
+        if not f.tree_sha or G.tree_fingerprint(cwd) != f.tree_sha:
+            return None
+        return O.refused(
+            "gate.run",
+            f"refusing to run {gate!r} again on {item}: it has failed {f.count} times in a "
+            f"row with the same output and the work has not changed since.\n"
+            f"  {f.render()}\n\nChange the work first (a re-run of the same tree repeats "
+            f'the failure), or set [loops].on_detect = "warn".',
+            id=item,
+            gate=gate,
+            looping=[f.__dict__],
+        )
+    return None
+
+
 def run(
     repo: Path, item: str, gate: str, *, agent: str = "", called_from: Path | None = None
 ) -> O.Outcome:
@@ -332,6 +358,9 @@ def run(
         ) + " Recording UNAVAILABLE."
         G.record(log, cfg, item, gate, "unavailable", reason=reason, gates=gates)
         return O.nothing("gate.run", reason, gate=gate, outcome="unavailable", evidence={}, id=item)
+    repeated = _refuse_repeated_failure(log, cfg, st, item, gate, cwd)
+    if repeated is not None:
+        return repeated
     log.append("gate.started", item, {"gate": gate})
     keeper = _lease_keeper(log, cfg, it)
     result, ev = G.run_command_gate(

@@ -1935,13 +1935,17 @@ graph is perfectly acyclic and the work still never finishes:
 | `dependency_cycle` | A needs B needs C needs A — always blocking |
 | `repeat_claims` | claimed and given up N times without completing (crash-expiries excluded: that is a different problem) |
 | `gate_flapping` | a gate whose verdict keeps flipping — flaky, or measuring a moving target |
+| `repeated_failure` | one gate failing N times in a row (default 3, `max_repeated_failures`) with the same output digest — the same failing patch re-applied, which never flips the verdict so `gate_flapping` misses it; a pass in between resets it, reviewer gates (`rubber_duck`, `critic`) are never counted |
 | `reopened` | work that will not stay done, usually because the acceptance criteria are not in the item |
 | `duplicate_work` | two live items declaring the same files |
 | `no_progress` | N recent events with no completion, no gate pass, no merge |
 
 Every threshold is a `[loops]` knob, and `on_detect = "block"` makes `ddflow claim`
 **refuse** an item that is already looping — a warning is read by a human later, a
-refused claim is read by the agent now.
+refused claim is read by the agent now. `repeated_failure` also shows as a line in the
+item's `ddflow brief`, and under `block` refuses a `gate run` of that gate until the work
+has changed (the refusal names the evidence; a different tree lifts it). `max_repeated_failures = 0`
+turns it off.
 
 ## The task pipeline
 
