@@ -1745,6 +1745,32 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "due",
     },
+    "ddflow_export": {
+        "description": (
+            "Project documents from the log (roadmap, bugs, status, worklog, sessions, decisions, "
+            "rules). No doc: list kinds with state. doc: capped markdown (`truncated`). Writes "
+            "only with write=true AND a repo-relative path."
+        ),
+        "properties": {
+            "doc": ("string", "Kind; omit to list.", False),
+            "all": ("boolean", "The selected documents.", False),
+            "since": ("string", "From YYYY-MM-DD.", False),
+            "version": ("string", "One release.", False),
+            "phase": ("string", "One phase.", False),
+            "item": ("string", "One item (bugs).", False),
+            "status": ("string", "e.g. open.", False),
+            "limit": ("integer", "At most N.", False),
+            "tag": ("string", "One tag.", False),
+            "session": ("string", "One session.", False),
+            "max_bytes": ("integer", "Cap, at most 60000.", False),
+            "diff": ("boolean", "What a write would change.", False),
+            "check": ("boolean", "Is the target fresh.", False),
+            "write": ("boolean", "Write to path.", False),
+            "path": ("string", "Repo-relative file.", False),
+        },
+        "api": lambda repo, a, agent: _api().export_tool(repo, a),
+        "payload": "",
+    },
     "ddflow_pins": {
         "description": (
             "BEFORE compressing or rewording an instruction file (a rulebook, a driver, "
@@ -2669,7 +2695,7 @@ FULL_ONLY_TOOLS = frozenset(
         "external_sync import import_verify job_add job_end job_list job_run promote_add "
         "promote_status workflow workflow_drop workflow_gate workflow_pipeline flow_choose "
         "version_cut rebuild replay hooks precommit companions_add prompts pins loops cadence "
-        "reviewers_detect memory_forget lesson_verify"
+        "reviewers_detect memory_forget lesson_verify export"
     ).split()
 )
 

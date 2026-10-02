@@ -38,6 +38,7 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
     _write_config,
 )
 from .commands.decisions import cmd_decision
+from .commands.export import add_export_parser
 from .commands.flow import cmd_flow, cmd_pr, cmd_promote, cmd_version
 from .commands.gates import cmd_gate
 from .commands.knowledge import (
@@ -1030,6 +1031,8 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "this machine's endpoints, hosts, key variables and sizing, never committed",
     )
     cf.set_defaults(fn=cmd_config)
+
+    add_export_parser(s)
 
     cd = s.add_parser("cadence", help="which periodic passes are due (exit 2 = none)")
     cd.add_argument("--ran", default="")

@@ -271,6 +271,16 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     # it in would let an agent send `apply=true, verify=true`, which means nothing and
     # would silently do one of them.
     ("ddflow_import", "--verify"): "covered by ddflow_import_verify, its own tool",
+    # `export`: the tool's writing is `write=true` + `path`; an agent never overrides hand-edit
+    # protection or points the renderer at an arbitrary file (D-export-templates).
+    ("ddflow_export", "--update"): "MCP writes with write=true plus a repo-relative path",
+    ("ddflow_export", "--out"): "MCP: write=true plus path (the same path-safety rules)",
+    (
+        "ddflow_export",
+        "--force",
+    ): "overriding hand-edit protection is the operator's, at a terminal",
+    ("ddflow_export", "--template"): "an agent never feeds the renderer an arbitrary file",
+    ("ddflow_export", "--yes"): "answers the terminal confirmation, which MCP has none of",
     # The answer flags of the add-time duplicate check are ONE MCP argument: `relation`
     # ("new", "extends:ID", "duplicate_of:ID", "related:ID" -- a mutually exclusive set
     # is a single string, not four booleans), and `--check` is `check_only`. The pair is

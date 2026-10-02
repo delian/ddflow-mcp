@@ -41,6 +41,7 @@ TOPICS: dict[str, str] = {
     "customise": "changing the workflow itself: pipelines, gates, prompts",
     "cli": "driving it from a terminal, a Makefile or CI, with no agent at all",
     "mcp": "driving it as an MCP server, and what to put in AGENTS.md / CLAUDE.md",
+    "export": "project documents (roadmap, bugs, status, log, ...) generated from the log",
 }
 
 #: Tool-name prefix -> the group it is printed under. Ordered: the first match wins, so
@@ -94,7 +95,10 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "What the project remembers",
         ("recall", "similar", "memory", "lesson", "decision", "research", "bug", "session"),
     ),
-    ("Looking at it", ("board", "show", "status", "brief", "progress", "render", "history")),
+    (
+        "Looking at it",
+        ("board", "show", "status", "brief", "progress", "render", "export", "history"),
+    ),
     ("When something is wrong", ("doctor", "recover", "loops", "rebuild", "replay", "cadence")),
     ("Help", ("help",)),
 )

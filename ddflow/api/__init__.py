@@ -51,6 +51,9 @@ from .decisions import (
     decision_show,
     decision_supersede,
 )
+from .export import export as export_documents
+from .export import export_list as export_list_documents
+from .export import export_tool
 from .flow import (
     flow_choose,
     flow_show,
@@ -195,6 +198,9 @@ __all__ = [
     "decision_supersede",
     "dedupe_check_add",
     "doctor",
+    "export_documents",
+    "export_list_documents",
+    "export_tool",
     "external_sync",
     "flow_choose",
     "flow_show",
