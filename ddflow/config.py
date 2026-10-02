@@ -1609,7 +1609,7 @@ def _unit_interval(v: Any) -> str:
 #: Knobs whose VALUE set can grow in a later release (an enum), so a config FILE carrying a
 #: value this version does not know is skipped with a warning rather than refused; the
 #: write paths (`config --set`, `ddflow_configure`) still refuse it.
-_TOLERANT_VALUES = frozenset({"mcp.tools", "export.refresh"})
+_TOLERANT_VALUES = frozenset({"mcp.tools", "export.refresh", "export.tables"})
 
 
 def _export_tables_problem(v: Any) -> str:

@@ -283,6 +283,18 @@ def write_doc(
             "mode whole or region",
             EXIT_REFUSED,
         )
+    if spec.filters.given():
+        raise ExportError(
+            f"append mode takes no filters (given: {', '.join(sorted(spec.filters.given()))})",
+            EXIT_REFUSED,
+        )
+    last = W.last_exported(repo, path)
+    if last and last not in {e.id or e.compute_id() for e in q.events}:
+        raise ExportError(
+            f"the last exported event {last} (in {path}) is not in the log any more; "
+            "refusing to append, which would repeat entries already written",
+            EXIT_REFUSED,
+        )
     make = appender(spec.doc)
     if make is None:  # update_mode APPEND declared but no producer: a kind bug, not a user error
         raise ExportError(f"document {spec.doc!r} has no append producer", EXIT_UNAVAILABLE)
