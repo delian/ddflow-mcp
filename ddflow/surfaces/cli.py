@@ -1071,7 +1071,8 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rvt.set_defaults(fn=cmd_reviewers)
 
     rw = s.add_parser("review", help="run the configured reviewer(s) over an item's diff")
-    rw.add_argument("id", nargs="?", default="")
+    # `*`, not `?`: `ddflow review triage <id> ...` is a verb followed by the item.
+    rw.add_argument("id", nargs="*", default=[], help="the item; or `triage <item>`")
     rw.add_argument("--gate", default="critic")
     rw.add_argument(
         "--intent",
@@ -1098,6 +1099,14 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="re-review only chunk N (as the recorded review numbered it; repeatable, or "
         "'2,5') and merge it into that record -- same diff, chunk size and reviewer",
     )
+    rw.add_argument("--finding", type=int, default=0, help="triage: the finding's number (#N)")
+    rw.add_argument(
+        "--refuted", action="store_true", help="triage: --probe shows the finding is false"
+    )
+    rw.add_argument(
+        "--confirmed", action="store_true", help="triage: --probe is the fix/test that answers it"
+    )
+    rw.add_argument("--probe", default="", help="triage: the evidence for the verdict")
     rw.set_defaults(fn=cmd_review)
 
     ad = s.add_parser("adopt", help="install ddflow into this project for one or more agents")
