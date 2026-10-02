@@ -43,7 +43,7 @@ def corpus_repo(tmp_path_factory):
     subprocess.run(["git", "init", "-q", "-b", "main", str(r)], check=True)
     log = EventLog(r, "seed")
     for rec in FIX.values():
-        if rec["added"] >= FIX["B3eda99e0fe"]["added"]:
+        if rec["id"] == "B3eda99e0fe" or rec["added"] > FIX["B3eda99e0fe"]["added"]:
             continue
         if rec["kind"] == "bug":
             log.append("bug.found", rec["id"], {"item": "", "summary": rec["body"]})
@@ -95,21 +95,22 @@ def test_extends_an_open_bug_adds_a_record_and_keeps_the_summary(filed):
     assert add["text"] == REPORT and add["who"] and add["score"] > 0.5
 
 
-def test_extends_a_fixed_bug_files_a_new_linked_bug(filed):
+@pytest.mark.parametrize("relation", ["extends", "duplicate_of"])
+def test_extends_a_fixed_bug_files_a_new_linked_bug(filed, relation):
     log = EventLog(filed, "a")
     log.append("bug.fixed", "B5d98a4da0a", {"regression_test": "t::x"})
     out = A.bug_found(
         filed,
         summary=REPORT,
         id="B3eda99e0fe",
-        answer=DD.Answer("duplicate_of", "B5d98a4da0a"),
+        answer=DD.Answer(relation, "B5d98a4da0a"),
         agent="a",
     )
     assert out.exit == 0 and out.data["id"] == "B3eda99e0fe"
     assert out.data["holder"]["state"] == "fixed"
     st = state(filed)
     assert st.bugs["B3eda99e0fe"].summary == REPORT
-    assert st.links["B3eda99e0fe"].linked("duplicate_of") == {"B5d98a4da0a"}
+    assert st.links["B3eda99e0fe"].linked(relation) == {"B5d98a4da0a"}
     assert not st.links.get("B5d98a4da0a") or not st.links["B5d98a4da0a"].extensions
 
 
@@ -276,8 +277,9 @@ def test_session_notes_and_prompts_are_never_checked(repo):
     s = A.session_start(repo, agent="a")
     sid = s.data["id"] if "id" in s.data else s.data.get("session", "")
     text = "the same long note about the very same thing repeated again and again"
-    assert A.session_note(repo, sid, text, agent="a").exit == 0
-    assert A.session_note(repo, sid, text, agent="a").exit == 0
+    for _ in range(2):
+        assert A.session_note(repo, sid, text, agent="a").exit == 0
+        assert A.session_prompt(repo, sid, text, agent="a").exit == 0
 
 
 def test_the_check_is_callable_for_the_importer(filed):
