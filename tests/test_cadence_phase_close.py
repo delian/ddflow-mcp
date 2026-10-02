@@ -76,6 +76,16 @@ def test_a_malformed_entry_named_for_the_pass_does_not_switch_it_off(repo):
     assert code == REFUSED and "architecture_review" in err, err
 
 
+def test_a_good_entry_beside_a_malformed_one_still_enforces_the_count(repo):
+    _two_phases(repo)
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(
+        cfg.read_text() + 'every_days = ["architecture_review=7", "architecture_review=oops"]\n'
+    )
+    code, _o, err = run_cli(repo, "complete", "P1", "--model", "claude-opus-5")
+    assert code == REFUSED and "architecture_review" in err, err
+
+
 def test_the_verdict_itself_carries_it_so_every_completion_path_enforces_it(repo):
     # The PR-merge settle path calls CM.verdict directly, not api.complete.
     from ddflow.config import Config
