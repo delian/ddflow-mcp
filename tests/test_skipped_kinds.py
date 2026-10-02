@@ -36,8 +36,8 @@ def test_doctor_names_unknown_kinds_and_counts(repo):
 
 def test_doctor_is_silent_on_a_log_it_fully_understands(repo):
     run_cli(repo, "init")
-    _, out, _ = run_cli(repo, "doctor")
-    assert "newer ddflow" not in out
+    _, out, err = run_cli(repo, "doctor")
+    assert out.strip() and "newer ddflow" not in out, err
 
 
 def test_status_carries_the_skipped_kinds(repo):
