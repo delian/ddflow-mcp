@@ -192,11 +192,25 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
     changed = changed_paths(repo, it, cfg)
     if not changed:
         return ""
-    code = [p for p in changed if is_shared(p, cfg.enforce.readme_code_globs)]
+    code = [
+        p for p in changed if is_shared(p, cfg.enforce.readme_code_globs) and not _is_test_path(p)
+    ]
     if not code or any(is_shared(p, cfg.enforce.readme_files) for p in changed):
         return ""
     more = f" (+{len(code) - 3} more)" if len(code) > 3 else ""  # noqa: PLR2004
     return f"{README_REMEDY}. Changed: {', '.join(code[:3])}{more}."
+
+
+def _is_test_path(path: str) -> bool:
+    """A test file is never user-visible, even inside a code glob (`pkg/tests/x.py`)."""
+    parts = path.split("/")
+    name = parts[-1]
+    return (
+        any(d in ("tests", "test") for d in parts[:-1])
+        or name.startswith("test_")
+        or name.endswith(("_test.py", ".test.js", ".test.ts", ".spec.js", ".spec.ts"))
+        or name == "conftest.py"
+    )
 
 
 def changed_paths(repo: Path, it, cfg: Config) -> list[str]:

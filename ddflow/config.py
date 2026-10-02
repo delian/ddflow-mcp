@@ -1039,7 +1039,7 @@ _doc(
 _doc(
     "enforce",
     "readme_code_globs",
-    "Paths whose change is user-visible and so should reach the README (readme_with_code), in git's glob pathspec syntax. Default `ddflow/**`, ddflow's own package; set a project's own source directories. Tests, docs and `.ddflow/**` are not listed and so are exempt.",
+    "Paths whose change is user-visible and so should reach the README (readme_with_code), in git's glob pathspec syntax. Default `ddflow/**`, ddflow's own package; set a project's own source directories. Docs and `.ddflow/**` are not listed and so are exempt; a test file inside a listed path (a `tests/` directory, `test_*.py`, `*_test.py`, conftest.py) is exempt too.",
 )
 _doc(
     "enforce",
