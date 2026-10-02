@@ -25,9 +25,9 @@ def test_cli_mcp_serves_with_the_callers_cwd(repo, tmp_path, monkeypatch):
     where = tmp_path / "elsewhere"
     where.mkdir()
     monkeypatch.chdir(where)
-    cmd_mcp(SimpleNamespace(), SimpleNamespace(repo=repo))
+    cmd_mcp(SimpleNamespace(), SimpleNamespace(repo=repo, _start=where))
     assert seen["repo"] == repo
-    assert seen.get("called_from") == where.resolve() or seen.get("called_from") == where
+    assert seen.get("called_from") == where
 
 
 def _done_item(repo: Path) -> None:
@@ -63,3 +63,24 @@ def test_block_still_blocks_an_open_item(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--title", "t")
     assert run_cli(repo, "block", "T1", "--reason", "wait")[0] == OK
+
+
+def test_block_over_mcp_needs_reopen_for_a_done_item(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _done_item(repo)
+
+    def call(**extra):
+        msg = {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_block", "arguments": {"id": "T1", "reason": "x", **extra}},
+        }
+        return Server(repo).handle(msg)["result"]
+
+    refused = call()
+    assert refused["_meta"]["exit"] == REFUSED
+    assert _state(repo) == "done"
+    assert call(reopen=True)["_meta"]["exit"] == OK
+    assert _state(repo) == "blocked"

@@ -295,13 +295,11 @@ def cmd_loops(a, c: Ctx) -> int:
 #: which is honest — a new event type shows up as itself rather than being silently
 #: dropped from the history, which is the failure `replay` had with decisions.
 def cmd_mcp(a, c: Ctx) -> int:
-    from pathlib import Path
-
     from ..surfaces.mcp import serve
 
-    # The caller's own cwd, as the ddflow-mcp entry point passes it: without it every
+    # The caller's own start (--repo, DDFLOW_REPO or cwd), as ddflow-mcp passes it: without it every
     # called_from-aware tool treats the caller as standing in the primary (Bc1fe69741f).
-    serve(c.repo, called_from=Path.cwd())
+    serve(c.repo, called_from=c._start)
     return OK
 
 

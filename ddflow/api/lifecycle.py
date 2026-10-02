@@ -1552,8 +1552,6 @@ def block(
     out of done, which a mistyped id would do silently (B-block-done). `reopen` is the
     deliberate form -- the B12/B14 data fix was one.
     """
-    from ..core.model import DONE
-
     log, _cfg, st = _load(repo, agent)
     it = _require(st, item, "item.blocked")
     if isinstance(it, O.Outcome):
