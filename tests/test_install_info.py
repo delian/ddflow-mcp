@@ -329,3 +329,16 @@ def test_index_install_into_a_target_dir_is_not_a_checkout(tmp_path):
 
 def test_malformed_dir_info_degrades_instead_of_crashing(installed):
     assert installed({"url": "file:///x", "dir_info": "bogus"}).kind == "local-dir"
+
+
+def test_non_utf8_direct_url_is_unknown(tmp_path):
+    site = _site(tmp_path, None)
+    (next(site.glob("*.dist-info")) / "direct_url.json").write_bytes(b"\xff\xfe")
+    assert I.install_info(root=site).kind == "unknown"
+
+
+def test_missing_version_header_falls_back(tmp_path):
+    site = _site(tmp_path, None)
+    meta = next(site.glob("*.dist-info")) / "METADATA"
+    meta.write_text("Metadata-Version: 2.1\nName: ddflow-mcp\n")
+    assert isinstance(I.install_info(root=site).version, str)

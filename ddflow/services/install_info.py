@@ -71,7 +71,10 @@ def _direct_url(dist=None) -> dict | None:
     index', and `kind` says so)."""
     if dist is None:
         return None
-    text = dist.read_text("direct_url.json")
+    try:
+        text = dist.read_text("direct_url.json")
+    except (ValueError, OSError):  # not UTF-8, or unreadable in a way read_text lets through
+        return {}
     if text is None:
         # `read_text` also answers None for a file that exists but cannot be read.
         try:
@@ -181,7 +184,8 @@ def _kind(dist, record: dict | None, from_source: bool) -> str:
 def _version(dist) -> str:
     if dist is not None:
         try:
-            return dist.version
+            if dist.version:
+                return str(dist.version)
         except Exception:
             pass
     import ddflow
