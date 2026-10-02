@@ -12,7 +12,6 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
-from ... import __version__
 from ..prompts import Template, TemplateError
 from ..prompts import render as render_template
 from .frame import DEFAULT_MAX_BYTES, frame, normalize, truncate
@@ -184,6 +183,7 @@ def render_document(
     builtin: Path | None = None,
     max_bytes: int = DEFAULT_MAX_BYTES,
     extra: dict[str, str] | None = None,
+    version: str = "",
 ) -> str:
     """The full framed document (header + body), capped to ``max_bytes`` (0 = uncapped).
 
@@ -192,4 +192,8 @@ def render_document(
     """
     k = get(kind) if isinstance(kind, str) else kind
     body = render_body(k, query, filters, repo=repo, overrides=overrides, builtin=builtin)
-    return frame(truncate(body, max_bytes), k.name, __version__, extra)
+    if not version:
+        import ddflow
+
+        version = str(ddflow.__version__)
+    return frame(truncate(body, max_bytes), k.name, version, extra)
