@@ -92,7 +92,14 @@ def test_a_bump_is_verified_against_the_source_it_wrote_not_stale_bytecode(tmp_p
     want = f"{major}.{minor}.{patch + 1}"
     assert r.returncode == 0, f"bump.sh patch failed:\n{r.stdout}\n{r.stderr}"
     assert _version(repo) == want
-    assert json.loads((repo / "server.json").read_text())["version"] == want
+    srv = json.loads((repo / "server.json").read_text())
+    assert srv["version"] == want
+    for pkg in srv["packages"]:
+        if pkg["registryType"] == "oci":
+            # Tag moved, and no `version` field appeared: the registry rejects one (#40).
+            assert pkg["identifier"].endswith(f":{want}") and "version" not in pkg, pkg
+        else:
+            assert pkg["version"] == want, pkg
     assert f'__version__ = "{want}"' in (repo / "ddflow" / "__init__.py").read_text()
     assert re.search(
         rf'name = "ddflow-mcp"\nversion = "{re.escape(want)}"', (repo / "uv.lock").read_text()
