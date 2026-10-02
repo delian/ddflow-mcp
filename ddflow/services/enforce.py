@@ -1086,11 +1086,12 @@ def _merge_own_paths(tree: Path, paths: list[str]) -> list[str]:
     other = _merged_in(tree)
     if not other:
         return paths
-    r = W.git(tree, "diff", "--cached", "--no-renames", "--name-only", "-z", other)
-    if not r.ok:
+    # `git_paths`, not `git`: a strict UTF-8 decode of `-z` output crashed on one
+    # non-UTF-8 file name; it decodes as `staged_paths` does, so the names compare.
+    differs = W.git_paths(tree, "diff", "--cached", "--no-renames", "--name-only", other)
+    if differs is None:
         return paths
-    differs = set(filter(None, r.out.split("\0")))
-    return [p for p in paths if p in differs]
+    return [p for p in paths if p in set(differs)]
 
 
 def clean_merge_conclusion(tree: Path) -> bool:

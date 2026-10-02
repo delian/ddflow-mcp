@@ -46,7 +46,11 @@ def _hook(repo: Path) -> str:
         env=env,
         timeout=120,
     )
-    return p.stdout + p.stderr
+    out = p.stdout + p.stderr
+    # Under the default "warn" policy the hook always exits 0; anything else, or a
+    # traceback, is the hook failing -- which the negative assertions would read as a pass.
+    assert p.returncode == 0 and "Traceback" not in out, out
+    return out
 
 
 def _mid_merge(repo: Path, globs: str) -> None:
@@ -108,18 +112,5 @@ def test_a_merge_in_a_linked_worktree_is_judged_the_same(repo, tmp_path):
     _git(tree, "add", "shared.txt")
     run_cli(repo, "task", "add", "T1", "--globs", "shared.txt")
     assert A.claim(repo, "T1", no_worktree=True, agent=AGENT).ok
-    env = {
-        "PATH": "/usr/bin:/bin",
-        "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
-        "DDFLOW_AGENT": AGENT,
-    }
-    p = subprocess.run(
-        [sys.executable, "-m", "ddflow", "--repo", str(tree), "hooks", "check-commit"],
-        cwd=tree,
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=120,
-    )
-    out = p.stdout + p.stderr
+    out = _hook(tree)
     assert "from_main.txt" not in out and "not covered" not in out, out
