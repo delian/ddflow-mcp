@@ -85,8 +85,15 @@ def export_cadence(repo, cfg) -> list[dict[str, Any]]:
             return []
         q = ops.load(repo, cfg)
         stale = [s.doc for s in docs if ops.state_of(repo, cfg, q, s)[0] == "stale"]
-    except Exception:
-        return []
+    except Exception as exc:  # never fails the listing -- but "could not look" is not "not due"
+        return [
+            {
+                "cadence": "export_refresh",
+                "since": f"could not check ({type(exc).__name__}: {exc})",
+                "every": 0,
+                "unit": "export settings or event log unreadable; `ddflow export --all --check`",
+            }
+        ]
     if not stale:
         return []
     return [

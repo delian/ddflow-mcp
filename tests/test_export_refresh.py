@@ -242,3 +242,34 @@ def test_one_documents_bad_settings_do_not_block_the_others(proj):
     by = {o.doc: o for o in r.outcomes}
     assert set(by) == {"roadmap", "status"}  # rules is off: never resolved
     assert by["roadmap"].action == "updated" and by["status"].action == "failed"
+
+
+def test_recording_the_docs_gate_runs_the_export_step_and_keeps_digests(proj):
+    p = proj / ".ddflow" / "config.toml"
+    p.write_text(p.read_text() + '\n[export.roadmap]\nrefresh = "docs_gate"\n')
+    assert _stale(proj)
+    code, out, err = run_cli(
+        proj, "--json", "gate", "record", "P1", "docs", "--outcome", "passed", "--evidence", "x"
+    )
+    assert code == OK, out + err
+    assert not _stale(proj)
+    ev = _load(proj)[2].items["P1"].gates["docs"].evidence["export"]
+    head, _ = F.split((proj / "ROADMAP.md").read_text())
+    assert ev["digests"] == {"roadmap": head.digest}
+    assert ev["documents"][0]["verified"] is True
+
+
+def test_the_cadence_says_when_it_could_not_check(proj, monkeypatch):
+    from ddflow.services import cadence
+    from ddflow.services.export import ops
+
+    p = proj / ".ddflow" / "config.toml"
+    p.write_text(p.read_text() + '\n[export.roadmap]\nrefresh = "merge"\n')
+    cfg = _load(proj)[1]
+
+    def boom(*a, **k):
+        raise OSError("log unreadable")
+
+    monkeypatch.setattr(ops, "load", boom)
+    due = cadence.export_cadence(proj, cfg)
+    assert due and "could not check" in due[0]["since"]
