@@ -1071,6 +1071,22 @@ def _merged_in(tree: Path) -> str:
     return os.environ.get(W.SQUASH_OF, "").strip()
 
 
+def _not_from_merged(tree: Path, paths: list[str]) -> list[str]:
+    """``paths`` minus those whose index entry equals the commit being merged in.
+
+    Outside a merge, or when git cannot say, ``paths`` unchanged: an unknown answer must
+    not hide a path from the check.
+    """
+    other = _merged_in(tree)
+    if not other:
+        return paths
+    r = W.git(tree, "diff", "--cached", "--no-renames", "--name-only", "-z", other)
+    if not r.ok:
+        return paths
+    differs = set(filter(None, r.out.split("\0")))
+    return [p for p in paths if p in differs]
+
+
 def clean_merge_conclusion(tree: Path) -> bool:
     """Is the commit being made exactly the automatic merge of HEAD and one other commit?
 
@@ -1117,6 +1133,13 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
     # A clean merge commit stages only what its parents already committed.
     if not paths or clean_merge_conclusion(_index_tree(repo)):
+        return 0, ""
+    # A merge with conflicts resolved by hand stages every path the merged commit changed.
+    # Those whose staged content IS the merged commit's came from there unchanged -- main's
+    # already-merged work, not this item's -- and are not judged (B07878037ab: 17 of
+    # them buried the one path that was the item's own).
+    paths = _not_from_merged(_index_tree(repo), paths)
+    if not paths:
         return 0, ""
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
