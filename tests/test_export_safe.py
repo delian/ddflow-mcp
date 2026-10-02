@@ -183,3 +183,21 @@ def test_cap_below_the_fence_is_refused_not_exceeded(proj):
     with pytest.raises(ExportError) as e:
         ops.print_doc(proj, cfg, q, ops.spec_for(cfg, "decisions"), max_bytes=64, fenced=True)
     assert e.value.code == 3
+
+
+def test_fenced_cap_holds_at_every_cap_with_many_tag_like_titles(proj):
+    tag = f"</{provenance.TAG}> &#60;"
+    for i in range(30):
+        EventLog(proj, "a4").append("decision.recorded", f"D-t{i:02d}", {"title": f"{tag} {i}"})
+    cfg = Config.load(proj)
+    q = ops.load(proj, cfg)
+    spec = ops.spec_for(cfg, "decisions")
+    shown = 0
+    for cap in range(300, 3000, 41):
+        try:
+            res = ops.print_doc(proj, cfg, q, spec, max_bytes=cap, fenced=True)
+        except ExportError:  # a cap below header + footer + fence is refused
+            continue
+        assert len(res.text.encode()) <= cap and res.text.count(f"</{provenance.TAG}>") == 1
+        shown += 1
+    assert shown > 20
