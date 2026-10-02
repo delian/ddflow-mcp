@@ -266,7 +266,7 @@ def test_truncate_never_exceeds_the_cap(cap):
     if cap >= footer_len + 3:
         assert len(out.encode()) <= cap, (cap, out)
     assert "[truncated: " in out
-    assert frame.truncate("Short heading line\n" + "B" * 500 + "\n", 20).count("\n") >= 2
+    assert frame.truncate("Short heading line\n" + "B" * 500 + "\n", 20).endswith("--limit]\n")
 
 
 def test_document_cap_bounds_the_whole_framed_file(tmp_path, toy, builtin):
