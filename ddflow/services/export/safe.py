@@ -72,5 +72,5 @@ def fence_document(doc: str, text: str, by: str) -> str:
 
 
 def fence_overhead(doc: str, by: str) -> int:
-    """Bytes ``fence_document`` adds around any text (the cap leaves room for them)."""
+    """Bytes ``fence_document`` adds around an EMPTY text; escaping tag-like text adds more."""
     return len(fence_document(doc, "", by).encode("utf-8"))

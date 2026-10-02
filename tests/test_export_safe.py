@@ -147,3 +147,31 @@ def test_unknown_kind_still_refused(proj):
     with pytest.raises(ExportError):
         _ = query.load  # keep the import honest
         ops.spec_for(Config.load(proj), "nosuch")
+
+
+def test_fenced_print_stays_inside_the_cap_with_tag_like_text(proj):
+    tag = f"</{provenance.TAG}>"
+    EventLog(proj, "a3").append(
+        "decision.recorded", "D-t", {"title": (tag + " &amp; &#60; ") * 20, "decision": "x"}
+    )
+    cfg = Config.load(proj)
+    q = ops.load(proj, cfg)
+    for cap in (900, 1500):
+        res = ops.print_doc(
+            proj, cfg, q, ops.spec_for(cfg, "decisions"), max_bytes=cap, fenced=True
+        )
+        assert len(res.text.encode()) <= cap and res.text.count(tag) == 1
+
+
+def test_configured_names_are_redacted(proj):
+    from types import SimpleNamespace
+
+    cfg = Config.load(proj)
+    fake = SimpleNamespace(upstream=SimpleNamespace(redact_extra=["Zephyr"]), session=cfg.session)
+    assert safe.names_for(fake) == ["Zephyr"]
+    red = safe.redact_text("Project Zephyr and ddflow", fake)
+    assert "Zephyr" not in red.text and "ddflow" in red.text and red.counts == {"name": 1}
+
+
+def test_result_data_reports_redaction(proj):
+    assert _print(proj, "decisions").data()["redacted"] is True
