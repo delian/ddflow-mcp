@@ -259,3 +259,16 @@ def test_configure_records_the_per_call_agent(proj):
     out = AS.configure(proj, AS.ConfigEdit(append_toml=HTTP, local=True), agent="sub-7")
     assert out.exit == 0, out.reason
     assert _configured_authors(proj) == {"sub-7"}
+
+
+def test_reviewers_detect_write_records_the_per_call_agent(proj, monkeypatch):
+    """Follow-up of B6dd8467780: detect --write dropped agent= before append_block."""
+    from ddflow.api import review as AR
+    from ddflow.services import review as R
+
+    monkeypatch.setattr(
+        R, "detect", lambda *a, **k: [("http://127.0.0.1:9/v1", "probe", ["gemini-2.5-pro"])]
+    )
+    out = AR.reviewers_detect(proj, write=True, agent="sub-9")
+    assert out.exit == 0, out.reason
+    assert _configured_authors(proj) == {"sub-9"}
