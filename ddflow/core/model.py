@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .events import Event
+from .events import Event, changelog_of
 
 # Item states. These are DERIVED, never written: an item's state is a function of the
 # events about it. A state field that can be set directly is a field that can drift
@@ -198,6 +198,8 @@ class Item:
     #: safety property the adoption commit claimed was never actually implemented.
     adopted: bool = False
     merged_sha: str = ""
+    #: Optional `item.completed` `changelog` {category, line, skip}; {} when none was given.
+    changelog: dict[str, Any] = field(default_factory=dict)
     #: The branch the worktree forked from. Recorded because under gitflow and stacking it
     #: is no longer "the base branch" -- a hotfix forks from production, a stacked task
     #: from its dependency's branch -- and the merge target is derived from it.
@@ -352,6 +354,8 @@ class Bug:
     #: has its whole `regression_test` string as the single entry.
     regression_tests: list[str] = field(default_factory=list)
     lesson: str = ""
+    #: Optional `bug.fixed` `changelog` {category, line, skip}; {} when none was given.
+    changelog: dict[str, Any] = field(default_factory=dict)
     #: Closed as a FALSE finding (`bug invalid`), with why and what showed it. Kept apart
     #: from `fixed_at` because the two closures claim different things: a fix claims a
     #: repair and a regression test that failed without it; an invalid finding claims
@@ -1302,6 +1306,7 @@ def _h_state(new_state: str):
             # so the one record of WHY an item was closed without running a single gate
             # existed only in the raw log. Third instance of this class in this series.
             it.completion_evidence = ev.data.get("evidence", it.completion_evidence)
+            it.changelog = changelog_of(ev.data.get("changelog")) or it.changelog
         elif new_state == ABANDONED:
             it.blocked_reason = ev.data.get("reason", "")
 
@@ -1553,6 +1558,8 @@ def _h_bug_fixed(st: State, ev: Event) -> None:
         ev.data.get("regression_tests") or ([bug.regression_test] if bug.regression_test else [])
     )
     bug.lesson = ev.data.get("lesson", "")
+    # A keyless event (an older writer, a re-close) leaves a recorded line alone.
+    bug.changelog = changelog_of(ev.data.get("changelog")) or bug.changelog
 
 
 def _h_bug_invalid(st: State, ev: Event) -> None:

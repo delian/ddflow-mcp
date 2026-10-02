@@ -389,6 +389,14 @@ You get everything except the judgement. Command gates run themselves; agent gat
 for a human to record an outcome, and `ddflow gate skip <id> <gate> --reason "..."` is
 the escape hatch — recorded as a skip, never as a pass.
 
+**Changelog line (optional).** `ddflow complete P1.T1 --changelog "Added: tax rounding"` (and
+`ddflow bug fixed B1 --regression-test ... --changelog "Security: ..."`, MCP `changelog` on
+`ddflow_complete` / `ddflow_bug_fixed`) records one line for the project's changelog on the
+completion event. The category is one of Added, Changed, Deprecated, Removed, Fixed, Security
+(case-insensitive; anything else is refused with that list); `--changelog skip` (or `internal`)
+marks work that must not appear in the changelog. `complete` never asks for it and never
+requires it, and logs without it fold exactly as before.
+
 In CI, the exit codes are the interface:
 
 ```make
