@@ -3126,9 +3126,9 @@ kind compared, not the ddflow version), the event log must be fully staged besid
 stale or hand-edited document is named with `ddflow export <kind> --update` as the remedy. A
 hand-written file that only holds a marker region has no such first line, so it is not treated
 as a generated file; an append-mode log (`last=` in its header) grows by design and is skipped.
-Every SELECTED export target is also excluded from `[enforce].stale_docs`
+Every SELECTED whole or append export target is also excluded from `[enforce].stale_docs`
 (`shared_files.doc_exclude`) and from docscheck (generated documents are judged by `export
---check`), is a shared path (no claim needed), and draws no "no merge strategy" note from
+--check`; a region target's hand-written text is still scanned), every selected target is a shared path (no claim needed), and draws no "no merge strategy" note from
 `doctor`; `doctor` instead reports a selected target that is stale or hand-edited as a NOTE.
 
 Exit codes: 0 done or fresh, 1 stale (`--check`), 2 could not run (unreadable log, template
