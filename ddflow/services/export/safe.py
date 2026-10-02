@@ -9,6 +9,10 @@ Redaction
     session patterns of the loaded config. The header says what happened:
     ``redacted=N redacted-kinds=ipv4:1,path:2`` or ``redacted=off``.
 
+Append mode
+    Only the entries are redacted; an append-mode header carries no count (it would have to
+    be cumulative across writes).
+
 Fencing
     Over MCP the whole printed document is wrapped in one ``core.provenance`` fence: its
     text was written by agents, so a reader is told it is data, by whom and from where.
@@ -18,7 +22,6 @@ Fencing
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
 from ...config import Config
@@ -34,7 +37,7 @@ def names_for(cfg: Config) -> list[str]:
     return [str(n) for n in (getattr(up, "redact_extra", None) or [])]
 
 
-def redact_text(text: str, cfg: Config, repo: Path | str) -> Redacted:
+def redact_text(text: str, cfg: Config) -> Redacted:
     """``text`` with secrets, private addresses, hosts and home paths removed.
 
     ``repo_root`` is passed empty on purpose: the repository's directory name is the
@@ -61,19 +64,13 @@ def authors(events: Any) -> str:
     return ",".join(names)
 
 
-def origin(events: Any) -> provenance.Origin:
-    return provenance.Origin(provenance.AGENT, authors(events))
+def fence_document(doc: str, text: str, by: str) -> str:
+    """The printed document as DATA, with its authors (``by``, from ``authors``) and where it
+    came from."""
+    o = provenance.Origin(provenance.AGENT, by, f"ddflow export {doc}")
+    return provenance.fence("export", doc, text, o, inline=False)
 
 
-def fence_document(doc: str, text: str, events: Any) -> str:
-    """The printed document as DATA, with its authors and where it came from."""
-    return provenance.fence("export", doc, text, _with_source(origin(events), doc), inline=False)
-
-
-def fence_overhead(doc: str, events: Any) -> int:
+def fence_overhead(doc: str, by: str) -> int:
     """Bytes ``fence_document`` adds around any text (the cap leaves room for them)."""
-    return len(fence_document(doc, "", events).encode("utf-8"))
-
-
-def _with_source(o: provenance.Origin, doc: str) -> provenance.Origin:
-    return provenance.Origin(o.trust, o.by, f"ddflow export {doc}")
+    return len(fence_document(doc, "", by).encode("utf-8"))

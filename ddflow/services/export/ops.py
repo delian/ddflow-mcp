@@ -222,7 +222,7 @@ def _post(cfg: Config, repo: Path, spec: Spec):
     def run(body: str) -> tuple[str, dict[str, str]]:
         if not spec.redact:
             return body, S.redaction_attrs(None)
-        red = S.redact_text(body, cfg, repo)
+        red = S.redact_text(body, cfg)
         return red.text, S.redaction_attrs(red.counts)
 
     return run
@@ -265,11 +265,12 @@ def print_doc(
     ``fenced`` (the MCP path) wraps it in a provenance fence naming its authors; the fence
     is inside the cap."""
     cap = cfg.export.max_bytes if max_bytes is None else max_bytes
+    by = S.authors(q.events) if fenced else ""
     if fenced and cap > 0:
-        cap = max(cap - S.fence_overhead(spec.doc, q.events), 1)
+        cap = max(cap - S.fence_overhead(spec.doc, by), 1)
     shown = render(repo, cfg, q, spec, max_bytes=cap, template=template)
     m = _TRUNC.fullmatch(shown.rstrip("\n").rsplit("\n", 1)[-1])
-    text = S.fence_document(spec.doc, shown, q.events) if fenced else shown
+    text = S.fence_document(spec.doc, shown, by) if fenced else shown
     return Result(
         spec.doc,
         spec.path,
