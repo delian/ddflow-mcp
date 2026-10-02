@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import ddflow.api._dedupe as DD
+
 from ..config import csv_list
 from ..core import outcome as O
 from ..core.ids import auto_id
@@ -64,6 +66,8 @@ class LessonDraft:
     pattern: str = ""
     globs: str = ""
     id: str = ""
+    #: What the adder says about a possible duplicate (``_dedupe.Answer``).
+    answer: DD.Answer | None = None
 
 
 def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
@@ -76,7 +80,7 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
     """
     from ..services import inventory as INV
 
-    log, _cfg, _st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     lid = draft.id or auto_id("L", draft.title, draft.rule)
     data: dict[str, Any] = {
         "title": draft.title,
@@ -100,8 +104,28 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
             # real occurrence away the first time anybody ran the check.
             return O.failed("lesson.pattern_invalid", str(exc), pattern=draft.pattern)
         data |= {"pattern": draft.pattern, "globs": globlist, "sites": sites}
-    log.append("lesson.recorded", lid, data)
-    return O.ok("lesson.recorded", id=lid, sites=len(sites), inventory=sites)
+    chk = DD.check_add(
+        repo,
+        log,
+        cfg,
+        st,
+        DD.Record(
+            kind="lesson",
+            event_kind="lesson.recorded",
+            rid=lid,
+            title=draft.title,
+            body="\n".join(x for x in (draft.rule, draft.why, draft.how) if x),
+        ),
+        draft.answer,
+    )
+    if chk.refusal is not None:
+        return chk.refusal
+    if chk.extension:
+        return DD.extend(log, cfg, chk, "lesson.recorded")
+    with log.transaction():
+        log.append("lesson.recorded", lid, data | chk.fields)
+        DD.after_add(log, cfg, lid, chk)
+    return O.ok("lesson.recorded", id=lid, sites=len(sites), inventory=sites, **chk.data())
 
 
 def lessons_verify(repo: Path, *, agent: str = "") -> O.Outcome:
@@ -248,40 +272,6 @@ def recall(
     return O.ok("recall", **data)
 
 
-#: Words listed to explain one match: enough to see why, few enough to read at a glance.
-SIMILAR_SHARED_WORDS = 5
-
-
-def _record_state(state, rid: str, kind: str) -> tuple[str, str]:
-    """(headline, state) of one indexed record, as a person reads them: an item's title
-    and where it is in the queue, a bug's summary and whether it is fixed."""
-    if kind in ("task", "phase"):
-        it = state.items.get(rid)
-        if it is None:
-            return "", "unknown"
-        if it.lease and not it.lease.expired_at and it.state not in ("done", "abandoned"):
-            return it.title, f"claimed by {it.lease.holder}"
-        return it.title, it.state
-    if kind == "bug":
-        bg = state.bugs.get(rid)
-        if bg is None:
-            return "", "unknown"
-        return bg.summary, bg.resolution or "open"
-    if kind == "lesson":
-        ls = state.lessons.get(rid)
-        return (ls.title, "superseded" if ls.superseded_by else "active") if ls else ("", "unknown")
-    if kind == "decision":
-        dc = state.decisions.get(rid)
-        return (dc.title, dc.status or "active") if dc else ("", "unknown")
-    if kind == "research":
-        rs = state.research.get(rid)
-        return (rs.question, rs.verdict.lower() or "recorded") if rs else ("", "unknown")
-    if kind == "memory":
-        mm = state.memories.get(rid)
-        return (mm.text, "live") if mm else ("", "unknown")
-    return "", "unknown"
-
-
 def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Outcome:
     """ "Is this already filed?" -- the records most like ``text``, before it is added.
 
@@ -296,8 +286,6 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
     """
     import dataclasses
 
-    from ..core import textsim
-    from ..infra.store import similar_records
     from ..services import similar as sim
 
     text = (text or "").strip()
@@ -326,26 +314,7 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
         found = sim.assess(matcher, {"kind": scope[0], "title": text, "body": ""}, scoped)
         # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
         cands = [c for c in found.candidates if c.kind in scope]
-        n, df = matcher.doc_freq(textsim.tokens(text))
-    records = {r["id"]: r for r in similar_records(st)}
-    mine = set(textsim.tokens(text))
-    rows = []
-    for c in cands:
-        r = records[c.id]
-        shared = set(textsim.tokens(r["title"], r["body"])) & mine
-        ranked = sorted(shared, key=lambda t: (-textsim.idf(df.get(t, 0), n), t))
-        headline, where = _record_state(st, c.id, c.kind)
-        rows.append(
-            {
-                "id": c.id,
-                "kind": c.kind,
-                "title": " ".join((headline or r["body"]).split())[:200],
-                "state": where,
-                "score": c.score,
-                "shared": ranked[:SIMILAR_SHARED_WORDS],
-                "flags": [f for f in c.flags if f != "same_item"],
-            }
-        )
+        rows = DD.rows(st, matcher, cands, text)
     data = {
         "text": text,
         "kinds": scope,
@@ -383,6 +352,8 @@ class Finding:
     budget: str = ""
     item: str = ""
     id: str = ""
+    #: What the adder says about a possible duplicate (``_dedupe.Answer``).
+    answer: DD.Answer | None = None
 
 
 def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
@@ -405,40 +376,85 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
             f"verdict with no probe behind it is an opinion. Use THEORETICAL and say why "
             f"no probe was possible.",
         )
-    log, _cfg, _st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     rid = finding.id or auto_id("R", finding.question, finding.claim)
-    log.append(
-        "research.recorded",
-        rid,
-        {
-            "question": finding.question,
-            "claim": finding.claim,
-            "mechanism": finding.mechanism,
-            "falsifier": finding.falsifier,
-            "probe": finding.probe,
-            "probe_output": finding.probe_output,
-            "verdict": finding.verdict,
-            "sources": csv_list(finding.sources),
-            "budget": finding.budget,
-            "item": finding.item,
-        },
+    chk = DD.check_add(
+        repo,
+        log,
+        cfg,
+        st,
+        DD.Record(
+            kind="research",
+            event_kind="research.recorded",
+            rid=rid,
+            title=finding.question,
+            body="\n".join(x for x in (finding.claim, finding.mechanism) if x),
+            item=finding.item,
+        ),
+        finding.answer,
     )
-    return O.ok("research.recorded", id=rid, verdict=finding.verdict)
+    if chk.refusal is not None:
+        return chk.refusal
+    if chk.extension:
+        return DD.extend(log, cfg, chk, "research.recorded")
+    with log.transaction():
+        log.append(
+            "research.recorded",
+            rid,
+            {
+                "question": finding.question,
+                "claim": finding.claim,
+                "mechanism": finding.mechanism,
+                "falsifier": finding.falsifier,
+                "probe": finding.probe,
+                "probe_output": finding.probe_output,
+                "verdict": finding.verdict,
+                "sources": csv_list(finding.sources),
+                "budget": finding.budget,
+                "item": finding.item,
+                **chk.fields,
+            },
+        )
+        DD.after_add(log, cfg, rid, chk)
+    return O.ok("research.recorded", id=rid, verdict=finding.verdict, **chk.data())
 
 
 def bug_found(
-    repo: Path, *, summary: str, item: str = "", id: str = "", agent: str = ""
+    repo: Path,
+    *,
+    summary: str,
+    item: str = "",
+    id: str = "",
+    answer: DD.Answer | None = None,
+    agent: str = "",
 ) -> O.Outcome:
-    log, _cfg, st = _load(repo, agent)
+    """File a bug. One that reads like an existing record is refused until ``answer``
+    says what it is; a bug a task will fix is filed against it (``item``), which answers
+    that candidate. ``answer`` extending an OPEN bug appends to it and files nothing."""
+    log, cfg, st = _load(repo, agent)
     bid = id or auto_id("B", summary, item)
-    log.append("bug.found", bid, {"item": item, "summary": summary})
+    chk = DD.check_add(
+        repo,
+        log,
+        cfg,
+        st,
+        DD.Record(kind="bug", event_kind="bug.found", rid=bid, body=summary, item=item),
+        answer,
+    )
+    if chk.refusal is not None:
+        return chk.refusal
+    if chk.extension:
+        return DD.extend(log, cfg, chk, "bug.found")
+    with log.transaction():
+        log.append("bug.found", bid, {"item": item, "summary": summary, **chk.fields})
+        DD.after_add(log, cfg, bid, chk)
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
     # out loud, because otherwise a real recurrence filed under an id already closed --
     # the same summary and item give the same auto id -- vanishes without a word.
     prior = st.bugs.get(bid)
     if prior is not None and prior.resolution:
-        return O.ok("bug.found", id=bid, resolution=prior.resolution)
-    return O.ok("bug.found", id=bid)
+        return O.ok("bug.found", id=bid, resolution=prior.resolution, **chk.data())
+    return O.ok("bug.found", id=bid, **chk.data())
 
 
 def _unknown_bug(kind: str, bid: str, st) -> O.Outcome:
@@ -884,7 +900,13 @@ def history(
 
 
 def memory_add(
-    repo: Path, text: str, *, tags: str = "", id: str = "", agent: str = ""
+    repo: Path,
+    text: str,
+    *,
+    tags: str = "",
+    id: str = "",
+    answer: DD.Answer | None = None,
+    agent: str = "",
 ) -> O.Outcome:
     """Remember one operational fact about this machine, repository or working state.
 
@@ -906,15 +928,29 @@ def memory_add(
             id="",
         )
     mid = id or auto_id("M", text)
-    data: dict[str, Any] = {"text": text}
+    chk = DD.check_add(
+        repo,
+        log,
+        cfg,
+        st,
+        DD.Record(kind="memory", event_kind="memory.recorded", rid=mid, body=text),
+        answer,
+    )
+    if chk.refusal is not None:
+        return chk.refusal
+    if chk.extension:
+        return DD.extend(log, cfg, chk, "memory.recorded")
+    data: dict[str, Any] = {"text": text, **chk.fields}
     if tags:
         # Only when given: the fold MERGES, keeping a field the event omits, and an
         # always-present `tags: []` made correcting a fact by `--id` wipe its tags
         # (cross-family critic).
         data["tags"] = csv_list(tags)
-    log.append("memory.recorded", mid, data)
+    with log.transaction():
+        log.append("memory.recorded", mid, data)
+        DD.after_add(log, cfg, mid, chk)
     replaced = bool(id) and id in st.memories
-    return O.ok("memory.recorded", id=mid, replaced=replaced)
+    return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())
 
 
 def _memory_row(m) -> dict[str, Any]:
