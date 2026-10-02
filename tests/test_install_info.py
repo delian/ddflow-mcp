@@ -227,3 +227,18 @@ def test_home_replacement_respects_path_boundaries(monkeypatch):
     assert I.normalise_path("/home/anna/checkout") == "/home/anna/checkout"
     assert I.normalise_path("/home/ann/checkout") == "~/checkout"
     assert I.normalise_path("/home/ann") == "~"
+
+
+def test_root_selects_the_distribution(tmp_path, monkeypatch):
+    other = tmp_path / "other"
+    other.mkdir()
+    site = _site(
+        tmp_path / "a",
+        {"url": "https://example.invalid/x", "vcs_info": {"vcs": "git", "commit_id": COMMIT}},
+        version="4.5.6",
+    )
+    monkeypatch.setattr(PATHS, "package_parent", lambda: other)
+    monkeypatch.setattr(I, "running_from_source", lambda: False)
+    assert I.install_info(root=site).version == "4.5.6"
+    assert I.install_info(root=site).kind == "vcs"
+    assert I.install_info().kind == "unknown"
