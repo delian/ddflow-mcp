@@ -3082,6 +3082,13 @@ Record one with: ddflow cadence --ran <name>
 Configurable: integration tests, architecture review, mutation testing, duplication
 sweep, lessons compression.
 
+**A phase will not close over an overdue pass.** `ddflow complete <phase>` lists every due
+pass counted in phases (architecture review, mutation tests, lessons) as an unmet condition
+and refuses (exit 3). Run the pass and record it with `ddflow cadence --ran <name>`, or skip
+it on the record with `ddflow cadence --ran <name> --note "skipped: <reason>"`.
+Task-counted passes stay advisory, and completing a task never asks. The driver's phase
+close runs `ddflow cadence` first.
+
 ---
 
 ## Exporting documents
