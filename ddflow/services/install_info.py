@@ -44,9 +44,10 @@ class InstallInfo:
         return asdict(self)
 
 
-def running_from_source() -> bool:
-    """True when this package lives in a checkout rather than in site-packages."""
-    here = Path(__file__).resolve()
+def running_from_source(root: Path | None = None) -> bool:
+    """True when this package -- or the tree at `root`, when given -- lives in a
+    checkout rather than in site-packages."""
+    here = Path(root).resolve() if root is not None else Path(__file__).resolve()
     return not any(part in ("site-packages", "dist-packages") for part in here.parts)
 
 
@@ -170,7 +171,7 @@ def install_info(root: Path | None = None) -> InstallInfo:
     """Describe the running ddflow. `root` is the directory holding the `ddflow`
     package (default: where it was imported from)."""
     root = Path(root) if root is not None else _paths.package_parent()
-    from_source = running_from_source()
+    from_source = running_from_source(root)
     dist = own_distribution(root)
     version = _version(dist)
     record = _direct_url(dist)

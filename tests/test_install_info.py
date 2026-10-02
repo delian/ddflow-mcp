@@ -40,7 +40,7 @@ def installed(tmp_path, monkeypatch):
     def make(direct_url, **kw):
         site = _site(tmp_path, direct_url, **kw)
         monkeypatch.setattr(PATHS, "package_parent", lambda: site)
-        monkeypatch.setattr(I, "running_from_source", lambda: False)
+        monkeypatch.setattr(I, "running_from_source", lambda *a: False)
         return I.install_info(root=site)
 
     return make
@@ -97,7 +97,7 @@ def test_no_distribution_outside_a_checkout_is_unknown(tmp_path, monkeypatch):
     site = tmp_path / "site-packages"
     (site / "ddflow").mkdir(parents=True)
     monkeypatch.setattr(PATHS, "package_parent", lambda: site)
-    monkeypatch.setattr(I, "running_from_source", lambda: False)
+    monkeypatch.setattr(I, "running_from_source", lambda *a: False)
     info = I.install_info(root=site)
     assert info.kind == "unknown" and info.is_own_dev_tree is False
 
@@ -127,7 +127,7 @@ def test_source_tree_reads_the_commit_from_git(tmp_path, monkeypatch):
     )
     head = git("rev-parse", "HEAD").stdout.strip()
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
-    monkeypatch.setattr(I, "running_from_source", lambda: True)
+    monkeypatch.setattr(I, "running_from_source", lambda *a: True)
     info = I.install_info(root=tree)
     assert (info.kind, info.commit) == ("source-tree", head)
 
@@ -191,7 +191,7 @@ def test_editable_install_is_found_in_site_packages(tmp_path, monkeypatch):
     )
     monkeypatch.syspath_prepend(str(site))
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
-    monkeypatch.setattr(I, "running_from_source", lambda: True)
+    monkeypatch.setattr(I, "running_from_source", lambda *a: True)
     assert I.install_info(root=tree).kind == "editable"
 
 
@@ -207,7 +207,7 @@ def test_editable_url_is_percent_decoded(tmp_path, monkeypatch):
     )
     assert "%20" in tree.as_uri()
     monkeypatch.syspath_prepend(str(site))
-    monkeypatch.setattr(I, "running_from_source", lambda: True)
+    monkeypatch.setattr(I, "running_from_source", lambda *a: True)
     assert I.install_info(root=tree).kind == "editable"
 
 
@@ -217,7 +217,7 @@ def test_egg_info_in_a_checkout_is_not_an_index_install(tmp_path, monkeypatch):
     egg.mkdir()
     (egg / "PKG-INFO").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
-    monkeypatch.setattr(I, "running_from_source", lambda: True)
+    monkeypatch.setattr(I, "running_from_source", lambda *a: True)
     info = I.install_info(root=tree)
     assert info.kind == "source-tree" and info.version == "1.2.3"
 
@@ -238,7 +238,18 @@ def test_root_selects_the_distribution(tmp_path, monkeypatch):
         version="4.5.6",
     )
     monkeypatch.setattr(PATHS, "package_parent", lambda: other)
-    monkeypatch.setattr(I, "running_from_source", lambda: False)
+    monkeypatch.setattr(I, "running_from_source", lambda *a: False)
     assert I.install_info(root=site).version == "4.5.6"
     assert I.install_info(root=site).kind == "vcs"
     assert I.install_info().kind == "unknown"
+
+
+def test_from_source_follows_root_not_the_calling_interpreter(tmp_path):
+    """No monkeypatching: an installed fixture under site-packages is judged by ITS
+    path, whatever tree the test itself runs from."""
+    site = _site(
+        tmp_path,
+        {"url": "https://example.invalid/x", "vcs_info": {"vcs": "git", "commit_id": COMMIT}},
+    )
+    info = I.install_info(root=site)
+    assert (info.kind, info.commit) == ("vcs", COMMIT)
