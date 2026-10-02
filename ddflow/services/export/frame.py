@@ -44,6 +44,8 @@ class Header:
     extra: dict[str, str] = field(default_factory=dict)
 
     def line(self) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", self.doc) or not re.fullmatch(r"\S+", self.version):
+            raise ValueError(f"header doc={self.doc!r} v={self.version!r} is not representable")
         for k, v in self.extra.items():
             # What `split` can read back: anything else would write a header ddflow itself
             # fails to parse, and hand-edit protection would silently see "not ours".

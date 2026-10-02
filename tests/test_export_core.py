@@ -442,7 +442,7 @@ def test_sandbox_blocks_open_and_import(tmp_path, toy, builtin):
 
 def test_template_errors_exit_2_and_write_nothing(tmp_path, toy, builtin):
     q = _log(tmp_path)
-    out = tmp_path / "TOY.md"
+    before = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*"))
     for src, needle in (
         ("{% for p in phases %}\n{{ p.id }}\n", "toyroad.md.j2:"),  # syntax: unclosed for
         ("ok\n{{ nope }}\n", "nope"),  # undefined variable
@@ -452,7 +452,10 @@ def test_template_errors_exit_2_and_write_nothing(tmp_path, toy, builtin):
         with pytest.raises(ExportError) as e:
             registry.render_document("toyroad", q, repo=tmp_path, builtin=builtin)
         assert e.value.code == EXIT_UNAVAILABLE and needle in str(e.value), (src, str(e.value))
-    assert not out.exists()
+    # rendering has no write path at all (the writer is B-export-write): nothing appeared
+    kept = [p for p in before if not p.startswith(".ddflow/templates")]
+    after = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*"))
+    assert [p for p in after if not p.startswith(".ddflow/templates")] == kept
 
 
 def test_error_names_file_and_line(tmp_path, toy, builtin):
@@ -610,3 +613,10 @@ def test_bad_header_extra_through_render_document_is_refused(tmp_path, toy, buil
             "toyroad", _log(tmp_path), builtin=builtin, extra={"title": "two words"}
         )
     assert e.value.code == EXIT_REFUSED
+
+
+def test_header_doc_and_version_must_be_parseable():
+    for doc, ver in (("my doc", "1"), ("", "1"), ("k", "1 2"), ("k", "")):
+        with pytest.raises(ValueError):
+            frame.frame("x\n", doc, ver)
+    assert frame.split(frame.frame("x\n", "my-doc.v2", "0.1.9-rc1"))[0] is not None
