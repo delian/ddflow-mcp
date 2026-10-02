@@ -565,8 +565,8 @@ def bug_fixed(
     lesson: str = "",
     lesson_title: str = "",
     lesson_rule: str = "",
-    changelog: str = "",
     agent: str = "",
+    changelog: str = "",
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
 

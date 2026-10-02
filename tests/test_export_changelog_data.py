@@ -4,8 +4,6 @@ fold unchanged and an older ddflow ignores the key."""
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from conftest import finish, pass_pipeline, run_cli
 
@@ -135,17 +133,19 @@ def test_bug_fixed_takes_the_changelog_too(repo):
         "line": "closed a hole",
         "skip": False,
     }
+    log.append("bug.found", "B2", {"summary": "s"})
     code, _o, err = run_cli(
         repo,
         "bug",
         "fixed",
-        "B1",
+        "B2",
         "--regression-test",
         "tests/test_x.py::test_x",
         "--changelog",
         "nope",
     )
-    assert code != 0
+    assert code != 0 and "Security" in err, err
+    assert not _state(repo).bugs["B2"].fixed_at
 
 
 def test_mcp_complete_and_bug_fixed_carry_the_parameter(repo):
@@ -161,6 +161,22 @@ def test_mcp_complete_records_the_changelog(repo):
     res = _mcp(repo, "ddflow_complete", id="T1", model="claude-opus-5", changelog="Changed: x")
     assert res["_meta"]["exit"] == 0, res
     assert _state(repo).items["T1"].changelog["category"] == "Changed"
-    bad = _mcp(repo, "ddflow_complete", id="T1", changelog="Zzz: x")
+    assert run_cli(repo, "task", "add", "T2", "--globs", "b.py")[0] == 0
+    pass_pipeline(repo, "T2")
+    bad = _mcp(repo, "ddflow_complete", id="T2", model="claude-opus-5", changelog="Zzz: x")
     assert bad["_meta"]["exit"] != 0
-    assert json.loads(bad["content"][0]["text"])  # leads with the reason, parseable
+    assert "Security" in str(bad["content"]), bad  # the reason names the categories
+    assert _state(repo).items["T2"].state != "done"
+    bug_bad = _mcp(repo, "ddflow_bug_fixed", id="B9", regression_test="x", changelog="Zzz: x")
+    assert "Security" in str(bug_bad["content"]), bug_bad
+
+
+def test_a_later_completion_without_the_key_resets_the_item_field():
+    from ddflow.core.events import Event
+
+    ok = {"category": "Added", "line": "x", "skip": False}
+    evs = [
+        Event("item.completed", "T1", {"kind": "task", "changelog": ok}, lamport=1),
+        Event("item.completed", "T1", {"kind": "task"}, lamport=2),
+    ]
+    assert fold(evs).items["T1"].changelog == {}

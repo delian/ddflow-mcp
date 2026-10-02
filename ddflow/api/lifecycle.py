@@ -1369,8 +1369,8 @@ def complete(
     sha: str = "",
     force: bool = False,
     model: str = "",
-    changelog: str = "",
     agent: str = "",
+    changelog: str = "",
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
 
