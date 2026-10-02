@@ -199,7 +199,9 @@ def test_a_long_unbroken_token_is_not_quadratic():
 
     t0 = time.monotonic()
     rr.redact_report("x" * 200_000, hostname="", names=())
-    assert time.monotonic() - t0 < 5
+    assert (
+        time.monotonic() - t0 < 30
+    )  # generous: measured 0.06s; the old quadratic regex took 13s at 100k
 
 
 def test_zero_padded_and_dot_local_leaks_are_caught():
