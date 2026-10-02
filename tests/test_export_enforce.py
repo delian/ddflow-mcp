@@ -120,16 +120,19 @@ def test_the_event_log_must_be_fully_staged(proj):
 
 
 def test_a_hand_written_file_with_a_region_is_not_a_generated_file(proj):
-    assert run_cli(proj, "export", "enable", "roadmap", "--path", "NOTES.md", "--mode", "region")[
-        0
-    ] in (0, 3)
+    _config(proj, None, '\n[export.roadmap]\npath = "NOTES.md"\nmode = "region"\n')
+    assert Config.load(proj).export.targets() == [("roadmap", "NOTES.md", "region")]
     notes = proj / "NOTES.md"
     notes.write_text(
         "# Notes\n\nmy words\n\n<!-- ddflow:begin doc=roadmap body-sha256=000000000000 -->\n"
         "stale region\n<!-- ddflow:end doc=roadmap -->\n"
     )
-    r = _commit(proj, "NOTES.md")
+    _move_the_log(proj)
+    r = _commit(proj, "NOTES.md", ".ddflow")
     assert r.returncode == 0, r.stderr
+    # its hand-written text is still scanned by stale_docs / docscheck: only whole files are excluded
+    assert "NOTES.md" not in SF.doc_exclude(Config.load(proj))
+    assert "NOTES.md" in shared_globs(Config.load(proj))
 
 
 def test_a_marker_quoted_below_the_first_line_is_not_generated(proj):
@@ -144,9 +147,8 @@ def test_doctor_notes_a_stale_target(proj):
     assert "ROADMAP.md (roadmap)" not in run_cli(proj, "doctor")[1]
     _move_the_log(proj)
     out = run_cli(proj, "doctor")[1]
-    assert "ROADMAP.md (roadmap) is stale" in out, out
-    # a NOTE, not a problem
-    assert "PROBLEM" not in out.split("ROADMAP.md (roadmap)")[0].splitlines()[-1]
+    line = next(ln for ln in out.splitlines() if "ROADMAP.md (roadmap) is stale" in ln)
+    assert line.strip().startswith("note:"), line  # a NOTE, not a problem
 
 
 def test_doctor_notes_a_hand_edited_target(proj):
@@ -176,10 +178,19 @@ def test_export_targets_are_excluded_from_stale_docs_and_docscheck(proj):
 
 
 def test_export_targets_are_shared_and_draw_no_merge_note(proj):
+    from ddflow.core.schedule import conflicts
+
     cfg = Config.load(proj)
     assert DOC in shared_globs(cfg)
     assert DOC not in cfg.lease.shared_globs
+    # two leases on the target do not overlap: no claim on it is needed
+    assert conflicts([DOC], [DOC], shared_globs(cfg)) == []
     _problems, notes = SF.findings(proj, cfg)
     assert not [n for n in notes if DOC in n], notes
-    out = run_cli(proj, "doctor")[1]
-    assert "no merge strategy" not in out or DOC not in out.split("no merge strategy")[0][-200:]
+    assert "no merge strategy" not in run_cli(proj, "doctor")[1]
+
+
+def test_the_no_merge_note_still_fires_for_an_ordinary_shared_glob(proj):
+    # control: the doctor line the test above forbids does exist for a declared shared glob
+    _config(proj, None, '\n[lease]\nshared_globs = ["generated/out.toml"]\n')
+    assert "no merge strategy" in run_cli(proj, "doctor")[1]

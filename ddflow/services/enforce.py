@@ -1288,7 +1288,13 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     staged, exports = _staged_generated(repo, listed, names, tree)
     if not staged and not exports:
         return 0, ""
-    noun = "generated view" if staged else "generated document"
+    noun = (
+        "generated view or document"
+        if staged and exports
+        else "generated view"
+        if staged
+        else "generated document"
+    )
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     # The view is committed WITH a log, and must agree with THAT log -- not with the
