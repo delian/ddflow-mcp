@@ -1036,6 +1036,37 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "results",
     },
+    "ddflow_similar": {
+        "description": (
+            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE "
+            "you file it as a bug, task, lesson or other record. Read-only. Candidates "
+            "cross kinds (a bug sees the open task that fixes it, a task the bug it "
+            "would fix) and include closed ones, so a bug that repeats a fixed one is "
+            "caught. Each carries id, kind, title, state (open, claimed by whom, done, "
+            "fixed, invalid, removed...), score (0-1), the words it shares with your "
+            "text, and flags (identical text; the text names its id). Which are shown "
+            "follows [dedupe] show_floor, max_candidates and kinds. A score is a "
+            "prompt to LOOK, not a verdict: two bugs in one function score high and "
+            "are different. Nothing close answers exit 2 / an empty list."
+        ),
+        "properties": {
+            "text": (
+                "string",
+                "The title or summary of the record you are about to file.",
+                True,
+            ),
+            "kind": (
+                "string",
+                "Comma-separated subset of the configured kinds to look in: bug,task,"
+                "phase,lesson,decision,research,memory. Default: all of them.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().similar(
+            repo, a.get("text", "") or "", kinds=a.get("kind", "") or "", agent=agent
+        ),
+        "payload": "candidates",
+    },
     "ddflow_status": {
         "description": (
             "The state of the whole project in one answer: how many tasks are done and "
