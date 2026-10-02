@@ -922,6 +922,7 @@ class LoopsConfig:
     max_claims_per_item: int = 3
     max_gate_flaps: int = 4
     max_reopens: int = 2
+    max_repeated_failures: int = 3
     max_duplicate_items: int = 2
     no_progress_window: int = 60
     on_detect: str = "warn"  # warn | block
@@ -936,6 +937,11 @@ _doc(
     "loops",
     "max_gate_flaps",
     "How many times a gate's verdict may flip between passed and failed on one item before it is reported as flapping. A gate that cannot decide is flaky or measuring a moving target; re-running it will not converge.",
+)
+_doc(
+    "loops",
+    "max_repeated_failures",
+    'How many CONSECUTIVE failed runs of one gate with the SAME output digest on one item are reported as `repeated_failure` (default 3; 0 turns the detector off). A pass, a different output, or a failure with no recorded digest ends the streak; the reviewer gates (rubber_duck, critic) are never counted. It warns in `doctor`, `ddflow loops` and the item\'s brief; with `on_detect = "block"` it also refuses `claim`, and refuses a `gate run` of that gate while the work is byte-for-byte what last failed. The digest is over the raw output, so a gate that prints timings never repeats -- a deterministic summary line is what makes it comparable.',
 )
 _doc(
     "loops",
