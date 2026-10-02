@@ -8,9 +8,10 @@ and calls no runner. The consent object is DEFINED here and MINTED elsewhere (th
 interactive yes, or a one-time approval); nothing in this module can create one.
 
 This module checks that a consent is BOUND to these bytes, unexpired and unused; it does
-not authenticate who made it. Authenticity is the minter's job (B-upstream-consent): the
-only surfaces that reach `send_gh` pass a consent they obtained from the operator's
-interactive yes or a one-time approval, never one the agent can construct.
+not authenticate who made it,
+and nothing here can enforce that a caller obtained it from the operator. Authenticity is
+the minter's job (B-upstream-consent); callers MUST pass only a consent minted from the
+operator's interactive yes or a one-time approval, never one an agent constructed.
 
 The bundle arrives already redacted. This module verifies its digest before writing or
 sending a byte, so what is previewed, what is on disk and what is sent are the same bytes.
