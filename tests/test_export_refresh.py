@@ -273,3 +273,31 @@ def test_the_cadence_says_when_it_could_not_check(proj, monkeypatch):
     monkeypatch.setattr(ops, "load", boom)
     due = cadence.export_cadence(proj, cfg)
     assert due and "could not check" in due[0]["since"]
+
+
+def test_a_failed_refresh_commit_keeps_a_document_that_already_existed_untracked(proj, monkeypatch):
+    p = proj / ".ddflow" / "config.toml"
+    p.write_text(
+        p.read_text().replace(
+            'documents = ["roadmap"]', 'documents = ["roadmap", "status"]\nrefresh = "merge"'
+        )
+    )
+    tree = _tree(proj)
+    _work(tree)
+    assert run_cli(proj, "export", "status", "--out", "STATUS.md")[0] == OK  # in the primary
+    (tree / "STATUS.md").write_text((proj / "STATUS.md").read_text())  # untracked, generated
+    real = W.git
+    monkeypatch.setattr(
+        W,
+        "git",
+        lambda repo, *a, **k: (
+            W.GitResult(1, "", "gpg failed")
+            if "refresh generated documents" in a
+            else real(repo, *a, **k)
+        ),
+    )
+    from ddflow import api
+
+    out = api.merge_item(proj, "T1", allow_dirty=True, keep=True)
+    assert out.exit == OK, out.reason
+    assert (tree / "STATUS.md").exists()
