@@ -147,7 +147,7 @@ def build(events: Iterable[Event], skipped_lines: int = 0) -> Query:
     return Query(fold(evs, strict=False), evs, skipped_lines)
 
 
-def load(root: Path | str) -> Query:
+def load(root: Path | str, log_cfg: Any = None) -> Query:
     """Read ``<root>/.ddflow/events`` and fold it. Raises ``ExportError`` (exit 2) if the
     log is missing or cannot be read -- never returns an empty Query for a broken log."""
     from ...infra.log import EventLog
@@ -157,7 +157,7 @@ def load(root: Path | str) -> Query:
         raise ExportError(
             f"no event log at {root / '.ddflow' / 'events'}; is this project adopted?"
         )
-    log = EventLog(root)
+    log = EventLog(root, log_cfg=log_cfg)  # the caller's `cfg.log`, so [log] knobs apply
     try:
         events = log.read_all()
     except (OSError, ValueError) as exc:
