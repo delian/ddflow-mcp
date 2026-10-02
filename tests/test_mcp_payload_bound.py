@@ -245,5 +245,6 @@ def test_show_names_every_rewrite_and_does_not_edit_the_callers_body():
 
 
 def test_a_triage_record_without_location_or_title_is_not_reported_as_cut():
-    body = {"state": "open", "triage": {"g": {"f1": {"note": "x"}}}}
-    assert B.bound_show(body, {})[0] == body
+    for rec in ({"note": "x"}, {"verdict": "open", "title": "", "location": ""}):
+        body = {"state": "open", "triage": {"g": {"f1": rec}}}
+        assert B.bound_show(body, {})[0] == body, rec
