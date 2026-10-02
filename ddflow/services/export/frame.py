@@ -44,6 +44,11 @@ class Header:
     extra: dict[str, str] = field(default_factory=dict)
 
     def line(self) -> str:
+        for k, v in self.extra.items():
+            # What `split` can read back: anything else would write a header ddflow itself
+            # fails to parse, and hand-edit protection would silently see "not ours".
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", k) or not re.fullmatch(r"\S+", str(v)):
+                raise ValueError(f"header attribute {k}={v!r} is not representable")
         extra = "".join(f" {k}={v}" for k, v in sorted(self.extra.items()))
         return (
             f"<!-- ddflow:generated doc={self.doc} v={self.version} "

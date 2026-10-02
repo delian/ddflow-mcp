@@ -564,3 +564,29 @@ def test_non_mapping_data_is_an_export_error_and_bar_never_underflows():
 def test_truncate_cap_equal_to_the_footer_adds_no_separator():
     out = frame.truncate("x" * 100 + "\n", 41)
     assert out == "[truncated: 1 more; use --since/--limit]\n" and len(out.encode()) == 41
+
+
+def test_unrepresentable_header_attribute_is_refused_not_written():
+    for bad in ({"title": "Q4 Plan"}, {"t": ""}, {"a.b": "x"}):
+        with pytest.raises(ValueError):
+            frame.frame("x\n", "k", "1", bad)
+
+
+def test_since_date_form_ignores_events_with_no_readable_date():
+    from ddflow.core.events import Event
+
+    def ev(ts):
+        return Event(kind="note", subject="x", ts=ts, lamport=1, agent="a")
+
+    q = query.Query(State(), [ev("unknown"), ev("2026-10-05-broken"), ev("2026-10-05T00:00:00Z")])
+    assert [e.ts for e in q.events_of(since="2026-10-01")] == [
+        "2026-10-05-broken",
+        "2026-10-05T00:00:00Z",
+    ]
+
+
+def test_self_referential_data_is_an_export_error():
+    d: dict = {}
+    d["self"] = d
+    with pytest.raises(ExportError):
+        registry.render("x", d)

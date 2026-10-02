@@ -283,7 +283,12 @@ def render(
     text = template.text if isinstance(template, Template) else template
     if not isinstance(data, Mapping):
         raise ExportError(f"{where}: template data must be a mapping, not {type(data).__name__}")
-    ctx = plain(dict(data))
+    try:
+        ctx = plain(dict(data))
+    except RecursionError:
+        raise ExportError(
+            f"{where}: template data is nested too deeply or refers to itself"
+        ) from None
     ctx["schema_version"] = schema_version
     try:
         env = _environment()
