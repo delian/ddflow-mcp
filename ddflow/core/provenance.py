@@ -36,10 +36,12 @@ _ATTR_CAP = 80
 #: character the fence needs a body not to contain, so only these are escaped: a body that
 #: says `a < b` or `List<int>` reads exactly as written.
 _TAG_LIKE = re.compile(r"<(?=\s*/?\s*ddflow)", re.IGNORECASE)
-#: An entity-shaped run (`&#60;`, `&lt;`): a reader that decodes entities would turn one
-#: back into the `<` this module removes, so its `&` is escaped too. A bare `&` or `&&`
-#: is not matched and reads as written.
-_ENTITY = re.compile(r"&(?=#?\w+;)")
+#: An entity-shaped run (`&#60;`, `&lt;`, `&#60`): a reader that decodes entities would
+#: turn one back into the `<` this module removes, so its `&` is escaped too. A bare `&`
+#: or `&&` is not matched and reads as written. The readers are language models, which
+#: read `&lt;` as an escaped `<`; a strict HTML renderer would decode it, and none is on
+#: this path (the brief, `recall` and the preview are text).
+_ENTITY = re.compile(r"&(?=#|\w+;)")
 _NOT_ATTR = re.compile(r"[\s\"'<>&`]+")
 
 
