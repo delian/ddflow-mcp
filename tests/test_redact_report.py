@@ -183,3 +183,20 @@ def test_private_addresses_helper_matches_the_repo_guard():
     ):
         assert rr.private_addresses(t) == _private_addresses(t)
     assert ipaddress  # keep import used
+
+
+def test_configured_secret_patterns_are_applied():
+    from ddflow.config import Config
+
+    cfg = Config()
+    cfg.session.redact_extra = [r"zzkey-[a-z]{6}"]
+    out = rr.redact_report("a zzkey-abcdef b", cfg=cfg)
+    assert "zzkey-abcdef" not in out.text and out.counts["secret"] == 1
+
+
+def test_a_long_unbroken_token_is_not_quadratic():
+    import time
+
+    t0 = time.monotonic()
+    rr.redact_report("x" * 200_000, hostname="", names=())
+    assert time.monotonic() - t0 < 5
