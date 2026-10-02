@@ -372,3 +372,21 @@ def test_check_names_the_knob_when_the_kind_is_not_checked(filed_as):
     (filed / ".ddflow" / "config.toml").write_text('[dedupe]\nkinds = ["bug"]\n')
     code, out, _e = run_cli(filed, *ADDS["task"], "--check")
     assert code == 2 and "[dedupe].kinds" in out and "on_match = off" not in out
+
+
+def test_check_is_a_failure_not_a_clean_bill_when_the_index_cannot_be_read(filed_as, monkeypatch):
+    """An outage must not read as "nothing like it" (exit 2) to a caller that gates on it."""
+    from ddflow import api as A
+    from ddflow.api import _dedupe as DD
+
+    filed = filed_as("task")
+    real = DD._assess
+
+    def broken(repo, log, cfg, st, rec):
+        found, _shown, _why = real(repo, log, cfg, st, rec)
+        return found, [], "OSError: index is locked"
+
+    monkeypatch.setattr(DD, "_assess", broken)
+    out = A.task_add(filed, "T-new", title=SECOND, answer=DD.Answer(check_only=True), agent="a")
+    assert out.exit == 1 and "could not run" in out.reason
+    assert out.data["dedupe_unavailable"] == "OSError: index is locked"
