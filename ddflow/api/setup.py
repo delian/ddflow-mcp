@@ -471,6 +471,90 @@ def _hook_remedy(armed, check: str) -> str:
     return "Run `ddflow hooks install`"
 
 
+def _prompt_hook_line(repo: Path) -> str:
+    from ..services import claudehooks as CH
+
+    parts = []
+    for name, kw in (("Claude Code", _prompt_kw(CH, False)), ("Gemini CLI", _prompt_kw(CH, True))):
+        on, why = CH.state(repo, **kw)
+        parts.append(
+            f"{name}: "
+            + ("installed" if on else f"UNKNOWN -- {why}" if on is None else "not installed")
+        )
+    return "; ".join(parts)
+
+
+def _prompt_kw(CH, gemini: bool) -> dict[str, Any]:
+    return {
+        "event": CH.GEMINI_PROMPT_EVENT if gemini else CH.PROMPT_EVENT,
+        "marker": CH.PROMPT_MARKER,
+        "rel": CH.GEMINI_SETTINGS if gemini else ".claude/settings.json",
+    }
+
+
+def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list[str]:
+    """Install or remove the harness hooks: Claude's SessionStart + prompt, Gemini's prompt."""
+    from ..services import claudehooks as CH
+    from ..services import enforce as E
+
+    msgs: list[str] = []
+    if claude:
+        if action == "install":
+            line = E.command_line(CH.MARKER)
+            msgs.append(CH.install(repo, line))
+            if note := E.redirect_note(line):
+                msgs.append(note)
+        else:
+            msgs.append(CH.uninstall(repo))
+    for want, kw in ((claude, _prompt_kw(CH, False)), (gemini, _prompt_kw(CH, True))):
+        if not want:
+            continue
+        if action == "install":
+            cmd = (
+                E.command_line(CH.PROMPT_MARKER)
+                + (" --gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "")
+                + " || true"
+            )
+            msgs.append(CH.install(repo, cmd, matcher=None, **kw))
+        else:
+            msgs.append(CH.uninstall(repo, **kw))
+    return msgs
+
+
+def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
+    """What the prompt hook does with the harness's JSON. NEVER fails the user's turn:
+    every problem becomes a quiet `skipped` with the reason, and the exit is always 0.
+
+    Redaction happens inside `sessions.capture_prompt`, before the event is built.
+    """
+    import json
+
+    from ..config import Config
+    from ..infra.log import EventLog, resolve_agent_id
+    from ..services import sessions as S
+
+    try:
+        payload = json.loads(stdin) if stdin.strip() else {}
+        if not isinstance(payload, dict):
+            raise ValueError("the hook's stdin is not a JSON object")
+        text = payload.get("prompt")
+        if not isinstance(text, str):
+            return O.ok("hooks", message="", result="skipped", why="no prompt in the hook JSON")
+        cfg = Config.load(repo)
+        resolved, _layer = resolve_agent_id(repo, cfg, agent)
+        # A short lock wait: the hook must not make the operator's turn wait on a busy log.
+        log = EventLog(
+            repo, resolved, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0), log_cfg=cfg.log
+        )
+        sid = str(payload.get("session_id") or payload.get("conversation_id") or "")
+        result = S.capture_prompt(
+            log, cfg, sid, text, model=str(payload.get("model") or ""), tool="hook"
+        )
+        return O.ok("hooks", message="", result=result)
+    except Exception as exc:  # a hook must not break the prompt it observes
+        return O.ok("hooks", message="", result="skipped", why=f"{type(exc).__name__}: {exc}")
+
+
 def _hooks_status(repo: Path, cfg) -> O.Outcome:
     """What is installed, and whether the installed hook and the policy agree."""
     from ..services import claudehooks as CH
@@ -523,7 +607,8 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         f"{_hook_line('pre-commit', commit_hook)}\n"
         f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
         f"{trailer_line}\n"
-        f"Claude Code SessionStart hook: {session_line}"
+        f"Claude Code SessionStart hook: {session_line}\n"
+        f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
     data = {
         "installed": on,
@@ -547,17 +632,23 @@ def hooks(
     claude: bool = False,
     msg_file: str = "",
     agent: str = "",
+    gemini: bool = False,
+    stdin: str = "",
 ) -> O.Outcome:
     """The commit hook: install, uninstall, status, or run the check itself.
 
-    `claude=True` installs or removes the Claude Code SessionStart hook instead
-    (`services.claudehooks`); `session-start` is what that hook runs.
+    `claude=True` installs or removes the Claude Code SessionStart and UserPromptSubmit
+    hooks instead (`services.claudehooks`); `gemini=True` the Gemini CLI BeforeAgent
+    one. `session-start` is what the first runs; `prompt` records the operator's prompt
+    from the hook's JSON on `stdin`.
     """
     from ..services import claudehooks as CH
     from ..services import enforce as E
 
     if action == "session-start":
         return _session_start(repo, agent)
+    if action == "prompt":
+        return _capture_prompt(repo, stdin, agent)
     if action == "check-msg":
         # The config alone, not `_load`: this runs on EVERY commit, and folding the whole
         # log up front cost ~120 ms on a 5k-event log whether or not a trailer needed the
@@ -567,19 +658,16 @@ def hooks(
 
         return _check_msg(repo, Config.load(repo), msg_file)
     _log, cfg, _st = _load(repo, agent)
-    if claude and action in ("install", "uninstall"):
+    if (claude or gemini) and action in ("install", "uninstall"):
         try:
-            if action == "install":
-                line = E.command_line(CH.MARKER)
-                msg = CH.install(repo, line)
-                if note := E.redirect_note(line):
-                    msg = f"{msg}\n{note}"
-            else:
-                msg = CH.uninstall(repo)
+            msgs = _agent_hooks(repo, action, claude=claude, gemini=gemini)
         except CH.SettingsError as exc:
             return O.failed("hooks", str(exc), message=str(exc), installed=E.installed(repo))
         return O.ok(
-            "hooks", message=msg, installed=E.installed(repo), session_hook=CH.installed(repo)
+            "hooks",
+            message="\n".join(msgs),
+            installed=E.installed(repo),
+            session_hook=CH.installed(repo),
         )
     if action == "install":
         msg = E.install(repo, force=force)

@@ -791,6 +791,7 @@ def adopt(
         from ..services.enforce import install as install_hook
 
         actions.append(install_hook(repo))
+        actions.extend(_install_prompt_hooks(repo, agents))
     for key in agents:
         actions.append(_register_mcp(repo, key, launch=launch, image=image))
         if key in NATIVE_RULES:
@@ -808,6 +809,32 @@ def adopt(
     if line and (note := redirect_note(line)) and note not in "\n".join(actions):
         actions.append(note)
     return actions
+
+
+def _install_prompt_hooks(repo: Path, agents: list[str]) -> list[str]:
+    """The prompt-capture hook for each adopted agent that has one (Claude Code, Gemini CLI).
+
+    A settings file ddflow cannot parse is reported, not overwritten, and never fails the
+    adoption.
+    """
+    from . import claudehooks as CH
+    from .enforce import command_line
+
+    out: list[str] = []
+    for key, rel, event, flag in (
+        ("claude", ".claude/settings.json", CH.PROMPT_EVENT, ""),
+        ("gemini", CH.GEMINI_SETTINGS, CH.GEMINI_PROMPT_EVENT, " --gemini"),
+    ):
+        if key not in agents:
+            continue
+        cmd = command_line(CH.PROMPT_MARKER) + flag + " || true"
+        try:
+            out.append(
+                CH.install(repo, cmd, event=event, marker=CH.PROMPT_MARKER, matcher=None, rel=rel)
+            )
+        except CH.SettingsError as exc:
+            out.append(f"prompt hook not installed: {exc}")
+    return out
 
 
 #: Slash-command files an agent reads from the project, keyed like `AGENT_TARGETS`:
