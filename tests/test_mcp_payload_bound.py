@@ -258,3 +258,11 @@ def test_a_string_just_over_the_cut_is_left_whole_because_cutting_would_not_shri
         {"state": "open", "gates": {"g": {"evidence": {"note": edge + "w"}}}}, {}
     )
     assert over["gates"]["g"]["evidence"]["note"].endswith(B.CUT_MARK)
+
+
+def test_a_decision_text_just_over_the_clip_is_left_whole():
+    edge = "d" * (B.DECISION_TEXT_SHOWN + len(B.CUT_MARK))
+    rows = [{"id": "D1", "decision": edge, "context": "c", "at": "t"}]
+    assert B.bound_decisions(rows, {})[0][0]["decision"] == edge
+    rows[0]["decision"] = edge + "d"
+    assert B.bound_decisions(rows, {})[0][0]["decision"].endswith(B.CUT_MARK)
