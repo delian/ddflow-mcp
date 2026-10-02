@@ -43,6 +43,7 @@ def loops(repo: Path) -> O.Outcome:
             "dependency cycles",
             "repeat claims",
             "gate flapping",
+            "repeated failures",
             "reopened items",
             "duplicate work",
             "stalled queue",
