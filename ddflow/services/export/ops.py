@@ -18,7 +18,9 @@ redacts the RENDERED body before it is truncated, framed or digested (``[export]
 default on; ``Spec.redact``), so the header digest and ``--check`` cover redacted bytes. A
 printed document served over MCP is also fenced as agent-written data (``fenced=True``).
 
-Refresh modes beyond ``off`` (B-export-refresh) are accepted by config and not acted on.
+Refresh (``refresh.py``, B-export-refresh): ``[export].refresh`` = off | merge | phase_close |
+docs_gate decides when a selected whole-file document regenerates itself; the triggers call
+``refresh.py``, which goes through the same ``write_doc`` and its hand-edit protection.
 """
 
 from __future__ import annotations

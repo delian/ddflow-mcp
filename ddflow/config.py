@@ -990,7 +990,7 @@ _doc(
 _doc(
     "export",
     "redact",
-    "Strip private addresses and credentials from exported documents (they are public-repo files at the repo root). ON by default. The redaction pass itself arrives with B-export-redact-fence: until then the knob is accepted and documents are NOT yet redacted, so read them before committing.",
+    "Strip private addresses and credentials from exported documents (they are public-repo files at the repo root). ON by default: the rendered body is redacted before it is digested, so the header digest and `export --check` cover the redacted text, and the header says `redacted=N`. Secrets, private addresses and hosts, home paths, emails and the machine hostname become [REDACTED:<kind>]; the project's own name is kept. [export.<doc>].redact overrides one document.",
 )
 _doc(
     "export",
