@@ -31,9 +31,7 @@ def test_gate_record_help_names_the_reason_requirement():
 
 def test_next_help_names_exit_1_for_unknown_phase():
     sub = _subparser(cli.build_parser(), "next")
-    text = (sub.description or "") + " ".join(
-        a.help or "" for a in sub._actions
-    )
+    text = (sub.description or "") + " ".join(a.help or "" for a in sub._actions)
     assert "exit 1" in text
     for path in (
         ROOT / "ddflow/templates/drivers/implement-phase.md",

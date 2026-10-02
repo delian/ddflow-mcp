@@ -166,6 +166,7 @@ the same implementation, so neither drifts from the other.
 | **get a plan into the queue** | see [From plan mode to the queue](#from-plan-mode-to-the-queue) | same |
 | **know what to work on** | `ddflow next` | `ddflow_next` |
 | **start a task** | `ddflow claim <id>` → work → `ddflow gate …` → `ddflow merge` → `ddflow complete` | `ddflow_claim`, `ddflow_gate_*`, `ddflow_merge`, `ddflow_complete` |
+| **see everything about one item or bug** | `ddflow show <id>` (phase, task or bug id) | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research` · `ddflow_bug_*` |
@@ -369,7 +370,7 @@ $ ddflow config --set gate.unit_tests.command "python -m pytest -q"
 $ ddflow phase add P1 --title "Billing" --globs "src/billing/**"
 $ ddflow task add P1.T1 --phase P1 --title "Tax rules" --globs "src/billing/tax.py"
 
-$ ddflow next                          # exit 2 = nothing actionable
+$ ddflow next                          # exit 2 = nothing actionable; exit 1 = unknown --phase
 $ ddflow claim P1.T1                   # exit 3 = refused, with the reason
 leased P1.T1 · worktree .ddflow-worktrees/P1.T1 · branch ddflow/P1.T1
 
@@ -377,6 +378,7 @@ $ cd .ddflow-worktrees/P1.T1 && ...    # do the work
 $ ddflow gate status P1.T1             # what the pipeline wants next
 $ ddflow gate run P1.T1 unit_tests     # runs it; the exit code IS the evidence
 $ ddflow gate record P1.T1 implement --outcome passed --evidence "added tax.py"
+                                       # failed/unavailable/partial/skipped also need --reason
 $ ddflow complete P1.T1                # exit 3 lists whatever is unsatisfied
 $ ddflow merge P1.T1
 ```
