@@ -2507,7 +2507,8 @@ through [`ddflow export changelog`](#exporting-documents): the Unreleased entrie
 become `## [x.y.z] - date` with the right compare link, and an empty Unreleased remains. The
 file is committed on the branch the tag names, so the tag's commit holds it; in gitflow with
 pull requests it is a commit on the release branch, part of the release request, and the
-request body and the tag message are the same section. Mode `whole` (the default) rewrites the
+request body is the same section (the tag, cut later by `pr sync`, carries its usual
+message); otherwise the tag message is the section. Mode `whole` (the default) rewrites the
 file; mode `region` rewrites only the marked region and puts the new section below it,
 updating the `[Unreleased]:` link line when the file keeps one. Nothing is written without
 the flag (the tag message is then the commit-derived notes as before), `--dry-run` shows what

@@ -873,7 +873,8 @@ def _export_failed(out: Cut, exc: Exception) -> None:
 
 def _prepare_changelog(repo, cfg, out: Cut, vp: VersionPlan, *, force: bool, dry_run: bool):
     """The rendered changelog for the cut, or None after recording why not on ``out``.
-    The version's section also becomes the tag message and the request body."""
+    The version's section also becomes the tag message (the request body in pr mode, where
+    `pr sync` writes the tag's message later)."""
     from . import changelog_cut as CC
     from .export.query import ExportError
 

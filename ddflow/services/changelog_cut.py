@@ -102,14 +102,34 @@ def prepare(repo: Path, cfg: Config, *, version: str, ref: str, fallback_notes: 
             links = {x["label"]: x["url"] for x in KC.build_sections(q)["links"]}
             apply = _region(spec.path, unreleased, notes, version, links)
     finally:
-        _git(repo, "tag", "-d", tag)
+        gone = _git(repo, "tag", "-d", tag)
+        if not gone.ok:  # a leftover would read as a release and block the real cut
+            raise ExportError(
+                f"could not remove the temporary tag {tag} ({gone.err}); delete it with "
+                f"`git tag -d {tag}` before cutting again",
+                EXIT_UNAVAILABLE,
+            )
     has_entries = "\n### " in notes
     return Prepared(spec.path, spec.mode, notes if has_entries else fallback_notes, apply)
 
 
 def _whole(path: str, doc: str) -> Callable[..., str]:
     def apply(tree: Path, *, force: bool, dry: bool) -> str:
-        return EW.write_whole(tree, path, doc, force=force, diff=dry).action
+        if not dry:
+            return EW.write_whole(tree, path, doc, force=force).action
+        # A dry run must refuse what the real write refuses, and write_whole's diff mode
+        # does not: run the real write on a copy of the file in a scratch directory.
+        import tempfile
+
+        target, rel = EW.safe_target(tree, path)
+        old = EW._read(target)
+        with tempfile.TemporaryDirectory() as scratch:
+            copy = Path(scratch) / rel
+            copy.parent.mkdir(parents=True, exist_ok=True)
+            if old is not None:
+                copy.write_bytes(old.encode("utf-8"))
+            (Path(scratch) / ".ddflow" / "local").mkdir(parents=True, exist_ok=True)
+            return EW.write_whole(scratch, path, doc, force=force).action
 
     return apply
 

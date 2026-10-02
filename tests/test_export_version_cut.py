@@ -95,6 +95,16 @@ def test_dry_run_with_changelog_writes_nothing(proj):
     assert _git(repo, "tag", "-l") == "v1.0.0"
 
 
+def test_dry_run_refuses_what_the_real_cut_refuses(proj):
+    repo = proj
+    (repo / "CHANGELOG.md").write_text("# my own file\n")
+    _git(repo, "add", "CHANGELOG.md")
+    _git(repo, "commit", "-qm", "docs: own changelog")
+    code, out, err = _cut(repo, "--changelog", "--dry-run")
+    assert code == 3, out + err
+    assert (repo / "CHANGELOG.md").read_text() == "# my own file\n"
+
+
 def test_a_hand_edited_changelog_is_refused_without_force(proj):
     repo = proj
     assert _cut(repo, "--changelog")[0] == 0
