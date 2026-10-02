@@ -127,7 +127,7 @@ def _lock_path(repo: Path | str) -> Path:
 
 def _read(path: Path) -> str | None:
     try:
-        return path.read_text("utf-8")
+        return path.read_bytes().decode("utf-8")  # not read_text: that folds CRLF to LF
     except FileNotFoundError:
         return None
     except (OSError, UnicodeDecodeError) as exc:
@@ -226,10 +226,10 @@ def _region_pattern(doc: str, which: str) -> re.Pattern[str]:
     d = re.escape(doc)
     if which == "begin":
         return re.compile(
-            rf"^<!-- ddflow:begin doc={d} body-sha256=(?P<sha>[0-9a-f]{{{F.DIGEST_LEN}}}) -->$",
+            rf"^<!-- ddflow:begin doc={d} body-sha256=(?P<sha>[0-9a-f]{{{F.DIGEST_LEN}}}) -->\r?$",
             re.M,
         )
-    return re.compile(rf"^<!-- ddflow:end doc={d} -->$", re.M)
+    return re.compile(rf"^<!-- ddflow:end doc={d} -->\r?$", re.M)
 
 
 def region_text(doc: str, body: str) -> str:

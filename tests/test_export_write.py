@@ -463,3 +463,12 @@ def test_path_swapped_for_a_symlink_before_the_lock_is_caught_inside_it(repo, tm
     t.join()
     v.join()
     assert res == ["refused"] and not (outside / "R.md").exists()
+
+
+def test_region_in_a_crlf_file_keeps_the_prose_bytes(repo):
+    p = repo / "README.md"
+    begin, end = W.region_text("status", "- a\n").split("- a\n")[0], W._end("status")
+    p.write_bytes(f"intro\r\n{begin.strip()}\r\n- a\n{end}\r\noutro\r\n".encode())
+    W.write_region(repo, "README.md", "status", "- b\n")
+    raw = p.read_bytes()
+    assert raw.startswith(b"intro\r\n") and raw.endswith(b"outro\r\n") and b"- b\n" in raw
