@@ -231,12 +231,7 @@ def cmd_similar(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason)
         return out.exit
-    for r in out.data["candidates"]:
-        flags = f"  [{', '.join(r['flags'])}]" if r["flags"] else ""
-        print(f"{r['id']}  {r['kind']}  {r['score']:.2f}  {r['state']}{flags}")
-        print(f"    {r['title']}")
-        if r["shared"]:
-            print(f"    shares: {', '.join(r['shared'])}")
+    print("\n".join(D.candidate_lines(out.data["candidates"])))
     return OK
 
 
