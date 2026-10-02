@@ -83,7 +83,6 @@ _SURROGATES = re.compile("[\ud800-\udfff]")
 _DETECTOR = re.compile(r"[a-z][a-z0-9_.-]{0,40}")
 _CLASS = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,80}")
 _PROGRAMS = frozenset({"ddflow", "ddflow-mcp", "python", "python3", "uv", "uvx"})
-_FLAG = re.compile(r"--?[A-Za-z][A-Za-z0-9-]{0,40}")
 _WORD = re.compile(r"[a-z][a-z0-9_-]{0,23}")
 _FILE_LINE = re.compile(r'^(\s*File ")([^"]+)(".*)$')
 _ANY_DDFLOW_PATH = re.compile(r"(?:/[\w.@+~-]+)+/ddflow/")
@@ -111,7 +110,7 @@ class Failure:
     traceback: str = ""
     #: The CLI's own verbs (its parser's choices): the words of `argv` that may stay.
     subcommands: Iterable[str] | None = None
-    #: The CLI's own flag names; any other dash-led token is shown as `<flag>`.
+    #: The CLI's own flag names (exact); every other dash-led token is shown as `<flag>`.
     flags: Iterable[str] | None = None
 
 
@@ -211,41 +210,37 @@ def redact_argv(
     subcommands: Iterable[str] | None = None,
     flags: Iterable[str] | None = None,
 ) -> list[str]:
-    """The shape of a command line: the program (when it is ddflow or a Python
-    launcher), the leading subcommand words the caller lists in `subcommands` (the CLI's
-    own verbs), flag names, and `<value>` / `<arg>` / `<flag>` in place of anything else.
+    """The shape of a command line, from allowlists and nothing else.
 
-    A token after a bare flag is that flag's value, whatever it looks like: a dash-led
-    secret (`--token -hunter2`, `-p --s3cr3t`) cannot be told from a flag, so it never
-    survives as one. `flags`, when given, is the CLI's own flag names; any other
-    dash-led token that is not a value becomes `<flag>`. With no `subcommands` no
-    positional survives."""
+    Kept: the program (when it is ddflow or a Python launcher), the leading words the
+    caller lists in `subcommands` (the CLI's own verbs), and the flag names the caller
+    lists in `flags` (the CLI's own flags, matched exactly, with or without `=value`).
+    Everything else is a placeholder: `<flag>` for any other dash-led token, `<value>`
+    for a word right after a kept flag, `<arg>` for any other word. Nothing is inferred
+    from how a token looks -- a dash-led secret (`-hunter2`, `-psecret`, `--s3cr3t`) cannot
+    be told from a flag, so it is only ever kept if the caller named it as one."""
     allowed = set(subcommands) if subcommands is not None else set()
-    known = set(flags) if flags is not None else None
+    known = {"-m", *(flags or ())}  # `-m` is the Python launcher's own
     out: list[str] = []
     leading = True
     for i, raw in enumerate(argv):
         tok = str(raw)
-        bare_flag_before = bool(out) and out[-1].startswith("-") and "=" not in out[-1]
         if i == 0:
             base = tok.replace("\\", "/").rsplit("/", 1)[-1]
             out.append(base if base in _PROGRAMS else "<program>")
         elif tok in _PROGRAMS and out[-1] == "-m":
             out.append(tok)  # `python -m ddflow`
-        elif bare_flag_before:
-            leading = False
-            out.append("<value>")
         elif tok.startswith("-") and tok != "-":
             leading = False
             name, eq, _value = tok.partition("=")
-            ok = name in known if known is not None else bool(_FLAG.fullmatch(name))
-            shown = name if ok else "<flag>"
+            shown = name if name in known else "<flag>"
             out.append(f"{shown}=<value>" if eq else shown)
         elif leading and _WORD.fullmatch(tok) and tok in allowed:
             out.append(tok)
         else:
             leading = False
-            out.append("<arg>")
+            after_flag = out[-1] in known and "=" not in out[-1]
+            out.append("<value>" if after_flag else "<arg>")
     return out
 
 

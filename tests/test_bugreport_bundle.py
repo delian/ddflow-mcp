@@ -104,6 +104,10 @@ def test_normalise_traceback_directly():
 
 def test_argv_values_are_redacted_flags_kept():
     out = _build()
+    assert out.data["command"]["argv"] == ["ddflow", "<arg>", "<arg>", "<flag>", "<arg>"]
+    out = _build(
+        failure=B.Failure(argv=["ddflow", "claim", "B-x", "--agent", "h"], flags={"--agent"})
+    )
     assert out.data["command"]["argv"] == ["ddflow", "<arg>", "<arg>", "--agent", "<value>"]
     out = _build(
         failure=B.Failure(
@@ -118,6 +122,7 @@ def test_argv_values_are_redacted_flags_kept():
             argv=["/x/bin/ddflow", "bug", "found", "--title=oops", "-q"],
             exit_code=2,
             subcommands={"bug", "found", "claim"},
+            flags={"--title", "-q"},
         ),
     )
     assert out.data["command"]["argv"] == ["ddflow", "bug", "found", "--title=<value>", "-q"]
@@ -128,7 +133,7 @@ def test_exit_code_and_class_recorded():
     assert out.data["command"]["exit_code"] == 1
     assert out.data["command"]["error_class"] == "RuntimeError"
     odd = _build(failure=B.Failure(argv=["ddflow"], error_class="x y\nz" + PROJECT))
-    assert PROJECT not in odd.markdown
+    assert PROJECT not in odd.markdown + odd.json
 
 
 def test_allowlist_enforced_for_knobs():
@@ -180,7 +185,7 @@ def test_provenance_aliases_and_detector():
     prov = out.data["provenance"]
     assert prov["on_behalf_of_operator"] == "op-1"
     assert prov["detector"] == "agent-judgement"
-    assert "someone" not in out.markdown.replace("someone-", "")
+    assert "someone" not in out.markdown
     assert re.fullmatch(r"s-[0-9a-f]{8}", prov["session"])
     named = _build(
         provenance=replace(
@@ -305,14 +310,12 @@ def _events_log() -> list[dict]:
 def test_bundles_from_real_bug_texts_in_the_logs_leak_nothing():
     log = _events_log()
     bugs = [e for e in log if e.get("kind") == "bug.found"]
-    if not bugs:
-        pytest.skip("no bug.found events in this checkout's log")
     counts: dict[str, int] = {}
     for e in log:
         head = str(e.get("agent", "")).partition("-")[0]
         if head:
             counts[head] = counts.get(head, 0) + 1
-    host = max(counts, key=counts.__getitem__)
+    host = max(counts, key=counts.__getitem__, default=HOST)
     projects = set()
     for e in log:
         for m in re.finditer(
@@ -322,6 +325,15 @@ def test_bundles_from_real_bug_texts_in_the_logs_leak_nothing():
     projects = {p for p in projects if len(p) >= 4 and p not in ("ddflow", "ddflow-mcp")} or {
         PROJECT
     }
+    # A synthetic private text keeps the "something was redacted" check independent of
+    # whatever this checkout's log happens to hold.
+    bugs.append(
+        {
+            "agent": f"{host}-x",
+            "subject": "B-synthetic",
+            "data": {"summary": f"crash in {HOME}/src/{PROJECT}/x calling {ADDR}"},
+        }
+    )
     dirty = 0
     for e in bugs:
         summary = str(e["data"].get("summary", ""))
@@ -342,7 +354,7 @@ def test_bundles_from_real_bug_texts_in_the_logs_leak_nothing():
         left = _leaks(out.markdown + out.json, host=host, projects=projects)
         assert not left, f"{e.get('subject')}: {left}"
         dirty += sum(out.redactions.values()) > 0
-    assert dirty, "real bug texts carry private text; something must have been redacted"
+    assert dirty, "the synthetic private text must have been redacted"
 
 
 def test_local_candidates_find_a_similar_record_and_an_index_failure_is_unavailable(repo):
@@ -383,22 +395,34 @@ def test_relative_ddflow_frame_keeps_its_public_source_line():
     assert got == '  File "ddflow/cli.py", line 10, in main\n    raise SystemExit(1)'
 
 
-def test_a_dash_led_value_after_a_flag_is_a_value():
+def test_dash_led_secrets_never_survive_as_flags():
     for argv in (
         ["ddflow", "--token", "-hunter2"],
         ["ddflow", "--password", "--s3cr3t"],
         ["ddflow", "-p", "-hunter2"],
+        ["ddflow", "-psecret"],
         ["ddflow", "--limit", "-1"],
+        ["ddflow", "--cfg.x", "-hunter2"],
+        ["ddflow", "--passwordhunter2"],
     ):
-        got = B.redact_argv(argv)
-        assert got[-1] == "<value>", (argv, got)
-        assert not any("hunter2" in t or "s3cr3t" in t for t in got)
-    assert B.redact_argv(["ddflow", "--token", "x", "-q"]) == ["ddflow", "--token", "<value>", "-q"]
+        for known in (None, {"--token", "--password", "-p", "--limit"}):
+            got = B.redact_argv(argv, flags=known)
+            assert not any(x in t for t in got for x in ("hunter2", "s3cr3t", "secret", "-1")), got
 
 
-def test_unknown_flags_are_hidden_when_the_cli_flags_are_given():
-    got = B.redact_argv(["ddflow", "--agent=x", "--my-secret-flag", "-q"], flags={"--agent"})
-    assert got == ["ddflow", "--agent=<value>", "<flag>", "<flag>"]
+def test_known_flags_and_adjacent_flags_survive():
+    flags = {"--json", "--verbose", "--token"}
+    assert B.redact_argv(["ddflow", "--json", "--verbose"], flags=flags) == [
+        "ddflow",
+        "--json",
+        "--verbose",
+    ]
+    assert B.redact_argv(["ddflow", "--token", "x", "--json"], flags=flags) == [
+        "ddflow",
+        "--token",
+        "<value>",
+        "--json",
+    ]
 
 
 def test_environment_keys_are_redacted_too():
