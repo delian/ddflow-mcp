@@ -236,7 +236,7 @@ def test_one_documents_bad_settings_do_not_block_the_others(proj):
         'documents = ["roadmap"]', 'documents = ["roadmap", "status", "rules"]\nrefresh = "merge"'
     )
     p.write_text(
-        text + '\n[export.status]\npath = "../outside.md"\n\n[export.rules]\nrefresh = "off"\n'
+        text + '\n[export.status]\nfilters = { nope = 1 }\n\n[export.rules]\nrefresh = "off"\n'
     )
     r = RF.refresh_selected(proj, "merge")
     by = {o.doc: o for o in r.outcomes}

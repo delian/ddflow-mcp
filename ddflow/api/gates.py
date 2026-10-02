@@ -416,7 +416,7 @@ def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
 
     rr = RF.refresh_selected(repo, "docs_gate", cfg=cfg)
     if not rr.outcomes:
-        return warning
+        return " ".join(filter(None, [warning, f"NOTE: {rr.note}" if rr.note else ""]))
     ev["export"] = rr.evidence()
     if rr.problems or any(o.verified is False for o in rr.outcomes):
         return " ".join(filter(None, [warning, f"NOTE: {rr.summary()}"]))
