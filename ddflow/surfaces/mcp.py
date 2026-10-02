@@ -971,7 +971,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Use it to answer 'how much effort has gone into this' and to see an item's "
             "full gate history including the outcomes that were not passes."
         ),
-        "properties": {"id": ("string", "One item, with its per-attempt detail.", False)},
+        "properties": {
+            "id": ("string", "One item, with its per-attempt detail.", False),
+            "limit": ("integer", "Rows returned, most effort first (default 25; 0 = all).", False),
+        },
         "api": lambda repo, a, agent: _api().progress(repo, a.get("id", "") or ""),
         # The pre-migration body was the ROW ARRAY. Preserved exactly.
         "payload": "rows",
@@ -1195,7 +1198,10 @@ TOOLS: dict[str, dict[str, Any]] = {
             "hidden unless you ask for them — they are kept, never deleted, "
             "because how the architecture got here is what a rebuild needs."
         ),
-        "properties": {"all": ("boolean", "Include superseded decisions.", False)},
+        "properties": {
+            "all": ("boolean", "Include superseded decisions.", False),
+            "limit": ("integer", "Newest decisions returned (default 25; 0 = all).", False),
+        },
         "api": lambda repo, a, agent: _api().decision_list(repo, all=bool(a.get("all"))),
         "payload": "rows",
     },
@@ -2702,8 +2708,19 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
     return {**lead, **said}
 
 
+def _bounds() -> dict[str, Any]:
+    from .mcp_bound import BOUNDS
+
+    return BOUNDS
+
+
 def _outcome_result(
-    out: Any, payload_key: str | tuple[str, ...] = "", *, as_text: bool = False
+    out: Any,
+    payload_key: str | tuple[str, ...] = "",
+    *,
+    as_text: bool = False,
+    bound: Any = None,
+    args: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """An `Outcome` as an MCP tool result: JSON body, `isError` only for a real failure.
 
@@ -2752,8 +2769,18 @@ def _outcome_result(
             body = out.reason
         return _text(body, error=(out.exit == 1), meta={"exit": out.exit})
 
-    body = json.dumps(_refusal_body(out, payload_key, out.body(payload_key)), indent=2, default=str)
+    full = _refusal_body(out, payload_key, out.body(payload_key))
+    note = None
+    if bound is not None:
+        # The bounded reads (`mcp_bound`): the full body, cut and said so. The CLI's
+        # `--json` is the whole body; the two differ only here.
+        full, note = bound(full, args or {})
+    # Compact: a model reads every byte of this and indentation is a quarter of it.
+    body = json.dumps(full, separators=(",", ":"), default=str)
     result = _text(body, error=(out.exit == 1), meta={"exit": out.exit})
+    if note:
+        # A second block, like the reason below: `content[0]` stays the bare JSON.
+        result["content"].append({"type": "text", "text": note})
     if out.reason:
         # A SECOND content block, never a prefix. The reason used to be prepended to the
         # JSON, which reads well and breaks every machine consumer: `json.loads` on
@@ -3057,7 +3084,13 @@ class Server:
                     wants_text = wants_text(args)
                 if callable(payload):
                     payload = payload(args)
-                out = _outcome_result(result, payload, as_text=bool(wants_text))
+                out = _outcome_result(
+                    result,
+                    payload,
+                    as_text=bool(wants_text),
+                    bound=_bounds().get(name),
+                    args=args,
+                )
                 # The footer goes on LAST, after the reason block, so it never comes between
                 # a caller and the answer it asked for — `content[0]` is still the body and
                 # `jtool`-style consumers are untouched.
