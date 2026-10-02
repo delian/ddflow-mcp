@@ -30,6 +30,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import math
 import os
 import secrets
 import socket
@@ -258,7 +259,8 @@ def _well_formed(w: Waiter) -> bool:
     when USED (`since` in the sort) once broke the read for every waiter beside it."""
 
     def num(v: object) -> bool:
-        return isinstance(v, (int, float)) and not isinstance(v, bool)
+        # Finite: json.loads reads Infinity and NaN, and an infinite `since` never lapses.
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
 
     return (
         all(isinstance(v, str) for v in (w.agent, w.item, w.phase, w.reason, w.host))
