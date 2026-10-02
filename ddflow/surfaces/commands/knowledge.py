@@ -201,6 +201,24 @@ def cmd_recall(a, c: Ctx) -> int:
     return OK
 
 
+def cmd_similar(a, c: Ctx) -> int:
+    """Existing records like a text, before it is filed. Exit 0 with candidates, 2 with none."""
+    out = A.similar(c.repo, a.text, kinds=a.kind or "", agent=c.requested_agent)
+    if c.json:
+        print(json.dumps(out.body("candidates"), indent=2, default=str))
+        return out.exit
+    if out.exit != OK:
+        print(out.reason)
+        return out.exit
+    for r in out.data["candidates"]:
+        flags = f"  [{', '.join(r['flags'])}]" if r["flags"] else ""
+        print(f"{r['id']}  {r['kind']}  {r['score']:.2f}  {r['state']}{flags}")
+        print(f"    {r['title']}")
+        if r["shared"]:
+            print(f"    shares: {', '.join(r['shared'])}")
+    return OK
+
+
 def cmd_research(a, c: Ctx) -> int:
     out = A.research_add(
         c.repo,
