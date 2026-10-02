@@ -102,8 +102,8 @@ def truncate(body: str, max_bytes: int) -> str:
 
     The footer is explicit -- ``[truncated: N more lines; use --since/--limit]`` -- so a
     reader (or an agent) never mistakes a cut document for a complete one. ``max_bytes``
-    of 0 or less means no cap. The footer is inside the budget, and at least one line is
-    kept whenever any fits.
+    of 0 or less means no cap. The footer is inside the budget. When even the first line
+    does not fit, it is cut mid-line and the count includes it as not (fully) shown.
     """
     body = normalize(body)
     if max_bytes <= 0 or len(body.encode("utf-8")) <= max_bytes:
@@ -135,7 +135,7 @@ def truncate(body: str, max_bytes: int) -> str:
     if not shown:  # not even one whole line fits: cut the first on a character boundary
         room = max_bytes - size(footer(n - 1)) - 1
         cut = lines[0].encode("utf-8")[: max(room, 0)].decode("utf-8", "ignore")
-        return cut.rstrip("\n") + "\n" + footer(n - 1)
+        return cut.rstrip("\n") + "\n" + footer(n)  # the cut line counts as not shown
     return "".join(shown) + footer(n - len(shown))
 
 
