@@ -237,6 +237,9 @@ def test_shipped_default_withholds_near_duplicates(repo, monkeypatch):
     plan = _plan(repo)
     assert len(plan.duplicates) == 1
     assert sum(1 for i in _lessons(plan) if i.startswith("LS-")) == 1, "the duplicate is withheld"
+    # Not silently: the plan names each one and the way to file it anyway.
+    note = next(n for n in plan.notes if "NOT imported" in n)
+    assert "--new" in note and "ddflow <kind> add" in note
 
 
 def test_two_plain_records_of_one_import_are_both_kept(repo):
