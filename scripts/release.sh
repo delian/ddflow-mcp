@@ -46,10 +46,15 @@ SRV=$(python3 -c 'import json;print(json.load(open("server.json"))["version"])')
 python3 - "$VERSION" <<'PY' || exit 1
 import json, sys
 want = sys.argv[1]
-bad = [p["identifier"] for p in json.load(open("server.json"))["packages"]
+pkgs = json.load(open("server.json"))["packages"]
+bad = [p["identifier"] for p in pkgs
        if p.get("registryType") == "oci" and not p["identifier"].endswith(f":{want}")]
 if bad:
     sys.exit(f"OCI identifiers not tagged {want}: {bad}")
+# The registry rejects an OCI package carrying `version` (publish #40): the tag says it.
+bad = [p["identifier"] for p in pkgs if p.get("registryType") == "oci" and "version" in p]
+if bad:
+    sys.exit(f"OCI packages must not have a version field: {bad}")
 PY
 echo "  $VERSION — pyproject, server.json and every OCI tag agree"
 

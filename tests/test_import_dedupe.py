@@ -45,9 +45,9 @@ SUMMARY = """# Summary
 
 @pytest.fixture(autouse=True)
 def _default_policy(monkeypatch):
-    """These tests read the DEFAULT [dedupe] ("ask"); conftest turns the add-time check off
-    for the rest of the suite."""
-    monkeypatch.delenv("DDFLOW_DEDUPE_ON_MATCH", raising=False)
+    """These tests read [dedupe] on_match = "ask" (not the shipped default, warn, until
+    B-add-dedupe-surfaces); conftest turns the add-time check off for the rest of the suite."""
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "ask")
 
 
 def _corpus(repo: Path, *, summary: bool = True) -> None:
@@ -146,7 +146,8 @@ def test_a_near_duplicate_of_a_queued_lesson_is_reported_with_its_candidate(repo
     assert 0.55 <= dup.score < 1.0, dup.score
 
 
-def test_dedupe_off_imports_everything(repo):
+def test_dedupe_off_imports_everything(repo, monkeypatch):
+    monkeypatch.delenv("DDFLOW_DEDUPE_ON_MATCH")  # the config file decides here
     _corpus(repo)
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
@@ -216,7 +217,8 @@ def test_a_stored_record_sharing_an_id_with_an_imported_one_is_still_a_queue_mat
     assert (dup.found.ident, dup.of, dup.where) == ("L2", "L2", "queue"), dup
 
 
-def test_warn_mode_reports_but_still_imports(repo):
+def test_warn_mode_reports_but_still_imports(repo, monkeypatch):
+    monkeypatch.delenv("DDFLOW_DEDUPE_ON_MATCH")  # the config file decides here
     _corpus(repo)
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
@@ -225,6 +227,16 @@ def test_warn_mode_reports_but_still_imports(repo):
     assert len(plan.duplicates) == 1
     assert sum(1 for i in _lessons(plan) if i.startswith("LS-")) == 2, "nothing withheld"
     assert any("WILL be imported anyway" in n for n in plan.notes), plan.notes
+
+
+def test_shipped_default_lists_near_duplicates_but_imports_them(repo, monkeypatch):
+    """The shipped default is warn (B-dedupe-default-warn): flips with B-add-dedupe-surfaces."""
+    monkeypatch.delenv("DDFLOW_DEDUPE_ON_MATCH")
+    _corpus(repo)
+    run_cli(repo, "init")
+    plan = _plan(repo)
+    assert len(plan.duplicates) == 1
+    assert sum(1 for i in _lessons(plan) if i.startswith("LS-")) == 2, "nothing withheld"
 
 
 def test_two_plain_records_of_one_import_are_both_kept(repo):
