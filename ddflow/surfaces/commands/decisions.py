@@ -12,6 +12,7 @@ import json
 import sys
 
 from ...api import decisions as A
+from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 
 
@@ -23,25 +24,33 @@ def _emit(c: Ctx, out, payload: str) -> int:
 
 
 def _decision_add(a, c: Ctx, st) -> int:
-    out = A.decision_add(
-        c.repo,
-        A.Draft(
-            title=a.title,
-            decision=a.decision or "",
-            id=a.id or "",
-            context=a.context or "",
-            consequences=a.consequences or "",
-            alternatives=a.alternatives or "",
-            globs=a.globs or "",
-            tags=a.tags or "",
-            sources=a.sources or "",
-            status=a.status,
-            by=a.by or "",
-            item=a.item or "",
-            supersedes=a.supersedes or "",
+    out = D.run(
+        a,
+        c,
+        lambda answer: A.decision_add(
+            c.repo,
+            A.Draft(
+                title=a.title,
+                decision=a.decision or "",
+                id=a.id or "",
+                context=a.context or "",
+                consequences=a.consequences or "",
+                alternatives=a.alternatives or "",
+                globs=a.globs or "",
+                tags=a.tags or "",
+                sources=a.sources or "",
+                status=a.status,
+                by=a.by or "",
+                item=a.item or "",
+                supersedes=a.supersedes or "",
+                answer=answer,
+            ),
+            agent=c.requested_agent,
         ),
-        agent=c.requested_agent,
     )
+    settled = D.settle(a, c, out)
+    if settled is not None:
+        return settled
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
