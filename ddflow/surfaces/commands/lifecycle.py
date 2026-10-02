@@ -282,7 +282,7 @@ def cmd_remove(a, c: Ctx) -> int:
 
 
 def cmd_block(a, c: Ctx) -> int:
-    out = A.block(c.repo, a.id, reason=a.reason, agent=c.requested_agent)
+    out = A.block(c.repo, a.id, reason=a.reason, reopen=a.reopen, agent=c.requested_agent)
     if out.exit != OK:
         return _refused(out)
     c.out(f"{a.id} blocked: {a.reason}", out.body(("id",)))

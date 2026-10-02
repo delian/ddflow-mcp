@@ -412,7 +412,7 @@ suite that never ran.
 
 ### As an MCP server
 
-`ddflow mcp` speaks newline-delimited JSON-RPC over stdio. You rarely run it by hand —
+`ddflow mcp` speaks newline-delimited JSON-RPC over stdio, and treats the directory it was started in as the caller's location (as `ddflow-mcp` does), so a merge from inside a worktree keeps that worktree. You rarely run it by hand —
 `ddflow adopt` writes the launch entry into each agent's own config and leaves existing
 servers alone:
 
@@ -3578,7 +3578,7 @@ ddflow promote status           each environment: head, behind upstream, open pr
 ddflow flow show                how this project works: model, lines, every choice + who made it
 ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)
-ddflow block <id> --reason ..   mark blocked
+ddflow block <id> --reason ..   mark blocked (a DONE item is refused, exit 3, unless --reopen)
 ddflow abandon <id> --reason .. stop work on an item without completing it
 ddflow remove <id> [--force]    take an item out of the queue (recorded, not erased)
 
