@@ -151,7 +151,9 @@ def test_a_plain_re_report_keeps_a_ddflow_scoped_bug_ddflow_scoped(repo):
     assert run_cli(repo, *args, "--scope", "ddflow")[0] == 0
     code, _, _ = run_cli(repo, "--json", *args)
     assert code == 0
-    assert next(iter(_bugs(repo).values())).scope == "ddflow"
+    bugs = _bugs(repo)
+    assert len(bugs) == 1, "the re-report merged into the same bug, not a second one"
+    assert next(iter(bugs.values())).scope == "ddflow"
 
 
 def test_the_default_project_call_carries_a_null_offer(repo):
