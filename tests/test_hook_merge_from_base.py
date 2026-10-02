@@ -86,3 +86,40 @@ def test_the_resolved_path_is_still_judged(repo):
     out = _hook(repo)
     assert "shared.txt" in out and "not covered" in out, out
     assert "from_main.txt" not in out, out
+
+
+def test_a_merge_in_a_linked_worktree_is_judged_the_same(repo, tmp_path):
+    """Where the report came from: an item's own worktree, whose `.git` is a file and
+    whose MERGE_HEAD lives under the common gitdir's `worktrees/<name>`."""
+    run_cli(repo, "init")
+    (repo / "shared.txt").write_text("base\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "base")
+    tree = tmp_path / "feat-tree"
+    _git(repo, "worktree", "add", "-q", "-b", "feat", str(tree))
+    (tree / "shared.txt").write_text("feat\n")
+    _git(tree, "commit", "-qam", "feat")
+    (repo / "shared.txt").write_text("main\n")
+    (repo / "from_main.txt").write_text("main\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "main moves on")
+    assert _git(tree, "merge", "main", check=False).returncode != 0, "expected a conflict"
+    (tree / "shared.txt").write_text("feat and main\n")
+    _git(tree, "add", "shared.txt")
+    run_cli(repo, "task", "add", "T1", "--globs", "shared.txt")
+    assert A.claim(repo, "T1", no_worktree=True, agent=AGENT).ok
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
+        "DDFLOW_AGENT": AGENT,
+    }
+    p = subprocess.run(
+        [sys.executable, "-m", "ddflow", "--repo", str(tree), "hooks", "check-commit"],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=120,
+    )
+    out = p.stdout + p.stderr
+    assert "from_main.txt" not in out and "not covered" not in out, out
