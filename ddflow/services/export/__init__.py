@@ -2,8 +2,8 @@
 
 This package is the CORE: a registry of document kinds, a single-pass query index, a
 framed deterministic rendering with a body digest, and a size cap. Writing to disk is
-``write.py`` (B-export-write); the command and MCP tool are ``api/export.py`` and
-``surfaces/commands/export.py``. The core does no I/O except reading the log in
+``write.py`` (B-export-write); the MCP tool and the command
+are ``api/export.py`` and ``surfaces/commands/export.py``. The core does no I/O except reading the log in
 ``query.load``, templates in ``registry.resolve_template``, and the two sanctioned READ-ONLY
 reads a kind's ``data()`` may make through ``query.repo`` (below): the project config
 and git.
