@@ -194,3 +194,11 @@ def test_the_no_merge_note_still_fires_for_an_ordinary_shared_glob(proj):
     # control: the doctor line the test above forbids does exist for a declared shared glob
     _config(proj, None, '\n[lease]\nshared_globs = ["generated/out.toml"]\n')
     assert "no merge strategy" in run_cli(proj, "doctor")[1]
+
+
+def test_a_configured_target_is_checked_whatever_its_suffix(proj):
+    _config(proj, None, '\n[export.roadmap]\npath = "ROADMAP.rst"\n')
+    assert run_cli(proj, "export", "roadmap", "--update", "--yes")[0] == 0
+    _move_the_log(proj)
+    r = _commit(proj, "ROADMAP.rst", ".ddflow")
+    assert r.returncode != 0 and "ROADMAP.rst" in r.stderr

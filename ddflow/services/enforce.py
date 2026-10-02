@@ -1285,7 +1285,8 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     listed = staged_paths(repo, tree=tree)
     if listed is None:
         return _verdict(mode, [_UNKNOWN_STAGED])
-    staged, exports = _staged_generated(repo, listed, names, tree)
+    configured = {p for _d, p, _m in cfg.export.targets()}
+    staged, exports = _staged_generated(repo, listed, names, tree, configured)
     if not staged and not exports:
         return 0, ""
     noun = (
@@ -1383,7 +1384,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
 
 
 def _staged_generated(
-    repo: Path, listed: list[str], view_names: set[str], tree: Path
+    repo: Path, listed: list[str], view_names: set[str], tree: Path, configured: set[str]
 ) -> tuple[dict[str, bytes], dict[str, tuple[str, str]]]:
     """The staged views ``{path: bytes}`` and exported documents ``{path: (kind, text)}``."""
     from ..views.markdown import GENERATED
@@ -1392,7 +1393,7 @@ def _staged_generated(
     exports: dict[str, tuple[str, str]] = {}
     for p in listed:
         if Path(p).name not in view_names:
-            found = _staged_export(repo, p, tree)
+            found = _staged_export(repo, p, tree, p in configured)
             if found:
                 exports[p] = found
             continue
@@ -1425,17 +1426,20 @@ def _wrong_views(log: EventLog, cfg: Config, staged: dict[str, bytes]) -> list[s
     ]
 
 
-def _staged_export(repo: Path, path: str, tree: Path) -> tuple[str, str] | None:
+def _staged_export(
+    repo: Path, path: str, tree: Path, configured: bool = False
+) -> tuple[str, str] | None:
     """``(doc kind, staged text)`` when the INDEX copy of ``path`` is a generated export
     document of a known kind (its FIRST line is the `ddflow:generated` header), else None.
 
-    Only text-ish names are read: every staged file would otherwise cost a `git show`.
+    Only text-ish names (and any CONFIGURED target, whatever its suffix) are read: every
+    staged file would otherwise cost a `git show`.
     A file that merely quotes the marker further down, or holds a marker region, is not one.
     """
     from .export import frame as F
     from .export import registry as R
 
-    if not path.lower().endswith((".md", ".markdown", ".txt")):
+    if not configured and not path.lower().endswith((".md", ".markdown", ".txt")):
         return None
     data = staged_bytes(repo, path, tree=tree)
     if data is None or not data.startswith(b"<!-- ddflow:generated doc="):
