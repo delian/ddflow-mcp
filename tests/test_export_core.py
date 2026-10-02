@@ -360,5 +360,8 @@ def test_since_compares_instants_not_strings():
     got = [e.ts for e in q.events_of(since="2024-05-01T12:00:00Z")]
     assert got == ["2024-05-01T12:00:00+00:00", "2024-05-02T00:00:00+00:00"]
     assert len(q.events_of(since="2024-05-02")) == 1  # a bare date is a calendar day
-    with pytest.raises(ExportError):
-        q.events_of(since="last tuesday")
+    for bad in ("last tuesday", "garbage", "2024-13-99", "nope!!", "2024-5-1"):
+        with pytest.raises(ExportError) as e:
+            q.events_of(since=bad)
+        assert e.value.code == EXIT_REFUSED, bad
+    assert len(q.events_of(since="2024-05")) == 3 and len(q.events_of(since="2025")) == 0
