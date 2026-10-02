@@ -351,10 +351,11 @@ def anchors_of(text: str) -> set[str]:
     seen: Counter = Counter()
 
     def add(heading: str) -> None:
-        slug = slugify(heading)
-        n = seen[slug]
-        seen[slug] += 1
-        out.add(slug if n == 0 else f"{slug}-{n}")
+        base = slug = slugify(heading)
+        while slug in out:  # github-slugger: bump the suffix until the candidate is free
+            seen[base] += 1
+            slug = f"{base}-{seen[base]}"
+        out.add(slug)
 
     paragraph: list[str] = []  #: prose lines so far; a setext underline makes them a heading
     for _, line, code in _lines(text):

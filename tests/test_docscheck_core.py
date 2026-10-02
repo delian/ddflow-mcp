@@ -211,3 +211,8 @@ def test_a_checked_document_is_never_its_own_evidence(tmp_path):
     # without `p not in docs` the .txt page would feed the corpus its own names
     assert D.anchors_of("Some text\n***\nHeading\n-------\n") == {"heading"}
     assert D.anchors_of("A\n*-*\nB\n===\n") == {"a---b"}
+
+
+def test_suffixed_slugs_that_collide_are_bumped_like_github():
+    assert D.anchors_of("# Foo\n# Foo\n# Foo 1\n") == {"foo", "foo-1", "foo-1-1"}
+    assert D.anchors_of("# Foo-1\n# Foo\n# Foo\n") == {"foo-1", "foo", "foo-2"}
