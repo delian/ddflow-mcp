@@ -298,14 +298,9 @@ def render(
     except jinja2.TemplateError as exc:  # undefined variable, SecurityError, ...
         line = _template_line(exc)
         raise ExportError(f"{where}{':' + str(line) if line else ''}: {exc}") from exc
-    except (
-        TimeoutError,
-        RecursionError,
-        OverflowError,
-        TypeError,
-        ValueError,
-        ArithmeticError,
-    ) as exc:
+    except Exception as exc:
+        # An ordinary method call can raise anything (`[].pop()` -> IndexError); none of it
+        # may escape as a traceback, and none of it may leave a half-rendered document.
         raise ExportError(f"{where}: {type(exc).__name__}: {exc}") from exc
 
 
@@ -405,8 +400,11 @@ def render_document(
         import ddflow
 
         version = str(ddflow.__version__)
-    if max_bytes > 0:
+    try:
         overhead = len(frame("", k.name, version, extra).encode("utf-8"))
+    except ValueError as exc:  # an `extra` header attribute the reader could not parse back
+        raise ExportError(str(exc), EXIT_REFUSED) from exc
+    if max_bytes > 0:
         fits = overhead + len(normalize(body).encode("utf-8")) <= max_bytes
         if not fits and max_bytes < overhead + MIN_BODY_BYTES:
             raise ExportError(
@@ -415,4 +413,4 @@ def render_document(
                 EXIT_REFUSED,
             )
         max_bytes = max(max_bytes - overhead, 1) if fits else max_bytes - overhead
-    return frame(truncate(body, max_bytes), k.name, version, extra)
+    return frame(truncate(body, max_bytes), k.name, version, extra)  # `extra` validated above
