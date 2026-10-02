@@ -2325,8 +2325,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_block": {
         "description": (
             "Mark an item blocked on something outside the queue — a missing decision, "
-            "an upstream outage, a question for the operator. Better than leaving it "
-            "claimed: a blocked item states its reason. A DONE item is refused unless "
+            "an upstream outage, an operator question. Better than leaving it "
+            "claimed: a blocked item states its reason. A DONE or ABANDONED item needs "
             "reopen."
         ),
         "properties": {
