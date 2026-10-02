@@ -1988,7 +1988,12 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "id": ("string", "The item whose review it is.", True),
             "gate": ("string", "critic (default) or rubber_duck.", False),
-            "finding": ("integer", "The finding's number: #N in the review's output.", True),
+            "finding": (
+                "integer",
+                "The finding's number: #N in the review's output -- of the RECORDED "
+                "reviewer's findings, which the output's last lines name when several ran.",
+                True,
+            ),
             "verdict": ("string", "refuted or confirmed.", True),
             "probe": ("string", "The evidence for the verdict. Required.", True),
         },
