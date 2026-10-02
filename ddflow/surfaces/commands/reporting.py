@@ -14,7 +14,7 @@ import time
 
 from ...api import reporting as A
 from ...infra import worktree as W
-from ...views.markdown import cap_held
+from ...views.markdown import addenda_lines, cap_held
 from ..context import FAIL, NOTHING, OK, Ctx
 
 
@@ -169,6 +169,9 @@ def cmd_show(a, c: Ctx) -> int:
     if it.body:
         print(f"\n{it.body}\n")
     print(out.data["_render"]["gate_status"].render())
+    extra = addenda_lines(out.data["_render"]["addenda"])
+    if extra:
+        print("\n".join(extra))
     contest = contest_block(it)
     if contest:
         print(contest)
@@ -200,6 +203,7 @@ def _bug_lines(b: dict) -> str:
     if b["lesson"]:
         lines.append(f"  lesson {b['lesson']}")
     lines += ["", b["summary"]]
+    lines += addenda_lines(b)
     return "\n".join(lines)
 
 
