@@ -219,16 +219,18 @@ def _is_readme(path: str, files: list[str]) -> bool:
 
 
 _DOC_SUFFIXES = (".md", ".rst", ".adoc", ".txt")
+_TEST_DOC_DIRS = ("tests", "test", "__tests__", "spec", "specs", "docs", "doc")
 
 
 def _is_test_or_doc_path(path: str) -> bool:
     """Never user-visible code, even inside a code glob: a test file (`pkg/tests/x.py`,
-    `__tests__/`, `foo.test.ts`, `foo_spec.rb`, conftest.py) or a documentation file."""
+    `__tests__/`, `foo.test.ts`, `foo_spec.rb`, conftest.py) or documentation (a docs/ or
+    doc/ directory, or a .md/.rst/.adoc/.txt file)."""
     parts = path.split("/")
     name = parts[-1]
     stem = name.rsplit(".", 1)[0]
     return (
-        any(d in ("tests", "test", "__tests__", "spec", "specs") for d in parts[:-1])
+        any(d in _TEST_DOC_DIRS for d in parts[:-1])
         or name.startswith("test_")
         or stem.endswith(("_test", "_spec"))
         or ".test." in name
@@ -256,7 +258,9 @@ def changed_paths(repo: Path, it) -> list[str] | None:
     # Claimed --no-worktree: the work is a branch in a tree that is not ours to read.
     if it.branch and W.rev(repo, it.branch):
         out = W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{base}...{it.branch}")
-        return None if out is None else sorted(out)
+        # Empty is not "nothing changed" here: a branch already merged into its base, or
+        # the base itself, diffs to nothing whatever the task did.
+        return sorted(out) if out else None
     return None
 
 
