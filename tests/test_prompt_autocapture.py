@@ -204,20 +204,20 @@ def test_uninstall_with_no_prompt_hook_in_the_file_is_a_quiet_no_op(repo):
 
 
 def test_hook_stdin_falls_back_to_a_thread_read_when_select_cannot_take_the_fd(monkeypatch):
-    import io
     import select
     import time
 
     from ddflow.surfaces.commands import setup as S
 
-    class _Stdin:
-        buffer = io.BytesIO('{"prompt": "café"}'.encode())
+    r, w = os.pipe()
+    os.write(w, '{"prompt": "caf\u00e9"}'.encode())  # written, and the pipe left OPEN
 
+    class _Stdin:
         def isatty(self):
             return False
 
         def fileno(self):
-            return 99
+            return r
 
     called = []
 
@@ -228,6 +228,10 @@ def test_hook_stdin_falls_back_to_a_thread_read_when_select_cannot_take_the_fd(m
     monkeypatch.setattr(select, "select", boom)
     monkeypatch.setattr(sys, "stdin", _Stdin())
     t0 = time.monotonic()
-    assert json.loads(S._hook_stdin(timeout_s=5)) == {"prompt": "café"}
+    try:
+        assert json.loads(S._hook_stdin(timeout_s=1)) == {"prompt": "caf\u00e9"}
+    finally:
+        os.close(w)
+        os.close(r)
     assert time.monotonic() - t0 < 5
     assert called, "the fallback ran for some reason other than select refusing the fd"

@@ -274,21 +274,23 @@ def _hook_stdin(timeout_s: float = 2.0) -> str:
             chunks.append(data)
         return b"".join(chunks).decode("utf-8", "replace")
     except Exception:
-        # select() takes only sockets on Windows: read in a thread we can abandon.
+        # select() takes only sockets on Windows: read chunks in a thread we can abandon,
+        # keeping what arrived even if the pipe is never closed.
         import threading
 
-        box: list[str] = []
+        got: list[bytes] = []
 
         def _read() -> None:
             try:
-                box.append(sys.stdin.buffer.read().decode("utf-8", "replace"))
+                while chunk := os.read(fd, 65536):
+                    got.append(chunk)
             except Exception:
                 pass
 
         t = threading.Thread(target=_read, daemon=True)
         t.start()
         t.join(timeout_s)
-        return box[0] if box else ""
+        return b"".join(got).decode("utf-8", "replace")
 
 
 def cmd_hooks(a, c: Ctx) -> int:
