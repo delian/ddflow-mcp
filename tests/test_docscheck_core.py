@@ -164,3 +164,9 @@ def test_runtime_on_this_repositorys_readme():
     report = D.check_docs(root, docs=["README.md"])
     assert time.perf_counter() - start < 2.0
     assert report.checked["identifiers"] > 100
+
+
+def test_a_named_document_that_cannot_be_read_is_not_a_clean_report(tmp_path):
+    root = repo_with(tmp_path, "ok\n")
+    with pytest.raises(OSError, match=r"TYPO\.md"):
+        D.check_docs(root, docs=["TYPO.md"])
