@@ -129,8 +129,10 @@ def _merge_rows(rows: list[str]) -> list[tuple[int, str, str]]:
 
 
 def _witness(pattern: str) -> str:
-    """A path ``pattern`` matches, standing for it: `**` -> two segments, `*`/`?`/a class
-    -> U+0001, which no literal holds. Read as a path, `docs/**` was matched by `docs/*`
+    """A stand-in path for ``pattern``: `**` -> two segments, `*`/`?`/a class -> U+0001,
+    which no literal holds. It is matched by `*`, `?`, `**` and a NEGATED class, NOT by a
+    positive class -- so a pattern with one may read "not inside" a true superset, and
+    the caller then writes an inert union line rather than a wrong one. Read as a path, `docs/**` was matched by `docs/*`
     (a `*` matches `**`); a plain `x` was matched by a narrower `docs/x*` (review
     findings). The stand-in is matched only by wildcards -- including a NEGATED class
     (`[!x]`), which is why `_relation` treats containment both ways as ambiguous."""
