@@ -8,7 +8,6 @@ every finding re-recorded the gate `passed`, and the log read as if a fix had ha
 
 from __future__ import annotations
 
-import json
 import stat
 import sys
 from pathlib import Path
@@ -160,13 +159,25 @@ def test_a_rereview_keeps_a_triage_only_for_a_finding_worded_the_same(repo, tmp_
 
 
 def test_a_chunk_rerun_keeps_the_triage_of_the_findings_it_did_not_touch(repo, tmp_path):
-    _setup(repo, tmp_path)
+    wording = _setup(repo, tmp_path)
     _full_review(repo)
     _triage(repo, 1)
     _triage(repo, 2)
-    second = _state(repo).gates["critic"].evidence["chunk_findings"][1]["chunk"]
-    api.review(repo, gate="critic", item="T1", chunks=[second])
-    assert G.triage_counts(_state(repo), "critic")["refuted"] == 2
+    first = _state(repo).gates["critic"].evidence["chunk_findings"][0]["chunk"]
+    wording.write_text("a DIFFERENT wording")
+    lines: list[str] = []
+    out = api.review(repo, gate="critic", item="T1", chunks=[first], on_progress=lines.append)
+    assert out.exit == OK or out.data["outcome"] == "failed", out.reason
+    # The re-run chunk's finding is new text (untriaged); the untouched chunk's keeps its
+    # triage. And the numbers printed are the MERGED record's, which triage addresses.
+    assert G.triage_counts(_state(repo), "critic") == {
+        "findings": 2,
+        "refuted": 1,
+        "confirmed": 0,
+        "untriaged": 1,
+    }
+    shown = [ln.strip().split()[0] for ln in lines if ln.strip().startswith("#")]
+    assert shown == ["#1", "#2"], lines
 
 
 def test_the_cli_verb_and_an_item_named_triage(repo, tmp_path):
@@ -212,7 +223,6 @@ def test_the_mcp_tool_records_the_same_event(repo, tmp_path):
     assert out.exit == OK and out.data["counts"]["confirmed"] == 1
     (event,) = [e for e in EventLog(repo).read_all() if e.kind == "review.triaged"]
     assert event.data["finding"] == 2 and event.data["severity"] == "LOW"
-    assert json.dumps(out.data["counts"])
 
 
 def test_a_triage_event_for_an_unknown_item_folds_to_nothing():
@@ -235,16 +245,22 @@ def test_a_triage_event_for_an_unknown_item_folds_to_nothing():
     assert "GHOST" not in st.items
 
 
-def test_identical_findings_of_one_review_are_triaged_one_at_a_time(repo, tmp_path):
-    """critic: two word-for-word identical findings shared a digest, so one triage
-    marked both and a second overwrote the first."""
+def test_one_claim_made_twice_is_triaged_together(repo, tmp_path):
+    """Word-for-word identical findings share a digest: triaging one triages both. (A
+    positional suffix was tried; it moved to the wrong copy when an earlier chunk was
+    re-reviewed.)"""
     _setup(repo, tmp_path)
     (repo / "d.py").write_text("x = 1  # FINDA " + "p" * 60 + "\n")  # same finding as a.py's
     _full_review(repo)
-    digests = [f["digest"] for f in _state(repo).gates["critic"].evidence["chunk_findings"]]
-    assert len(digests) == 3 and len(set(digests)) == 3, digests
+    found = _state(repo).gates["critic"].evidence["chunk_findings"]
+    assert len(found) == 3 and found[0]["digest"] == found[2]["digest"] != found[1]["digest"]
     _triage(repo, 1)
-    assert G.triage_counts(_state(repo), "critic")["refuted"] == 1, "one event, one finding"
+    assert G.triage_counts(_state(repo), "critic") == {
+        "findings": 3,
+        "refuted": 2,
+        "confirmed": 0,
+        "untriaged": 1,
+    }
 
 
 def test_with_two_reviewers_the_recorded_ones_findings_are_named(repo, tmp_path):
