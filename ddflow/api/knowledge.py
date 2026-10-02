@@ -259,8 +259,6 @@ def _record_state(state, rid: str, kind: str) -> tuple[str, str]:
         it = state.items.get(rid)
         if it is None:
             return "", "unknown"
-        if it.removed:
-            return it.title, "removed"
         if it.lease and not it.lease.expired_at and it.state not in ("done", "abandoned"):
             return it.title, f"claimed by {it.lease.holder}"
         return it.title, it.state
@@ -280,7 +278,7 @@ def _record_state(state, rid: str, kind: str) -> tuple[str, str]:
         return (rs.question, rs.verdict.lower() or "recorded") if rs else ("", "unknown")
     if kind == "memory":
         mm = state.memories.get(rid)
-        return (mm.text, "live" if mm.live else "forgotten") if mm else ("", "unknown")
+        return (mm.text, "live") if mm else ("", "unknown")
     return "", "unknown"
 
 
@@ -326,22 +324,16 @@ def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Out
     scoped = dataclasses.replace(cfg, dedupe=dd)
     with sim.open_store(store) as matcher:
         found = sim.assess(matcher, {"kind": scope[0], "title": text, "body": ""}, scoped)
+        # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
+        cands = [c for c in found.candidates if c.kind in scope]
+        n, df = matcher.doc_freq(textsim.tokens(text))
     records = {r["id"]: r for r in similar_records(st)}
     mine = set(textsim.tokens(text))
-    df: dict[str, int] = {}
-    for c in found.candidates:
-        for t in set(textsim.tokens(records[c.id]["title"], records[c.id]["body"])) & mine:
-            df[t] = 0
-    if df:
-        for r in records.values():
-            for t in set(textsim.tokens(r["title"], r["body"])) & df.keys():
-                df[t] += 1
-    n = len(records)
     rows = []
-    for c in found.candidates:
+    for c in cands:
         r = records[c.id]
         shared = set(textsim.tokens(r["title"], r["body"])) & mine
-        ranked = sorted(shared, key=lambda t: (-textsim.idf(df[t], n), t))
+        ranked = sorted(shared, key=lambda t: (-textsim.idf(df.get(t, 0), n), t))
         headline, where = _record_state(st, c.id, c.kind)
         rows.append(
             {

@@ -1632,7 +1632,7 @@ Before you file a bug, task or lesson, ask what the log already holds that reads
 it. `ddflow similar` (MCP: `ddflow_similar`) is read-only and takes the text you would
 file, and optionally `--kind` (a comma-separated subset of `[dedupe].kinds`; anything else
 is refused, exit 1). Each candidate shows its id, kind, title, **state** (open, claimed by
-whom, done, fixed, invalid, removed...), **score** (0-1, TF-IDF cosine), the words it
+whom, done, fixed, invalid...), **score** (0-1, TF-IDF cosine), the words it
 shares with your text, and flags: `identical` (the same text up to case and whitespace)
 and `named` (your text names its id). Candidates cross kinds, so a bug sees the open task
 that fixes it and a task the bug it would fix, and closed records are included: a new bug
