@@ -307,7 +307,7 @@ def cmd_hooks(a, c: Ctx) -> int:
         return FAIL
     c.out(
         out.data["message"],
-        out.body(("installed", "policy", "session_hook", "prompt_hook", "trailer_hook")),
+        out.body(("installed", "policy", "session_hook", "trailer_hook")),
     )
     return out.exit
 
