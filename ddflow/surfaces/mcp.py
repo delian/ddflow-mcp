@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "ddflow", "version": "0.1.6", "title": "ddflow work-queue kernel"}
+SERVER_INFO = {"name": "ddflow", "version": "0.1.9", "title": "ddflow work-queue kernel"}
 
 
 #: Tool surface. Each entry maps an MCP tool onto an argv the CLI already understands,
@@ -610,6 +610,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
             line=a.get("line", "") or "",
             readd=bool(a.get("readd")),
+            answer=_answer(a),
             agent=agent,
         ),
         "payload": ("id",),
@@ -707,6 +708,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             line=a.get("line", "") or "",
             lines=a.get("lines", "") or "",
             readd=bool(a.get("readd")),
+            answer=_answer(a),
             agent=agent,
         ),
         "payload": ("id", "line", "ports", "port_strategy", "defaulted"),
@@ -790,6 +792,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 pattern=a.get("pattern", "") or "",
                 globs=a.get("globs", "") or "",
                 id=a.get("id", "") or "",
+                answer=_answer(a),
             ),
             agent=agent,
         ),
@@ -852,6 +855,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 budget=a.get("budget", "") or "",
                 item=a.get("item", "") or "",
                 id=a.get("id", "") or "",
+                answer=_answer(a),
             ),
             agent=agent,
         ),
@@ -1169,6 +1173,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 by=a.get("by", "") or "",
                 item=a.get("item", "") or "",
                 supersedes=a.get("supersedes", "") or "",
+                answer=_answer(a),
             ),
             agent=agent,
         ),
@@ -1573,6 +1578,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             summary=a.get("summary", "") or "",
             item=a.get("item", "") or "",
             id=a.get("id", "") or "",
+            answer=_answer(a),
             agent=agent,
         ),
         "payload": ("id",),
@@ -2389,6 +2395,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             a.get("text", "") or "",
             tags=a.get("tags", "") or "",
             id=a.get("id", "") or "",
+            answer=_answer(a),
             agent=agent,
         ),
         "payload": ("id", "replaced"),
@@ -2563,6 +2570,50 @@ def _schema(spec: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+#: The add tools: each takes the answer to the duplicate check (`api/_dedupe.py`).
+ADD_TOOLS = (
+    "ddflow_phase_add",
+    "ddflow_task_add",
+    "ddflow_bug_found",
+    "ddflow_lesson_add",
+    "ddflow_decision_add",
+    "ddflow_research_add",
+    "ddflow_memory_add",
+)
+
+DEDUPE_PROPERTIES: dict[str, tuple[str, str, bool]] = {
+    "relation": (
+        "string",
+        "Answers the duplicate check when an add is refused as 'possible duplicate' "
+        "(the refusal lists `candidates` and the `options` it accepts): 'new' (a "
+        "different record), 'extends:ID' (adds to record ID: appended to it while it is "
+        "open and unclaimed, else filed as a new record linked to it), "
+        "'duplicate_of:ID' (the same thing; handled like extends), 'related:ID' (a "
+        "different record, linked both ways). Prefer extending an open, unclaimed "
+        "record. Omit it on the first call.",
+        False,
+    ),
+    "check_only": (
+        "boolean",
+        "Dry run: write nothing and return the existing records this add would be "
+        "refused as a duplicate of (`candidates`, `would_ask`). Exit 0 with candidates, "
+        "2 with none.",
+        False,
+    ),
+}
+
+for _name in ADD_TOOLS:
+    TOOLS[_name]["properties"].update(DEDUPE_PROPERTIES)
+
+
+def _answer(a: dict[str, Any]):
+    """The duplicate-check answer an add call carries: ``relation`` and ``check_only``."""
+    from ..api._dedupe import Answer
+
+    given = Answer.parse(str(a.get("relation", "") or ""))
+    return Answer(given.relation, given.target, bool(a.get("check_only")))
+
+
 def _api():
     """Imported lazily: `surfaces` may reach `api`, and doing it at call time keeps the
     module import graph flat for anything that only wants the tool table."""
@@ -2680,6 +2731,10 @@ def _outcome_result(
     # consumer one quoted string with `\n` in it instead of the document they parse.
     # The rendering itself lives in `views/`, below both surfaces, so this is a choice of
     # ENCODING here and not a second renderer.
+    if not as_text and (out.data.get("extended") or out.data.get("check_only")):
+        # An add that went onto an existing record, or a dry run: what the check decided
+        # IS the answer, and the tool's usual `{"id": ...}` projection would drop it.
+        payload_key = ""
     if as_text:
         body = out.body(payload_key)
         if not isinstance(body, str):

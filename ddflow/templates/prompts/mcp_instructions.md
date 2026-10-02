@@ -247,6 +247,13 @@ judgement calls: put them to the operator rather than resolving them yourself.
 similar task and earlier operator prompt. It exists so the operator does not have to say
 the same thing twice and you do not have to learn the same lesson twice.
 
+Before you FILE something, `ddflow_similar` lists the records it reads like. An add that
+looks like an existing record is refused as a possible duplicate, with `candidates` and
+`options`; answer by calling the same tool again with `relation`: `new` (a different
+record), `extends:ID` or `duplicate_of:ID` (the same thing) or `related:ID` (linked both
+ways). Prefer extending an open, unclaimed record; a claimed or closed one gets a new
+record linked to it. `check_only` shows the candidates and writes nothing.
+
 {% if recoverable %}
 ## Waiting for you right now
 

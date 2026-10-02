@@ -822,7 +822,12 @@ and each image carries the label `io.modelcontextprotocol.server.name` with the 
 The `verify` job runs `tests/test_registry_ownership.py` first, so a release the registry
 would reject — a missing marker, or a label that does not match — is refused before
 anything is uploaded; a `server.json` `description` over the registry's 100-character limit
-fails the suite the same way. The publish step also retries a *transient* registry failure
+fails the suite the same way. So do the registry's per-package rules, which the JSON schema
+does not express and the registry enforces only at publish: an `oci` package must **not**
+carry a `version` field (or `registryBaseUrl`/`fileSha256`) — the tag in its `identifier` is
+the version — while the `pypi` package must carry one. publish #40 failed on exactly that, at
+the last job, after PyPI and both images had shipped; `tests/test_registry_manifest_rules.py`
+now encodes the rules offline and `verify` runs it first. The publish step also retries a *transient* registry failure
 (a 504, a 408/429, a network error) with backoff, checking the registry for the exact
 version after every attempt, because the publish behind a 504 may have committed; a 4xx
 that retrying cannot fix fails at once, and only after the budget does it fail with a
@@ -881,8 +886,8 @@ loses a race with another commit fails the run and publishes nothing, where push
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
 `main` or a `v*` tag releases.
 
-The version lives in seven places — `pyproject.toml`, `server.json`'s version, its
-per-package version, the tag inside every OCI identifier, `SERVER_INFO` (what the server
+The version lives in seven places — `pyproject.toml`, `server.json`'s version, the `pypi`
+package's version (an `oci` package has none), the tag inside every OCI identifier, `SERVER_INFO` (what the server
 tells every client it is), `ddflow.__version__`, and `uv.lock`, which records the project's
 own version. `scripts/bump.sh` moves them all and re-reads them to check it did;
 `tests/test_packaging.py` fails if the first six ever drift. (That test caught the bump
@@ -1503,8 +1508,8 @@ duplicate from a related record, which is why it is reported rather than decided
 real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson were
 reported this way. Tasks and phases are not checked (they carry dependencies);
 `[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
-`"off"` turns the check off. Re-running over the same files adds
-nothing.
+`"off"` turns the check off. Under the shipped default, `ask`, near-duplicates are
+withheld. Re-running over the same files adds nothing.
 
 ### Verifying an import, at any time
 
@@ -1711,8 +1716,7 @@ open task that fixes it. Its policy is the `[dedupe]` section (decision D-no-dup
 on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds come from a
 labelled set of 84 duplicate / related / hard-negative pairs built from real logs
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
-duplicate from a different bug in the same function, which is why the default asks rather
-than decides.
+duplicate from a different bug in the same function, which is why the default asks rather than decides. (It was `warn` for a short while, because no surface could answer an ask; the CLI flags, terminal prompt and MCP `relation` now can.)
 
 ### Similar — "is this already filed?"
 
@@ -1737,6 +1741,96 @@ the same list of candidates, and an empty list when there are none. It uses the
 (default 3; records whose id the text names are listed as well) and `kinds`; it runs even
 when `[dedupe].on_match` is `off`, since that setting governs what an *add* does. A score
 is a prompt to look, not a verdict: two bugs in one function score high and are different.
+
+### The check every add runs
+
+Every add — task, phase, bug, lesson, decision, research and memory; never a session
+prompt or note — runs the same check against the log **before it writes**, with the
+`[dedupe]` knobs above. What it does depends on how close the match is:
+
+- **A match** — a candidate scoring at least `ask_threshold` (0.55) when the new text has
+  at least `min_words` (8) content words, or text that names an existing record's id — is
+  **refused** (exit 3, `refused: possible duplicate`). Nothing is written. The refusal
+  carries `candidates` (id, kind, title, state, score, the words shared) and `options`
+  (`new`, then `extends` / `duplicate_of` / `related` for each candidate), and its reason
+  lists them in prose. Over MCP the refusal leads the reply as `{"refusal": {...}}`. A bug
+  filed against the task that fixes it (`--item T`) already answers that candidate and is
+  not asked about it.
+- **An answer** lifts the refusal. `new`: it is a different record, filed as asked.
+  `extends X` / `duplicate_of X`: it is the same thing. While X is **open and unclaimed**
+  (an open task or phase, an unfixed bug, a lesson or decision not superseded, research, a
+  live memory) the text is appended to X as a `record.extended` — verbatim, with who, when
+  and the score — and **no new id is made**; a bug's own summary is never replaced. If X
+  is claimed, running, done, fixed or superseded, a **new record** is filed linked to X
+  (`extends` / `duplicate_of` on its add event), so nothing is lost, and the result names X
+  and its state so the holder can be told. `related X` files a new record linked **both
+  ways** (a `link.recorded` on X). The API takes the answer as one `answer` argument
+  (`api.DedupeAnswer("extends", "B5d98a4da0a")`; `DedupeAnswer.parse("related B1")`)
+  carried on `task_add`, `phase_add`, `bug_found`, `memory_add` and the lesson, decision
+  and research drafts. The CLI and MCP surfaces are below.
+- **Answering a refusal, on every surface.**
+  - **CLI flags** on every add command (`task add`, `phase add`, `bug found`, `lesson add`,
+    `decision add`, `research add`, `memory add`): `--new`, `--extends ID`,
+    `--duplicate-of ID`, `--related ID` and `--check`; at most one of the five (argparse refuses two, and
+    over MCP `relation` with `check_only` is a failure).
+    `--check` is a dry run: it writes nothing, prints the candidates and whether the add
+    would be refused, and exits 0 with candidates or 2 with none (`--json` prints
+    `candidates`, `options`, `would_ask`, and for an exact copy `would_extend` -- the open
+    record it would be added to -- or `would_link` -- the claimed or closed record it would
+    be filed beside). An id that already exists keeps its own rule and is not checked
+    (`--check` says so, exit 2 -- except a task or phase, whose existing id is the queue's
+    ordinary `already exists` refusal, exit 3, exactly as the add itself would answer); an index that cannot be read is exit 1, never "none". `ddflow similar "<text>"` asks the same question
+    before you have an id or a command to run.
+  - **On a terminal** (stdin and stdout are both terminals, no `--json`, no answer flag) a
+    refused add asks instead of failing: it lists the candidates numbered and prompts
+    `[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [a]bort`. `e 1` and `r T-old`
+    both work (the number or the id; the number alone is enough when there is one
+    candidate). Anything else asks again; abort, or end of input, files nothing and exits 3.
+  - **Without a terminal** (a script, an agent's shell, a pipe) it exits 3 with
+    `refused: possible duplicate`, the candidates, and the same command again with each
+    answer appended -- `--new`, `--extends TOP`, `--duplicate-of TOP`, `--related TOP` --
+    ready to paste. `--json` prints the same refusal as `candidates` plus `options` (the reason
+    is still on stderr). Nothing is written. An add that goes ahead anyway -- `warn`, or a
+    match below the asking threshold -- prints `It reads like:` and the candidates on stderr
+    before its usual line.
+  - **MCP**: every add tool (`ddflow_task_add`, `ddflow_phase_add`, `ddflow_bug_found`,
+    `ddflow_lesson_add`, `ddflow_decision_add`, `ddflow_research_add`, `ddflow_memory_add`)
+    takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID` or `related:ID` -- and
+    `check_only` (the dry run). The refusal leads the reply as `{"refusal": {...}}` with
+    `candidates` and `options` beside it; answer it by calling the tool again with
+    `relation`. An answer that lands on an existing record returns `extended` (the record
+    that received the text), `extended_kind` and `relation` in place of a new id.
+  - **Agents:** run `ddflow similar` before filing; prefer extending an open, unclaimed
+    record; a claimed or closed one gets a new record linked to it (`extends` does that on
+    its own).
+- **Identical text** (up to case and whitespace) as an existing record of the same kind is
+  recorded as a duplicate of it **without asking**, under the same open-or-linked rule.
+- **Below the threshold, at or above `show_floor` (0.35):** the add goes through and its
+  result lists the candidates.
+- **Every answer is recorded** on the add event (`dedupe`: the answer, the score, the
+  candidates shown), `new` included, and an automatic merge is marked `auto`.
+
+**Seeing what was added.** `ddflow show X` (an item or a bug id; `--json` carries the same
+data as `additions`, `links` and `linked_from`) lists the additions on X verbatim with who,
+when and the score; the links X makes (`links`); the records that link to X
+(`linked_from`) — found by scanning every record's links for X, because a new record filed
+`extends` / `duplicate_of` X holds the link itself and only `related` also writes a
+back-link, which is listed once; and, for a bug, the task that fixes it. The holder of a
+claimed item is told what arrived: `ddflow brief` for it leads with **N new reports on your
+item since you claimed** (additions made, and records linked to it, since its lease was
+acquired), quoting each (the first five, clipped; `show` has the rest) inside the brief's
+token budget, and `ddflow heartbeat` and `ddflow gate status` carry the count in one line.
+MCP `ddflow_show` and `ddflow_brief` return the same data.
+
+`[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
+merges — it lists the candidates and records the add as `new` — and `off` skips the check
+entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
+the log before the add writes, so it is advisory across agents: two adds of the same text
+racing in different clones can both pass, and a later `similar` will show the pair. The
+check is also a function, `api.dedupe_check_add`, taking a config that may have `on_match`
+replaced (`api._dedupe.with_check`), so a bulk caller need not go through the add paths. The
+importer applies the same engine and `[dedupe]` thresholds to a batch with its own
+reconciliation (see the import section), not through this function.
 
 ## Operational memory
 
@@ -2735,7 +2829,8 @@ and `dedupe` (the recorded answer, its score and the candidates shown). A later
 score), and a later `link.recorded` is a link or a `distinct` dismissal. Both accumulate,
 keyed by event: two additions made at once by two clones both survive in any fold order,
 and an addition never replaces the record's own text (a bug's summary stays as written).
-`ddflow replay` renders both. No command writes them yet.
+`ddflow replay` renders both. The add paths write `record.extended` and the `related`
+back-link (see "The check every add runs"); no command writes a bare `link.recorded` yet.
 
 ### The compaction that was declined
 

@@ -17,6 +17,16 @@ from ddflow.config import Config
 from ddflow.infra.log import EventLog
 
 
+@pytest.fixture(autouse=True)
+def _dedupe_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The add-time duplicate check (``[dedupe].on_match``, default "ask") is OFF in the
+    suite unless a test turns it on. Hundreds of tests file near-identical placeholder
+    tasks and bugs to set up something else, and each would be refused as a duplicate of
+    the one before. The behaviour itself is tests/test_add_dedupe.py, which sets
+    ``DDFLOW_DEDUPE_ON_MATCH`` back; ``run_cli`` subprocesses inherit this environment."""
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "off")
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A real git repository. Real, not mocked: every worktree, lease-recovery and

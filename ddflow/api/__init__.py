@@ -40,6 +40,8 @@ from __future__ import annotations
 # this layer through the PACKAGE (`_api().progress`), never through a family module, so
 # moving an operation between families is not a breaking change.
 from ._base import _load
+from ._dedupe import Answer as DedupeAnswer
+from ._dedupe import check_add as dedupe_check_add
 from .completion import completion_verdict
 from .decisions import (
     decision_add,
@@ -161,6 +163,7 @@ __all__ = [
     "DEFAULT_RENDER_DIR",
     "Adoption",
     "ConfigEdit",
+    "DedupeAnswer",
     "GateEvidence",
     "ItemEdit",
     "LessonDraft",
@@ -190,6 +193,7 @@ __all__ = [
     "decision_search",
     "decision_show",
     "decision_supersede",
+    "dedupe_check_add",
     "doctor",
     "external_sync",
     "flow_choose",
