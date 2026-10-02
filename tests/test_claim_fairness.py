@@ -336,3 +336,10 @@ def test_a_registration_with_a_huge_integer_time_is_skipped_not_fatal(proj):
     )
     assert WT.live_waiters(proj) == []
     assert _claim(proj, "TC", C).exit == O.REFUSED  # refused by A's lease, not a crash
+
+
+def test_a_single_refusal_is_not_reported_to_the_holder_as_a_waiter(proj):
+    assert _claim(proj, "TC", C).exit == O.REFUSED
+    assert WT.waiting_on(proj, "HOT") == []
+    assert _claim(proj, "TC", C).exit == O.REFUSED
+    assert [w["agent"] for w in WT.waiting_on(proj, "HOT")] == [C]
