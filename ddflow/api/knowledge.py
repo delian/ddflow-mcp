@@ -513,16 +513,25 @@ def bug_found(
     )
     if chk.refusal is not None:
         return chk.refusal
+    # Only what was said is written: `project` is the default, so a plain re-report of
+    # a ddflow-scoped bug (same summary and item, same id) does not turn it back.
+    extra = {
+        k: v
+        for k, v in (("title", title), ("severity", severity), ("scope", scope))
+        if v and (k != "scope" or v != "project")
+    }
     if chk.extension:
-        return DD.extend(log, cfg, chk, "bug.found")
+        # The text goes onto the OPEN bug it was answered onto; what was said about its
+        # title, severity or scope goes with it (a merge: an empty field never blanks one).
+        target = chk.extension["target"]
+        if extra:
+            log.append("bug.found", target, dict(extra))
+        out = DD.extend(log, cfg, chk, "bug.found")
+        held = st.bugs.get(target)
+        ddflow_scoped = scope == "ddflow" or (held is not None and held.scope == "ddflow")
+        offer = upstream_offer("ddflow" if ddflow_scoped else "project", target)
+        return O.ok("bug.found", **{**out.data, **({"offer": offer} if offer else {})})
     with log.transaction():
-        # Only what was said is written: `project` is the default, so a plain re-report of
-        # a ddflow-scoped bug (same summary and item, same id) does not turn it back.
-        extra = {
-            k: v
-            for k, v in (("title", title), ("severity", severity), ("scope", scope))
-            if v and (k != "scope" or v != "project")
-        }
         log.append("bug.found", bid, {"item": item, "summary": summary, **extra, **chk.fields})
         DD.after_add(log, cfg, bid, chk)
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
