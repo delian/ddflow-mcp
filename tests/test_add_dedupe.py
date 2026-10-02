@@ -314,3 +314,24 @@ def test_a_decision_is_extendable_until_superseded():
         assert DD.extendable(st(status=status), "D1", "decision")
     assert not DD.extendable(st(status="superseded"), "D1", "decision")
     assert not DD.extendable(st(superseded_by="D2"), "D1", "decision")
+
+
+@pytest.mark.parametrize("kind", ["task", "phase"])
+def test_a_record_filed_after_the_state_was_loaded_is_still_seen(repo, monkeypatch, kind):
+    """The check runs inside the write transaction, against the log as it is then: an add
+    that loaded its state before another agent filed the same thing is still refused."""
+    from ddflow.api import items
+
+    run_cli(repo, "init")
+    title = "update must widen the held lease globs as well as the item globs on a claimed item"
+    real = items._load
+
+    def stale(repo_, agent=""):
+        loaded = real(repo_, agent)
+        EventLog(repo_, "other").append(f"{kind}.added", "RACE-1", {"title": title})
+        return loaded
+
+    monkeypatch.setattr(items, "_load", stale)
+    add = A.task_add if kind == "task" else A.phase_add
+    out = add(repo, "RACE-2", title=title + " too", agent="a")
+    assert out.exit == 3 and out.data["candidates"][0]["id"] == "RACE-1"
