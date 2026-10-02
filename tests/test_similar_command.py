@@ -1,5 +1,5 @@
 """`ddflow similar` / `ddflow_similar` (B-similar-command): read-only candidates for a
-text before it is filed. The engine's own accuracy is tests/test_similar_engine.py."""
+text before it is filed. The engine's own accuracy is tests/test_similar.py."""
 
 from __future__ import annotations
 
@@ -122,3 +122,16 @@ def test_the_cli_and_the_mcp_tool_give_the_same_answer(repo):
 def test_the_tool_is_listed_and_read_only():
     assert "ddflow_similar" in TOOLS
     assert "IS THIS ALREADY FILED" in TOOLS["ddflow_similar"]["description"]
+
+
+def test_kind_narrows_a_named_record_too(repo):
+    """assess() lists a record the text names whatever its kind; `--kind task` must not
+    hand back the bug it names (found by review of the first version)."""
+    _filed(repo)
+    _c, out, _e = run_cli(repo, "--json", "similar", BUG, "--kind", "bug")
+    bug_id = json.loads(out)[0]["id"]
+    text = f"does this repeat {bug_id} somehow"
+    _c, out, _e = run_cli(repo, "--json", "similar", text, "--kind", "task")
+    assert all(r["kind"] == "task" for r in json.loads(out))
+    _c, out, _e = run_cli(repo, "--json", "similar", text)
+    assert any(r["id"] == bug_id and "named" in r["flags"] for r in json.loads(out))
