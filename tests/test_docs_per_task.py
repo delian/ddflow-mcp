@@ -98,6 +98,11 @@ def test_tests_and_docs_inside_a_code_path_are_exempt(repo, tree):
             "ddflow/web/Foo.test.tsx": "x\n",
             "ddflow/models/foo_spec.rb": "x\n",
             "ddflow/docs/design.md": "# design\n",
+            "ddflow/docs/arch.svg": "<svg/>\n",
+            "ddflow/NOTES.txt": "x\n",
+            "ddflow/guide.rst": "x\n",
+            "ddflow/spec/a.py": "x\n",
+            "ddflow/pkg/foo_test.go": "x\n",
         },
     )
     assert _reported(repo) == []
@@ -162,3 +167,20 @@ def test_an_unreadable_base_says_the_check_could_not_run(repo, tree):
     out = completion_verdict(repo, "T1")
     unknown = [w for w in out.data["warnings"] if "README check could not run" in w]
     assert unknown and not any("README" in b for b in out.data["blockers"])
+
+
+def test_a_branch_that_diffs_to_nothing_is_unknown_not_clean(repo):
+    """Claimed --no-worktree with the branch the base itself: the diff is empty whatever
+    the task did, which is "could not tell"."""
+    run_cli(repo, "init")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "ddflow")
+    run_cli(repo, "task", "add", "T1", "--title", "a task", "--globs", "ddflow/**")
+    code, out, err = run_cli(repo, "claim", "T1", "--no-worktree")
+    assert code == OK, out + err
+    from ddflow.services import completion as CM
+
+    st = _load(repo)[2]
+    it = st.items["T1"]
+    it.branch, it.base = "main", "main"
+    assert CM.changed_paths(repo, it) is None

@@ -2904,7 +2904,7 @@ part that matters.
   `ddflow gate skip <id> docs --reason "..."` (or `gate record <id> docs --outcome
   passed --evidence "<section>"`). `[enforce] readme_with_code` picks the severity:
   `warn` (default), `block` (refuses `complete`) or `off`. Test-only and docs-only
-  files (a `tests/` directory, `test_*.py`, `*.test.*`; `.md`/`.rst` files) and ddflow's own event-log commits
+  files (`tests/`, `test_*`, `*_test.*`, `*.test.*`, `*_spec.*`), documentation (`docs/`, `.md`/`.rst`/`.adoc`/`.txt`) and ddflow's own event-log commits
   (`.ddflow/**`) are never reported; when git cannot say what the task changed, `complete`
   says the check could not run (a warning, never a block). It is a
   check, not a pipeline gate, so a task with nothing to document is not asked for a
