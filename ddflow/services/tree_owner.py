@@ -26,7 +26,10 @@ connection's identity is the one standing in the tree, and the CLI does not -- a
 agent adopting its own harness tree is established behaviour that tests rely on. The
 limit that leaves: a tree whose occupant has never written under its derived identity
 cannot be told from a harness-isolated agent's fresh tree, and is adopted. That
-includes a declared-identity parent that has not yet claimed anything from its tree.
+includes a declared-identity parent that has not yet claimed anything from its tree --
+and the first identity to adopt a tree owns it: a subagent that claims from its parent's
+tree BEFORE the parent has is indistinguishable from a harness-isolated agent, so it takes
+the tree and the parent then gets a tree of its own (safe, just not the one it stands in).
 """
 
 from __future__ import annotations
