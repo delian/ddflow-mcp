@@ -822,7 +822,12 @@ and each image carries the label `io.modelcontextprotocol.server.name` with the 
 The `verify` job runs `tests/test_registry_ownership.py` first, so a release the registry
 would reject — a missing marker, or a label that does not match — is refused before
 anything is uploaded; a `server.json` `description` over the registry's 100-character limit
-fails the suite the same way. The publish step also retries a *transient* registry failure
+fails the suite the same way. So do the registry's per-package rules, which the JSON schema
+does not express and the registry enforces only at publish: an `oci` package must **not**
+carry a `version` field (or `registryBaseUrl`/`fileSha256`) — the tag in its `identifier` is
+the version — while the `pypi` package must carry one. publish #40 failed on exactly that, at
+the last job, after PyPI and both images had shipped; `tests/test_registry_manifest_rules.py`
+now encodes the rules offline and `verify` runs it first. The publish step also retries a *transient* registry failure
 (a 504, a 408/429, a network error) with backoff, checking the registry for the exact
 version after every attempt, because the publish behind a 504 may have committed; a 4xx
 that retrying cannot fix fails at once, and only after the budget does it fail with a
@@ -881,8 +886,8 @@ loses a race with another commit fails the run and publishes nothing, where push
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
 `main` or a `v*` tag releases.
 
-The version lives in seven places — `pyproject.toml`, `server.json`'s version, its
-per-package version, the tag inside every OCI identifier, `SERVER_INFO` (what the server
+The version lives in seven places — `pyproject.toml`, `server.json`'s version, the `pypi`
+package's version (an `oci` package has none), the tag inside every OCI identifier, `SERVER_INFO` (what the server
 tells every client it is), `ddflow.__version__`, and `uv.lock`, which records the project's
 own version. `scripts/bump.sh` moves them all and re-reads them to check it did;
 `tests/test_packaging.py` fails if the first six ever drift. (That test caught the bump
@@ -1503,7 +1508,10 @@ duplicate from a related record, which is why it is reported rather than decided
 real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson were
 reported this way. Tasks and phases are not checked (they carry dependencies);
 `[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
-`"off"` turns the check off. Re-running over the same files adds
+`"off"` turns the check off. **While the shipped default is `warn`** (see "The check every
+add runs"), an import lists near-duplicates and imports them anyway; set
+`on_match = "ask"` to have them withheld, as the default will again once
+B-add-dedupe-surfaces lands. Re-running over the same files adds
 nothing.
 
 ### Verifying an import, at any time
@@ -1707,12 +1715,11 @@ stemmer), TF-IDF weights projected into `index.db` by `ddflow rebuild`, and an e
 over an inverted index — a record missing from the hits shares no term with the query, so
 nothing depends on how SQLite was built. Candidates cross kinds, so a new bug is shown the
 open task that fixes it. Its policy is the `[dedupe]` section (decision D-no-duplicates):
-`on_match` (`ask` default, `warn`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
+`on_match` (`warn` default for now, `ask`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
 on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds come from a
 labelled set of 84 duplicate / related / hard-negative pairs built from real logs
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
-duplicate from a different bug in the same function, which is why the default asks rather
-than decides.
+duplicate from a different bug in the same function, which is why `ask` exists rather than an automatic decision. The shipped default is currently `warn`, because no surface can answer an ask yet (CLI flags, terminal prompt and MCP `relation` are task B-add-dedupe-surfaces, which flips it back to `ask`).
 
 ### Similar — "is this already filed?"
 
@@ -1783,7 +1790,7 @@ acquired), quoting each (the first five, clipped; `show` has the rest) inside th
 token budget, and `ddflow heartbeat` and `ddflow gate status` carry the count in one line.
 MCP `ddflow_show` and `ddflow_brief` return the same data.
 
-`[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
+`[dedupe].on_match` sets the policy: `ask` as above (the intended default, not shipped until B-add-dedupe-surfaces gives every surface a way to answer), `warn` (the current default) never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
 entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
 the log before the add writes, so it is advisory across agents: two adds of the same text
