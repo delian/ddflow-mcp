@@ -55,7 +55,7 @@ def _corpus_projects(events: list[dict]) -> set[str]:
     names = set()
     for e in events:
         for m in re.finditer(
-            r"/home/[\w.-]+/(?:src|git|code|work|projects)/([\w.-]+)", json.dumps(e)
+            r"/(?:home|Users)/[\w.-]+/(?:src|git|code|work|projects)/([\w.-]+)", json.dumps(e)
         ):
             names.add(m.group(1))
     return {n for n in names if len(n) >= 4 and n not in rr.PUBLIC_NAMES}
@@ -204,7 +204,9 @@ def test_a_long_unbroken_token_is_not_quadratic():
 
 def test_zero_padded_and_dot_local_leaks_are_caught():
     padded = _ip(172, 16, 1, 1).replace(".16.1.", ".16.001.")
-    out = rr.redact_report(f"at {padded} and 010.0.0.1 and nas.local.", hostname="", names=())
+    out = rr.redact_report(
+        f"at {padded} and 0{_ip(10, 0, 0, 1)} and nas.local.", hostname="", names=()
+    )
     assert not _leaks(out.text, host="", projects=set())
     assert out.counts["ipv4"] == 2 and out.counts["host"] == 1
     assert _leaks("see nas.local", host="", projects=set()), "the detector can see .local"
