@@ -222,14 +222,111 @@ def plain(value: Any, path: str = "data") -> Any:
     raise ExportError(f"{path}: {type(value).__name__} is not plain data (dict/list/str/number)")
 
 
+#: Ceilings for what one template expression may build. Python runs `'x' * 10**10` in C, in
+#: one allocation, past any deadline, so the sandbox refuses it BEFORE it runs.
+MAX_SEQUENCE = 1_000_000  # items/characters from one `*`, `center`, `indent`, width spec
+MAX_EXPONENT = 10_000  # `a ** b`
+MAX_OUTPUT_BYTES = 16_000_000  # the rendered document itself
+
+_WIDTH = re.compile(
+    r"(?<![\w.])\d{7,}|\*|:[^{}]*\{"
+)  # a printf/format width past MAX_SEQUENCE, `*`, or a nested `{:{}}`
+
+
+def _too_big(what: str) -> OverflowError:
+    return OverflowError(f"{what} is larger than the template sandbox allows")
+
+
+def _cap_width(width: object) -> int:
+    n = int(width)  # type: ignore[call-overload]
+    if n > MAX_SEQUENCE:
+        raise _too_big(f"width {n}")
+    return n
+
+
+def _format(value: object, *args: object, **kwargs: object) -> str:
+    text = str(value)
+    if _WIDTH.search(text):
+        raise _too_big("format width")
+    return text % (kwargs or args)  # type: ignore[operator]
+
+
+def _center(value: object, width: int = 80) -> str:
+    return str(value).center(_cap_width(width))
+
+
+def _indent(value: object, width: int = 4, first: bool = False, blank: bool = False) -> str:
+    pad = " " * _cap_width(width)
+    lines = str(value).splitlines(keepends=True)
+    out = [pad + ln if (i or first) and (blank or ln.strip()) else ln for i, ln in enumerate(lines)]
+    return "".join(out)
+
+
+class _Sandbox(SandboxedEnvironment):
+    """Jinja's sandbox, plus ceilings on the operators and filters that allocate by size."""
+
+    intercepted_binops = frozenset({"*", "**", "%"})
+
+    def call_binop(self, context, operator, left, right):  # type: ignore[no-untyped-def]
+        if operator == "*":
+            for seq, n in ((left, right), (right, left)):
+                if isinstance(seq, (str, bytes, list, tuple)) and isinstance(n, int):
+                    if len(seq) * max(n, 0) > MAX_SEQUENCE:
+                        raise _too_big(f"{type(seq).__name__} repetition")
+        elif operator == "**":
+            if isinstance(right, (int, float)) and abs(right) > MAX_EXPONENT:
+                raise _too_big(f"exponent {right}")
+        elif operator == "%" and isinstance(left, str) and _WIDTH.search(left):
+            raise _too_big("format width")
+        return super().call_binop(context, operator, left, right)
+
+    _SIZED_METHODS = frozenset({"center", "ljust", "rjust", "zfill", "expandtabs"})
+
+    def call(self, __context, __obj, *args, **kwargs):  # type: ignore[no-untyped-def]
+        owner, name = getattr(__obj, "__self__", None), getattr(__obj, "__name__", "")
+        if isinstance(owner, str):
+            if name in self._SIZED_METHODS:
+                for a in (*args, *kwargs.values()):
+                    if isinstance(a, int) and a > MAX_SEQUENCE:
+                        raise _too_big(f"width {a}")
+        return super().call(__context, __obj, *args, **kwargs)
+
+    def wrap_str_format(self, value):  # type: ignore[no-untyped-def]
+        # `'{:>9999999999}'.format(1)`: the width is in the receiver string, so check it
+        # before the sandbox's own wrapper formats anything.
+        owner = getattr(value, "__self__", None)
+        if (
+            getattr(value, "__name__", "") in ("format", "format_map")
+            and isinstance(owner, str)
+            and _WIDTH.search(owner)
+        ):
+            raise _too_big("format width")
+        return super().wrap_str_format(value)
+
+
 def _environment() -> SandboxedEnvironment:
     # bandit B701: Markdown, never HTML; escaping would corrupt the output. The sandbox is
     # the point: a template may come from a cloned repository.
-    env = SandboxedEnvironment(  # nosec B701
+    env = _Sandbox(  # nosec B701
         undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
     )
     env.filters.update(FILTERS)
+    env.filters["center"] = _center  # the built-ins allocate `width` bytes unchecked
+    env.filters["indent"] = _indent
+    env.filters["format"] = _format
     return env
+
+
+def _render_capped(env: SandboxedEnvironment, text: str, ctx: dict[str, Any]) -> str:
+    """Render, stopping with an error once the output passes ``MAX_OUTPUT_BYTES``."""
+    out: list[str] = []
+    size = 0
+    for chunk in env.from_string(text).generate(**ctx):
+        size += len(chunk)
+        if size > MAX_OUTPUT_BYTES:
+            raise _too_big("rendered output")
+        out.append(chunk)
+    return "".join(out)
 
 
 def _run_limited(fn: Callable[[], str], seconds: float) -> str:
@@ -292,7 +389,7 @@ def render(
     ctx["schema_version"] = schema_version
     try:
         env = _environment()
-        return normalize(_run_limited(lambda: env.from_string(text).render(**ctx), timeout_s))
+        return normalize(_run_limited(lambda: _render_capped(env, text, ctx), timeout_s))
     except jinja2.TemplateSyntaxError as exc:
         raise ExportError(f"{where}:{exc.lineno}: {exc.message}") from exc
     except jinja2.TemplateError as exc:  # undefined variable, SecurityError, ...
