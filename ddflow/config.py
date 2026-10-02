@@ -1034,12 +1034,12 @@ _doc(
 _doc(
     "enforce",
     "readme_with_code",
-    "What `complete`, `gate status` and `brief` do about a TASK whose diff changes a path in readme_code_globs but none of readme_files, with no 'docs' outcome recorded for it (`gate skip <id> docs --reason ...`, or `gate record <id> docs --outcome passed --evidence ...` naming the section changed). 'warn' reports it (a `complete` warning, a line in `gate status` and in the item's `brief`), 'block' makes `complete` refuse, 'off' disables. Test files (a `tests/` directory, `test_*.py`, `*_test.py`, conftest.py), docs-only changes and ddflow's own event-log commits (`.ddflow/**`) never count as code. When git cannot say what the task changed, `complete` says the check could not run (a warning, never a blocker). Default 'warn': a README is the user's, and the report names the one-line remedy.",
+    "What `complete`, `gate status` and `brief` do about a TASK whose diff changes a path in readme_code_globs but none of readme_files, with no 'docs' outcome recorded for it (`gate skip <id> docs --reason ...`, or `gate record <id> docs --outcome passed --evidence ...` naming the section changed). 'warn' reports it (a `complete` warning, a line in `gate status` and in the item's `brief`), 'block' makes `complete` refuse, 'off' disables. Test files (a `tests/` or `__tests__/` directory, `test_*.py`, `*_test.py`, `*.test.*`, `*_spec.*`, conftest.py) and documentation files (.md, .rst, .adoc, .txt) never count as code, and ddflow's own event-log commits (`.ddflow/**`) are not in the default readme_code_globs. When git cannot say what the task changed, `complete` says the check could not run (a warning, never a blocker). Default 'warn': a README is the user's, and the report names the one-line remedy.",
 )
 _doc(
     "enforce",
     "readme_code_globs",
-    "Paths whose change is user-visible and so should reach the README (readme_with_code), in git's glob pathspec syntax. Default `ddflow/**`, ddflow's own package; set a project's own source directories. Docs and `.ddflow/**` are not listed and so are exempt; a test file inside a listed path (a `tests/` directory, `test_*.py`, `*_test.py`, conftest.py) is exempt too.",
+    "Paths whose change is user-visible and so should reach the README (readme_with_code), in git's glob pathspec syntax. Default `ddflow/**`, ddflow's own package; set a project's own source directories. Docs and `.ddflow/**` are not listed and so are exempt; a test or documentation file inside a listed path is exempt too.",
 )
 _doc(
     "enforce",

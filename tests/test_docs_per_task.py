@@ -88,8 +88,18 @@ def test_test_only_and_docs_only_changes_are_exempt(repo, tree):
     assert _reported(repo) == []
 
 
-def test_tests_inside_a_code_path_are_exempt(repo, tree):
-    _commit(tree, {"ddflow/tests/test_x.py": "x = 1\n", "ddflow/test_y.py": "x = 1\n"})
+def test_tests_and_docs_inside_a_code_path_are_exempt(repo, tree):
+    _commit(
+        tree,
+        {
+            "ddflow/tests/test_x.py": "x = 1\n",
+            "ddflow/test_y.py": "x = 1\n",
+            "ddflow/web/__tests__/h.ts": "x\n",
+            "ddflow/web/Foo.test.tsx": "x\n",
+            "ddflow/models/foo_spec.rb": "x\n",
+            "ddflow/docs/design.md": "# design\n",
+        },
+    )
     assert _reported(repo) == []
 
 
@@ -142,3 +152,13 @@ def test_a_task_with_no_diff_to_read_says_the_check_could_not_run(repo):
     out = completion_verdict(repo, "T1")
     assert any("README check could not run" in w for w in out.data["warnings"])
     assert not any("README" in b for b in out.data["blockers"]), "could not run is not a block"
+
+
+def test_an_unreadable_base_says_the_check_could_not_run(repo, tree):
+    _commit(tree, {"ddflow/feature.py": "x = 1\n"})
+    # `task add` has no --base; a recorded base that names nothing is the failure.
+    _git(repo, "branch", "-m", "main", "trunk")
+    run_cli(repo, "config", "--set", "enforce.readme_with_code", "block")
+    out = completion_verdict(repo, "T1")
+    unknown = [w for w in out.data["warnings"] if "README check could not run" in w]
+    assert unknown and not any("README" in b for b in out.data["blockers"])
