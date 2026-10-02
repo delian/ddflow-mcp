@@ -636,7 +636,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bl.add_argument(
         "--reopen",
         action="store_true",
-        help="block an item that is already DONE (moves it out of done; refused without)",
+        help="block an item that is already DONE or ABANDONED (refused without)",
     )
     bl.set_defaults(fn=cmd_block)
 
