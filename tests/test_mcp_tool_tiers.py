@@ -30,12 +30,6 @@ def _list(repo: Path) -> list[dict]:
     ]
 
 
-@pytest.fixture(autouse=True)
-def _no_ambient_tier(monkeypatch):
-    """The default-tier tests assert the DEFAULT, not the developer's environment."""
-    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
-
-
 def _call(srv: Server, name: str, args: dict | None = None) -> dict:
     return srv.handle(
         {
