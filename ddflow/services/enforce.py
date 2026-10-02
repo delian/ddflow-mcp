@@ -1071,6 +1071,29 @@ def _merged_in(tree: Path) -> str:
     return os.environ.get(W.SQUASH_OF, "").strip()
 
 
+def _merge_own_paths(tree: Path, paths: list[str]) -> list[str]:
+    """The staged ``paths`` this commit is answerable for.
+
+    A clean merge commit stages only what its parents already committed: none. A merge
+    with conflicts resolved by hand stages every path the merged commit changed; those
+    whose index entry IS the merged commit's came from there unchanged -- main's
+    already-merged work, not this item's -- and are dropped (B07878037ab: 17 of them
+    buried the one path that was the item's own). Outside a merge, or when git cannot
+    say, ``paths`` unchanged: an unknown answer must not hide a path from the check.
+    """
+    if not paths or clean_merge_conclusion(tree):
+        return []
+    other = _merged_in(tree)
+    if not other:
+        return paths
+    # `git_paths`, not `git`: a strict UTF-8 decode of `-z` output crashed on one
+    # non-UTF-8 file name; it decodes as `staged_paths` does, so the names compare.
+    differs = W.git_paths(tree, "diff", "--cached", "--no-renames", "--name-only", other)
+    if differs is None:
+        return paths
+    return [p for p in paths if p in set(differs)]
+
+
 def clean_merge_conclusion(tree: Path) -> bool:
     """Is the commit being made exactly the automatic merge of HEAD and one other commit?
 
@@ -1115,8 +1138,8 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
             (0, _UNKNOWN_STAGED + "\n\n(warning only)") if mode == "warn" else (1, _UNKNOWN_STAGED)
         )
     paths = [p for p in staged if not any(p.startswith(prefix) for prefix in SELF_MANAGED)]
-    # A clean merge commit stages only what its parents already committed.
-    if not paths or clean_merge_conclusion(_index_tree(repo)):
+    paths = _merge_own_paths(_index_tree(repo), paths)
+    if not paths:
         return 0, ""
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
