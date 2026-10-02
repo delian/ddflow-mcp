@@ -682,6 +682,8 @@ def driver_drift(
     if not has_been_adopted(repo, docs_dir=docs_dir):
         return []
     templates = Path(package_dir) / "templates" if package_dir else paths.templates_dir()
+    if not (templates / "drivers" / "implement-phase.md").is_file():
+        return []  # a packaging fault `adopt` names; doctor must not crash on it
     return [
         rel
         for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates)
@@ -706,6 +708,11 @@ def refresh_docs(
             "run `ddflow adopt` first"
         )
     templates = Path(package_dir) / "templates" if package_dir else paths.templates_dir()
+    if not (templates / "drivers" / "implement-phase.md").is_file():
+        raise FileNotFoundError(
+            f"driver templates are missing from {templates}. This is a packaging fault, "
+            f"not a configuration one: reinstall ddflow-mcp."
+        )
     actions: list[str] = []
     agents = adopted_agents(repo, docs_dir=docs_dir)
     for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates):
