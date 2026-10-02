@@ -1265,28 +1265,30 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
     since "could not tell whether a view is staged" is not "no view is staged". A commit
     that stages no view is never blocked because the queue moved, which would teach
     everyone to bypass the hook.
+
+    The same rule covers an EXPORTED document (B-export-enforce, D-export): a staged file
+    whose first line is a `ddflow:generated doc=<kind>` header of a known kind must be
+    what a fresh `ddflow export` of that kind renders (the header's ddflow version is not
+    compared; the body and kind are). A hand-written file that only holds a marker REGION
+    has no such first line, so it is not a generated file and is left to `export --check`;
+    an append-mode log (`last=` in its header) grows by design and is skipped.
     """
-    from ..views.markdown import GENERATED, VIEWS, render_views
+    from ..views.markdown import VIEWS
 
     cfg = cfg or Config.load(repo)
     mode = cfg.enforce.generated_views
     if mode == "off":
         return 0, ""
-    staged: dict[str, bytes] = {}
     names = {name for name, _ in VIEWS}
     # Resolved once: the same tree for the listing, each staged view's bytes and the log.
     tree = _index_tree(repo)
     listed = staged_paths(repo, tree=tree)
     if listed is None:
         return _verdict(mode, [_UNKNOWN_STAGED])
-    for p in listed:
-        if Path(p).name not in names:
-            continue
-        data = staged_bytes(repo, p, tree=tree)
-        if data is not None and data.startswith(GENERATED.encode("utf-8")):
-            staged[p] = data
-    if not staged:
+    staged, exports = _staged_generated(repo, listed, names, tree)
+    if not staged and not exports:
         return 0, ""
+    noun = "generated view" if staged else "generated document"
 
     log = EventLog(repo, agent or cfg.agent.id or "", log_cfg=cfg.log)
     # The view is committed WITH a log, and must agree with THAT log -- not with the
@@ -1300,7 +1302,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
         return _verdict(
             mode,
             [
-                "ddflow: a generated view is staged, but git could not report the state of "
+                f"ddflow: a {noun} is staged, but git could not report the state of "
                 f"the event log ({_rel(repo, log.dir)}) it must agree with.",
                 "",
                 "Refusing rather than guessing: an unreadable log state is not a clean one.",
@@ -1324,7 +1326,7 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
         return _verdict(
             mode,
             [
-                f"ddflow: a generated view is staged, but the event log it is rendered from "
+                f"ddflow: a {noun} is staged, but the event log it is rendered from "
                 f"has {len(probe.paths)} change(s) the commit does not record:",
                 "",
                 *(
@@ -1334,32 +1336,157 @@ def check_views(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tu
                 "",
                 "A committed view must agree with the log committed beside it. Stage both:",
                 *remedy,
-                "    ddflow render" + _out_hint(sorted(staged)),
-                "    git add " + " ".join(shlex.quote(p) for p in sorted(staged)),
+                *(["    ddflow render" + _out_hint(sorted(staged))] if staged else []),
+                *(
+                    [
+                        f"    ddflow export {d} --update"
+                        for d in sorted({d for d, _ in exports.values()})
+                    ]
+                    if exports
+                    else []
+                ),
+                "    git add " + " ".join(shlex.quote(p) for p in sorted({**staged, **exports})),
             ],
         )
     # Config from the FILES, as `ddflow render` writes with: env overrides belong to
     # whoever typed `git commit`, not to the view.
-    want = render_views(fold(log.read_all(), strict=False), Config.load(repo, env={}))
+    fresh_cfg = Config.load(repo, env={})
+    lines: list[str] = []
+    if staged:
+        lines += _wrong_views(log, fresh_cfg, staged)
+    if exports:
+        err, bad = _wrong_exports(repo, fresh_cfg, exports)
+        if err:
+            return _verdict(mode, [*lines, *([""] if lines else []), err])
+        if bad:
+            lines += [
+                *([""] if lines else []),
+                f"ddflow: {len(bad)} staged exported document(s) differ from what "
+                "`ddflow export` regenerates now:",
+                "",
+                *(f"  {p}  ({why})" for p, _d, why in bad),
+                "",
+                "An exported document is regenerated from the log, never edited: either it was",
+                "changed by hand, or the log moved after it was exported. Regenerate and stage:",
+                *(f"    ddflow export {d} --update" for d in sorted({d for _p, d, _w in bad})),
+                "    git add " + " ".join(shlex.quote(p) for p, _d, _w in bad),
+            ]
+    if not lines:
+        return 0, ""
+    return _verdict(mode, lines)
+
+
+def _staged_generated(
+    repo: Path, listed: list[str], view_names: set[str], tree: Path
+) -> tuple[dict[str, bytes], dict[str, tuple[str, str]]]:
+    """The staged views ``{path: bytes}`` and exported documents ``{path: (kind, text)}``."""
+    from ..views.markdown import GENERATED
+
+    staged: dict[str, bytes] = {}
+    exports: dict[str, tuple[str, str]] = {}
+    for p in listed:
+        if Path(p).name not in view_names:
+            found = _staged_export(repo, p, tree)
+            if found:
+                exports[p] = found
+            continue
+        data = staged_bytes(repo, p, tree=tree)
+        if data is not None and data.startswith(GENERATED.encode("utf-8")):
+            staged[p] = data
+    return staged, exports
+
+
+def _wrong_views(log: EventLog, cfg: Config, staged: dict[str, bytes]) -> list[str]:
+    """Message lines for the staged views that differ from a fresh render (empty: all fine)."""
+    from ..views.markdown import render_views
+
+    want = render_views(fold(log.read_all(), strict=False), cfg)
     wrong = sorted(
         p for p, data in staged.items() if _lf(data) != want[Path(p).name].encode("utf-8")
     )
     if not wrong:
-        return 0, ""
-    return _verdict(
-        mode,
-        [
-            f"ddflow: {len(wrong)} staged generated view(s) differ from what the event log "
-            "regenerates now:",
-            "",
-            *(f"  {p}" for p in wrong),
-            "",
-            "A view is regenerated from the log, never edited: either it was changed by hand,",
-            "or the queue moved after it was rendered. Regenerate it and stage the result:",
-            "    ddflow render" + _out_hint(wrong),
-            "    git add " + " ".join(shlex.quote(p) for p in wrong),
-        ],
-    )
+        return []
+    return [
+        f"ddflow: {len(wrong)} staged generated view(s) differ from what the event log "
+        "regenerates now:",
+        "",
+        *(f"  {p}" for p in wrong),
+        "",
+        "A view is regenerated from the log, never edited: either it was changed by hand,",
+        "or the queue moved after it was rendered. Regenerate it and stage the result:",
+        "    ddflow render" + _out_hint(wrong),
+        "    git add " + " ".join(shlex.quote(p) for p in wrong),
+    ]
+
+
+def _staged_export(repo: Path, path: str, tree: Path) -> tuple[str, str] | None:
+    """``(doc kind, staged text)`` when the INDEX copy of ``path`` is a generated export
+    document of a known kind (its FIRST line is the `ddflow:generated` header), else None.
+
+    Only text-ish names are read: every staged file would otherwise cost a `git show`.
+    A file that merely quotes the marker further down, or holds a marker region, is not one.
+    """
+    from .export import frame as F
+    from .export import registry as R
+
+    if not path.lower().endswith((".md", ".markdown", ".txt")):
+        return None
+    data = staged_bytes(repo, path, tree=tree)
+    if data is None or not data.startswith(b"<!-- ddflow:generated doc="):
+        return None
+    try:
+        text = _lf(data).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    head, _body = F.split(text)
+    if head is None or "last" in head.extra or head.doc not in R.names():
+        return None
+    return head.doc, text
+
+
+def _wrong_exports(
+    repo: Path, cfg: Config, exports: dict[str, tuple[str, str]]
+) -> tuple[str, list[tuple[str, str, str]]]:
+    """``(error, [(path, doc, why)])``: the staged exports that are not a fresh export.
+
+    ``error`` is non-empty when the comparison could not run (unreadable log, a template
+    failure): that is reported, and under 'block' refuses, never read as fresh.
+    """
+    from .export import frame as F
+    from .export import ops as X
+    from .export import write as XW
+    from .export.query import ExportError
+
+    bad: list[tuple[str, str, str]] = []
+    try:
+        q = X.load(repo, cfg)
+        for p in sorted(exports):
+            doc, text = exports[p]
+            _head, body = F.split(text)
+            why = ""
+            if F.hand_edited(text):
+                why = "hand-edited: its body no longer matches its digest"
+            try:
+                XW.safe_target(repo, p)
+                spec = X.spec_for(cfg, doc, path=p, mode="whole")
+                fresh = X.render(repo, cfg, q, spec, max_bytes=0)
+            except ExportError as exc:
+                if exc.code == X.EXIT_UNAVAILABLE:
+                    raise
+                bad.append((p, doc, f"cannot be regenerated: {exc}"))
+                continue
+            _fh, fresh_body = F.split(fresh)
+            if not why and fresh_body != body:
+                why = "stale: the log moved since it was exported"
+            if why:
+                bad.append((p, doc, why))
+    except ExportError as exc:
+        return (
+            "ddflow: a staged exported document could not be compared with a fresh export "
+            f"({exc}). An unchecked document is not a clean one.",
+            [],
+        )
+    return "", bad
 
 
 def _verdict(mode: str, lines: list[str], knob: str = "generated_views") -> tuple[int, str]:
@@ -1384,7 +1511,9 @@ def check_docs(repo: Path, cfg: Config | None = None) -> tuple[int, str]:
     if mode == "off":
         return 0, ""
     # The committing tree: the diff is this commit's, against that tree's own HEAD.
-    hits = docsync.stale_mentions(_index_tree(repo), cfg.enforce.doc_globs, cfg.enforce.doc_exclude)
+    from .shared_files import doc_exclude
+
+    hits = docsync.stale_mentions(_index_tree(repo), cfg.enforce.doc_globs, doc_exclude(cfg))
     if hits is None:
         return _verdict(
             mode,
