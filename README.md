@@ -822,7 +822,12 @@ and each image carries the label `io.modelcontextprotocol.server.name` with the 
 The `verify` job runs `tests/test_registry_ownership.py` first, so a release the registry
 would reject — a missing marker, or a label that does not match — is refused before
 anything is uploaded; a `server.json` `description` over the registry's 100-character limit
-fails the suite the same way. The publish step also retries a *transient* registry failure
+fails the suite the same way. So do the registry's per-package rules, which the JSON schema
+does not express and the registry enforces only at publish: an `oci` package must **not**
+carry a `version` field (or `registryBaseUrl`/`fileSha256`) — the tag in its `identifier` is
+the version — while the `pypi` package must carry one. publish #40 failed on exactly that, at
+the last job, after PyPI and both images had shipped; `tests/test_registry_manifest_rules.py`
+now encodes the rules offline and `verify` runs it first. The publish step also retries a *transient* registry failure
 (a 504, a 408/429, a network error) with backoff, checking the registry for the exact
 version after every attempt, because the publish behind a 504 may have committed; a 4xx
 that retrying cannot fix fails at once, and only after the budget does it fail with a
@@ -881,8 +886,8 @@ loses a race with another commit fails the run and publishes nothing, where push
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
 `main` or a `v*` tag releases.
 
-The version lives in seven places — `pyproject.toml`, `server.json`'s version, its
-per-package version, the tag inside every OCI identifier, `SERVER_INFO` (what the server
+The version lives in seven places — `pyproject.toml`, `server.json`'s version, the `pypi`
+package's version (an `oci` package has none), the tag inside every OCI identifier, `SERVER_INFO` (what the server
 tells every client it is), `ddflow.__version__`, and `uv.lock`, which records the project's
 own version. `scripts/bump.sh` moves them all and re-reads them to check it did;
 `tests/test_packaging.py` fails if the first six ever drift. (That test caught the bump
