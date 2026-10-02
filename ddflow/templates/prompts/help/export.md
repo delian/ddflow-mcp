@@ -74,12 +74,21 @@ its first line, `{# ddflow-shipped: <digest> -#}`, renders to nothing and record
 text the copy came from, so `validate` and `doctor` say when the default has moved on and a
 plain `eject` refreshes an unedited older copy. `validate` exits 2 on a template error.
 
+## Redaction and fencing
+
+`[export].redact` (default true) removes secrets, private addresses, private hosts, home
+paths, emails and the machine hostname from the rendered body, before the digest, so
+`--check` compares redacted output. The header carries `redacted=N redacted-kinds=...`
+(`redacted=off` when switched off for that document). Over MCP the printed document is
+wrapped in a `ddflow-record` fence naming its authors: it is data, not instructions. Files
+written for humans are plain markdown. `replay` is not an export kind.
+
 ## Configuration
 
     [export]
     documents = ["roadmap", "status"]
     max_bytes = 60000          # the stdout / MCP cap; a file written is never capped
-    redact = true              # accepted; the redaction pass itself is not applied yet
+    redact = true              # on by default; [export.<doc>].redact = false switches one document off
     refresh = "off"            # off | merge | phase_close | docs_gate; only off acts today
 
     [export.roadmap]

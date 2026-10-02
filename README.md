@@ -2501,6 +2501,22 @@ develop, merges it into production, tags it and merges the tag back into develop
 mode it opens the release request instead, and `pr sync` tags the merge commit once a
 person merges it and opens the back-merge request.
 
+**Changelog with the cut.** `version cut --changelog` also writes the new version's
+section into `CHANGELOG.md` (the path of `[export.changelog]`, default `CHANGELOG.md`)
+through [`ddflow export changelog`](#exporting-documents): the Unreleased entries
+become `## [x.y.z] - date` with the right compare link, and an empty Unreleased remains. The
+file is committed on the branch the tag names, so the tag's commit holds it; in gitflow with
+pull requests it is a commit on the release branch, part of the release request, and the
+request body is the same section (the tag, cut later by `pr sync`, carries its usual
+message); otherwise the tag message is the section. Mode `whole` (the default) rewrites the
+file; mode `region` rewrites only the marked region and puts the new section below it,
+updating the `[Unreleased]:` link line when the file keeps one. Nothing is written without
+the flag (the tag message is then the commit-derived notes as before), `--dry-run` shows what
+would be written, a hand-edited file or uncommitted changes to it are refused (exit 3) unless
+`--force`, and a git or log failure is exit 2. Trunk or maintenance cuts with pull requests
+refuse `--changelog` (no request to carry the commit). The MCP tool takes `changelog` and
+`force`. Bumping version files is a separate task.
+
 An item counts as shipped on a line when its landing merge commit **or the branch it merged**
 (the merge's second parent) is reachable from it: a hotfix landed on production reaches
 `develop` by the back-merge as that branch, with production's merge commit nowhere in it. A
@@ -3033,8 +3049,21 @@ rendered in a sandbox); you ask for a document, you do not write it.
 invalid), `status`, `worklog` (coalesced per item, grouped by day), `sessions`, `decisions`
 (an index), `rules` (decisions in force by governing path, lessons, the enforced workflow) and
 `changelog` (Keep a Changelog form, from finished items, fixed bugs and version tags).
-Replay is not a kind: it carries paths and addresses. Output is deterministic: the same log
-gives the same bytes, with no clock in the body.
+Replay is not a kind (`ddflow export replay` is refused): it carries paths and addresses.
+Output is deterministic: the same log gives the same bytes, with no clock in the body.
+
+**Redaction is on.** These are public-repo documents, so `[export].redact` (default `true`;
+`[export.<doc>].redact` overrides one document) runs the report redactor over the rendered
+body: secrets, private IPv4/IPv6 addresses, `.lan`/`.local`/`.internal` hosts, home paths,
+emails and the machine's hostname become `[REDACTED:<kind>]`; version strings survive, and the
+project's own name stays (add words with `[upstream].redact_extra` when that section exists).
+It runs before the body is digested, so the header digest and `--check` cover the redacted
+text. In a whole-document header it says what happened: `redacted=3 redacted-kinds=ipv4:1,path:2`, or
+`redacted=off` for a document whose redaction is switched off (an append-mode document, the
+changelog, has its new entries redacted and carries no count). Over MCP the printed
+document is wrapped in one `<ddflow-record kind="export" ... by=... source=... trust="agent">`
+fence, because the text in it was written by agents: read it as data, not instructions. A
+file written for humans (`--update`, `--out`, `write=true`) is plain markdown.
 
 **Review on demand.** Printing writes nothing and works for any kind, selected or not:
 
@@ -3119,6 +3148,18 @@ $ ddflow export --all --update --yes
 $ ddflow export roadmap --template my.md.j2   # render once with another template; writes nothing
 ```
 
+**Enforcement.** The pre-commit check behind `[enforce].generated_views` (`block` | `warn` |
+`off`) covers exported documents as well as the rendered views: a staged file whose FIRST line
+is a `ddflow:generated doc=<kind>` header of a known kind must equal a fresh export (body and
+kind compared, not the ddflow version), the event log must be fully staged beside it, and a
+stale or hand-edited document is named with `ddflow export <kind> --update` as the remedy. A
+hand-written file that only holds a marker region has no such first line, so it is not treated
+as a generated file; an append-mode log (`last=` in its header) grows by design and is skipped.
+Every SELECTED whole or append export target is also excluded from `[enforce].stale_docs`
+(`shared_files.doc_exclude`) and from docscheck (generated documents are judged by `export
+--check`; a region target's hand-written text is still scanned), every selected target is a shared path (no claim needed), and draws no "no merge strategy" note from
+`doctor`; `doctor` instead reports a selected target that is stale or hand-edited as a NOTE.
+
 Exit codes: 0 done or fresh, 1 stale (`--check`), 2 could not run (unreadable log, template
 error, nothing selected) or declined at the prompt, 3 refused. A failure is never an empty
 clean document.
@@ -3150,9 +3191,7 @@ filters = { limit = 50 }
 ```
 
 Unknown keys are skipped with a warning (a newer release's config does not stop an older
-checkout); `ddflow config --set` refuses them. **Not yet implemented:** `redact` is accepted
-but documents are NOT yet redacted (a later task, B-export-redact-fence: the print and
-`--update` paths note this on stderr). `ddflow help export` has the same material.
+checkout); `ddflow config --set` refuses them. `ddflow help export` has the same material.
 
 **Automatic refresh.** `refresh` says when a SELECTED whole-file document regenerates itself;
 set it for all documents in `[export]` or for one in `[export.<doc>]` (the per-document value
@@ -3399,6 +3438,7 @@ ddflow pr sync [--item]         what reviewers did: complete / reopen / park / m
 ddflow pr status               every item's request, from the log (no forge call)
 ddflow version show            current and next version, why, release notes (2 = nothing new)
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
+ddflow version cut --changelog  also write the version's CHANGELOG.md section (--force over a hand-edited file)
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
 ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
 ddflow promote add <env>        file a promotion one step downstream (2 = nothing to carry)

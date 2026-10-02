@@ -490,22 +490,27 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_version_cut": {
         "description": (
-            "Tag the next version. trunk: tags the base branch. gitflow: makes release/X "
-            "from develop, merges it to production, tags it and merges the tag back — or, "
-            "with pull requests, opens the release request and lets `ddflow_pr_sync` tag "
-            "it once a person merges it. Exit 2 = nothing to release."
+            "Tag the next version. trunk: tags the base branch. gitflow: release/X from "
+            "develop, merged to production, tagged, tag merged back; with pull requests, "
+            "opens the release request (`ddflow_pr_sync` tags it once merged). Exit 2 = "
+            "nothing to release."
         ),
         "properties": {
-            "bump": ("string", "Force major | minor | patch.", False),
-            "version": ("string", "Exact MAJOR.MINOR.PATCH.", False),
-            "push": ("boolean", "Publish the tag (and gitflow branches) to the remote.", False),
-            "dry_run": ("boolean", "Compute and report; write nothing.", False),
+            "bump": ("string", "major | minor | patch.", False),
+            "version": ("string", "MAJOR.MINOR.PATCH.", False),
+            "push": ("boolean", "Publish the tag and branches.", False),
+            "dry_run": ("boolean", "Report only.", False),
             "line": (
                 "string",
-                "A maintenance line: tagged where it stands, and refused if the bump would "
-                "leave its major.",
+                "A maintenance line: tagged where it stands; its major is kept.",
                 False,
             ),
+            "changelog": (
+                "boolean",
+                "Also write CHANGELOG.md.",
+                False,
+            ),
+            "force": ("boolean", "Overwrite a hand-edited file.", False),
         },
         "api": lambda repo, a, agent: _api().version_cut(
             repo,
@@ -514,6 +519,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             push=bool(a.get("push")),
             dry_run=bool(a.get("dry_run")),
             line=a.get("line", "") or "",
+            changelog=bool(a.get("changelog")),
+            force=bool(a.get("force")),
             agent=agent,
         ),
         "payload": "",

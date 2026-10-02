@@ -13,10 +13,10 @@ call-site argument -> ``[export.<doc>]`` table -> the kind's default. Filters me
 way, field by field. The size cap (``[export].max_bytes``) bounds what is printed or
 returned; a file that is written is never capped.
 
-SEAM for B-export-redact-fence: every body that leaves this module passes ``render`` below.
-Redaction (``[export].redact``, already parsed into ``Spec.redact``) and the MCP fencing of
-free text belong there, BEFORE the body is framed, so the header digest covers redacted
-bytes. Neither is applied yet; ``REDACTION_APPLIED`` says so and the surfaces tell the user.
+Safety (``safe.py``, D-export 5): every body that leaves this module passes ``render``, which
+redacts the RENDERED body before it is truncated, framed or digested (``[export].redact``,
+default on; ``Spec.redact``), so the header digest and ``--check`` cover redacted bytes. A
+printed document served over MCP is also fenced as agent-written data (``fenced=True``).
 
 Refresh modes beyond ``off`` (B-export-refresh) are accepted by config and not acted on.
 """
@@ -33,16 +33,12 @@ from ..prompts import Template
 from . import frame as F
 from . import query as Q
 from . import registry as R
+from . import safe as S
 from . import write as W
 from .query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
-#: Redaction is not wired in yet (B-export-redact-fence). Surfaces say so instead of
-#: implying the documents are scrubbed.
-REDACTION_APPLIED = False
-REDACTION_NOTE = (
-    "note: [export].redact is not applied yet (B-export-redact-fence): read the document for "
-    "private addresses and hostnames before committing it"
-)
+#: Redaction is applied by ``render`` (``safe.py``); the surfaces report it as on.
+REDACTION_APPLIED = True
 
 STATES = ("not selected", "fresh", "stale", "hand-edited", "missing")
 
@@ -91,6 +87,7 @@ class Result:
             "text": self.text,
             "truncated": self.truncated,
             "bytes": len(self.text.encode("utf-8")),
+            "redacted": self.redacted,
         }
         if self.truncated:
             out["truncated_more"] = self.truncated_more
@@ -207,7 +204,7 @@ def render(
     max_bytes: int = 0,
     template: Template | str | None = None,
 ) -> str:
-    """The framed document for ``spec`` over ``q`` (SEAM: redaction and fencing go here)."""
+    """The framed document for ``spec`` over ``q``, redacted when ``spec.redact``."""
     return R.render_document(
         spec.doc,
         q,
@@ -216,7 +213,25 @@ def render(
         overrides=_overrides(cfg),
         max_bytes=max_bytes,
         template=template,
+        post=_post(cfg, repo, spec),
     )
+
+
+def _post(cfg: Config, repo: Path, spec: Spec):
+    """The body hook for ``render_document``: redact, and say so in the header."""
+
+    def run(body: str) -> tuple[str, dict[str, str]]:
+        if not spec.redact:
+            return body, S.redaction_attrs(None)
+        red = S.redact_text(body, cfg)
+        return red.text, S.redaction_attrs(red.counts)
+
+    return run
+
+
+def _redacted(cfg: Config, repo: Path, spec: Spec, text: str) -> str:
+    """A body that is not framed by ``render`` (region, append entries), redacted."""
+    return _post(cfg, repo, spec)(text)[0]
 
 
 def _body(
@@ -226,8 +241,13 @@ def _body(
     spec: Spec,
     template: Template | str | None = None,
 ) -> str:
-    return R.render_body(
-        spec.doc, q, spec.filters, repo=repo, overrides=_overrides(cfg), template=template
+    return _redacted(
+        cfg,
+        repo,
+        spec,
+        R.render_body(
+            spec.doc, q, spec.filters, repo=repo, overrides=_overrides(cfg), template=template
+        ),
     )
 
 
@@ -239,11 +259,31 @@ def print_doc(
     *,
     max_bytes: int | None = None,
     template: Template | str | None = None,
+    fenced: bool = False,
 ) -> Result:
-    """The document as it would be shown on stdout or returned over MCP, capped."""
+    """The document as it would be shown on stdout or returned over MCP, capped.
+
+    ``fenced`` (the MCP path) wraps it in a provenance fence naming its authors; the fence
+    is inside the cap."""
     cap = cfg.export.max_bytes if max_bytes is None else max_bytes
-    text = render(repo, cfg, q, spec, max_bytes=cap, template=template)
-    m = _TRUNC.fullmatch(text.rstrip("\n").rsplit("\n", 1)[-1])
+    by = S.authors(q.events) if fenced else ""
+    room = cap
+    if fenced and cap > 0:
+        room = max(cap - S.fence_overhead(spec.doc, by), 1)
+    shown = render(repo, cfg, q, spec, max_bytes=room, template=template)
+    text = S.fence_document(spec.doc, shown, by) if fenced else shown
+    # The fence escapes tag-like text, which grows it past what the overhead measured on an
+    # empty body: tighten the room by the excess until the fenced text fits the cap.
+    for _ in range(64):
+        excess = len(text.encode("utf-8")) - cap if fenced and cap > 0 else 0
+        if excess <= 0:
+            break
+        room = max(room - excess, 1)
+        shown = render(repo, cfg, q, spec, max_bytes=room, template=template)
+        text = S.fence_document(spec.doc, shown, by)
+    else:
+        raise ExportError(f"--max-bytes {cap} is too small for the fenced document", EXIT_REFUSED)
+    m = _TRUNC.fullmatch(shown.rstrip("\n").rsplit("\n", 1)[-1])
     return Result(
         spec.doc,
         spec.path,
@@ -253,7 +293,7 @@ def print_doc(
         truncated=bool(m),
         truncated_more=int(m.group(1)) if m else 0,
         total_bytes=len(text.encode("utf-8")),
-        redacted=REDACTION_APPLIED,
+        redacted=spec.redact,
     )
 
 
@@ -314,11 +354,21 @@ def write_doc(
         repo,
         path,
         spec.doc,
-        make(q),
+        _redacting(make(q), cfg, repo, spec),
         check=check,
         diff=diff,
         force=force,
     )
+
+
+def _redacting(produce, cfg: Config, repo: Path, spec: Spec):
+    """An append producer whose new entries are redacted before they are written."""
+
+    def run(last):
+        entries, new_last = produce(last)
+        return _redacted(cfg, repo, spec, entries), new_last
+
+    return run
 
 
 def state_of(repo: Path, cfg: Config, q: Q.Query, spec: Spec) -> tuple[str, str]:

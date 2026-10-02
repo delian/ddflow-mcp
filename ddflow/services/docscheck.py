@@ -138,6 +138,16 @@ class Report:
         }
 
 
+def _is_export_file(root, rel: str) -> bool:
+    """True when ``rel`` starts with a ddflow export header (a generated document)."""
+    try:
+        with open(root / rel, "rb") as f:
+            first = f.readline(512)
+    except OSError:
+        return False
+    return first.startswith(b"<!-- ddflow:generated doc=")
+
+
 def check_docs(
     repo,
     *,
@@ -147,6 +157,7 @@ def check_docs(
     ignore_paths: list[str] | tuple[str, ...] = (),
     commands: list[str] | None = None,
     ignore_names: list[str] | tuple[str, ...] = (),
+    generated: list[str] | tuple[str, ...] = (),
 ) -> Report:
     """Check ``docs`` (default: tracked files matching ``doc_globs`` minus ``doc_exclude``)
     against the tracked tree of ``repo``.
@@ -155,7 +166,11 @@ def check_docs(
     ``commands`` are the script names whose `<script> <verb>` references are verified
     (default: the project's own `[project.scripts]` / package.json `bin`). ``ignore_names``
     are fnmatch patterns of identifiers and flags another tool owns (`ddflow_*` in an
-    agent-instructions page of a project that merely uses ddflow). Raises
+    agent-instructions page of a project that merely uses ddflow). ``generated`` are
+    repo-relative paths of export targets (``shared_files.export_targets``): a generated
+    document is checked by ``ddflow export --check``, so it is neither scanned nor named
+    explicitly here, and a tracked file whose first line is an export header is left out
+    the same way. Raises
     OSError when git cannot list the tree or a named document cannot be read: "could not tell" is
     never a clean report.
     """
@@ -166,9 +181,10 @@ def check_docs(
     exclude = [glob_regex(g) for g in doc_exclude]
     doc_re = [glob_regex(g) for g in doc_globs]
     is_doc = lambda p: any(r.fullmatch(p) for r in doc_re)  # noqa: E731
+    skip = set(generated)
     if docs is None:
         docs = [p for p in files if is_doc(p) and not any(r.fullmatch(p) for r in exclude)]
-    docs = sorted(set(docs))
+    docs = sorted(p for p in set(docs) if p not in skip and not _is_export_file(root, p))
     corpus = _Corpus.build(
         root, [p for p in files if not is_doc(p) and p not in docs and not p.startswith(".ddflow/")]
     )
