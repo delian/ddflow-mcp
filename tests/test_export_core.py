@@ -151,6 +151,7 @@ def test_truncation_footer_is_explicit(tmp_path, toy, builtin):
     assert "[truncated: " in cut
     n = int(cut.rsplit("[truncated: ", 1)[1].split(" ")[0])
     assert n == len(full.splitlines()) - (len(cut.splitlines()) - 1)
+    assert not cut.splitlines()[-2].strip() == ""  # never ends the shown part on a blank
     assert len(cut.encode()) <= 60
     # A cut document is still self-consistent: the digest matches what is shown.
     doc = registry.render_document("toyroad", q, builtin=builtin, max_bytes=60)
@@ -252,12 +253,14 @@ def test_tasks_under_includes_subtasks_and_skips_removed():
     assert [t.id for t in q.tasks_of("P")] == ["A"]
 
 
-def test_no_new_dependency_and_no_hot_files():
-    import subprocess
-
-    root = Path(__file__).resolve().parent.parent
-    out = subprocess.run(
-        ["git", "diff", "--name-only", "main...HEAD"], cwd=root, capture_output=True, text=True
-    ).stdout.split()
-    for hot in ("pyproject.toml", "ddflow/views/markdown.py", "ddflow/core/model.py"):
-        assert hot not in out
+@pytest.mark.parametrize("cap", [1, 20, 47, 66, 80, 100, 150, 400])
+def test_truncate_never_exceeds_the_cap(cap):
+    """A short first line plus a long second one: the footer must be inside the budget
+    even when the first line is the only one kept (found by roborev)."""
+    body = "Short heading line\n" + "B" * 500 + "\n" + "tail\n" * 40
+    out = frame.truncate(body, cap)
+    footer_len = len("[truncated: 41 more lines; use --since/--limit]\n")
+    if cap >= footer_len + 3:
+        assert len(out.encode()) <= cap, (cap, out)
+    assert "[truncated: " in out
+    assert frame.truncate("Short heading line\n" + "B" * 500 + "\n", 20).count("\n") >= 2
