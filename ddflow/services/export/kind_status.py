@@ -2,7 +2,9 @@
 
 A compact "where are we" for a README badge row or a standup: totals and the work in
 flight, no per-task listing (that is the roadmap). Agent-hours come from the log's own lease
-tracking (``core.progress.work``), so they are the same number ``ddflow status`` reports.
+tracking (``core.progress.work``) like ``ddflow status``, except that a lease still open is
+counted up to the newest event in the log rather than to the clock, so the same log always
+renders the same number.
 """
 
 from __future__ import annotations

@@ -2,7 +2,8 @@
 
 Filters: ``status`` (open | fixed | invalid; default all three), ``since`` (an ISO date:
 open bugs found, fixed bugs fixed, invalid bugs closed on or after it), ``limit`` (at most
-N entries per section) and ``phase`` (only bugs raised against that phase or its tasks).
+N entries per section) and ``phase`` (only bugs raised against that item or the tasks below
+it: a phase id, or any task id, so a surface's ``--item`` maps onto it).
 Unfiltered, a mature log is mostly fixed bugs; the filters exist so the document a human
 or agent reads is the slice they asked for.
 
