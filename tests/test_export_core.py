@@ -641,6 +641,9 @@ BOMBS = [
     "{{ '%99999999999d' % 1 }}",
     "{{ '{:>99999999999}'.format(1) }}",
     "{{ '%*d' % (10, 1) }}",
+    "{{ '%.99999999f' % 1.5 }}",
+    "{{ '{:.99999999f}'.format(1.5) }}",
+    "{{ '{0:0>99999999}'.format(1) }}",
     "{{ '{:{}}'.format(1, 10**10) }}",
     "{{ range(10**12)|sum }}",
     "{% for i in range(99999) %}{{ 'x' * 99999 }}{% endfor %}",  # output ceiling
@@ -664,3 +667,12 @@ def test_ordinary_sized_operators_still_work():
         == "  x  |a\n  b|   7\n"
     )
     assert r("{{ '%5.2f'|format(3.14159) }}", {}) == " 3.14\n"
+
+
+def test_markdown_text_is_not_mistaken_for_a_format_bomb():
+    r = registry.render
+    assert r("{{ '**{}**'.format('b') }}", {}) == "**b**\n"
+    assert r("{{ '%s *x*' % 1 }}", {}) == "1 *x*\n"
+    assert r("{{ 'ticket 1234567 {}'.format(1) }}", {}) == "ticket 1234567 1\n"
+    assert r("{{ '{name}: {x}'.format(name='n', x=2) }}", {}) == "n: 2\n"
+    assert r("{{ 'Note: {}'.format(1) }}", {}) == "Note: 1\n"
