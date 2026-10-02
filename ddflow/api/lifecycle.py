@@ -1412,6 +1412,23 @@ def complete(
         "warnings": v.warnings,
         "blockers": v.blockers,
     }
+    if it.kind == "phase":
+        # Periodic passes counted in phases (architecture review, mutation tests, lessons)
+        # are the ones a phase close exists to run; task-counted ones stay advisory.
+        from .operations import due_cadences
+
+        try:
+            overdue = [d for d in due_cadences(repo, cfg, st) if d["unit"] == "phases"]
+        except ValueError as exc:  # a malformed [cadence] knob: say so, do not block on it
+            overdue = []
+            v.warnings.append(f"cadences could not be checked: {exc}")
+        for d in overdue:
+            v.blockers.append(
+                f"periodic pass overdue: {d['cadence']} ({d['since']} of {d['every']} "
+                f"phases since the last). Run it, then `ddflow cadence --ran {d['cadence']}`; "
+                f"to skip it on the record: `ddflow cadence --ran {d['cadence']} "
+                f'--note "skipped: <reason>"`.'
+            )
     if not v.may_complete and not force:
         return O.refused(
             "item.completed",

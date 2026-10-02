@@ -107,33 +107,16 @@ def _calendar_due(
     return due
 
 
-def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.Outcome:
-    """Which periodic passes are due? Derived from the log, so there is no state file."""
+def due_cadences(
+    repo: Path, cfg, st, *, calendar: dict[str, float] | None = None
+) -> list[dict[str, Any]]:
+    """Every periodic pass that is due now, derived from the log. Shared by `cadence` and
+    by `complete <phase>`, which refuses while a phase-counted pass is overdue."""
     from ..services.cadence import export_cadence, lessons_cadence
 
-    log, cfg, st = _load(repo, agent)
     done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
     done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
-    try:
-        calendar = _calendar(cfg)
-    except ValueError as exc:
-        return O.failed("cadence", str(exc), due=[])
-
-    if ran:
-        if ran == "lessons_compression":
-            live = [x for x in st.lessons.values() if not x.superseded_by]
-            result = json.dumps(
-                {"bytes": sum(len(x.text().encode("utf-8")) for x in live), "entries": len(live)}
-            )
-        else:
-            # A calendar cadence is timed by the run event's own timestamp; what it
-            # records here is incidental.
-            result = str(
-                done_tasks if ran in ("integration_tests", "dedupe_sweep") else done_phases
-            )
-        log.append("cadence.ran", ran, {"result": result, "evidence": {"note": note}})
-        return O.ok("cadence.ran", cadence=ran, due=[])
-
+    calendar = _calendar(cfg) if calendar is None else calendar
     due: list[dict[str, Any]] = []
     for name, every, unit, count in (
         ("integration_tests", cfg.cadence.integration_tests_every_tasks, "tasks", done_tasks),
@@ -159,6 +142,35 @@ def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.
     due += lessons_cadence(st, cfg)
     due += export_cadence(repo, cfg)
     due += _calendar_due(st, cfg, calendar=calendar)
+    return due
+
+
+def cadence(repo: Path, *, ran: str = "", note: str = "", agent: str = "") -> O.Outcome:
+    """Which periodic passes are due? Derived from the log, so there is no state file."""
+    log, cfg, st = _load(repo, agent)
+    done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
+    done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
+    try:
+        calendar = _calendar(cfg)
+    except ValueError as exc:
+        return O.failed("cadence", str(exc), due=[])
+
+    if ran:
+        if ran == "lessons_compression":
+            live = [x for x in st.lessons.values() if not x.superseded_by]
+            result = json.dumps(
+                {"bytes": sum(len(x.text().encode("utf-8")) for x in live), "entries": len(live)}
+            )
+        else:
+            # A calendar cadence is timed by the run event's own timestamp; what it
+            # records here is incidental.
+            result = str(
+                done_tasks if ran in ("integration_tests", "dedupe_sweep") else done_phases
+            )
+        log.append("cadence.ran", ran, {"result": result, "evidence": {"note": note}})
+        return O.ok("cadence.ran", cadence=ran, due=[])
+
+    due = due_cadences(repo, cfg, st, calendar=calendar)
     data: dict[str, Any] = {"due": due, "tasks_done": done_tasks, "phases_done": done_phases}
     if not due:
         return O.nothing(
