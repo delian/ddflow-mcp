@@ -207,6 +207,8 @@ def test_a_declared_parent_identity_still_owns_its_tree(repo):
     # and the owner itself still adopts its own tree again
     code, out, err = run_cli(tree, "claim", "T0", agent="parent")
     assert code == OK, out + err
+    assert "not adopted" not in out, out
+    assert _item(repo, "T0").branch == "parent-work", out
 
 
 def _cli_no_worktree(repo: Path) -> Path:
