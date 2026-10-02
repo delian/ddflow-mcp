@@ -87,6 +87,7 @@ from .knowledge import (
     session_note,
     session_prompt,
     session_start,
+    similar,
 )
 from .lifecycle import (
     DEFAULT_CHECK_RECOVERY,
@@ -244,6 +245,7 @@ __all__ = [
     "session_prompt",
     "session_start",
     "show",
+    "similar",
     "split",
     "status",
     "task_add",

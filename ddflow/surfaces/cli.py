@@ -48,6 +48,7 @@ from .commands.knowledge import (
     cmd_recall,
     cmd_research,
     cmd_session,
+    cmd_similar,
 )
 from .commands.lifecycle import (
     cmd_abandon,
@@ -811,6 +812,20 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rc.add_argument("--max-chars", type=int, default=4000)
     rc.set_defaults(fn=cmd_recall)
 
+    sm = s.add_parser(
+        "similar",
+        help="'is this already filed?' -- the existing bugs, tasks, lessons and other "
+        "records most like a text, before you add it (read-only; exit 2 when none)",
+    )
+    sm.add_argument("text", help="the title or summary of the record you are about to file")
+    sm.add_argument(
+        "--kind",
+        default="",
+        help="comma-separated subset of [dedupe].kinds: "
+        "bug,task,phase,lesson,decision,research,memory (default: all of them)",
+    )
+    sm.set_defaults(fn=cmd_similar)
+
     dc = s.add_parser("decision", help="architectural decisions: record and consult")
     dc_s = dc.add_subparsers(dest="decision_cmd", required=False)
     dca = dc_s.add_parser("add")
@@ -1147,6 +1162,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--image",
         default="ghcr.io/OWNER/ddflow:latest",
         help="container image used by --launch docker",
+    )
+    ad.add_argument(
+        "--refresh-docs",
+        action="store_true",
+        help="rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the agents' "
+        "native rules from this ddflow's templates; leaves MCP launches, hooks and command "
+        "files alone (what `doctor` points to when drivers lag)",
     )
     ad.set_defaults(fn=cmd_adopt)
 

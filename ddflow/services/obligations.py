@@ -74,7 +74,7 @@ def outstanding(state, cfg, *, repo=None, limit: int = MAX_REPORTED) -> list[Obl
                 "rules_drift",
                 ", ".join(r.path for r in stale),
                 "; ".join(r.render() for r in stale),
-                "ask the operator, then `ddflow_setup` (shell: `ddflow adopt`) rewrites it",
+                "ask the operator, then `ddflow_setup` with refresh_docs (shell: `ddflow adopt --refresh-docs`) rewrites it",
             )
         )
 

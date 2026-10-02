@@ -148,6 +148,12 @@ def setup(out) -> str:
     d = out.data
     agents = d.get("agents") or []
     tail = ""
+    if d.get("refresh_docs"):
+        return (
+            "\n".join(f"  {x}" for x in d.get("actions", []))
+            + "\n\nDriver docs and rules refreshed; MCP launches, hooks and command files "
+            "were not touched."
+        )
     if d.get("companions_ready"):
         tail += (
             f"\n\nInstalled here but not wired up: {', '.join(d['companions_ready'])}.\n"

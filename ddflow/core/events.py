@@ -72,6 +72,10 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         # a log that kept the adds and dropped this would fold the contest back open.
         # (No replay renderer yet: `replay` skips it, as it does any kind without one.)
         "item.resolved",
+        # D-no-duplicates: what an agent ADDED to an existing record, verbatim, and which
+        # records it judged the same, related or distinct -- operator-visible intent.
+        "record.extended",
+        "link.recorded",
     }
 )
 
