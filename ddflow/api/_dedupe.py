@@ -366,10 +366,15 @@ def _dry_run(repo: Path, log, cfg: Config, st, rec: Record) -> Checked:
     }
     if unavailable:
         data["dedupe_unavailable"] = unavailable
+        # NOT "nothing reads like it": the check did not run, and a caller gating on the
+        # exit code must not read an outage as a clean bill.
+        return Checked(
+            refusal=O.failed(
+                rec.event_kind, f"the duplicate check could not run: {unavailable}", **data
+            )
+        )
     if not shown:
-        if unavailable:
-            why = unavailable
-        elif cfg.dedupe.on_match == "off":
+        if cfg.dedupe.on_match == "off":
             why = "the check is off ([dedupe].on_match = off)"
         elif rec.kind not in cfg.dedupe.kinds:
             why = f"{rec.kind} is not checked ([dedupe].kinds = {', '.join(cfg.dedupe.kinds)})"
