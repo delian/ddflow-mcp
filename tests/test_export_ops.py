@@ -379,6 +379,13 @@ def test_append_mode_refuses_filters_and_a_last_event_the_log_lost(proj):
     assert "old" in (proj / "CHANGES.md").read_text()
 
 
+def test_printing_an_append_mode_document_still_honours_its_filters(proj):
+    _select(proj, '[export.changelog]\nmode = "append"\npath = "CHANGES.md"\n')
+    out = api.export_documents(proj, "changelog", version="unreleased")
+    assert out.exit == 0, out.reason  # a preview: print never appends
+    assert api.export_documents(proj, "changelog", check=True, tag="unreleased").exit == 3
+
+
 def test_template_never_writes(proj):
     (proj / "adhoc.j2").write_text("X {{ open_tasks }}\n")
     for kw in ({"update": True}, {"out": "docs/x.md"}):

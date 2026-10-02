@@ -123,9 +123,19 @@ def filters_of(table: dict[str, Any], given: R.Filters | None = None) -> R.Filte
 
 
 def spec_for(
-    cfg: Config, doc: str, *, path: str = "", mode: str = "", filters: R.Filters | None = None
+    cfg: Config,
+    doc: str,
+    *,
+    path: str = "",
+    mode: str = "",
+    filters: R.Filters | None = None,
+    writing: bool = False,
 ) -> Spec:
-    """Settings for ``doc`` (refused, exit 3, for an unknown kind: the message lists them)."""
+    """Settings for ``doc`` (refused, exit 3, for an unknown kind: the message lists them).
+
+    ``writing`` is true for anything that compares with or writes the target (``--diff``,
+    ``--check``, ``--update``, ``--out``, the listing): an append-mode document then takes no
+    template and no filters. Printing never appends, so it is not refused for them."""
     kind = R.get(doc)
     t = cfg.export.table(doc)
     m = mode or str(t.get("mode") or kind.update_mode)
@@ -138,7 +148,7 @@ def spec_for(
             EXIT_REFUSED,
         )
     flt = filters_of(t, filters)
-    if m == R.APPEND and (t.get("template") or flt.given()):
+    if writing and m == R.APPEND and (t.get("template") or flt.given()):
         raise ExportError(
             "append mode writes the entries the kind produces itself: it takes no template "
             "and no filters",
@@ -290,11 +300,6 @@ def write_doc(
             "mode whole or region",
             EXIT_REFUSED,
         )
-    if spec.filters.given():
-        raise ExportError(
-            f"append mode takes no filters (given: {', '.join(sorted(spec.filters.given()))})",
-            EXIT_REFUSED,
-        )
     last = W.last_exported(repo, path)
     if last and last not in {e.id or e.compute_id() for e in q.events}:
         raise ExportError(
@@ -394,7 +399,7 @@ def listing(repo: Path, cfg: Config) -> list[dict[str, Any]]:
             "filters": sorted(kind.filters),
         }
         try:
-            spec = spec_for(cfg, doc)
+            spec = spec_for(cfg, doc, writing=True)
         except ExportError as exc:
             rows.append(
                 {

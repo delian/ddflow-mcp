@@ -140,7 +140,9 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
         results = []
         for d in docs:
             try:
-                spec = ops.spec_for(cfg, d, filters=flt)
+                spec = ops.spec_for(
+                    cfg, d, filters=flt, writing=bool(diff or check or update or out)
+                )
                 if not (diff or check or update or out):
                     results.append(ops.print_doc(repo, cfg, q, spec, max_bytes=cap, template=tmpl))
                 else:
