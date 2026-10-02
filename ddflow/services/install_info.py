@@ -180,7 +180,7 @@ def install_info(root: Path | None = None) -> InstallInfo:
     dist = own_distribution(root)
     version = _version(dist)
     record = _direct_url(dist)
-    if from_source:
+    if from_source and record is None:
         # A checkout is never an index install, even when a build leaves an egg-info
         # (no direct_url.json) beside it; it is an editable install when one says so.
         record = _editable_record(root)

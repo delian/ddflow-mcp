@@ -289,3 +289,19 @@ def test_unreadable_direct_url_is_not_an_index_install(installed):
         assert I.installed_from_index() is False
     finally:
         record.chmod(0o644)
+
+
+def test_a_real_record_beside_the_package_survives_a_source_run(tmp_path, monkeypatch):
+    tree = tmp_path / "checkout"
+    (tree / "ddflow").mkdir(parents=True)
+    info = tree / "ddflow_mcp-1.2.3.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
+    (info / "direct_url.json").write_text(
+        json.dumps(
+            {"url": "https://example.invalid/x", "vcs_info": {"vcs": "git", "commit_id": COMMIT}}
+        )
+    )
+    monkeypatch.setattr(I, "running_from_source", lambda *a: True)
+    got = I.install_info(root=tree)
+    assert (got.kind, got.commit) == ("vcs", COMMIT)
