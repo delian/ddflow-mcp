@@ -202,6 +202,7 @@ def cmd_recall(a, c: Ctx) -> int:
     budget, used = out.data["max_chars"], 0
     # BEFORE the records, so a recall cut short by the budget still carried it.
     print(PV.DATA_RULE)
+    used += len(PV.DATA_RULE)
     for table, label, why in out.data["_render"]["sources"]:
         rows = results.get(table)
         if not rows:
@@ -225,19 +226,24 @@ def cmd_recall(a, c: Ctx) -> int:
     return OK
 
 
-_KIND = {"decisions": "decision", "lessons": "lesson", "memories": "memory"}
+_KIND = {"decisions": "decision", "lessons": "lesson", "memories": "memory", "prompts": "prompt"}
 
 
 def _recall_block(table: str, r: dict, head: str, body: str) -> str:
-    """One hit. A decision, lesson or memory carries who recorded it and is fenced as
-    data (`core/provenance.py`); the other kinds print as they always did."""
-    prov = r.get("provenance")
-    if not prov or table not in _KIND:
+    """One hit. A decision, lesson, memory or recorded prompt/note is somebody's words:
+    it carries who recorded it and is fenced as data (`core/provenance.py`). A hit the
+    index holds but the state cannot name is `unknown`, not unlabelled."""
+    if table not in _KIND:
         return f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
-    origin = PV.Origin(prov["trust"], prov.get("by", ""), prov.get("source", ""))
-    fenced = PV.fence(
-        _KIND[table], r.get("id", ""), head + (f"\n{body}" if body else ""), origin, inline=False
-    )
+    prov = r.get("provenance")
+    if prov:
+        origin = PV.Origin(prov["trust"], prov.get("by", ""), prov.get("source", ""))
+    else:
+        # A prompt or note is recorded by an agent, whoever's words it quotes.
+        origin = PV.Origin(PV.AGENT if table == "prompts" else PV.UNKNOWN)
+    kind = "note" if r.get("role") == "note" else _KIND[table]
+    text = head + (f"\n{body}" if body else "")
+    fenced = PV.fence(kind, r.get("id", ""), text, origin, inline=False)
     return f"  [{r.get('id', '?')}] ({origin.label()})\n      {fenced}\n"
 
 

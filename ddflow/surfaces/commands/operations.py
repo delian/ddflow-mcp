@@ -6,6 +6,7 @@ import json
 import sys
 
 from ...api import operations as A
+from ...core import provenance as PV
 from ..context import FAIL, NOTHING, OK, Ctx
 
 
@@ -102,8 +103,6 @@ _FREE_TEXT = {"lesson", "decision", "memory", "research", "journal"}
 def _preview_title(f) -> str:
     """A preview row's title, fenced as imported data when it is a record's own words
     (`core/provenance.py`), so a title cannot pose as the tool's output."""
-    from ...core import provenance as PV
-
     if f.kind not in _FREE_TEXT:
         return f"{f.title[:52]:<52s}"
     return PV.fence(f.kind, f.ident, f.title[:52], PV.Origin(PV.IMPORTED, "", f.source))
@@ -179,7 +178,7 @@ def cmd_import(a, c: Ctx) -> int:
         lines.append(f"  {len(rows)} {kind}(s):")
         for f in rows[:preview]:
             mark = "[x]" if f.done else "[ ]"
-            lines.append(f"    {mark} {f.ident:<28s} {_preview_title(f)} {f.source}")
+            lines.append(f"    {mark} {f.ident:<28s} {_preview_title(f)} {PV.clean(f.source)}")
         if len(rows) > preview:
             lines.append(f"    ... and {len(rows) - preview} more")
         lines.append("")
