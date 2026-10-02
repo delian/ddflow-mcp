@@ -53,7 +53,7 @@ def test_print_to_stdout_writes_no_file(proj):
     code, out, err = run_cli(proj, "export", "roadmap")
     assert code == 0 and out.startswith("<!-- ddflow:generated doc=roadmap")
     assert "Billing" in out and not (proj / "ROADMAP.md").exists()
-    assert "redact" in err  # the honest note: redaction is not applied yet
+    assert "not applied" not in err  # redaction is applied (B-export-redact-fence)
 
 
 def test_exit_codes_zero_one_two_three(proj):
@@ -90,7 +90,14 @@ def test_cli_and_mcp_return_the_same_list_and_document(proj):
     assert json.loads(_call(proj, {})["body"]) == json.loads(cli_json)
     _c, cli_doc, _ = run_cli(proj, "--json", "export", "status")
     mcp = json.loads(_call(proj, {"doc": "status"})["body"])
-    assert mcp == json.loads(cli_doc)
+    cli = json.loads(cli_doc)
+    # MCP serves the same document fenced as agent-written data (B-export-redact-fence)
+    fenced = mcp["results"][0].pop("text")
+    plain = cli["results"][0].pop("text")
+    assert fenced.startswith("<ddflow-record ") and plain in fenced
+    for r in (mcp["results"][0], cli["results"][0]):
+        r.pop("bytes")
+    assert mcp == cli
     assert mcp["results"][0]["truncated"] is False
 
 
