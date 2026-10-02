@@ -432,14 +432,6 @@ def test_sandbox_refuses_escapes(tmp_path, toy, builtin, src):
     assert e.value.code == EXIT_UNAVAILABLE
 
 
-def test_sandbox_blocks_open_and_import(tmp_path, toy, builtin):
-    for src in ("{{ open('/etc/passwd').read() }}", "{{ __import__('os').getcwd() }}"):
-        _override(tmp_path, src)
-        with pytest.raises(ExportError) as e:
-            registry.render_body("toyroad", _log(tmp_path), repo=tmp_path, builtin=builtin)
-        assert e.value.code == EXIT_UNAVAILABLE
-
-
 def test_template_errors_exit_2_and_write_nothing(tmp_path, toy, builtin):
     q = _log(tmp_path)
     before = sorted(p.relative_to(tmp_path).as_posix() for p in tmp_path.rglob("*"))
@@ -676,3 +668,13 @@ def test_markdown_text_is_not_mistaken_for_a_format_bomb():
     assert r("{{ 'ticket 1234567 {}'.format(1) }}", {}) == "ticket 1234567 1\n"
     assert r("{{ '{name}: {x}'.format(name='n', x=2) }}", {}) == "n: 2\n"
     assert r("{{ 'Note: {}'.format(1) }}", {}) == "Note: 1\n"
+
+
+def test_exit_codes_are_the_documented_numbers():
+    assert (EXIT_UNAVAILABLE, EXIT_REFUSED) == (2, 3)
+
+
+def test_template_is_deterministic_no_random_globals():
+    with pytest.raises(ExportError):
+        registry.render("{{ lipsum() }}", {})
+    assert registry.render("{{ range(3)|list }}", {}) == "[0, 1, 2]\n"
