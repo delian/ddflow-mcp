@@ -774,6 +774,7 @@ class Cut:
     url: str = ""
     steps: list[str] = field(default_factory=list)
     plan: VersionPlan | None = None
+    changelog: str = ""  # the changelog file the cut wrote (--changelog), "" when none
 
 
 def cut(
@@ -786,6 +787,8 @@ def cut(
     push: bool = False,
     dry_run: bool = False,
     line: str = "",
+    changelog: bool = False,
+    force: bool = False,
 ) -> Cut:
     """Tag the next version. Under gitflow, via a release branch.
 
@@ -795,6 +798,10 @@ def cut(
                        is computed from a tag it actually contains.
     gitflow + pr       release/X is pushed and a request opened into production; the
                        tag is cut by `pr sync` when a person merges it.
+
+    ``changelog`` also writes the version's section into CHANGELOG.md (``changelog_cut``),
+    committed on the branch the tag names -- or, in pr mode, on the release branch the
+    request carries. Without it nothing but the tag is written.
     """
     st = _state(log)
     vp = plan_version(repo, cfg, st, bump=bump, version=version, line=line)
@@ -821,20 +828,95 @@ def cut(
             f"release {vp.next} is already awaiting review: {pending.get('url')}",
         )
         return out
+    direct = cfg.flow.model != F.GITFLOW or F.is_maintenance(cfg, line)
+    prep = None
+    if changelog:
+        if direct and cfg.flow.integration == "pr":
+            out.refused, out.reason = (
+                True,
+                (
+                    "--changelog with pull requests needs [flow].model = gitflow: a trunk or "
+                    "maintenance cut tags the remote branch as it is, and the changelog commit "
+                    "would have no request to travel in"
+                ),
+            )
+            return out
+        prep = _prepare_changelog(repo, cfg, out, vp, force=force, dry_run=dry_run)
+        if prep is None:
+            return out
     if dry_run:
         out.ok = True
         out.steps.append("dry run: nothing written")
         return out
-    if cfg.flow.model != F.GITFLOW or F.is_maintenance(cfg, line):
+    if direct:
         # A maintenance line is tagged where it stands: it has no develop/production
         # pair of its own, so there is no release branch to route through.
+        if prep and not _write_changelog(repo, cfg, out, vp.ref, prep, vp.next, force=force):
+            return out
         out.sha = W.rev(repo, vp.ref)
         return _tag_and_push(repo, cfg, log, out, vp, branch=vp.ref, push=push)
-    return _cut_gitflow(repo, cfg, log, out, vp, push=push)
+    return _cut_gitflow(repo, cfg, log, out, vp, push=push, prep=prep, force=force)
+
+
+def _export_failed(out: Cut, exc: Exception) -> None:
+    """An export failure as the cut's outcome: exit 3 when ddflow refuses (a hand-edited
+    file), exit 2 when it could not run (git, the log)."""
+    out.ok = False
+    out.reason = str(exc)
+    from .export.query import EXIT_REFUSED
+
+    if getattr(exc, "code", 0) == EXIT_REFUSED:
+        out.refused = True
+    else:
+        out.unavailable = True
+
+
+def _prepare_changelog(repo, cfg, out: Cut, vp: VersionPlan, *, force: bool, dry_run: bool):
+    """The rendered changelog for the cut, or None after recording why not on ``out``.
+    The version's section also becomes the tag message and the request body."""
+    from . import changelog_cut as CC
+    from .export.query import ExportError
+
+    try:
+        prep = CC.prepare(repo, cfg, version=vp.next, ref=vp.ref, fallback_notes=vp.notes)
+        if dry_run:
+            prep.apply(W.repo_root(repo), force=force, dry=True)
+    except ExportError as exc:
+        _export_failed(out, exc)
+        return None
+    vp.notes = prep.notes
+    if dry_run:
+        out.steps.append(f"dry run: would write {prep.path} ({prep.mode})")
+    return prep
+
+
+def _write_changelog(repo, cfg, out: Cut, branch: str, prep, version: str, *, force: bool) -> bool:
+    """Commit the prepared changelog on ``branch``; False (with the reason on ``out``) if not."""
+    from . import changelog_cut as CC
+    from .export.query import ExportError
+
+    try:
+        action = CC.commit_on(
+            repo, cfg, branch, prep, force=force, message=f"docs: changelog for {version}"
+        )
+    except ExportError as exc:
+        _export_failed(out, exc)
+        return False
+    out.changelog = prep.path
+    out.steps.append(f"{action} {prep.path} on {branch}")
+    return True
 
 
 def _cut_gitflow(
-    repo: Path, cfg: Config, log: EventLog, out: Cut, vp: VersionPlan, *, push: bool
+    repo: Path,
+    cfg: Config,
+    log: EventLog,
+    out: Cut,
+    vp: VersionPlan,
+    *,
+    push: bool,
+    prep=None,
+    force: bool = False,
 ) -> Cut:
     remote = cfg.flow.remote
     prod = F.production(cfg, W.default_branch(repo))
@@ -844,6 +926,9 @@ def _cut_gitflow(
         out.refused, out.reason = True, f"could not create {rel}: {mk.err}"
         return out
     out.steps.append(f"created {rel} from {vp.ref}")
+    if prep and not _write_changelog(repo, cfg, out, rel, prep, vp.next, force=force):
+        W.git(repo, "branch", "-D", rel)  # unmade, as a failed push unmakes it
+        return out
     if cfg.flow.integration == "pr":
         return _open_release(repo, cfg, log, out, vp, rel=rel, prod=prod)
     r = W.merge_into(repo, cfg, prod, rel, message=f"release {vp.next}")

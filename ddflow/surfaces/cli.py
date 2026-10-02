@@ -677,6 +677,15 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     vct.add_argument("--dry-run", action="store_true")
     vct.add_argument("--line", default="", help="a maintenance line (default: the current one)")
+    vct.add_argument(
+        "--changelog",
+        action="store_true",
+        help="also write the version's section into CHANGELOG.md, committed with the cut "
+        "(in a release request under gitflow + pr); never written without this flag",
+    )
+    vct.add_argument(
+        "--force", action="store_true", help="with --changelog: replace a hand-edited changelog"
+    )
     vct.set_defaults(fn=cmd_version)
 
     pm = s.add_parser(
