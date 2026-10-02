@@ -2738,7 +2738,9 @@ def _outcome_result(
     # migration: the duplication was at least honest about what it returned.
     # `Outcome.body` is the ONE implementation of that projection, shared with the
     # CLI's `--json` -- which is the point, since the property being preserved is that
-    # the two are byte-identical.
+    # the two are the same parsed body. (MCP encodes it compact, the CLI indented, so
+    # "byte-identical" is the parsed value, not the text; five reads are also cut
+    # on MCP -- `mcp_bound`.)
     #
     # `as_text` covers the tools whose body is PROSE and always has been: `board` is
     # markdown, `doctor` is a report an operator reads, `replay` is a reconstruction
@@ -2773,14 +2775,11 @@ def _outcome_result(
     note = None
     if bound is not None:
         # The bounded reads (`mcp_bound`): the full body, cut and said so. The CLI's
-        # `--json` is the whole body; the two differ only here.
+        # `--json` is the whole body, and the parsed MCP body equals it except here.
         full, note = bound(full, args or {})
     # Compact: a model reads every byte of this and indentation is a quarter of it.
     body = json.dumps(full, separators=(",", ":"), default=str)
     result = _text(body, error=(out.exit == 1), meta={"exit": out.exit})
-    if note:
-        # A second block, like the reason below: `content[0]` stays the bare JSON.
-        result["content"].append({"type": "text", "text": note})
     if out.reason:
         # A SECOND content block, never a prefix. The reason used to be prepended to the
         # JSON, which reads well and breaks every machine consumer: `json.loads` on
@@ -2801,6 +2800,10 @@ def _outcome_result(
         # stays, for the array bodies that cannot carry it and for a model reading text.
         # `_meta.exit` carries the code either way.
         result["content"].append({"type": "text", "text": out.reason})
+    if note:
+        # After the reason, so the reason keeps the position documented above; the
+        # bounded read's statement of what it cut is the block after it.
+        result["content"].append({"type": "text", "text": note})
     return result
 
 

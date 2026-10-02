@@ -109,7 +109,7 @@ def test_show_of_an_item_with_nothing_to_cut_says_nothing_was_cut(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     body = _body(_call(repo, "ddflow_show", id="T1"))
-    assert "truncated" not in body and body["id"] == "T1"
+    assert "truncated" not in body and body["id"] == "T1" and body["adopted"] is False
 
 
 def test_progress_is_cut_to_limit_with_a_second_block_and_limit_zero_is_all(repo):
@@ -186,3 +186,28 @@ def test_mcp_json_is_compact(repo):
     _gated(repo)
     text = _call(repo, "ddflow_show", id="T1")["content"][0]["text"]
     assert "\n" not in text and '": ' not in text
+
+
+def test_recall_always_says_it_left_the_raw_records_out(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "decision", "add", "--id", "D1", "--title", "payload bound", "--decision", "x")
+    r = _call(repo, "ddflow_recall", query="payload bound")
+    assert "raw" in r["content"][1]["text"] and "truncated" not in r["content"][1]["text"]
+
+
+def test_a_negative_limit_does_not_lift_the_bound(repo):
+    run_cli(repo, "init")
+    log = EventLog(repo, "agent-test")
+    for i in range(40):
+        log.append("task.added", f"T{i:02d}", {"title": f"t {i}"})
+    assert len(_body(_call(repo, "ddflow_progress", limit=-1))) == B.ROWS_SHOWN
+
+
+def test_the_reason_stays_the_second_block_and_the_cut_note_follows_it(repo):
+    run_cli(repo, "init")
+    log = EventLog(repo, "agent-test")
+    for i in range(40):
+        log.append("task.added", f"W{i:02d}", {"title": f"w {i}", "needs": ["MISSING"]})
+    blocks = [c["text"] for c in _call(repo, "ddflow_next")["content"]]
+    assert json.loads(blocks[0])["truncated"]["blocked"] == 40
+    assert blocks[1].startswith("Nothing actionable"), blocks[1][:80]

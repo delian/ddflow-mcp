@@ -64,7 +64,8 @@ def _limit(args: dict[str, Any], default: int = ROWS_SHOWN) -> int:
         n = int(raw) if raw is not None else default
     except (TypeError, ValueError):
         return default
-    return n if n > 0 else 0  # 0 = everything
+    # 0 is everything; a negative number is a mistake, not a request to lift the bound.
+    return n if n >= 0 else default
 
 
 def bound_next(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
@@ -110,8 +111,9 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     own words stay, and `truncated` names what was left out."""
     if not isinstance(body, dict) or ("state" not in body and "gates" not in body):
         return body, None
-    out = {k: v for k, v in _lean(body).items() if v is not False and k not in ITEM_PLUMBING}
-    stripped = False
+    lean = _lean(body)
+    out = {k: v for k, v in lean.items() if k not in ITEM_PLUMBING}
+    stripped = len(out) != len(lean)
     gates = out.get("gates")
     if isinstance(gates, dict):
         slim: dict[str, Any] = {}
@@ -215,13 +217,13 @@ def bound_recall(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
             out[kind].append(hit)
             used += size
     shown = sum(len(v) for v in out.values())
-    note = (
-        f"truncated: showing {shown} of {total} hits within max_chars={budget}"
-        if shown < total
-        else None
-    )
-    raw = "each hit's raw record is left out (its id is in the hit)"
-    return out, f"{note}; {raw}. Raise max_chars for more." if note else None
+    note = "each hit's raw record is left out (its id is in the hit)"
+    if shown < total:
+        note = (
+            f"truncated: showing {shown} of {total} hits within max_chars={budget}; {note}. "
+            f"Raise max_chars for more."
+        )
+    return out, note
 
 
 #: tool name -> the projection its MCP body goes through.
