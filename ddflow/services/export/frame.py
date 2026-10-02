@@ -113,23 +113,30 @@ def truncate(body: str, max_bytes: int) -> str:
     def footer(n: int) -> str:
         return f"[truncated: {n} more lines; use --since/--limit]\n"
 
-    kept: list[str] = []
-    used = 0
-    for i, line in enumerate(lines):
-        ln = line
-        size = len(ln.encode("utf-8"))
-        if used + size + len(footer(len(lines) - i - 1).encode("utf-8")) > max_bytes and kept:
+    def size(text: str) -> int:
+        return len(text.encode("utf-8"))
+
+    # The largest prefix whose size PLUS its own footer fits the cap. The footer counts
+    # for every prefix, the empty one included, so the result never exceeds max_bytes
+    # (unless the footer alone does, which no sane cap allows). A shown part never ends
+    # on blank lines; dropping them grows the footer's count, so the fit is re-checked.
+    n, used, best = len(lines), 0, 0
+    for k, line in enumerate(lines, 1):
+        used += size(line)
+        if used + size(footer(n - k)) <= max_bytes:
+            best = k
+    shown = lines[:best]
+    while True:
+        while shown and not shown[-1].strip():
+            shown.pop()
+        if not shown or size("".join(shown)) + size(footer(n - len(shown))) <= max_bytes:
             break
-        if used + size > max_bytes:  # a single over-long first line: hard cut, on a char edge
-            cut = ln.encode("utf-8")[: max(max_bytes - 80, 0)]
-            ln = cut.decode("utf-8", "ignore") + "\n"
-            size = len(ln.encode("utf-8"))
-        kept.append(ln)
-        used += size
-    while len(kept) > 1 and not kept[-1].strip():
-        kept.pop()  # never end the shown part on blank lines
-    more = len(lines) - len(kept)
-    return "".join(kept).rstrip("\n") + "\n" + footer(more)
+        shown.pop()
+    if not shown:  # not even one whole line fits: cut the first on a character boundary
+        room = max_bytes - size(footer(n - 1)) - 1
+        cut = lines[0].encode("utf-8")[: max(room, 0)].decode("utf-8", "ignore")
+        return cut.rstrip("\n") + "\n" + footer(n - 1)
+    return "".join(shown) + footer(n - len(shown))
 
 
 def one_line(s: str, limit: int = 140) -> str:
