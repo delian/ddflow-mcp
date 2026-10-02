@@ -1,0 +1,32 @@
+# Sessions
+
+{{ shown }} of {{ total }} sessions, newest first; {{ with_summary }} carry a summary. A prompt marked "brief" is a task brief written by an orchestrating agent (most prompts logged in an agent-driven project) and "operator" is anything else; the log cannot tell them apart, so the mark is a guess.
+{% for s in sessions %}
+
+## {{ s.id }}
+
+**Summary and handoff.** {{ s.summary_text }}
+
+- agent `{{ s.agent }}`, model {{ s.model }}, {{ s.opened }} to {{ s.closed }}
+- items: {{ s.items_text }}
+{% if s.prompts %}
+
+Prompts:
+
+{% for p in s.prompts %}
+- {{ p.at }} [{{ p.who }}] {{ p.text }}
+{% endfor %}
+{% endif %}
+{% if s.notes %}
+
+Notes:
+
+{% for n in s.notes %}
+- {{ n.at }} {{ n.text }}
+{% endfor %}
+{% endif %}
+{% if s.imported_notes %}
+
+{{ s.imported_notes }} imported journal notes are indexed in the work log.
+{% endif %}
+{% endfor %}
