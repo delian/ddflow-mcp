@@ -671,13 +671,23 @@ def _toml_without(text: str, cid: str) -> str | None:
     """
     name = "(?:{0}|\"{0}\"|'{0}')".format(re.escape(cid))
     header = re.compile(rf"^\s*\[\s*mcp_servers\s*\.\s*{name}\s*(?:\.[^\]]*)?\]\s*(?:#.*)?$")
-    kept, skipping = [], False
+    kept: list[str] = []
+    cut: list[str] = []  # the lines of the table being dropped
     for line in text.splitlines(keepends=True):
         if header.match(line):
-            skipping = True
-        elif skipping and line.lstrip().startswith("["):
-            skipping = False
-        if not skipping:
+            cut.append(line)
+        elif cut and line.lstrip().startswith("["):
+            # Comments and blank lines just above the NEXT header describe it, not the
+            # table that is going: keep them.
+            tail = []
+            while cut[-1].strip() == "" or cut[-1].lstrip().startswith("#"):
+                tail.insert(0, cut.pop())
+            kept.extend(tail)
+            cut = []
+            kept.append(line)
+        elif cut:
+            cut.append(line)
+        else:
             kept.append(line)
     out = "".join(kept)
     try:
