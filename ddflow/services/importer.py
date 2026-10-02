@@ -2922,14 +2922,16 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     if not dropped:
         return
     _resolve_chains(dropped, in_plan)
-    plan.found = [f for f in plan.found if id(f) not in dropped]
+    warn = dd.on_match == "warn"
+    if not warn:
+        plan.found = [f for f in plan.found if id(f) not in dropped]
     plan.duplicates = [dropped[id(f)] for f in mine if id(f) in dropped]
     same = [d for d in plan.duplicates if d.identical]
     near = [d for d in plan.duplicates if not d.identical]
     if same:
         plan.notes.append(
-            f"{len(same)} record(s) repeat another word for word and were not "
-            f"imported: "
+            f"{len(same)} record(s) repeat another word for word and "
+            f"{'WILL be imported anyway ([dedupe].on_match = warn)' if warn else 'were not imported'}: "
             + ", ".join(
                 f"{d.found.ident} = {d.of}" + (" (in this import)" if d.where == "import" else "")
                 for d in same[:_SHOWN_IDENTICAL]
@@ -2938,7 +2940,8 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
         )
     if near:
         lines = [
-            f"{len(near)} record(s) look like ones already held and were NOT imported -- "
+            f"{len(near)} record(s) look like ones already held and "
+            f"{'WILL be imported anyway ([dedupe].on_match = warn)' if warn else 'were NOT imported'} -- "
             f"decide each (file one anyway with the matching `ddflow <kind> add`; "
             f"otherwise the existing record already says it). Candidate and score:"
         ]
