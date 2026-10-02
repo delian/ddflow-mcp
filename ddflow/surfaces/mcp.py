@@ -2325,16 +2325,25 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_block": {
         "description": (
             "Mark an item blocked on something outside the queue — a missing decision, "
-            "an upstream outage, a question for the operator. Better than silently "
-            "leaving it claimed: a blocked item states its reason, while a claimed one "
-            "that nobody is working just looks busy until the lease expires."
+            "an upstream outage, a question for the operator. Better than leaving it "
+            "claimed: a blocked item states its reason. A DONE item is refused unless "
+            "reopen."
         ),
         "properties": {
             "id": ("string", "Item id.", True),
             "reason": ("string", "What it is waiting on.", True),
+            "reopen": (
+                "boolean",
+                "Allow blocking a DONE item.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().block(
-            repo, a["id"], reason=a.get("reason", "") or "", agent=agent
+            repo,
+            a["id"],
+            reason=a.get("reason", "") or "",
+            reopen=bool(a.get("reopen", False)),
+            agent=agent,
         ),
         "payload": ("id",),
     },
