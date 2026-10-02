@@ -1,7 +1,7 @@
 """Redaction for anything that leaves the machine in an upstream report.
 
-Per D-upstream-reporting (3): a pure text pass -- no I/O beyond reading the environment
-(`$HOME`, the machine name) -- that removes secrets, private addresses and hosts, home
+Per D-upstream-reporting (3): a text pass whose only inputs are the text and the environment
+(`$HOME`, the machine name, the working directory; each overridable) and which writes nothing -- that removes secrets, private addresses and hosts, home
 and repo paths, the machine hostname, emails and project names, leaving a visible
 `[REDACTED:<kind>]` marker so a reader can see that something was there, and returns a
 count per kind so a preview can say what was removed.
@@ -27,7 +27,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..config import SessionConfig
+from ..config import Config, SessionConfig
 
 #: The tool's own names are public, and a report about ddflow must still say "ddflow".
 PUBLIC_NAMES = frozenset({"ddflow", "ddflow-mcp", "ddflow_mcp"})
@@ -45,7 +45,9 @@ _MARKER = re.compile(r"\[REDACTED:[a-z0-9_]*\]?")
 _IPV4 = re.compile(r"(?<![\d.])(\d{1,3}(?:\.\d{1,3}){3})(?!\d|\.\d)")
 _IPV6 = re.compile(r"(?<![\w:])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7})(?![\w:])")
 
-_EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+_EMAIL = re.compile(
+    r"(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
+)
 #: `/home/<user>/...` and `/Users/<user>/...`: the whole path token, since what follows
 #: the user is usually a project directory.
 _HOME_PATH = re.compile(r"(?<![\w.-])/(?:home|Users)/[^\s/'\"`<>)\]},;:]+(?:/[^\s'\"`<>)\]},;]*)?")
@@ -157,21 +159,26 @@ def redact_report(
     names: Iterable[str] = (),
     home: str | os.PathLike[str] | None = None,
     repo_root: str | os.PathLike[str] | None = None,
+    cfg: Config | None = None,
     secret_patterns: Iterable[str] | None = None,
 ) -> Redacted:
     """Redact `text` for an upstream report. Returns the text and a count per kind.
 
     Kinds: `secret`, `email`, `path`, `ipv4`, `ipv6`, `host`, `hostname`, `name`.
 
-    `names` is the caller's list plus `[upstream].redact_extra` (literal words, matched
-    case-insensitively on word boundaries); the repo directory name is added here.
-    `hostname`, `home` and `repo_root` default to the machine's own at run time.
+    `names` is the caller's list of project names (literal words, matched
+    case-insensitively on word boundaries); the caller adds `[upstream].redact_extra`
+    once that section exists. The repo directory name is added here. `hostname`, `home`
+    and `repo_root` default to the machine's own at run time (the repo root is found by
+    walking up from the working directory to a `.git`). Secrets use the session
+    patterns of `cfg` (`redact_patterns` and `redact_extra`) or the built-in defaults.
     """
     p = _Pass(_coerce(text))
+    session = cfg.session if cfg is not None else SessionConfig()
     patterns = (
         list(secret_patterns)
         if secret_patterns is not None
-        else list(SessionConfig().redact_patterns)
+        else [*session.redact_patterns, *session.redact_extra]
     )
     for pat in patterns:
         try:
