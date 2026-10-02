@@ -260,7 +260,12 @@ def _well_formed(w: Waiter) -> bool:
 
     def num(v: object) -> bool:
         # Finite: json.loads reads Infinity and NaN, and an infinite `since` never lapses.
-        return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            return False
+        try:
+            return math.isfinite(v)
+        except OverflowError:
+            return False  # an integer too large for a float: arithmetic on it would raise
 
     return (
         all(isinstance(v, str) for v in (w.agent, w.item, w.phase, w.reason, w.host))
