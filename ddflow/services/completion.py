@@ -197,7 +197,10 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
     if mode == "off" or it is None or it.removed or it.kind != "task" or it.promote_to:
         return ""
     docs = it.gates.get("docs")
-    if docs and docs.outcome in ("passed", "skipped") and (docs.reason or docs.evidence):
+    if docs and (
+        (docs.outcome == "skipped" and docs.reason)
+        or (docs.outcome == "passed" and (docs.evidence or {}).get("note"))
+    ):
         return ""
     changed = changed_paths(repo, it)
     if changed is None:
