@@ -2916,9 +2916,12 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     near = [d for d in plan.duplicates if not d.identical]
     if same:
         plan.notes.append(
-            f"{len(same)} record(s) repeat ones already held word for word and were not "
+            f"{len(same)} record(s) repeat another word for word and were not "
             f"imported: "
-            + ", ".join(f"{d.found.ident} = {d.of}" for d in same[:_SHOWN_IDENTICAL])
+            + ", ".join(
+                f"{d.found.ident} = {d.of}" + (" (in this import)" if d.where == "import" else "")
+                for d in same[:_SHOWN_IDENTICAL]
+            )
             + (" ..." if len(same) > _SHOWN_IDENTICAL else "")
         )
     if near:
