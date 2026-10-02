@@ -40,8 +40,6 @@ _LABEL = {
     "lesson.recorded": "lesson",
     "research.recorded": "research",
 }
-#: Shown in this order inside one line, whatever order the events arrived in.
-_ORDER = list(_LABEL.values())
 _KINDS = (*_LABEL, "session.note")
 _FIXES = re.compile(r"\(fixes bugs? ([^)]*)\)")
 
@@ -94,7 +92,7 @@ def _window(q: Query, f: registry.Filters) -> str:
 
 def data(q: Query, f: registry.Filters) -> dict[str, Any]:
     since = _window(q, f)
-    # (day, subject) -> {"labels": set, "first": (ts, id), "kind": first kind, ...}
+    # (day, subject) -> {"labels": {label: first ts}, "sort": (ts, id), ...}
     groups: dict[tuple[str, str, str], dict[str, Any]] = {}
     for e in q.events_of(*_KINDS):
         if e.kind == "session.note":
@@ -106,7 +104,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
             gid = (day, "note", e.id or e.compute_id())
             src = str(e.data.get("source") or "")
             groups[gid] = {
-                "labels": {"note"},
+                "labels": {"note": ""},
                 "ts": "",
                 "subject": "",
                 "title": one_line(str(e.data.get("text") or ""), NOTE_CHARS),
@@ -122,7 +120,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
         g = groups.get(gid)
         if g is None:
             g = groups[gid] = {
-                "labels": set(),
+                "labels": {},
                 "ts": e.ts[11:16],
                 "subject": e.subject,
                 "title": _title(q, e.kind, e.subject),
@@ -130,7 +128,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
                 "bugs": set(),
                 "sort": (e.ts, e.subject),
             }
-        g["labels"].add(_LABEL[e.kind])
+        g["labels"].setdefault(_LABEL[e.kind], e.ts)  # label -> first time seen
         g["sort"] = min(g["sort"], (e.ts, e.subject))
     _fold_bug_fixes(q, groups)
     days: dict[str, list[dict[str, Any]]] = {}
@@ -171,8 +169,8 @@ def _fold_bug_fixes(q: Query, groups: dict[tuple[str, str, str], dict[str, Any]]
         for raw in m.group(1).split(","):
             bug = raw.strip()
             other = groups.get((day, "item", bug))
-            if other is not None and other["labels"] <= {"bug fixed"}:
-                g["labels"].add("bug fixed")
+            if other is not None and set(other["labels"]) <= {"bug fixed"}:
+                g["labels"].setdefault("bug fixed", other["labels"]["bug fixed"])
                 g["bugs"].add(bug)
                 other["dropped"] = True
 
@@ -180,7 +178,8 @@ def _fold_bug_fixes(q: Query, groups: dict[tuple[str, str, str], dict[str, Any]]
 def _line(g: dict[str, Any]) -> dict[str, str]:
     """One finished markdown list line (the template only loops, so no inline tag can
     swallow a newline)."""
-    labels = ", ".join(x for x in _ORDER if x in g["labels"]) or ", ".join(sorted(g["labels"]))
+    # chronological: the order things happened, ties by name
+    labels = ", ".join(sorted(g["labels"], key=lambda x: (g["labels"][x], x)))
     parts = [f"{g['ts']} " if g["ts"] else "", f"**{labels}**"]
     if g["subject"]:
         parts.append(f" `{g['subject']}`")
@@ -201,7 +200,7 @@ def _limit(days: list[dict[str, Any]], n: int) -> tuple[list[dict[str, Any]], in
     for d in days:
         if left <= 0:
             break
-        take = d["lines"][:left]
+        take = d["lines"][-left:]  # lines inside a day run oldest to newest
         kept.append({"date": d["date"], "lines": take})
         left -= len(take)
     return kept, n - left

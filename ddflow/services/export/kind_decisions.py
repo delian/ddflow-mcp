@@ -44,11 +44,11 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
         )
     rows.sort(key=lambda r: (r["_k"], r["id"]), reverse=True)  # newest first
     total = len(rows)
+    live = sum(1 for r in rows if r["status"] == "accepted")  # of the whole set, not the page
     if f.limit:
         rows = rows[: f.limit]
     for r in rows:
         r.pop("_k")
-    live = sum(1 for r in rows if r["status"] == "accepted")
     return {"rows": rows, "total": total, "shown": len(rows), "live": live}
 
 
