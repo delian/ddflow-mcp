@@ -53,7 +53,9 @@ def _row(b: Bug, until: str) -> dict[str, Any]:
         "id": b.id,
         "title": one_line(title, 100),  # "" until B-bug-scope-event
         "severity": str(getattr(b, "severity", "") or ""),
-        "scope": str(getattr(b, "scope", "") or ""),
+        # the default scope (project) is not worth a tag on every line; show and
+        # ``similar`` also name only a scope other than project
+        "scope": "" if getattr(b, "scope", "project") in ("", "project") else str(b.scope),
         "summary": first_sentence(b.summary),
         "item": b.item,
         "found": _day(b.found_at),
