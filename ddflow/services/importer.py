@@ -2898,6 +2898,10 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
 
     # Another record of this import is a target only for a summary-born lesson, and a
     # target must outrank it: a summary bullet repeats the corpus, never the reverse.
+    # Two non-summary records of one import are NOT compared with each other, on purpose:
+    # which of a pair to keep is the author's call (both are kept; the second then shows up
+    # as a duplicate of the first on the next re-import's queue check), and dropping the
+    # later would make the outcome depend on the order the files were read.
     def is_summary(f: Found) -> bool:
         return f.kind == "lesson" and "summary" in f.extra.get("tags", ())
 
