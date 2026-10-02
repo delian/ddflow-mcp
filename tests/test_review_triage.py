@@ -233,3 +233,30 @@ def test_a_triage_event_for_an_unknown_item_folds_to_nothing():
         strict=False,
     )
     assert "GHOST" not in st.items
+
+
+def test_identical_findings_of_one_review_are_triaged_one_at_a_time(repo, tmp_path):
+    """critic: two word-for-word identical findings shared a digest, so one triage
+    marked both and a second overwrote the first."""
+    _setup(repo, tmp_path)
+    (repo / "d.py").write_text("x = 1  # FINDA " + "p" * 60 + "\n")  # same finding as a.py's
+    _full_review(repo)
+    digests = [f["digest"] for f in _state(repo).gates["critic"].evidence["chunk_findings"]]
+    assert len(digests) == 3 and len(set(digests)) == 3, digests
+    _triage(repo, 1)
+    assert G.triage_counts(_state(repo), "critic")["refuted"] == 1, "one event, one finding"
+
+
+def test_with_two_reviewers_the_recorded_ones_findings_are_named(repo, tmp_path):
+    """critic: '#1' under the second reviewer's block was the first reviewer's #1."""
+    _setup(repo, tmp_path)
+    cfg = repo / ".ddflow" / "config.toml"
+    first = cfg.read_text().split("[[reviewer]]")[1]
+    cfg.write_text(
+        cfg.read_text() + "\n[[reviewer]]\n" + first.replace('name = "fake"', 'name = "fake2"')
+    )
+    lines: list[str] = []
+    api.review(repo, gate="critic", item="T1", on_progress=lines.append)
+    text = "\n".join(lines)
+    assert "fake FAILED" not in text and "fake REVIEWED" in text and "fake2 REVIEWED" in text
+    assert "triage addresses fake's findings: #1..#2" in text, text

@@ -163,7 +163,7 @@ def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
 def _say_result(say: Callable[[str], None], res) -> None:
     """One reviewer's verdict, then each finding with its detail."""
     say(
-        f"  {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
+        f"  {res.reviewer} {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
         f"{res.elapsed_s:.1f}s" + (f" — {res.reason}" if res.reason else "")
     )
     for n, f in enumerate(res.findings, 1):
@@ -265,6 +265,13 @@ def _chunk_numbers(value) -> list[int] | str:
             except ValueError:
                 return f"--chunk takes chunk numbers, e.g. 5 or 2,5; got {part.strip()!r}"
     return sorted(out) or "--chunk names no chunk"
+
+
+def _say_triage_scope(say: Callable[[str], None], results: list, best) -> None:
+    """With several reviewers each one's findings were numbered from #1, but only the
+    recorded reviewer's can be triaged: say whose (critic: another's #1 is not it)."""
+    if len(results) > 1 and best.findings:
+        say(f"triage addresses {best.reviewer}'s findings: #1..#{len(best.findings)}")
 
 
 def _rerun_scope(it, gate: str, revs: list, diff: str, value):
@@ -563,6 +570,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         say(
             f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})"
         )
+        _say_triage_scope(say, results, best)
 
     data: dict[str, Any] = {
         "id": item,
