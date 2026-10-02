@@ -5,7 +5,7 @@ superseded; a proposed one is marked) grouped by the path each governs, the live
 (the same data ``ddflow workflow`` reports: the gates, and the ``[gates]``/``[schedule]``/
 ``[enforce]`` rules). Imported rulebooks (AGENTS.md and the like) are never copied in.
 
-Lessons are summaries, never full text, and ``--limit`` / ``--tag`` bound them: a project
+Lessons are summaries, never full text, and ``--limit`` / ``--tag`` bound them (the lessons only: decisions are grouped by path): a project
 with hundreds of lessons would otherwise produce a document nobody reads (168 KB for 473).
 """
 
@@ -20,7 +20,8 @@ from .frame import one_line
 from .query import ExportError, Query, _parse_ts
 
 UNTAGGED = "(untagged)"
-IN_FORCE = ("accepted", "proposed")  # any other status (superseded, rejected, ...) is not
+#: Per D-export (7) a proposed decision is listed (and marked); any other status is not.
+IN_FORCE = ("accepted", "proposed")
 TITLE_CHARS = 150
 TEXT_CHARS = 220
 
@@ -46,8 +47,6 @@ def _decisions(q: Query, f: registry.Filters) -> tuple[list[dict[str, Any]], lis
     loose: list[dict[str, Any]] = []
     for d in q.decisions():  # id order
         if d.status not in IN_FORCE or d.superseded_by:
-            continue
-        if f.tag and f.tag not in d.tags:
             continue
         row = {
             "id": d.id,
