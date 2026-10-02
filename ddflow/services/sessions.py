@@ -202,7 +202,8 @@ def _rs_extended(n, ev):
 
 def _rs_link(n, ev):
     d = ev.data
-    verb = {"distinct": "is DISTINCT from"}.get(d.get("relation", ""), d.get("relation", "?"))
+    relation = d.get("relation", "") or "unspecified"
+    verb = {"distinct": "is DISTINCT from"}.get(relation, relation)
     targets = ", ".join(link_targets(d.get("target"))) or "?"
     return ReplayStep(
         n, ev.ts, "link", f"{ev.subject} {verb.replace('_', ' ')} {targets}", ev.subject

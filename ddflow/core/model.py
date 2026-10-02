@@ -438,7 +438,8 @@ class RecordLinks:
 
     @property
     def links(self) -> list[dict[str, Any]]:
-        """The links: extends / duplicate_of / related. Dismissals are `dismissals`."""
+        """Every relation but `distinct` (those are `dismissals`), including relations this
+        ddflow does not know: extends / duplicate_of / related and whatever a newer one says."""
         return self._sorted(x for x in self.link_entries.values() if x["relation"] != "distinct")
 
     @property
