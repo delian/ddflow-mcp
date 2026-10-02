@@ -1720,6 +1720,45 @@ the same list of candidates, and an empty list when there are none. It uses the
 when `[dedupe].on_match` is `off`, since that setting governs what an *add* does. A score
 is a prompt to look, not a verdict: two bugs in one function score high and are different.
 
+### The check every add runs
+
+Every add — task, phase, bug, lesson, decision, research and memory; never a session
+prompt or note — runs the same check against the log **before it writes**, with the
+`[dedupe]` knobs above. What it does depends on how close the match is:
+
+- **A match** — a candidate scoring at least `ask_threshold` (0.55) when the new text has
+  at least `min_words` (8) content words, or text that names an existing record's id — is
+  **refused** (exit 3, `refused: possible duplicate`). Nothing is written. The refusal
+  carries `candidates` (id, kind, title, state, score, the words shared) and `options`
+  (`new`, then `extends` / `duplicate_of` / `related` for each candidate), and its reason
+  lists them in prose. Over MCP the refusal leads the reply as `{"refusal": {...}}`. A bug
+  filed against the task that fixes it (`--item T`) already answers that candidate and is
+  not asked about it.
+- **An answer** lifts the refusal. `new`: it is a different record, filed as asked.
+  `extends X` / `duplicate_of X`: it is the same thing. While X is **open and unclaimed**
+  (an open task or phase, an unfixed bug, a lesson or decision not superseded, research, a
+  live memory) the text is appended to X as a `record.extended` — verbatim, with who, when
+  and the score — and **no new id is made**; a bug's own summary is never replaced. If X
+  is claimed, running, done, fixed or superseded, a **new record** is filed linked to X
+  (`extends` / `duplicate_of` on its add event), so nothing is lost, and the result names X
+  and its state so the holder can be told. `related X` files a new record linked **both
+  ways** (a `link.recorded` on X). The API takes the answer as one `answer` argument
+  (`api.DedupeAnswer("extends", "B5d98a4da0a")`; `DedupeAnswer.parse("related B1")`)
+  carried on `task_add`, `phase_add`, `bug_found`, `memory_add` and the lesson, decision
+  and research drafts; the CLI flags and the MCP `relation` field come next.
+- **Identical text** (up to case and whitespace) as an existing record of the same kind is
+  recorded as a duplicate of it **without asking**, under the same open-or-linked rule.
+- **Below the threshold, at or above `show_floor` (0.35):** the add goes through and its
+  result lists the candidates.
+- **Every answer is recorded** on the add event (`dedupe`: the answer, the score, the
+  candidates shown), `new` included, and an automatic merge is marked `auto`.
+
+`[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
+merges — it lists the candidates and records the add as `new` — and `off` skips the check
+entirely. Adding an id that already exists keeps the refusal or merge it always had. The
+importer reaches the check through `api.dedupe_check_add` and can hand it a config with
+`on_match` replaced, rather than going through the add paths.
+
 ## Operational memory
 
 ```sh
@@ -2717,7 +2756,8 @@ and `dedupe` (the recorded answer, its score and the candidates shown). A later
 score), and a later `link.recorded` is a link or a `distinct` dismissal. Both accumulate,
 keyed by event: two additions made at once by two clones both survive in any fold order,
 and an addition never replaces the record's own text (a bug's summary stays as written).
-`ddflow replay` renders both. No command writes them yet.
+`ddflow replay` renders both. The add paths write `record.extended` and the `related`
+back-link (see "The check every add runs"); no command writes a bare `link.recorded` yet.
 
 ### The compaction that was declined
 
