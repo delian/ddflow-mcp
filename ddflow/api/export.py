@@ -207,6 +207,7 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
     confirm: Confirm | None = None,
     base: Path | None = None,
     ceiling: int = 0,
+    fenced: bool = False,
 ) -> O.Outcome:
     """Print, diff, check or write one document or the selected set (see the module doc)."""
     try:
@@ -262,7 +263,11 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
                     cfg, d, filters=flt, writing=bool(diff or check or update or out)
                 )
                 if not (diff or check or update or out):
-                    results.append(ops.print_doc(repo, cfg, q, spec, max_bytes=cap, template=tmpl))
+                    results.append(
+                        ops.print_doc(
+                            repo, cfg, q, spec, max_bytes=cap, template=tmpl, fenced=fenced
+                        )
+                    )
                 else:
                     results.append(_act(repo, cfg, q, spec, tmpl, diff, check, out, force, confirm))
             except ExportError as exc:
@@ -282,10 +287,6 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
             "export", {"results": []}, EXIT_UNAVAILABLE, f"could not read the config: {exc}"
         )
     data: dict[str, Any] = {"results": [r.data() for r in results], "selected": ops.selection(cfg)}
-    if not ops.REDACTION_APPLIED and any(
-        r.action in ("created", "updated", "print") for r in results
-    ):
-        data["note"] = ops.REDACTION_NOTE
     reason = "; ".join(f"{r.doc}: {r.message}" for r in results if r.code and r.message)
     return O.Outcome("export", data, ops.worst([r.code for r in results]), reason)
 
@@ -380,6 +381,7 @@ def export_tool(repo: Path, a: dict[str, Any], agent: str = "") -> O.Outcome:
         update=write and not path,
         out=path,
         ceiling=MCP_CEILING,
+        fenced=True,
     )
 
 
