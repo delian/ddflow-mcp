@@ -24,6 +24,7 @@ from urllib.parse import quote
 
 from ..infra import upstream_gh as gh
 from .bugreport import Bundle
+from .redact_report import redact_report
 
 #: A prefilled URL longer than this is not offered; the file is.
 URL_MAX = 8000
@@ -123,7 +124,7 @@ def prepare(root: Path, bundle: Bundle, repo: str) -> Outcome:
         md, js = write_report(root, bundle)
         url, why = issue_url(bundle, repo)
     except (ValueError, OSError) as exc:
-        return Outcome("failed", FAILED, str(exc), bundle.digest)
+        return Outcome("failed", FAILED, _safe(exc), bundle.digest)
     if url is None:
         return Outcome(
             "fallback",
@@ -134,6 +135,10 @@ def prepare(root: Path, bundle: Bundle, repo: str) -> Outcome:
             js,
         )
     return Outcome("prepared", OK, "", bundle.digest, md, js, url)
+
+
+def _safe(exc: Exception) -> str:
+    return redact_report(str(exc)).text
 
 
 def _refusal(consent: ConsentLike | None, digest: str, now: float) -> str:
@@ -175,18 +180,18 @@ def send_gh(
             return Outcome("failed", FAILED, "the file differs from the preview; not sent", digest)
         gh.ensure_ready(Path(root), runner=run)
     except gh.Unavailable as exc:
-        return Outcome("unavailable", UNAVAILABLE, str(exc), digest)
+        return Outcome("unavailable", UNAVAILABLE, _safe(exc), digest)
     except gh.GhError as exc:
-        return Outcome("failed", FAILED, str(exc), digest)
+        return Outcome("failed", FAILED, _safe(exc), digest)
     except (ValueError, OSError) as exc:
-        return Outcome("failed", FAILED, str(exc), digest)
+        return Outcome("failed", FAILED, _safe(exc), digest)
     assert consent is not None
     if not consent.consume():
         return Outcome("refused", REFUSED, "the consent was already used", digest)
     try:
         url, number = gh.create_issue(Path(root), repo, bundle.data["title"], md, runner=run)
     except gh.Unavailable as exc:
-        return Outcome("unavailable", UNAVAILABLE, str(exc), digest, md, js)
+        return Outcome("unavailable", UNAVAILABLE, _safe(exc), digest, md, js)
     except gh.GhError as exc:
-        return Outcome("failed", FAILED, str(exc), digest, md, js)
+        return Outcome("failed", FAILED, _safe(exc), digest, md, js)
     return Outcome("sent", OK, "", digest, md, js, url, number)

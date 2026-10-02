@@ -6,7 +6,7 @@ only SENDS when its caller has already checked a consent (see `services/upstream
 it does not decide anything about consent itself.
 
 `gh` missing or not logged in is `Unavailable` with the reason; a `gh` error is `GhError`
-with its redacted message. The runner is injectable so tests never start a real `gh`.
+with the CLI's message (the caller redacts it before showing it). The runner is injectable so tests never start a real `gh`.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from ..services.redact_report import redact_report
 from .forge import ForgeError, ForgeUnavailable, _check, _run
 
 Runner = Callable[..., Any]
@@ -33,17 +32,13 @@ class GhError(RuntimeError):
     """`gh` was asked and said no."""
 
 
-def _safe(text: str) -> str:
-    return redact_report(text).text[:ERROR_MAX]
-
-
 def _ask(runner: Runner, cwd: Path, argv: list[str], what: str) -> str:
     try:
         return _check(runner(cwd, argv), what)
     except ForgeUnavailable as exc:
-        raise Unavailable(_safe(str(exc))) from exc
+        raise Unavailable(str(exc)[:ERROR_MAX]) from exc
     except ForgeError as exc:
-        raise GhError(_safe(str(exc))) from exc
+        raise GhError(str(exc)[:ERROR_MAX]) from exc
 
 
 def ensure_ready(cwd: Path, *, runner: Runner = _run) -> None:
