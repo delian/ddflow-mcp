@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 import os
-import pty
 import select
 import shlex
 import shutil
@@ -237,6 +236,7 @@ def test_every_add_command_documents_the_flags():
 def _on_a_terminal(repo: Path, argv: list[str], replies: list[str], timeout: float = 60):
     """Run ddflow with a pseudo-terminal as stdin and stdout, typing each reply when the
     menu appears. Returns (exit code, everything it printed)."""
+    pty = pytest.importorskip("pty")  # POSIX only
     master, slave = pty.openpty()
     env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
     proc = subprocess.Popen(
@@ -399,3 +399,35 @@ def test_the_commands_put_the_flag_before_an_end_of_options_separator():
     got = commands(["task", "add", "T1", "--", "-retry storm"], [{"id": "T-old"}])
     assert got[1] == "ddflow task add T1 --extends T-old -- '-retry storm'"
     assert got[0] == "ddflow task add T1 --new -- '-retry storm'"
+
+
+def test_check_on_an_existing_id_says_its_own_rule_applies(filed_as):
+    """`task add T-old --check`: the real add is refused as taken, never as a duplicate."""
+    filed = filed_as("memory")
+    before = events(filed)
+    code, out, _e = run_cli(filed, "memory", "add", SECOND, "--id", "M-old", "--check")
+    assert code == 2 and "already recorded" in out
+    assert events(filed) == before
+
+
+def test_check_says_an_exact_copy_of_a_claimed_record_is_filed_linked(filed_as):
+    filed = filed_as("task")
+    run_cli(filed, "--agent", "someone", "claim", "T-old")
+    code, out, _e = run_cli(filed, "--json", "task", "add", "T-copy", "--title", FIRST, "--check")
+    body = json.loads(out)
+    assert code == 0 and body["would_link"] == "T-old" and body["would_extend"] == ""
+
+
+def test_a_refusal_in_json_still_says_why_on_stderr(filed_as):
+    filed = filed_as("task")
+    code, out, err = run_cli(filed, "--json", *ADDS["task"])
+    assert code == 3 and "possible duplicate" in err
+    assert json.loads(out)["candidates"]
+
+
+def test_a_filed_anyway_add_lists_the_records_it_reads_like(filed_as, monkeypatch):
+    filed = filed_as("task")
+    monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "warn")
+    code, out, err = run_cli(filed, *ADDS["task"])
+    assert code == 0 and "T-new" in out
+    assert "It reads like" in err and "T-old" in err

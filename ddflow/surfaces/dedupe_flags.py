@@ -194,8 +194,14 @@ def settle(a, c, out: Outcome) -> int | None:
             print("\n".join(candidate_lines(data["candidates"])))
             if data.get("would_extend"):
                 verdict = (
-                    f"An add of this is an exact copy: it would be recorded as a duplicate "
-                    f"of {data['would_extend']} without asking"
+                    f"An add of this is an exact copy: it would be added to "
+                    f"{data['would_extend']} without asking, and no new record made"
+                )
+            elif data.get("would_link"):
+                verdict = (
+                    f"An add of this is an exact copy of {data['would_link']}, which is "
+                    f"claimed or closed: it would be filed as a new record linked to it, "
+                    f"without asking"
                 )
             elif data["would_ask"]:
                 verdict = (
@@ -207,10 +213,10 @@ def settle(a, c, out: Outcome) -> int | None:
             print(verdict + ".")
         return out.exit
     if _asks(out):
+        print(out.reason, file=sys.stderr)
         if c.json:
             c.out(out.reason, out.body())
             return out.exit
-        print(out.reason, file=sys.stderr)
         if data.get("aborted"):
             return out.exit
         argv = list(getattr(a, "_argv", []))
@@ -222,6 +228,11 @@ def settle(a, c, out: Outcome) -> int | None:
             file=sys.stderr,
         )
         return out.exit
+    if not out.exit and data.get("candidates") and not c.json and not data.get("extended"):
+        # Filed anyway (`warn`, or a match below the asking threshold): the add reports
+        # itself as usual, after the records it reads like.
+        print("It reads like:", file=sys.stderr)
+        print("\n".join(candidate_lines(data["candidates"])), file=sys.stderr)
     if data.get("extended") and not out.exit:
         msg = (
             f"added to {data['extended']} ({data['extended_kind']}, {data['relation']}): "
