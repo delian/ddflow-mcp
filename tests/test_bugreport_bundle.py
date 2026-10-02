@@ -104,7 +104,15 @@ def test_normalise_traceback_directly():
 
 def test_argv_values_are_redacted_flags_kept():
     out = _build()
-    assert out.data["command"]["argv"] == ["ddflow", "claim", "<arg>", "--agent", "<value>"]
+    assert out.data["command"]["argv"] == ["ddflow", "<arg>", "<arg>", "--agent", "<value>"]
+    out = _build(
+        failure=B.Failure(
+            argv=["ddflow", "task", "add", "my-private-slug"], subcommands={"task", "add"}
+        )
+    )
+    assert out.data["command"]["argv"] == ["ddflow", "task", "add", "<arg>"]
+    out = _build(failure=B.Failure(argv=["/x/myproject-run", "-m", "ddflow", "go"]))
+    assert out.data["command"]["argv"] == ["<program>", "-m", "ddflow", "<arg>"]
     out = _build(
         failure=B.Failure(
             argv=["/x/bin/ddflow", "bug", "found", "--title=oops", "-q"],
@@ -357,3 +365,14 @@ def test_local_candidates_find_a_similar_record_and_an_index_failure_is_unavaila
 
     unavailable = _build(candidates=lambda t: broken())
     assert unavailable.data["dedupe_candidates"]["status"] == "unavailable"
+
+
+def test_malformed_candidate_rows_are_unavailable_not_a_crash():
+    for rows in ([{"id": "B-a", "score": None}], ["not a mapping"]):
+        got = _build(candidates=lambda t, r=rows: r)
+        assert got.data["dedupe_candidates"]["status"] == "unavailable"
+
+
+def test_lone_surrogates_do_not_break_the_bundle():
+    out = _build(title="bad \ud800 title", expected="x \udfff y")
+    assert out.verify() and "\ud800" not in out.rendered
