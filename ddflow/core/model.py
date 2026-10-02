@@ -1864,8 +1864,10 @@ def _h_export_enabled(st: State, ev: Event) -> None:
         "path": str(d.get("path", "")),
         "mode": str(d.get("mode", "")),
         "local": bool(d.get("local")),
-        # Only a person at a terminal lifts the operator's veto: the writer enforces it, and
-        # the fold does not trust a forged or foreign event to have.
+        # Only a person at a terminal lifts the operator's veto. The writer enforces that
+        # (an agent's enable of a locked document is refused); the fold ignores the event's
+        # own `locked` claim and honours its `human` flag as it does for every event kind:
+        # the log has no authenticity beyond what its writers record.
         "locked": bool(st.exports.get(ev.subject, {}).get("locked")) and not human,
         "acked": human,  # an agent's enable waits for the operator to acknowledge it
     }
@@ -1886,6 +1888,8 @@ def _h_export_disabled(st: State, ev: Event) -> None:
 
 
 def _h_export_acknowledged(st: State, ev: Event) -> None:
+    if not ev.data.get("human"):  # only a person's acknowledgement clears the notice
+        return
     docs = ev.data.get("documents")
     for doc in docs if isinstance(docs, list) else []:
         if isinstance(doc, str) and doc in st.exports:

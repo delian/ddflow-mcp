@@ -256,7 +256,7 @@ def test_the_fold_tracks_who_enabled_what_and_the_lock():
             _ev("export.enabled", "roadmap", 1, by="bot", path="R.md", mode="whole"),
             _ev("export.disabled", "roadmap", 2, by="op", human=True, locked=True),
             _ev("export.enabled", "status", 3, by="op", human=True),
-            _ev("export.acknowledged", "export", 4, documents=["roadmap", "nosuch", 7]),
+            _ev("export.acknowledged", "export", 4, human=True, documents=["roadmap", "nosuch", 7]),
         ]
     )
     assert st.exports["roadmap"]["locked"] is True and not st.exports["roadmap"]["enabled"]
@@ -266,7 +266,7 @@ def test_the_fold_tracks_who_enabled_what_and_the_lock():
     st = model.fold(
         [
             *[_ev("export.enabled", "roadmap", 1, by="bot")],
-            _ev("export.acknowledged", "export", 2, documents=["roadmap"]),
+            _ev("export.acknowledged", "export", 2, human=True, documents=["roadmap"]),
         ]
     )
     assert st.exports["roadmap"]["acked"] is True
@@ -450,3 +450,51 @@ def test_no_document_kind_is_named_like_a_verb():
     from ddflow.surfaces.commands.export import VERBS
 
     assert not set(R.names()) & set(VERBS)
+
+
+def test_a_non_human_acknowledgement_event_clears_nothing():
+    st = model.fold(
+        [
+            _ev("export.enabled", "roadmap", 1, by="bot"),
+            _ev("export.acknowledged", "export", 2, documents=["roadmap"]),
+        ]
+    )
+    assert st.exports["roadmap"]["acked"] is False
+
+
+def test_mcp_refuses_mode_and_path_outside_enable(proj):
+    assert _call(proj, {"action": "disable", "doc": "roadmap", "mode": "append"})["exit"] == 3
+    assert _call(proj, {"action": "validate", "doc": "roadmap", "path": "x.md"})["exit"] == 3
+
+
+def _on_a_terminal(repo: Path, *argv: str) -> int:
+    """The CLI as a person at a real terminal: stdin and stdout are a pty."""
+    import pty
+
+    env = {k: v for k, v in os.environ.items() if k not in ("DDFLOW_AGENT", "CLAUDECODE")}
+    env["PYTHONPATH"] = str(ROOT)
+    master, slave = pty.openpty()
+    try:
+        p = subprocess.run(
+            [sys.executable, "-m", "ddflow", "--repo", str(repo), *argv],
+            stdin=slave,
+            stdout=slave,
+            stderr=subprocess.PIPE,
+            env=env,
+            timeout=300,
+        )
+    finally:
+        os.close(master)
+        os.close(slave)
+    return p.returncode
+
+
+def test_the_plain_listing_at_a_terminal_acknowledges_and_no_other_mode_does(proj):
+    run_cli(proj, "export", "enable", "roadmap", agent="bot")
+    _on_a_terminal(proj, "export", "--check")  # a comparison with no document is not a listing
+    assert not _events(proj, "export.acknowledged")
+    assert "Export:" in run_cli(proj, "brief")[1]
+    assert _on_a_terminal(proj, "export") == 0
+    (ev,) = _events(proj, "export.acknowledged")
+    assert ev["data"]["documents"] == ["roadmap"] and ev["data"]["human"] is True
+    assert "Export:" not in run_cli(proj, "brief")[1]

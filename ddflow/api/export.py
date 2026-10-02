@@ -390,6 +390,8 @@ def _tool_action(repo: Path, a: dict[str, Any], act: str, agent: str) -> O.Outco
     others = [k for k in ("all", "write", "diff", "check") if a.get(k)]
     if others:
         return O.refused("export", f"{', '.join(others)} do not apply to action={act}", results=[])
+    if act != "enable" and (a.get("mode") or a.get("path")):
+        return O.refused("export", f"mode and path apply to action=enable, not {act}", results=[])
     if act == "list":
         return export_list(repo, agent)
     if act == "validate":

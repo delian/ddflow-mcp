@@ -260,7 +260,11 @@ def acknowledge(
             user = getpass.getuser()
         except Exception:
             user = ""
-        log.append("export.acknowledged", "export", {"documents": docs, "user": user})
+        log.append(
+            "export.acknowledged",
+            "export",
+            {"documents": docs, "user": user, "by": log.agent_id, "human": True},
+        )
     return docs
 
 
