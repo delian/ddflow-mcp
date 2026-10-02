@@ -122,7 +122,8 @@ _PREFIX_SHOWN = 12
 
 def _unknown_phase(st, phase: str, *, phases_only: bool = False) -> str:
     """Why ``phase`` names nothing ``next``, ``brief`` or ``board`` can slice by; "" when
-    it is an item.
+    a slice is possible: any live item for ``next`` and ``brief``, and with
+    ``phases_only`` (``board``, which slices by phase id) only a phase.
 
     An empty slice of an id that is not an item read as "Nothing actionable", exit 2, and
     a driver took that for "phase done" (Bde0c6e9fad: `--phase 159`, whose work lived
