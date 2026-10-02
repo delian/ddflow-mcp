@@ -1548,7 +1548,7 @@ def block(
     command where a typo'd id materialised a titleless phantom task — which the scheduler
     then offered to an agent as the next thing to do.
 
-    A DONE item is refused (exit 3) unless `reopen`: blocking it moves finished work
+    A DONE or ABANDONED item is refused (exit 3) unless `reopen`: blocking it moves finished work
     out of done, which a mistyped id would do silently (B-block-done). `reopen` is the
     deliberate form -- the B12/B14 data fix was one.
     """
@@ -1556,12 +1556,20 @@ def block(
     it = _require(st, item, "item.blocked")
     if isinstance(it, O.Outcome):
         return it
-    if it.state == DONE and not reopen:
+    if it.state in (DONE, ABANDONED) and not reopen:
+        if it.state == DONE:
+            why = (
+                f"{item} is DONE; blocking it would move finished work out of done (and "
+                f"anything depending on it would wait again)."
+            )
+        else:
+            why = (
+                f"{item} is ABANDONED; blocking it would revive work that was dropped on "
+                f"purpose (a mistyped id would do it silently)."
+            )
         return O.refused(
             "item.blocked",
-            f"{item} is DONE; blocking it would move finished work out of done (and "
-            f"anything depending on it would wait again). Pass --reopen "
-            f"(reopen=true over MCP) if that is the intent.",
+            f"{why} Pass --reopen (reopen=true over MCP) if that is the intent.",
             id=item,
         )
     log.append("item.blocked", item, {"reason": reason})

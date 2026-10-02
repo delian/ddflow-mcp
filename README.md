@@ -3589,7 +3589,7 @@ ddflow promote status           each environment: head, behind upstream, open pr
 ddflow flow show                how this project works: model, lines, every choice + who made it
 ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)
-ddflow block <id> --reason ..   mark blocked (a DONE item is refused, exit 3, unless --reopen)
+ddflow block <id> --reason ..   mark blocked (a DONE or ABANDONED item is refused, exit 3, unless --reopen)
 ddflow abandon <id> --reason .. stop work on an item without completing it
 ddflow remove <id> [--force]    take an item out of the queue (recorded, not erased)
 
