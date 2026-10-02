@@ -205,12 +205,9 @@ def test_a_negative_limit_does_not_lift_the_bound(repo):
 
 def test_the_reason_stays_the_second_block_and_the_cut_note_follows_it(repo):
     run_cli(repo, "init")
-    log = EventLog(repo, "agent-test")
-    for i in range(40):
-        log.append("task.added", f"W{i:02d}", {"title": f"w {i}", "needs": ["MISSING"]})
-    blocks = [c["text"] for c in _call(repo, "ddflow_next")["content"]]
-    assert json.loads(blocks[0])["truncated"]["blocked"] == 40
-    assert blocks[1].startswith("Nothing actionable"), blocks[1][:80]
+    blocks = [c["text"] for c in _call(repo, "ddflow_recall", query="nothing like this")["content"]]
+    assert blocks[1].startswith("Nothing recalled"), blocks[1][:80]
+    assert "raw record" in blocks[2], blocks[2]
 
 
 def test_a_gate_timestamp_loses_only_a_utc_fraction():
