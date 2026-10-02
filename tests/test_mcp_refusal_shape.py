@@ -124,8 +124,8 @@ def test_an_unknown_decision_leads_with_the_refusal_not_a_null(repo):
 
 
 def test_a_scalar_body_at_success_is_untouched():
-    ok = O.ok("decision.show", id="D1", decision={"id": "D1"})
-    assert _first(_outcome_result(ok, "decision")) == {"id": "D1"}
+    ok = O.ok("decision.show", id="D1", decision="text")
+    assert _first(_outcome_result(ok, "decision")) == "text"
 
 
 def test_a_data_field_named_refusal_is_kept_not_discarded():
@@ -189,3 +189,9 @@ def test_a_successful_call_is_untouched():
         "holder": "a",
         "worktree": None,
     }
+
+
+def test_a_data_field_named_refusal_data_is_not_overwritten_by_the_rename():
+    out = O.refused("k", "why", refusal="a", refusal_data="b")
+    body = _first(_outcome_result(out))
+    assert body["refusal_data"] == "b" and body["refusal_data_"] == "a", body

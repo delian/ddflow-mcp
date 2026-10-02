@@ -56,6 +56,6 @@ def test_the_trimmed_text_still_has_a_home():
         assert value in text, value
 
 
-def test_ddflow_loops_names_every_detector_an_agent_can_be_told_about():
+def test_ddflow_loops_names_the_repeated_failure_detector():
     """B1d72a8144c: repeated_failure was missing from the tools/list description."""
     assert "repeated_failure" in TOOLS["ddflow_loops"]["description"]
