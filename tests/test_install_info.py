@@ -314,3 +314,14 @@ def test_a_checkout_with_an_egg_info_is_not_from_the_index(tmp_path, monkeypatch
     (egg / "PKG-INFO").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
     monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
     assert I.installed_from_index() is False
+
+
+def test_index_install_into_a_target_dir_is_not_a_checkout(tmp_path):
+    """`pip install --target`: no site-packages in the path, but a real dist-info."""
+    target = tmp_path / "opt-x"
+    (target / "ddflow").mkdir(parents=True)
+    info = target / "ddflow_mcp-1.2.3.dist-info"
+    info.mkdir()
+    (info / "METADATA").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
+    got = I.install_info(root=target)
+    assert (got.kind, got.version) == ("index", "1.2.3")
