@@ -1,0 +1,30 @@
+# Roadmap
+
+{{ open_tasks }} open tasks. {{ done_phases }} phases complete (not listed).
+{% for lane in lanes %}
+
+## {{ lane.label }} ({{ lane.blurb }})
+{% if not lane.phases %}
+
+None.
+{% endif %}
+{% for p in lane.phases %}
+
+### {{ p.id }}: {{ p.title | md_escape }} ({{ p.done }}/{{ p.total }}) {{ p.done | bar(p.total) }}
+{% if p.waits_on %}
+
+Waits on {{ p.waits_on | join(", ") }}.
+{% endif %}
+{% if p.tasks %}
+
+{% endif %}
+{% for t in p.tasks %}
+- `{{ t.id }}` {{ t.title | md_escape }}{% if t.status != "ready" %} _({{ t.status }}{% if t.holder %}, {{ t.holder }}{% endif %}{% if t.waits_on %}: waits on {{ t.waits_on | join(", ") }}{% endif %})_{% endif %}
+
+{% endfor %}
+{% endfor %}
+{% endfor %}
+{% if hidden_phases %}
+
+{{ hidden_phases }} more phases not listed (--limit).
+{% endif %}

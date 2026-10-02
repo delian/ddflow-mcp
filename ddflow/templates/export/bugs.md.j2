@@ -1,0 +1,23 @@
+# Bugs
+{% if as_of %}
+
+As of {{ as_of }}.
+{% endif %}
+{% for s in sections %}
+
+## {{ s.label }} ({{ s.total }})
+{% if not s.bugs %}
+
+None.
+{% endif %}
+{% if s.bugs %}
+
+{% endif %}
+{% for b in s.bugs %}
+- `{{ b.id }}` {% if b.title %}**{{ b.title | md_escape }}**{% if b.summary %}: {% endif %}{% endif %}{% if b.summary %}{{ b.summary | md_escape }}{% endif %}{% if b.severity %} [{{ b.severity }}]{% endif %}{% if b.scope %} [{{ b.scope }}]{% endif %}{% if s.name == "open" %} _(found {{ b.found }}{% if b.age_days >= 0 %}, {{ b.age_days }}d old{% endif %}{% if b.item %}, in {{ b.item }}{% endif %})_{% elif s.name == "fixed" %} _(fixed {{ b.fixed }}{% if b.test %}; test `{{ b.test }}`{% if b.more_tests %} +{{ b.more_tests }}{% endif %}{% endif %})_{% else %} _(invalid {{ b.invalid }}{% if b.reason %}: {{ b.reason | md_escape }}{% endif %})_{% endif %}
+
+{% endfor %}
+{% if s.hidden %}
+{{ s.hidden }} more not listed (--limit).
+{% endif %}
+{% endfor %}

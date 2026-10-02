@@ -1,0 +1,20 @@
+# Status
+{% if as_of %}
+
+As of {{ as_of }}.
+{% endif %}
+
+- Tasks: {{ tasks_done }}/{{ tasks_total }} done {{ tasks_done | bar(tasks_total, 20) }} across {{ phases_total }} phases ({{ phases_done }} complete).
+{% if task_counts %}
+- By state: {% for c in task_counts %}{{ c.n }} {{ c.state }}{% if not loop.last %}, {% endif %}{% endfor %}.
+{% endif %}
+- Agent-hours: {{ agent_hours }}.
+- Open bugs: {{ open_bugs }} of {{ bugs_total }}.
+- Decisions in force: {{ decisions }}. Lessons: {{ lessons }}.
+{% if in_flight %}
+
+## In flight
+{% for t in in_flight %}
+- `{{ t.id }}` {{ t.title | md_escape }} ({{ t.state }}{% if t.holder %}, {{ t.holder }}{% endif %})
+{% endfor %}
+{% endif %}
