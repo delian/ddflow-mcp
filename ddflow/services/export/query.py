@@ -128,8 +128,8 @@ class Query:
         """Events (log order, which is the deterministic ``sort_key`` order) of ``kinds``.
 
         ``since`` is an ISO date (a calendar day, compared on the ``ts`` text) or a full
-        timestamp (compared as an instant); anything else is refused. Events whose ``ts``
-        cannot be read are left out of a ``since``-filtered result. A document
+        timestamp (compared as an instant); anything else is refused. Events whose ``ts`` is
+        not date-shaped (date form) or not parseable (timestamp form) are left out. A document
         that needs *when* something happened for display must take it from event data,
         never from the clock at render time.
         """

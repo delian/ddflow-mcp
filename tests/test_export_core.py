@@ -590,3 +590,20 @@ def test_self_referential_data_is_an_export_error():
     d["self"] = d
     with pytest.raises(ExportError):
         registry.render("x", d)
+
+
+@pytest.mark.parametrize(
+    "src", ["{{ [].pop() }}", "{{ {}.popitem() }}", "{{ 1 // 0 }}", "{{ 'a'.nope() }}"]
+)
+def test_any_exception_from_template_code_is_an_export_error(src):
+    with pytest.raises(ExportError) as e:
+        registry.render(src, {})
+    assert e.value.code == EXIT_UNAVAILABLE
+
+
+def test_bad_header_extra_through_render_document_is_refused(tmp_path, toy, builtin):
+    with pytest.raises(ExportError) as e:
+        registry.render_document(
+            "toyroad", _log(tmp_path), builtin=builtin, extra={"title": "two words"}
+        )
+    assert e.value.code == EXIT_REFUSED
