@@ -88,6 +88,11 @@ def test_test_only_and_docs_only_changes_are_exempt(repo, tree):
     assert _reported(repo) == []
 
 
+def test_tests_inside_a_code_path_are_exempt(repo, tree):
+    _commit(tree, {"ddflow/tests/test_x.py": "x = 1\n", "ddflow/test_y.py": "x = 1\n"})
+    assert _reported(repo) == []
+
+
 def test_event_log_housekeeping_is_exempt(repo, tree):
     _commit(tree, {".ddflow/events/x.jsonl": "{}\n"})
     assert _reported(repo) == []
