@@ -1773,7 +1773,9 @@ prompt or note — runs the same check against the log **before it writes**, wit
 
 `[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
-entirely. Adding an id that already exists keeps the refusal or merge it always had. The
+entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
+the log before the add writes, so it is advisory across agents: two adds of the same text
+racing in different clones can both pass, and a later `similar` will show the pair. The
 check is also a function, `api.dedupe_check_add`, taking a config that may have `on_match`
 replaced (`api._dedupe.with_check`), so a bulk caller need not go through the add paths. The
 importer applies the same engine and `[dedupe]` thresholds to a batch with its own
