@@ -162,3 +162,25 @@ def test_the_reports_block_is_clipped_to_a_small_budget(proj):
     data = json.loads(run_cli(proj, "--json", "brief", "--item", "P1.T1", agent="a")[1])
     assert data["brief"].startswith("## 5 new reports")
     assert data["approx_tokens"] <= 300 * 1.1
+
+
+def test_a_lesson_or_decision_linked_to_a_claimed_item_renders_in_the_brief(proj):
+    """`Lesson.text` and `Decision.text` are methods: the brief must quote their text."""
+    run_cli(proj, "claim", "P1.T1", "--no-worktree", agent="a")
+    log = _log(proj)
+    log.append(
+        "lesson.recorded",
+        "L1",
+        {"title": "Whitespace passwords", "rule": "Trim nothing.", "extends": "P1.T1"},
+    )
+    log.append(
+        "decision.recorded",
+        "D1",
+        {"title": "Keep spaces", "decision": "Never trim.", "extends": "P1.T1"},
+    )
+    code, out, err = run_cli(proj, "--json", "brief", "--item", "P1.T1", agent="a")
+    assert code == OK, err
+    text = json.loads(out)["brief"]
+    assert text.startswith("## 2 new reports") and "Trim nothing." in text
+    assert "Never trim." in text
+    assert OK == run_cli(proj, "show", "P1.T1")[0]
