@@ -138,7 +138,7 @@ def test_replay_is_refused_as_an_export_kind(proj):
 
 def test_names_come_from_the_config_and_the_machine_not_the_project(proj):
     cfg = Config.load(proj)
-    red = safe.redact_text("Project Zephyr and ddflow", cfg, proj)
+    red = safe.redact_text("Project Zephyr and ddflow", cfg)
     assert "ddflow" in red.text and "Zephyr" in red.text  # nothing configured: no names
     assert safe.names_for(cfg) == []
 
