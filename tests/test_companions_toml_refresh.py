@@ -82,3 +82,13 @@ def test_junk_entries_keep_their_refusals(tmp_path):
     status, msg = CO.register(tmp_path, _c(tmp_path), "codex")
     assert status == "refused" and "launches nothing" in msg
     assert p.read_text("utf-8") == "[mcp_servers.context7]\n"
+
+
+def test_a_comment_above_the_next_table_survives_the_refresh(tmp_path):
+    p = _codex(
+        tmp_path,
+        '[mcp_servers.context7]\ncommand = "old-launcher"\n\n# the other one, keep me\n'
+        '[mcp_servers.other]\ncommand = "keep-me"\n',
+    )
+    assert CO.register(tmp_path, _c(tmp_path), "codex")[0] == "written"
+    assert "# the other one, keep me\n[mcp_servers.other]" in p.read_text("utf-8")
