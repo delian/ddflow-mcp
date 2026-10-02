@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
-from ..core.model import State
+from ..core.model import ADD_RELATIONS, State, link_targets
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 
 
@@ -177,10 +177,37 @@ def _rs_session_ended(n, ev):
 
 def _rs_phase(n, ev):
     d = ev.data
-    text = f"{ev.subject}: {d.get('title', '')}"
+    text = f"{ev.subject}: {d.get('title', '')}" + _link_note(d)
     if d.get("body"):
         text += "\n\n" + d["body"].strip()
     return ReplayStep(n, ev.ts, "phase", text, ev.subject)
+
+
+def _link_note(d: dict) -> str:
+    """` [extends T1; related T2]` -- how an add said it relates to what was there."""
+    parts = []
+    for relation in ADD_RELATIONS:
+        for t in link_targets(d.get(relation)):
+            parts.append(f"{relation.replace('_', ' ')} {t}")
+    return f" [{'; '.join(parts)}]" if parts else ""
+
+
+def _rs_extended(n, ev):
+    d = ev.data
+    who = d.get("who") or ev.agent
+    return ReplayStep(
+        n, ev.ts, "addition", f"added to {ev.subject} by {who}:\n\n{d.get('text', '')}", ev.subject
+    )
+
+
+def _rs_link(n, ev):
+    d = ev.data
+    relation = d.get("relation", "") or "unspecified"
+    verb = {"distinct": "is DISTINCT from"}.get(relation, relation)
+    targets = ", ".join(link_targets(d.get("target"))) or "?"
+    return ReplayStep(
+        n, ev.ts, "link", f"{ev.subject} {verb.replace('_', ' ')} {targets}", ev.subject
+    )
 
 
 def _rs_task(n, ev):
@@ -192,6 +219,7 @@ def _rs_task(n, ev):
         + (f"; writes {', '.join(d['globs'])}" if d.get("globs") else "")
         + ")"
     )
+    text += _link_note(d)
     if d.get("body"):
         text += "\n\n" + d["body"].strip()
     return ReplayStep(n, ev.ts, "task", text, ev.subject)
@@ -212,7 +240,7 @@ def _rs_decision(n, ev):
             parts.append(f"{label}: {d[key]}")
     if d.get("globs"):
         parts.append(f"Governs: {', '.join(d['globs'])}")
-    return ReplayStep(n, ev.ts, "decision", "\n\n".join(parts), d.get("item", ""))
+    return ReplayStep(n, ev.ts, "decision", "\n\n".join(parts) + _link_note(d), d.get("item", ""))
 
 
 def _rs_decision_superseded(n, ev):
@@ -232,7 +260,7 @@ def _rs_research(n, ev):
         n,
         ev.ts,
         "research",
-        f"{d.get('question', '')} -> {d.get('claim', '')}",
+        f"{d.get('question', '')} -> {d.get('claim', '')}{_link_note(d)}",
         d.get("item", ""),
         verdict=d.get("verdict", ""),
     )
@@ -240,7 +268,9 @@ def _rs_research(n, ev):
 
 def _rs_lesson(n, ev):
     d = ev.data
-    return ReplayStep(n, ev.ts, "lesson", f"{d.get('title', '')}: {d.get('rule', '')}")
+    return ReplayStep(
+        n, ev.ts, "lesson", f"{d.get('title', '')}: {d.get('rule', '')}{_link_note(d)}"
+    )
 
 
 def _rs_completed(n, ev):
@@ -275,6 +305,8 @@ _REPLAY_RENDERERS = {
     "lesson.recorded": _rs_lesson,
     "item.completed": _rs_completed,
     "item.resolved": _rs_resolved,
+    "record.extended": _rs_extended,
+    "link.recorded": _rs_link,
 }
 
 
