@@ -202,3 +202,43 @@ def test_the_cadence_lists_a_stale_opted_in_document(proj):
     cfg = _load(proj)[1]
     due = export_cadence(proj, cfg)
     assert due and due[0]["cadence"] == "export_refresh" and "roadmap" in due[0]["since"]
+
+
+def test_a_failed_refresh_commit_removes_a_document_it_created(proj, monkeypatch):
+    p = proj / ".ddflow" / "config.toml"
+    p.write_text(
+        p.read_text().replace(
+            'documents = ["roadmap"]', 'documents = ["roadmap", "status"]\nrefresh = "merge"'
+        )
+    )
+    tree = _tree(proj)
+    _work(tree)
+    real = W.git
+
+    def git(repo, *args, **kw):
+        if "commit" in args and "refresh generated documents" in args:
+            return W.GitResult(1, "", "gpg failed")
+        return real(repo, *args, **kw)
+
+    monkeypatch.setattr(W, "git", git)
+    from ddflow import api
+
+    out = api.merge_item(proj, "T1", allow_dirty=True, keep=True)
+    assert out.exit == OK, out.reason
+    assert "could not commit" in out.data["export_refresh"]["summary"]
+    assert not (tree / "STATUS.md").exists()
+    assert _git(tree, "status", "--porcelain").strip() == ""
+
+
+def test_one_documents_bad_settings_do_not_block_the_others(proj):
+    p = proj / ".ddflow" / "config.toml"
+    text = p.read_text().replace(
+        'documents = ["roadmap"]', 'documents = ["roadmap", "status", "rules"]\nrefresh = "merge"'
+    )
+    p.write_text(
+        text + '\n[export.status]\npath = "../outside.md"\n\n[export.rules]\nrefresh = "off"\n'
+    )
+    r = RF.refresh_selected(proj, "merge")
+    by = {o.doc: o for o in r.outcomes}
+    assert set(by) == {"roadmap", "status"}  # rules is off: never resolved
+    assert by["roadmap"].action == "updated" and by["status"].action == "failed"
