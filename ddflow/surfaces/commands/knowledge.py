@@ -200,6 +200,8 @@ def cmd_recall(a, c: Ctx) -> int:
 
     results = out.data["_render"]["results"]
     budget, used = out.data["max_chars"], 0
+    # BEFORE the records, so a recall cut short by the budget still carried it.
+    print(PV.DATA_RULE)
     for table, label, why in out.data["_render"]["sources"]:
         rows = results.get(table)
         if not rows:
@@ -215,7 +217,6 @@ def cmd_recall(a, c: Ctx) -> int:
                 return OK
             print(block, end="")
             used += len(block)
-    print("\n" + PV.DATA_RULE)
     print(
         "\nRecall is a prompt to CHECK, not a verdict. A decision above is binding "
         "unless the operator says otherwise; a lesson is advice; a past prompt is "
@@ -231,7 +232,7 @@ def _recall_block(table: str, r: dict, head: str, body: str) -> str:
     """One hit. A decision, lesson or memory carries who recorded it and is fenced as
     data (`core/provenance.py`); the other kinds print as they always did."""
     prov = r.get("provenance")
-    if not prov:
+    if not prov or table not in _KIND:
         return f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
     origin = PV.Origin(prov["trust"], prov.get("by", ""), prov.get("source", ""))
     fenced = PV.fence(

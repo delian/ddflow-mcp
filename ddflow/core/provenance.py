@@ -24,6 +24,7 @@ from dataclasses import dataclass
 OPERATOR = "operator"
 AGENT = "agent"
 IMPORTED = "imported"
+UNKNOWN = "unknown"  # a record the folded state does not hold: nobody to name
 
 #: The tag a fence is written with. Named once: the escape below, the instruction line
 #: agents are given and the tests all depend on it.
@@ -50,6 +51,8 @@ class Origin:
         if self.trust == IMPORTED:
             via = f" (by {self.by})" if self.by else ""
             return f"imported from {self.source or 'an unnamed source'}{via}"
+        if self.trust == UNKNOWN:
+            return "author unknown"
         return f"recorded by an agent ({self.by})" if self.by else "recorded by an agent"
 
 

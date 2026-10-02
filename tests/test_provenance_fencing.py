@@ -259,3 +259,31 @@ def test_doctor_says_unavailable_when_git_cannot(tmp_path):
     EventLog(plain, "other").append("lesson.recorded", "L2", {"title": "t"})
     (note,) = _unknown_author_notes(plain, log)
     assert note.startswith("unavailable") and "not a git repository" in note
+
+
+def test_a_budget_cut_recall_still_carries_the_data_rule(proj):
+    for n in range(3):
+        run_cli(
+            proj, "lesson", "add", "--id", f"L-z{n}", "--title", f"zebra {n}", "--rule", "z" * 200
+        )
+    code, out, _ = run_cli(proj, "recall", "zebra", "--max-chars", "120", agent="reader")
+    assert code == 0 and "truncated" in out
+    assert out.index("recorded DATA") < out.index("truncated")
+
+
+def test_a_hit_the_state_cannot_name_is_unknown_not_an_agent(proj):
+    from ddflow.api._base import _load
+    from ddflow.core.schedule import plan
+    from ddflow.views import markdown as md
+
+    _log, cfg, st = _load(proj, "reader")
+    text = md.brief(st, cfg, plan(st, cfg), lessons=[{"id": "L-gone", "title": "t", "rule": "r"}])
+    (line,) = [ln for ln in text.splitlines() if 'id="L-gone"' in ln]
+    assert 'trust="unknown"' in line and "agent" not in line.split(">", 1)[0]
+
+
+def test_a_provenance_row_of_another_kind_prints_plainly():
+    from ddflow.surfaces.commands.knowledge import _recall_block
+
+    out = _recall_block("prompts", {"id": "p1", "provenance": {"trust": "agent"}}, "head", "body")
+    assert "ddflow-record" not in out and "head" in out
