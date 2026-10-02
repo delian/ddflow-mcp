@@ -166,8 +166,9 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
 
 README_UNKNOWN = (
-    "README check could not run: no diff for this task (no worktree, branch or landed "
-    "commit git can read), so whether the README moved is unknown."
+    "README check could not run: git could not report this task's diff (no worktree, "
+    "branch or landed commit to read, or its base is unreadable), so whether the README "
+    "moved is unknown."
 )
 README_REMEDY = (
     "README not updated: record the section you changed, or "
@@ -176,7 +177,8 @@ README_REMEDY = (
 
 
 def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str:
-    """The "README not updated" report when a task's diff changed code and not the README; else "".
+    """The "README not updated" report when a task's diff changed code and not the README;
+    `README_UNKNOWN` when git cannot say what changed; else "".
 
     Decision D-readme-current: a change a user or agent can see updates README.md in the
     same task. A completion CHECK rather than a pipeline gate: a gate in `task_pipeline`
@@ -185,8 +187,9 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
     diff. The recorded reason is the existing `docs` gate outcome -- `gate skip <id> docs
     --reason` or `gate record <id> docs --outcome passed --evidence <section>`.
 
-    Silent (never a guess) when the mode is `off`, the item is not a task, a `docs`
-    outcome with a reason is on record, or git cannot say what changed.
+    Silent when the mode is `off`, the item is not a task, or a `docs` outcome with a
+    reason is on record. When git cannot say what changed it returns `README_UNKNOWN`
+    (the caller makes that a warning, never a blocker): "nobody looked" is not "no".
     """
     mode = cfg.enforce.readme_with_code
     it = state.items.get(item_id)
@@ -199,7 +202,9 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
     if changed is None:
         return README_UNKNOWN
     code = [
-        p for p in changed if is_shared(p, cfg.enforce.readme_code_globs) and not _is_test_path(p)
+        p
+        for p in changed
+        if is_shared(p, cfg.enforce.readme_code_globs) and not _is_test_or_doc_path(p)
     ]
     if not code or any(_is_readme(p, cfg.enforce.readme_files) for p in changed):
         return ""
@@ -213,15 +218,23 @@ def _is_readme(path: str, files: list[str]) -> bool:
     return is_shared(path, [f if f.startswith("/") else f"/{f}" for f in files])
 
 
-def _is_test_path(path: str) -> bool:
-    """A test file is never user-visible, even inside a code glob (`pkg/tests/x.py`)."""
+_DOC_SUFFIXES = (".md", ".rst", ".adoc", ".txt")
+
+
+def _is_test_or_doc_path(path: str) -> bool:
+    """Never user-visible code, even inside a code glob: a test file (`pkg/tests/x.py`,
+    `__tests__/`, `foo.test.ts`, `foo_spec.rb`, conftest.py) or a documentation file."""
     parts = path.split("/")
     name = parts[-1]
+    stem = name.rsplit(".", 1)[0]
     return (
-        any(d in ("tests", "test") for d in parts[:-1])
+        any(d in ("tests", "test", "__tests__", "spec", "specs") for d in parts[:-1])
         or name.startswith("test_")
-        or name.endswith(("_test.py", ".test.js", ".test.ts", ".spec.js", ".spec.ts"))
+        or stem.endswith(("_test", "_spec"))
+        or ".test." in name
+        or ".spec." in name
         or name == "conftest.py"
+        or name.lower().endswith(_DOC_SUFFIXES)
     )
 
 
