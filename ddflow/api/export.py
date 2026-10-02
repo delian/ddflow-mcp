@@ -47,14 +47,23 @@ def export_list(repo: Path) -> O.Outcome:
     )
 
 
-def _filters(*, version: str = "", tag: str = "", **kw: Any) -> R.Filters:
+def _filters(
+    *, since: str, version: str, phase: str, status: str, limit: int, tag: str, session: str
+) -> R.Filters:
     """The core Filters from the flags. ``--version X`` is the ``tag`` filter (the changelog
     kind reads a version from it: ``X`` or ``vX``, or ``unreleased``); asking for both a
     different ``--version`` and ``--tag`` is refused."""
     if version and tag and version != tag:
         raise ExportError("--version and --tag are the same filter; give one", EXIT_REFUSED)
-    given = {k: v for k, v in {**kw, "tag": tag or version}.items() if v not in ("", 0, None)}
-    return R.Filters(**given)
+    given = {
+        "since": since,
+        "phase": phase,
+        "status": status,
+        "limit": limit,
+        "tag": tag or version,
+        "session": session,
+    }
+    return R.Filters(**{k: v for k, v in given.items() if v not in ("", 0, None)})
 
 
 def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the filters are the core vocabulary
