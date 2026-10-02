@@ -47,7 +47,7 @@ def test_every_cli_command_is_named_in_the_readme():
     missing = [
         c
         for c in _subcommands(cli.build_parser())
-        if not re.search(rf"ddflow {re.escape(c)}\b", flat)
+        if not re.search(rf"ddflow {re.escape(c)}(?![\w-])", flat)
     ]
     assert not missing, f"commands the README never names (add them to the reference): {missing}"
 
@@ -58,6 +58,9 @@ def test_every_command_the_readme_names_exists():
     for raw in _spans():
         # `ddflow --agent X heartbeat T`: the global options come before the command.
         span = re.sub(r"^ddflow(?: --(?:agent|repo)(?:=| )\S+| --json)+", "ddflow", raw)
+        # One invocation: cut at a chained command, a comment, or the reference's
+        # description column (two spaces), which are prose or another command.
+        span = re.split(r"\s{2,}|\s*(?:&&|;|\|\||\||#)\s*", span)[0]
         m = re.match(r"ddflow ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?", span)
         if not m:
             continue
@@ -72,8 +75,7 @@ def test_every_command_the_readme_names_exists():
         parser = subs[sub] if sub and subs else top[cmd]
         known = {o for a in parser._actions for o in a.option_strings} | _GLOBAL
         # A flag it names must be one the command takes (`--flag=v` and `--flag v` alike).
-        # (The reference's trailing description column, after two spaces, is prose.)
-        for flag in re.findall(r"(?<![\w-])(--[a-z][a-z-]*)", re.split(r"\s{2,}", span)[0]):
+        for flag in re.findall(r"(?<![\w-])(--[a-z][a-z-]*)(?![\w-])", span):
             if flag not in known:
                 bad.append(f"{span}  [{flag} is not an option of `ddflow {cmd}`]")
     assert not bad, f"not commands: {sorted(set(bad))}"
