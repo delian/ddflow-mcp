@@ -183,7 +183,7 @@ def truncate_text(value: object, limit: int = 140) -> str:
 
 def bar(done: object, total: object, width: int = 10) -> str:
     """A text progress bar, ``[####......]``; an empty total renders an empty bar."""
-    w, t = int(width), int(total)  # type: ignore[call-overload]
+    w, t = _cap_width(width), int(total)  # type: ignore[call-overload]
     n = 0 if t <= 0 else max(0, min(w, round(w * int(done) / t)))  # type: ignore[call-overload]
     return "[" + "#" * n + "." * (w - n) + "]"
 
@@ -264,8 +264,11 @@ def _center(value: object, width: int = 80) -> str:
 
 
 def _indent(value: object, width: int = 4, first: bool = False, blank: bool = False) -> str:
-    pad = " " * _cap_width(width)
+    n = _cap_width(width)
     lines = str(value).splitlines(keepends=True)
+    if n * len(lines) > MAX_SEQUENCE:  # the padded result, not just the pad, is bounded
+        raise _too_big("indented text")
+    pad = " " * n
     out = [pad + ln if (i or first) and (blank or ln.strip()) else ln for i, ln in enumerate(lines)]
     return "".join(out)
 
