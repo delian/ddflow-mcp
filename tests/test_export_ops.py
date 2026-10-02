@@ -344,6 +344,23 @@ def test_a_log_that_cannot_be_read_is_could_not_run_not_an_empty_document(tmp_pa
     assert out.exit == 2 and "event log" in out.reason
 
 
+def test_listing_selected_documents_over_an_unreadable_log_is_exit_two_not_stale(tmp_path):
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "config.toml").write_text('[export]\ndocuments = ["roadmap"]\n')
+    out = api.export_list_documents(tmp_path)
+    assert out.exit == 2 and "event log" in out.reason
+
+
+def test_template_never_writes(proj):
+    (proj / "adhoc.j2").write_text("X {{ open_tasks }}\n")
+    for kw in ({"update": True}, {"out": "docs/x.md"}):
+        out = api.export_documents(proj, "roadmap", template="adhoc.j2", base=proj, **kw)
+        assert out.exit == 3 and "never writes" in out.reason
+    assert not (proj / "docs").exists() and not (proj / "ROADMAP.md").exists()
+    ok = api.export_documents(proj, "roadmap", template="adhoc.j2", base=proj, diff=True)
+    assert ok.exit == 0 and "+X" in _results(ok)[0]["text"]
+
+
 # -- the MCP tool ----------------------------------------------------------------------
 
 
