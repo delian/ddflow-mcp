@@ -253,12 +253,15 @@ def cmd_prompts(a, c: Ctx) -> int:
 def _hook_stdin(timeout_s: float = 2.0) -> str:
     """The harness's hook JSON, without ever blocking the operator's turn: a terminal or
     a pipe that stays silent is abandoned after `timeout_s`."""
-    import select
-
     try:
         if sys.stdin is None or sys.stdin.isatty():
             return ""
         fd = sys.stdin.fileno()
+    except Exception:
+        return ""
+    try:
+        import select
+
         chunks: list[bytes] = []
         deadline = time.monotonic() + timeout_s
         while (left := deadline - time.monotonic()) > 0:
@@ -271,7 +274,23 @@ def _hook_stdin(timeout_s: float = 2.0) -> str:
             chunks.append(data)
         return b"".join(chunks).decode("utf-8", "replace")
     except Exception:
-        return ""
+        # select() takes only sockets on Windows: read chunks in a thread we can abandon,
+        # keeping what arrived even if the pipe is never closed.
+        import threading
+
+        got: list[bytes] = []
+
+        def _read() -> None:
+            try:
+                while chunk := os.read(fd, 65536):
+                    got.append(chunk)
+            except Exception:
+                pass
+
+        t = threading.Thread(target=_read, daemon=True)
+        t.start()
+        t.join(timeout_s)
+        return b"".join(got).decode("utf-8", "replace")
 
 
 def cmd_hooks(a, c: Ctx) -> int:
