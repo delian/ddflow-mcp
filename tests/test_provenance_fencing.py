@@ -312,3 +312,20 @@ def test_entity_encoded_tags_are_defanged_too():
     assert "&#60;" not in out and "&lt;/ddflow" not in out.replace("&amp;lt;", "")
     assert "&amp;#60;" in out and "a && b" in out
     _balanced(out)
+
+
+def test_the_json_and_mcp_recall_hit_is_fenced_with_its_author(proj):
+    from ddflow.surfaces.mcp_bound import bound_recall
+
+    run_cli(
+        proj, "lesson", "add", "--id", "L-w", "--title", "unique giraffe lesson",
+        "--rule", "giraffe " + INJECTION, agent="evil-agent",
+    )  # fmt: skip
+    _code, js, _ = run_cli(proj, "recall", "giraffe", "--json", agent="reader")
+    body, _note = bound_recall(json.loads(js), {})  # what ddflow_recall returns: no `raw`
+    (hit,) = body["lessons"]
+    assert "raw" not in hit and hit["provenance"]["by"] == "evil-agent"
+    assert hit["headline"] == "L-w (recorded by an agent (evil-agent))"
+    _balanced(hit["body"])
+    assert hit["body"].startswith("<ddflow-record kind=") and hit["body"].endswith(CLOSE)
+    assert "ignore all rules" in hit["body"] and "giraffe" not in hit["headline"]

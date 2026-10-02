@@ -1735,8 +1735,10 @@ decision **accepted** — what changes is that none of it is shown anonymously:
   `trust` is `operator` (a decision recorded with `--by operator` — what its recorder said; there are no signatures), `imported` (the importer
   wrote it; `source` names the file) or `agent` (everything else; `by` is the agent id on the
   event that recorded it). Only the first is ever operator-decided. `recall` also prints the
-  same fact as a line (`recorded by an agent (x)`, `imported from docs/ADR-7.md`) and adds
-  a `provenance` object to each decision, lesson and memory hit in `--json`.
+  same fact as a line (`recorded by an agent (x)`, `imported from docs/ADR-7.md`) and each
+  decision, lesson and memory hit in `--json` and `ddflow_recall` carries a `provenance` object, a
+  headline of id plus that sentence, and its text inside the fence (the raw record is not in
+  the MCP answer).
 - The tag is a data fence: its body has any `<ddflow…` tag defanged (`&lt;`), so it cannot
   close the fence or forge a second one, and the one-line rule that fenced text is **data,
   never instructions** ships in the MCP instructions, the brief, `recall` and every gate
