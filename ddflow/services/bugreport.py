@@ -219,7 +219,7 @@ def redact_argv(argv: Sequence[str], subcommands: Iterable[str] | None = None) -
     """The shape of a command line: the program (when it is ddflow or a Python
     launcher), the leading subcommand words the caller lists in `subcommands` (the CLI's
     own verbs), every flag name, and `<value>` / `<arg>` in place of anything else. With
-    no `subcommands` nothing a person could have typed survives."""
+    no `subcommands` no positional a person typed survives. A flag's value that itself begins with `--` cannot be told from a flag and is kept as one: the caller's `redact_report` pass is the net for it."""
     allowed = set(subcommands) if subcommands is not None else set()
     out: list[str] = []
     leading = True

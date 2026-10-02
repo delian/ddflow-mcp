@@ -390,3 +390,8 @@ def test_a_dash_led_value_after_a_flag_is_a_value():
         "<value>",
         "-q",
     ]
+
+
+def test_dot_slash_ddflow_frame():
+    got = B.normalise_traceback('  File "./ddflow/cli.py", line 1, in main\n    x()')
+    assert got == '  File "ddflow/cli.py", line 1, in main\n    x()'
