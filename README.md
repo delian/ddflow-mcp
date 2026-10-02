@@ -2525,7 +2525,11 @@ refuse `--changelog` (no request to carry the commit). The MCP tool takes `chang
 An item counts as shipped on a line when its landing merge commit **or the branch it merged**
 (the merge's second parent) is reachable from it: a hotfix landed on production reaches
 `develop` by the back-merge as that branch, with production's merge commit nowhere in it. A
-squash or fast-forward landing is the one commit it made.
+squash or fast-forward landing is the one commit it made. A squash landing has no merge
+parent to follow, so it is also found on another line by its change: a commit there with the
+same patch-id (a cherry-pick, or the back-merge squash), or the `back-merge <id> into ...`
+commit ddflow wrote for it -- so a hotfix squashed onto production counts as shipped on
+`develop` once it is back-merged. Only the newest 1000 commits of the line are searched.
 
 ddflow holds no token: it drives `gh` or `glab`, logged in as the operator, so every
 permission question is answered by the forge. A forge that cannot be reached is exit 2 —
