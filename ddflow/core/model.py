@@ -402,6 +402,59 @@ class Lesson:
         return "\n".join(x for x in (self.title, self.rule, self.why, self.how) if x)
 
 
+#: How a record points at another. `distinct` is a dismissal -- "I looked, these are
+#: different" -- kept so the same pair is not asked about again; the others are links.
+LINK_RELATIONS = ("extends", "duplicate_of", "related", "distinct")
+
+
+@dataclass
+class RecordLinks:
+    """What the log says about how one record relates to others, and what was added to it.
+
+    ACCUMULATED, never replaced (decision D-no-duplicates, 2): every entry is keyed by the
+    event that made it, so the fold is commutative and idempotent -- two additions made
+    at once by two clones both survive in any order, and a re-delivered event is one entry.
+    That is why an addition is its own event kind: a field on `task.updated` or `bug.found`
+    keeps the last writer and loses the other (and once overwrote a bug's summary).
+    """
+
+    id: str
+    #: event id -> {event, text, who, at, score}: verbatim additions (`record.extended`).
+    additions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: event id + relation + target -> {event, relation, target, by, at, score, source}.
+    link_entries: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: add event id -> the answer recorded with it: {answer, score, candidates}.
+    answers: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    @property
+    def extensions(self) -> list[dict[str, Any]]:
+        """The additions in one order whatever order they folded in: oldest first."""
+        return sorted(self.additions.values(), key=lambda a: (a["at"], a["event"]))
+
+    @property
+    def links(self) -> list[dict[str, Any]]:
+        return sorted(self.link_entries.values(), key=lambda x: (x["at"], x["event"], x["target"]))
+
+    @property
+    def answer(self) -> dict[str, Any]:
+        """The recorded dedupe answer of the NEWEST add that carried one."""
+        if not self.answers:
+            return {}
+        latest = max(self.answers, key=lambda e: (self.answers[e].get("at", ""), e))
+        return self.answers[latest]
+
+    def dismissed(self) -> set[str]:
+        """Records this one was judged DISTINCT from."""
+        return {x["target"] for x in self.link_entries.values() if x["relation"] == "distinct"}
+
+    def linked(self, relation: str = "") -> set[str]:
+        return {
+            x["target"]
+            for x in self.link_entries.values()
+            if x["relation"] != "distinct" and (not relation or x["relation"] == relation)
+        }
+
+
 @dataclass
 class Job:
     """A long-running process started for an item: a training run, a data generation.
@@ -586,6 +639,8 @@ class State:
     #: (decision D-reviewer-trust). An entry no tool wrote appears in neither.
     reviewer_writes: dict[str, dict[str, Any]] = field(default_factory=dict)
     reviewer_approvals: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: record id -> its links and additions. Only records that have any appear.
+    links: dict[str, RecordLinks] = field(default_factory=dict)
     last_lamport: int = 0
     event_count: int = 0
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
@@ -1738,9 +1793,77 @@ def _h_reviewer_approved(st: State, ev: Event) -> None:
 
 
 #: kind -> handler. The single declaration of the event vocabulary.
+def _links(st: State, record: str) -> RecordLinks:
+    return st.links.setdefault(record, RecordLinks(id=record))
+
+
+def link_targets(v: Any) -> list[str]:
+    """A link field is one id or a list of them; anything else names nothing."""
+    if isinstance(v, str):
+        return [v] if v else []
+    if isinstance(v, list | tuple):
+        return [x for x in v if isinstance(x, str) and x]
+    return []
+
+
+def _link(st: State, ev: Event, relation: str, target: str, source: str) -> None:
+    eid = ev.id or ev.compute_id()
+    d = ev.data
+    _links(st, ev.subject).link_entries[f"{eid}:{relation}:{target}"] = {
+        "event": eid,
+        "relation": relation,
+        "target": target,
+        "by": d.get("by", "") or ev.agent,
+        "at": ev.ts,
+        "score": d.get("score"),
+        "source": source,
+    }
+
+
+def _linking(handler: Callable[[State, Event], None]) -> Callable[[State, Event], None]:
+    """An ADD handler that also records the link fields its event carries."""
+
+    def handle(st: State, ev: Event) -> None:
+        handler(st, ev)
+        d = ev.data
+        for relation in ("extends", "duplicate_of", "related"):
+            for target in link_targets(d.get(relation)):
+                _link(st, ev, relation, target, "add")
+        if isinstance(d.get("dedupe"), dict):
+            _links(st, ev.subject).answers[ev.id or ev.compute_id()] = {
+                **d["dedupe"],
+                "at": ev.ts,
+            }
+
+    return handle
+
+
+def _h_record_extended(st: State, ev: Event) -> None:
+    """A verbatim addition to an existing record. Touches nothing the record already says."""
+    d = ev.data
+    eid = ev.id or ev.compute_id()
+    _links(st, ev.subject).additions[eid] = {
+        "event": eid,
+        "text": d.get("text", ""),
+        "who": d.get("who", "") or ev.agent,
+        "at": ev.ts,
+        "score": d.get("score"),
+    }
+
+
+def _h_link_recorded(st: State, ev: Event) -> None:
+    """A link made after the record was added, or a 'distinct' dismissal."""
+    d = ev.data
+    relation = d.get("relation", "")
+    if relation not in LINK_RELATIONS:
+        return
+    for target in link_targets(d.get("target")):
+        _link(st, ev, relation, target, "later")
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
-    "phase.added": lambda st, ev: _h_added(st, ev, "phase"),
-    "task.added": lambda st, ev: _h_added(st, ev, "task"),
+    "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
+    "task.added": _linking(lambda st, ev: _h_added(st, ev, "task")),
     "phase.updated": lambda st, ev: _h_updated(st, ev, "phase"),
     "task.updated": lambda st, ev: _h_updated(st, ev, "task"),
     "phase.removed": lambda st, ev: _h_removed(st, ev, "phase"),
@@ -1777,14 +1900,14 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "release.opened": _h_release_opened,
     "release.tagged": _h_release_tagged,
     "release.closed": _h_release_closed,
-    "bug.found": _h_bug_found,
+    "bug.found": _linking(_h_bug_found),
     "bug.fixed": _h_bug_fixed,
     "bug.invalid": _h_bug_invalid,
-    "lesson.recorded": _h_lesson,
-    "research.recorded": _h_research,
-    "decision.recorded": _h_decision,
+    "lesson.recorded": _linking(_h_lesson),
+    "research.recorded": _linking(_h_research),
+    "decision.recorded": _linking(_h_decision),
     "decision.superseded": _h_decision_superseded,
-    "memory.recorded": _h_memory,
+    "memory.recorded": _linking(_h_memory),
     "job.started": _h_job_started,
     "external.observed": _h_external,
     "job.ended": _h_job_ended,
@@ -1797,6 +1920,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "cadence.ran": _h_cadence,
     "reviewer.configured": _h_reviewer_configured,
     "reviewer.approved": _h_reviewer_approved,
+    "record.extended": _h_record_extended,
+    "link.recorded": _h_link_recorded,
 }
 
 
