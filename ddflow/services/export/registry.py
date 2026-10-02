@@ -326,6 +326,7 @@ def _environment() -> SandboxedEnvironment:
         undefined=jinja2.StrictUndefined, trim_blocks=True, lstrip_blocks=True, autoescape=False
     )
     env.globals.pop("lipsum", None)  # backed by `random`: a template must be deterministic
+    env.filters.pop("random", None)
     env.filters.update(FILTERS)
     env.filters["center"] = _center  # the built-ins allocate `width` bytes unchecked
     env.filters["indent"] = _indent
