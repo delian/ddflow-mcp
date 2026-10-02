@@ -172,7 +172,9 @@ def open_sessions(events: list, agent: str) -> list[str]:
     return sorted(live, key=lambda sid: last.get(sid, (0, "")), reverse=True)
 
 
-def resolve(log: EventLog, session_id: str = "") -> tuple[str, str]:
+def resolve(
+    log: EventLog, session_id: str = "", *, model: str = "", tool: str = ""
+) -> tuple[str, str]:
     """The session a prompt or note belongs to, and how it was found.
 
     explicit (the caller's id) / harness (the session the prompt hook keys on, named by
@@ -183,6 +185,9 @@ def resolve(log: EventLog, session_id: str = "") -> tuple[str, str]:
         return session_id.strip(), "explicit"
     events = log.read_all()
     live = open_sessions(events, log.agent_id)
+    literal = os.environ.get("DDFLOW_SESSION_ID", "").strip()
+    if literal and literal in live:
+        return literal, "harness"
     for var in ("DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"):
         hid = harness_session_id(os.environ.get(var, ""))
         if hid and hid in live:
@@ -191,7 +196,9 @@ def resolve(log: EventLog, session_id: str = "") -> tuple[str, str]:
         return live[0], "latest"
     sid = new_session_id()
     log.append(
-        "session.started", sid, {"model": "", "tool": "", "cwd": str(Path.cwd()), "implicit": True}
+        "session.started",
+        sid,
+        {"model": model, "tool": tool, "cwd": str(Path.cwd()), "implicit": True},
     )
     return sid, "implicit"
 
@@ -271,7 +278,7 @@ def capture_prompt(
         return "off"
     if not (text or "").strip():
         return "empty"
-    sid = harness_session_id(harness_id) or resolve(log)[0]
+    sid = harness_session_id(harness_id) or resolve(log, model=model, tool=tool)[0]
     clean, n = redact(text, cfg)
     events = log.read_all()
     if not any(e.kind == "session.started" and e.subject == sid for e in events):
@@ -315,7 +322,12 @@ def replay(events: list[Event], *, include_outcomes: bool = True) -> list[Replay
     """
     steps: list[ReplayStep] = []
     n = 0
+    # An adopted orphan lives on as the copy under its session; the id-less original
+    # would read as the same words twice.
+    adopted = {e.data["adopted_from"] for e in events if e.data.get("adopted_from")}
     for ev in events:
+        if ev.id in adopted:
+            continue
         if ev.kind not in PROVENANCE_KINDS and not (
             include_outcomes and ev.kind == "item.completed"
         ):

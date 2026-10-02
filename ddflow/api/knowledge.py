@@ -924,6 +924,9 @@ def session_prompt(
             "session.prompt", _EMPTY_SESSION_TEXT.format(what="prompt"), session=session
         )
     log, cfg, _st = _load(repo, agent)
+    if not cfg.session.log_prompts:
+        # Nothing is recorded, so no session is opened for it either.
+        return O.ok("session.prompt", redactions=0, session=session, how="off")
     sid, how = S.resolve(log, session)
     return O.ok(
         "session.prompt", redactions=S.prompt(log, cfg, sid, text, item=item), session=sid, how=how

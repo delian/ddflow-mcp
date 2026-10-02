@@ -3798,7 +3798,9 @@ part that matters.
   as ever. The prompt hook does the same when a harness gives it no session id. Events
   recorded earlier with no session id show up as a `ddflow doctor` note;
   `ddflow session adopt-orphans` attaches each to the session nearest in time (writing a
-  copy marked `adopted_from`, since the log is append-only; run twice it adds nothing).
+  copy marked `adopted_from`, since the log is append-only; run twice it adds nothing, and
+  `replay` shows the words once). With `session.log_prompts = false` a prompt is not
+  recorded and the output says so, rather than opening a session for nothing.
 
 **Not automated, on purpose:**
 

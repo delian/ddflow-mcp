@@ -160,3 +160,40 @@ def test_doctor_notes_orphans_and_adopt_orphans_attaches_them(repo):
     assert len([e for e in _events(repo, "session.prompt") if e["subject"]]) == 1
     _c, out, _e = run_cli(repo, "doctor")
     assert "no session id" not in out
+
+
+def test_env_session_id_names_an_open_session_and_the_say_so_is_honest(repo, monkeypatch):
+    from ddflow import api as A
+
+    _init(repo)
+    _c, first, _e = run_cli(repo, "session", "start")
+    run_cli(repo, "session", "start")
+    monkeypatch.setenv("DDFLOW_SESSION_ID", first.strip())
+    out = A.session_prompt(repo, "", "pinned by env")
+    assert out.data["session"] == first.strip() and out.data["how"] == "harness"
+
+
+def test_prompt_logging_off_opens_no_phantom_session(repo):
+    _init(repo)
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text().replace("[session]", "[session]\nlog_prompts = false", 1))
+    code, out, _e = run_cli(repo, "session", "prompt", "--text", "words")
+    assert code == 0 and "NOT recorded" in out
+    assert not _events(repo, "session.started", "session.prompt")
+
+
+def test_replay_shows_an_adopted_orphan_once(repo):
+    _init(repo)
+    _orphans(repo)
+    run_cli(repo, "session", "adopt-orphans")
+    _c, out, _e = run_cli(repo, "replay")
+    assert out.count("lost prompt") == 1
+
+
+def test_the_hook_opening_an_implicit_session_keeps_its_model_and_tool(repo):
+    from test_prompt_autocapture import _hook
+
+    _init(repo)
+    _hook(repo, {"prompt": "first", "model": "m-1"})
+    (s,) = _events(repo, "session.started")
+    assert s["data"]["model"] == "m-1" and s["data"]["tool"] == "hook"
