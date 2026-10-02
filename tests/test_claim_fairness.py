@@ -314,3 +314,15 @@ def test_a_registration_with_a_non_finite_time_is_not_read(proj):
         f.read_text().replace(f.read_text().split('"since": ')[1].split(",")[0], "Infinity")
     )
     assert WT.live_waiters(proj) == []
+
+
+def test_a_registration_with_a_huge_integer_time_is_skipped_not_fatal(proj):
+    import json
+
+    _queue(proj, B, "TB", time.time() - 120)
+    f = next((proj / ".ddflow" / "local" / "waits").glob("*.json"))
+    f.write_text(
+        f.read_text().replace(f.read_text().split('"since": ')[1].split(",")[0], "1" + "0" * 400)
+    )
+    assert WT.live_waiters(proj) == []
+    assert _claim(proj, "TC", C).exit == O.REFUSED  # refused by A's lease, not a crash
