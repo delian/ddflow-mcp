@@ -20,6 +20,7 @@ from .frame import one_line
 from .query import ExportError, Query, _parse_ts
 
 UNTAGGED = "(untagged)"
+IN_FORCE = ("accepted", "proposed")  # any other status (superseded, rejected, ...) is not
 TITLE_CHARS = 150
 TEXT_CHARS = 220
 
@@ -44,7 +45,7 @@ def _decisions(q: Query, f: registry.Filters) -> tuple[list[dict[str, Any]], lis
     by_glob: dict[str, list[dict[str, Any]]] = {}
     loose: list[dict[str, Any]] = []
     for d in q.decisions():  # id order
-        if d.status == "superseded" or d.superseded_by:
+        if d.status not in IN_FORCE or d.superseded_by:
             continue
         if f.tag and f.tag not in d.tags:
             continue
