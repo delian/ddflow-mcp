@@ -53,9 +53,11 @@ _NOT_PARAGRAPH = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\|)")
 _SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 _SPAN = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 _LINK = re.compile(r"(?<!\\)!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
-#: `[label]: destination`; a footnote (`[^1]: prose`) is not one, and a destination must look
-#: like one (a path, a URL or an anchor) so that prose after the colon is never a link.
-_REFDEF = re.compile(r"^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s<>]*[./#:][^\s<>]*)>?(?:\s+.*)?$")
+#: `[label]: destination "optional title"`. A footnote (`[^1]: prose`) is not one, and the
+#: destination must end the line or be followed only by a title, so prose never reads as a link.
+_REFDEF = re.compile(
+    r"""^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s<>]+)>?(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*$"""
+)
 _ATX = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
 _HTML_ANCHOR = re.compile(r"""<a\s[^>]*?\b(?:name|id)\s*=\s*["']([^"']+)["']""", re.I)
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")

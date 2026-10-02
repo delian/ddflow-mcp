@@ -190,7 +190,7 @@ def test_a_short_fence_inside_a_long_one_is_code(tmp_path):
 def test_footnotes_and_emphasised_setext_headings(tmp_path):
     readme = (
         "[^1]: See the [install](docs/a.md) page.\n[ref]: docs/a.md#second-part\n"
-        "[bad]: docs/gone.md\n\n**Install**\n===\n\n[i](#install)\n"
+        '[bad]: docs/gone.md\n[lic]: LICENSEX "title"\n\n**Install**\n===\n\n[i](#install)\n'
     )
     report = D.check_docs(repo_with(tmp_path, readme, **{"docs/a.md": "## Second part\n"}))
-    assert found(report) == [("link", "docs/gone.md")]
+    assert found(report) == [("link", "LICENSEX"), ("link", "docs/gone.md")]
