@@ -147,7 +147,7 @@ def _parser_accepts(command: str) -> bool:
 
 def test_a_plain_re_report_keeps_a_ddflow_scoped_bug_ddflow_scoped(repo):
     run_cli(repo, "init")
-    args = ("bug", "found", "--summary", "crash on load", "--item", "T1")
+    args = ("bug", "found", "--id", "B-r", "--summary", "crash on load", "--item", "T1")
     assert run_cli(repo, *args, "--scope", "ddflow")[0] == 0
     code, _, _ = run_cli(repo, "--json", *args)
     assert code == 0
@@ -211,3 +211,16 @@ def test_extending_an_open_bug_carries_severity_and_scope_onto_it(repo):
     b = _bugs(repo)["B-e"]
     assert (b.severity, b.scope) == ("critical", "ddflow")
     assert len(_bugs(repo)) == 1
+
+
+def test_the_offer_is_produced_once_the_command_is_set(repo, monkeypatch):
+    # The production constant is empty until the command exists; this proves the offer
+    # path in-process (a CLI subprocess would not see the patch).
+    monkeypatch.setattr(K, "BUG_REPORT_COMMAND", "ddflow bug example {id}")
+    run_cli(repo, "init")
+    out = K.bug_found(repo, summary="x", id="B-o", scope="ddflow", agent="a")
+    assert out.data["offer"].count("`ddflow bug example B-o`") == 1, out.data
+    assert "offer" not in K.bug_found(repo, summary="y", id="B-p", agent="a").data
+    # a plain re-report of the ddflow bug still gets the offer: the scope is the record's
+    again = K.bug_found(repo, summary="x", id="B-o", agent="a")
+    assert "`ddflow bug example B-o`" in again.data["offer"], again.data
