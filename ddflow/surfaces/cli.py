@@ -989,15 +989,31 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     ss.add_argument("--tool", default="")
     ss.set_defaults(fn=cmd_session)
     sp = se_s.add_parser("prompt")
-    sp.add_argument("session", help="the SESSION id (from `session start`), not the text")
+    sp.add_argument(
+        "session",
+        nargs="?",
+        default="",
+        help="the SESSION id (from `session start`), not the text; omitted: the latest "
+        "open session, else an implicit new one",
+    )
     sp.add_argument("--text", help="the prompt text; without it, read from piped stdin")
     sp.add_argument("--item", default="")
     sp.set_defaults(fn=cmd_session)
     sn = se_s.add_parser("note")
-    sn.add_argument("session", help="the SESSION id (from `session start`), not the text")
+    sn.add_argument(
+        "session",
+        nargs="?",
+        default="",
+        help="the SESSION id (from `session start`), not the text; omitted: the latest "
+        "open session, else an implicit new one",
+    )
     sn.add_argument("--text", help="the note text; without it, read from piped stdin")
     sn.add_argument("--item", default="")
     sn.set_defaults(fn=cmd_session)
+    so = se_s.add_parser(
+        "adopt-orphans", help="attach prompts/notes recorded with no session id to a session"
+    )
+    so.set_defaults(fn=cmd_session)
     sd = se_s.add_parser("end")
     sd.add_argument("session")
     sd.add_argument("--summary", default="")
