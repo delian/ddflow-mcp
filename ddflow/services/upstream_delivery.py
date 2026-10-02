@@ -34,7 +34,7 @@ from .redact_report import redact_report
 
 #: A prefilled URL longer than this is not offered; the file is.
 URL_MAX = 8000
-REPO = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
+REPO = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*/[A-Za-z0-9_.][A-Za-z0-9_.-]*")
 
 OK, FAILED, UNAVAILABLE, REFUSED = 0, 1, 2, 3
 
