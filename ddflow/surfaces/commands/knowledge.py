@@ -226,14 +226,11 @@ def cmd_recall(a, c: Ctx) -> int:
     return OK
 
 
-_KIND = {"decisions": "decision", "lessons": "lesson", "memories": "memory", "prompts": "prompt"}
-
-
 def _recall_block(table: str, r: dict, head: str, body: str) -> str:
     """One hit. A decision, lesson, memory or recorded prompt/note is somebody's words:
     it carries who recorded it and is fenced as data (`core/provenance.py`). A hit the
     index holds but the state cannot name is `unknown`, not unlabelled."""
-    if table not in _KIND:
+    if table not in PV.TABLE_KIND:
         return f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
     prov = r.get("provenance")
     if prov:
@@ -243,7 +240,7 @@ def _recall_block(table: str, r: dict, head: str, body: str) -> str:
     else:
         # A prompt or note is recorded by an agent, whoever's words it quotes.
         origin = PV.Origin(PV.AGENT if table == "prompts" else PV.UNKNOWN)
-    kind = "note" if r.get("role") == "note" else _KIND[table]
+    kind = "note" if r.get("role") == "note" else PV.TABLE_KIND[table]
     text = head + (f"\n{body}" if body else "")
     fenced = PV.fence(kind, r.get("id", ""), text, origin, inline=False)
     return f"  [{r.get('id', '?')}] ({origin.label()})\n      {fenced}\n"
