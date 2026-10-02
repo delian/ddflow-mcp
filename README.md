@@ -1707,12 +1707,11 @@ stemmer), TF-IDF weights projected into `index.db` by `ddflow rebuild`, and an e
 over an inverted index — a record missing from the hits shares no term with the query, so
 nothing depends on how SQLite was built. Candidates cross kinds, so a new bug is shown the
 open task that fixes it. Its policy is the `[dedupe]` section (decision D-no-duplicates):
-`on_match` (`ask` default, `warn`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
+`on_match` (`warn` default for now, `ask`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
 on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds come from a
 labelled set of 84 duplicate / related / hard-negative pairs built from real logs
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
-duplicate from a different bug in the same function, which is why the default asks rather
-than decides.
+duplicate from a different bug in the same function, which is why `ask` exists rather than an automatic decision. The shipped default is currently `warn`, because no surface can answer an ask yet (CLI flags, terminal prompt and MCP `relation` are task B-add-dedupe-surfaces, which flips it back to `ask`).
 
 ### Similar — "is this already filed?"
 
@@ -1771,7 +1770,7 @@ prompt or note — runs the same check against the log **before it writes**, wit
 - **Every answer is recorded** on the add event (`dedupe`: the answer, the score, the
   candidates shown), `new` included, and an automatic merge is marked `auto`.
 
-`[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
+`[dedupe].on_match` sets the policy: `ask` as above (the intended default, not shipped until B-add-dedupe-surfaces gives every surface a way to answer), `warn` (the current default) never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
 entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
 the log before the add writes, so it is advisory across agents: two adds of the same text
