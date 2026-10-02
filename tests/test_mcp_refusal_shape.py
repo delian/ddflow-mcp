@@ -79,13 +79,73 @@ def test_no_tool_answers_a_refusal_with_its_success_shape_in_nulls(tool, exit_co
     assert body["candidates"] == [{"id": "X1"}], f"{tool} dropped the payload: {body}"
 
 
-def test_a_padded_nothing_leads_with_its_reason_and_keeps_its_shape():
-    """`heartbeat` with no lease is exit 2 and used to be all nulls. It keeps its keys
-    (nothing-to-do is that tool's answer) but the reason comes first."""
-    out = O.nothing("lease.renewed", "no lease held T1")
+def test_a_padded_nothing_leads_with_its_reason_keeps_its_shape_and_the_rest_of_its_data():
+    """An exit 2 that sets fewer keys than the tool declares (a synthetic one: the real
+    `heartbeat` and `workflow_drop` set them all and are left alone, below). The reason
+    comes first, every declared key follows (null where unset), and a data field outside the
+    projection is kept, not dropped (B7774c7e07b b)."""
+    out = O.nothing("x.y", "nothing to do", renewed=False, extra="kept")
     body = _first(_outcome_result(out, ("renewed", "waiters", "globs_withheld")))
-    assert list(body) == ["refusal", "renewed", "waiters", "globs_withheld"], body
-    assert body["refusal"]["reason"] == "no lease held T1"
+    assert list(body) == ["refusal", "renewed", "waiters", "globs_withheld", "extra"], body
+    assert body["refusal"]["reason"] == "nothing to do"
+    assert body["refusal"]["exit"] == O.NOTHING and body["refusal"]["outcome"] == "nothing"
+
+
+def test_the_real_heartbeat_with_no_lease_fills_its_shape_and_is_left_alone():
+    out = O.nothing(
+        "lease.renewed", "no lease held T1", renewed=False, waiters=[], globs_withheld=[]
+    )
+    assert _first(_outcome_result(out, ("renewed", "waiters", "globs_withheld"))) == {
+        "renewed": False,
+        "waiters": [],
+        "globs_withheld": [],
+    }
+
+
+def test_an_unknown_decision_leads_with_the_refusal_not_a_null(repo):
+    """B7774c7e07b a: `ddflow_decision_show` answers its `decision` field, which is None
+    for an unknown id, so `content[0]` was the text `null` with the reason only in block 2."""
+    run_cli(repo, "init")
+    s = Server(repo)
+    res = s.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_decision_show", "arguments": {"id": "D-nope"}},
+        }
+    )["result"]
+    body = _first(res)
+    assert isinstance(body, dict), body
+    assert next(iter(body)) == "refusal" and "D-nope" in body["refusal"]["reason"], body
+    assert body["refusal"]["exit"] == O.FAIL and body["id"] == "D-nope", body
+    assert "decision" not in body and res["isError"] is True
+    assert res["content"][1]["text"] == body["refusal"]["reason"]
+
+
+def test_a_scalar_body_at_success_is_untouched():
+    ok = O.ok("decision.show", id="D1", decision="text")
+    assert _first(_outcome_result(ok, "decision")) == "text"
+
+
+def test_a_data_field_named_refusal_is_kept_not_discarded():
+    """B7774c7e07b e: no tool has one today; one that did would be popped silently."""
+    out = O.refused("k", "why", refusal="mine", holder="beta")
+    body = _first(_outcome_result(out))
+    assert body["refusal"]["reason"] == "why"
+    assert body["refusal_data"] == "mine" and body["holder"] == "beta", body
+    proj = _first(_outcome_result(out, ("holder", "refusal")))
+    assert proj["refusal"]["reason"] == "why" and proj["refusal_data"] == "mine", proj
+
+
+def test_the_lead_names_the_exit_so_a_failure_is_not_read_as_a_refusal():
+    """B7774c7e07b d: the `refusal` lead also leads exit 1 and 2 bodies; `outcome` and
+    `exit` (and `_meta.exit`) say which."""
+    out = O.failed("k", "broke", candidates=[1])
+    res = _outcome_result(out, ("item", "holder"))
+    body = _first(res)
+    assert body["refusal"] == {"reason": "broke", "outcome": "failed", "exit": O.FAIL}
+    assert res["_meta"]["exit"] == O.FAIL
 
 
 def test_a_complete_nothing_and_every_array_keep_their_shape():
@@ -129,3 +189,9 @@ def test_a_successful_call_is_untouched():
         "holder": "a",
         "worktree": None,
     }
+
+
+def test_a_data_field_named_refusal_data_is_not_overwritten_by_the_rename():
+    out = O.refused("k", "why", refusal="a", refusal_data="b")
+    body = _first(_outcome_result(out))
+    assert body["refusal_data"] == "b" and body["refusal_data_"] == "a", body

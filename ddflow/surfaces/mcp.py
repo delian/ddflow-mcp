@@ -1003,11 +1003,11 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Detect circular references and runtime loops: dependency cycles, an item "
             "claimed and given up over and over, a gate whose verdict keeps flipping, "
+            "a gate failing again with identical output (repeated_failure), "
             "work completed and reopened repeatedly, duplicate items writing the same "
             "files, and a queue where events keep arriving but nothing advances. "
-            "CALL THIS WHEN WORK FEELS REPETITIVE — it is the check that tells you to "
-            "stop and re-plan rather than trying the same thing again. Returns [] when "
-            "there is nothing wrong."
+            "CALL THIS WHEN WORK FEELS REPETITIVE: stop and re-plan rather than retry "
+            "the same thing. [] when nothing is wrong."
         ),
         "properties": {},
         "api": lambda repo, a, agent: _api().loops(repo),
@@ -2824,17 +2824,26 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
     A refused call used to return the tool's SUCCESS projection: `claim` refused for an
     overlap answered `{"item": null, "holder": null, "worktree": null, ...}` with the
     reason only in a second block, and the data the refusal did carry (the alternatives
-    it names, the id) was projected away. An agent reading the first block — which is
-    what the wire contract tells a machine to read — saw a broken success (B9cf58aaeaa).
+    it names, the id) was projected away. An agent reading the first block -- which is
+    what the wire contract tells a machine to read -- saw a broken success (B9cf58aaeaa).
 
-    So a JSON object body leads with a `refusal` object (reason first, then outcome and
-    exit) on every REFUSAL (exit 3), and on any other non-zero exit whose declared shape
-    the operation did not fill — the null-padded success schema is the bug, whatever
-    the code. On exit 1 and 3 the rest is what the operation actually said: the declared
-    fields it set, plus every other wire field of its data, which is the structured
-    payload a refusal carries (claim's `alternatives`, later duplicate candidates). A
-    field it never set is not invented as null. Exit 2 keeps its declared keys after the
-    lead, since "nothing" is still that tool's answer (`heartbeat` with no lease).
+    So a JSON body leads with a `refusal` object (reason first, then `outcome` and
+    `exit`) on every REFUSAL (exit 3), and on any other non-zero exit whose declared shape
+    the operation did not fill -- the null-padded success schema is the bug, whatever
+    the code. The lead is named `refusal` for the call that "did not do what was asked",
+    not for exit 3 alone: `refusal.exit` and `refusal.outcome` say which (`failed`,
+    `nothing` or `refused`), and `_meta.exit` carries the same code. After the lead come
+    the declared fields the operation set and every other wire field of its data -- on
+    exit 1, 2 and 3 alike (claim's `alternatives`, later duplicate candidates). A field it
+    never set is not invented as null on exit 1 and 3. Exit 2 keeps ALL the declared keys
+    (null where unset), in the order the tool declares them, because "nothing" is still that
+    tool's answer. (An operation that sets every declared key at exit 2 -- `heartbeat` with
+    no lease, `workflow_drop` of a gate in neither pipeline -- fills its shape and is left
+    alone, byte-identical to `--json`; the padded case is one that sets fewer.)
+
+    A tool whose body is ONE data field (`ddflow_decision_show` answers its `decision`) is
+    a null or scalar when that field is unset; a non-zero exit then still leads with the
+    refusal, followed by the rest of the data (`id`), not the bare `null`.
 
     An exit 1 or 2 body that fills its declared shape is a RESULT and is left alone,
     byte-identical to the CLI's `--json`: `gate verify` fails WITH its results, `next` on
@@ -2843,15 +2852,18 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
 
     `refusal` is a name no operation's data uses; `outcome` and `reason` are both wire
     fields of some tools (`gate record`, `gate verify`) and could not lead unambiguously.
+    Should a data field ever be named `refusal`, it is kept, as `refusal_data` (or that
+    name with `_` appended while it is taken), never dropped.
     """
-    if out.exit == 0 or not isinstance(body, dict):
+    if out.exit == 0 or isinstance(body, list):
         return body
     from ..core.outcome import EXIT_NAMES, NOTHING, REFUSED
 
     data = {k: v for k, v in out.data.items() if not k.startswith("_")}
+    scalar = not isinstance(body, dict)
     projected = isinstance(payload_key, tuple)
     padded = projected and any(k not in data for k in payload_key)
-    if out.exit != REFUSED and not padded:
+    if not scalar and out.exit != REFUSED and not padded:
         return body
     lead: dict[str, Any] = {
         "refusal": {
@@ -2860,13 +2872,23 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
             "exit": out.exit,
         }
     }
-    if out.exit == NOTHING:
-        said = dict(body)
+    if scalar:
+        # A string payload key names the one field the body was cut down to; unset, it is
+        # the null that used to lead. What the operation did say still rides along.
+        said = {k: v for k, v in data.items() if k != payload_key or v is not None}
     else:
-        said = {k: v for k, v in body.items() if not projected or k in data}
+        said = dict(body)
         if projected:
+            # Declared keys the operation never set stay out (not invented as null) on
+            # exit 1 and 3; exit 2 keeps its declared keys. Everything else it said is added.
+            if out.exit != NOTHING:
+                said = {k: v for k, v in said.items() if k in data}
             said.update({k: v for k, v in data.items() if k not in said})
-    said.pop("refusal", None)
+    if "refusal" in said:
+        key = "refusal_data"
+        while key in said:  # never overwrite a field the operation also has
+            key += "_"
+        said[key] = said.pop("refusal")
     return {**lead, **said}
 
 

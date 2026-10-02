@@ -437,9 +437,14 @@ that enforces claim-before-you-edit.
 refused for an overlap (exit 3), or any call whose result would otherwise be its success
 shape in nulls — returns a JSON body whose first key is
 `"refusal": {"reason": ..., "outcome": ..., "exit": ...}`, followed by whatever the
-operation actually said (a refused claim's `alternatives`). Exit 2 ("nothing") keeps its
-declared keys after that lead; a result that fills its declared shape is left as the CLI's
-`--json` prints it, with the reason in the second content block.
+operation actually said (a refused claim's `alternatives`). The lead is named `refusal` for
+any call that did not do what was asked: `outcome` (`failed`, `nothing` or `refused`) and
+`exit` say which, so an exit-1 failure is not mistaken for a refusal. A tool whose body is one
+field (`ddflow_decision_show` on an unknown id) leads with the same object instead of a bare
+`null`. Exit 2 ("nothing") keeps its declared keys after that lead, and any other data it
+carried; a data field that is itself named `refusal` is kept as `refusal_data`. A result that
+fills its declared shape is left as the CLI's `--json` prints it, with the reason in the
+second content block.
 
 Two tools exist so an agent can orient itself without being told: `ddflow_help` (what
 is this, what is the loop) and `ddflow_workflow` (what are the rules *here*).
