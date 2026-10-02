@@ -104,7 +104,7 @@ def next_(
         "review": [i.id for i in p.review],
         "synced": synced,
         "promoted": promoted,
-        "ready": [plain(i) for i in p.ready],
+        "ready": _ready_rows(p.ready),
         "blocked": [plain(b) for b in p.blocked],
         "running": [i.id for i in p.running],
         "cycles": p.cycles,
@@ -114,11 +114,25 @@ def next_(
     }
     if p.ready and cfg.lease.waiter_reservation_s > 0:
         _hold_reserved(repo, st, cfg, p, cfg.agent.id or log.agent_id)
-        data["ready"] = [plain(i) for i in p.ready]
+        data["ready"] = _ready_rows(p.ready)
         data["blocked"] = [plain(b) for b in p.blocked]
     if p.ready:
         return O.ok("next", **data)
     return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
+
+
+def _ready_rows(items) -> list[dict[str, Any]]:
+    """The ready items as rows; a `tier:` tag also as a `tier` field (advisory, so an
+    untagged item carries nothing extra)."""
+    from ..core.tier import tier_of
+
+    rows = []
+    for i in items:
+        row = plain(i)
+        if tier := tier_of(i.tags):
+            row["tier"] = tier
+        rows.append(row)
+    return rows
 
 
 def _hold_reserved(repo: Path, st, cfg, p, me: str) -> None:
