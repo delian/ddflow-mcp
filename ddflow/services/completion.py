@@ -25,6 +25,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..core.model import State
+from ..core.schedule import is_shared
 from . import gates as G
 
 
@@ -143,6 +144,10 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     if s.unavailable:
         v.coverage_note = _coverage_note(it, s.unavailable)
 
+    readme = readme_report(state, cfg, item_id, repo=repo)
+    if readme:
+        (v.blockers if cfg.enforce.readme_with_code == "block" else v.warnings).append(readme)
+
     cwd, landed = _tree_being_completed(repo, it)
     for note in G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed):
         if note.unverified:
@@ -156,6 +161,65 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
             f"{note.why}. Re-run it if the change was not cosmetic."
         )
     return v
+
+
+README_REMEDY = (
+    "README not updated: record the section you changed, or "
+    "`ddflow gate skip <id> docs --reason ...`"
+)
+
+
+def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str:
+    """The "README not updated" report when a task's diff changed code and not the README; else "".
+
+    Decision D-readme-current: a change a user or agent can see updates README.md in the
+    same task. A completion CHECK rather than a pipeline gate: a gate in `task_pipeline`
+    would be demanded of every task (test-only, docs-only, housekeeping) and its only
+    evidence would be an assertion, while whether the README moved is a fact about the
+    diff. The recorded reason is the existing `docs` gate outcome -- `gate skip <id> docs
+    --reason` or `gate record <id> docs --outcome passed --evidence <section>`.
+
+    Silent (never a guess) when the mode is `off`, the item is not a task, a `docs`
+    outcome with a reason is on record, or git cannot say what changed.
+    """
+    mode = cfg.enforce.readme_with_code
+    it = state.items.get(item_id)
+    if mode == "off" or it is None or it.removed or it.kind != "task" or it.promote_to:
+        return ""
+    docs = it.gates.get("docs")
+    if docs and docs.outcome in ("passed", "skipped") and (docs.reason or docs.evidence):
+        return ""
+    changed = changed_paths(repo, it, cfg)
+    if not changed:
+        return ""
+    code = [p for p in changed if is_shared(p, cfg.enforce.readme_code_globs)]
+    if not code or any(is_shared(p, cfg.enforce.readme_files) for p in changed):
+        return ""
+    more = f" (+{len(code) - 3} more)" if len(code) > 3 else ""  # noqa: PLR2004
+    return f"{README_REMEDY}. Changed: {', '.join(code[:3])}{more}."
+
+
+def changed_paths(repo: Path, it, cfg: Config) -> list[str]:
+    """The paths the item changed: what landed (`landed_before..landed_after`), or before
+    it lands its worktree (or, with none, its branch) against its base. Empty when git cannot say."""
+    from ..infra import worktree as W
+    from . import testselect as TS
+
+    if it.landed_before and it.landed_after:
+        out = W.git_paths(
+            repo, "diff", "--name-only", "--no-renames", it.landed_before, it.landed_after
+        )
+        return sorted(out or ())
+    base = it.base or W.default_branch(repo)
+    path = W.load_path(repo, it.worktree) if it.worktree else None
+    if path and path.is_dir():
+        return TS.changed_files(path, base) or []
+    # Claimed --no-worktree: the work is a branch in a tree that is not ours to read.
+    if it.branch and W.rev(repo, it.branch):
+        return sorted(
+            W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{base}...{it.branch}") or ()
+        )
+    return []
 
 
 def _tree_being_completed(repo: Path, it) -> tuple[Path, str]:

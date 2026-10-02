@@ -722,7 +722,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 136 knobs.
+cadences, and the rest of the 139 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -2825,7 +2825,7 @@ declared once and persists — see
 
 ## Configuration
 
-136 knobs across 18 sections, every one documented in place:
+139 knobs across 18 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -2895,6 +2895,18 @@ part that matters.
   words instead (`trailer_waivers = { "Phase-ships" = ["none", "recon"] }`). It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
   tool-attribution line), merges included, for every agent and every route that runs
   git hooks -- which a harness-side hook reading only the command text cannot promise.
+* **A per-task README check** (decision D-readme-current). A task whose diff changed
+  code under `[enforce] readme_code_globs` (default `ddflow/**`) but none of
+  `readme_files` (default `README.md`), with no `docs` outcome recorded for it, is
+  reported — `README not updated: record the section you changed, or gate skip docs
+  --reason ...` — by `ddflow complete`, in `ddflow gate status`, and as a `docs:` line
+  under the item in `ddflow brief`. Record the reason with
+  `ddflow gate skip <id> docs --reason "..."` (or `gate record <id> docs --outcome
+  passed --evidence "<section>"`). `[enforce] readme_with_code` picks the severity:
+  `warn` (default), `block` (refuses `complete`) or `off`. Test-only and docs-only
+  changes and ddflow's own event-log commits (`.ddflow/**`) are never reported. It is a
+  check, not a pipeline gate, so a task with nothing to document is not asked for a
+  `docs` outcome; the phase-level `docs` gate is unchanged.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
   crashed work to recover, ready items, binding decisions, operational memory — into
   every session, including after a context compaction, whether or not the agent
