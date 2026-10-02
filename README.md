@@ -1774,7 +1774,10 @@ prompt or note — runs the same check against the log **before it writes**, wit
     `--duplicate-of ID`, `--related ID` (at most one; argparse refuses two), and `--check`.
     `--check` is a dry run: it writes nothing, prints the candidates and whether the add
     would be refused, and exits 0 with candidates or 2 with none (`--json` prints
-    `candidates`, `options`, `would_ask`). `ddflow similar "<text>"` asks the same question
+    `candidates`, `options`, `would_ask`, and for an exact copy `would_extend` -- the open
+    record it would be added to -- or `would_link` -- the claimed or closed record it would
+    be filed beside). An id that already exists keeps its own rule and is not checked
+    (`--check` says so, exit 2); an index that cannot be read is exit 1, never "none". `ddflow similar "<text>"` asks the same question
     before you have an id or a command to run.
   - **On a terminal** (stdin and stdout are both terminals, no `--json`, no answer flag) a
     refused add asks instead of failing: it lists the candidates numbered and prompts
@@ -1784,8 +1787,10 @@ prompt or note — runs the same check against the log **before it writes**, wit
   - **Without a terminal** (a script, an agent's shell, a pipe) it exits 3 with
     `refused: possible duplicate`, the candidates, and the same command again with each
     answer appended -- `--new`, `--extends TOP`, `--duplicate-of TOP`, `--related TOP` --
-    ready to paste. `--json` prints the same refusal as `candidates` plus `options`. Nothing
-    is written.
+    ready to paste. `--json` prints the same refusal as `candidates` plus `options` (the reason
+    is still on stderr). Nothing is written. An add that goes ahead anyway -- `warn`, or a
+    match below the asking threshold -- prints `It reads like:` and the candidates on stderr
+    before its usual line.
   - **MCP**: every add tool (`ddflow_task_add`, `ddflow_phase_add`, `ddflow_bug_found`,
     `ddflow_lesson_add`, `ddflow_decision_add`, `ddflow_research_add`, `ddflow_memory_add`)
     takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID` or `related:ID` -- and
