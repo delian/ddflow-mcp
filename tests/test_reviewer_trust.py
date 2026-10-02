@@ -246,3 +246,16 @@ def test_approve_lists_what_waits_and_keeps_the_note(proj, monkeypatch):
     st = fold(AS._load(proj)[0].read_all())
     assert [a["note"] for a in st.reviewer_approvals.values()] == ["checked endpoint"]
     assert run_cli(proj, "reviewers", "approve")[0] == 2  # nothing waits any more
+
+
+# -- the author of a tool-written reviewer is the per-call identity (B6dd8467780) -----------
+
+
+def _configured_authors(repo: Path) -> set[str]:
+    return {e.agent for e in AS._load(repo)[0].read_all() if e.kind == "reviewer.configured"}
+
+
+def test_configure_records_the_per_call_agent(proj):
+    out = AS.configure(proj, AS.ConfigEdit(append_toml=HTTP, local=True), agent="sub-7")
+    assert out.exit == 0, out.reason
+    assert _configured_authors(proj) == {"sub-7"}
