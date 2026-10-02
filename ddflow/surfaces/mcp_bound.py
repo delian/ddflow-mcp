@@ -18,6 +18,7 @@ the body carries its own `truncated` field.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 #: Blocked items `ddflow_next` lists. The reasons are counted in full beside them.
@@ -41,6 +42,7 @@ GATE_BOILERPLATE = (
     "elapsed_s",
     "family",
 )
+_FRACTION = re.compile(r"\.\d+Z$")
 #: Item fields that are merge bookkeeping (the full commit ids around the merge; `merged_sha`
 #: is the answer). Left out of `ddflow_show`.
 ITEM_PLUMBING = ("landed_before", "landed_after")
@@ -123,7 +125,8 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
                 continue
             one = {k: v for k, v in rec.items() if k != "gate"}
             if isinstance(one.get("at"), str):
-                one["at"] = one["at"].partition(".")[0] + "Z"
+                # Whole seconds: only a UTC stamp's fraction goes, anything else is as written.
+                one["at"] = _FRACTION.sub("Z", one["at"])
             ev = one.get("evidence")
             if isinstance(ev, dict):
                 kept = {k: v for k, v in ev.items() if k not in GATE_BOILERPLATE}
