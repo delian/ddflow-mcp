@@ -198,7 +198,8 @@ def render_document(
     """The full framed document (header + body), capped to ``max_bytes`` (0 = uncapped).
 
     ``max_bytes`` bounds the WHOLE document: the header's length is reserved before the
-    body is truncated, and a cap too small for header + footer is refused (exit 3). Truncation happens BEFORE framing, so the header digest always
+    body is truncated; a cap too small for header + footer is refused (exit 3) unless the
+    whole document already fits in it. Truncation happens BEFORE framing, so the header digest always
     matches the bytes shown and ``frame.hand_edited`` is False for any output. Pure: same
     inputs, same bytes.
     """
@@ -210,11 +211,12 @@ def render_document(
         version = str(ddflow.__version__)
     if max_bytes > 0:
         overhead = len(frame("", k.name, version, extra).encode("utf-8"))
-        if max_bytes < overhead + MIN_BODY_BYTES:
+        fits = overhead + len(normalize(body).encode("utf-8")) <= max_bytes
+        if not fits and max_bytes < overhead + MIN_BODY_BYTES:
             raise ExportError(
                 f"--max-bytes {max_bytes} is below the {overhead + MIN_BODY_BYTES} bytes the "
                 "header and truncation footer alone need",
                 EXIT_REFUSED,
             )
-        max_bytes -= overhead
+        max_bytes = max(max_bytes - overhead, 1) if fits else max_bytes - overhead
     return frame(truncate(body, max_bytes), k.name, version, extra)

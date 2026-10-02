@@ -148,7 +148,7 @@ def test_truncation_footer_is_explicit(tmp_path, toy, builtin):
     q = _log(tmp_path)
     full = registry.render_body("toyroad", q, builtin=builtin)
     cut = frame.truncate(full, 60)
-    assert cut.endswith("more lines; use --since/--limit]\n")
+    assert cut.endswith("more; use --since/--limit]\n")
     assert "[truncated: " in cut
     n = int(cut.rsplit("[truncated: ", 1)[1].split(" ")[0])
     assert n == len(full.splitlines()) - (len(cut.splitlines()) - 1)
@@ -262,7 +262,7 @@ def test_truncate_never_exceeds_the_cap(cap):
     even when the first line is the only one kept (found by roborev)."""
     body = "Short heading line\n" + "B" * 500 + "\n" + "tail\n" * 40
     out = frame.truncate(body, cap)
-    footer_len = len("[truncated: 41 more lines; use --since/--limit]\n")
+    footer_len = len("[truncated: 41 more; use --since/--limit]\n")
     if cap >= footer_len + 3:
         assert len(out.encode()) <= cap, (cap, out)
     assert "[truncated: " in out
@@ -279,7 +279,7 @@ def test_document_cap_bounds_the_whole_framed_file(tmp_path, toy, builtin):
 
 def test_truncate_single_overlong_line_does_not_claim_nothing_is_missing():
     out = frame.truncate("x" * 200, 100)
-    assert len(out.encode()) <= 100 and "[truncated: 1 more lines;" in out
+    assert len(out.encode()) <= 100 and "[truncated: 1 more;" in out
 
 
 def test_discover_failure_is_not_remembered(monkeypatch):
@@ -318,7 +318,7 @@ def test_truncate_exact_at_digit_boundaries(lines):
 
 def test_cap_below_the_frame_overhead_is_refused(tmp_path, toy, builtin):
     q = _log(tmp_path)
-    for cap in (1, 100, 145):
+    for cap in (1, 100, 145):  # all smaller than the document itself
         with pytest.raises(ExportError) as e:
             registry.render_document("toyroad", q, builtin=builtin, max_bytes=cap)
         assert e.value.code == EXIT_REFUSED
@@ -365,3 +365,11 @@ def test_since_compares_instants_not_strings():
             q.events_of(since=bad)
         assert e.value.code == EXIT_REFUSED, bad
     assert len(q.events_of(since="2024-05")) == 3 and len(q.events_of(since="2025")) == 0
+
+
+def test_small_cap_that_the_document_fits_in_is_not_refused(tmp_path, toy, builtin):
+    (builtin / "toyroad.md.j2").write_text("tiny\n")
+    q = _log(tmp_path)
+    full = registry.render_document("toyroad", q, builtin=builtin, max_bytes=0)
+    assert len(full.encode()) < 200
+    assert registry.render_document("toyroad", q, builtin=builtin, max_bytes=200) == full
