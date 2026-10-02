@@ -2852,8 +2852,8 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
 
     `refusal` is a name no operation's data uses; `outcome` and `reason` are both wire
     fields of some tools (`gate record`, `gate verify`) and could not lead unambiguously.
-    Should a data field ever be named `refusal`, it is kept, as `refusal_data`, never
-    dropped.
+    Should a data field ever be named `refusal`, it is kept, as `refusal_data` (or that
+    name with `_` appended while it is taken), never dropped.
     """
     if out.exit == 0 or isinstance(body, list):
         return body
@@ -2885,7 +2885,10 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
                 said = {k: v for k, v in said.items() if k in data}
             said.update({k: v for k, v in data.items() if k not in said})
     if "refusal" in said:
-        said["refusal_data"] = said.pop("refusal")
+        key = "refusal_data"
+        while key in said:  # never overwrite a field the operation also has
+            key += "_"
+        said[key] = said.pop("refusal")
     return {**lead, **said}
 
 
