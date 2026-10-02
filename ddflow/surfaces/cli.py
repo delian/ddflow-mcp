@@ -1163,6 +1163,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         default="ghcr.io/OWNER/ddflow:latest",
         help="container image used by --launch docker",
     )
+    ad.add_argument(
+        "--refresh-docs",
+        action="store_true",
+        help="rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the agents' "
+        "native rules from this ddflow's templates; leaves MCP launches, hooks and command "
+        "files alone (what `doctor` points to when drivers lag)",
+    )
     ad.set_defaults(fn=cmd_adopt)
 
     hi = s.add_parser("history", help="one timeline of everything that happened (exit 2 = nothing)")
