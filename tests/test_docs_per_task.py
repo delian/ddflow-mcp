@@ -103,6 +103,10 @@ def test_tests_and_docs_inside_a_code_path_are_exempt(repo, tree):
             "ddflow/guide.rst": "x\n",
             "ddflow/spec/a.py": "x\n",
             "ddflow/pkg/foo_test.go": "x\n",
+            "ddflow/src/FooTest.java": "x\n",
+            "ddflow/widgetSpec.js": "x\n",
+            "ddflow/integration_tests/h.py": "x\n",
+            "ddflow/Tests/foo.py": "x\n",
         },
     )
     assert _reported(repo) == []
