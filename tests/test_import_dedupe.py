@@ -197,7 +197,7 @@ def test_a_stored_record_sharing_an_id_with_an_imported_one_is_still_a_queue_mat
         "bug.found",
         "L2",
         {
-            "summary": "Never force a push to a shared branch\\n"
+            "summary": "Never force a push to a shared branch\n"
             "Force pushing rewrites history other worktrees are built on; use a revert "
             "commit instead."
         },
