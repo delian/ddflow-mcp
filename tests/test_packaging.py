@@ -538,5 +538,14 @@ def test_the_release_machinery_reads_init_py_not_pyproject():
     the workflow would publish an empty version."""
     for rel in (".github/workflows/publish.yml", "scripts/release.sh", "scripts/bump.sh"):
         text = (ROOT / rel).read_text()
-        assert "'^version = '" not in text, f"{rel} still greps pyproject.toml for a version"
+        reads_pyproject = [
+            ln.strip()
+            for ln in text.splitlines()
+            if "pyproject.toml" in ln
+            and re.search(r"\b(grep|sed|awk|cut)\b", ln)
+            and "version" in ln
+        ]
+        assert not reads_pyproject, (
+            f"{rel} still reads a version from pyproject.toml: {reads_pyproject}"
+        )
         assert "__init__.py" in text, rel
