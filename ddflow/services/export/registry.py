@@ -226,6 +226,7 @@ def plain(value: Any, path: str = "data") -> Any:
 #: one allocation, past any deadline, so the sandbox refuses it BEFORE it runs.
 MAX_SEQUENCE = 1_000_000  # items/characters from one `*`, `center`, `indent`, width spec
 MAX_EXPONENT = 10_000  # `a ** b`
+MAX_RESULT_BITS = 4_000_000  # size of an integer `a ** b`
 MAX_OUTPUT_BYTES = 16_000_000  # the rendered document itself
 
 # A printf width/precision past MAX_SEQUENCE or `*`; a str.format width/precision past it, or
@@ -283,6 +284,10 @@ class _Sandbox(SandboxedEnvironment):
         elif operator == "**":
             if isinstance(right, (int, float)) and abs(right) > MAX_EXPONENT:
                 raise _too_big(f"exponent {right}")
+            if isinstance(left, int) and isinstance(right, int) and right > 0:
+                # `(10**10000)**10000` is two small exponents and a 10**8-digit result
+                if left.bit_length() * right > MAX_RESULT_BITS:
+                    raise _too_big("power result")
         elif operator == "%" and isinstance(left, str) and _WIDTH.search(left):
             raise _too_big("format width")
         return super().call_binop(context, operator, left, right)
@@ -344,6 +349,11 @@ def _run_limited(fn: Callable[[], str], seconds: float) -> str:
     state (no signal handler, no itimer another component might be using). A compiled
     template is pure Python bytecode, so the asynchronous exception lands inside the
     runaway loop and ends it; the caller always gets an error, never a hang.
+
+    A limit, stated plainly: this and the size ceilings above are BEST-EFFORT resource
+    containment, not a guarantee. The sandbox's firm promise is isolation (no attribute
+    escape, no file, process or import access); a template that finds a native call big
+    enough to outlast the deadline is reported as a timeout, but its thread may keep running.
     """
     if seconds <= 0:
         return fn()
@@ -364,7 +374,10 @@ def _run_limited(fn: Callable[[], str], seconds: float) -> str:
         if hit > 1:  # more than one thread state matched: undo, never hit a bystander
             ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
         t.join(2.0)
-        raise TimeoutError(f"template ran longer than {seconds:g}s")
+        if "value" in box:  # it finished in the window before the interrupt landed
+            return box["value"]
+        stuck = " and could not be stopped (a native call)" if t.is_alive() else ""
+        raise TimeoutError(f"template ran longer than {seconds:g}s{stuck}")
     if "error" in box:
         raise box["error"]
     return box["value"]
