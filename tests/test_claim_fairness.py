@@ -57,9 +57,8 @@ def _queue(repo: Path, agent: str, item: str, since: float, **kw) -> None:
 
 
 def _dead_pid() -> int:
-    p = subprocess.Popen([sys.executable, "-c", "pass"])
-    p.wait()
-    return p.pid
+    """A pid no process can have (above any pid_max), so it can never be recycled."""
+    return 2**31 - 2
 
 
 def _claim(repo: Path, item: str, agent: str) -> O.Outcome:
@@ -107,12 +106,13 @@ def test_a_waiter_past_its_deadline_never_blocks(proj):
 
 
 def test_the_reservation_lapses_after_the_window(proj):
-    (proj / ".ddflow" / "config.toml").write_text("[lease]\nwaiter_reservation_s = 1\n")
     p = _wait_until_woken(proj, B, "TB")
     assert A.release(proj, "HOT", agent=HOLDER).ok
     p.wait(30)
     assert _claim(proj, "TC", C).exit == O.REFUSED, "inside the window the place is kept"
-    time.sleep(1.3)
+    (kept,) = [w for w in WT.live_waiters(proj) if w.agent == B]
+    assert 0 < kept.until - time.time() <= 300, "the window is [lease].waiter_reservation_s"
+    WT.mark_woken(kept, -1)  # the window has run out
     assert _claim(proj, "TC", C).ok, "the waiter did not come back: its place lapsed"
 
 
@@ -245,6 +245,7 @@ def test_places_in_line_that_sanitise_alike_stay_apart(proj):
     assert a != b
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root ignores directory modes")
 def test_an_unwritable_registry_never_fails_the_refusal(proj):
     waits = proj / ".ddflow" / "local" / "waits"
     waits.mkdir(parents=True, exist_ok=True)
@@ -304,3 +305,12 @@ def test_a_wait_after_a_refused_claim_carries_the_older_place(proj):
     assert out.exit == O.NOTHING  # the deadline passed: still blocked
     (kept,) = WT.live_waiters(proj)  # one place, still the first refusal's, for the window
     assert (kept.agent, kept.item, kept.since) == (C, "TC", queued.since)
+
+
+def test_a_registration_with_a_non_finite_time_is_not_read(proj):
+    _queue(proj, B, "TB", time.time() - 120)
+    f = next((proj / ".ddflow" / "local" / "waits").glob("*.json"))
+    f.write_text(
+        f.read_text().replace(f.read_text().split('"since": ')[1].split(",")[0], "Infinity")
+    )
+    assert WT.live_waiters(proj) == []
