@@ -44,6 +44,7 @@ class Filters:
     status: str = ""  # a kind-defined status word (open, fixed, ...)
     phase: str = ""  # one phase id
     session: str = ""  # one session id
+    tag: str = ""  # one tag (lessons, decisions)
 
     def given(self) -> set[str]:
         """Names set to something other than their default."""
