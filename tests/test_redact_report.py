@@ -69,7 +69,7 @@ def _leaks(text: str, *, host: str, projects: set[str]) -> list[str]:
         left.append("home path")
     if host and re.search(rf"(?<![A-Za-z0-9]){re.escape(host)}(?![A-Za-z0-9])", text, re.I):
         left.append("hostname")
-    if re.search(r"\b[\w-]+\.(?:lan|internal|home\.arpa)\b", text, re.I):
+    if re.search(r"\b[\w-]+\.(?:lan|local|internal|home\.arpa)(?![\w-]|\.\w)", text, re.I):
         left.append(".lan host")
     if re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text):
         left.append("email")
@@ -200,3 +200,12 @@ def test_a_long_unbroken_token_is_not_quadratic():
     t0 = time.monotonic()
     rr.redact_report("x" * 200_000, hostname="", names=())
     assert time.monotonic() - t0 < 5
+
+
+def test_zero_padded_and_dot_local_leaks_are_caught():
+    padded = _ip(172, 16, 1, 1).replace(".16.1.", ".16.001.")
+    out = rr.redact_report(f"at {padded} and 010.0.0.1 and nas.local.", hostname="", names=())
+    assert not _leaks(out.text, host="", projects=set())
+    assert out.counts["ipv4"] == 2 and out.counts["host"] == 1
+    assert _leaks("see nas.local", host="", projects=set()), "the detector can see .local"
+    assert not _leaks("settings.local.json", host="", projects=set())

@@ -75,9 +75,16 @@ def _this_network(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     return ip.version == _V4 and ip.packed[0] == 0
 
 
+def _parse(raw: str, ip_type: type):
+    """`ipaddress` rejects zero-padded octets (`172.16.001.1`), but a reader sees one."""
+    if ip_type is ipaddress.IPv4Address:
+        raw = ".".join(part.lstrip("0") or "0" for part in raw.split("."))
+    return ip_type(raw)
+
+
 def _is_private(raw: str, ip_type: type) -> bool:
     try:
-        ip = ip_type(raw)
+        ip = _parse(raw, ip_type)
     except ValueError:
         return False
     if ip.is_unspecified or _this_network(ip):
@@ -96,7 +103,7 @@ def private_addresses(text: str) -> set[str]:
         for m in pat.finditer(text):
             raw = m.group(1)
             try:
-                ip = kind(raw)
+                ip = _parse(raw, kind)
             except ValueError:
                 continue
             if _is_private(raw, kind) and not ip.is_loopback:
