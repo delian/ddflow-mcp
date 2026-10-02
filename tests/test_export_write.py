@@ -491,3 +491,18 @@ def test_concurrent_first_appends_to_different_targets_all_register(repo):
     [t.join() for t in ts]
     assert not errs
     assert sorted(committed_append_only(repo)) == sorted(names)  # none lost
+
+
+@pytest.mark.parametrize("umask,mode", [(0o022, 0o644), (0o077, 0o600), (0o027, 0o640)])
+def test_new_file_honours_the_umask_without_changing_it(repo, umask, mode):
+    old = os.umask(umask)
+    try:
+        W.write_whole(repo, "R.md", doc())
+        assert (repo / "R.md").stat().st_mode & 0o777 == mode
+        assert os.umask(umask) == umask  # the writer left the process umask alone
+        assert sorted(p.name for p in repo.iterdir()) == [".ddflow", "R.md"]  # probe removed
+        (repo / "R.md").chmod(0o600)
+        W.write_whole(repo, "R.md", doc("# Roadmap\n\n- two\n"))
+        assert (repo / "R.md").stat().st_mode & 0o777 == 0o600  # an update keeps the mode
+    finally:
+        os.umask(old)
