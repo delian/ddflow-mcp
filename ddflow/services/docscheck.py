@@ -349,12 +349,14 @@ def anchors_of(text: str) -> set[str]:
     targets."""
     out: set[str] = set()
     seen: Counter = Counter()
+    taken: set[str] = set()  #: heading slugs only: an explicit anchor never bumps a heading
 
     def add(heading: str) -> None:
         base = slug = slugify(heading)
-        while slug in out:  # github-slugger: bump the suffix until the candidate is free
+        while slug in taken:  # github-slugger: bump the suffix until the candidate is free
             seen[base] += 1
             slug = f"{base}-{seen[base]}"
+        taken.add(slug)
         out.add(slug)
 
     paragraph: list[str] = []  #: prose lines so far; a setext underline makes them a heading
