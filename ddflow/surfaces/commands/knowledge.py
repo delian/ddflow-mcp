@@ -396,6 +396,8 @@ def _session_text(a) -> str | None:
 def _where(d: dict) -> str:
     """Which session took the words, said when the caller did not name one."""
     how = d.get("how", "explicit")
+    if how == "off":
+        return " -- NOT recorded: session.log_prompts is off"
     if how == "explicit":
         return ""
     label = {"implicit": "implicit, new", "harness": "harness"}.get(how, how)
