@@ -47,7 +47,7 @@ def add_flags(parser) -> None:
         default="",
         help="answer it: a different record that is related to ID; linked both ways",
     )
-    parser.add_argument(
+    g.add_argument(
         "--check",
         action="store_true",
         help="dry run: print the existing records this would be refused as a duplicate "

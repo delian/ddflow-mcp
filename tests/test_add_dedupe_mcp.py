@@ -166,3 +166,14 @@ def test_a_bad_relation_is_a_failure_that_says_why(filed_as):
         assert result["_meta"]["exit"] == 1, bad
         assert word in result["content"][-1]["text"], bad
     assert events(repo) == before
+
+
+def test_check_only_with_a_relation_is_a_failure(filed_as):
+    repo = filed_as("ddflow_task_add")
+    args, old = CALLS["ddflow_task_add"]
+    before = events(repo)
+    _body, result = call(
+        repo, "ddflow_task_add", check_only=True, relation=f"extends:{old}", **args
+    )
+    assert result["_meta"]["exit"] == 1 and "dry run" in result["content"][-1]["text"]
+    assert events(repo) == before

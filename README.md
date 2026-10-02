@@ -1771,13 +1771,15 @@ prompt or note — runs the same check against the log **before it writes**, wit
 - **Answering a refusal, on every surface.**
   - **CLI flags** on every add command (`task add`, `phase add`, `bug found`, `lesson add`,
     `decision add`, `research add`, `memory add`): `--new`, `--extends ID`,
-    `--duplicate-of ID`, `--related ID` (at most one; argparse refuses two), and `--check`.
+    `--duplicate-of ID`, `--related ID` and `--check`; at most one of the five (argparse refuses two, and
+    over MCP `relation` with `check_only` is a failure).
     `--check` is a dry run: it writes nothing, prints the candidates and whether the add
     would be refused, and exits 0 with candidates or 2 with none (`--json` prints
     `candidates`, `options`, `would_ask`, and for an exact copy `would_extend` -- the open
     record it would be added to -- or `would_link` -- the claimed or closed record it would
     be filed beside). An id that already exists keeps its own rule and is not checked
-    (`--check` says so, exit 2); an index that cannot be read is exit 1, never "none". `ddflow similar "<text>"` asks the same question
+    (`--check` says so, exit 2 -- except a task or phase, whose existing id is the queue's
+    ordinary `already exists` refusal, exit 3, exactly as the add itself would answer); an index that cannot be read is exit 1, never "none". `ddflow similar "<text>"` asks the same question
     before you have an id or a command to run.
   - **On a terminal** (stdin and stdout are both terminals, no `--json`, no answer flag) a
     refused add asks instead of failing: it lists the candidates numbered and prompts
