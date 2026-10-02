@@ -13,7 +13,8 @@ only reads: nothing is sent anywhere, and the single I/O seam is ``fetch``.
 Failing to ask is not an answer. A network error, a timeout, a rate limit, a 4xx/5xx or
 an unreadable body makes the upstream state ``unavailable`` with the reason -- never
 "no duplicates found" (the discipline of ``infra.forge``: ``ForgeUnavailable`` is not an
-empty answer). An upstream with zero issues IS an answer: ``no_issues``.
+empty answer). An upstream whose issues were fully listed and are zero IS an answer:
+``no_issues``; a capped listing that showed no issue is ``unavailable``.
 """
 
 from __future__ import annotations
