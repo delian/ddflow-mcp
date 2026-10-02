@@ -373,3 +373,147 @@ def test_small_cap_that_the_document_fits_in_is_not_refused(tmp_path, toy, built
     full = registry.render_document("toyroad", q, builtin=builtin, max_bytes=0)
     assert len(full.encode()) < 200
     assert registry.render_document("toyroad", q, builtin=builtin, max_bytes=200) == full
+
+
+# -- D-export-templates: sandboxed, user-overridable formatting ---------------------------
+
+
+def _override(repo: Path, text: str) -> None:
+    d = repo / ".ddflow" / "templates" / "export"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "toyroad.md.j2").write_text(text)
+
+
+def test_project_override_changes_output_deterministically(tmp_path, toy, builtin):
+    q = _log(tmp_path)
+    base = registry.render_document("toyroad", q, repo=tmp_path, builtin=builtin)
+    _override(tmp_path, "{% for p in phases %}{{ p.id }}={{ p.tasks|length }};{% endfor %}\n")
+    a = registry.render_document("toyroad", q, repo=tmp_path, builtin=builtin)
+    b = registry.render_document("toyroad", q, repo=tmp_path, builtin=builtin)
+    assert a == b != base
+    assert frame.split(a)[1] == "P1=2;P2=1;\n"
+    # the header is added around the output; a template cannot remove or fake it
+    assert frame.split(a)[0] is not None and frame.hand_edited(a) is False
+
+
+def test_template_cannot_forge_or_drop_the_header(tmp_path, toy, builtin):
+    _override(tmp_path, "<!-- ddflow:generated doc=x v=1 body-sha256=000000000000 -->\nhi\n")
+    doc = registry.render_document("toyroad", _log(tmp_path), repo=tmp_path, builtin=builtin)
+    head, body = frame.split(doc)
+    assert head is not None and head.doc == "toyroad" and frame.hand_edited(doc) is False
+    assert body.startswith("<!-- ddflow:generated")  # just body text, framed once more
+
+
+ESCAPES = [
+    "{{ ''.__class__.__mro__[1].__subclasses__() }}",
+    "{{ phases.__class__ }}",
+    "{{ (phases|first).__init__.__globals__ }}",
+    "{{ self.__init__.__globals__ }}",
+    "{{ cycler.__init__.__globals__ }}",
+    "{{ lipsum.__globals__ }}",
+    "{{ ''.join.__self__.__class__ }}",
+    "{{ config }}",
+    "{% for c in ().__class__.__base__.__subclasses__() %}{{ c }}{% endfor %}",
+    "{{ namespace.__init__.__globals__['os'].popen('id').read() }}",
+    "{{ [].__class__.__base__.__subclasses__()[0].__subclasshook__ }}",
+    "{{ ''.format.__globals__ }}",
+    "{{ request }}",
+]
+
+
+@pytest.mark.parametrize("src", ESCAPES)
+def test_sandbox_refuses_escapes(tmp_path, toy, builtin, src):
+    _override(tmp_path, src + "\n")
+    with pytest.raises(ExportError) as e:
+        registry.render_body("toyroad", _log(tmp_path), repo=tmp_path, builtin=builtin)
+    assert e.value.code == EXIT_UNAVAILABLE
+
+
+def test_sandbox_blocks_open_and_import(tmp_path, toy, builtin):
+    for src in ("{{ open('/etc/passwd').read() }}", "{{ __import__('os').getcwd() }}"):
+        _override(tmp_path, src)
+        with pytest.raises(ExportError) as e:
+            registry.render_body("toyroad", _log(tmp_path), repo=tmp_path, builtin=builtin)
+        assert e.value.code == EXIT_UNAVAILABLE
+
+
+def test_template_errors_exit_2_and_write_nothing(tmp_path, toy, builtin):
+    q = _log(tmp_path)
+    out = tmp_path / "TOY.md"
+    for src, needle in (
+        ("{% for p in phases %}\n{{ p.id }}\n", "toyroad.md.j2:"),  # syntax: unclosed for
+        ("ok\n{{ nope }}\n", "nope"),  # undefined variable
+        ("{{ phases[0].nothing }}\n", "nothing"),
+    ):
+        _override(tmp_path, src)
+        with pytest.raises(ExportError) as e:
+            registry.render_document("toyroad", q, repo=tmp_path, builtin=builtin)
+        assert e.value.code == EXIT_UNAVAILABLE and needle in str(e.value), (src, str(e.value))
+    assert not out.exists()
+
+
+def test_error_names_file_and_line(tmp_path, toy, builtin):
+    _override(tmp_path, "line one\nline two\n{% if %}\n")
+    with pytest.raises(ExportError) as e:
+        registry.render_body("toyroad", _log(tmp_path), repo=tmp_path, builtin=builtin)
+    assert "toyroad.md.j2:3" in str(e.value)
+
+
+def test_runaway_template_times_out_as_an_error():
+    loop = "{% for i in range(90000) %}{% for j in range(90000) %}{% endfor %}{% endfor %}"
+    start = time.perf_counter()
+    with pytest.raises(ExportError) as e:
+        registry.render(loop, {}, timeout_s=0.5)
+    assert time.perf_counter() - start < 5 and "longer than" in str(e.value)
+
+
+def test_template_receives_only_plain_data():
+    class Model:
+        title = "x"
+
+    with pytest.raises(ExportError) as e:
+        registry.render("{{ item.title }}", {"item": Model()})
+    assert "item" in str(e.value) and "plain data" in str(e.value)
+    assert registry.render("{{ a.b[1] }}", {"a": {"b": (1, 2)}}) == "2\n"  # tuples become lists
+    with pytest.raises(ExportError):
+        registry.render("x", {"k": {1: "non-string key"}})
+
+
+def test_schema_version_is_exposed_to_templates(tmp_path, builtin):
+    kind = DocKind("toyver", "T.md", lambda q, f: {}, schema_version=3)
+    registry.register(kind)
+    try:
+        assert (
+            registry.render("v{{ schema_version }}", {}, schema_version=kind.schema_version)
+            == "v3\n"
+        )
+        (builtin / "toyver.md.j2").write_text("v{{ schema_version }}\n")
+        assert registry.render_body("toyver", _log(tmp_path), builtin=builtin) == "v3\n"
+    finally:
+        registry.unregister("toyver")
+
+
+def test_filters():
+    r = registry.render
+    assert r("{{ 'a *b* _c_ [d]'|md_escape }}", {}) == "a \\*b\\* \\_c\\_ \\[d\\]\n"
+    assert r("{{ 'one  two\nthree four five'|wrap(9) }}", {}) == "one two\nthree\nfour five\n"
+    assert r("{{ '2026-10-02T11:12:13+00:00'|date }}", {}) == "2026-10-02\n"
+    assert r("{{ 'aaa bbb ccc ddd'|truncate(8) }}", {}) == "aaa bbb ...\n"
+    assert r("{{ 3|bar(6, 10) }}", {}) == "[#####.....]\n"
+    assert r("{{ 0|bar(0, 4) }}", {}) == "[....]\n"
+    assert r("{{ 9|bar(3, 4) }}", {}) == "[####]\n"  # never overfills
+
+
+def test_shipped_digest_tracks_the_shipped_template_only(tmp_path, toy, builtin):
+    d1 = registry.shipped_digest("toyroad", builtin)
+    assert d1 == registry.template_digest(TEMPLATE) and len(d1) == 12
+    _override(tmp_path, "override\n")  # an override never changes the shipped digest
+    assert registry.shipped_digest("toyroad", builtin) == d1
+    (builtin / "toyroad.md.j2").write_text(TEMPLATE + "<!-- v2 -->\n")
+    assert registry.shipped_digest("toyroad", builtin) != d1
+
+
+def test_ad_hoc_template_renders_once(tmp_path, toy, builtin):
+    q = _log(tmp_path)
+    got = registry.render_body("toyroad", q, builtin=builtin, template="{{ phases|length }} phases")
+    assert got == "2 phases\n"
