@@ -2665,7 +2665,12 @@ Nothing errors. There is no signal that can tell them apart, so identity is **de
 Under a declared identity a call uses what *that* agent holds, on every surface: an MCP
 tool called with a foreign `as_agent` asks from the primary and `ddflow_claim` creates that
 agent's own tree instead of adopting the connection's harness worktree, and `ddflow --agent
-X claim` does not adopt a tree another identity is working in. `ddflow_setup` writes into
+X claim` does not adopt a tree another identity is working in -- one it has worked in under
+its tree-derived name, or one it ADOPTED (`worktree.adopted` names the adopter, so a parent
+that always declares `--agent` still owns its tree once it has claimed from it; a parent that
+has never claimed from its tree is not yet detectable, and the first identity to adopt a
+tree owns it). A reviewer written through
+`ddflow_configure` is recorded under the per-call `as_agent`. `ddflow_setup` writes into
 the tree the server stands in, as `adopt` does; `adopt` run from a linked worktree writes
 the project's tracked files into **that worktree** (the event log and hooks stay shared).
 
