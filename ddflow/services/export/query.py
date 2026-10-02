@@ -59,6 +59,10 @@ class Query:
     events: list[Event] = field(default_factory=list)
     #: Unparseable log lines skipped on load (a torn final line); kinds may mention it.
     skipped_lines: int = 0
+    #: The project root this Query was loaded from (``load`` sets it; ``build`` leaves it
+    #: ``None``). The one thing a kind may take from outside the log: the configured
+    #: workflow, which lives in config and not in events.
+    repo: Path | None = None
     #: parent id -> live child items sorted by ``item_key``. One pass, built in __post_init__.
     children: dict[str, list[Item]] = field(init=False, default_factory=dict)
     _phases: list[Item] = field(init=False, default_factory=list)
@@ -221,7 +225,9 @@ def load(root: Path | str, log_cfg: Any = None) -> Query:
     if not events and log.skipped_lines:
         # Every line was unreadable: an empty document here would claim "nothing happened".
         raise ExportError(f"the event log has no readable events ({log.skipped_lines} bad lines)")
-    return build(events, log.skipped_lines)
+    q = build(events, log.skipped_lines)
+    q.repo = root
+    return q
 
 
 def sorted_by(items: Iterable[T], key: Callable[[T], Any], tiebreak: Callable[[T], str]) -> list[T]:

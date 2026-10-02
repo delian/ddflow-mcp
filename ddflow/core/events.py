@@ -89,6 +89,42 @@ def canonical(obj: Any) -> str:
     return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
 
 
+#: The keep-a-changelog categories an item.completed / bug.fixed `changelog` field may carry
+#: (decision D-export (4)).
+CHANGELOG_CATEGORIES = ("Added", "Changed", "Deprecated", "Removed", "Fixed", "Security")
+#: `--changelog skip` / `internal`: the entry must not appear in the changelog.
+CHANGELOG_SKIP_WORDS = ("skip", "internal")
+
+
+def parse_changelog(text: str) -> dict[str, Any]:
+    """`"Added: text"` -> {category, line, skip}; `skip`/`internal` -> a skip marker.
+    Case-insensitive; an unknown category or an empty line raises ValueError naming the list."""
+    t = (text or "").strip()
+    if t.lower() in CHANGELOG_SKIP_WORDS:
+        return {"category": "", "line": "", "skip": True}
+    head, sep, rest = t.partition(":")
+    by_name = {c.lower(): c for c in CHANGELOG_CATEGORIES}
+    if sep and head.strip().lower() in by_name and rest.strip():
+        return {"category": by_name[head.strip().lower()], "line": rest.strip(), "skip": False}
+    raise ValueError(
+        f"--changelog {t!r}: expected 'Category: text' with Category one of "
+        f"{', '.join(CHANGELOG_CATEGORIES)}, or 'skip' / 'internal' to keep it out of the changelog"
+    )
+
+
+def changelog_of(raw: Any) -> dict[str, Any]:
+    """The folded form of an event's `changelog` key: a well-formed dict, else {}. Lenient on
+    purpose -- a newer or hand-written shape must never break the fold."""
+    if not isinstance(raw, dict):
+        return {}
+    cat, line = raw.get("category", ""), raw.get("line", "")
+    if raw.get("skip") is True:
+        return {"category": "", "line": "", "skip": True}
+    if cat in CHANGELOG_CATEGORIES and isinstance(line, str) and line.strip():
+        return {"category": cat, "line": line.strip(), "skip": False}
+    return {}
+
+
 @dataclass(frozen=True)
 class Event:
     kind: str

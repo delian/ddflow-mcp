@@ -389,6 +389,14 @@ You get everything except the judgement. Command gates run themselves; agent gat
 for a human to record an outcome, and `ddflow gate skip <id> <gate> --reason "..."` is
 the escape hatch — recorded as a skip, never as a pass.
 
+**Changelog line (optional).** `ddflow complete P1.T1 --changelog "Added: tax rounding"` (and
+`ddflow bug fixed B1 --regression-test ... --changelog "Security: ..."`, MCP `changelog` on
+`ddflow_complete` / `ddflow_bug_fixed`) records one line for the project's changelog on the
+completion event. The category is one of Added, Changed, Deprecated, Removed, Fixed, Security
+(case-insensitive; anything else is refused with that list); `--changelog skip` (or `internal`)
+marks work that must not appear in the changelog. `complete` never asks for it and never
+requires it, and logs without it fold exactly as before.
+
 In CI, the exit codes are the interface:
 
 ```make
@@ -740,7 +748,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 141 knobs.
+cadences, and the rest of the 142 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3174,6 +3182,20 @@ exceeds its byte budget (about 91 KB for 90 tools, down from 119 KB) or if the s
 `as_agent` / `relation` / `check_only` descriptions are repeated at length on any tool.
 Their full text lives once, in `ddflow_identify` and the handshake instructions.
 
+**Tool tiers.** A client that loads every tool schema up front still pays that ~91 KB, so
+`[mcp].tools = "core" | "standard" | "all"` (env `DDFLOW_MCP_TOOLS`; default `all`) chooses
+which tools `tools/list` advertises: `core` is 32 tools, 39 KB (the daily loop: brief, next,
+claim, heartbeat, gates, complete, merge, status, show, recall, bugs, lessons, decisions,
+sessions, identify, task add/update, wait, review, help, pr sync, similar, setup), `standard`
+is 63 tools, 67 KB (core plus the commonly used rest), `all` is every tool, byte-identical to
+before. It is a start-time choice and only about what is listed: a tool outside the tier is
+**still callable by name**, `ddflow_help` and the connection instructions say what the tier
+hides and how to widen it, and `listChanged` stays false, so change the knob and restart the
+server. An unrecognised value is refused on write and lists everything at start. The tier
+sets are one structure in `ddflow/surfaces/mcp.py` (`CORE_TOOLS`, `STANDARD_EXTRA_TOOLS`,
+`FULL_ONLY_TOOLS`) and `tests/test_mcp_tool_tiers.py` fails until every new tool is placed in
+exactly one. The parity ratchets read the whole registry, so they never depend on the tier.
+
 The flag ratchet derives its own input from the parser rather than a hand-written list —
 its first version carried eleven tools and was blind to `remove --force` for exactly
 that reason. Omissions are allowed, but each must be an entry in `FLAG_EXEMPTIONS` with
@@ -3289,7 +3311,7 @@ declared once and persists — see
 
 ## Configuration
 
-141 knobs across 18 sections, every one documented in place:
+142 knobs across 19 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

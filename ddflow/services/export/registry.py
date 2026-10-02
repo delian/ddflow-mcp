@@ -44,6 +44,7 @@ class Filters:
     status: str = ""  # a kind-defined status word (open, fixed, ...)
     phase: str = ""  # one phase id
     session: str = ""  # one session id
+    tag: str = ""  # one tag (lessons, decisions)
 
     def given(self) -> set[str]:
         """Names set to something other than their default."""
@@ -54,7 +55,9 @@ class Filters:
 class DocKind:
     name: str  # also the template stem: templates/export/<name>.md.j2
     default_target: str  # repo-relative path the writer uses unless told otherwise
-    data: Callable[[Query, Filters], Mapping[str, Any]]  # pure: no I/O, no clock
+    data: Callable[
+        [Query, Filters], Mapping[str, Any]
+    ]  # pure over the Query: no clock; only Query.repo's config may be read
     update_mode: str = WHOLE
     filters: frozenset[str] = frozenset()  # Filters field names this kind honours
     title: str = ""  # one line for `export list`

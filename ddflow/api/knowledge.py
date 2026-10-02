@@ -24,6 +24,7 @@ import ddflow.api._dedupe as DD
 
 from ..config import csv_list
 from ..core import outcome as O
+from ..core.events import parse_changelog
 from ..core.ids import auto_id
 from ._base import _load
 
@@ -567,6 +568,7 @@ def bug_fixed(
     lesson_title: str = "",
     lesson_rule: str = "",
     agent: str = "",
+    changelog: str = "",
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
 
@@ -577,6 +579,12 @@ def bug_fixed(
     and `regression_tests` as the split list. The required-test rule asks the LIST: `;`
     alone is a truthy string naming no test.
     """
+    entry: dict[str, Any] = {}
+    if changelog:
+        try:
+            entry = parse_changelog(changelog)
+        except ValueError as e:
+            return O.failed("bug.fixed", str(e), id=item)
     log, cfg, st = _load(repo, agent)
     parts = [regression_test] if isinstance(regression_test, str) else list(regression_test)
     tests = [t for part in parts for t in _split_outside_brackets(str(part or ""))]
@@ -612,7 +620,12 @@ def bug_fixed(
     log.append(
         "bug.fixed",
         item,
-        {"regression_test": regression_test, "regression_tests": tests, "lesson": lesson},
+        {
+            "regression_test": regression_test,
+            "regression_tests": tests,
+            "lesson": lesson,
+            **({"changelog": entry} if entry else {}),
+        },
     )
     captured = ""
     if cfg.lessons.auto_capture_on_bug and lesson_title:
