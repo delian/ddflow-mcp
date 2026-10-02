@@ -253,6 +253,10 @@ def cmd_doctor(a, c: Ctx) -> int:
 
 def cmd_board(a, c: Ctx) -> int:
     out = A.board(c.repo, phase=a.phase or "", agent=c.requested_agent)
+    if out.exit == FAIL:  # an unknown --phase (Bc2acd426f4): said as `next` says it
+        from .lifecycle import _next_without_plan
+
+        return _next_without_plan(out, c)
     c.out(out.data["text"], out.body())
     return OK
 
