@@ -2831,6 +2831,20 @@ def _apply_state(log: EventLog, f: Found, bump: Callable[[str], None]) -> None:
         bump("task_held")
 
 
+def _resolve_chains(dropped: dict[int, Duplicate], in_plan: dict[str, Found]) -> None:
+    """A summary bullet that repeats a record of this import which is itself left out
+    repeats what THAT repeats: point at the record that is actually held, so the outcome
+    does not depend on the order the records were read."""
+    for d in dropped.values():
+        seen = {d.found.ident}
+        while d.where == "import" and id(in_plan[d.of]) in dropped:
+            nxt = dropped[id(in_plan[d.of])]
+            if nxt.of in seen:
+                break
+            seen.add(nxt.of)
+            d.of, d.where = nxt.of, nxt.where
+
+
 #: Identical repeats named in the plan's note (the rest are counted).
 _SHOWN_IDENTICAL = 12
 
@@ -2884,7 +2898,7 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
             where = "queue"
             if tgt is not None:
                 where = "import"
-                if not is_summary(f) or is_summary(tgt) or id(tgt) in dropped:
+                if not is_summary(f) or is_summary(tgt):
                     continue
             ident = "identical" in c.flags
             if ident or (c.score >= dd.ask_threshold and a.words >= dd.min_words):
@@ -2892,6 +2906,7 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
                 break
     if not dropped:
         return
+    _resolve_chains(dropped, in_plan)
     plan.found = [f for f in plan.found if id(f) not in dropped]
     plan.duplicates = [dropped[id(f)] for f in mine if id(f) in dropped]
     same = [d for d in plan.duplicates if d.identical]
@@ -2906,8 +2921,8 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     if near:
         lines = [
             f"{len(near)} record(s) look like ones already held and were NOT imported -- "
-            f"decide each (`ddflow lesson add` files one anyway; otherwise the existing "
-            f"record already says it). Candidate and score:"
+            f"decide each (file one anyway with the matching `ddflow <kind> add`; "
+            f"otherwise the existing record already says it). Candidate and score:"
         ]
         lines += [
             f"    {d.found.kind} {d.found.ident} ~ {d.of} ({d.score:.2f}"
