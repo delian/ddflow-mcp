@@ -237,7 +237,9 @@ def _recall_block(table: str, r: dict, head: str, body: str) -> str:
         return f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
     prov = r.get("provenance")
     if prov:
-        origin = PV.Origin(prov["trust"], prov.get("by", ""), prov.get("source", ""))
+        origin = PV.Origin(
+            prov.get("trust", PV.UNKNOWN), prov.get("by", ""), prov.get("source", "")
+        )
     else:
         # A prompt or note is recorded by an agent, whoever's words it quotes.
         origin = PV.Origin(PV.AGENT if table == "prompts" else PV.UNKNOWN)

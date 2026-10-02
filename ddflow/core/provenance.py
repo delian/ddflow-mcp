@@ -36,6 +36,10 @@ _ATTR_CAP = 80
 #: character the fence needs a body not to contain, so only these are escaped: a body that
 #: says `a < b` or `List<int>` reads exactly as written.
 _TAG_LIKE = re.compile(r"<(?=\s*/?\s*ddflow)", re.IGNORECASE)
+#: An entity-shaped run (`&#60;`, `&lt;`): a reader that decodes entities would turn one
+#: back into the `<` this module removes, so its `&` is escaped too. A bare `&` or `&&`
+#: is not matched and reads as written.
+_ENTITY = re.compile(r"&(?=#?\w+;)")
 _NOT_ATTR = re.compile(r"[\s\"'<>&`]+")
 
 
@@ -91,7 +95,7 @@ _attr = clean
 
 def escape(text: str) -> str:
     """The body with any `ddflow` tag defanged, so it cannot close the fence or open one."""
-    return _TAG_LIKE.sub("&lt;", text)
+    return _TAG_LIKE.sub("&lt;", _ENTITY.sub("&amp;", text))
 
 
 def fence(kind: str, ident: str, text: str, origin: Origin, *, inline: bool = True) -> str:
