@@ -1,0 +1,37 @@
+{% if not single %}
+# Changelog
+
+All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+{% if baseline %}
+
+Generated from the event log and the version tags: nothing before {{ baseline }} is reconstructed.
+{% endif %}
+{% endif %}
+{% for s in sections %}
+{% if not (single and loop.first) %}
+
+{% endif %}
+## [{{ s.title }}]{{ (" - " ~ s.date) if s.date else "" }}
+{% for g in s.groups %}
+
+### {{ g.category }}
+
+{% for e in g.entries %}
+- {{ e.line }}{{ " _(placed by date, no merge commit)_" if e.by_date else "" }}
+{% endfor %}
+{% endfor %}
+{% endfor %}
+{% if has_by_date %}
+
+Entries marked "placed by date" have no merge commit recorded, so their version comes from when they were completed, not from git history.
+{% endif %}
+{% if unplaced %}
+
+{{ unplaced }} finished item(s) could not be placed (no merge commit and no readable completion time) and are left out.
+{% endif %}
+{% if links %}
+
+{% for l in links %}
+[{{ l.label }}]: {{ l.url }}
+{% endfor %}
+{% endif %}
