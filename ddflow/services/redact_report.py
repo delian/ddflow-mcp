@@ -204,8 +204,13 @@ def redact_report(
     # The repo root keeps its tail: `<root>/ddflow/x.py` is a useful frame.
     if root and str(root) not in ("", "/", "."):
         p.sub(re.compile(re.escape(str(root)) + r"(?![\w.-])"), "path")
-    if home_dir and home_dir not in ("/", "~", "/root"):
-        p.sub(re.compile(re.escape(home_dir) + r"(?:/[^\s'\"`<>)\]},;]*)?(?![\w.-])"), "path")
+    if home_dir and home_dir not in ("/", "~", ".", ""):
+        p.sub(
+            re.compile(
+                r"(?<![\w.-])" + re.escape(home_dir) + r"(?:/[^\s'\"`<>)\]},;]*)?(?![\w.-])"
+            ),
+            "path",
+        )
     p.sub(_HOME_PATH, "path")
     p.sub(_TILDE_PATH, "path")
 
