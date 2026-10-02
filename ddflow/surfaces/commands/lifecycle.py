@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from ...api import lifecycle as A
+from ...core.tier import tier_of
 from ...views.markdown import new_reports_line
 from ..context import FAIL, MAX_LISTED_FILES, NOTHING, OK, REFUSED, Ctx
 
@@ -68,7 +69,8 @@ def cmd_next(a, c: Ctx) -> int:
         return NOTHING
     print(f"Ready ({p.summary()}):")
     for it in p.ready:
-        print(f"  {it.id}  {it.title}")
+        tier = tier_of(it.tags)
+        print(f"  {it.id}  {it.title}" + (f"  [tier:{tier}]" if tier else ""))
         if it.globs:
             print(f"      writes: {', '.join(it.globs)}")
     if len(p.ready) > 1:

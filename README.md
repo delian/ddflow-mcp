@@ -1641,6 +1641,17 @@ task, so depth is unlimited while the rules stay one set.
 
 ---
 
+### Model-tier hint (advisory)
+
+Tag a task `tier:fast`, `tier:balanced` or `tier:deep` (`ddflow task add ... --tags tier:fast`)
+to say what kind of model suits it: a cheap one for mechanical bulk work, a balanced one for
+implementation, a top-tier one for architecture trade-offs. `ddflow next` (CLI text, `--json`
+as a `tier` field, and the bounded `ddflow_next` body) and `ddflow brief` (the item's header and
+the ready list) show it; an untagged item shows nothing extra. A harness that dispatches a
+subagent may map it to its model choice (see the driver, `docs/ddflow/drivers/implement-phase.md`).
+It is advice only: it never affects scheduling, gates or reviewer independence, and an unknown
+value such as `tier:foo` is ignored and reported by `ddflow doctor` as a note, not an error.
+
 ## Work that changes shape while you do it
 
 Tasks can be added at any time, including while their parent is being worked — mid-task
