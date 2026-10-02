@@ -181,6 +181,20 @@ def _macro_report(repo: Path | None) -> tuple[dict, dict[str, str]]:
         return {}, {}
 
 
+def not_loaded_note(repo: Path | None) -> str:
+    """One `\\n  not loaded: <why>` line per reason a configured macro is unusable, or "".
+
+    Includes a config that cannot be read at all (parse error, undecodable prompt_file),
+    which `all_commands` swallows -- so a surface that says "unknown prompt" can say why
+    (B57fc667efc).
+    """
+    if not repo:
+        return ""
+    from .macros import macro_problems
+
+    return "".join(f"\n  not loaded: {p}" for p in macro_problems(Path(repo)))
+
+
 def macro_commands(repo: Path | None = None) -> dict[str, tuple[str, str, list[str]]]:
     """Operator-defined `[[macro]]` blocks, in the same shape as `COMMANDS`.
 
@@ -535,12 +549,8 @@ def resolve_any(name: str, repo: Path | None = None, overrides: dict[str, str] |
     # Why a configured macro is not among the commands, said HERE: "unknown prompt" about
     # a macro the operator can see in their config, with the reason only in doctor, is the
     # silence B-macro-clash-silent was about.
-    from .macros import macro_problems
-
-    problems = macro_problems(Path(repo)) if repo else []
     raise TemplateError(
         f"unknown prompt {name!r}.\n"
         f"  templates: {', '.join(TEMPLATE_NAMES)}\n"
-        f"  commands:  {', '.join(sorted(all_commands(repo)))}"
-        + "".join(f"\n  not loaded: {p}" for p in problems)
+        f"  commands:  {', '.join(sorted(all_commands(repo)))}" + not_loaded_note(repo)
     )

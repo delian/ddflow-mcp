@@ -711,6 +711,8 @@ nothing), and **both `prompt` and `prompt_file`** (two sources for one body mean
 dead and looks live). A refused macro is refused **alone and by name** — the others still
 load — and `ddflow prompts list`, `prompts show`, `doctor` and the MCP `prompts/list` say
 which one and why; an undecodable `prompt_file` is a named problem too.
+When the whole `[[macro]]` config cannot be read (a parse error, an unknown field), MCP
+`prompts/get` for an unknown name says why (`not loaded: ...`) instead of only "unknown prompt".
 
 **Including the one the agent actually reads first.** `mcp_instructions.md` is the block
 an MCP client injects into the model's context on connect — the workflow, the reporting
