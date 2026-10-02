@@ -2032,10 +2032,13 @@ def brief(
         cap = cfg.session.brief_max_tokens * 4 // 2
         if len(reports_block) > cap:
             reports_block = reports_block[:cap].rsplit("\n", 1)[0] + "\n\n"
+    from ..core import progress as PR
+
     text = render_md.brief(
         st,
         cfg,
         p,
+        loops=[f for f in PR.detect(log.read_all(), st, cfg) if f.item == item] if item else [],
         repo=repo,
         item=item,
         lessons=lessons,

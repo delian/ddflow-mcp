@@ -40,6 +40,10 @@ from ..config import Config
 from ..core.model import ABANDONED, DONE, GATE_OUTCOMES, State
 from .events import Event
 
+#: Gates whose failure is a reviewer's verdict on the work, not a failure of the work
+#: (decision D-failed-critic-not-blocking). The repeated-failure detector skips them.
+REVIEW_GATES: frozenset[str] = frozenset({"rubber_duck", "critic"})
+
 #: Kinds that represent forward progress. Used by the no-progress detector: a window
 #: full of events none of which is one of these is a window in which nothing advanced.
 PROGRESS_KINDS: frozenset[str] = frozenset(
@@ -116,6 +120,9 @@ class ItemWork:
     state: str = "open"
     attempts: list[Attempt] = field(default_factory=list)
     gate_outcomes: dict[str, list[str]] = field(default_factory=dict)
+    #: gate -> (outcome, output digest, tree fingerprint) of each passed/failed run, in
+    #: order. What the repeated-failure detector reads; "" where a run recorded none.
+    gate_runs_evidence: dict[str, list[tuple[str, str, str]]] = field(default_factory=dict)
     commits: list[str] = field(default_factory=list)
     holders: list[str] = field(default_factory=list)
     completed_times: int = 0
@@ -126,6 +133,15 @@ class ItemWork:
         """Record a commit once: merge and complete both name the landing's sha."""
         if sha not in self.commits:
             self.commits.append(sha)
+
+    def add_gate_run(self, gate: str, outcome: str, evidence: Any) -> None:
+        """Keep a decisive run's output digest and tree, for the repeated-failure check."""
+        if outcome not in ("passed", "failed"):
+            return
+        ev = evidence if isinstance(evidence, dict) else {}
+        self.gate_runs_evidence.setdefault(gate, []).append(
+            (outcome, str(ev.get("output_digest") or ""), str(ev.get("tree_sha") or ""))
+        )
 
     @property
     def total_seconds(self) -> float:
@@ -160,6 +176,9 @@ class LoopFinding:
     threshold: int
     detail: str
     severity: str = "warn"  # warn | block
+    #: The gate and the tree it last failed on, for the findings that are about one gate.
+    gate: str = ""
+    tree_sha: str = ""
 
     def render(self) -> str:
         return f"[{self.severity.upper()}] {self.kind} · {self.item}: {self.detail}"
@@ -213,6 +232,7 @@ def _absorb(ev: Event, rec, open_attempt: dict[str, Attempt]) -> None:
             return
         r = rec(subj)
         r.gate_outcomes.setdefault(d.get("gate", "?"), []).append(outcome)
+        r.add_gate_run(d.get("gate", "?"), outcome, d.get("evidence"))
         att = open_attempt.get(subj)
         if att:
             att.gates_run += 1
@@ -300,6 +320,7 @@ def detect(events: list[Event], state: State, cfg: Config) -> list[LoopFinding]:
     found += _static_cycles(state, sev)
     found += _repeat_claims(tracked, lc, sev)
     found += _gate_flapping(tracked, lc, sev)
+    found += _repeated_failures(tracked, lc, sev)
     found += _reopened(tracked, lc, sev)
     found += _duplicate_work(state, lc, sev)
     found += _no_progress(events, lc, sev)
@@ -385,6 +406,50 @@ def _gate_flapping(tracked: dict[str, ItemWork], lc, sev: str) -> list[LoopFindi
                         f"({' -> '.join(decisive[-6:])}). A gate that cannot decide is "
                         f"either flaky or measuring something that keeps moving; "
                         f"re-running it will not converge."
+                    ),
+                )
+            )
+    return out
+
+
+def _repeated_failures(tracked: dict[str, ItemWork], lc, sev: str) -> list[LoopFinding]:
+    """One gate failing the same way again and again: N consecutive failed runs with one
+    output digest. `gate_flapping` needs the verdict to flip; an agent re-applying the
+    same failing patch never flips it. A pass ends the streak, and so does a failure
+    that recorded no digest (nothing shows it failed the same way). Reviewer gates are
+    excluded -- a failed review is not a failure of the work."""
+    n = lc.max_repeated_failures
+    if n <= 0:
+        return []
+    out = []
+    for r in tracked.values():
+        for gate, runs in r.gate_runs_evidence.items():
+            if gate in REVIEW_GATES:
+                continue
+            outcome, digest, tree = runs[-1]
+            if outcome != "failed" or not digest:
+                continue
+            streak = 0
+            for o, dg, _ in reversed(runs):
+                if o != "failed" or dg != digest:
+                    break
+                streak += 1
+            if streak < n:
+                continue
+            out.append(
+                LoopFinding(
+                    kind="repeated_failure",
+                    item=r.item,
+                    count=streak,
+                    threshold=n,
+                    severity=sev,
+                    gate=gate,
+                    tree_sha=tree,
+                    detail=(
+                        f"gate {gate!r} has failed {streak} times in a row with the same "
+                        f"output (digest {digest}). Re-running it on the same work will "
+                        f"not pass: read the failure (`ddflow gate status {r.item}`), "
+                        f"change something, or `ddflow block {r.item}` / ask for help."
                     ),
                 )
             )

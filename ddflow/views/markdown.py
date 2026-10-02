@@ -382,6 +382,7 @@ def _brief_current(
     *,
     held: list[str] | None = None,
     suggested: bool = False,
+    loops: list | None = None,
 ) -> None:
     """The item this brief is about. "Current" only when it is the agent's own -- named
     with `--item` or held under its lease; the queue's top pick for an agent holding
@@ -428,6 +429,9 @@ def _brief_current(
         readme = readme_report(state, cfg, item, repo=repo)
         if readme:
             out.append(f"- docs: {readme}")
+    for f in loops or []:
+        if f.item == item and f.kind == "repeated_failure":
+            out.append(f"- {f.render()}")
     if it.body:
         out += ["", textwrap.indent(it.body.strip()[:700], "> ")]
     out.append("")
@@ -570,6 +574,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     held: list[str] | None = None,
     suggested: bool = False,
     reserve: int = 0,
+    loops: list | None = None,
 ) -> str:
     """The session-start pack, under ``session.brief_max_tokens``.
 
@@ -582,7 +587,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     _brief_recovery(out, recovery or [])
     _brief_jobs(out, state)
     if item:
-        _brief_current(out, state, cfg, item, repo, held=held, suggested=suggested)
+        _brief_current(out, state, cfg, item, repo, held=held, suggested=suggested, loops=loops)
     _brief_ready(out, plan)
     _brief_decisions(out, decisions or [])
     # `memories` is every LIVE one, newest first; how many to show is this view's call.
