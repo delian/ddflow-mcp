@@ -3418,7 +3418,8 @@ class Server:
                 return _err(
                     mid,
                     -32602,
-                    f"unknown prompt {name!r}. Known: {', '.join(sorted(known))}",
+                    f"unknown prompt {name!r}. Known: {', '.join(sorted(known))}"
+                    + P.not_loaded_note(self.repo),
                 )
             try:
                 if name in P.COMMANDS:
