@@ -393,6 +393,17 @@ def _session_text(a) -> str | None:
     return sys.stdin.read()
 
 
+def _where(d: dict) -> str:
+    """Which session took the words, said when the caller did not name one."""
+    how = d.get("how", "explicit")
+    if how == "off":
+        return " -- NOT recorded: session.log_prompts is off"
+    if how == "explicit":
+        return ""
+    label = {"implicit": "implicit, new", "harness": "harness"}.get(how, how)
+    return f" in session {d['session']} ({label})"
+
+
 def cmd_session(a, c: Ctx) -> int:
     if a.session_cmd == "start":
         out = A.session_start(
@@ -415,10 +426,23 @@ def cmd_session(a, c: Ctx) -> int:
         if out.exit != OK:
             print(out.reason + _misread_hint(a), file=sys.stderr)
             return out.exit
-        if a.session_cmd == "prompt":
-            c.out(f"recorded ({out.data['redactions']} redaction(s))", out.body(("redactions",)))
+        where = _where(out.data)
+        if where.startswith(" -- NOT"):
+            c.out(f"not recorded:{where[len(' -- NOT recorded:') :]}", out.body(("session", "how")))
+        elif a.session_cmd == "prompt":
+            c.out(
+                f"recorded ({out.data['redactions']} redaction(s)){where}",
+                out.body(("redactions", "session", "how")),
+            )
         else:
-            c.out("noted", {})
+            c.out(f"noted{where}", out.body(("session", "how")))
+        return OK
+    if a.session_cmd == "adopt-orphans":
+        out = A.session_adopt_orphans(c.repo, agent=c.requested_agent)
+        if out.exit != OK:
+            print(out.reason, file=sys.stderr)
+            return out.exit
+        c.out(f"adopted {out.data['adopted']} orphan(s)", out.body(("adopted",)))
         return OK
     if a.session_cmd == "end":
         A.session_end(c.repo, a.session, summary=a.summary or "", agent=c.requested_agent)

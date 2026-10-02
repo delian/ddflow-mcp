@@ -913,7 +913,9 @@ def session_prompt(
     """Record the operator's own words, with credentials redacted before they touch disk.
 
     Empty or whitespace-only text is refused, recording nothing: an empty prompt in the
-    log is a hole `ddflow replay` cannot see as one.
+    log is a hole `ddflow replay` cannot see as one. A missing session id is not a
+    reason to refuse: the latest open session is used, else an implicit one is opened,
+    and `how` says which.
     """
     from ..services import sessions as S
 
@@ -922,8 +924,12 @@ def session_prompt(
             "session.prompt", _EMPTY_SESSION_TEXT.format(what="prompt"), session=session
         )
     log, cfg, _st = _load(repo, agent)
+    if not cfg.session.log_prompts:
+        # Nothing is recorded, so no session is opened for it either.
+        return O.ok("session.prompt", redactions=0, session=session, how="off")
+    sid, how = S.resolve(log, session)
     return O.ok(
-        "session.prompt", redactions=S.prompt(log, cfg, session, text, item=item), session=session
+        "session.prompt", redactions=S.prompt(log, cfg, sid, text, item=item), session=sid, how=how
     )
 
 
@@ -935,8 +941,17 @@ def session_note(
     if not (text or "").strip():
         return O.failed("session.note", _EMPTY_SESSION_TEXT.format(what="note"), session=session)
     log, cfg, _st = _load(repo, agent)
-    S.note(log, cfg, session, text, item=item)
-    return O.ok("session.note", session=session)
+    sid, how = S.resolve(log, session)
+    S.note(log, cfg, sid, text, item=item)
+    return O.ok("session.note", session=sid, how=how)
+
+
+def session_adopt_orphans(repo: Path, *, agent: str = "") -> O.Outcome:
+    """Attach prompts and notes recorded with no session id to the nearest session."""
+    from ..services import sessions as S
+
+    log, _cfg, _st = _load(repo, agent)
+    return O.ok("session.adopted", adopted=S.adopt_orphans(log))
 
 
 def session_end(repo: Path, session: str, *, summary: str = "", agent: str = "") -> O.Outcome:
