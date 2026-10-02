@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 from conftest import run_cli
 
 from ddflow.core.model import fold
@@ -40,6 +41,13 @@ SUMMARY = """# Summary
 - **Cache keys.** A cache keyed by file path alone serves stale thumbnails after a rename,
   so key it by content digest plus the rendering parameters.
 """
+
+
+@pytest.fixture(autouse=True)
+def _default_policy(monkeypatch):
+    """These tests read the DEFAULT [dedupe] ("ask"); conftest turns the add-time check off
+    for the rest of the suite."""
+    monkeypatch.delenv("DDFLOW_DEDUPE_ON_MATCH", raising=False)
 
 
 def _corpus(repo: Path, *, summary: bool = True) -> None:
