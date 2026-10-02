@@ -7,6 +7,11 @@ bytes being sent, which is not expired and not already used; with none, the func
 and calls no runner. The consent object is DEFINED here and MINTED elsewhere (the operator's
 interactive yes, or a one-time approval); nothing in this module can create one.
 
+This module checks that a consent is BOUND to these bytes, unexpired and unused; it does
+not authenticate who made it. Authenticity is the minter's job (B-upstream-consent): the
+only surfaces that reach `send_gh` pass a consent they obtained from the operator's
+interactive yes or a one-time approval, never one the agent can construct.
+
 The bundle arrives already redacted. This module verifies its digest before writing or
 sending a byte, so what is previewed, what is on disk and what is sent are the same bytes.
 """
