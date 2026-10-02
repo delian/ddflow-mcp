@@ -1306,7 +1306,7 @@ def _h_state(new_state: str):
             # so the one record of WHY an item was closed without running a single gate
             # existed only in the raw log. Third instance of this class in this series.
             it.completion_evidence = ev.data.get("evidence", it.completion_evidence)
-            it.changelog = changelog_of(ev.data.get("changelog"))
+            it.changelog = changelog_of(ev.data.get("changelog")) or it.changelog
         elif new_state == ABANDONED:
             it.blocked_reason = ev.data.get("reason", "")
 
@@ -1558,7 +1558,8 @@ def _h_bug_fixed(st: State, ev: Event) -> None:
         ev.data.get("regression_tests") or ([bug.regression_test] if bug.regression_test else [])
     )
     bug.lesson = ev.data.get("lesson", "")
-    bug.changelog = changelog_of(ev.data.get("changelog"))
+    # A keyless event (an older writer, a re-close) leaves a recorded line alone.
+    bug.changelog = changelog_of(ev.data.get("changelog")) or bug.changelog
 
 
 def _h_bug_invalid(st: State, ev: Event) -> None:
