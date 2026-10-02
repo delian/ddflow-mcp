@@ -44,6 +44,7 @@ from ..core.schedule import globs_overlap, is_shared, shared_globs
 from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.log import EventLog
+from .install_info import running_from_source
 
 HOOK_MARKER = "# DDFLOW-HOOK v1 — managed by `ddflow hooks install`"
 
@@ -103,8 +104,7 @@ def command_line(args: str, *, exec_: bool = False) -> str:
 
 
 def _running_from_source() -> bool:
-    here = Path(__file__).resolve()
-    return not any(part in ("site-packages", "dist-packages") for part in here.parts)
+    return running_from_source()
 
 
 def hooks_dir(repo: Path) -> Path:

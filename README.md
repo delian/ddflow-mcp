@@ -1508,11 +1508,8 @@ duplicate from a related record, which is why it is reported rather than decided
 real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson were
 reported this way. Tasks and phases are not checked (they carry dependencies);
 `[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
-`"off"` turns the check off. **While the shipped default is `warn`** (see "The check every
-add runs"), an import lists near-duplicates and imports them anyway; set
-`on_match = "ask"` to have them withheld, as the default will again once
-B-add-dedupe-surfaces lands. Re-running over the same files adds
-nothing.
+`"off"` turns the check off. Under the shipped default, `ask`, near-duplicates are
+withheld. Re-running over the same files adds nothing.
 
 ### Verifying an import, at any time
 
@@ -1715,11 +1712,11 @@ stemmer), TF-IDF weights projected into `index.db` by `ddflow rebuild`, and an e
 over an inverted index — a record missing from the hits shares no term with the query, so
 nothing depends on how SQLite was built. Candidates cross kinds, so a new bug is shown the
 open task that fixes it. Its policy is the `[dedupe]` section (decision D-no-duplicates):
-`on_match` (`warn` default for now, `ask`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
+`on_match` (`ask` default, `warn`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
 on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds come from a
 labelled set of 84 duplicate / related / hard-negative pairs built from real logs
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
-duplicate from a different bug in the same function, which is why `ask` exists rather than an automatic decision. The shipped default is currently `warn`, because no surface can answer an ask yet (CLI flags, terminal prompt and MCP `relation` are task B-add-dedupe-surfaces, which flips it back to `ask`).
+duplicate from a different bug in the same function, which is why the default asks rather than decides. (It was `warn` for a short while, because no surface could answer an ask; the CLI flags, terminal prompt and MCP `relation` now can.)
 
 ### Similar — "is this already filed?"
 
@@ -1770,7 +1767,42 @@ prompt or note — runs the same check against the log **before it writes**, wit
   ways** (a `link.recorded` on X). The API takes the answer as one `answer` argument
   (`api.DedupeAnswer("extends", "B5d98a4da0a")`; `DedupeAnswer.parse("related B1")`)
   carried on `task_add`, `phase_add`, `bug_found`, `memory_add` and the lesson, decision
-  and research drafts; the CLI flags and the MCP `relation` field come next.
+  and research drafts. The CLI and MCP surfaces are below.
+- **Answering a refusal, on every surface.**
+  - **CLI flags** on every add command (`task add`, `phase add`, `bug found`, `lesson add`,
+    `decision add`, `research add`, `memory add`): `--new`, `--extends ID`,
+    `--duplicate-of ID`, `--related ID` and `--check`; at most one of the five (argparse refuses two, and
+    over MCP `relation` with `check_only` is a failure).
+    `--check` is a dry run: it writes nothing, prints the candidates and whether the add
+    would be refused, and exits 0 with candidates or 2 with none (`--json` prints
+    `candidates`, `options`, `would_ask`, and for an exact copy `would_extend` -- the open
+    record it would be added to -- or `would_link` -- the claimed or closed record it would
+    be filed beside). An id that already exists keeps its own rule and is not checked
+    (`--check` says so, exit 2 -- except a task or phase, whose existing id is the queue's
+    ordinary `already exists` refusal, exit 3, exactly as the add itself would answer); an index that cannot be read is exit 1, never "none". `ddflow similar "<text>"` asks the same question
+    before you have an id or a command to run.
+  - **On a terminal** (stdin and stdout are both terminals, no `--json`, no answer flag) a
+    refused add asks instead of failing: it lists the candidates numbered and prompts
+    `[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [a]bort`. `e 1` and `r T-old`
+    both work (the number or the id; the number alone is enough when there is one
+    candidate). Anything else asks again; abort, or end of input, files nothing and exits 3.
+  - **Without a terminal** (a script, an agent's shell, a pipe) it exits 3 with
+    `refused: possible duplicate`, the candidates, and the same command again with each
+    answer appended -- `--new`, `--extends TOP`, `--duplicate-of TOP`, `--related TOP` --
+    ready to paste. `--json` prints the same refusal as `candidates` plus `options` (the reason
+    is still on stderr). Nothing is written. An add that goes ahead anyway -- `warn`, or a
+    match below the asking threshold -- prints `It reads like:` and the candidates on stderr
+    before its usual line.
+  - **MCP**: every add tool (`ddflow_task_add`, `ddflow_phase_add`, `ddflow_bug_found`,
+    `ddflow_lesson_add`, `ddflow_decision_add`, `ddflow_research_add`, `ddflow_memory_add`)
+    takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID` or `related:ID` -- and
+    `check_only` (the dry run). The refusal leads the reply as `{"refusal": {...}}` with
+    `candidates` and `options` beside it; answer it by calling the tool again with
+    `relation`. An answer that lands on an existing record returns `extended` (the record
+    that received the text), `extended_kind` and `relation` in place of a new id.
+  - **Agents:** run `ddflow similar` before filing; prefer extending an open, unclaimed
+    record; a claimed or closed one gets a new record linked to it (`extends` does that on
+    its own).
 - **Identical text** (up to case and whitespace) as an existing record of the same kind is
   recorded as a duplicate of it **without asking**, under the same open-or-linked rule.
 - **Below the threshold, at or above `show_floor` (0.35):** the add goes through and its
@@ -1790,7 +1822,7 @@ acquired), quoting each (the first five, clipped; `show` has the rest) inside th
 token budget, and `ddflow heartbeat` and `ddflow gate status` carry the count in one line.
 MCP `ddflow_show` and `ddflow_brief` return the same data.
 
-`[dedupe].on_match` sets the policy: `ask` as above (the intended default, not shipped until B-add-dedupe-surfaces gives every surface a way to answer), `warn` (the current default) never refuses or
+`[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
 entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
 the log before the add writes, so it is advisory across agents: two adds of the same text

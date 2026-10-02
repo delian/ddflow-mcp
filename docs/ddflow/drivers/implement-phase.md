@@ -198,6 +198,15 @@ hard to notice and very hard to undo.
 
 ### 2e. Capture what you learned
 
+Before you file anything -- a bug, task, lesson, decision, research or memory -- run
+`ddflow similar "<the text>"` and look at what is already there. Every add runs the same
+check, and one that reads like an existing record is **refused** (exit 3, `refused:
+possible duplicate`) with the candidates and the commands that answer it: `--new` (a
+different record), `--extends ID` / `--duplicate-of ID` (the same thing) or `--related ID`
+(linked both ways). Prefer extending an **open, unclaimed** record -- the text is appended
+to it and no new id is made; a record somebody has claimed, or that is closed, gets a new
+record linked to it instead. `--check` shows the candidates without writing anything.
+
 Any bug, any operator correction, any surprise:
 
 ```sh

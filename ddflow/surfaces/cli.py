@@ -31,6 +31,7 @@ from ..infra import worktree as W
 from ..services import gates as G
 from ..services import leases as L
 from ..services.adopt import AGENT_TARGETS
+from . import dedupe_flags
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
     _workflow_problems,
@@ -402,6 +403,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
             help="file a REMOVED item's id again. An id still in the queue is always "
             "refused: change it with `ddflow update`",
         )
+        dedupe_flags.add_flags(add)
         add.set_defaults(fn=fn)
         return add
 
@@ -750,6 +752,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     ma.add_argument("text")
     ma.add_argument("--tags", default="")
     ma.add_argument("--id", default="", help="re-record (correct) an existing memory")
+    dedupe_flags.add_flags(ma)
     ma.set_defaults(fn=cmd_memory)
     ml = me_s.add_parser("list", help="live memories, newest first (exit 2 = none)")
     ml.add_argument("--query", default="", help="rank by relevance instead of recency")
@@ -786,6 +789,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     la.add_argument(
         "--globs", default="", help="comma-separated globs to scan (default: all tracked files)"
     )
+    dedupe_flags.add_flags(la)
     la.set_defaults(fn=cmd_lesson)
     lv = ls_s.add_parser(
         "verify",
@@ -850,6 +854,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     dca.add_argument("--by", default="", help="operator | agent | a name")
     dca.add_argument("--status", default="accepted", choices=["proposed", "accepted", "superseded"])
     dca.add_argument("--supersedes", default="")
+    dedupe_flags.add_flags(dca)
     dca.set_defaults(fn=cmd_decision)
     dcl = dc_s.add_parser("list")
     dcl.add_argument("--all", action="store_true")
@@ -893,6 +898,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rs.add_argument("--sources", default="")
     rs.add_argument("--budget", default="")
     rs.add_argument("--item", default="")
+    dedupe_flags.add_flags(rs)
     rs.set_defaults(fn=cmd_research)
 
     bg = s.add_parser("bug")
@@ -901,6 +907,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bf.add_argument("--id", default="")
     bf.add_argument("--summary", required=True)
     bf.add_argument("--item", default="")
+    dedupe_flags.add_flags(bf)
     bf.set_defaults(fn=cmd_bug)
     bx = bg_s.add_parser("fixed")
     bx.add_argument("id")
@@ -1343,6 +1350,8 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # What was typed, for the commands a refusal tells the caller to run instead.
+    args._argv = list(sys.argv[1:] if argv is None else argv)
     try:
         ctx = Ctx(args)
         return int(args.fn(args, ctx))
