@@ -389,6 +389,7 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_session_note",
     "ddflow_session_end",
     "ddflow_review",
+    "ddflow_review_triage",
     "ddflow_reviewers_detect",
     "ddflow_import",
     "ddflow_companions_add",

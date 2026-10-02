@@ -1977,6 +1977,34 @@ TOOLS: dict[str, dict[str, Any]] = {
         "text": True,
         "kind": "review",
     },
+    "ddflow_review_triage": {
+        "description": (
+            "Record your triage of ONE finding of an item's recorded `ddflow review`: it is "
+            "refuted (probe = the run that shows it false) or confirmed (probe = the fix or "
+            "test that answers it). The finding number is the #N the review printed. The "
+            "gate stays failed -- a review that reported findings is not re-recorded as "
+            "passed; the log shows each finding's fate instead (decision D-review-triage)."
+        ),
+        "properties": {
+            "id": ("string", "The item whose review it is.", True),
+            "gate": ("string", "critic (default) or rubber_duck.", False),
+            "finding": ("integer", "The finding's number: #N in the review's output.", True),
+            "verdict": ("string", "refuted or confirmed.", True),
+            "probe": ("string", "The evidence for the verdict. Required.", True),
+        },
+        "api": lambda repo, a, agent: _api().review_triage(
+            repo,
+            a.get("id", "") or "",
+            gate=a.get("gate") or "critic",
+            finding=int(a.get("finding") or 0),
+            verdict=a.get("verdict", "") or "",
+            probe=a.get("probe", "") or "",
+            agent=agent,
+        ),
+        "payload": "text",
+        "text": True,
+        "kind": "review.triage",
+    },
     "ddflow_show": {
         "description": (
             "Everything known about one phase or task: state, dependencies, declared "
