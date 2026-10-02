@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -130,7 +131,10 @@ class Query:
         never from the clock at render time.
         """
         want = set(kinds)
-        return [e for e in self.events if (not want or e.kind in want) and e.ts >= since]
+        cut = _cutoff(since)
+        return [
+            e for e in self.events if (not want or e.kind in want) and (cut is None or cut(e.ts))
+        ]
 
     @property
     def last_event_id(self) -> str:
@@ -139,6 +143,42 @@ class Query:
             return ""
         e = self.events[-1]
         return e.id or e.compute_id()
+
+
+def _cutoff(since: str) -> Callable[[str], bool] | None:
+    """A predicate "this ``ts`` is at or after ``since``", or None for no cutoff.
+
+    A bare date (``2026-10-01``) compares by calendar day on the ``ts`` text; a full
+    timestamp is parsed on both sides (``Z`` and ``+00:00`` are the same instant, offsets
+    are honoured) -- a raw string compare puts ``...12:00:00+00:00`` before ``...12:00:00Z``.
+    An unparseable ``since`` is refused, never ignored.
+    """
+    if not since:
+        return None
+    if len(since) <= _DATE_LEN:
+        return lambda ts: ts[: len(since)] >= since
+    try:
+        floor = _parse_ts(since)
+    except ValueError:
+        raise ExportError(
+            f"--since {since!r} is not an ISO date or timestamp", EXIT_REFUSED
+        ) from None
+
+    def at_or_after(ts: str) -> bool:
+        try:
+            return _parse_ts(ts) >= floor
+        except ValueError:
+            return False  # an event with no readable time cannot be shown to be in range
+
+    return at_or_after
+
+
+_DATE_LEN = len("2026-10-01")
+
+
+def _parse_ts(text: str) -> datetime:
+    t = datetime.fromisoformat(text.strip().replace("Z", "+00:00"))
+    return t if t.tzinfo else t.replace(tzinfo=UTC)
 
 
 def build(events: Iterable[Event], skipped_lines: int = 0) -> Query:
@@ -162,6 +202,9 @@ def load(root: Path | str, log_cfg: Any = None) -> Query:
         events = log.read_all()
     except (OSError, ValueError) as exc:
         raise ExportError(f"could not read the event log: {exc}") from exc
+    if not events and log.skipped_lines:
+        # Every line was unreadable: an empty document here would claim "nothing happened".
+        raise ExportError(f"the event log has no readable events ({log.skipped_lines} bad lines)")
     return build(events, log.skipped_lines)
 
 
