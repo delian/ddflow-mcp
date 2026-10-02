@@ -6,7 +6,7 @@ flips the default back to "ask", this test flips with it."""
 from __future__ import annotations
 
 import pytest
-from test_add_dedupe import REPORT, corpus_repo, filed, state  # noqa: F401, F811
+from test_add_dedupe import REPORT, corpus_repo, filed, state  # noqa: F401
 
 from ddflow import api as A
 from ddflow.config import Config
