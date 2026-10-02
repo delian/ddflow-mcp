@@ -21,6 +21,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ddflow.surfaces.cli import build_parser
 from ddflow.surfaces.mcp import TOOLS
 
+#: EXEMPTION: the `[mcp].tools` tier (core | standard | all) changes what `tools/list`
+#: ADVERTISES, never what exists. Every ratchet below reads `TOOLS`, the whole registry,
+#: so parity is checked against all tools whatever tier a server runs at; a tool a tier
+#: hides is still callable by name. `tests/test_mcp_tool_tiers.py` pins that.
+
 #: CLI command -> the MCP tool(s) that cover it, when the names differ.
 ALIASES: dict[str, tuple[str, ...]] = {
     "init": ("ddflow_setup",),
