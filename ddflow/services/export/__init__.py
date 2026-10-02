@@ -2,8 +2,11 @@
 
 This package is the CORE: a registry of document kinds, a single-pass query index, a
 framed deterministic rendering with a body digest, and a size cap. Writing to disk is
-``write.py`` (B-export-write); the command and MCP tool are separate tasks. The core does
-no I/O except reading the log in ``query.load`` and templates in ``registry.resolve_template``.
+``write.py`` (B-export-write); the MCP tool and the command
+are ``api/export.py`` and ``surfaces/commands/export.py``. The core does no I/O except reading the log in
+``query.load``, templates in ``registry.resolve_template``, and the two sanctioned READ-ONLY
+reads a kind's ``data()`` may make through ``query.repo`` (below): the project config
+and git.
 
 Plug-in contract for a document kind
 ------------------------------------
@@ -32,11 +35,12 @@ Rules a kind follows:
 
 * ``data(query, filters)`` is PURE: it reads only the Query (``query.phases()``,
   ``tasks_of``, ``tasks_under``, ``tasks``, ``bugs``, ``decisions``, ``lessons``,
-  ``sessions``, ``events_of``, ``last_event_id``, or ``query.state``). No log, git,
-  network, environment or clock access, and no filesystem access beyond ONE sanctioned
-  read: a kind that documents configuration (``rules``: the workflow) may read the project
-  config through ``query.repo`` (``None`` for an in-memory Query), and a failure there is
-  ``ExportError``. It returns a mapping of plain values
+  ``sessions``, ``events_of``, ``last_event_id``, or ``query.state``). No log, network,
+  environment or clock access, and no filesystem or git access beyond the SANCTIONED
+  READ-ONLY reads, both through ``query.repo`` (``None`` for an in-memory Query): a kind
+  that documents configuration (``rules``: the workflow) may read the project config, and
+  the ``changelog`` kind reads config and git (version tags, merge commits; it never
+  writes). A failure in either is ``ExportError`` (exit 2), never an empty document. It returns a mapping of plain values
   (str/int/list/dict) that the template iterates; pre-format text (shorten with your own
   helper) so the template is only loops and ``{{ var }}``.
 * Determinism: every sequence has an explicit sort key with an id tie-break (use the
