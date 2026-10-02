@@ -47,7 +47,7 @@ class Header:
         for k, v in self.extra.items():
             # What `split` can read back: anything else would write a header ddflow itself
             # fails to parse, and hand-edit protection would silently see "not ours".
-            if not re.fullmatch(r"[A-Za-z0-9_-]+", k) or not re.fullmatch(r"\S+", str(v)):
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", str(k)) or not re.fullmatch(r"\S+", str(v)):
                 raise ValueError(f"header attribute {k}={v!r} is not representable")
         extra = "".join(f" {k}={v}" for k, v in sorted(self.extra.items()))
         return (
@@ -107,7 +107,9 @@ def truncate(body: str, max_bytes: int) -> str:
 
     The footer is explicit -- ``[truncated: N more; use --since/--limit]`` -- so a
     reader (or an agent) never mistakes a cut document for a complete one. ``max_bytes``
-    of 0 or less means no cap. The footer is inside the budget. When even the first line
+    of 0 or less means no cap. The footer is inside the budget; a cap smaller than the footer
+    itself (about 41 bytes) yields the footer alone -- `registry.render_document` refuses such
+    caps (exit 3) instead. When even the first line
     does not fit, it is cut mid-line and the count includes it as not (fully) shown.
     """
     body = normalize(body)

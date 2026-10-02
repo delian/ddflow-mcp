@@ -418,6 +418,9 @@ ESCAPES = [
     "{{ [].__class__.__base__.__subclasses__()[0].__subclasshook__ }}",
     "{{ ''.format.__globals__ }}",
     "{{ request }}",
+    '{{ "{0.__class__.__base__.__subclasses__}".format(0) }}',  # str.format path
+    '{{ "{0.__class__}".format_map({}) }}',
+    '{{ "{0.__init__.__globals__}".format(phases) }}',
 ]
 
 
