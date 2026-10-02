@@ -21,8 +21,15 @@ def auto_id(prefix: str, *parts: str) -> str:
     record overwrites the first in the fold, so the entry simply disappears. Measured:
     7 lessons added in one second, 2 survived.
 
-    Content-addressed instead, so the id is stable for identical content and distinct
-    for anything else, with a nanosecond stamp to separate genuine duplicates.
+    So the id is salted with a nanosecond clock reading: the SAME text filed twice gets
+    two DIFFERENT ids, on purpose. Two real reports of identical text stay two records
+    until the add-time duplicate check (D-no-duplicates) catches them -- an exact copy of
+    an open record is merged into it as an extension, an exact copy of a closed one is
+    filed as a new record linked to it, both without asking -- under the default
+    `[dedupe].on_match = "ask"`; with `warn` or `off` they stay two unlinked records. Only an id the caller names is stable, and a re-report under
+    one merges into its record. The text is hashed in so ids differ across content too,
+    but nothing may rely on an auto id being reproducible. Do not change the format:
+    existing logs hold these ids and must replay identically.
     """
     seed = "|".join(parts) + f"|{time.time_ns()}"
     return prefix + hashlib.blake2b(seed.encode("utf-8"), digest_size=5).hexdigest()
