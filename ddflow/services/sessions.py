@@ -102,13 +102,90 @@ def start(
     return sid
 
 
+#: How long an automatically captured prompt and an agent's own record of the same words
+#: count as one prompt. The hook fires before the agent's turn, so the agent's call is the
+#: second writer; the window only has to span one turn.
+DEDUPE_WINDOW_S = 120
+#: A hook firing twice for one prompt lands within moments; a longer window would eat an
+#: operator who really types "continue" twice.
+DOUBLE_FIRE_S = 3
+
+
+def _age_s(ts: str) -> float:
+    from datetime import UTC, datetime
+
+    try:
+        then = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
+    except ValueError:
+        return float("inf")
+    return (datetime.now(UTC) - then).total_seconds()
+
+
+def _recorded_recently(
+    log: EventLog, clean: str, *, auto_only: bool, window: float = DEDUPE_WINDOW_S
+) -> bool:
+    """True when `clean` was already recorded as a prompt inside the window.
+
+    `auto_only` restricts the match to hook-captured prompts: an agent that repeats the
+    same words on purpose (a subagent brief sent twice) is not deduplicated against
+    ANOTHER agent's record, only against the hook's.
+    """
+    for ev in reversed(log.read_all()):
+        if ev.kind != "session.prompt":
+            continue
+        if _age_s(ev.ts) > window:
+            # Shards are appended in time order but merged by lamport; keep scanning a
+            # little rather than trusting the first old one.
+            continue
+        if auto_only and not ev.data.get("auto"):
+            continue
+        if ev.data.get("text") == clean:
+            return True
+    return False
+
+
 def prompt(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str = "") -> int:
-    """Record one operator prompt verbatim (after redaction). Returns redaction count."""
+    """Record one operator prompt verbatim (after redaction). Returns redaction count.
+
+    Not written again when the prompt hook already captured the same words a moment ago.
+    """
     if not cfg.session.log_prompts:
         return 0
     clean, n = redact(text, cfg)
+    if _recorded_recently(log, clean, auto_only=True):
+        return n
     log.append("session.prompt", session_id, {"text": clean, "item": item, "redactions": n})
     return n
+
+
+def harness_session_id(raw: str) -> str:
+    """The ddflow session id for a harness's own session id (one session per conversation)."""
+    safe = re.sub(r"[^A-Za-z0-9._-]", "", str(raw))[:64]
+    return f"h-{safe}" if safe else ""
+
+
+def capture_prompt(
+    log: EventLog, cfg: Config, harness_id: str, text: str, *, model: str = "", tool: str = ""
+) -> str:
+    """Record a prompt a harness hook delivered. Returns what happened, never raises on
+    an absent id or empty text.
+
+    The text is redacted BEFORE any event is built, so a secret never reaches the log; a
+    session is opened once per harness session id and reused after that.
+    """
+    if not cfg.session.log_prompts:
+        return "off"
+    if not (text or "").strip():
+        return "empty"
+    sid = harness_session_id(harness_id) or new_session_id()
+    clean, n = redact(text, cfg)
+    events = log.read_all()
+    if not any(e.kind == "session.started" and e.subject == sid for e in events):
+        log.append("session.started", sid, {"model": model, "tool": tool, "cwd": str(Path.cwd())})
+    if _recorded_recently(log, clean, auto_only=True, window=DOUBLE_FIRE_S):
+        return "duplicate"
+    log.append("session.prompt", sid, {"text": clean, "item": "", "redactions": n, "auto": True})
+    return "recorded"
 
 
 def note(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str = "") -> None:

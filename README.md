@@ -3764,6 +3764,18 @@ part that matters.
   remembers to ask. In a worktree behind its base branch it says so, and names the
   rulebooks that changed there. It is added beside the project's own hooks in
   `.claude/settings.json`, removed alone, and always exits 0.
+* **A prompt-capture hook** (also installed by `ddflow hooks install --claude`, and by
+  `ddflow adopt` for Claude Code and Gemini CLI) records every operator prompt without the
+  agent having to remember `session prompt`. Claude Code's `UserPromptSubmit` hook runs
+  `ddflow hooks prompt` with the hook JSON on stdin; it opens (once) and reuses a session
+  keyed on the harness session id, redacts secrets before anything touches disk, appends
+  one `session.prompt`, prints nothing, never waits on a silent stdin and always exits 0,
+  so a failing ddflow never breaks the turn. An agent that also calls `session prompt`
+  with the same words within two minutes is not recorded twice, and a hook that fires
+  twice records once. Gemini CLI is wired the same way through its `BeforeAgent` hook
+  (`ddflow hooks install --gemini`, `.gemini/settings.json`). Cursor (`beforeSubmitPrompt`
+  in `.cursor/hooks.json`), Codex, Kilo and opencode have no wiring yet: known gaps.
+  `ddflow hooks status` reports whether the prompt hook is installed.
 
 **Not automated, on purpose:**
 

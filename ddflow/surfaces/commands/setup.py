@@ -11,7 +11,9 @@ without "here is what to do about it" is a report nobody acts on.
 from __future__ import annotations
 
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 from ...api import setup as A
@@ -248,6 +250,30 @@ def cmd_prompts(a, c: Ctx) -> int:
     return OK
 
 
+def _hook_stdin(timeout_s: float = 2.0) -> str:
+    """The harness's hook JSON, without ever blocking the operator's turn: a terminal or
+    a pipe that stays silent is abandoned after `timeout_s`."""
+    import select
+
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            return ""
+        fd = sys.stdin.fileno()
+        chunks: list[bytes] = []
+        deadline = time.monotonic() + timeout_s
+        while (left := deadline - time.monotonic()) > 0:
+            ready, _, _ = select.select([fd], [], [], left)
+            if not ready:
+                break
+            data = os.read(fd, 65536)
+            if not data:
+                break
+            chunks.append(data)
+        return b"".join(chunks).decode("utf-8", "replace")
+    except Exception:
+        return ""
+
+
 def cmd_hooks(a, c: Ctx) -> int:
     out = A.hooks(
         c.repo,
@@ -256,7 +282,15 @@ def cmd_hooks(a, c: Ctx) -> int:
         claude=bool(getattr(a, "claude", False)),
         msg_file=getattr(a, "msg_file", "") or "",
         agent=c.requested_agent,
+        gemini=bool(getattr(a, "gemini", False)),
+        stdin=_hook_stdin() if a.hooks_cmd == "prompt" else "",
     )
+    if a.hooks_cmd == "prompt":
+        # Gemini CLI insists on JSON on stdout; Claude Code would add ANY stdout to the
+        # model's context. So: `{}` for one, nothing for the other. Always exit 0.
+        if getattr(a, "gemini", False):
+            print("{}")
+        return OK
     if a.hooks_cmd == "session-start":
         # Claude Code puts this STDOUT into the session's context. Always exit 0: a hook
         # that fails at session start blocks nothing useful.
@@ -271,7 +305,10 @@ def cmd_hooks(a, c: Ctx) -> int:
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
-    c.out(out.data["message"], out.body(("installed", "policy", "session_hook", "trailer_hook")))
+    c.out(
+        out.data["message"],
+        out.body(("installed", "policy", "session_hook", "trailer_hook")),
+    )
     return out.exit
 
 

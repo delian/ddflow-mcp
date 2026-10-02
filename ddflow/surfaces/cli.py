@@ -1379,9 +1379,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "hook; other hooks there are left exactly as they are"
     )
     hki.add_argument("--claude", action="store_true", help=_claude_help)
+    _gemini_help = "the Gemini CLI BeforeAgent prompt hook in .gemini/settings.json"
+    hki.add_argument("--gemini", action="store_true", help=_gemini_help)
     hki.set_defaults(fn=cmd_hooks)
     hku = hk_s.add_parser("uninstall")
     hku.add_argument("--claude", action="store_true", help=_claude_help)
+    hku.add_argument("--gemini", action="store_true", help=_gemini_help)
     hku.set_defaults(fn=cmd_hooks)
     hk_s.add_parser("status").set_defaults(fn=cmd_hooks)
     hk_s.add_parser("check-commit", help="(invoked by the hook)").set_defaults(fn=cmd_hooks)
@@ -1392,6 +1395,14 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "session-start",
         help="(invoked by the Claude Code SessionStart hook) print the brief; always exit 0",
     ).set_defaults(fn=cmd_hooks)
+
+    hkp = hk_s.add_parser(
+        "prompt",
+        help="(invoked by the UserPromptSubmit / BeforeAgent hook) record the prompt on stdin; "
+        "always exit 0",
+    )
+    hkp.add_argument("--gemini", action="store_true", help="answer with the JSON Gemini CLI wants")
+    hkp.set_defaults(fn=cmd_hooks)
 
     s.add_parser("mcp", help="run the MCP stdio server over this repository").set_defaults(
         fn=cmd_mcp
