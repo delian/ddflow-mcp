@@ -84,11 +84,11 @@ def discover() -> None:
     """
     if _discovered[0]:
         return
-    _discovered[0] = True
     pkg = importlib.import_module(__package__)
     for m in sorted(pkgutil.iter_modules(pkg.__path__), key=lambda m: m.name):
         if m.name.startswith("kind_"):
             importlib.import_module(f"{__package__}.{m.name}")
+    _discovered[0] = True  # only after every kind imported: a failure re-raises next call
 
 
 def names() -> list[str]:
@@ -105,6 +105,13 @@ def get(name: str) -> DocKind:
             f"unknown document kind {name!r}. Known: {', '.join(sorted(_KINDS)) or '(none)'}",
             EXIT_REFUSED,
         ) from None
+
+
+def _read(path: Path) -> str:
+    try:
+        return path.read_text("utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise ExportError(f"could not read template {path}: {exc}") from exc
 
 
 def resolve_template(
@@ -127,11 +134,11 @@ def resolve_template(
             path = Path(repo) / path
         if not path.is_file():
             raise ExportError(f"[export.{kind}].template points at {path}, which does not exist")
-        return Template(kind, path.read_text("utf-8"), "config", path)
+        return Template(kind, _read(path), "config", path)
     if repo:
         path = Path(repo) / ".ddflow" / "templates" / "export" / f"{kind}.md.j2"
         if path.is_file():
-            return Template(kind, path.read_text("utf-8"), "project", path)
+            return Template(kind, _read(path), "project", path)
     if builtin is None:
         from ...infra.paths import templates_dir
 
@@ -139,7 +146,7 @@ def resolve_template(
     path = builtin / f"{kind}.md.j2"
     if not path.is_file():
         raise ExportError(f"shipped template {kind}.md.j2 is missing from the package")
-    return Template(kind, path.read_text("utf-8"), "builtin", path)
+    return Template(kind, _read(path), "builtin", path)
 
 
 def render_body(
@@ -187,8 +194,10 @@ def render_document(
 ) -> str:
     """The full framed document (header + body), capped to ``max_bytes`` (0 = uncapped).
 
-    Truncation happens BEFORE framing, so the header digest always matches the bytes
-    shown and ``frame.hand_edited`` is False for any output. Pure: same inputs, same bytes.
+    ``max_bytes`` bounds the WHOLE document: the header's length is reserved before the
+    body is truncated. Truncation happens BEFORE framing, so the header digest always
+    matches the bytes shown and ``frame.hand_edited`` is False for any output. Pure: same
+    inputs, same bytes.
     """
     k = get(kind) if isinstance(kind, str) else kind
     body = render_body(k, query, filters, repo=repo, overrides=overrides, builtin=builtin)
@@ -196,4 +205,7 @@ def render_document(
         import ddflow
 
         version = str(ddflow.__version__)
+    if max_bytes > 0:
+        overhead = len(frame("", k.name, version, extra).encode("utf-8"))
+        max_bytes = max(max_bytes - overhead, 1)
     return frame(truncate(body, max_bytes), k.name, version, extra)

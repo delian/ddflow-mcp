@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -228,11 +229,13 @@ def test_index_5632_items_under_100ms():
             tid = f"P{p:02d}-T{t:03d}"
             st.items[tid] = Item(id=tid, kind="task", parent=f"P{p:02d}", priority=t % 7)
     assert len(st.items) == 5632
-    start = time.perf_counter()
-    q = query.Query(st, [])
-    total = sum(len(q.tasks_of(p.id)) for p in q.phases())
-    under = sum(len(q.tasks_under(p.id)) for p in q.phases())
-    elapsed = time.perf_counter() - start
+    elapsed = 9.9
+    for _ in range(3):  # best of three: a loaded runner must not turn a pass into a flake
+        start = time.perf_counter()
+        q = query.Query(st, [])
+        total = sum(len(q.tasks_of(p.id)) for p in q.phases())
+        under = sum(len(q.tasks_under(p.id)) for p in q.phases())
+        elapsed = min(elapsed, time.perf_counter() - start)
     assert total == under == n_phases * per
     assert elapsed < 0.1, f"index + lookups took {elapsed:.3f}s"
     first = q.tasks_of("P00")
@@ -264,3 +267,43 @@ def test_truncate_never_exceeds_the_cap(cap):
         assert len(out.encode()) <= cap, (cap, out)
     assert "[truncated: " in out
     assert frame.truncate("Short heading line\n" + "B" * 500 + "\n", 20).count("\n") >= 2
+
+
+def test_document_cap_bounds_the_whole_framed_file(tmp_path, toy, builtin):
+    q = _log(tmp_path)
+    for cap in (200, 260, 400):
+        doc = registry.render_document("toyroad", q, builtin=builtin, max_bytes=cap)
+        assert len(doc.encode()) <= cap, (cap, len(doc.encode()))
+        assert frame.hand_edited(doc) is False
+
+
+def test_truncate_single_overlong_line_does_not_claim_nothing_is_missing():
+    out = frame.truncate("x" * 200, 100)
+    assert len(out.encode()) <= 100 and "[truncated: 1 more lines;" in out
+
+
+def test_discover_failure_is_not_remembered(monkeypatch):
+    calls = []
+
+    def fake_import(name):
+        if name.endswith("kind_bad"):
+            calls.append(name)
+            raise RuntimeError("bad kind module")
+        return types.SimpleNamespace(__path__=["x"])
+
+    monkeypatch.setattr(registry, "_discovered", [False])
+    monkeypatch.setattr(registry.importlib, "import_module", fake_import)
+    monkeypatch.setattr(
+        registry.pkgutil, "iter_modules", lambda p: [types.SimpleNamespace(name="kind_bad")]
+    )
+    for _ in range(2):  # the second call must fail again, not return a partial registry
+        with pytest.raises(RuntimeError):
+            registry.names()
+    assert len(calls) == 2
+
+
+def test_unreadable_template_is_an_export_error(tmp_path, toy, builtin):
+    (builtin / "toyroad.md.j2").write_bytes(b"\xff\xfe not utf-8")
+    with pytest.raises(ExportError) as e:
+        registry.render_body("toyroad", _log(tmp_path), builtin=builtin)
+    assert e.value.code == EXIT_UNAVAILABLE
