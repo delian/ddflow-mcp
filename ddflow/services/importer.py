@@ -2831,6 +2831,10 @@ def _apply_state(log: EventLog, f: Found, bump: Callable[[str], None]) -> None:
         bump("task_held")
 
 
+#: Identical repeats named in the plan's note (the rest are counted).
+_SHOWN_IDENTICAL = 12
+
+
 def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
     """Leave out what repeats a record already held, and say so. In place.
 
@@ -2896,8 +2900,8 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
         plan.notes.append(
             f"{len(same)} record(s) repeat existing ones word for word and were not "
             f"imported: "
-            + ", ".join(f"{d.found.ident} = {d.of}" for d in same[:12])
-            + (" ..." if len(same) > 12 else "")
+            + ", ".join(f"{d.found.ident} = {d.of}" for d in same[:_SHOWN_IDENTICAL])
+            + (" ..." if len(same) > _SHOWN_IDENTICAL else "")
         )
     if near:
         lines = [
