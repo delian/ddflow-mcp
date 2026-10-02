@@ -38,10 +38,12 @@ def _spans() -> list[str]:
 
 
 def test_every_cli_command_is_named_in_the_readme():
+    # `ddflow --agent X heartbeat T` names heartbeat as much as `ddflow heartbeat T` does.
+    flat = re.sub(r"ddflow(?: --(?:agent|repo)(?:=| )\S+| --json)+", "ddflow", README)
     missing = [
         c
         for c in _subcommands(cli.build_parser())
-        if not re.search(rf"ddflow {re.escape(c)}\b", README)
+        if not re.search(rf"ddflow {re.escape(c)}\b", flat)
     ]
     assert not missing, f"commands the README never names (add them to the reference): {missing}"
 
@@ -49,7 +51,9 @@ def test_every_cli_command_is_named_in_the_readme():
 def test_every_command_the_readme_names_exists():
     top = _subcommands(cli.build_parser())
     bad = []
-    for span in _spans():
+    for raw in _spans():
+        # `ddflow --agent X heartbeat T`: the global options come before the command.
+        span = re.sub(r"^ddflow(?: --(?:agent|repo)(?:=| )\S+| --json)+", "ddflow", raw)
         m = re.match(r"ddflow ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?", span)
         if not m:
             continue
