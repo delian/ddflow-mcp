@@ -78,9 +78,11 @@ STDERR_MAX = 4000
 TRACEBACK_MAX = 6000
 UNKNOWN_KIND = "(unknown)"
 _CUT = " [truncated]"
+_SURROGATES = re.compile("[\ud800-\udfff]")
 
 _DETECTOR = re.compile(r"[a-z][a-z0-9_.-]{0,40}")
 _CLASS = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,80}")
+_PROGRAMS = frozenset({"ddflow", "ddflow-mcp", "python", "python3", "uv", "uvx"})
 _WORD = re.compile(r"[a-z][a-z0-9_-]{0,23}")
 _FILE_LINE = re.compile(r'^(\s*File ")([^"]+)(".*)$')
 _ANY_DDFLOW_PATH = re.compile(r"(?:/[\w.@+~-]+)+/ddflow/")
@@ -200,27 +202,29 @@ def _frame_path(path: str) -> tuple[str, bool]:
 
 
 def redact_argv(argv: Sequence[str], subcommands: Iterable[str] | None = None) -> list[str]:
-    """The shape of a command line: the program's base name, the leading subcommand
-    words, every flag name, and `<value>` / `<arg>` in place of anything a person typed.
-
-    `subcommands`, when given, is the set of words that may stay (the CLI's own verbs);
-    without it a leading run of plain lowercase words before the first flag stays."""
-    allowed = set(subcommands) if subcommands is not None else None
+    """The shape of a command line: the program (when it is ddflow or a Python
+    launcher), the leading subcommand words the caller lists in `subcommands` (the CLI's
+    own verbs), every flag name, and `<value>` / `<arg>` in place of anything else. With
+    no `subcommands` nothing a person could have typed survives."""
+    allowed = set(subcommands) if subcommands is not None else set()
     out: list[str] = []
     leading = True
     for i, raw in enumerate(argv):
         tok = str(raw)
         if i == 0:
-            out.append(tok.replace("\\", "/").rsplit("/", 1)[-1])
+            base = tok.replace("\\", "/").rsplit("/", 1)[-1]
+            out.append(base if base in _PROGRAMS else "<program>")
         elif tok.startswith("-") and tok != "-":
             leading = False
             name, eq, _value = tok.partition("=")
             out.append(f"{name}=<value>" if eq else name)
-        elif leading and _WORD.fullmatch(tok) and (allowed is None or tok in allowed):
+        elif tok in _PROGRAMS and out[-1] == "-m":
+            out.append(tok)  # `python -m ddflow`
+        elif leading and _WORD.fullmatch(tok) and tok in allowed:
             out.append(tok)
         else:
             leading = False
-            after_flag = bool(out) and out[-1].startswith("-") and "=" not in out[-1]
+            after_flag = out[-1].startswith("-") and "=" not in out[-1]
             out.append("<value>" if after_flag else "<arg>")
     return out
 
@@ -307,7 +311,7 @@ def build_bundle(
         )
         for kind, n in r.counts.items():
             counts[kind] = counts.get(kind, 0) + n
-        return r.text
+        return _SURROGATES.sub("\ufffd", r.text)
 
     def bounded(value: object, limit: int, *, one_line: bool = False) -> str:
         text = clean(value)
@@ -408,17 +412,16 @@ def _candidates(
     if provider is None:
         return {"status": "not_checked", "items": []}
     try:
-        rows = list(provider(title))
-    except Exception as exc:  # an unavailable index is said, never read as "none"
+        items = [
+            {
+                "id": clean(r.get("id", "")),
+                "kind": clean(r.get("kind", "")),
+                "score": round(float(r.get("score", 0.0)), 2),
+            }
+            for r in provider(title)
+        ]
+    except Exception as exc:  # an unavailable or malformed index is said, never read as "none"
         return {"status": "unavailable", "reason": clean(type(exc).__name__), "items": []}
-    items = [
-        {
-            "id": clean(r.get("id", "")),
-            "kind": clean(r.get("kind", "")),
-            "score": round(float(r.get("score", 0.0)), 2),
-        }
-        for r in rows
-    ]
     return {"status": "ok" if items else "none", "items": items}
 
 
