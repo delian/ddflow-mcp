@@ -383,8 +383,13 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     bad = _bad_line(cfg, line) if line else ""
     if bad:
         return O.failed("phase.added", bad, id=item)
-    chk = DD.Checked()
-    if not _taken(st, item, readd=readd):
+    with log.transaction():
+        st = _fresh(log)
+        taken = _taken(st, item, readd=readd)
+        if taken:
+            return O.refused("phase.added", taken, id=item)
+        # Inside the transaction, against the log as it is NOW: a record another agent
+        # filed since `_load` is seen.
         chk = DD.check_add(
             repo,
             log,
@@ -397,10 +402,6 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
             return chk.refusal
         if chk.extension:
             return DD.extend(log, cfg, chk, "phase.added")
-    with log.transaction():
-        taken = _taken(_fresh(log), item, readd=readd)
-        if taken:
-            return O.refused("phase.added", taken, id=item)
         log.append(
             "phase.added",
             item,
@@ -471,8 +472,11 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         bad = _bad_line(cfg, ln)
         if bad:
             return O.failed("task.added", bad, id=item)
-    chk = DD.Checked()
-    if not _taken(st, item, readd=readd):
+    with log.transaction():
+        st = _fresh(log)
+        taken = _taken(st, item, readd=readd)
+        if taken:
+            return O.refused("task.added", taken, id=item)
         chk = DD.check_add(
             repo,
             log,
@@ -487,11 +491,6 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
             return chk.refusal
         if chk.extension:
             return DD.extend(log, cfg, chk, "task.added")
-    with log.transaction():
-        st = _fresh(log)
-        taken = _taken(st, item, readd=readd)
-        if taken:
-            return O.refused("task.added", taken, id=item)
         plan = None
         adopted: list[str] = []
         if len(set(wanted)) > 1:
