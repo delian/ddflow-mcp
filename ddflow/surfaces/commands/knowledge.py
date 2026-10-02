@@ -435,6 +435,9 @@ def cmd_session(a, c: Ctx) -> int:
         return OK
     if a.session_cmd == "adopt-orphans":
         out = A.session_adopt_orphans(c.repo, agent=c.requested_agent)
+        if out.exit != OK:
+            print(out.reason, file=sys.stderr)
+            return out.exit
         c.out(f"adopted {out.data['adopted']} orphan(s)", out.body(("adopted",)))
         return OK
     if a.session_cmd == "end":

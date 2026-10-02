@@ -153,8 +153,8 @@ def _recorded_recently(
 def open_sessions(events: list, agent: str) -> list[str]:
     """Ids of this agent's sessions that have not ended, the most recently active first.
 
-    Activity is the last event of any kind on the session (Lamport order breaks a tie in
-    the clock), so a session someone is still writing to outranks one opened later and
+    Activity is the last event of any kind on the session, ordered by the Lamport clock
+    (the wall clock breaks a tie), so a session someone is still writing to outranks one opened later and
     then abandoned. An ended session is never listed.
     """
     started: dict[str, bool] = {}
