@@ -1036,6 +1036,37 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "results",
     },
+    "ddflow_similar": {
+        "description": (
+            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE "
+            "you file it as a bug, task, lesson or other record. Read-only. Candidates "
+            "cross kinds (a bug sees the open task that fixes it, a task the bug it "
+            "would fix) and include closed ones, so a bug that repeats a fixed one is "
+            "caught. Each carries id, kind, title, state (open, claimed by whom, done, "
+            "fixed, invalid, removed...), score (0-1), the words it shares with your "
+            "text, and flags (identical text; the text names its id). Which are shown "
+            "follows [dedupe] show_floor, max_candidates and kinds. A score is a "
+            "prompt to LOOK, not a verdict: two bugs in one function score high and "
+            "are different. Nothing close answers exit 2 / an empty list."
+        ),
+        "properties": {
+            "text": (
+                "string",
+                "The title or summary of the record you are about to file.",
+                True,
+            ),
+            "kind": (
+                "string",
+                "Comma-separated subset of the configured kinds to look in: bug,task,"
+                "phase,lesson,decision,research,memory. Default: all of them.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().similar(
+            repo, a.get("text", "") or "", kinds=a.get("kind", "") or "", agent=agent
+        ),
+        "payload": "candidates",
+    },
     "ddflow_status": {
         "description": (
             "The state of the whole project in one answer: how many tasks are done and "
@@ -1803,7 +1834,16 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "Comma-separated agents to write driver deltas for: "
                 f"{','.join(_AGENT_KEYS())}. Default: all.",
                 False,
-            )
+            ),
+            "refresh_docs": (
+                "boolean",
+                "Rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the "
+                "adopted agents' native rules from this ddflow's templates -- no MCP "
+                "launch, hook or command-file changes. Use it when ddflow_doctor notes "
+                "that driver docs differ from the templates. Refused on a project that "
+                "was never adopted.",
+                False,
+            ),
         },
         # Where the server stands decides where the committed files go: a linked
         # worktree's own checkout, not the shared primary (bug B1e7ad10c6c). A foreign
@@ -1812,7 +1852,9 @@ TOOLS: dict[str, dict[str, Any]] = {
         "wants_called_from": True,
         "api": lambda repo, a, agent, called_from=None: _api().adopt_project(
             repo,
-            _api().Adoption(agents=a.get("agents", "") or ""),
+            _api().Adoption(
+                agents=a.get("agents", "") or "", refresh_docs=bool(a.get("refresh_docs"))
+            ),
             agent=agent,
             called_from=called_from,
         ),
