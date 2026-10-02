@@ -6,9 +6,10 @@ with the writers -- only a decision per kind about which field is "the state", "
 owner" and "the last change", made ONCE below.
 
 Every row is one line of facts (`id kind state title owner updated`); a caller wanting
-the whole record uses `show <id>`. Free text that reaches a row (titles, summaries, the
-first words of a session prompt) goes through the same redaction the export documents
-use, so a listing cannot carry a secret the log itself holds.
+the whole record uses `show <id>`. The free text that reaches a row (the title, taken
+from a title, summary, question or the first words of a session prompt, and the tags)
+goes through the same redaction the export documents use. `owner` is an agent id and
+`state` a fixed word, neither free text.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from typing import Any
 
 from ..config import Config
 from ..core.model import Bug, Item, ResearchNote, Session, State
+from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
 
 KINDS = ("task", "phase", "bug", "research", "session")
@@ -63,7 +65,21 @@ def _one_line(text: str, cfg: Config) -> str:
     return clean if len(clean) <= _TITLE_MAX else clean[: _TITLE_MAX - 1] + "…"
 
 
-def _item_row(it: Item, cfg: Config) -> dict[str, Any]:
+def _phase_of(st: State, it: Item | None) -> str:
+    """The phase enclosing `it`, however deeply nested: itself for a phase, the nearest
+    phase ancestor for a task or sub-task, "" for none."""
+    if it is None:
+        return ""
+    if it.kind == "phase":
+        return it.id
+    return next((a.id for a in st.ancestors(it.id) if a.kind == "phase"), "")
+
+
+def _tags(tags: list[str], cfg: Config) -> list[str]:
+    return [redact_text(t, cfg).text for t in tags]
+
+
+def _item_row(st: State, it: Item, cfg: Config) -> dict[str, Any]:
     updated = it.completed_at or it.created_at
     if it.lease is not None:
         renewed = datetime.fromtimestamp(it.lease.renewed_at, tz=UTC).strftime(
@@ -77,8 +93,8 @@ def _item_row(it: Item, cfg: Config) -> dict[str, Any]:
         "title": _one_line(it.title, cfg),
         "owner": it.lease.holder if it.lease else "",
         "updated": updated,
-        "phase": it.parent,
-        "tags": list(it.tags),
+        "phase": _phase_of(st, it),
+        "tags": _tags(it.tags, cfg),
     }
 
 
@@ -91,7 +107,7 @@ def _bug_row(b: Bug, cfg: Config, st: State) -> dict[str, Any]:
         "title": _one_line(b.title or b.summary, cfg),
         "owner": "",
         "updated": b.fixed_at or b.invalid_at or b.found_at,
-        "phase": (it.parent or it.id) if it else "",
+        "phase": _phase_of(st, it),
         "tags": [],
     }
 
@@ -105,8 +121,8 @@ def _research_row(r: ResearchNote, cfg: Config, st: State) -> dict[str, Any]:
         "title": _one_line(r.question or r.claim, cfg),
         "owner": "",
         "updated": r.at,
-        "phase": (it.parent or it.id) if it else "",
-        "tags": list(r.tags),
+        "phase": _phase_of(st, it),
+        "tags": _tags(r.tags, cfg),
     }
 
 
@@ -126,20 +142,16 @@ def _session_row(s: Session, cfg: Config) -> dict[str, Any]:
 
 def _candidates(st: State, kind: str, cfg: Config) -> list[dict[str, Any]]:
     if kind == "task":
-        return [_item_row(i, cfg) for i in st.items.values() if i.kind == "task" and not i.removed]
+        return [
+            _item_row(st, i, cfg) for i in st.items.values() if i.kind == "task" and not i.removed
+        ]
     if kind == "phase":
-        return [_item_row(i, cfg) for i in st.phases()]
+        return [_item_row(st, i, cfg) for i in st.phases()]
     if kind == "bug":
         return [_bug_row(b, cfg, st) for b in st.bugs.values()]
     if kind == "research":
         return [_research_row(r, cfg, st) for r in st.research.values()]
     return [_session_row(s, cfg) for s in st.sessions.values()]
-
-
-def _in_phase(st: State, row: dict[str, Any], phase: str) -> bool:
-    if row["kind"] == "task":
-        return row["id"] in {t.id for t in st.tasks(phase)}
-    return row["phase"] == phase
 
 
 def list_view(
@@ -175,13 +187,17 @@ def list_view(
     if state:
         rows = [r for r in rows if r["state"] == state.lower()]
     if phase:
-        rows = [r for r in rows if _in_phase(st, r, phase)]
+        rows = [r for r in rows if r["phase"] == phase]
     if tag:
         rows = [r for r in rows if tag in r["tags"]]
     if agent:
         rows = [r for r in rows if r["owner"] == agent]
     if since:
-        rows = [r for r in rows if r["updated"] and r["updated"] >= since]
+        try:
+            at_or_after = _cutoff(since)
+        except ExportError as exc:
+            raise ViewError(str(exc).replace("--since", "since")) from None
+        rows = [r for r in rows if r["updated"] and at_or_after(r["updated"])]
     # Two stable sorts: id ascending, then newest first, so equal timestamps keep id order.
     rows.sort(key=lambda r: r["id"])
     rows.sort(key=lambda r: r["updated"], reverse=True)
