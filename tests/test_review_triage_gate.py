@@ -71,7 +71,7 @@ def test_omitted_gate_resolves_the_only_gate_with_findings_and_says_which(repo, 
 
 def test_explicit_gate_is_unchanged(repo, tmp_path):
     _setup(repo, tmp_path)
-    code, out, err = _cli(repo, "--gate", "rubber_duck")
+    code, _out, err = _cli(repo, "--gate", "rubber_duck")
     assert code == OK, err
     assert [e.data["gate"] for e in _triaged(repo)] == ["rubber_duck"]
 
