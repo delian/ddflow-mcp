@@ -40,13 +40,13 @@ def test_auto_id_differs_for_identical_input():
     assert all(re.fullmatch(r"B[0-9a-f]{10}", i) for i in ids)
 
 
-def test_refiled_identical_bug_is_auto_linked_not_silently_merged(repo):
+def test_refiled_identical_bug_is_caught_by_the_duplicate_check_not_silently_merged(repo):
     first = A.bug_found(repo, summary=TEXT, agent="a")
     assert first.exit == 0
     second = A.bug_found(repo, summary=TEXT, agent="a")
     assert second.exit == 0
-    # Not the same id (no silent merge into one record), but caught by the duplicate
-    # check and linked to the first, automatically because the copy is exact.
+    # Not the same id (no silent merge by id): the duplicate check catches the exact
+    # copy of an OPEN bug and records it as an extension of the first, automatically.
     assert second.data["auto"] is True
     assert second.data["extended"] == first.data["id"]
     st = fold(EventLog(repo, "a").read_all(), strict=False)
