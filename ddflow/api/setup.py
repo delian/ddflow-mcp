@@ -754,6 +754,8 @@ class Adoption:
     docs: str = "docs/ddflow"
     launch: str = ""
     image: str = ""
+    #: Rewrite only the driver docs and the rules blocks (`services.adopt.refresh_docs`).
+    refresh_docs: bool = False
 
 
 def files_tree(repo: Path, called_from: Path | None) -> Path:
@@ -800,12 +802,33 @@ def setup(
     this design exists to prevent. Detection only; nothing is installed, because fetching
     and running code on someone's machine is not a thing a work-queue tool gets to do.
     """
-    from ..services.adopt import AGENT_TARGETS, adopt
+    from ..services.adopt import AGENT_TARGETS, adopt, adopted_agents, refresh_docs
 
     plan = plan or Adoption()
     _log, cfg, _st = _load(repo, agent)
     agents = csv_list(plan.agents) or list(AGENT_TARGETS)
     tree = files_tree(repo, called_from)
+    if plan.refresh_docs:
+        # Documents only: no init files, hooks, MCP launches or command files, and no
+        # companion scan. Into the caller's tree like every committed file.
+        try:
+            actions = refresh_docs(tree, docs_dir=plan.docs)
+        except ValueError as exc:
+            return O.failed("setup", str(exc), actions=[], agents=[], text="")
+        out = O.ok(
+            "setup",
+            actions=actions,
+            agents=adopted_agents(tree, docs_dir=plan.docs),
+            tree=str(tree),
+            refresh_docs=True,
+            companions_ready=[],
+            companions_absent=[],
+            text="",
+        )
+        from ..views import human as _human
+
+        out.data["text"] = _human.render(out)
+        return out
     try:
         actions = adopt(
             tree,

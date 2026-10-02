@@ -48,6 +48,7 @@ from .commands.knowledge import (
     cmd_recall,
     cmd_research,
     cmd_session,
+    cmd_similar,
 )
 from .commands.lifecycle import (
     cmd_abandon,
@@ -811,6 +812,20 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rc.add_argument("--max-chars", type=int, default=4000)
     rc.set_defaults(fn=cmd_recall)
 
+    sm = s.add_parser(
+        "similar",
+        help="'is this already filed?' -- the existing bugs, tasks, lessons and other "
+        "records most like a text, before you add it (read-only; exit 2 when none)",
+    )
+    sm.add_argument("text", help="the title or summary of the record you are about to file")
+    sm.add_argument(
+        "--kind",
+        default="",
+        help="comma-separated subset of [dedupe].kinds: "
+        "bug,task,phase,lesson,decision,research,memory (default: all of them)",
+    )
+    sm.set_defaults(fn=cmd_similar)
+
     dc = s.add_parser("decision", help="architectural decisions: record and consult")
     dc_s = dc.add_subparsers(dest="decision_cmd", required=False)
     dca = dc_s.add_parser("add")
@@ -1085,7 +1100,17 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rvt.add_argument("name", nargs="?", default="")
     rvt.set_defaults(fn=cmd_reviewers)
 
-    rw = s.add_parser("review", help="run the configured reviewer(s) over an item's diff")
+    rw = s.add_parser(
+        "review",
+        help="run the configured reviewer(s) over an item's diff",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="two commands share this parser:\n"
+        "  ddflow review <id> --gate G [--chunk N]   run the reviewer(s) (slow, shared)\n"
+        "  ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...\n"
+        "                                            record what became of one finding\n"
+        "--finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the\n"
+        "`triage` verb: without it they are refused, never run as a review.",
+    )
     # `*`, not `?`: `ddflow review triage <id> ...` is a verb followed by the item.
     rw.add_argument("id", nargs="*", default=[], help="the item; or `triage <item>`")
     rw.add_argument("--gate", default="critic")
@@ -1114,14 +1139,14 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="re-review only chunk N (as the recorded review numbered it; repeatable, or "
         "'2,5') and merge it into that record -- same diff, chunk size and reviewer",
     )
-    rw.add_argument("--finding", type=int, default=0, help="triage: the finding's number (#N)")
+    rw.add_argument("--finding", type=int, default=None, help="triage: the finding's number (#N)")
     rw.add_argument(
         "--refuted", action="store_true", help="triage: --probe shows the finding is false"
     )
     rw.add_argument(
         "--confirmed", action="store_true", help="triage: --probe is the fix/test that answers it"
     )
-    rw.add_argument("--probe", default="", help="triage: the evidence for the verdict")
+    rw.add_argument("--probe", default=None, help="triage: the evidence for the verdict")
     rw.set_defaults(fn=cmd_review)
 
     ad = s.add_parser("adopt", help="install ddflow into this project for one or more agents")
@@ -1147,6 +1172,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--image",
         default="ghcr.io/OWNER/ddflow:latest",
         help="container image used by --launch docker",
+    )
+    ad.add_argument(
+        "--refresh-docs",
+        action="store_true",
+        help="rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the agents' "
+        "native rules from this ddflow's templates; leaves MCP launches, hooks and command "
+        "files alone (what `doctor` points to when drivers lag)",
     )
     ad.set_defaults(fn=cmd_adopt)
 

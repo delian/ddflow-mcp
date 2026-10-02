@@ -179,6 +179,17 @@ ddflow complete <ID> --model "<your model>" --sha "<sha>"
 ddflow release <ID>
 ```
 
+**Update the README in the same task.** A task that changes what a user or agent sees
+(a command, flag, MCP tool, config knob, event kind, gate behaviour, default, refusal
+message or documented workflow) edits the README section that describes it, before the
+reviewer gates so they see it. If your diff changes code under `[enforce].readme_code_globs`
+(default `ddflow/**`) and not `README.md`, `complete`, `ddflow gate status` and `ddflow
+brief` all say `README not updated`: name the section you changed, or, for a change with
+no visible effect (a refactor, a fix the README never described), record why with
+`ddflow gate skip <id> docs --reason "..."`. Test-only and docs-only changes and event-log
+commits are never reported. `[enforce].readme_with_code` is `warn` by default; `block`
+makes `complete` refuse and `off` silences it.
+
 `complete` exits 3 and lists **every** unmet condition at once. Fix them; reach for
 `--force` only with a reason you are willing to see in an audit (it is recorded).
 

@@ -646,6 +646,93 @@ def init_files(repo: Path) -> list[str]:
     return actions
 
 
+def _driver_pairs(repo: Path, docs_dir: str, templates: Path) -> list[tuple[str, Path, Path]]:
+    """(repo-relative path, the project's copy, the template) for each driver doc that EXISTS.
+
+    `implement-phase.md` plus every delta already present that this ddflow ships a template
+    for: the deltas on disk are the record of which agents the project was adopted for, so
+    a refresh never adds one the operator did not adopt.
+    """
+    src = templates / "drivers"
+    dst = Path(repo) / docs_dir / "drivers"
+    pairs = [
+        (
+            f"{docs_dir}/drivers/implement-phase.md",
+            dst / "implement-phase.md",
+            src / "implement-phase.md",
+        )
+    ]
+    present = sorted((dst / "deltas").glob("*.md")) if (dst / "deltas").is_dir() else []
+    for path in present:
+        tmpl = src / "deltas" / path.name
+        if tmpl.is_file():
+            pairs.append((f"{docs_dir}/drivers/deltas/{path.name}", path, tmpl))
+    return pairs
+
+
+def driver_drift(
+    repo: Path, *, docs_dir: str = "docs/ddflow", package_dir: Path | None = None
+) -> list[str]:
+    """Driver docs whose bytes differ from the templates the RUNNING ddflow ships.
+
+    `rules_status` judges the AGENTS.md block; nothing judged the driver docs themselves,
+    so a project adopted by an older ddflow kept a driver that lacked later guidance while
+    doctor said Healthy (bug Ba11a054309). Empty for a project that was never adopted.
+    """
+    if not has_been_adopted(repo, docs_dir=docs_dir):
+        return []
+    templates = Path(package_dir) / "templates" if package_dir else paths.templates_dir()
+    if not (templates / "drivers" / "implement-phase.md").is_file():
+        return []  # a packaging fault `adopt` names; doctor must not crash on it
+    return [
+        rel
+        for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates)
+        if mine.read_bytes() != tmpl.read_bytes()
+    ]
+
+
+def refresh_docs(
+    repo: Path, *, docs_dir: str = "docs/ddflow", package_dir: Path | None = None
+) -> list[str]:
+    """Rewrite ONLY the agent-facing documents: the driver docs, the managed rules blocks
+    and the adopted agents' native rules. Never the MCP launch, the hooks, the command
+    files, `.gitignore`/`.gitattributes` or `.ddflow/` -- the parts of a plain `adopt` an
+    operator may have tuned by hand and that a docs refresh has no business touching.
+
+    Refuses (ValueError) a project that was never adopted: a refresh must not adopt.
+    """
+    repo = Path(repo)
+    if not has_been_adopted(repo, docs_dir=docs_dir):
+        raise ValueError(
+            f"{repo} has not been adopted (no {docs_dir}/drivers/implement-phase.md); "
+            "run `ddflow adopt` first"
+        )
+    templates = Path(package_dir) / "templates" if package_dir else paths.templates_dir()
+    if not (templates / "drivers" / "implement-phase.md").is_file():
+        raise FileNotFoundError(
+            f"driver templates are missing from {templates}. This is a packaging fault, "
+            f"not a configuration one: reinstall ddflow-mcp."
+        )
+    actions: list[str] = []
+    agents = adopted_agents(repo, docs_dir=docs_dir)
+    for rel, mine, tmpl in _driver_pairs(repo, docs_dir, templates):
+        if mine.read_bytes() == tmpl.read_bytes():
+            actions.append(f"{rel} is current")
+        else:
+            shutil.copy2(tmpl, mine)
+            actions.append(f"wrote {rel}")
+    section = project_section(docs_dir)
+    for name in ("AGENTS.md", "CLAUDE.md"):
+        path = repo / name
+        if name == "CLAUDE.md" and not path.exists() and "claude" not in agents:
+            continue
+        actions.append(_upsert_block(path, section))
+    for key in agents:
+        if key in NATIVE_RULES:
+            actions.append(_write_native_rule(repo, key, docs_dir))
+    return actions
+
+
 def adopt(
     repo: Path,
     agents: list[str],
