@@ -357,3 +357,9 @@ def test_a_session_with_no_start_and_no_prompt_claims_no_items_by_agent():
     ]
     body = registry.render_body("sessions", query.build(evs), Filters())
     assert "items: none recorded" in body
+
+
+def test_sessions_summary_count_is_of_the_whole_set_not_the_page():
+    body = registry.render_body("sessions", query.build(_events()), Filters(limit=1))
+    # the newest session (s-quiet) has no summary, but one of the two does
+    assert "1 of 3 sessions" in body and "1 carry a summary" in body
