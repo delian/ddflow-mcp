@@ -58,3 +58,23 @@ def test_a_task_completion_never_asks_about_cadences(repo):
     run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--globs", "z/*")
     run_cli(repo, "claim", "P1.T2", "--no-worktree")
     assert finish(repo, "P1.T2")[0] == OK
+
+
+def test_a_malformed_calendar_knob_does_not_switch_the_check_off(repo):
+    _two_phases(repo)
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + 'every_days = ["bug_hunt=oops"]\n')
+    code, _o, err = run_cli(repo, "complete", "P1", "--model", "claude-opus-5")
+    assert code == REFUSED and "architecture_review" in err, err
+
+
+def test_the_verdict_itself_carries_it_so_every_completion_path_enforces_it(repo):
+    # The PR-merge settle path calls CM.verdict directly, not api.complete.
+    from ddflow.config import Config
+    from ddflow.core.model import State
+    from ddflow.services.cadence import phase_overdue
+
+    cfg, st = Config(), State()
+    cfg.cadence.architecture_review_every_phases = 1
+    st.items["P0"] = type("I", (), {"kind": "phase", "state": "done"})()
+    assert "architecture_review" in phase_overdue(st, cfg)[0]

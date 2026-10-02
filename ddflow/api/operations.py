@@ -112,33 +112,10 @@ def due_cadences(
 ) -> list[dict[str, Any]]:
     """Every periodic pass that is due now, derived from the log. Shared by `cadence` and
     by `complete <phase>`, which refuses while a phase-counted pass is overdue."""
-    from ..services.cadence import export_cadence, lessons_cadence
+    from ..services.cadence import count_due, export_cadence, lessons_cadence
 
-    done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
-    done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
     calendar = _calendar(cfg) if calendar is None else calendar
-    due: list[dict[str, Any]] = []
-    for name, every, unit, count in (
-        ("integration_tests", cfg.cadence.integration_tests_every_tasks, "tasks", done_tasks),
-        ("dedupe_sweep", cfg.cadence.dedupe_sweep_every_tasks, "tasks", done_tasks),
-        (
-            "architecture_review",
-            cfg.cadence.architecture_review_every_phases,
-            "phases",
-            done_phases,
-        ),
-        ("mutation_tests", cfg.cadence.mutation_tests_every_phases, "phases", done_phases),
-        ("lessons_pass", cfg.cadence.lessons_pass_every_phases, "phases", done_phases),
-    ):
-        if name in calendar:
-            # The calendar entry of the same name REPLACES this pass; without the skip
-            # it would also fall due by completions, reported twice under one name.
-            continue
-        runs = st.cadences.get(name, [])
-        at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
-        since = count - at_last
-        if every > 0 and since >= every:
-            due.append({"cadence": name, "since": since, "every": every, "unit": unit})
+    due = count_due(st, cfg, replaced=set(calendar))
     due += lessons_cadence(st, cfg)
     due += export_cadence(repo, cfg)
     due += _calendar_due(st, cfg, calendar=calendar)
