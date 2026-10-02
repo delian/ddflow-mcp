@@ -80,6 +80,8 @@ class Matcher(Protocol):
 
     def ids(self) -> frozenset[str]: ...
 
+    def doc_freq(self, terms: Iterable[str]) -> tuple[int, dict[str, int]]: ...
+
 
 def record_tokens(record: Mapping[str, Any]) -> list[str]:
     return textsim.tokens(str(record.get("title") or ""), str(record.get("body") or ""))
@@ -128,6 +130,12 @@ class _Exact:
 
     def ids(self) -> frozenset[str]:
         return frozenset(self._by_id())
+
+    def doc_freq(self, terms: Iterable[str]) -> tuple[int, dict[str, int]]:
+        """(records indexed, how many hold each of ``terms``): the postings' lengths,
+        so a caller can weigh words without re-tokenizing the corpus."""
+        post = self._postings(list(dict.fromkeys(terms)))
+        return self._n, {t: len(p[0]) for t, p in post.items()}
 
     def _by_id(self) -> dict[str, Doc]:
         by = getattr(self, "_by_id_cache", None)
