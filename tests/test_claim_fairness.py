@@ -239,3 +239,16 @@ def test_an_unwritable_registry_never_fails_the_refusal(proj):
     finally:
         waits.chmod(0o700)
     assert out.exit == O.REFUSED
+
+
+def test_next_backfills_the_slot_a_reserved_item_gives_up(proj):
+    """With one free slot the plan offers only the top item; if that one is reserved for
+    a waiter, the slot goes to the next claimable item rather than to nothing (exit 2
+    reads as "phase done" to a driver)."""
+    (proj / ".ddflow" / "config.toml").write_text("[schedule]\nmax_parallel_tasks = 1\n")
+    _queue(proj, B, "TB", time.time() - 120)
+    assert A.release(proj, "HOT", agent=HOLDER).ok
+    out = A.next_(proj, agent=C)
+    assert out.exit == O.OK, out.reason
+    offered = [i["id"] for i in out.data["ready"]]
+    assert offered == ["TD"], offered
