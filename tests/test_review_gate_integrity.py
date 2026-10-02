@@ -61,7 +61,7 @@ def _gate(repo: Path, gate: str):
 
 def test_a_reviewed_sha_that_is_not_the_branch_head_is_refused(repo):
     _item(repo)
-    main_head = _git(repo, "rev-parse", "main")
+    main_head = _git(repo, "rev-parse", "HEAD")
     code, out, err = run_cli(
         repo,
         "gate",
