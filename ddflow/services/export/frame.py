@@ -100,7 +100,7 @@ def hand_edited(text: str) -> bool | None:
 def truncate(body: str, max_bytes: int) -> str:
     """Cut ``body`` to at most ``max_bytes`` UTF-8 bytes, on a line boundary, and say so.
 
-    The footer is explicit -- ``[truncated: N more lines; use --since/--limit]`` -- so a
+    The footer is explicit -- ``[truncated: N more; use --since/--limit]`` -- so a
     reader (or an agent) never mistakes a cut document for a complete one. ``max_bytes``
     of 0 or less means no cap. The footer is inside the budget. When even the first line
     does not fit, it is cut mid-line and the count includes it as not (fully) shown.
@@ -111,7 +111,7 @@ def truncate(body: str, max_bytes: int) -> str:
     lines = body.splitlines(keepends=True)
 
     def footer(n: int) -> str:
-        return f"[truncated: {n} more lines; use --since/--limit]\n"
+        return f"[truncated: {n} more; use --since/--limit]\n"
 
     def size(text: str) -> int:
         return len(text.encode("utf-8"))
