@@ -351,9 +351,12 @@ def append_entries(
         extra["last"] = new_last
         new = F.frame(prior + entries, doc, version, extra)
         result = _finish(path, rel, old, new, check=check, diff=diff, refuse=refuse)
-    registered = False
-    if register and result.action in ("created", "updated"):
-        registered = register_append_only(repo, rel)
+        # Inside the export lock: registration is a read-modify-write of one config key, and
+        # two first appends to different targets would otherwise each read the old list and
+        # the second would drop the first's entry.
+        registered = False
+        if register and result.action in ("created", "updated"):
+            registered = register_append_only(repo, rel)
     return WriteResult(result.path, result.rel, result.action, result.code, result.diff, registered)
 
 
