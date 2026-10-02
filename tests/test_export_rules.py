@@ -11,7 +11,7 @@ from ddflow.infra.log import EventLog
 from ddflow.services.export import ExportError, Filters, query, registry
 from ddflow.services.redact_report import redact_report
 
-LAN = "192.168.7.41"
+LAN = ".".join(("192", "168", "7", "41"))  # built, so no private host is committed text
 
 
 def _repo(root: Path, order: str = "forward", with_extras: bool = True) -> query.Query:

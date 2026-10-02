@@ -33,7 +33,10 @@ Rules a kind follows:
 * ``data(query, filters)`` is PURE: it reads only the Query (``query.phases()``,
   ``tasks_of``, ``tasks_under``, ``tasks``, ``bugs``, ``decisions``, ``lessons``,
   ``sessions``, ``events_of``, ``last_event_id``, or ``query.state``). No log, git,
-  filesystem, network, environment or clock access. It returns a mapping of plain values
+  network, environment or clock access, and no filesystem access beyond ONE sanctioned
+  read: a kind that documents configuration (``rules``: the workflow) may read the project
+  config through ``query.repo`` (``None`` for an in-memory Query), and a failure there is
+  ``ExportError``. It returns a mapping of plain values
   (str/int/list/dict) that the template iterates; pre-format text (shorten with your own
   helper) so the template is only loops and ``{{ var }}``.
 * Determinism: every sequence has an explicit sort key with an id tie-break (use the

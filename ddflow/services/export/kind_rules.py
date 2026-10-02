@@ -1,7 +1,7 @@
 """The ``rules`` document kind: what binds work here, from the log and the config.
 
-Three parts (decision D-export, 7): the decisions in force grouped by the path each
-governs, the live lessons grouped by tag as one-line summaries, and the enforced workflow
+Three parts (decision D-export, 7): the decisions in force (accepted or proposed, never
+superseded; a proposed one is marked) grouped by the path each governs, the live lessons grouped by tag as one-line summaries, and the enforced workflow
 (the same data ``ddflow workflow`` reports: the gates, and the ``[gates]``/``[schedule]``/
 ``[enforce]`` rules). Imported rulebooks (AGENTS.md and the like) are never copied in.
 
@@ -12,16 +12,24 @@ with hundreds of lessons would otherwise produce a document nobody reads (168 KB
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from typing import Any
 
 from . import registry
 from .frame import one_line
-from .query import ExportError, Query
+from .query import ExportError, Query, _parse_ts
 
-NO_PATH = "(no governing path)"
 UNTAGGED = "(untagged)"
 TITLE_CHARS = 150
 TEXT_CHARS = 220
+
+
+def _when(at: str) -> datetime:
+    """A lesson's timestamp as an instant, so "newest" does not rest on one text form."""
+    try:
+        return _parse_ts(at)
+    except ValueError:
+        return datetime.min.replace(tzinfo=UTC)
 
 
 def _first_paragraph(text: str) -> str:
@@ -64,7 +72,7 @@ def _lessons(q: Query, f: registry.Filters) -> tuple[list[dict[str, Any]], int, 
     NEWEST N of the live, matching lessons.
     """
     live = [lz for lz in q.lessons() if not lz.superseded_by and (not f.tag or f.tag in lz.tags)]
-    live.sort(key=lambda lz: (lz.at or "", lz.id), reverse=True)
+    live.sort(key=lambda lz: (_when(lz.at), lz.id), reverse=True)
     omitted = 0
     if f.limit and len(live) > f.limit:
         omitted = len(live) - f.limit
