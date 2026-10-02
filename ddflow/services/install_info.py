@@ -17,6 +17,8 @@ import re
 import tomllib
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from urllib.parse import urlparse
+from urllib.request import url2pathname
 
 from ..infra import paths as _paths
 from ..infra import proc as P
@@ -48,20 +50,22 @@ def running_from_source() -> bool:
     return not any(part in ("site-packages", "dist-packages") for part in here.parts)
 
 
-def own_distribution():
+def own_distribution(root: Path | None = None):
     """The installed distribution that THIS `ddflow` package came from, or None.
 
     Looked up in the directory holding the package rather than by name across
     `sys.path`: a second copy installed elsewhere says nothing about this one."""
     from importlib import metadata
 
-    for dist in metadata.distributions(name=DIST_NAME, path=[str(_paths.package_parent())]):
+    for dist in metadata.distributions(
+        name=DIST_NAME, path=[str(root if root is not None else _paths.package_parent())]
+    ):
         return dist
     return None
 
 
-def direct_url(dist=None) -> dict | None:
-    """The PEP 610 record of the install, or None when there is none (an index install,
+def _direct_url(dist=None) -> dict | None:
+    """The PEP 610 record of the install (private: it carries the URL), or None when there is none (an index install,
     no distribution, or an unreadable file -- the last is also 'not evidence of an
     index', and `kind` says so)."""
     dist = dist if dist is not None else own_distribution()
@@ -85,11 +89,14 @@ def _editable_record(root: Path) -> dict | None:
     from importlib import metadata
 
     for dist in metadata.distributions(name=DIST_NAME):
-        record = direct_url(dist)
+        record = _direct_url(dist)
         if not record or not (record.get("dir_info") or {}).get("editable"):
             continue
         url = str(record.get("url", ""))
-        if url.startswith("file://") and Path(url[7:]).resolve() == root.resolve():
+        if (
+            url.startswith("file://")
+            and Path(url2pathname(urlparse(url).path)).resolve() == root.resolve()
+        ):
             return record
     return None
 
@@ -164,9 +171,9 @@ def install_info(root: Path | None = None) -> InstallInfo:
     package (default: where it was imported from)."""
     root = Path(root) if root is not None else _paths.package_parent()
     from_source = running_from_source()
-    dist = own_distribution()
+    dist = own_distribution(root)
     version = _version(dist)
-    record = direct_url(dist)
+    record = _direct_url(dist)
     if from_source:
         # A checkout is never an index install, even when a build leaves an egg-info
         # (no direct_url.json) beside it; it is an editable install when one says so.
@@ -191,7 +198,6 @@ __all__ = [
     "DIST_NAME",
     "KINDS",
     "InstallInfo",
-    "direct_url",
     "install_info",
     "installed_from_index",
     "is_own_dev_tree",

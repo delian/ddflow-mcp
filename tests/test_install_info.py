@@ -195,6 +195,22 @@ def test_editable_install_is_found_in_site_packages(tmp_path, monkeypatch):
     assert I.install_info(root=tree).kind == "editable"
 
 
+def test_editable_url_is_percent_decoded(tmp_path, monkeypatch):
+    tree = tmp_path / "my project"
+    (tree / "ddflow").mkdir(parents=True)
+    site = tmp_path / "site"
+    info = site / "ddflow_mcp-1.2.3.dist-info"
+    info.mkdir(parents=True)
+    (info / "METADATA").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
+    (info / "direct_url.json").write_text(
+        json.dumps({"url": tree.as_uri(), "dir_info": {"editable": True}})
+    )
+    assert "%20" in tree.as_uri()
+    monkeypatch.syspath_prepend(str(site))
+    monkeypatch.setattr(I, "running_from_source", lambda: True)
+    assert I.install_info(root=tree).kind == "editable"
+
+
 def test_egg_info_in_a_checkout_is_not_an_index_install(tmp_path, monkeypatch):
     tree = _checkout(tmp_path)
     egg = tree / "ddflow_mcp.egg-info"
