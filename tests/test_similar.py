@@ -261,7 +261,7 @@ def test_the_knobs_steer_the_policy():
 def test_dedupe_defaults_are_the_decisions():
     d = Config().dedupe
     assert (d.on_match, d.show_floor, d.ask_threshold, d.max_candidates, d.min_words) == (
-        "warn",  # B-add-dedupe-surfaces flips this back to "ask"
+        "ask",
         0.35,
         0.55,
         3,

@@ -629,10 +629,10 @@ DEDUPE_ON_MATCH = ("ask", "warn", "off")
 class DedupeConfig:
     """Duplicate detection at add time, `[dedupe]` (decision D-no-duplicates)."""
 
-    # Shipped as "warn" until B-add-dedupe-surfaces gives the CLI, terminal and MCP a way to
-    # answer an ask; that task flips this back to "ask". Until then "ask" would refuse with
-    # no way through.
-    on_match: str = "warn"  # ask | warn | off
+    # "ask": every surface can answer one now -- --new / --extends / --duplicate-of /
+    # --related on the CLI (a prompt on a terminal), `relation` over MCP. It was shipped
+    # as "warn" while none could (hotfix B-dedupe-default-warn).
+    on_match: str = "ask"  # ask | warn | off
     show_floor: float = 0.35
     ask_threshold: float = 0.55
     max_candidates: int = 3
@@ -643,7 +643,7 @@ class DedupeConfig:
 _doc(
     "dedupe",
     "on_match",
-    "What an add does when it looks like an existing record. 'ask': it is refused until answered new / extends X / duplicate of X / related X -- a prompt on a terminal, exit 3 with the ready commands for a script, a re-call with relation=... over MCP. 'warn' (default for now): the candidates are printed and the add goes ahead; the default becomes 'ask' once the surfaces can answer (task B-add-dedupe-surfaces). 'off': no check. No score can tell a duplicate from a different bug in the same function (research R-dedupe-matchers), which is why 'ask' never decides.",
+    "What an add does when it looks like an existing record. 'ask' (default): it is refused until answered new / extends X / duplicate of X / related X -- --new / --extends ID / --duplicate-of ID / --related ID on the CLI (a prompt on a terminal, exit 3 with the ready commands for a script), `relation` over MCP. 'warn': the candidates are printed and the add goes ahead. 'off': no check. No score can tell a duplicate from a different bug in the same function (research R-dedupe-matchers), which is why the default asks rather than decides.",
 )
 _doc(
     "dedupe",
