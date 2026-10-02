@@ -65,6 +65,8 @@ class Answer:
 
     @property
     def problem(self) -> str:
+        if self.check_only and self.relation:
+            return "a dry run (check) cannot also carry an answer: drop one of them"
         if not self.relation:
             return ""
         if self.relation not in RELATIONS:

@@ -402,7 +402,8 @@ def test_the_commands_put_the_flag_before_an_end_of_options_separator():
 
 
 def test_check_on_an_existing_id_says_its_own_rule_applies(filed_as):
-    """`task add T-old --check`: the real add is refused as taken, never as a duplicate."""
+    """`memory add --id M-old --check`: the real add keeps its own rule and is never checked as
+    a duplicate."""
     filed = filed_as("memory")
     before = events(filed)
     code, out, _e = run_cli(filed, "memory", "add", SECOND, "--id", "M-old", "--check")
@@ -431,3 +432,19 @@ def test_a_filed_anyway_add_lists_the_records_it_reads_like(filed_as, monkeypatc
     code, out, err = run_cli(filed, *ADDS["task"])
     assert code == 0 and "T-new" in out
     assert "It reads like" in err and "T-old" in err
+
+
+def test_check_on_an_existing_task_id_is_the_ordinary_taken_refusal(filed_as):
+    filed = filed_as("task")
+    before = events(filed)
+    code, _o, err = run_cli(filed, "task", "add", "T-old", "--title", SECOND, "--check")
+    assert code == 3 and "T-old" in err
+    assert events(filed) == before
+
+
+def test_check_cannot_be_combined_with_an_answer(filed_as):
+    filed = filed_as("task")
+    before = events(filed)
+    code, _o, err = run_cli(filed, *ADDS["task"], "--check", "--new")
+    assert code == 2 and "not allowed with" in err
+    assert events(filed) == before
