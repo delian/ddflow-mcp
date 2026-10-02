@@ -77,13 +77,13 @@ EXPECTED_MAX = 1000
 STDERR_MAX = 4000
 TRACEBACK_MAX = 6000
 UNKNOWN_KIND = "(unknown)"
-_SHORT_FLAG = 2  # `-q`, `-m`: a single-letter flag; longer is a word
 _CUT = " [truncated]"
 _SURROGATES = re.compile("[\ud800-\udfff]")
 
 _DETECTOR = re.compile(r"[a-z][a-z0-9_.-]{0,40}")
 _CLASS = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,80}")
 _PROGRAMS = frozenset({"ddflow", "ddflow-mcp", "python", "python3", "uv", "uvx"})
+_FLAG = re.compile(r"--?[A-Za-z][A-Za-z0-9-]{0,40}")
 _WORD = re.compile(r"[a-z][a-z0-9_-]{0,23}")
 _FILE_LINE = re.compile(r'^(\s*File ")([^"]+)(".*)$')
 _ANY_DDFLOW_PATH = re.compile(r"(?:/[\w.@+~-]+)+/ddflow/")
@@ -111,6 +111,8 @@ class Failure:
     traceback: str = ""
     #: The CLI's own verbs (its parser's choices): the words of `argv` that may stay.
     subcommands: Iterable[str] | None = None
+    #: The CLI's own flag names; any other dash-led token is shown as `<flag>`.
+    flags: Iterable[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -204,42 +206,46 @@ def _frame_path(path: str) -> tuple[str, bool]:
 # ------------------------------------------------------------------------- argv
 
 
-def _is_value_of_previous(out: list[str], tok: str) -> bool:
-    """`--token -hunter2`: a single-dash word after a bare long flag is that flag's value."""
-    return (
-        len(out) > 1
-        and out[-1].startswith("--")
-        and "=" not in out[-1]
-        and not tok.startswith("--")
-        and len(tok) > _SHORT_FLAG
-    )
-
-
-def redact_argv(argv: Sequence[str], subcommands: Iterable[str] | None = None) -> list[str]:
+def redact_argv(
+    argv: Sequence[str],
+    subcommands: Iterable[str] | None = None,
+    flags: Iterable[str] | None = None,
+) -> list[str]:
     """The shape of a command line: the program (when it is ddflow or a Python
     launcher), the leading subcommand words the caller lists in `subcommands` (the CLI's
-    own verbs), every flag name, and `<value>` / `<arg>` in place of anything else. With
-    no `subcommands` no positional a person typed survives. A flag's value that itself begins with `--` cannot be told from a flag and is kept as one: the caller's `redact_report` pass is the net for it."""
+    own verbs), flag names, and `<value>` / `<arg>` / `<flag>` in place of anything else.
+
+    A token after a bare flag is that flag's value, whatever it looks like: a dash-led
+    secret (`--token -hunter2`, `-p --s3cr3t`) cannot be told from a flag, so it never
+    survives as one. `flags`, when given, is the CLI's own flag names; any other
+    dash-led token that is not a value becomes `<flag>`. With no `subcommands` no
+    positional survives."""
     allowed = set(subcommands) if subcommands is not None else set()
+    known = set(flags) if flags is not None else None
     out: list[str] = []
     leading = True
     for i, raw in enumerate(argv):
         tok = str(raw)
+        bare_flag_before = bool(out) and out[-1].startswith("-") and "=" not in out[-1]
         if i == 0:
             base = tok.replace("\\", "/").rsplit("/", 1)[-1]
             out.append(base if base in _PROGRAMS else "<program>")
-        elif tok.startswith("-") and tok != "-" and not _is_value_of_previous(out, tok):
-            leading = False
-            name, eq, _value = tok.partition("=")
-            out.append(f"{name}=<value>" if eq else name)
         elif tok in _PROGRAMS and out[-1] == "-m":
             out.append(tok)  # `python -m ddflow`
+        elif bare_flag_before:
+            leading = False
+            out.append("<value>")
+        elif tok.startswith("-") and tok != "-":
+            leading = False
+            name, eq, _value = tok.partition("=")
+            ok = name in known if known is not None else bool(_FLAG.fullmatch(name))
+            shown = name if ok else "<flag>"
+            out.append(f"{shown}=<value>" if eq else shown)
         elif leading and _WORD.fullmatch(tok) and tok in allowed:
             out.append(tok)
         else:
             leading = False
-            after_flag = out[-1].startswith("-") and "=" not in out[-1]
-            out.append("<value>" if after_flag else "<arg>")
+            out.append("<arg>")
     return out
 
 
@@ -354,7 +360,7 @@ def build_bundle(
             "commit": clean(install.commit or ""),
             "own_dev_tree": bool(install.is_own_dev_tree),
         },
-        "environment": {k: clean(v) for k, v in sorted((env or {}).items())},
+        "environment": {clean(k): clean(v) for k, v in sorted((env or {}).items())},
         "command": _command(failure, clean),
         "knobs": {
             k: _scalar(v, clean) for k, v in sorted((knobs or {}).items()) if k in KNOB_ALLOWLIST
@@ -390,7 +396,7 @@ def _command(failure: Failure | None, clean: Callable[[object], str]) -> dict[st
         return {}
     cls = failure.error_class if _CLASS.fullmatch(failure.error_class or "") else ""
     out: dict[str, Any] = {
-        "argv": [clean(t) for t in redact_argv(failure.argv, failure.subcommands)],
+        "argv": [clean(t) for t in redact_argv(failure.argv, failure.subcommands, failure.flags)],
         "exit_code": failure.exit_code,
         "error_class": clean(cls),
     }

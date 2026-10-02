@@ -231,7 +231,7 @@ def test_candidates_use_the_title_and_unavailable_is_said():
         return [{"id": "B-a", "kind": "bug", "score": 0.61234}]
 
     out = _build(candidates=provider)
-    assert seen == [out.data["title"]] or seen == [f"claim crashes in {PROJECT}"]
+    assert seen == [out.data["title"]] and PROJECT not in seen[0]
     assert out.data["dedupe_candidates"]["status"] == "ok"
     assert out.data["dedupe_candidates"]["items"][0]["score"] == 0.61
 
@@ -384,12 +384,26 @@ def test_relative_ddflow_frame_keeps_its_public_source_line():
 
 
 def test_a_dash_led_value_after_a_flag_is_a_value():
-    assert B.redact_argv(["ddflow", "--token", "-hunter2", "-q"]) == [
-        "ddflow",
-        "--token",
-        "<value>",
-        "-q",
-    ]
+    for argv in (
+        ["ddflow", "--token", "-hunter2"],
+        ["ddflow", "--password", "--s3cr3t"],
+        ["ddflow", "-p", "-hunter2"],
+        ["ddflow", "--limit", "-1"],
+    ):
+        got = B.redact_argv(argv)
+        assert got[-1] == "<value>", (argv, got)
+        assert not any("hunter2" in t or "s3cr3t" in t for t in got)
+    assert B.redact_argv(["ddflow", "--token", "x", "-q"]) == ["ddflow", "--token", "<value>", "-q"]
+
+
+def test_unknown_flags_are_hidden_when_the_cli_flags_are_given():
+    got = B.redact_argv(["ddflow", "--agent=x", "--my-secret-flag", "-q"], flags={"--agent"})
+    assert got == ["ddflow", "--agent=<value>", "<flag>", "<flag>"]
+
+
+def test_environment_keys_are_redacted_too():
+    out = _build(env={f"{HOME}/proj": "1", "python": "3.12"})
+    assert HOME not in out.rendered + out.json
 
 
 def test_dot_slash_ddflow_frame():
