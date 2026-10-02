@@ -456,9 +456,10 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
 
 BUG_SCOPES = ("project", "ddflow")
 BUG_SEVERITIES = ("low", "medium", "high", "critical")
-#: True once `ddflow bug report` exists; the offer to prepare an upstream report names it,
-#: so it is only made while it is true (tests/test_bug_scope.py pins this to the parser).
-BUG_REPORT_COMMAND = False
+#: The command line (with `{id}`) that prepares an upstream report, once there is one ("" until).
+#: The offer to prepare a report names it, so it is only made when this is set
+#: (tests/test_bug_scope.py pins it to the parser).
+BUG_REPORT_COMMAND = ""
 
 
 def upstream_offer(scope: str, bid: str) -> str:
@@ -466,7 +467,10 @@ def upstream_offer(scope: str, bid: str) -> str:
     the project's own or the command that prepares the report is not there yet."""
     if scope != "ddflow" or not BUG_REPORT_COMMAND:
         return ""
-    return f"This bug is in ddflow itself: `ddflow bug report {bid}` prepares an upstream report."
+    return (
+        f"This bug is in ddflow itself: `{BUG_REPORT_COMMAND.format(id=bid)}` "
+        "prepares an upstream report."
+    )
 
 
 def bug_found(

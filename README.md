@@ -2979,8 +2979,8 @@ optional event fields: an old log folds unchanged and an older ddflow ignores th
 title takes part in the duplicate check, and `show <bug>` and `ddflow similar` display
 all three. A later `bug.reported_upstream` event (`url`, `number`, `delivery`, `sent_at`,
 `digest`) records where a ddflow-scoped bug's report went; an older ddflow reports it as
-a skipped kind. Once `ddflow bug report` exists, filing a `ddflow`-scoped bug ends with
-a one-line offer to prepare that report.
+a skipped kind. Once a command to prepare that report exists, filing a `ddflow`-scoped bug ends with a
+one-line offer to run it.
 
 ---
 
