@@ -48,7 +48,33 @@ def cmd_review(a, c: Ctx) -> int:
         if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
             print("usage: ddflow review triage <id> --gate G --finding N ...", file=sys.stderr)
             return FAIL
+        if a.chunk:
+            print("--chunk re-reviews; `review triage` only records a verdict", file=sys.stderr)
+            return FAIL
         return _triage(a, c, ids[1])
+    # The triage flags are accepted by this parser (it is the verb's parser too) but mean
+    # nothing to a review. Ignoring them started a 25-minute reviewer run the caller never
+    # asked for (bug B3531d304ec), so refuse BEFORE any reviewer is contacted.
+    stray = [
+        flag
+        for flag, given in (
+            ("--finding", a.finding),
+            ("--refuted", a.refuted),
+            ("--confirmed", a.confirmed),
+            ("--probe", a.probe),
+        )
+        if given is not None and given is not False  # `--finding 0`, `--probe ""` still count
+    ]
+    if stray:
+        item = ids[0] if len(ids) == 1 else "<id>"
+        print(
+            f"{', '.join(stray)} record a verdict on a finding and need the `triage` verb; "
+            "without it this would start a full re-review. Did you mean:\n"
+            f"  ddflow review triage {item} --gate {a.gate} --finding N "
+            '--refuted|--confirmed --probe "..."',
+            file=sys.stderr,
+        )
+        return FAIL
     if len(ids) > 1:
         print(f"review takes one item id; got {ids}", file=sys.stderr)
         return FAIL

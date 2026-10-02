@@ -740,7 +740,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 136 knobs.
+cadences, and the rest of the 139 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -1090,7 +1090,9 @@ fix or test that answers it. The gate's outcome is not changed — a review that
 findings stays `failed`, and that does not block completion; the log now shows what became
 of each finding. Triage appears in `gate status` and `show`, and a re-review carries it over
 only for a finding whose text is identical (decision D-review-triage). Over MCP it is
-`ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`.
+`ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`. The `triage` verb is
+required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` are refused
+(exit 1) before any reviewer is contacted, as is `--chunk` on `review triage`.
 
 ### Companion tools
 
@@ -1487,6 +1489,22 @@ headings and citations alike. A lesson's `**Compressed:**` paragraph becomes its
 becomes that lesson's summary, and every other bullet becomes a consolidated lesson tagged
 `summary`. A GENERATED summary file is skipped. `ddflow render` writes them all back out
 as `docs/ddflow/LESSONS-SUMMARY.md` (also `ddflow://lessons-summary`).
+
+**An import adds nothing twice, and says what repeats.** Lessons, decisions and research
+are weighed against every record already in the log (and a summary bullet against the
+lessons of the same import) with the same similarity engine and `[dedupe]` thresholds an
+add uses. Text identical to a held record is left out and counted; a record scoring at
+least `[dedupe].ask_threshold` (0.55, with `min_words` content words) is left out and
+LISTED in the plan's notes as `lesson LS-git-rebase ~ L12 (0.74)  docs/lessons-summary.md:9`
+-- the candidate id and score -- so the operator or onboarding agent decides: nothing is
+written for it, and filing one anyway is `ddflow lesson add` (or `decision add` /
+`research add`) once the existing record is judged not to say it. No score separates a
+duplicate from a related record, which is why it is reported rather than decided. On a
+real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson were
+reported this way. Tasks and phases are not checked (they carry dependencies);
+`[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
+`"off"` turns the check off. Re-running over the same files adds
+nothing.
 
 ### Verifying an import, at any time
 
@@ -3104,7 +3122,7 @@ declared once and persists — see
 
 ## Configuration
 
-136 knobs across 18 sections, every one documented in place:
+139 knobs across 18 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -3192,6 +3210,21 @@ part that matters.
   next `pre-commit install` would discard the edit): it advises a `repo: local` hook in
   `.pre-commit-config.yaml` (`ddflow precommit` proposes it), says nothing needs installing
   when the framework already runs ddflow's check, and `--force` replaces the generated hook.
+* **A per-task README check** (decision D-readme-current). A task whose diff changed
+  code under `[enforce] readme_code_globs` (default `ddflow/**`) but none of
+  `readme_files` (default `README.md`), with no `docs` outcome recorded for it, is
+  reported — `README not updated: record the section you changed, or gate skip docs
+  --reason ...` — by `ddflow complete`, in `ddflow gate status`, and as a `docs:` line
+  under the item in `ddflow brief`. Record the reason with
+  `ddflow gate skip <id> docs --reason "..."` (or `gate record <id> docs --outcome
+  passed --evidence "<section>"`). `[enforce] readme_with_code` picks the severity:
+  `warn` (default), `block` (refuses `complete`) or `off`. Test files (`tests/`,
+  `test_*`, `*_test.*`, `*.test.*`, `*_spec.*`), documentation (`docs/`,
+  `.md`/`.rst`/`.adoc`/`.txt`) and ddflow's own event-log commits (`.ddflow/**`) are never
+  reported; when git cannot say what the task changed, `complete` says the check could not
+  run (a warning, never a block). It is a check, not a pipeline gate, so a task with
+  nothing to document is not asked for a `docs` outcome; the phase-level `docs` gate is
+  unchanged.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
   crashed work to recover, ready items, binding decisions, operational memory — into
   every session, including after a context compaction, whether or not the agent
