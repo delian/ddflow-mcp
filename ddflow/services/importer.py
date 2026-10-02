@@ -708,6 +708,18 @@ class Found:
 
 
 @dataclass
+class Duplicate:
+    """A found record left out of the proposal because it repeats an existing one."""
+
+    found: Found
+    of: str  #: the id of the record it repeats
+    score: float  #: similarity, 0-1; 1.0 is the same text
+    identical: bool = False
+    #: `queue` (already in the log) or `import` (another record of this same import)
+    where: str = "queue"
+
+
+@dataclass
 class ImportPlan:
     found: list[Found] = field(default_factory=list)
     #: Files that matched a glob but yielded nothing — reported, because "we looked and
@@ -723,6 +735,10 @@ class ImportPlan:
     #: board reading "0/3" for a phase whose other boxes shipped is otherwise read as
     #: "nothing shipped" (B45d5aa72fa).
     ticked_left_out: int = 0
+    #: Records the import did NOT propose because they repeat one already held: each
+    #: `Duplicate` says which and how closely. Reported, never written -- the operator
+    #: or the onboarding agent decides what to do with them (decision D-no-duplicates).
+    duplicates: list[Duplicate] = field(default_factory=list)
 
     def by_kind(self, kind: str) -> list[Found]:
         return [f for f in self.found if f.kind == kind]
@@ -2414,12 +2430,13 @@ def plan_import(
             _settle_phases(plan, state, touched, existing_phases)
         else:
             _settle_needed_phases(plan, deferred_done, state, touched, existing_phases)
+    _dedupe_found(repo, state, plan)
     for f in scan_branches(repo):
         f.ident = _unique("", f.ident, proposed)
         if f.ident not in known:
             plan.found.append(f)
 
-    if not plan.found and not plan.skipped_existing:
+    if not plan.found and not plan.skipped_existing and not plan.duplicates:
         plan.notes.append(
             "Nothing recognisable was found. That is not necessarily wrong — this looks "
             "for todo checklists, a lessons corpus, ADR files and unmerged branches in "
@@ -2812,6 +2829,88 @@ def _apply_state(log: EventLog, f: Found, bump: Callable[[str], None]) -> None:
             },
         )
         bump("task_held")
+
+
+def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
+    """Leave out what repeats a record already held, and say so. In place.
+
+    Decision D-no-duplicates, applied to the importer. Checked: lessons, decisions and
+    research -- the knowledge an onboarding brings in. Tasks and phases are not: they
+    carry dependencies, and withholding one would leave the rest waiting on an id the
+    queue never heard of. Each is weighed against every record already in the log
+    (`services.similar`, the same engine and thresholds `[dedupe]` sets for an add), and
+    a lessons-summary bullet that became a lesson of its own is also weighed against the
+    other records of this import -- that is how a hand-written summary repeats the
+    corpus beside it.
+
+    Identical text is dropped quietly (counted). A near-duplicate -- at `ask_threshold`
+    with enough content words -- is dropped from the proposal and LISTED, with the id it
+    repeats and the score, because no score separates a duplicate from a related record
+    and the operator answers that. Naming an existing id does not count: an imported
+    lesson citing `L12` is not a copy of it.
+    """
+    from ..infra.store import similar_records
+    from . import similar
+
+    cfg = Config.load(repo)
+    dd = cfg.dedupe
+    checked = ("lesson", "decision", "research")
+    if dd.on_match == "off":
+        return
+    mine = [f for f in plan.found if f.kind in checked and f.kind in dd.kinds]
+    if not mine:
+        return
+    base = similar_records(state) if state is not None else []
+
+    def rec(f: Found) -> dict[str, str]:
+        return {"id": f.ident, "kind": f.kind, "title": f.title, "body": f.body, "item": ""}
+
+    # Another record of this import is a target only for a summary-born lesson, and a
+    # target must outrank it: a summary bullet repeats the corpus, never the reverse.
+    def is_summary(f: Found) -> bool:
+        return f.kind == "lesson" and "summary" in f.extra.get("tags", ())
+
+    index = similar.build([*base, *(rec(f) for f in mine)])
+    in_plan = {f.ident: f for f in mine}
+    dropped: dict[int, Duplicate] = {}
+    for f in mine:
+        a = similar.assess(index, rec(f), cfg)
+        for c in a.candidates:
+            tgt = in_plan.get(c.id)
+            where = "queue"
+            if tgt is not None:
+                where = "import"
+                if not is_summary(f) or is_summary(tgt) or id(tgt) in dropped:
+                    continue
+            ident = "identical" in c.flags
+            if ident or (c.score >= dd.ask_threshold and a.words >= dd.min_words):
+                dropped[id(f)] = Duplicate(f, c.id, c.score, ident, where)
+                break
+    if not dropped:
+        return
+    plan.found = [f for f in plan.found if id(f) not in dropped]
+    plan.duplicates = [dropped[id(f)] for f in mine if id(f) in dropped]
+    same = [d for d in plan.duplicates if d.identical]
+    near = [d for d in plan.duplicates if not d.identical]
+    if same:
+        plan.notes.append(
+            f"{len(same)} record(s) repeat existing ones word for word and were not "
+            f"imported: "
+            + ", ".join(f"{d.found.ident} = {d.of}" for d in same[:12])
+            + (" ..." if len(same) > 12 else "")
+        )
+    if near:
+        lines = [
+            f"{len(near)} record(s) look like ones already held and were NOT imported -- "
+            f"decide each (`ddflow lesson add` files one anyway; otherwise the existing "
+            f"record already says it). Candidate and score:"
+        ]
+        lines += [
+            f"    {d.found.kind} {d.found.ident} ~ {d.of} ({d.score:.2f}"
+            f"{', in this import' if d.where == 'import' else ''})  {d.found.source}"
+            for d in sorted(near, key=lambda d: (-d.score, d.found.ident))
+        ]
+        plan.notes.append("\n".join(lines))
 
 
 def apply_import(repo: Path, log: EventLog, plan: ImportPlan) -> dict[str, int]:
