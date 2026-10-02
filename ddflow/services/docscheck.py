@@ -49,7 +49,9 @@ _MAX_CODE_BYTES = 1_000_000
 
 _FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
 #: A line that cannot continue a paragraph: a list item, a quote or a table row.
-_NOT_PARAGRAPH = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\||(?:[-*_]\s*){3,}$)")
+_NOT_PARAGRAPH = re.compile(
+    r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\||(?:\*\s*){3,}$|(?:-\s*){3,}$|(?:_\s*){3,}$)"
+)
 _SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 _SPAN = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 _LINK = re.compile(

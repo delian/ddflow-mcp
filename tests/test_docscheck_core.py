@@ -203,9 +203,11 @@ def test_odd_but_valid_links_and_one_letter_flags(tmp_path):
 
 
 def test_a_checked_document_is_never_its_own_evidence(tmp_path):
-    root = repo_with(tmp_path, "ok\n", **{"design.rst": "`widgetFactory` and `--only-here`\n"})
-    assert found(D.check_docs(root, docs=["design.rst"])) == [
+    root = repo_with(tmp_path, "ok\n", **{"design.txt": "`widgetFactory` and `--only-here`\n"})
+    assert found(D.check_docs(root, docs=["design.txt"])) == [
         ("flag", "--only-here"),
         ("identifier", "widgetFactory"),
     ]
+    # without `p not in docs` the .txt page would feed the corpus its own names
     assert D.anchors_of("Some text\n***\nHeading\n-------\n") == {"heading"}
+    assert D.anchors_of("A\n*-*\nB\n===\n") == {"a---b"}
