@@ -151,9 +151,7 @@ def _commit(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tomlcfg.atomic_write(path, text)
     if mode is None:
-        umask = os.umask(0)
-        os.umask(umask)
-        mode = 0o666 & ~umask
+        mode = 0o644  # a new file; reading the umask means setting it, process-wide
     os.chmod(path, mode)
 
 
