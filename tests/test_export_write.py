@@ -506,3 +506,17 @@ def test_new_file_honours_the_umask_without_changing_it(repo, umask, mode):
         assert (repo / "R.md").stat().st_mode & 0o777 == 0o600  # an update keeps the mode
     finally:
         os.umask(old)
+
+
+def test_the_writer_never_calls_os_umask(repo, monkeypatch):
+    """Reading the umask means setting it (process-wide, racing other threads); the old
+    implementation did `os.umask(0); os.umask(old)`. Any call at all fails this."""
+
+    def boom(*_a):
+        raise AssertionError("os.umask must not be called by the writer")
+
+    monkeypatch.setattr(os, "umask", boom)
+    W.write_whole(repo, "R.md", doc())
+    W.write_region(repo, "S.md", "status", "- a\n")
+    W.append_entries(repo, "L.md", "worklog", _produce("- e\n", "ev"), version="1")
+    assert (repo / "R.md").is_file()
