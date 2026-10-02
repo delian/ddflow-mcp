@@ -1748,7 +1748,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_export": {
         "description": (
             "Project documents from the log (roadmap, bugs, status, worklog, sessions, decisions, "
-            "rules). No doc: list kinds with state. doc: capped markdown (`truncated`). Writes "
+            "rules, changelog). No doc: list kinds with state. doc: capped markdown (`truncated`). Writes "
             "only with write=true AND a repo-relative path."
         ),
         "properties": {

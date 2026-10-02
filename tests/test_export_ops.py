@@ -274,6 +274,9 @@ def test_export_tables_knob_is_validated_like_the_sub_tables():
             Config.check({"export": {"tables": bad}})
     Config.check({"export": {"tables": {"roadmap": {"path": "a.md", "filters": {"limit": 3}}}}})
     Config.check({"export": {"tables": {"roadmap": {"a_future_key": 1}}}})  # forward-compat
+    lenient = Config()  # a file from a newer release: skipped with a warning, never fatal
+    lenient._apply({"export": {"tables": {"R": {"mode": "from-the-future"}}}}, "file")
+    assert lenient.export.tables == {} and any("export.tables" in k for k in lenient.unknown_knobs)
     with pytest.raises(ValueError):
         Config.check({"export": {"roadmap": {"filters": {"limit": True}}}})
 
@@ -359,6 +362,21 @@ def test_append_mode_refuses_a_template_instead_of_ignoring_it(proj):
     _select(proj, '[export.changelog]\nmode = "append"\npath = "CHANGES.md"\ntemplate = "t.j2"\n')
     out = api.export_documents(proj, "changelog", update=True)
     assert out.exit == 3 and "template" in out.reason and not (proj / "CHANGES.md").exists()
+
+
+def test_append_mode_refuses_filters_and_a_last_event_the_log_lost(proj):
+    _select(proj, '[export.changelog]\nmode = "append"\npath = "CHANGES.md"\n')
+    out = api.export_documents(proj, "changelog", update=True, tag="unreleased")
+    assert out.exit == 3 and "no filters" in out.reason
+    # a header whose `last` is not in this log: refuse rather than repeat entries
+    from ddflow.services.export import frame
+
+    (proj / "CHANGES.md").write_text(
+        frame.frame("- Fixed: old\n", "changelog", "0", {"last": "E-gone"})
+    )
+    out = api.export_documents(proj, "changelog", update=True)
+    assert out.exit == 3 and "not in the log" in out.reason
+    assert "old" in (proj / "CHANGES.md").read_text()
 
 
 def test_template_never_writes(proj):
