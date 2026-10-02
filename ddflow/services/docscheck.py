@@ -471,9 +471,11 @@ class _Scan:
         else:
             resolved = self.path
         if frag and resolved in self.tree.files and resolved.lower().endswith((".md", ".markdown")):
-            self.counts["anchors"] += 1
             offered = self.heads.of(resolved)
-            if offered is not None and frag.lower() not in offered:
+            if offered is None:
+                return  # could not read the target: not checked, so not counted
+            self.counts["anchors"] += 1
+            if frag.lower() not in offered:
                 self.report.findings.append(
                     Finding("anchor", self.path, n, url, f"no heading #{frag} in {resolved}")
                 )
