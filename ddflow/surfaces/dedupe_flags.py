@@ -187,6 +187,10 @@ def settle(a, c, out: Outcome) -> int | None:
     data = out.data
     if data.get("check_only"):
         if c.json:
+            if out.exit:
+                # The body is the same whether the kind is not checked, the index could not
+                # be read or nothing matched: the reason says which.
+                print(out.reason, file=sys.stderr)
             c.out(out.reason, out.body())
         elif out.exit:
             print(out.reason)
