@@ -85,3 +85,18 @@ def test_mcp_omitted_gate_is_refused_with_two_gates(repo, tmp_path):
     reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": call})
     assert reply["result"].get("isError") and "per gate" in str(reply), reply
     assert _triaged(repo) == []
+
+
+def test_a_gate_with_undigested_findings_still_counts_as_having_findings(repo, tmp_path):
+    """Review round 1: filtering on the digest let the one digested gate win silently."""
+    from ddflow.core.model import fold
+
+    _setup(repo, tmp_path)
+    log = EventLog(repo)
+    st = fold(log.read_all(), strict=False).items["T1"]
+    ev = dict(st.gates["rubber_duck"].evidence)
+    ev["chunk_findings"] = [{"severity": "LOW", "title": "old"}]  # no digest
+    log.append("gate.failed", "T1", {"gate": "rubber_duck", "evidence": ev})
+    out = api.triage(repo, "T1", finding=1, verdict="refuted", probe="ran it")
+    assert out.exit == FAIL and "critic" in out.reason and "rubber_duck" in out.reason
+    assert _triaged(repo) == []
