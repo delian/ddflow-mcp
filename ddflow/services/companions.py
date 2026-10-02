@@ -662,6 +662,61 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -
     return ""
 
 
+def _toml_without(text: str, cid: str) -> str | None:
+    """``text`` minus every ``[mcp_servers.<cid>]`` table and sub-table, or None.
+
+    Textual, since `tomllib` cannot write. The cut is trusted only when the result still
+    parses and differs from the original by exactly that server: an inline table, a dotted
+    key, or a header inside a multi-line string fails the check and is left alone.
+    """
+    name = "(?:{0}|\"{0}\"|'{0}')".format(re.escape(cid))
+    header = re.compile(rf"^\s*\[\s*mcp_servers\s*\.\s*{name}\s*(?:\.[^\]]*)?\]\s*(?:#.*)?$")
+    kept: list[str] = []
+    cut: list[str] = []  # the lines of the table being dropped
+    for line in text.splitlines(keepends=True):
+        if header.match(line):
+            cut.append(line)
+        elif cut and line.lstrip().startswith("["):
+            # Comments and blank lines just above the NEXT header describe it, not the
+            # table that is going: keep them.
+            tail = []
+            while cut[-1].strip() == "" or cut[-1].lstrip().startswith("#"):
+                tail.insert(0, cut.pop())
+            kept.extend(tail)
+            cut = []
+            kept.append(line)
+        elif cut:
+            cut.append(line)
+        else:
+            kept.append(line)
+    out = "".join(kept)
+    try:
+        before, after = tomllib.loads(text), tomllib.loads(out)
+    except tomllib.TOMLDecodeError:
+        return None
+    srv = before.get("mcp_servers")
+    if not isinstance(srv, dict):
+        return None
+    expect = {**before, "mcp_servers": {k: v for k, v in srv.items() if k != cid}}
+    # A bare `[mcp_servers]` header is an empty table on both sides, or on neither.
+    for d in (expect, after):
+        if d.get("mcp_servers") == {}:
+            d.pop("mcp_servers")
+    return out if after == expect else None
+
+
+def _toml_stale_entry(text: str, c: Companion) -> bool:
+    """Does the table under the id launch something that is not ``c``'s launch?"""
+    try:
+        servers = tomllib.loads(text).get("mcp_servers", {})
+    except tomllib.TOMLDecodeError:
+        return False
+    if not isinstance(servers, dict) or c.id not in servers:
+        return False
+    entry = servers[c.id]
+    return _serves(entry) and not launches_as(c, entry)
+
+
 def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str, str] | None:
     """What a TOML config already says about ``c``, or None when ``new_text`` may be written.
 
@@ -684,11 +739,6 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
     if c.id in servers and _serves(servers[c.id]):
         if launches_as(c, servers[c.id]):
             return "unchanged", f"{rel} already registers {c.id}"
-        # Not refreshed: rewriting a hand-written TOML table is not done here (B662a1ace82),
-        # so the message says what is true instead of "already registers".
-        return "unchanged", (
-            f"{rel} launches its own `{c.id}`, not the registry's launch; left as it is"
-        )
     if other := _launched_elsewhere((servers, text), c, rel):
         return "unchanged", other
     try:
@@ -701,6 +751,43 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
         )
         return "refused", f"SKIPPED {rel}: {what}; fix it by hand"
     return None
+
+
+def _register_toml(path: Path, rel: str, c: Companion, dry_run: bool) -> tuple[str, str]:
+    """The TOML (codex) half of `register`."""
+    text = path.read_text("utf-8") if path.exists() else ""
+    block = f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
+    if c.env:
+        block += f"env = {_toml(dict(c.env))}\n"
+    replaced = False
+    if _toml_stale_entry(text, c):
+        # Refreshed like the JSON path (B662a1ace82): the old table is cut out and the
+        # registry's launch appended -- unless the same launch already runs under
+        # another name (a second copy), or the table is not one that can be cut out.
+        if other := _launched_elsewhere((tomllib.loads(text)["mcp_servers"], text), c, rel):
+            return "unchanged", other
+        if (cut := _toml_without(text, c.id)) is None:
+            return "refused", (
+                f"SKIPPED {rel}: [mcp_servers.{c.id}] launches something other than the "
+                f"registry's launch and is not a plain table that can be rewritten; "
+                f"replace it by hand"
+            )
+        text, replaced = cut, True
+    new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
+    if verdict := _toml_present(text, new_text, c, rel):
+        return verdict
+    if dry_run and replaced:
+        return "written", f"WOULD replace in {rel}:\n{block.lstrip()}"
+    if dry_run:
+        # The block as it will be APPENDED, minus the leading blank line that only
+        # separates it from what is above. `test_the_preview_matches_the_write_for_a
+        # _TOML_target_too` asserts this text appears verbatim in the written file,
+        # which is the guarantee that matters; showing the whole merged file here
+        # would bury one added stanza in the operator's entire config.
+        return "written", f"WOULD add to {rel}:\n{block.lstrip()}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(new_text, "utf-8")
+    return "written", f"{'refreshed' if replaced else 'registered'} {c.id} in {rel}"
 
 
 def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> tuple[str, str]:
@@ -744,25 +831,7 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     # over a file the write would REFUSE as unparseable -- an operator signing off on a
     # change that could not happen, which is the failure the preview exists to prevent.
     if target.shape == SHAPE_TOML:
-        text = path.read_text("utf-8") if path.exists() else ""
-        block = (
-            f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
-        )
-        if c.env:
-            block += f"env = {_toml(dict(c.env))}\n"
-        new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
-        if verdict := _toml_present(text, new_text, c, rel):
-            return verdict
-        if dry_run:
-            # The block as it will be APPENDED, minus the leading blank line that only
-            # separates it from what is above. `test_the_preview_matches_the_write_for_a
-            # _TOML_target_too` asserts this text appears verbatim in the written file,
-            # which is the guarantee that matters; showing the whole merged file here
-            # would bury one added stanza in the operator's entire config.
-            return "written", f"WOULD add to {rel}:\n{block.lstrip()}"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(new_text, "utf-8")
-        return "written", f"registered {c.id} in {rel}"
+        return _register_toml(path, rel, c, dry_run)
 
     data: dict = {}
     if path.exists():

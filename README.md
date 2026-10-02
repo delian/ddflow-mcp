@@ -1152,6 +1152,10 @@ A companion counts as **registered** only when an entry under its id can actuall
 something: a bare or junk table with its name does not hide a real launch registered
 elsewhere, and does not pass for one. A non-table `mcp_servers` is refused with the parser's
 reason, and `companions add` appends TOML only when the result still parses.
+A stale entry under the id is refreshed in `.codex/config.toml` too, as in `.mcp.json`: the
+old `[mcp_servers.<id>]` table (and its sub-tables) is cut out and the registry's launch
+appended. A table that cannot be cut out safely (an inline or dotted form) is refused with
+"replace it by hand", and a launch that already runs under another name is not doubled.
 
 Three states, reported separately because the remedies differ: **registered**,
 **installed but not wired up** (one command away), **not installed** (with the command
