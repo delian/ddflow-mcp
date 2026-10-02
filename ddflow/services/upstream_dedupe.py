@@ -77,6 +77,7 @@ class Hit:
     score: float
     band: str  # "ask" | "show"
     url: str = ""
+    kind: str = ""  # local hits: what the record is (bug, task...); the matcher keeps no title
 
 
 @dataclass
@@ -117,7 +118,7 @@ class Result:
             lines.append(f"local check unavailable: {self.reason}")
         for h in self.local:
             tag = "likely already filed locally" if h.band == "ask" else "similar locally"
-            lines.append(f"  {tag}: {h.id} ({h.score:.2f}): {h.title}")
+            lines.append(f"  {tag}: {h.kind} {h.id} ({h.score:.2f})")
         return "\n".join(lines)
 
 
@@ -165,7 +166,9 @@ def _page(fetch: Fetch, repo: str, page: int, timeout: float) -> tuple[list[dict
         raise UpstreamUnavailable("upstream answer unparseable (not JSON)") from exc
     if not isinstance(data, list):
         raise UpstreamUnavailable("upstream answer unparseable (not an issue list)")
-    return [d for d in data if isinstance(d, dict)], spent
+    if not all(isinstance(d, dict) and isinstance(d.get("number"), int) for d in data):
+        raise UpstreamUnavailable("upstream answer unparseable (items are not issues)")
+    return data, spent
 
 
 def list_issues(
@@ -214,7 +217,7 @@ def check(
                 band = _band(score, ask_threshold, show_floor)
                 if band:
                     d = local.doc(rid)
-                    res.local.append(Hit("local", rid, (d.kind if d else ""), score, band))
+                    res.local.append(Hit("local", rid, "", score, band, kind=d.kind if d else ""))
     try:
         issues, res.truncated = list_issues(
             repo, fetch or real_fetch, max_pages=max_pages, timeout=timeout
