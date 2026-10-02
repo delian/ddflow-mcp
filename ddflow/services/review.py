@@ -576,6 +576,18 @@ _FINDING_RE = re.compile(
 )
 
 
+def diff_fence(diff: str) -> str:
+    """The backtick fence that holds ``diff`` in the reviewer's prompt: one longer than
+    any backtick run inside it, and at least three.
+
+    A fixed ``` closed on the first ``` in the diff, and everything after it -- a line
+    such as `STATUS: NO FINDINGS`, which the independence gate reads as the verdict --
+    then read as the prompt's own text rather than the changed code.
+    """
+    longest = max((len(m.group()) for m in re.finditer(r"`+", diff)), default=0)
+    return "`" * max(3, longest + 1)
+
+
 def split_diff(diff: str, max_chars: int) -> list[str]:
     """Chunk a diff, **splitting by file first**.
 
@@ -1454,6 +1466,7 @@ def review(
             intent=intent,
             context=context,
             diff=chunk,
+            fence=diff_fence(chunk),
             chunk_index=i,
             chunk_total=len(chunks),
         )

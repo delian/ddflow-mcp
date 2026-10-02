@@ -88,6 +88,7 @@ def test_stdlib_renderer_matches_jinja_on_the_shipped_templates():
             "intent": "i",
             "context": "c",
             "diff": "d",
+            "fence": "```",
             "chunk_index": 1,
             "chunk_total": 2,
         },

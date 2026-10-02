@@ -201,6 +201,19 @@ def lesson_search(
     return O.ok("lesson.search", **data)
 
 
+def _origin(st, table: str, ident):
+    """The `Origin` of a recalled decision, lesson or memory; None for the other kinds."""
+    from ..core import provenance as PV
+
+    if table == "decisions" and ident in st.decisions:
+        return PV.decision_origin(st.decisions[ident])
+    if table == "lessons" and ident in st.lessons:
+        return PV.lesson_origin(st.lessons[ident])
+    if table == "memories" and ident in st.memories:
+        return PV.memory_origin(st.memories[ident])
+    return None
+
+
 def recall(
     repo: Path,
     query: str,
@@ -242,6 +255,14 @@ def recall(
             results[table] = hits
 
     labels = {table: label for table, label, _ in RECALL_SOURCES}
+    # Who recorded each hit (`core/provenance.py`): decisions, lessons and memories are
+    # somebody's words, and a hit shown without its author reads as the tool's own.
+    # Looked up in the folded state by id -- the index holds no author column.
+    for table, rows in results.items():
+        for r in rows:
+            o = _origin(_st, table, r.get("id"))
+            if o is not None:
+                r["provenance"] = {"trust": o.trust, "by": o.by, "source": o.source}
     wire = {
         table: [
             {
@@ -249,6 +270,7 @@ def recall(
                 "kind": labels[table],
                 "headline": summarise_row(table, r)[0],
                 "body": summarise_row(table, r)[1],
+                **({"provenance": r["provenance"]} if "provenance" in r else {}),
                 "raw": r,
             }
             for r in rows

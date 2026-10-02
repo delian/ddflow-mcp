@@ -510,6 +510,49 @@ def _primary_mid_merge(repo: Path, problems: list[str], notes: list[str]) -> Non
     )
 
 
+#: How many new shard names the doctor note lists before it counts the rest.
+_SHARDS_SHOWN = 8
+
+
+def _unknown_author_notes(repo: Path, log) -> list[str]:
+    """ONE note naming event shards whose agent id has no committed history.
+
+    A pull request can add `.ddflow/events/<anybody>.jsonl`: the log is merged by union
+    with content-addressed ids and no signatures, so a new author's first records arrive
+    with the standing of everyone else's (`core/provenance.py` marks what they say; this
+    says that a stranger said it). "Seen before" is the base branch's committed tree --
+    this agent's own shard is never new to itself. Git unable to say is `unavailable`,
+    never silence: a repository where the check could not run must not read as clean.
+    """
+    from ..infra import worktree as W
+
+    unavailable = (
+        "unavailable: event-shard authorship was not checked (%s) -- git could not say "
+        "which agent ids are new, so none are reported as known"
+    )
+    shards = {p.name for p in log.shards()} - {log.shard.name}
+    if not shards:
+        return []
+    if not W.git(repo, "rev-parse", "--is-inside-work-tree").ok:
+        return [unavailable % "not a git repository"]
+    base = W.default_branch(repo)
+    if not W.git(repo, "rev-parse", "--verify", "--quiet", f"{base}^{{commit}}").ok:
+        return [unavailable % f"no commit on {base!r}"]
+    known = W.git_paths(repo, "ls-tree", "-r", "--name-only", base, "--", ".ddflow/events")
+    if known is None:
+        return [unavailable % f"could not list {base!r}"]
+    new = sorted(shards - {k.rsplit("/", 1)[-1] for k in known})
+    if not new:
+        return []
+    names = ", ".join(n.removesuffix(".jsonl") for n in new[:_SHARDS_SHOWN])
+    names += " ..." if len(new) > _SHARDS_SHOWN else ""
+    return [
+        f"{len(new)} event shard(s) written by an agent id with no committed history on "
+        f"{base}: {names} -- a pull request can add one. Check who wrote it "
+        "(`git log -- .ddflow/events/<id>.jsonl`) before trusting its decisions and lessons"
+    ]
+
+
 def _driver_drift_notes(repo: Path) -> list[str]:
     """One note naming driver docs that differ from the templates this ddflow ships."""
     from ..services.adopt import driver_drift
@@ -658,6 +701,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         (problems if severe else notes).append(line)
 
     notes += _driver_drift_notes(repo)
+    notes += _unknown_author_notes(repo, log)
 
     for f in PR.detect(log.read_all(), st, cfg):
         (problems if f.severity == "block" else notes).append(f.render())
