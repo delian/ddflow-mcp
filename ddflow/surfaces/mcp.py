@@ -358,6 +358,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Item id.", True),
             "sha": ("string", "Commit sha this shipped as.", False),
             "model": ("string", "The AUTHOR's model.", False),
+            "changelog": (
+                "string",
+                "Optional 'Added|Changed|Deprecated|Removed|Fixed|Security: text', or skip.",
+                False,
+            ),
             "force": (
                 "boolean",
                 "Complete over unmet conditions. Every one is recorded in the event "
@@ -373,6 +378,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             sha=a.get("sha", "") or "",
             force=bool(a.get("force")),
             model=a.get("model", "") or "",
+            changelog=a.get("changelog", "") or "",
             agent=agent,
         ),
         "payload": ("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke"),
@@ -894,6 +900,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
             "lesson": ("string", "Id of an EXISTING lesson this bug belongs to.", False),
+            "changelog": ("string", "Optional 'Fixed: text' (any category), or skip.", False),
         },
         "api": lambda repo, a, agent: _api().bug_fixed(
             repo,
@@ -902,6 +909,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             lesson=a.get("lesson", "") or "",
             lesson_title=a.get("lesson_title", "") or "",
             lesson_rule=a.get("lesson_rule", "") or "",
+            changelog=a.get("changelog", "") or "",
             agent=agent,
         ),
         "payload": ("id",),
