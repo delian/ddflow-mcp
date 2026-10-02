@@ -23,8 +23,9 @@ def _refused(out) -> int:
 
 
 def _next_without_plan(out, c: Ctx) -> int:
-    """`next`'s answers that render no plan: the JSON body, and a refusal's reason (an
-    unknown `--phase`, Bde0c6e9fad) on stderr in either mode, with its exit code."""
+    """`next`'s (and `brief`'s) answers that render no plan: the JSON body, and a
+    refusal's reason (an unknown `--phase`, Bde0c6e9fad) on stderr in either mode, with
+    its exit code."""
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
     if out.exit == FAIL and out.reason:
@@ -383,6 +384,8 @@ def cmd_brief(a, c: Ctx) -> int:
         check_recovery=a.check_recovery,
         agent=c.requested_agent,
     )
+    if out.exit == FAIL:  # an unknown --phase (Bc2acd426f4)
+        return _next_without_plan(out, c)
     if c.json:
         print(json.dumps(out.body(("brief", "item", "ready", "approx_tokens")), indent=2))
     else:

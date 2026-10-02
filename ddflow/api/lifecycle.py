@@ -120,8 +120,10 @@ def next_(
 _PREFIX_SHOWN = 12
 
 
-def _unknown_phase(st, phase: str) -> str:
-    """Why ``phase`` names nothing ``next`` can slice by; "" when it is an item.
+def _unknown_phase(st, phase: str, *, phases_only: bool = False) -> str:
+    """Why ``phase`` names nothing ``next``, ``brief`` or ``board`` can slice by; "" when
+    a slice is possible: any live item for ``next`` and ``brief``, and with
+    ``phases_only`` (``board``, which slices by phase id) only a phase.
 
     An empty slice of an id that is not an item read as "Nothing actionable", exit 2, and
     a driver took that for "phase done" (Bde0c6e9fad: `--phase 159`, whose work lived
@@ -131,7 +133,12 @@ def _unknown_phase(st, phase: str) -> str:
         return ""
     it = st.items.get(phase)
     if it is not None and not it.removed:
-        return ""
+        if not phases_only or it.kind == "phase":
+            return ""
+        # `board` slices by PHASE id: a task id would answer an empty board at exit 0.
+        owner = next((a.id for a in st.ancestors(it.id) if a.kind == "phase"), "")
+        where = f" -- it is under phase {owner!r}" if owner else ""
+        return f"{phase!r} is a {it.kind}, not a phase{where}."
     under = sorted(
         i.id
         for i in st.items.values()
@@ -1691,6 +1698,9 @@ def brief(
     log, cfg, _ = _load(repo, agent)
     store = Store(repo, cfg)
     st = store.ensure(log)
+    unknown = _unknown_phase(st, phase)
+    if unknown:  # as `next` refuses it (Bc2acd426f4)
+        return O.failed("brief", unknown, phase=phase, text="")
     p = plan(st, cfg, phase=phase, agent=cfg.agent.id or log.agent_id)
     # What THIS agent holds comes before what anyone may take (B226d8db6e8): the top
     # ready item was headed "Current" for an agent that had just claimed another one --
