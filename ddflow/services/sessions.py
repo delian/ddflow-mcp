@@ -122,25 +122,31 @@ def _age_s(ts: str) -> float:
 
 
 def _recorded_recently(
-    log: EventLog, clean: str, *, auto_only: bool, window: float = DEDUPE_WINDOW_S
+    log: EventLog,
+    clean: str,
+    *,
+    window: float = DEDUPE_WINDOW_S,
+    subject: str = "",
+    auto_only: bool = False,
 ) -> bool:
     """True when `clean` was already recorded as a prompt inside the window.
 
-    `auto_only` restricts the match to hook-captured prompts: an agent that repeats the
-    same words on purpose (a subagent brief sent twice) is not deduplicated against
-    ANOTHER agent's record, only against the hook's.
+    `subject` restricts the match to one session (a hook that fired twice for one
+    conversation). `auto_only` restricts it to hook-captured prompts, for an AGENT's own
+    record of words the hook already took. Known limit: an agent in a harness WITHOUT a
+    hook that types words identical to another session's capture within the window is
+    treated as the copy; the capture holds the same words, so no text is lost.
     """
-    for ev in reversed(log.read_all()):
-        if ev.kind != "session.prompt":
+    for ev in log.read_all():
+        if ev.kind != "session.prompt" or ev.data.get("text") != clean:
             continue
         if _age_s(ev.ts) > window:
-            # Shards are appended in time order but merged by lamport; keep scanning a
-            # little rather than trusting the first old one.
+            continue
+        if subject and ev.subject != subject:
             continue
         if auto_only and not ev.data.get("auto"):
             continue
-        if ev.data.get("text") == clean:
-            return True
+        return True
     return False
 
 
@@ -160,8 +166,16 @@ def prompt(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str 
 
 def harness_session_id(raw: str) -> str:
     """The ddflow session id for a harness's own session id (one session per conversation)."""
-    safe = re.sub(r"[^A-Za-z0-9._-]", "", str(raw))[:64]
-    return f"h-{safe}" if safe else ""
+    raw = str(raw)
+    safe = re.sub(r"[^A-Za-z0-9._-]", "", raw)[:48]
+    if not safe:
+        return ""
+    if safe != raw:
+        # Sanitising or truncating made distinct ids collide; a digest keeps them apart.
+        import hashlib
+
+        safe += "-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
+    return f"h-{safe}"
 
 
 def capture_prompt(
@@ -182,7 +196,7 @@ def capture_prompt(
     events = log.read_all()
     if not any(e.kind == "session.started" and e.subject == sid for e in events):
         log.append("session.started", sid, {"model": model, "tool": tool, "cwd": str(Path.cwd())})
-    if _recorded_recently(log, clean, auto_only=True, window=DOUBLE_FIRE_S):
+    if _recorded_recently(log, clean, window=DOUBLE_FIRE_S, subject=sid):
         return "duplicate"
     log.append("session.prompt", sid, {"text": clean, "item": "", "redactions": n, "auto": True})
     return "recorded"
