@@ -164,6 +164,8 @@ def _page(fetch: Fetch, repo: str, page: int, timeout: float) -> tuple[list[dict
         data: Any = json.loads(r.body or "null")
     except ValueError as exc:
         raise UpstreamUnavailable("upstream answer unparseable (not JSON)") from exc
+    if isinstance(data, dict) and isinstance(data.get("items"), list):
+        data = data["items"]  # the shape of a GitHub search/issues response
     if not isinstance(data, list):
         raise UpstreamUnavailable("upstream answer unparseable (not an issue list)")
     if not all(isinstance(d, dict) and isinstance(d.get("number"), int) for d in data):
