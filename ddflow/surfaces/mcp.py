@@ -1587,16 +1587,22 @@ TOOLS: dict[str, dict[str, Any]] = {
             "id": ("string", "Stable id, e.g. 'B1'. You will cite it when closing.", False),
             "summary": ("string", "What is wrong, in one line.", True),
             "item": ("string", "The task it was found in or affects.", False),
+            "title": ("string", "Short headline.", False),
+            "severity": ("string", "low|medium|high|critical.", False),
+            "scope": ("string", "project (default) or ddflow.", False),
         },
         "api": lambda repo, a, agent: _api().bug_found(
             repo,
             summary=a.get("summary", "") or "",
             item=a.get("item", "") or "",
             id=a.get("id", "") or "",
+            title=a.get("title", "") or "",
+            severity=a.get("severity", "") or "",
+            scope=a.get("scope", "") or "",
             answer=_answer(a),
             agent=agent,
         ),
-        "payload": ("id",),
+        "payload": ("id", "offer"),
     },
     "ddflow_session_note": {
         "description": (

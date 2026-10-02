@@ -41,5 +41,6 @@ HISTORY_VERBS: dict[str, str] = {
     "bug.found": "BUG found",
     "bug.fixed": "bug fixed",
     "bug.invalid": "bug closed as invalid",
+    "bug.reported_upstream": "bug reported upstream",
     "cadence.ran": "cadence ran",
 }

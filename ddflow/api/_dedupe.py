@@ -148,7 +148,7 @@ def record_state(state, rid: str, kind: str) -> tuple[str, str]:
         bg = state.bugs.get(rid)
         if bg is None:
             return "", "unknown"
-        return bg.summary, bg.resolution or "open"
+        return bg.title or bg.summary, bg.resolution or "open"
     if kind == "lesson":
         ls = state.lessons.get(rid)
         return (ls.title, "superseded" if ls.superseded_by else "active") if ls else ("", "unknown")
@@ -199,17 +199,21 @@ def rows(st, matcher, cands, text: str) -> list[dict[str, Any]]:
         shared = set(textsim.tokens(r["title"], r["body"])) & mine
         ranked = sorted(shared, key=lambda t: (-textsim.idf(df.get(t, 0), n), t))
         headline, where = record_state(st, c.id, c.kind)
-        out.append(
-            {
-                "id": c.id,
-                "kind": c.kind,
-                "title": " ".join((headline or r["body"]).split())[:200],
-                "state": where,
-                "score": c.score,
-                "shared": ranked[:SHARED_WORDS],
-                "flags": [f for f in c.flags if f != "same_item"],
-            }
-        )
+        row = {
+            "id": c.id,
+            "kind": c.kind,
+            "title": " ".join((headline or r["body"]).split())[:200],
+            "state": where,
+            "score": c.score,
+            "shared": ranked[:SHARED_WORDS],
+            "flags": [f for f in c.flags if f != "same_item"],
+        }
+        bg = st.bugs.get(c.id) if c.kind == "bug" else None
+        if bg is not None:
+            row.update({"severity": bg.severity} if bg.severity else {})
+            if bg.scope != "project":  # shown only when it is the unusual one
+                row["scope"] = bg.scope
+        out.append(row)
     return out
 
 

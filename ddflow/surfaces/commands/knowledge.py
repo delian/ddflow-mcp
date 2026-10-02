@@ -305,6 +305,9 @@ def cmd_bug(a, c: Ctx) -> int:
                 summary=a.summary,
                 item=a.item or "",
                 id=a.id or "",
+                title=a.title,
+                severity=a.severity,
+                scope=a.scope,
                 answer=answer,
                 agent=c.requested_agent,
             ),
@@ -317,7 +320,11 @@ def cmd_bug(a, c: Ctx) -> int:
             return out.exit
         closed = out.data.get("resolution", "")
         note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
-        c.out(f"bug {out.data['id']} recorded{note}", out.body(("id",)))
+        offer = out.data.get("offer", "")
+        c.out(
+            f"bug {out.data['id']} recorded{note}" + (f"\n{offer}" if offer else ""),
+            out.body(("id", "offer")),
+        )
         return OK
     if a.bug_cmd == "invalid":
         out = A.bug_invalid(

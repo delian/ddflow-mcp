@@ -454,18 +454,51 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
     return O.ok("research.recorded", id=rid, verdict=finding.verdict, **chk.data())
 
 
+BUG_SCOPES = ("project", "ddflow")
+BUG_SEVERITIES = ("low", "medium", "high", "critical")
+#: The command line (with `{id}`) that prepares an upstream report, once there is one ("" until).
+#: The offer to prepare a report names it, so it is only made when this is set
+#: (tests/test_bug_scope.py pins it to the parser).
+BUG_REPORT_COMMAND = ""
+
+
+def upstream_offer(scope: str, bid: str) -> str:
+    """One line offering an upstream report for a ddflow-scoped bug; '' when the bug is
+    the project's own or the command that prepares the report is not there yet."""
+    if scope != "ddflow" or not BUG_REPORT_COMMAND:
+        return ""
+    return (
+        f"This bug is in ddflow itself: `{BUG_REPORT_COMMAND.format(id=bid)}` "
+        "prepares an upstream report."
+    )
+
+
 def bug_found(
     repo: Path,
     *,
     summary: str,
     item: str = "",
     id: str = "",
+    title: str = "",
+    severity: str = "",
+    scope: str = "",
     answer: DD.Answer | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """File a bug. One that reads like an existing record is refused until ``answer``
     says what it is; a bug a task will fix is filed against it (``item``), which answers
-    that candidate. ``answer`` extending an OPEN bug appends to it and files nothing."""
+    that candidate. ``answer`` extending an OPEN bug appends to it and files nothing.
+    ``title``, ``severity`` (low|medium|high|critical) and ``scope`` (``project``, or
+    ``ddflow`` for a bug in ddflow itself) are optional event fields."""
+    scope = (scope or "").strip().lower()
+    severity = (severity or "").strip().lower()
+    title = " ".join((title or "").split())
+    if scope and scope not in BUG_SCOPES:
+        return O.failed("bug.found", f"unknown scope {scope!r}: one of {', '.join(BUG_SCOPES)}")
+    if severity and severity not in BUG_SEVERITIES:
+        return O.failed(
+            "bug.found", f"unknown severity {severity!r}: one of {', '.join(BUG_SEVERITIES)}"
+        )
     log, cfg, st = _load(repo, agent)
     bid = id or auto_id("B", summary, item)
     chk = DD.check_add(
@@ -473,23 +506,39 @@ def bug_found(
         log,
         cfg,
         st,
-        DD.Record(kind="bug", event_kind="bug.found", rid=bid, body=summary, item=item),
+        DD.Record(
+            kind="bug", event_kind="bug.found", rid=bid, title=title, body=summary, item=item
+        ),
         answer,
     )
     if chk.refusal is not None:
         return chk.refusal
+    # Only what was said is written, so a plain re-report of a ddflow-scoped bug (same
+    # id) does not turn it back to `project`; `--scope project` says it and does.
+    extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
     if chk.extension:
-        return DD.extend(log, cfg, chk, "bug.found")
+        # The text goes onto the OPEN bug it was answered onto; what was said about its
+        # title, severity or scope goes with it (a merge: an empty field never blanks one).
+        target = chk.extension["target"]
+        held = st.bugs.get(target)  # the target may be another kind of record
+        with log.transaction():
+            if extra and held is not None:
+                log.append("bug.found", target, dict(extra))
+            out = DD.extend(log, cfg, chk, "bug.found")
+        offer = upstream_offer(scope or (held.scope if held else "project"), target)
+        return O.ok("bug.found", **{**out.data, **({"offer": offer} if offer else {})})
     with log.transaction():
-        log.append("bug.found", bid, {"item": item, "summary": summary, **chk.fields})
+        log.append("bug.found", bid, {"item": item, "summary": summary, **extra, **chk.fields})
         DD.after_add(log, cfg, bid, chk)
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
     # out loud, because otherwise a real recurrence filed under an id already closed --
     # the same summary and item give the same auto id -- vanishes without a word.
     prior = st.bugs.get(bid)
+    offer = upstream_offer(scope or (prior.scope if prior else "project"), bid)
+    more = {"offer": offer} if offer else {}
     if prior is not None and prior.resolution:
-        return O.ok("bug.found", id=bid, resolution=prior.resolution, **chk.data())
-    return O.ok("bug.found", id=bid, **chk.data())
+        return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())
+    return O.ok("bug.found", id=bid, **more, **chk.data())
 
 
 def _unknown_bug(kind: str, bid: str, st) -> O.Outcome:
