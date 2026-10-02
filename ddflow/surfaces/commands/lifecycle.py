@@ -235,7 +235,13 @@ def cmd_wait(a, c: Ctx) -> int:
 
 def cmd_complete(a, c: Ctx) -> int:
     out = A.complete(
-        c.repo, a.id, sha=a.sha or "", force=a.force, model=a.model or "", agent=c.requested_agent
+        c.repo,
+        a.id,
+        sha=a.sha or "",
+        force=a.force,
+        model=a.model or "",
+        changelog=getattr(a, "changelog", "") or "",
+        agent=c.requested_agent,
     )
     for warning in out.data.get("warnings", []):
         print(f"NOTE: {warning}", file=sys.stderr)

@@ -29,6 +29,7 @@ from typing import Any
 
 from ..core import globspec as GS
 from ..core import outcome as O
+from ..core.events import parse_changelog
 from ..core.model import ABANDONED, DONE, REVIEW, State
 from ..core.plain import plain
 from ..infra import worktree as W
@@ -1368,6 +1369,7 @@ def complete(
     sha: str = "",
     force: bool = False,
     model: str = "",
+    changelog: str = "",
     agent: str = "",
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
@@ -1378,6 +1380,12 @@ def complete(
     """
     from ..services import completion as CM
 
+    entry: dict[str, Any] = {}
+    if changelog:
+        try:
+            entry = parse_changelog(changelog)
+        except ValueError as e:
+            return O.failed("item.completed", str(e), id=item)
     log, cfg, st = _load(repo, agent)
     it = _require(st, item, "item.completed")
     if isinstance(it, O.Outcome):
@@ -1424,6 +1432,9 @@ def complete(
             "kind": it.kind,
             "forced": forced,
             "overridden": v.blockers if force else [],
+            # Optional (D-export (4)): an absent key is the old shape, so an older ddflow
+            # folds this event exactly as before.
+            **({"changelog": entry} if entry else {}),
         },
     )
     L.release(log, item, note="completed")
