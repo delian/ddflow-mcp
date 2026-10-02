@@ -727,11 +727,6 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
     if c.id in servers and _serves(servers[c.id]):
         if launches_as(c, servers[c.id]):
             return "unchanged", f"{rel} already registers {c.id}"
-        # A launch that is not the registry's is handled by `register`, which refreshes it
-        # (B662a1ace82); reaching here with one means it declined to.
-        return "unchanged", (
-            f"{rel} launches its own `{c.id}`, not the registry's launch; left as it is"
-        )
     if other := _launched_elsewhere((servers, text), c, rel):
         return "unchanged", other
     try:
