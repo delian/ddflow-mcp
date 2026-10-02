@@ -146,3 +146,31 @@ def test_dedupe_off_imports_everything(repo):
     plan = _plan(repo)
     assert not plan.duplicates
     assert sum(1 for i in _lessons(plan) if i.startswith("LS-")) == 2
+
+
+def test_the_outcome_does_not_depend_on_the_order_records_were_read(repo):
+    """A summary bullet repeating a record that is itself left out points at the record
+    actually held, whichever of the two was read first."""
+    run_cli(repo, "init")
+    text = (
+        "Always rebase an agent branch onto the current main before merging it, "
+        "otherwise the merge silently reverts work another agent landed."
+    )
+    EventLog(repo, agent_id="someone").append(
+        "lesson.recorded", "Q", {"title": "Rebase agent branches first", "rule": text}
+    )
+    state = fold(EventLog(repo).read_all())
+
+    def found(order: str) -> IM.ImportPlan:
+        a = IM.Found("lesson", "A", "Rebase agent branches first", "x:1", body=text)
+        s = IM.Found(
+            "lesson", "LS-s", "Rebase first", "x:2", body=text, extra={"tags": ["summary"]}
+        )
+        plan = IM.ImportPlan(found=[s, a] if order == "sa" else [a, s])
+        IM._dedupe_found(repo, state, plan)
+        return plan
+
+    for order in ("sa", "as"):
+        plan = found(order)
+        assert not plan.found, (order, [f.ident for f in plan.found])
+        assert {d.found.ident: d.of for d in plan.duplicates} == {"A": "Q", "LS-s": "Q"}, order
