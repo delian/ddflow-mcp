@@ -228,9 +228,16 @@ MAX_SEQUENCE = 1_000_000  # items/characters from one `*`, `center`, `indent`, w
 MAX_EXPONENT = 10_000  # `a ** b`
 MAX_OUTPUT_BYTES = 16_000_000  # the rendered document itself
 
+# A printf width/precision past MAX_SEQUENCE or `*`; a str.format width/precision past it, or
+# a nested `{:{}}`. Anchored on the `%`/`{...:` so ordinary text and markdown (`**{}**`,
+# "ticket 1234567") never match.
 _WIDTH = re.compile(
-    r"(?<![\w.])\d{7,}|\*|:[^{}]*\{"
-)  # a printf/format width past MAX_SEQUENCE, `*`, or a nested `{:{}}`
+    r"%[-+ #0]*(?:\d{7,}|\*)"
+    r"|%[-+ #0]*\d*\.(?:\d{7,}|\*)"
+    r"|\{[^{}]*:(?:[^{}]?[<>^=])?[-+ ]?#?0?\d{7,}"
+    r"|\{[^{}]*:[^{}]*\.\d{7,}"
+    r"|\{[^{}]*:[^{}]*\{"
+)
 
 
 def _too_big(what: str) -> OverflowError:
