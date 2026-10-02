@@ -48,6 +48,7 @@ def _age_days(found: str, until: str) -> int | None:
 def _row(b: Bug, until: str) -> dict[str, Any]:
     tests = list(b.regression_tests) or ([b.regression_test] if b.regression_test else [])
     title = str(getattr(b, "title", "") or "")
+    scope = str(getattr(b, "scope", "") or "")
     age = _age_days(b.found_at, until) if b.open else None
     return {
         "id": b.id,
@@ -55,7 +56,7 @@ def _row(b: Bug, until: str) -> dict[str, Any]:
         "severity": str(getattr(b, "severity", "") or ""),
         # the default scope (project) is not worth a tag on every line; show and
         # ``similar`` also name only a scope other than project
-        "scope": "" if getattr(b, "scope", "project") in ("", "project") else str(b.scope),
+        "scope": "" if scope == "project" else scope,
         "summary": first_sentence(b.summary),
         "item": b.item,
         "found": _day(b.found_at),
