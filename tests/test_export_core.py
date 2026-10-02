@@ -155,7 +155,7 @@ def test_truncation_footer_is_explicit(tmp_path, toy, builtin):
     assert not cut.splitlines()[-2].strip() == ""  # never ends the shown part on a blank
     assert len(cut.encode()) <= 60
     # A cut document is still self-consistent: the digest matches what is shown.
-    doc = registry.render_document("toyroad", q, builtin=builtin, max_bytes=60)
+    doc = registry.render_document("toyroad", q, builtin=builtin, max_bytes=240)
     assert frame.hand_edited(doc) is False and "[truncated:" in doc
     # No cap, or a cap that fits: untouched.
     assert frame.truncate(full, 0) == full == frame.truncate(full, 10_000)
@@ -271,7 +271,7 @@ def test_truncate_never_exceeds_the_cap(cap):
 
 def test_document_cap_bounds_the_whole_framed_file(tmp_path, toy, builtin):
     q = _log(tmp_path)
-    for cap in (200, 260, 400):
+    for cap in (240, 260, 400):
         doc = registry.render_document("toyroad", q, builtin=builtin, max_bytes=cap)
         assert len(doc.encode()) <= cap, (cap, len(doc.encode()))
         assert frame.hand_edited(doc) is False
@@ -307,3 +307,18 @@ def test_unreadable_template_is_an_export_error(tmp_path, toy, builtin):
     with pytest.raises(ExportError) as e:
         registry.render_body("toyroad", _log(tmp_path), builtin=builtin)
     assert e.value.code == EXIT_UNAVAILABLE
+
+
+@pytest.mark.parametrize("lines", [9, 10, 11, 99, 100, 101])
+def test_truncate_exact_at_digit_boundaries(lines):
+    body = "A" * 300 + "\n" + "b\n" * lines
+    for cap in (100, 120):
+        assert len(frame.truncate(body, cap).encode()) <= cap
+
+
+def test_cap_below_the_frame_overhead_is_refused(tmp_path, toy, builtin):
+    q = _log(tmp_path)
+    for cap in (1, 100, 145):
+        with pytest.raises(ExportError) as e:
+            registry.render_document("toyroad", q, builtin=builtin, max_bytes=cap)
+        assert e.value.code == EXIT_REFUSED
