@@ -132,7 +132,7 @@ def test_unrelated_report_is_not_offered():
         fetch=Fake([corpus()]),
     )
     assert res.offer is None and res.upstream_state == "checked"
-    assert not any(h.band == "ask" for h in res.upstream)
+    assert res.issues_seen == 4 and res.upstream_state == "checked"
 
 
 def test_between_floor_and_threshold_is_listed_not_offered():
@@ -331,3 +331,18 @@ def test_zero_pages_is_refused_not_read_as_no_issues():
     with pytest.raises(ValueError):
         U.check("t", "b", repo=REPO, fetch=f, max_pages=0)
     assert f.calls == []
+
+
+def test_capped_listing_of_only_pull_requests_is_unavailable_not_no_issues():
+    prs = [
+        [issue(p * 100 + n, "t", "b", pull_request={"url": "x"}) for n in range(100)]
+        for p in range(3)
+    ]
+    res = U.check("t", "b", repo=REPO, fetch=Fake(prs), max_pages=2)
+    assert res.status == "unavailable" and res.upstream_state == "unavailable"
+    assert "pull requests" in res.reason
+
+
+def test_list_issues_itself_refuses_zero_pages():
+    with pytest.raises(ValueError):
+        U.list_issues(REPO, Fake([[]]), max_pages=0)

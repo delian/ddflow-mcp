@@ -183,6 +183,8 @@ def list_issues(
 ) -> tuple[list[dict], bool]:
     """Issues (pull requests removed) and whether the listing was capped. Raises
     ``UpstreamUnavailable``; a partial listing is never returned."""
+    if max_pages < 1:
+        raise ValueError("max_pages must be at least 1: an unasked upstream is not 'no issues'")
     out: list[dict] = []
     for page in range(1, max_pages + 1):
         items, spent = _page(fetch, repo, page, timeout)
@@ -210,8 +212,6 @@ def check(
     ``repo``. ``fetch`` defaults to the real unauthenticated GET."""
     if not _REPO.fullmatch(repo or "") or ".." in repo:
         raise ValueError(f"upstream repo {repo!r} must look like owner/name")
-    if max_pages < 1:
-        raise ValueError("max_pages must be at least 1: an unasked upstream is not 'no issues'")
     res = Result(repo=repo)
     record = {"title": title, "body": body}
     if local is not None:
@@ -238,6 +238,13 @@ def check(
         return res
     res.reason = res.local_reason
     res.issues_seen = len(issues)
+    if not issues and res.truncated:
+        # Every listed entry was a pull request and the listing was capped: older
+        # issues were never seen, so this is not "no issues".
+        res.upstream_state, res.status = "unavailable", "unavailable"
+        res.upstream_reason = "the capped listing held only pull requests; no issue was compared"
+        res.reason = "; ".join(r for r in (res.local_reason, res.upstream_reason) if r)
+        return res
     if not issues:
         res.upstream_state = "no_issues"
         return res
