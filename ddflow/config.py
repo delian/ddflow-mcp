@@ -935,6 +935,105 @@ _doc(
 )
 
 
+#: What `[export].refresh` accepts. Only `off` acts today (B-export-refresh implements the
+#: rest); the other values are accepted so a config written for a newer release loads.
+EXPORT_REFRESH_MODES = ("off", "merge", "phase_close", "docs_gate")
+
+#: Where each document kind is written when `[export.<doc>].path` does not say. A copy of
+#: each kind's `DocKind.default_target`, kept here because `core` (the lease scheduler,
+#: which registers every selected target as a shared path) may not import `services`;
+#: tests/test_export_ops.py asserts the two tables agree.
+EXPORT_DEFAULT_TARGETS: dict[str, str] = {
+    "bugs": "BUGS.md",
+    "changelog": "CHANGELOG.md",
+    "decisions": "DECISIONS.md",
+    "roadmap": "ROADMAP.md",
+    "rules": "RULES.md",
+    "sessions": "SESSION.md",
+    "status": "STATUS.md",
+    "worklog": "LOG.md",
+}
+
+
+@dataclass
+class ExportConfig:
+    """`ddflow export`: which documents are kept, where, and how (decisions D-export*)."""
+
+    documents: list[str] = field(default_factory=list)
+    redact: bool = True
+    max_bytes: int = 60_000
+    refresh: str = "off"
+    #: The per-document tables, `[export.<doc>]`: path, mode, template, filters, refresh,
+    #: redact. Filled from those tables by `Config._apply`; this field is only the store.
+    tables: dict[str, dict[str, Any]] = field(default_factory=dict)
+
+    def table(self, doc: str) -> dict[str, Any]:
+        return self.tables.get(doc, {})
+
+    def targets(self) -> list[tuple[str, str, str]]:
+        """`(doc, repo-relative path, mode)` of every selected document, selection order.
+        A document with no table and no default target (an unknown kind) has none."""
+        out = []
+        for doc in self.documents:
+            t = self.table(doc)
+            path = str(t.get("path") or EXPORT_DEFAULT_TARGETS.get(doc, ""))
+            if path:
+                out.append((doc, path, str(t.get("mode") or "whole")))
+        return out
+
+
+_doc(
+    "export",
+    "documents",
+    "The documents `ddflow export --all` writes and keeps (roadmap, bugs, status, worklog, sessions, decisions, rules, changelog). EMPTY by default: nothing is generated unless selected. `ddflow export` lists every kind with its state; any kind can still be printed or written once on demand whether or not it is listed here. Each selected target is a shared path for leases (no claim is needed to regenerate it).",
+)
+_doc(
+    "export",
+    "redact",
+    "Strip private addresses and credentials from exported documents (they are public-repo files at the repo root). ON by default. The redaction pass itself arrives with B-export-redact-fence: until then the knob is accepted and documents are NOT yet redacted, so read them before committing.",
+)
+_doc(
+    "export",
+    "max_bytes",
+    "Size cap for a document printed to stdout or returned over MCP, in bytes; a cut document ends in an explicit [truncated: N more] footer. 0 = no cap. A file written by --update or --out is never capped. `--max-bytes` overrides per call.",
+)
+_doc(
+    "export",
+    "refresh",
+    "When selected documents regenerate by themselves: off | merge | phase_close | docs_gate. Only `off` is implemented (B-export-refresh adds the rest); the other values are accepted and do nothing yet.",
+)
+_doc(
+    "export",
+    "tables",
+    "The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact. Unknown keys in a table are skipped with a warning, so a newer release's keys do not stop an older checkout.",
+)
+
+#: Keys an `[export.<doc>]` table understands.
+EXPORT_TABLE_KEYS = frozenset({"path", "mode", "template", "filters", "refresh", "redact"})
+EXPORT_MODES = ("whole", "region", "append")
+
+
+def _export_table_problem(doc: str, t: Any) -> str:
+    """Why `[export.<doc>]` is wrong, or ""."""
+    if not isinstance(t, dict):
+        return f"[export.{doc}] must be a table"
+    for k in ("path", "mode", "template", "refresh"):
+        if k in t and not isinstance(t[k], str):
+            return f"[export.{doc}].{k} must be a string"
+    if "mode" in t and t["mode"] not in EXPORT_MODES:
+        return f"[export.{doc}].mode must be one of {', '.join(EXPORT_MODES)}"
+    if "refresh" in t and t["refresh"] not in EXPORT_REFRESH_MODES:
+        return f"[export.{doc}].refresh must be one of {', '.join(EXPORT_REFRESH_MODES)}"
+    if "redact" in t and not isinstance(t["redact"], bool):
+        return f"[export.{doc}].redact must be true or false"
+    if "filters" in t and not (
+        isinstance(t["filters"], dict)
+        and all(isinstance(k, str) and isinstance(v, str | int) for k, v in t["filters"].items())
+    ):
+        return f"[export.{doc}].filters must be a table of strings and integers"
+    return ""
+
+
 @dataclass
 class LoopsConfig:
     """Runtime loop detection — work that repeats instead of finishing."""
@@ -1231,6 +1330,7 @@ class Config:
     log: LogConfig = field(default_factory=LogConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
+    export: ExportConfig = field(default_factory=ExportConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
     #: where each knob's final value came from -- "default" | "file" | "local" | "env"
@@ -1346,7 +1446,10 @@ class Config:
                 )
             target = getattr(self, sec)
             known = {f.name: f for f in fields(target)}
-            for knob, raw in values.items():
+            knobs_only = (
+                self._apply_export_tables(values, lenient, source) if sec == "export" else values
+            )
+            for knob, raw in knobs_only.items():
                 if knob not in known and lenient:
                     self.unknown_knobs.append(f"{sec}.{knob}")
                     continue
@@ -1364,6 +1467,40 @@ class Config:
                     raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
+
+    def _apply_export_tables(
+        self, values: dict[str, Any], lenient: bool, source: str
+    ) -> dict[str, Any]:
+        """Move the `[export.<doc>]` sub-tables into `export.tables`; return the plain knobs.
+
+        A dict value under a name that is not an `[export]` knob is a document's table.
+        Unknown keys inside one are skipped with a warning in a file (a newer release's
+        key) and refused when written (`config --set`), like unknown knobs elsewhere.
+        """
+        knobs = {f.name for f in fields(self.export)}
+        plain: dict[str, Any] = {}
+        for k, v in values.items():
+            if k in knobs or not isinstance(v, dict):
+                plain[k] = v
+                continue
+            clean = {}
+            for key, val in v.items():
+                if key not in EXPORT_TABLE_KEYS:
+                    if lenient:
+                        self.unknown_knobs.append(f"export.{k}.{key}")
+                        continue
+                    raise ValueError(
+                        f"unknown key '{key}' in [export.{k}]. Known: {sorted(EXPORT_TABLE_KEYS)}"
+                    )
+                clean[key] = val
+            if why := _export_table_problem(k, clean):
+                if lenient:  # a value a newer release defines: skipped, never fatal
+                    self.unknown_knobs.append(f"export.{k} ({why})")
+                    continue
+                raise ValueError(f"invalid [export.{k}]: {why}")
+            self.export.tables[k] = {**self.export.tables.get(k, {}), **clean}
+            self.sources["export.tables"] = source
+        return plain
 
     def as_dict(self) -> dict[str, Any]:
         out = dataclasses.asdict(self)
@@ -1468,9 +1605,18 @@ def _unit_interval(v: Any) -> str:
 #: Knobs whose VALUE set can grow in a later release (an enum), so a config FILE carrying a
 #: value this version does not know is skipped with a warning rather than refused; the
 #: write paths (`config --set`, `ddflow_configure`) still refuse it.
-_TOLERANT_VALUES = frozenset({"mcp.tools"})
+_TOLERANT_VALUES = frozenset({"mcp.tools", "export.refresh"})
 
 _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+    "export.refresh": lambda v: (
+        "" if v in EXPORT_REFRESH_MODES else f"must be one of {', '.join(EXPORT_REFRESH_MODES)}"
+    ),
+    "export.max_bytes": lambda v: (
+        "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else "must be an integer >= 0"
+    ),
+    "export.documents": lambda v: (
+        "" if isinstance(v, list) and all(isinstance(x, str) for x in v) else "must be a list of document names"
+    ),
     "mcp.tools": lambda v: (
         "" if v in MCP_TOOL_TIERS else f"must be one of {', '.join(MCP_TOOL_TIERS)}"
     ),

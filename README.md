@@ -244,6 +244,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [Reading the log, and why it is never compacted](#reading-the-log-and-why-it-is-never-compacted)
 - [Lessons, research and bugs](#lessons-research-and-bugs)
 - [Cadences](#cadences)
+- [Exporting documents](#exporting-documents)
 - [Keeping session-start cost flat](#keeping-session-start-cost-flat)
 - [Agent portability](#agent-portability)
 - [Keeping the two surfaces honest](#keeping-the-two-surfaces-honest)
@@ -748,7 +749,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 142 knobs.
+cadences, and the rest of the 147 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3021,6 +3022,94 @@ sweep, lessons compression.
 
 ---
 
+## Exporting documents
+
+The log already knows the roadmap, the open bugs, the decisions in force and what was done
+this week. `ddflow export` renders that as ordinary markdown, so someone who never runs
+ddflow can read it in a pull request. ddflow owns the format (a Jinja2 template per kind,
+rendered in a sandbox); you ask for a document, you do not write it.
+
+**What can be exported:** `roadmap` (Now / Next / Later with progress), `bugs` (open, fixed,
+invalid), `status`, `worklog` (coalesced per item, grouped by day), `sessions`, `decisions`
+(an index) and `rules` (decisions in force by governing path, lessons, the enforced workflow).
+Replay is not a kind: it carries paths and addresses. Output is deterministic: the same log
+gives the same bytes, with no clock in the body.
+
+**Review on demand.** Printing writes nothing and works for any kind, selected or not:
+
+```console
+$ ddflow export                       # every kind: target, mode, state
+$ ddflow export roadmap               # the document on stdout, capped at [export].max_bytes
+$ ddflow export bugs --status open --limit 20
+$ ddflow export worklog --since 2026-09-01
+$ ddflow export status --max-bytes 4000   # a cut document ends in "[truncated: N more ...]"
+$ ddflow export roadmap --diff        # what writing it would change
+$ ddflow export bugs --item B-export-core # --item filters the bugs kind as a phase
+```
+
+The filters are `--since --version --phase --item --status --limit --tag --session`; a
+filter the kind does not take is refused (exit 3), never ignored. `ddflow export <kind>
+--help` lists the flags.
+
+**Selection.** Nothing is generated or kept up to date unless selected: `[export].documents`
+is empty by default. `ddflow export --all` acts on the SELECTED documents (and, with none
+selected, does nothing and says so, exit 2); `ddflow export <kind>` always works on demand.
+Every selected target is registered automatically as a shared path for leases (a generated
+file) so regenerating it needs no claim. The list shows each kind as `not selected`,
+`fresh`, `stale`, `hand-edited` or `missing`.
+
+**The three update modes**, per `[export.<doc>].mode`: `whole` (the file is generated; its
+header carries the kind, the ddflow version and a digest of the BODY, so hand edits are
+detected and `--check` regenerates and compares exactly), `region` (only the text between
+`<!-- ddflow:begin doc=<kind> ... -->` and `<!-- ddflow:end doc=<kind> -->` in a hand-written
+file; the rest is kept byte for byte) and `append` (kinds that grow a log; entries are added
+after the last exported event). Writes are atomic under a lock. A hand-edited generated file,
+an unmarked file or an edited region is never overwritten without `--force` (exit 3, with the
+diff); paths outside the repo, symlinks and `.git` / `.ddflow` are refused.
+
+```console
+$ ddflow export roadmap --update          # write the target; asks to confirm on a terminal
+$ ddflow export roadmap --out docs/ROADMAP.md
+$ ddflow export --all --check             # exit 1 if any selected document is stale
+$ ddflow export --all --update --yes
+$ ddflow export roadmap --template my.md.j2   # render once with another template; writes nothing
+```
+
+Exit codes: 0 done or fresh, 1 stale (`--check`), 2 could not run (unreadable log, template
+error, nothing selected) or declined at the prompt, 3 refused. A failure is never an empty
+clean document.
+
+**MCP.** `ddflow_export` with no `doc` lists the kinds; with a `doc` it returns the
+markdown and says `truncated: true` (with `truncated_more`) when it was cut, bounded at 60,000
+bytes whatever `max_bytes` asks. It writes only with `write=true` AND a repo-relative `path`
+(`path` alone is refused); `diff` and `check` compare against a path. It has no `force`, no
+`update` and no ad hoc template: an agent never overrides hand-edit protection or points the
+renderer at an arbitrary file. It is in the `all` tool tier only.
+
+**The `[export]` knobs** (5 of the 147): `documents` (the selection, default `[]`), `redact`
+(default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
+capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
+(the per-document tables below). Each document may have a table:
+
+```toml
+[export]
+documents = ["roadmap", "status"]
+
+[export.roadmap]
+path = "docs/ROADMAP.md"      # default: ROADMAP.md at the repo root
+mode = "whole"                # whole | region | append
+template = "tools/roadmap.md.j2"
+filters = { limit = 50 }
+```
+
+Unknown keys are skipped with a warning (a newer release's config does not stop an older
+checkout); `ddflow config --set` refuses them. **Not yet implemented:** `redact` is accepted
+but documents are NOT yet redacted (a later task, B-export-redact-fence: the print and
+`--update` paths note this on stderr), and only `refresh = "off"` acts (merge, phase close
+and the docs gate are B-export-refresh). `ddflow help export` has the same material.
+
+---
+
 ## Keeping AGENTS.md true
 
 `ddflow adopt` writes a managed block into **AGENTS.md** (and **CLAUDE.md**, and each
@@ -3178,11 +3267,11 @@ previous one turned out to be too shallow:
 
 A fourth ratchet bounds the cost of that surface: the whole tool list is sent to the model
 on every session, so `tests/test_mcp_tool_budget.py` fails if the compact `tools/list`
-exceeds its byte budget (about 91 KB for 90 tools, down from 119 KB) or if the shared
+exceeds its byte budget (about 93 KB for 91 tools, down from 119 KB) or if the shared
 `as_agent` / `relation` / `check_only` descriptions are repeated at length on any tool.
 Their full text lives once, in `ddflow_identify` and the handshake instructions.
 
-**Tool tiers.** A client that loads every tool schema up front still pays that ~91 KB, so
+**Tool tiers.** A client that loads every tool schema up front still pays that ~93 KB, so
 `[mcp].tools = "core" | "standard" | "all"` (env `DDFLOW_MCP_TOOLS`; default `all`) chooses
 which tools `tools/list` advertises: `core` is 32 tools, 39 KB (the daily loop: brief, next,
 claim, heartbeat, gates, complete, merge, status, show, recall, bugs, lessons, decisions,
@@ -3283,6 +3372,10 @@ ddflow pins <file>              which text of an instruction file a test pins, b
 ddflow precommit [--write]      propose a .pre-commit-config.yaml for this repo's stacks (writes only with --write)
 ddflow doctor                   integrity + health
 ddflow rebuild                  re-derive the index
+ddflow export                   list the document kinds with target and state
+ddflow export <doc> [filters]   print one (--since --phase --status --limit --max-bytes ...)
+ddflow export <doc> --diff|--check|--update|--out P   compare or write (--force, --yes)
+ddflow export --all --check     act on the selected documents ([export].documents)
 ddflow cadence [--ran NAME]     which periodic passes are due  (2 = none)
 ddflow config --explain         every knob, its value, its source and its docs
 ddflow config --append-toml ..  add config without a shell editor (validated first; --local: not committed)
@@ -3311,7 +3404,7 @@ declared once and persists — see
 
 ## Configuration
 
-142 knobs across 19 sections, every one documented in place:
+147 knobs across 20 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

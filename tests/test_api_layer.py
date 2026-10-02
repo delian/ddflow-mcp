@@ -263,6 +263,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_decision_applicable": (["decision", "applicable", "T1"], {"id": "T1"}),
     "ddflow_workflow": (["workflow"], {}),
     "ddflow_status": (["status"], {}),
+    "ddflow_export": (["export"], {}),
     "ddflow_rebuild": (["rebuild"], {}),
     "ddflow_show": (["show", "T1"], {"id": "T1"}),
     "ddflow_recover": (["recover"], {}),
