@@ -1,0 +1,14 @@
+# Work log
+
+{{ entries }} entries{% if has_since %} since {{ since }}{% endif %}.
+{% if windowed %}
+Showing the last {{ window_days }} days of the log; use --since for more.
+{% endif %}
+{% for d in days %}
+
+## {{ d.date }}
+
+{% for l in d.lines %}
+- {{ l.text }}
+{% endfor %}
+{% endfor %}
