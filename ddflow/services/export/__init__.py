@@ -39,17 +39,29 @@ Rules a kind follows:
 * Determinism: every sequence has an explicit sort key with an id tie-break (use the
   Query accessors, which already do, or ``query.sorted_by``). Dates come from record or
   event data, never from "now". Same log, same bytes.
-* Templates are Jinja2 with ``StrictUndefined`` (an undefined name raises, it never
-  renders empty), resolved ``[export.<name>].template`` -> ``.ddflow/templates/export/``
-  -> shipped, exactly as ``services/prompts.py`` does. Stay in the subset both renderers
-  agree on: ``{{ var }}``, ``{% if %}``, ``{% for %}``.
+* FORMAT IS DDFLOW'S, NOT THE AGENT'S (D-export-templates). The template receives ONLY
+  the plain data ``data()`` returns (dict/list/str/int/float/bool/None; tuples become
+  lists; anything else is refused naming the path), plus ``schema_version`` (the kind's
+  ``DocKind.schema_version``: ddflow only ADDS fields within a version) and the filters
+  ``md_escape``, ``wrap(width)``, ``date``, ``truncate(limit)``, ``bar(done, total,
+  width)`` beside Jinja's built-ins. It runs in ``jinja2.sandbox.SandboxedEnvironment``
+  (StrictUndefined, trim_blocks, lstrip_blocks, no autoescape) with a time limit, because a
+  template may come from a cloned repository: no ``__class__``/``__globals__`` walk, no
+  ``open``, no imports. Any template failure is ``ExportError`` exit 2 naming file and line.
+* Templates resolve ``[export.<name>].template`` -> ``.ddflow/templates/export/<name>.md.j2``
+  -> shipped ``ddflow/templates/export/<name>.md.j2`` (same order as ``services/prompts.py``;
+  ``registry.resolve_template``). ``registry.shipped_digest(kind)`` is the digest an eject
+  records and a validate compares, to say the shipped default moved. The
+  ``<!-- ddflow:generated ... -->`` header and body digest are added by ddflow AROUND the
+  template output, so a template cannot remove hand-edit protection.
 * Filters: ``Filters`` is the single vocabulary (since, limit, status, phase, session).
   Declare the ones you honour; any other given filter is refused with exit 3.
 * A failure (unreadable log, template error) raises ``ExportError`` with ``code``: 2 =
   could not run, 3 = refused. Never return an empty document to mean "I failed".
 
 Entry points: ``query.load(root)`` -> ``Query``; ``registry.render_body`` /
-``render_document(kind, query, filters, repo=..., max_bytes=...)``; ``frame.split`` /
+``render_document(kind, query, filters, repo=..., max_bytes=..., template=...)``;
+``registry.resolve_template`` / ``render`` / ``shipped_digest`` / ``shipped_template``; ``frame.split`` /
 ``frame.hand_edited`` / ``frame.body_digest`` for the writer. The header is
 ``<!-- ddflow:generated doc=<kind> v=<version> body-sha256=<12 hex> -->`` over the body only.
 """
@@ -66,8 +78,11 @@ from .registry import (
     get,
     names,
     register,
+    render,
     render_body,
     render_document,
+    resolve_template,
+    shipped_digest,
 )
 
 __all__ = [
@@ -91,7 +106,10 @@ __all__ = [
     "query",
     "register",
     "registry",
+    "render",
     "render_body",
     "render_document",
+    "resolve_template",
+    "shipped_digest",
     "split",
 ]
