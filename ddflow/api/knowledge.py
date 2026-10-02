@@ -532,8 +532,10 @@ def bug_found(
         log.append("bug.found", bid, {"item": item, "summary": summary, **extra, **chk.fields})
         DD.after_add(log, cfg, bid, chk)
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
-    # out loud, because otherwise a real recurrence filed under an id already closed --
-    # the same summary and item give the same auto id -- vanishes without a word.
+    # out loud, because otherwise a real recurrence filed under an id already closed
+    # vanishes without a word. Only an EXPLICIT `--id` can land on a closed record: an
+    # auto id is time-salted (core/ids.py), so the same text without an id is a new id,
+    # and the duplicate check above is what catches it.
     prior = st.bugs.get(bid)
     offer = upstream_offer(scope or (prior.scope if prior else "project"), bid)
     more = {"offer": offer} if offer else {}
