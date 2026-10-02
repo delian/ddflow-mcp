@@ -211,3 +211,13 @@ def test_the_reason_stays_the_second_block_and_the_cut_note_follows_it(repo):
     blocks = [c["text"] for c in _call(repo, "ddflow_next")["content"]]
     assert json.loads(blocks[0])["truncated"]["blocked"] == 40
     assert blocks[1].startswith("Nothing actionable"), blocks[1][:80]
+
+
+def test_a_gate_timestamp_loses_only_a_utc_fraction():
+    def at(stamp):
+        body = {"state": "open", "gates": {"g": {"outcome": "passed", "at": stamp}}}
+        return B.bound_show(body, {})[0]["gates"]["g"]["at"]
+
+    assert at("2026-10-01T21:29:42.425803Z") == "2026-10-01T21:29:42Z"
+    assert at("2026-10-01T21:29:42Z") == "2026-10-01T21:29:42Z"
+    assert at("2026-10-01T21:29:42.5+05:00") == "2026-10-01T21:29:42.5+05:00"
