@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import ddflow.api._dedupe as DD
+
 from ..config import Config, csv_list
 from ..core import outcome as O
 from ..core.ids import auto_id
@@ -59,6 +61,8 @@ class Draft:
     by: str = ""
     item: str = ""
     supersedes: str = ""
+    #: What the adder says about a possible duplicate (``_dedupe.Answer``).
+    answer: DD.Answer | None = None
 
 
 def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
@@ -73,8 +77,27 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
             "--decision is required: the record must say what was DECIDED, not only "
             "what was discussed.",
         )
-    log, _cfg, _st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     did = draft.id or auto_id("D", draft.title, draft.decision)
+    chk = DD.check_add(
+        repo,
+        log,
+        cfg,
+        st,
+        DD.Record(
+            kind="decision",
+            event_kind="decision.recorded",
+            rid=did,
+            title=draft.title,
+            body="\n".join(x for x in (draft.context, draft.decision) if x),
+            item=draft.item,
+        ),
+        draft.answer,
+    )
+    if chk.refusal is not None:
+        return chk.refusal
+    if chk.extension:
+        return DD.extend(log, cfg, chk, "decision.recorded")
     fields: dict[str, Any] = {
         "title": draft.title,
         "context": draft.context,
@@ -89,7 +112,8 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
         "item": draft.item,
         "supersedes": csv_list(draft.supersedes),
     }
-    log.append("decision.recorded", did, fields)
+    log.append("decision.recorded", did, fields | chk.fields)
+    DD.after_add(log, cfg, did, chk)
     return O.ok(
         "decision.recorded",
         id=did,
@@ -100,6 +124,7 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
         # only ever be found by someone who already went looking. That warning used to
         # print in human mode only.
         ungoverned=not fields["globs"],
+        **chk.data(),
     )
 
 

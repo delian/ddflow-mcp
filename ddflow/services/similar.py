@@ -244,7 +244,8 @@ def open_store(store: Store) -> StoreIndex:
 class Candidate:
     """One existing record shown to whoever is adding. ``flags``: ``identical`` (the
     same text up to case and whitespace), ``named`` (the new text names its id),
-    ``same_item`` (filed against the same item, or the item itself)."""
+    ``same_item`` (filed against the same item, or the item itself), ``filed_against``
+    (the new record's item IS this one: it asks nothing)."""
 
     id: str
     kind: str
@@ -306,13 +307,19 @@ def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessme
             flags.append("named")
         if item and item in (d.item, d.id):
             flags.append("same_item")
+        if item and item == d.id and "identical" not in flags:
+            flags.append("filed_against")
         out.append(Candidate(i, d.kind, scores.get(i, 0.0), tuple(flags)))
     if not out:
         return Assessment("none", [], words)
+    # A record filed AGAINST the candidate (a bug with --item T, T being the task that
+    # fixes it) is already answered: it is shown, and it asks nothing.
     asked = any(
         "identical" in c.flags
-        or "named" in c.flags
-        or (c.score >= dd.ask_threshold and words >= dd.min_words)
+        or (
+            "filed_against" not in c.flags
+            and ("named" in c.flags or (c.score >= dd.ask_threshold and words >= dd.min_words))
+        )
         for c in out
     )
     if not asked:

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import ddflow.api._dedupe as DD
+
 from ..config import csv_list
 from ..core import globspec as GS
 from ..core import outcome as O
@@ -365,20 +367,36 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     priority: int = DEFAULT_PRIORITY,
     line: str = "",
     readd: bool = False,
+    answer: DD.Answer | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """Add a phase — an umbrella that completes when its tasks do.
 
     ``line`` puts the whole phase on a release line; its tasks inherit it. An id already
-    in the queue is REFUSED; ``readd`` lets a removed one come back.
+    in the queue is REFUSED; ``readd`` lets a removed one come back. A phase that reads
+    like an existing record is refused until ``answer`` says what it is (``_dedupe``).
     """
     bad = _bad_id(item) or GS.problem(GS.parse(globs))
     if bad:
         return O.failed("phase.added", bad, id=item)
-    log, cfg, _st = _load(repo, agent)
+    log, cfg, st = _load(repo, agent)
     bad = _bad_line(cfg, line) if line else ""
     if bad:
         return O.failed("phase.added", bad, id=item)
+    chk = DD.Checked()
+    if not _taken(st, item, readd=readd):
+        chk = DD.check_add(
+            repo,
+            log,
+            cfg,
+            st,
+            DD.Record(kind="phase", event_kind="phase.added", rid=item, title=title, body=body),
+            answer,
+        )
+        if chk.refusal is not None:
+            return chk.refusal
+        if chk.extension:
+            return DD.extend(log, cfg, chk, "phase.added")
     with log.transaction():
         taken = _taken(_fresh(log), item, readd=readd)
         if taken:
@@ -394,9 +412,11 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
                 "tags": csv_list(tags),
                 "priority": priority,
                 "line": line,
+                **chk.fields,
             },
         )
-    return O.ok("phase.added", id=item)
+        DD.after_add(log, cfg, item, chk)
+    return O.ok("phase.added", id=item, **chk.data())
 
 
 def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions have
@@ -413,6 +433,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     line: str = "",
     lines: str = "",
     readd: bool = False,
+    answer: DD.Answer | None = None,
     agent: str = "",
 ) -> O.Outcome:
     """Add a task. Its parent may be a phase OR another task (making it a sub-task).
@@ -428,6 +449,10 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
 
     An id already in the queue is REFUSED: adding never changes an item, `update` does.
     ``readd`` lets a REMOVED id come back with the new definition.
+
+    A task that reads like an existing record is REFUSED until ``answer`` says what it is
+    (``api._dedupe``): ``new``, or ``extends`` / ``duplicate_of`` / ``related`` a record.
+    ``answer`` is one bundled parameter, not three (BACKLOG B179).
     """
     from ..core import flow as F
     from ..services import choices as CH
@@ -446,6 +471,22 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         bad = _bad_line(cfg, ln)
         if bad:
             return O.failed("task.added", bad, id=item)
+    chk = DD.Checked()
+    if not _taken(st, item, readd=readd):
+        chk = DD.check_add(
+            repo,
+            log,
+            cfg,
+            st,
+            DD.Record(
+                kind="task", event_kind="task.added", rid=item, title=title, body=body, item=parent
+            ),
+            answer,
+        )
+        if chk.refusal is not None:
+            return chk.refusal
+        if chk.extension:
+            return DD.extend(log, cfg, chk, "task.added")
     with log.transaction():
         st = _fresh(log)
         taken = _taken(st, item, readd=readd)
@@ -476,8 +517,10 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
                 "title": title,
                 "needs": csv_list(needs),
                 "line": plan.author if plan else (wanted[0] if wanted else ""),
+                **chk.fields,
             },
         )
+        DD.after_add(log, cfg, item, chk)
         ports: list[str] = []
         for ln, frm in plan.ports if plan else []:
             source = item if frm < 0 else ports[frm]
@@ -517,6 +560,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         port_strategy=plan.strategy if plan else "",
         port_note=plan.note if plan else "",
         defaulted=adopted,
+        **chk.data(),
     )
 
 
