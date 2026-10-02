@@ -191,8 +191,19 @@ def test_installed_mcp_server_completes_a_handshake(wheel, tmp_path):
     assert reply["result"]["serverInfo"]["name"] == "ddflow"
 
 
+def _declared() -> str:
+    """The ONE hand-edited version literal: `ddflow/__init__.py`. Read as text, so a stale
+    `__pycache__` or an installed copy can never answer for the tree."""
+    m = re.search(r'^__version__ = "([^"]+)"$', (ROOT / "ddflow" / "__init__.py").read_text(), re.M)
+    assert m, "no __version__ literal in ddflow/__init__.py"
+    return m.group(1)
+
+
 def test_the_declared_versions_agree():
-    """pyproject, server.json and the server's own banner must not drift apart.
+    """`ddflow/__init__.py` is the only declaration; everything else follows it.
+
+    pyproject.toml has NO version (hatch reads `__init__.py`), the server banner is built
+    from it, and server.json is rendered from its template. They must not drift apart.
 
     A tag that disagrees with any of them publishes a version nobody can reproduce
     from the tree; the release workflow checks the same invariant.
@@ -201,13 +212,14 @@ def test_the_declared_versions_agree():
     import ddflow
     from ddflow.surfaces.mcp import SERVER_INFO
 
-    proj = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text())
+    assert "version" not in pyproject["project"], "pyproject.toml must not declare a version"
+    assert "version" in pyproject["project"]["dynamic"]
+    assert pyproject["tool"]["hatch"]["version"]["path"] == "ddflow/__init__.py"
+    proj = _declared()
     srv = json.loads((ROOT / "server.json").read_text())
-    # `ddflow.__version__` too: it is what `ddflow --version` prints, and it sat at 0.1.0
-    # through the 0.1.1 release because neither this test nor `scripts/bump.sh` knew it
-    # existed -- the sixth place, found when CI's `ddflow --version` step was fixed.
     assert proj == srv["version"] == SERVER_INFO["version"] == ddflow.__version__, (
-        f"version drift: pyproject={proj} server.json={srv['version']} "
+        f"version drift: __init__.py={proj} server.json={srv['version']} "
         f"SERVER_INFO={SERVER_INFO['version']} ddflow.__version__={ddflow.__version__}"
     )
     pypi = [k for k in srv["packages"] if k["registryType"] == "pypi"]
@@ -365,7 +377,7 @@ def test_ddflow_version_runs_and_prints_the_declared_version():
     that command here, so the first place it fails is not a CI job."""
     import subprocess
 
-    proj = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+    proj = _declared()
     r = subprocess.run(
         [sys.executable, "-m", "ddflow", "--version"],
         cwd=ROOT,
@@ -396,3 +408,135 @@ def test_server_json_fits_the_registry_schema_limits():
     assert 1 <= len(srv["title"]) <= 100, f"title is {len(srv['title'])} chars; max 100"
     assert 3 <= len(srv["name"]) <= 200
     assert re.fullmatch(r"[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+", srv["name"]), srv["name"]
+
+
+# ---- one place declares the version (B-single-version-source) -------------------------
+
+_COPIED = (
+    "ddflow",
+    "scripts",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "uv.lock",
+    "server.json",
+    "server.template.json",
+)
+
+
+def _copy_tree(dst: Path) -> Path:
+    dst.mkdir()
+    for name in _COPIED:
+        src = ROOT / name
+        if src.is_dir():
+            shutil.copytree(src, dst / name, ignore=shutil.ignore_patterns("__pycache__"))
+        else:
+            shutil.copy(src, dst / name)
+    return dst
+
+
+def test_editing_only_init_py_moves_the_version_everywhere(tmp_path):
+    """The acceptance for the single source: change `ddflow/__init__.py`, render
+    server.json, and the wheel, `ddflow --version`, the MCP banner, server.json (version,
+    pypi package, both OCI tags) and `uv lock --check` all follow -- nothing else edited."""
+    if not shutil.which("uv"):
+        pytest.skip("uv is not installed")
+    tree = _copy_tree(tmp_path / "tree")
+    init = tree / "ddflow" / "__init__.py"
+    init.write_text(
+        re.sub(r'^__version__ = ".*"$', '__version__ = "9.8.7"', init.read_text(), flags=re.M)
+    )
+    r = subprocess.run(
+        [sys.executable, "scripts/render_server_json.py"], cwd=tree, capture_output=True, text=True
+    )
+    assert r.returncode == 0, r.stderr
+
+    srv = json.loads((tree / "server.json").read_text())
+    assert srv["version"] == "9.8.7"
+    for pkg in srv["packages"]:
+        if pkg["registryType"] == "oci":
+            assert pkg["identifier"].endswith(":9.8.7") and "version" not in pkg, pkg
+        else:
+            assert pkg["version"] == "9.8.7", pkg
+
+    out = tmp_path / "dist"
+    b = subprocess.run(
+        ["uv", "build", "--out-dir", str(out)],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        timeout=600,
+    )
+    assert b.returncode == 0, b.stderr
+    assert [w.name for w in out.glob("*.whl")] == ["ddflow_mcp-9.8.7-py3-none-any.whl"]
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    v = subprocess.run(
+        [sys.executable, "-m", "ddflow", "--version"],
+        cwd=tree,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert v.stdout.strip() == "ddflow 9.8.7", v.stdout + v.stderr
+    banner = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from ddflow.surfaces.mcp import SERVER_INFO; print(SERVER_INFO['version'])",
+        ],
+        cwd=tree,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert banner.stdout.strip() == "9.8.7", banner.stdout + banner.stderr
+
+    lock = subprocess.run(
+        ["uv", "lock", "--check"], cwd=tree, capture_output=True, text=True, timeout=300
+    )
+    assert lock.returncode == 0, (
+        "uv.lock still records the project's version:\n" + lock.stdout + lock.stderr
+    )
+
+
+def test_server_json_is_the_render_of_its_template():
+    """server.json is generated; a hand edit (or a bump that forgot to render) fails here
+    before it can publish a manifest the template does not describe."""
+    r = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "render_server_json.py"), "--check"],
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 0, r.stderr
+
+
+def test_the_render_check_fails_when_server_json_is_edited_or_stale(tmp_path):
+    tree = _copy_tree(tmp_path / "tree")
+    check = [sys.executable, "scripts/render_server_json.py", "--check"]
+    assert subprocess.run(check, cwd=tree).returncode == 0
+    srv = tree / "server.json"
+    srv.write_text(srv.read_text().replace(_declared(), "0.0.1", 1))
+    assert subprocess.run(check, cwd=tree, capture_output=True).returncode == 1
+    subprocess.run(
+        [sys.executable, "scripts/render_server_json.py"], cwd=tree, check=True, capture_output=True
+    )
+    assert subprocess.run(check, cwd=tree).returncode == 0
+    init = tree / "ddflow" / "__init__.py"
+    init.write_text(init.read_text().replace(_declared(), "0.0.2"))
+    assert subprocess.run(check, cwd=tree, capture_output=True).returncode == 1
+
+
+def test_the_template_carries_the_version_only_as_a_placeholder():
+    tpl = (ROOT / "server.template.json").read_text()
+    assert _declared() not in tpl
+    assert tpl.count("@VERSION@") == 4  # version, the pypi package, two OCI tags
+
+
+def test_the_release_machinery_reads_init_py_not_pyproject():
+    """The version lives in no pyproject line any more: a grep for one finds nothing and
+    the workflow would publish an empty version."""
+    for rel in (".github/workflows/publish.yml", "scripts/release.sh", "scripts/bump.sh"):
+        text = (ROOT / rel).read_text()
+        assert "'^version = '" not in text, f"{rel} still greps pyproject.toml for a version"
+        assert "__init__.py" in text, rel

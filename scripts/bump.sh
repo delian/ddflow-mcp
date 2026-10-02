@@ -6,16 +6,15 @@
 #   scripts/bump.sh major     # 0.1.0 -> 1.0.0
 #   scripts/bump.sh 0.4.2     # ...or say it exactly
 #
-# WHY A SCRIPT. The version lives in SIX places that must agree: `pyproject.toml`,
-# `server.json`'s `version`, the `pypi` package's `version` (an `oci` package must NOT
-# have one -- the registry rejects it, publish #40), the TAG inside every `oci`
-# identifier, `SERVER_INFO` in `surfaces/mcp.py` — which is what the server tells every
-# client it is, and what `ddflow --version` prints — and `__version__` in
-# `ddflow/__init__.py`, the package attribute, kept equal to the rest. Most are easy to
-# forget, and the one that hurts is the OCI tag: a `:0.1.0` left behind while everything
-# else moved publishes a registry manifest pointing at the PREVIOUS image — discoverable
-# in an IDE marketplace, installable, and the wrong build. `tests/test_packaging.py`
-# catches the drift, but only after you have made it.
+# WHY A SCRIPT. The version is DECLARED in one place, `__version__` in `ddflow/__init__.py`;
+# everything else follows it: `pyproject.toml` reads it (hatch dynamic version, so uv.lock
+# records no version and never goes stale on a bump), `SERVER_INFO` in `surfaces/mcp.py` is
+# built from it, and `server.json` -- the `version`, the `pypi` package's `version` and the
+# TAG inside every `oci` identifier (an `oci` package has NO `version` field; the registry
+# rejects one, publish #40) -- is a GENERATED file, rendered from `server.template.json` by
+# `scripts/render_server_json.py`. This script edits that one literal, renders server.json
+# and re-reads the result. The OCI tag was the one that used to get left behind: a `:0.1.0`
+# while everything else moved publishes a manifest pointing at the PREVIOUS image.
 #
 # CI RUNS `patch` FOR YOU. `.github/workflows/publish.yml` bumps the patch version on every
 # push to main that changes shipped code, commits 'release X.Y.Z' to main, and publishes.
@@ -23,13 +22,12 @@
 # push. publish.yml releases a declared version PyPI does not have yet AS IS, instead of
 # bumping it again, and the automatic patches continue from there.
 #
-# uv.lock records the project's own version too, so it is re-locked here; left stale, the
-# next `uv run` rewrites it and the release commit is not what CI actually built.
+# No re-lock: uv.lock records no version for this project.
 set -eu
 
 cd "$(git rev-parse --show-toplevel)"
-CUR=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
-[ -n "$CUR" ] || { echo "no version in pyproject.toml" >&2; exit 1; }
+CUR=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
+[ -n "$CUR" ] || { echo "no __version__ in ddflow/__init__.py" >&2; exit 1; }
 
 WHAT="${1:-}"
 case "$WHAT" in
@@ -65,64 +63,36 @@ esac
 [ "$NEW" != "$CUR" ] || { echo "already $CUR" >&2; exit 2; }
 
 python3 - "$CUR" "$NEW" <<'PY'
-import json, pathlib, re, sys
+import pathlib, re, subprocess, sys
 
 cur, new = sys.argv[1], sys.argv[2]
 
-proj = pathlib.Path("pyproject.toml")
-text = proj.read_text()
-patched, n = re.subn(rf'^version = "{re.escape(cur)}"$', f'version = "{new}"', text, count=1, flags=re.M)
-if n != 1:
-    sys.exit(f"pyproject.toml: expected one `version = \"{cur}\"`, replaced {n}")
-proj.write_text(patched)
-
-srv = pathlib.Path("server.json")
-d = json.loads(srv.read_text())
-d["version"] = new
-for pkg in d["packages"]:
-    # An `oci` package has NO version field (the registry rejects one); its tag below is
-    # the version. Every other registry type that carries one moves with it.
-    if pkg.get("registryType") != "oci" and "version" in pkg:
-        pkg["version"] = new
-    # The OCI tag. This is the one that gets left behind.
-    if pkg.get("registryType") == "oci":
-        ident = pkg["identifier"]
-        pkg["identifier"] = f"{ident.rsplit(':', 1)[0]}:{new}"
-srv.write_text(json.dumps(d, indent=2) + "\n")
-
-# The FIFTH place: what the server reports at handshake. A client that installed 0.2.0
-# and is told 0.1.0 has no way to tell which is wrong, and `test_the_declared_versions_
-# agree` — which caught this script missing it on its first run — treats the three as one
-# invariant for exactly that reason.
-mcp = pathlib.Path("ddflow/surfaces/mcp.py")
-mtext = mcp.read_text()
-mpatched, mn = re.subn(rf'("version": ")({re.escape(cur)})(")', rf'\g<1>{new}\g<3>', mtext, count=1)
-if mn != 1:
-    sys.exit(f"surfaces/mcp.py: expected one SERVER_INFO version {cur!r}, replaced {mn}")
-mcp.write_text(mpatched)
-
-# The SIXTH place: `ddflow.__version__`, the package attribute. It sat at 0.1.0 through
-# the 0.1.1 release because this script did not know it existed. (`ddflow --version`
-# prints SERVER_INFO above, not this -- the CLI may not import the package root.)
+# The ONE edit.
 init = pathlib.Path("ddflow/__init__.py")
 itext = init.read_text()
 ipatched, n_init = re.subn(
-    rf'^(__version__ = ")({re.escape(cur)})(")', rf'\g<1>{new}\g<3>', itext, count=1, flags=re.M
+    rf'^(__version__ = ")({re.escape(cur)})(")$', rf'\g<1>{new}\g<3>', itext, count=1, flags=re.M
 )
 if n_init != 1:
     sys.exit(f"ddflow/__init__.py: expected one __version__ {cur!r}, replaced {n_init}")
 init.write_text(ipatched)
 
-# Re-read and assert, rather than trusting the writes above. Six places is well past the
-# number where "I updated them all" stops being checkable by eye.
+# Everything else is derived: render server.json from its template.
+r = subprocess.run([sys.executable, "scripts/render_server_json.py"], capture_output=True, text=True)
+if r.returncode != 0:
+    sys.exit("server.json did not render: " + (r.stderr or r.stdout).strip())
+
+# Re-read and assert, rather than trusting the writes above.
+import json
 import tomllib
 
-got_proj = tomllib.loads(proj.read_text())["project"]["version"]
-got = json.loads(srv.read_text())
+got = json.loads(pathlib.Path("server.json").read_text())
 stale = [p["identifier"] for p in got["packages"]
          if p.get("registryType") == "oci" and not p["identifier"].endswith(f":{new}")]
 stale += [f"{p['identifier']} has a version field" for p in got["packages"]
           if p.get("registryType") == "oci" and "version" in p]
+stale += [f"{p['identifier']} is at {p['version']}" for p in got["packages"]
+          if p.get("registryType") != "oci" and "version" in p and p["version"] != new]
 problems = []
 sys.path.insert(0, ".")
 # Bytecode from an EMPTY cache, i.e. compiled from the files just written. The tree's own
@@ -137,31 +107,26 @@ sys.pycache_prefix = tempfile.mkdtemp(prefix="bump-pycache-")
 atexit.register(shutil.rmtree, sys.pycache_prefix, True)
 import importlib
 
-import ddflow.surfaces.mcp as _mcp
-
-importlib.reload(_mcp)
 import ddflow as _pkg
 
 importlib.reload(_pkg)
+import ddflow.surfaces.mcp as _mcp
+
+importlib.reload(_mcp)
 if _pkg.__version__ != new:
     problems.append(f"ddflow.__version__ is {_pkg.__version__}")
 if _mcp.SERVER_INFO["version"] != new:
     problems.append(f"SERVER_INFO is {_mcp.SERVER_INFO['version']}")
-if got_proj != new:
-    problems.append(f"pyproject is {got_proj}")
+if "version" in tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]:
+    problems.append("pyproject.toml declares a version of its own")
 if got["version"] != new:
     problems.append(f"server.json is {got['version']}")
 if stale:
-    problems.append(f"stale OCI tags: {stale}")
+    problems.append(f"stale package versions: {stale}")
 if problems:
     sys.exit("bump did not take: " + "; ".join(problems))
-print(f"{cur} -> {new}  (pyproject.toml, server.json + {len(got['packages'])} packages, SERVER_INFO, __version__)")
+print(f"{cur} -> {new}  (ddflow/__init__.py, server.json + {len(got['packages'])} packages rendered)")
 PY
-
-uv lock --quiet || { echo "uv lock failed: uv.lock still records $CUR" >&2; exit 1; }
-grep -A1 '^name = "ddflow-mcp"$' uv.lock | grep -qx "version = \"$NEW\"" \
-  || { echo "uv.lock does not record $NEW after uv lock" >&2; exit 1; }
-echo "  uv.lock re-locked at $NEW"
 
 cat <<EOF
 
