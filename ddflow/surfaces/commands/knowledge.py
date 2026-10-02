@@ -427,7 +427,9 @@ def cmd_session(a, c: Ctx) -> int:
             print(out.reason + _misread_hint(a), file=sys.stderr)
             return out.exit
         where = _where(out.data)
-        if a.session_cmd == "prompt":
+        if where.startswith(" -- NOT"):
+            c.out(f"not recorded:{where[len(' -- NOT recorded:') :]}", out.body(("session", "how")))
+        elif a.session_cmd == "prompt":
             c.out(
                 f"recorded ({out.data['redactions']} redaction(s)){where}",
                 out.body(("redactions", "session", "how")),

@@ -178,7 +178,7 @@ def test_prompt_logging_off_opens_no_phantom_session(repo):
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text().replace("[session]", "[session]\nlog_prompts = false", 1))
     code, out, _e = run_cli(repo, "session", "prompt", "--text", "words")
-    assert code == 0 and "NOT recorded" in out
+    assert code == 0 and out.startswith("not recorded") and "recorded (" not in out
     assert not _events(repo, "session.started", "session.prompt")
 
 
@@ -197,3 +197,14 @@ def test_the_hook_opening_an_implicit_session_keeps_its_model_and_tool(repo):
     _hook(repo, {"prompt": "first", "model": "m-1"})
     (s,) = _events(repo, "session.started")
     assert s["data"]["model"] == "m-1" and s["data"]["tool"] == "hook"
+
+
+def test_doctor_still_warns_about_a_new_orphan_after_an_earlier_adoption(repo):
+    from ddflow.infra.log import EventLog
+
+    _init(repo)
+    _orphans(repo)
+    run_cli(repo, "session", "adopt-orphans")
+    EventLog(repo, "old-agent").append("session.prompt", "", {"text": "fresh orphan", "item": ""})
+    _c, out, _e = run_cli(repo, "doctor")
+    assert "1 prompt/note event(s) have no session id" in out
