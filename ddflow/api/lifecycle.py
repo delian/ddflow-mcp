@@ -1538,18 +1538,32 @@ def remove(
     return O.ok("item.removed", id=item, children=[], dependents=[])
 
 
-def block(repo: Path, item: str, *, reason: str = "", agent: str = "") -> O.Outcome:
+def block(
+    repo: Path, item: str, *, reason: str = "", reopen: bool = False, agent: str = ""
+) -> O.Outcome:
     """Park an item on something outside the queue — a vendor, an operator decision.
 
     The existence check is not ceremony. `fold`'s `_h_state` reaches items through
     `_item()`, which CREATES one when the id is unknown, so this was the only mutating
     command where a typo'd id materialised a titleless phantom task — which the scheduler
     then offered to an agent as the next thing to do.
+
+    A DONE item is refused (exit 3) unless `reopen`: blocking it moves finished work
+    out of done, which a mistyped id would do silently (B-block-done). `reopen` is the
+    deliberate form -- the B12/B14 data fix was one.
     """
     log, _cfg, st = _load(repo, agent)
     it = _require(st, item, "item.blocked")
     if isinstance(it, O.Outcome):
         return it
+    if it.state == DONE and not reopen:
+        return O.refused(
+            "item.blocked",
+            f"{item} is DONE; blocking it would move finished work out of done (and "
+            f"anything depending on it would wait again). Pass --reopen "
+            f"(reopen=true over MCP) if that is the intent.",
+            id=item,
+        )
     log.append("item.blocked", item, {"reason": reason})
     return O.Outcome(kind="item.blocked", data={"id": item, "reason": reason})
 
