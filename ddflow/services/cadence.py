@@ -44,10 +44,17 @@ def count_due(st, cfg, *, replaced: set[str] = frozenset()) -> list[dict[str, An
 
 
 def phase_overdue(st, cfg) -> list[str]:
-    """Blockers for completing a phase: every phase-counted pass that is due. Calendar
-    names are read leniently (`name=days`, no validation) so a typo elsewhere in
-    `every_days` cannot switch this check off."""
-    replaced = {spec.partition("=")[0].strip() for spec in cfg.cadence.every_days}
+    """Blockers for completing a phase: every phase-counted pass that is due. A calendar entry
+    replaces a count-based pass only when it is well-formed; a malformed one (even one
+    named for a phase-counted pass) leaves that pass in force."""
+    replaced: set[str] = set()
+    for spec in cfg.cadence.every_days:
+        name, _, days = spec.partition("=")
+        try:
+            if float(days) > 0 and name.strip():
+                replaced.add(name.strip())
+        except ValueError:
+            pass  # malformed: it replaces nothing, so the count-based pass stays in force
     return [
         f"periodic pass overdue: {d['cadence']} ({d['since']} of {d['every']} phases since "
         f"the last). Run it, then `ddflow cadence --ran {d['cadence']}`; to skip it on the "
