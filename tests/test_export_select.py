@@ -426,3 +426,27 @@ def test_the_help_topic_and_readme_document_the_new_verbs():
         "export validate",
     ):
         assert needle in help_text and needle in readme, needle
+
+
+def test_a_forged_agent_enable_does_not_lift_the_operators_lock():
+    st = model.fold(
+        [
+            _ev("export.disabled", "roadmap", 1, by="op", human=True, locked=True),
+            _ev("export.enabled", "roadmap", 2, by="bot"),  # not human: the lock stays
+            _ev("export.disabled", "roadmap", 3, by="bot", locked=False),
+        ]
+    )
+    assert st.exports["roadmap"]["locked"] is True
+    st = model.fold(
+        [
+            _ev("export.disabled", "roadmap", 1, by="op", human=True, locked=True),
+            _ev("export.enabled", "roadmap", 2, by="op", human=True),
+        ]
+    )
+    assert st.exports["roadmap"]["locked"] is False
+
+
+def test_no_document_kind_is_named_like_a_verb():
+    from ddflow.surfaces.commands.export import VERBS
+
+    assert not set(R.names()) & set(VERBS)

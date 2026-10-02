@@ -83,7 +83,7 @@ def _confirm(rel: str, diff: str) -> bool:
 VERBS = ("enable", "disable", "ack", "eject", "validate")
 
 
-def _list(c: Ctx) -> int:
+def _list(c: Ctx, *, may_ack: bool = True) -> int:
     out = A.export_list(c.repo, c.requested_agent)
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
@@ -100,10 +100,11 @@ def _list(c: Ctx) -> int:
         if r.get("locked"):
             state += " (locked by the operator)"
         if r.get("enabled_by"):
+            when = str(r.get("enabled_at", ""))[:16].replace("T", " ")
+            state += f" -- enabled by {r['enabled_by']} {when}"
             state += (
-                f" -- enabled by {r['enabled_by']} {str(r['enabled_at'])[:16].replace('T', ' ')}"
+                " (not acknowledged)" if r.get("by_agent") and not r.get("acknowledged") else ""
             )
-            state += "" if r["acknowledged"] or not r["by_agent"] else " (not acknowledged)"
         print(f"{r['doc']:<{w}}  {r['target']:<{t}}  {r['mode']:<6}  {state}")
     sel = out.data["selected"]
     print(
@@ -119,7 +120,7 @@ def _list(c: Ctx) -> int:
             + ", ".join(f"{r['doc']} (by {r['by'] or '?'})" for r in pending)
             + ". Stop one with `ddflow export disable <doc>`; add --lock to veto it."
         )
-        if sys.stdin.isatty() and sys.stdout.isatty() and not c.requested_agent:
+        if may_ack and sys.stdin.isatty() and sys.stdout.isatty() and not c.requested_agent:
             # A person looking at the list is the acknowledgement (an agent's marker refuses).
             ack = A.export_ack(c.repo, agent=c.requested_agent)
             if ack.exit == OK and ack.data.get("documents"):
@@ -189,7 +190,7 @@ def cmd_export(a, c: Ctx) -> int:
         print(f"unexpected argument {a.target!r}", file=sys.stderr)
         return REFUSED
     if not a.doc and not a.all:
-        return _list(c)
+        return _list(c, may_ack=not (a.diff or a.check or a.update or a.out))
     interactive = bool(
         a.update and not a.yes and not c.json and sys.stdin.isatty() and sys.stdout.isatty()
     )  # --json is machine output: no prompt
