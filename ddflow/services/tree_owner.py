@@ -11,6 +11,9 @@ standing in it is called by default -- is not the caller, and that identity has 
 to the log: somebody has been working there under that name. Then the command is
 answered as from the primary (`Ctx.called_from`): a claim makes a tree of its own, and
 gate run, merge, review and tests take the item's tree or branch, not the parent's.
+A tree is also someone's when an identity ADOPTED it (`worktree.adopted` names the tree's
+path and the adopter): a parent that always passes `--agent` never writes under the
+derived name, but its own adoption says whose tree this is (B-declared-tree-owner).
 Everything else still adopts:
 
 * no identity named (the caller IS the derived one, as before);
@@ -22,7 +25,8 @@ Not "never adopt under a foreign --agent", which is what MCP does: MCP KNOWS the
 connection's identity is the one standing in the tree, and the CLI does not -- a named
 agent adopting its own harness tree is established behaviour that tests rely on. The
 limit that leaves: a tree whose occupant has never written under its derived identity
-cannot be told from a harness-isolated agent's fresh tree, and is adopted.
+cannot be told from a harness-isolated agent's fresh tree, and is adopted. That
+includes a declared-identity parent that has not yet claimed anything from its tree.
 """
 
 from __future__ import annotations
@@ -46,7 +50,14 @@ def foreign_tree_owner(repo: Path, called_from: Path, agent: str, events: Iterab
     own = tree_agent_ids(here.path, repo)
     if agent in own:
         return ""
+    stored = W.store_path(repo, here.path)
+    adopter = ""
+    inferred = ""
     for e in events:
-        if e.agent in own:
-            return e.agent
-    return ""
+        if e.kind == "worktree.adopted" and e.data.get("path") == stored:
+            if e.agent == agent:
+                return ""  # the caller adopted this very tree before: it is theirs
+            adopter = adopter or e.agent
+        elif not inferred and e.agent in own:
+            inferred = e.agent
+    return adopter or inferred

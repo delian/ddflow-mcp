@@ -188,6 +188,27 @@ def test_a_named_agent_alone_in_a_harness_tree_still_adopts_it(repo):
     assert _item(repo, "T1").adopted and _item(repo, "T1").branch == "parent-work"
 
 
+def test_a_declared_parent_identity_still_owns_its_tree(repo):
+    """B-declared-tree-owner: a parent that always passes --agent never writes under the
+    identity derived from its tree, so inference from the log called the tree nobody's.
+    Its adoption (worktree.adopted, author = the declared identity) records the owner."""
+    tree = _cli_setup(repo)
+    run_cli(repo, "task", "add", "T0", "--globs", "c.py")
+    code, out, err = run_cli(tree, "claim", "T0", agent="parent")
+    assert code == OK, out + err
+    assert _item(repo, "T0").adopted
+    code, out, err = run_cli(tree, "abandon", "T0", "--reason", "done", agent="parent")
+    assert code == OK, out + err
+    code, out, err = run_cli(tree, "claim", "T1", agent="sub-1")
+    assert code == OK, out + err
+    t1 = _item(repo, "T1")
+    assert "parent's" in out and not t1.adopted, out + str(t1.worktree)
+    assert t1.branch != "parent-work", t1.branch
+    # and the owner itself still adopts its own tree again
+    code, out, err = run_cli(tree, "claim", "T0", agent="parent")
+    assert code == OK, out + err
+
+
 def _cli_no_worktree(repo: Path) -> Path:
     """T1 claimed --no-worktree by `sub-1`, whose shell is in its parent's tree."""
     run_cli(repo, "init")
