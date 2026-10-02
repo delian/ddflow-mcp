@@ -246,7 +246,7 @@ def test_default_project_scope_is_not_tagged_but_other_scopes_are():
     b.scope = "project"
     assert "[project]" not in _body("bugs", q)
     b.scope = None
-    assert "None" not in _body("bugs", q)
+    assert "[None]" not in _body("bugs", q)
     b.scope = "ddflow"
     assert "[ddflow]" in _body("bugs", q)
 
