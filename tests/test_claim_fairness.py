@@ -158,14 +158,25 @@ def test_a_waiter_still_behind_another_holder_reserves_nothing(proj):
     assert out.exit == O.REFUSED and "reserved" not in out.reason
 
 
-def test_a_refused_claim_keeps_its_place_without_typing_wait(proj):
-    first = _claim(proj, "TC", C)  # refused by A's lease: C is now in line
-    assert first.exit == O.REFUSED
-    assert [(w.agent, w.item) for w in WT.live_waiters(proj)] == [(C, "TC")]
+def test_a_refused_claim_asked_again_keeps_its_place_without_typing_wait(proj):
+    assert _claim(proj, "TC", C).exit == O.REFUSED  # first ask: pending, reserves nothing
+    assert _claim(proj, "TC", C).exit == O.REFUSED  # second ask: a real place
+    assert [(w.agent, w.item, w.asks) for w in WT.live_waiters(proj)] == [(C, "TC", 2)]
     assert A.release(proj, "HOT", agent=HOLDER).ok
     out = _claim(proj, "TB", B)  # B never queued, and C was asking first
     assert out.exit == O.REFUSED and f"reserved for {C}" in out.reason
     assert _claim(proj, "TC", C).ok
+
+
+def test_one_refused_claim_holds_nothing_for_anyone(proj):
+    """An agent refused once that takes the offered alternative never comes back: it must
+    not hide the item from `next` or block the owner re-claiming it (the slow scenarios)."""
+    assert _claim(proj, "TC", C).exit == O.REFUSED
+    assert A.release(proj, "HOT", agent=HOLDER).ok
+    assert "TC" in [i["id"] for i in A.next_(proj, agent="anonymous").data["ready"]]
+    assert _claim(proj, "TB", B).ok
+    assert A.release(proj, "TB", agent=B).ok
+    assert _claim(proj, "TC", "agent-owner").ok
 
 
 def test_next_does_not_offer_what_is_reserved_for_someone_else(proj):
@@ -325,3 +336,10 @@ def test_a_registration_with_a_huge_integer_time_is_skipped_not_fatal(proj):
     )
     assert WT.live_waiters(proj) == []
     assert _claim(proj, "TC", C).exit == O.REFUSED  # refused by A's lease, not a crash
+
+
+def test_a_single_refusal_is_not_reported_to_the_holder_as_a_waiter(proj):
+    assert _claim(proj, "TC", C).exit == O.REFUSED
+    assert WT.waiting_on(proj, "HOT") == []
+    assert _claim(proj, "TC", C).exit == O.REFUSED
+    assert [w["agent"] for w in WT.waiting_on(proj, "HOT")] == [C]

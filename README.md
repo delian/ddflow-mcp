@@ -2242,7 +2242,7 @@ line, so the narrower one keeps winning. Only the committed config writes union 
 **A contended file is served first come, first served.** An agent refused for an overlap
 used to have no place in line: it polled, and whoever polled first after the release took
 the file, so a hot file (the one every change touches) starved its longest waiter for
-hours. Now a live `ddflow wait --item X`, or a `claim` that was refused and is asked again,
+hours. Now a live `ddflow wait --item X`, or a `claim` that was refused and is asked AGAIN,
 is a place in line (kept in `.ddflow/local/waits/`, this machine's, never committed). While
 the oldest waiter could claim its item right now, a younger or unqueued claim of an
 overlapping file is refused with exit 3: `TC is reserved for agent-b (waiting since
@@ -2258,7 +2258,8 @@ place `[lease].waiter_reservation_s` seconds later (default 300; `0` turns the q
 waiter still behind another holder, or waiting for files disjoint from yours, reserves
 nothing against you; and the order is strict (older first), so two waiters cannot reserve
 against each other. A refused claim keeps its place as long as it is asked again within the
-window. The holder is told who it holds up: `heartbeat` and `release` name the waiters, and
+window; a SINGLE refusal reserves nothing (an agent that takes the alternative the refusal
+offers never comes back, and must not hide the item from `next` or block its owner). The holder is told who it holds up: `heartbeat` and `release` name the waiters, and
 `brief` adds a "Waiting on you" section. Releasing globs while only gates are pending is
 deliberately not offered: until the branch is merged another agent editing the same files
 would only meet the conflict at merge. The honest remedy is a short claim: claim when you
