@@ -533,7 +533,12 @@ def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now:
     mine = next(((w.since, w.agent) for w in waiters if w.agent == me and w.item == it.id), None)
     shared = shared_globs(cfg)
     for w in waiters:  # oldest first
-        if w.agent == me or not w.item or (mine is not None and mine <= (w.since, w.agent)):
+        if (
+            w.agent == me
+            or not w.item
+            or not w.reserves()
+            or (mine is not None and mine <= (w.since, w.agent))
+        ):
             continue
         target = st.items.get(w.item)
         if target is None or target.removed or target.state in (DONE, ABANDONED, REVIEW):
