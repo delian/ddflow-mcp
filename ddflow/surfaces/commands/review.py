@@ -63,7 +63,7 @@ def cmd_review(a, c: Ctx) -> int:
             ("--confirmed", a.confirmed),
             ("--probe", a.probe),
         )
-        if given
+        if given is not None and given is not False  # `--finding 0`, `--probe ""` still count
     ]
     if stray:
         item = ids[0] if len(ids) == 1 else "<id>"
