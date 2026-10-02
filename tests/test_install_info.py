@@ -341,4 +341,6 @@ def test_missing_version_header_falls_back(tmp_path):
     site = _site(tmp_path, None)
     meta = next(site.glob("*.dist-info")) / "METADATA"
     meta.write_text("Metadata-Version: 2.1\nName: ddflow-mcp\n")
-    assert isinstance(I.install_info(root=site).version, str)
+    import ddflow
+
+    assert I.install_info(root=site).version == ddflow.__version__
