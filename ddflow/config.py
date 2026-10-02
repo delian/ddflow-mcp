@@ -1028,7 +1028,11 @@ def _export_table_problem(doc: str, t: Any) -> str:
         return f"[export.{doc}].redact must be true or false"
     if "filters" in t and not (
         isinstance(t["filters"], dict)
-        and all(isinstance(k, str) and isinstance(v, str | int) for k, v in t["filters"].items())
+        and all(
+            isinstance(k, str)
+            and (isinstance(v, str) or (isinstance(v, int) and not isinstance(v, bool)))
+            for k, v in t["filters"].items()
+        )
     ):
         return f"[export.{doc}].filters must be a table of strings and integers"
     return ""
@@ -1607,7 +1611,22 @@ def _unit_interval(v: Any) -> str:
 #: write paths (`config --set`, `ddflow_configure`) still refuse it.
 _TOLERANT_VALUES = frozenset({"mcp.tools", "export.refresh"})
 
+
+def _export_tables_problem(v: Any) -> str:
+    """`[export].tables` as one map: each value is a valid `[export.<doc>]` table with only
+    known keys (the same rules the sub-table form gets)."""
+    if not isinstance(v, dict):
+        return "must be a table of [export.<doc>] tables"
+    for doc, t in v.items():
+        if isinstance(t, dict) and (bad := sorted(set(t) - EXPORT_TABLE_KEYS)):
+            return f"[export.{doc}] has unknown key(s) {', '.join(bad)}"
+        if why := _export_table_problem(str(doc), t):
+            return why
+    return ""
+
+
 _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+    "export.tables": _export_tables_problem,
     "export.refresh": lambda v: (
         "" if v in EXPORT_REFRESH_MODES else f"must be one of {', '.join(EXPORT_REFRESH_MODES)}"
     ),

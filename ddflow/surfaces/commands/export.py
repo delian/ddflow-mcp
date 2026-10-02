@@ -25,7 +25,7 @@ def add_export_parser(sub) -> None:
     p.add_argument("--all", action="store_true", help="act on the selected documents")
     for flag, what in (
         ("--since", "entries at or after this date (YYYY-MM-DD or a timestamp prefix)"),
-        ("--version", "entries of one release"),
+        ("--version", "one release (the changelog kind: X or vX, or unreleased)"),
         ("--phase", "one phase"),
         ("--item", "one item (the bugs document filters it as a phase)"),
         ("--status", "one status, e.g. open or fixed"),
@@ -95,7 +95,9 @@ def _list(c: Ctx) -> int:
 def cmd_export(a, c: Ctx) -> int:
     if not a.doc and not a.all:
         return _list(c)
-    interactive = bool(a.update and not a.yes and sys.stdin.isatty() and sys.stdout.isatty())
+    interactive = bool(
+        a.update and not a.yes and not c.json and sys.stdin.isatty() and sys.stdout.isatty()
+    )  # --json is machine output: no prompt
     out = A.export(
         c.repo,
         a.doc,

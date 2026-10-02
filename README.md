@@ -3031,7 +3031,8 @@ rendered in a sandbox); you ask for a document, you do not write it.
 
 **What can be exported:** `roadmap` (Now / Next / Later with progress), `bugs` (open, fixed,
 invalid), `status`, `worklog` (coalesced per item, grouped by day), `sessions`, `decisions`
-(an index) and `rules` (decisions in force by governing path, lessons, the enforced workflow).
+(an index), `rules` (decisions in force by governing path, lessons, the enforced workflow) and
+`changelog` (Keep a Changelog form, from finished items, fixed bugs and version tags).
 Replay is not a kind: it carries paths and addresses. Output is deterministic: the same log
 gives the same bytes, with no clock in the body.
 
@@ -3047,7 +3048,8 @@ $ ddflow export roadmap --diff        # what writing it would change
 $ ddflow export bugs --item B-export-core # --item filters the bugs kind as a phase
 ```
 
-The filters are `--since --version --phase --item --status --limit --tag --session`; a
+The filters are `--since --version --phase --item --status --limit --tag --session` (`--version X`
+is the `tag` filter, which the changelog reads as one release, `X` or `vX`, or `unreleased`); a
 filter the kind does not take is refused (exit 3), never ignored. `ddflow export <kind>
 --help` lists the flags.
 
@@ -3062,8 +3064,8 @@ file) so regenerating it needs no claim. The list shows each kind as `not select
 header carries the kind, the ddflow version and a digest of the BODY, so hand edits are
 detected and `--check` regenerates and compares exactly), `region` (only the text between
 `<!-- ddflow:begin doc=<kind> ... -->` and `<!-- ddflow:end doc=<kind> -->` in a hand-written
-file; the rest is kept byte for byte) and `append` (kinds that grow a log; entries are added
-after the last exported event). Writes are atomic under a lock. A hand-edited generated file,
+file; the rest is kept byte for byte) and `append` (a kind that can grow a log, today the changelog: entries are
+added after the last exported event). Writes are atomic under a lock. A hand-edited generated file,
 an unmarked file or an edited region is never overwritten without `--force` (exit 3, with the
 diff); paths outside the repo, symlinks and `.git` / `.ddflow` are refused.
 

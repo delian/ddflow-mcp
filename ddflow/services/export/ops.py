@@ -131,7 +131,7 @@ def spec_for(
     m = mode or str(t.get("mode") or kind.update_mode)
     if m not in R.UPDATE_MODES:
         raise ExportError(f"mode {m!r} is not one of {', '.join(R.UPDATE_MODES)}", EXIT_REFUSED)
-    if m == R.APPEND and kind.update_mode != R.APPEND:
+    if m == R.APPEND and kind.update_mode != R.APPEND and appender(doc) is None:
         raise ExportError(
             f"document {doc!r} renders whole documents and cannot be appended to: use mode "
             f"whole or region",
@@ -243,28 +243,18 @@ def print_doc(
 # -- writing --------------------------------------------------------------------------
 
 
-def _produce(repo: Path, cfg: Config, q: Q.Query, spec: Spec, template):
-    """``produce(last)`` for an append-mode document: the kind rendered over the events
-    that came AFTER the ``last`` event id recorded in the file's header."""
+def appender(doc: str):
+    """The append-mode producer factory of kind ``doc``, or None.
 
-    def produce(last: str) -> tuple[str, str]:
-        evs = q.events
-        if last:
-            ids = [e.id or e.compute_id() for e in evs]
-            if last not in ids:
-                raise ExportError(
-                    f"the last exported event {last} is not in the log any more; refusing to "
-                    "append (--force to start again is the writer's decision)",
-                    EXIT_REFUSED,
-                )
-            evs = evs[ids.index(last) + 1 :]
-        if not evs:
-            return "", ""
-        sub = Q.build(evs)
-        sub.repo = q.repo
-        return F.normalize(_body(repo, cfg, sub, spec, template)), q.last_event_id
+    A kind that can grow a log defines ``append_unreleased(query)`` in its module; it returns
+    ``produce(last) -> (entries_text, new_last_event_id)`` for ``write.append_entries``
+    (``kind_changelog`` is the one today). A kind without one cannot be appended to.
+    """
+    import sys
 
-    return produce
+    R.get(doc)  # imports every kind module; an unknown kind is refused here
+    mod = sys.modules.get(f"{__package__}.kind_{doc}")
+    return getattr(mod, "append_unreleased", None)
 
 
 def write_doc(
@@ -287,11 +277,14 @@ def write_doc(
     if spec.mode == R.REGION:
         body = _body(repo, cfg, q, spec, template)
         return W.write_region(repo, path, spec.doc, body, check=check, diff=diff, force=force)
+    make = appender(spec.doc)
+    if make is None:  # update_mode APPEND declared but no producer: a kind bug, not a user error
+        raise ExportError(f"document {spec.doc!r} has no append producer", EXIT_UNAVAILABLE)
     return W.append_entries(
         repo,
         path,
         spec.doc,
-        _produce(repo, cfg, q, spec, template),
+        make(q),
         check=check,
         diff=diff,
         force=force,
@@ -310,8 +303,12 @@ def state_of(repo: Path, cfg: Config, q: Q.Query, spec: Spec) -> tuple[str, str]
         return "stale", f"unsafe target: {exc}"
     if not path.exists():
         return "missing", ""
-    old = W._read(path)
-    assert old is not None
+    try:
+        old = W._read(path)
+    except ExportError as exc:  # unreadable or not UTF-8: not a file ddflow wrote
+        return "hand-edited", f"not readable as text ({exc})"
+    if old is None:  # removed between the exists() above and this read
+        return "missing", ""
     if spec.mode == R.REGION:
         sha = _region_edit(old, spec.doc)
         if sha == "none":
