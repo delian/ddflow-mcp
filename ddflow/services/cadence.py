@@ -63,3 +63,44 @@ def lessons_cadence(st, cfg) -> list[dict[str, Any]]:
             }
         ]
     return []
+
+
+def export_cadence(repo, cfg) -> list[dict[str, Any]]:
+    """Is an export refresh due? Only for a project that opted in: a selected document with
+    ``refresh`` other than ``off`` whose target is stale (its content would change).
+
+    A hand-edited or missing target is not "due" (a refresh would skip or create it, and the
+    operator decides that); nothing is read, and nothing written, when no document opted in.
+    Run the pass with ``ddflow export <doc> --update`` (the refresh triggers do it themselves).
+    """
+    from .export import ops
+
+    try:
+        docs = [
+            s
+            for s in (ops.spec_for(cfg, d, writing=True) for d in ops.selection(cfg))
+            if s.refresh != "off" and s.mode == "whole"
+        ]
+        if not docs:
+            return []
+        q = ops.load(repo, cfg)
+        stale = [s.doc for s in docs if ops.state_of(repo, cfg, q, s)[0] == "stale"]
+    except Exception as exc:  # never fails the listing -- but "could not look" is not "not due"
+        return [
+            {
+                "cadence": "export_refresh",
+                "since": f"could not check ({type(exc).__name__}: {exc})",
+                "every": 0,
+                "unit": "export settings or event log unreadable; `ddflow export --all --check`",
+            }
+        ]
+    if not stale:
+        return []
+    return [
+        {
+            "cadence": "export_refresh",
+            "since": ", ".join(stale),
+            "every": 0,
+            "unit": "stale selected document(s); `ddflow export <doc> --update`",
+        }
+    ]

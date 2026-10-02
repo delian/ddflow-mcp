@@ -1438,7 +1438,14 @@ def complete(
         },
     )
     L.release(log, item, note="completed")
-    return O.ok("item.completed", forced=forced, woke=waiting, **base)
+    extra: dict[str, Any] = {}
+    if it.kind == "phase":  # [export].refresh = phase_close
+        from ..services.export import refresh as RF
+
+        rr = RF.refresh_selected(repo, "phase_close", cfg=cfg)
+        if rr.outcomes:
+            extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
+    return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
 
 def _abandon_refused(item: str, reason: str, why: str) -> O.Outcome:
@@ -1680,6 +1687,7 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     bad = F.problems(cfg)
     if bad:
         return O.refused("worktree.merged", "; ".join(bad), id=item, sha="", dirty=[])
+    refreshed = {} if borrowed else _refresh_documents(repo, cfg, wt)
     branch_head = W.rev(repo, wt.branch) if borrowed else W.head_sha(wt.path)
     landed_before = W.rev(repo, wt.base)
     r = W.merge(repo, cfg, wt, message=message or f"merge {item}: {it.title}")
@@ -1747,7 +1755,56 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         pr="",
         branch=wt.branch,
         outside_globs=outside,
+        **({"export_refresh": refreshed} if refreshed else {}),
     )
+
+
+def _refresh_documents(repo: Path, cfg, wt: W.Worktree) -> dict[str, Any]:
+    """`[export].refresh = merge`: regenerate the selected whole-file documents into the
+    item's branch and commit them there, so they land in the merge. Never fatal: a document
+    that cannot be refreshed is reported (``problems``) and the merge goes ahead.
+
+    Empty when nothing is selected for ``merge`` (the default: refresh is off).
+    """
+    from ..services.export import refresh as RF
+
+    r = RF.refresh_selected(repo, "merge", root=wt.path, cfg=cfg)
+    if not r.outcomes:
+        return {}
+    data = r.data()
+    paths = r.changed
+    if paths:
+        add = W.git(wt.path, "add", "--", *paths)
+        commit = (
+            W.git(
+                wt.path,
+                "commit",
+                "-q",
+                "--no-verify",
+                "-m",
+                "refresh generated documents",
+                "--",
+                *paths,
+            )
+            if add.ok
+            else add
+        )
+        if not commit.ok:
+            W.git(wt.path, "reset", "-q", "HEAD", "--", *paths)
+            created = {o.path for o in r.outcomes if o.action == "created"}
+            for rel in paths:
+                if rel in created:  # absent before the refresh: nothing to restore, remove it
+                    (wt.path / rel).unlink(missing_ok=True)
+                elif W.git(wt.path, "cat-file", "-e", f"HEAD:{rel}").ok:
+                    W.git(wt.path, "checkout", "--", rel)
+            data["changed"] = []
+            data["problems_note"] = (
+                f"could not commit the refreshed documents: {commit.err or commit.out}"
+            )
+    data["summary"] = r.summary() + (
+        f"; {data['problems_note']}" if "problems_note" in data else ""
+    )
+    return data
 
 
 def _lands_nothing(repo: Path, it, wt: W.Worktree) -> O.Outcome | None:
