@@ -1864,7 +1864,9 @@ def _h_export_enabled(st: State, ev: Event) -> None:
         "path": str(d.get("path", "")),
         "mode": str(d.get("mode", "")),
         "local": bool(d.get("local")),
-        "locked": False,  # only a person at a terminal can enable a locked document
+        # Only a person at a terminal lifts the operator's veto: the writer enforces it, and
+        # the fold does not trust a forged or foreign event to have.
+        "locked": bool(st.exports.get(ev.subject, {}).get("locked")) and not human,
         "acked": human,  # an agent's enable waits for the operator to acknowledge it
     }
 
