@@ -144,7 +144,7 @@ def test_url_under_8kb_for_the_whole_real_text_corpus():
         url, why = D.issue_url(b, REPO)
         assert url is not None, why
         biggest = max(biggest, len(url))
-    assert biggest < D.URL_MAX
+    assert biggest < 8192 and D.URL_MAX <= 8192
 
 
 def test_oversize_url_falls_back_to_the_file_and_says_so(tmp_path):
@@ -293,3 +293,20 @@ def test_prepare_failure_messages_are_redacted(tmp_path, monkeypatch):
     out = D.prepare(tmp_path, _bundle(), REPO)
     assert out.status == "failed" and out.exit_code == 1 and out.reason
     assert HOME not in out.reason and ADDR not in out.reason
+
+
+def test_a_consent_can_be_consumed_only_once_across_threads():
+    import threading
+
+    c = D.Consent("d" * 64, 1e18)
+    wins: list[bool] = []
+    barrier = threading.Barrier(16)
+
+    def go():
+        barrier.wait()
+        wins.append(c.consume())
+
+    ts = [threading.Thread(target=go) for _ in range(16)]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    assert wins.count(True) == 1

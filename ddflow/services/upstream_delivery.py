@@ -20,9 +20,10 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 from urllib.parse import quote
@@ -58,12 +59,14 @@ class Consent:
     digest: str
     expires_at: float
     used: bool = False
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def consume(self) -> bool:
-        if self.used:
-            return False
-        self.used = True
-        return True
+        with self._lock:
+            if self.used:
+                return False
+            self.used = True
+            return True
 
 
 @dataclass(frozen=True)
