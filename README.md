@@ -3152,8 +3152,26 @@ filters = { limit = 50 }
 Unknown keys are skipped with a warning (a newer release's config does not stop an older
 checkout); `ddflow config --set` refuses them. **Not yet implemented:** `redact` is accepted
 but documents are NOT yet redacted (a later task, B-export-redact-fence: the print and
-`--update` paths note this on stderr), and only `refresh = "off"` acts (merge, phase close
-and the docs gate are B-export-refresh). `ddflow help export` has the same material.
+`--update` paths note this on stderr). `ddflow help export` has the same material.
+
+**Automatic refresh.** `refresh` says when a SELECTED whole-file document regenerates itself;
+set it for all documents in `[export]` or for one in `[export.<doc>]` (the per-document value
+wins, so `refresh = "off"` there opts one document out):
+
+| mode | when |
+| --- | --- |
+| `off` (default) | never: nothing writes unless you run `ddflow export --update` |
+| `merge` | `ddflow merge` regenerates the document into the item's branch and commits it there, so it lands in the merge commit (as of just before the landing) |
+| `phase_close` | completing a phase regenerates it in the working tree (not committed) |
+| `docs_gate` | the phase `docs` gate's export step: regenerate, verify (`export --check`) and return the documents with their body digests as evidence |
+
+Every mode keeps the same guards: a hand-edited or unmarked file is never touched (the result
+says `skipped`), a region or append document is not refreshed automatically, a refresh that
+fails (unreadable log, template error) is reported and never fails the merge or the
+completion, and with nothing selected for that trigger it does nothing and says so. The
+`ddflow merge` and `ddflow complete` output carries an `export_refresh` result (`--json`:
+documents, actions, digests) and prints a one-line summary. `ddflow cadence` lists
+`export_refresh` as due when an opted-in document is stale.
 
 ---
 

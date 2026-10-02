@@ -935,8 +935,8 @@ _doc(
 )
 
 
-#: What `[export].refresh` accepts. Only `off` acts today (B-export-refresh implements the
-#: rest); the other values are accepted so a config written for a newer release loads.
+#: What `[export].refresh` accepts: when a selected document regenerates by itself
+#: (`services/export/refresh.py`). `off` never writes.
 EXPORT_REFRESH_MODES = ("off", "merge", "phase_close", "docs_gate")
 
 #: Where each document kind is written when `[export.<doc>].path` does not say. A copy of
@@ -1000,7 +1000,7 @@ _doc(
 _doc(
     "export",
     "refresh",
-    "When selected documents regenerate by themselves: off | merge | phase_close | docs_gate. Only `off` is implemented (B-export-refresh adds the rest); the other values are accepted and do nothing yet.",
+    "When selected documents regenerate by themselves: off | merge | phase_close | docs_gate. `merge` regenerates into the item's merge, `phase_close` at phase completion, `docs_gate` at the phase docs gate; `off` never writes. Per document: [export.<doc>].refresh wins.",
 )
 _doc(
     "export",
