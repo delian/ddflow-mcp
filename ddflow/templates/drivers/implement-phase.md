@@ -79,6 +79,7 @@ ddflow next --phase <NAME>                       # [ddflow_next]
 - **exit 2** — nothing is actionable. This is a **result, not an error**. Read the
   blocked list: it says whether each item waits on a dependency, on another agent's
   lease, or on a file conflict. Do not invent work.
+- **exit 1** — failure: `--phase` names no phase or item. A typo, not an empty queue.
 
 Never take an item that `next` did not offer.
 
