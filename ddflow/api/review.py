@@ -163,14 +163,93 @@ def _lease_ticker(log, cfg, it, tick_s: float) -> Callable[[], None] | None:
 def _say_result(say: Callable[[str], None], res) -> None:
     """One reviewer's verdict, then each finding with its detail."""
     say(
-        f"  {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
+        f"  {res.reviewer} {res.label}: {len(res.findings)} finding(s), {res.coverage()}, "
         f"{res.elapsed_s:.1f}s" + (f" — {res.reason}" if res.reason else "")
     )
-    for f in res.findings:
-        say(f"\n  [{f.severity}] {f.location or f.title}")
+    for n, f in enumerate(res.findings, 1):
+        say(f"\n  #{n} [{f.severity}] {f.location or f.title}")
         for line in f.detail.splitlines():
             if line.strip():
                 say(f"      {line.strip()}")
+
+
+def triage(
+    repo: Path,
+    item: str,
+    *,
+    gate: str = "critic",
+    finding: int = 0,
+    verdict: str = "",
+    probe: str = "",
+    agent: str = "",
+) -> O.Outcome:
+    """Record the author's triage of ONE finding of a gate's recorded `ddflow review`.
+
+    ``finding`` is the number `ddflow review` printed (#N): the finding's place in the
+    recorded review's per-chunk findings. ``verdict`` is ``refuted`` -- ``probe`` is the
+    run that shows the finding false -- or ``confirmed`` -- ``probe`` is the fix or test
+    that answers it. Appends a `review.triaged` event; the gate's outcome is untouched
+    (decision D-review-triage: a review that reported findings stays `failed`, and that
+    does not block completion -- the log now shows what became of each finding).
+    """
+    from ..services import gates as G
+
+    log, _cfg, st = _load(repo, agent)
+
+    def bad(why: str, **extra) -> O.Outcome:
+        return O.failed("review.triage", why, id=item, gate=gate, text=why, **extra)
+
+    it = st.items.get(item)
+    if it is None:
+        return bad(f"no such item {item!r}")
+    if verdict not in ("refuted", "confirmed"):
+        return bad("say which: --refuted (the probe shows the finding false) or --confirmed")
+    if not probe.strip():
+        return bad(
+            "--probe is required: for --refuted the run that shows the finding false, for "
+            "--confirmed the fix or test that answers it"
+        )
+    rec = it.gates.get(gate)
+    found = (rec.evidence or {}).get("chunk_findings") if rec else None
+    if not found or not all(f.get("digest") for f in found):
+        return bad(
+            f"{item}.{gate} has no `ddflow review` with numbered findings on record "
+            f"(a hand-recorded gate, a clean review, or one from before triage)"
+        )
+    if not 1 <= finding <= len(found):
+        return bad(
+            f"no finding #{finding}: {item}.{gate} has #1..#{len(found)}", findings=len(found)
+        )
+    f = found[finding - 1]
+    log.append(
+        "review.triaged",
+        item,
+        {
+            "gate": gate,
+            "finding": finding,
+            "digest": f["digest"],
+            "verdict": verdict,
+            "probe": probe.strip(),
+            "severity": f.get("severity", ""),
+            "title": f.get("title", ""),
+            "location": f.get("location", ""),
+        },
+    )
+    _log, _cfg, st = _load(repo, agent)
+    counts = G.triage_counts(st.items[item], gate) or {}
+    text = (
+        f"{item}.{gate} finding #{finding} [{f.get('severity', '')}] {verdict}: "
+        f"{G.triage_line(counts)}"
+    )
+    return O.ok(
+        "review.triage",
+        id=item,
+        gate=gate,
+        finding=finding,
+        verdict=verdict,
+        counts=counts,
+        text=text,
+    )
 
 
 def _chunk_numbers(value) -> list[int] | str:
@@ -186,6 +265,13 @@ def _chunk_numbers(value) -> list[int] | str:
             except ValueError:
                 return f"--chunk takes chunk numbers, e.g. 5 or 2,5; got {part.strip()!r}"
     return sorted(out) or "--chunk names no chunk"
+
+
+def _say_triage_scope(say: Callable[[str], None], results: list, best) -> None:
+    """With several reviewers each one's findings were numbered from #1, but only the
+    recorded reviewer's can be triaged: say whose (critic: another's #1 is not it)."""
+    if len(results) > 1 and best.findings:
+        say(f"triage addresses {best.reviewer}'s findings: #1..#{len(best.findings)}")
 
 
 def _rerun_scope(it, gate: str, revs: list, diff: str, value):
@@ -484,6 +570,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         say(
             f"\nrecorded {item}.{gate} = {outcome} (reviewer {best.reviewer}, family {best.family})"
         )
+        _say_triage_scope(say, results, best)
 
     data: dict[str, Any] = {
         "id": item,

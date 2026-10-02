@@ -21,11 +21,41 @@ import ddflow.api.review as A
 from ..context import FAIL, NOTHING, OK, REFUSED, Ctx
 
 
+def _triage(a, c: Ctx, item: str) -> int:
+    """`ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...`."""
+    if a.refuted and a.confirmed:
+        print("--refuted and --confirmed are exclusive: one verdict per finding", file=sys.stderr)
+        return FAIL
+    out = A.triage(
+        c.repo,
+        item,
+        gate=a.gate,
+        finding=a.finding or 0,
+        verdict="refuted" if a.refuted else "confirmed" if a.confirmed else "",
+        probe=a.probe or "",
+        agent=c.requested_agent,
+    )
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    print(out.data["text"])
+    return OK
+
+
 def cmd_review(a, c: Ctx) -> int:
+    ids = list(a.id or [])
+    if ids[:1] == ["triage"]:  # `review triage <id>`: a verb, not an item named "triage"
+        if len(ids) != 2:  # noqa: PLR2004 -- the verb and the item
+            print("usage: ddflow review triage <id> --gate G --finding N ...", file=sys.stderr)
+            return FAIL
+        return _triage(a, c, ids[1])
+    if len(ids) > 1:
+        print(f"review takes one item id; got {ids}", file=sys.stderr)
+        return FAIL
     out = A.review(
         c.repo,
         gate=a.gate,
-        item=a.id or "",
+        item=ids[0] if ids else "",
         intent=a.intent or "",
         context=a.context or "",
         base=a.base or "",

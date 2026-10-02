@@ -129,6 +129,7 @@ from .reporting import (
 )
 from .review import review as run_review
 from .review import reviewers_detect, reviewers_list
+from .review import triage as review_triage
 
 # `run_review`, not `review`: a name re-exported here SHADOWS the submodule of the same
 # name, so `from ddflow.api import review` would bind the function and every
@@ -234,6 +235,7 @@ __all__ = [
     "replay",
     "research_add",
     "resolve",
+    "review_triage",
     "reviewers_detect",
     "reviewers_list",
     "run_review",
