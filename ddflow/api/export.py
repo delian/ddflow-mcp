@@ -98,6 +98,12 @@ def export(  # noqa: PLR0913 -- one keyword per CLI flag and MCP argument; the f
             )
         if all_docs and (out or template):
             raise ExportError("--out and --template name one document, not --all", EXIT_REFUSED)
+        if template and (update or (out and not (diff or check))):
+            raise ExportError(
+                "--template renders once for review (print, --diff, --check) and never writes; "
+                "put the template in [export.<doc>].template to write with it",
+                EXIT_REFUSED,
+            )
         flt = _filters(
             since=since, version=version, phase=phase or item, status=status,
             limit=limit, tag=tag, session=session,

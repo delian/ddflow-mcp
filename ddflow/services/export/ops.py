@@ -386,8 +386,8 @@ def listing(repo: Path, cfg: Config) -> list[dict[str, Any]]:
         if not spec.selected:
             row.update(state="not selected", detail="")
         else:
+            q = q or load(repo, cfg)  # an unreadable log is "could not run" (exit 2), not a state
             try:
-                q = q or load(repo, cfg)
                 state, detail = state_of(repo, cfg, q, spec)
             except ExportError as exc:
                 state, detail = "stale", f"could not compare: {exc}"
