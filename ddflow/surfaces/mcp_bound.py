@@ -52,6 +52,8 @@ ITEM_PLUMBING = ("landed_before", "landed_after")
 #: reviewers wrote what they did and found; the long ones run to 700+ characters, and
 #: `ddflow --json show` has them whole.
 TEXT_SHOWN = 160
+#: What a cut string ends in.
+CUT_MARK = " [...]"
 
 
 def _lean(value: Any) -> Any:
@@ -97,10 +99,11 @@ def _clip(value: Any, cut: list[int]) -> Any:
     """``value`` with every string over `TEXT_SHOWN` cut and ended in ' [...]'; ``cut[0]``
     counts them."""
     if isinstance(value, str):
-        if len(value) <= TEXT_SHOWN:
+        # Only when the cut is a saving: the " [...]" marker is six characters.
+        if len(value) <= TEXT_SHOWN + len(CUT_MARK):
             return value
         cut[0] += 1
-        return value[:TEXT_SHOWN].rstrip() + " [...]"
+        return value[:TEXT_SHOWN].rstrip() + CUT_MARK
     if isinstance(value, list):
         return [_clip(v, cut) for v in value]
     if isinstance(value, dict):

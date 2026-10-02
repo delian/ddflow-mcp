@@ -248,3 +248,13 @@ def test_a_triage_record_without_location_or_title_is_not_reported_as_cut():
     for rec in ({"note": "x"}, {"verdict": "open", "title": "", "location": ""}):
         body = {"state": "open", "triage": {"g": {"f1": rec}}}
         assert B.bound_show(body, {})[0] == body, rec
+
+
+def test_a_string_just_over_the_cut_is_left_whole_because_cutting_would_not_shrink_it():
+    edge = "w" * (B.TEXT_SHOWN + len(B.CUT_MARK))
+    out, _ = B.bound_show({"state": "open", "gates": {"g": {"evidence": {"note": edge}}}}, {})
+    assert out["gates"]["g"]["evidence"]["note"] == edge
+    over, _ = B.bound_show(
+        {"state": "open", "gates": {"g": {"evidence": {"note": edge + "w"}}}}, {}
+    )
+    assert over["gates"]["g"]["evidence"]["note"].endswith(B.CUT_MARK)
