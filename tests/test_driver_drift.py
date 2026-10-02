@@ -105,3 +105,8 @@ def test_refresh_docs_from_a_linked_worktree_writes_there(repo):
         text=True,
     ).stdout
     assert status == "", "the primary must stay clean"
+
+
+def test_missing_templates_do_not_crash_doctor_or_the_drift_check(repo, tmp_path):
+    _adopted(repo)
+    assert AD.driver_drift(repo, package_dir=tmp_path / "no-package") == []
