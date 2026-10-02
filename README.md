@@ -740,7 +740,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 139 knobs.
+cadences, and the rest of the 140 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -836,8 +836,8 @@ that retrying cannot fix fails at once, and only after the budget does it fail w
 Four things gate a release, and each exists because the failure it catches is public and
 irreversible:
 
-* the tag, `pyproject.toml`, `server.json`'s version **and every OCI identifier's tag**
-  must agree — a `:0.1.0` left behind while `version` moved on publishes a manifest
+* the tag, `ddflow/__init__.py` (the one declared version), `server.json`'s version **and
+  every OCI identifier's tag** must agree — a `:0.1.0` left behind while `version` moved on publishes a manifest
   pointing at the previous image, installable and wrong;
 * the full suite, plus the slow end-to-end scenarios, which `-m 'not slow'` otherwise
   excludes from every ordinary run;
@@ -855,7 +855,7 @@ $ git push origin main           # that is the whole release
 **Every push to main that changes shipped code releases, with the PATCH version bumped.**
 Major and minor move only when you move them.
 "Shipped" means `ddflow/`, `pyproject.toml`, `uv.lock`, `Dockerfile`,
-`docker-entrypoint.sh`, `.dockerignore`, `server.json` or `README.md` (the PyPI page, and
+`docker-entrypoint.sh`, `.dockerignore`, `server.json`, `server.template.json` or `README.md` (the PyPI page, and
 the line the registry verifies): a push of other docs, tests or the ddflow event log
 releases nothing, because PyPI keeps every version forever and one identical to the last
 is noise nobody can withdraw. CI runs `scripts/bump.sh patch`, commits `release 0.1.2` to
@@ -886,12 +886,16 @@ loses a race with another commit fails the run and publishes nothing, where push
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
 `main` or a `v*` tag releases.
 
-The version lives in seven places — `pyproject.toml`, `server.json`'s version, the `pypi`
-package's version (an `oci` package has none), the tag inside every OCI identifier, `SERVER_INFO` (what the server
-tells every client it is), `ddflow.__version__`, and `uv.lock`, which records the project's
-own version. `scripts/bump.sh` moves them all and re-reads them to check it did;
-`tests/test_packaging.py` fails if the first six ever drift. (That test caught the bump
-script missing `SERVER_INFO` on its first run.)
+The version is declared in **one** place: `__version__` in `ddflow/__init__.py`, the only
+line a bump edits. `pyproject.toml` reads it (a hatch dynamic version, so `uv.lock` records no
+version for the project and a bump never makes the lock stale), `SERVER_INFO` (what the
+server tells every client it is, and what `ddflow --version` prints) is built from it, and
+`server.json` — the manifest's version, the `pypi` package's version and the tag inside every
+OCI identifier (an `oci` package has no version field) — is a **generated, committed** file:
+edit `server.template.json`, then run `scripts/render_server_json.py` (`--check` fails when
+`server.json` is not the render; a test and the publish workflow both run it).
+`scripts/bump.sh` edits the literal, renders `server.json` and re-reads the result;
+`tests/test_packaging.py` fails if anything drifts. Do not edit `server.json` by hand.
 
 **`scripts/release.sh` runs all of that locally and publishes nothing.** It is dry by
 default, needs no credentials, and exists because a tag is not reversible: PyPI refuses a
@@ -2231,6 +2235,32 @@ narrower driver the project set for a file inside the glob: it is written before
 line, so the narrower one keeps winning. Only the committed config writes union lines; a
 `.ddflow/local` edit syncs nothing.
 
+**A contended file is served first come, first served.** An agent refused for an overlap
+used to have no place in line: it polled, and whoever polled first after the release took
+the file, so a hot file (the one every change touches) starved its longest waiter for
+hours. Now a live `ddflow wait --item X`, or a `claim` that was refused and is asked again,
+is a place in line (kept in `.ddflow/local/waits/`, this machine's, never committed). While
+the oldest waiter could claim its item right now, a younger or unqueued claim of an
+overlapping file is refused with exit 3: `TC is reserved for agent-b (waiting since
+14:02:11Z for TB, which needs the same files); their place is held for 300s after they could
+claim`. `next` lists such an item as blocked instead of offering it, and `wait --item` stays
+blocked on it. The waiter's own claim passes, and it spends the place. This is a
+best-effort queue, not a lock: the registry is checked when a claim is asked, not inside the
+lease transaction, so two claims landing in the very same instant at a release can still race.
+
+The rule cannot hold anyone up for long: a waiter whose process died or whose wait deadline
+passed is dead, and blocks nobody; a waiter that was woken and does not come back loses its
+place `[lease].waiter_reservation_s` seconds later (default 300; `0` turns the queue off); a
+waiter still behind another holder, or waiting for files disjoint from yours, reserves
+nothing against you; and the order is strict (older first), so two waiters cannot reserve
+against each other. A refused claim keeps its place as long as it is asked again within the
+window. The holder is told who it holds up: `heartbeat` and `release` name the waiters, and
+`brief` adds a "Waiting on you" section. Releasing globs while only gates are pending is
+deliberately not offered: until the branch is merged another agent editing the same files
+would only meet the conflict at merge. The honest remedy is a short claim: claim when you
+are ready to edit, run the gates promptly, and do not sit on a lease waiting for a slow
+review (record `partial` and merge instead).
+
 **When two clones disagree.** A merge can bring in a rival definition of one id (two
 clones added it) or two claims on one item whose windows overlapped. ddflow records the
 contest instead of letting the later event silently win: `show` prints a `CONTESTED` block
@@ -3177,7 +3207,7 @@ declared once and persists — see
 
 ## Configuration
 
-139 knobs across 18 sections, every one documented in place:
+140 knobs across 18 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

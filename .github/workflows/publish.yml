@@ -46,6 +46,7 @@ on:
       - "ddflow/**"
       - "pyproject.toml"
       - "uv.lock"
+      - "server.template.json"
       - "Dockerfile"
       - "docker-entrypoint.sh"
       - ".dockerignore"
@@ -94,11 +95,18 @@ jobs:
       sha: ${{ steps.decide.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v10.2.0   # bump.sh re-locks uv.lock, which records the version
       - id: decide
         run: |
           set -eu
-          version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+          # The version is declared once, in ddflow/__init__.py; server.json is rendered
+          # from server.template.json. A checkout where the two disagree (an edit that
+          # skipped scripts/render_server_json.py) publishes nothing: the registry job
+          # reads server.json from the release sha, so it must be committed rendered.
+          python3 scripts/render_server_json.py --check || {
+            echo "::error::server.json is not the render of server.template.json; run scripts/render_server_json.py and commit"
+            exit 1
+          }
+          version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
 
           if [ "${{ github.ref_type }}" = "tag" ]; then
             {
@@ -130,7 +138,7 @@ jobs:
               done
               [ "$taken" = 404 ] || { echo "::error::no free patch version within 50 of $version"; exit 1; }
               scripts/bump.sh "$next"
-              version=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+              version=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
               git config user.name "github-actions[bot]"
               git config user.email "github-actions[bot]@users.noreply.github.com"
               git commit -qam "release $version"
@@ -214,18 +222,20 @@ jobs:
       - uses: astral-sh/setup-uv@v10.2.0
       - name: Verify the tag matches the declared version
         run: |
-          # A tag that disagrees with pyproject.toml publishes a version nobody can
-          # reproduce from the tree. Fail loudly rather than shipping the mismatch.
+          # A tag that disagrees with ddflow/__init__.py (where pyproject.toml's dynamic
+          # version comes from) publishes a version nobody can reproduce from the tree.
+          # Fail loudly rather than shipping the mismatch.
           # On a tag push this is the tag; on a main push the gate already told us the
-          # version, and comparing "main" against pyproject would fail for the wrong reason.
+          # version, and comparing "main" against __init__.py would fail for the wrong reason.
           tag="${{ needs.gate.outputs.version }}"
-          decl=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
-          srv=$(python -c 'import json;print(json.load(open("server.json"))["version"])')
-          test "$tag" = "$decl" || { echo "tag $tag != pyproject $decl"; exit 1; }
+          decl=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
+          srv=$(python3 -c 'import json;print(json.load(open("server.json"))["version"])')
+          test "$tag" = "$decl" || { echo "tag $tag != ddflow/__init__.py $decl"; exit 1; }
           test "$tag" = "$srv"  || { echo "tag $tag != server.json $srv"; exit 1; }
           # Every OCI identifier carries the version as its TAG. A `:0.1.0` left behind
           # while `version` moved on would publish a manifest pointing at the previous
           # image -- discoverable, installable, and the wrong build.
+          python3 scripts/render_server_json.py --check || { echo "server.json is not the render of server.template.json"; exit 1; }
           python - "$tag" <<'PY'
           import json, sys
           want = sys.argv[1]
