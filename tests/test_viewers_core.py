@@ -166,3 +166,28 @@ def test_api_reads_a_real_log_and_reports_empty_and_refusal(repo):
     assert out.exit == 0 and [r["id"] for r in out.data["rows"]] == ["TK"]
     assert out.data["truncated"] is False and out.data["total"] == 1
     assert view_list(repo, "nonsense").exit == 3
+
+
+def test_since_is_refused_when_unparseable_and_compares_instants():
+    with pytest.raises(V.ViewError, match="since"):
+        V.list_view(_state(), CFG, "bug", since="yesterday")
+    # the same instant spelled with an offset and with Z both count
+    assert ids("bug", since="2026-04-02T00:00:00+00:00") == ["B2"]
+    assert ids("bug", since="2026-04-02") == ["B2"]
+
+
+def test_phase_filter_and_column_resolve_the_enclosing_phase_of_a_sub_task():
+    st = _state()
+    st.items["T5"] = Item(id="T5", kind="task", title="sub", parent="T2", created_at="2026-02-05")
+    st.bugs["B3"] = Bug(id="B3", item="T5", summary="deep", found_at="2026-04-05T00:00:00")
+    for kind, want in (("bug", "B3"), ("task", "T5")):
+        v = V.list_view(st, CFG, kind, phase="P1")
+        assert want in [r["id"] for r in v.rows]
+    row = next(r for r in V.list_view(st, CFG, "task").rows if r["id"] == "T5")
+    assert row["phase"] == "P1"
+
+
+def test_tags_are_redacted_too():
+    st = State()
+    st.items["T"] = Item(id="T", kind="task", tags=["ghp_" + "b" * 36], created_at="2026-01-01")
+    assert "b" * 10 not in V.list_view(st, CFG, "task").rows[0]["tags"][0]
