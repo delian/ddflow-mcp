@@ -59,3 +59,13 @@ def test_block_abandoned_over_mcp_needs_reopen(repo):
     assert _state(repo) == "abandoned"
     assert call(reopen=True)["_meta"]["exit"] == OK
     assert _state(repo) == "blocked"
+
+
+def test_block_help_and_mcp_description_name_abandoned(repo):
+    from ddflow.surfaces.mcp import Server
+
+    code, out, err = run_cli(repo, "block", "--help")
+    assert code == OK and "ABANDONED" in " ".join((out + err).split())
+    reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    tool = next(t for t in reply["result"]["tools"] if t["name"] == "ddflow_block")
+    assert "ABANDONED" in tool["description"]
