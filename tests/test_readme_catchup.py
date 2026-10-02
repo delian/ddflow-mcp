@@ -24,6 +24,10 @@ def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.Argument
     return {}
 
 
+#: Options every command takes (mirrored onto each subparser from the root parser).
+_GLOBAL = {"--agent", "--repo", "--json", "--help"}
+
+
 def _spans() -> list[str]:
     """Every `ddflow …` span: inline code, and the lines of fenced blocks (with a leading
     `$ ` shell prompt removed). Prose is not read: only what a reader would type."""
@@ -64,6 +68,14 @@ def test_every_command_the_readme_names_exists():
         subs = _subcommands(top[cmd])
         if sub and subs and sub not in subs:
             bad.append(span)
+            continue
+        parser = subs[sub] if sub and subs else top[cmd]
+        known = {o for a in parser._actions for o in a.option_strings} | _GLOBAL
+        # A flag it names must be one the command takes (`--flag=v` and `--flag v` alike).
+        # (The reference's trailing description column, after two spaces, is prose.)
+        for flag in re.findall(r"(?<![\w-])(--[a-z][a-z-]*)", re.split(r"\s{2,}", span)[0]):
+            if flag not in known:
+                bad.append(f"{span}  [{flag} is not an option of `ddflow {cmd}`]")
     assert not bad, f"not commands: {sorted(set(bad))}"
 
 
