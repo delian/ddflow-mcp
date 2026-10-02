@@ -76,6 +76,11 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         # records it judged the same, related or distinct -- operator-visible intent.
         "record.extended",
         "link.recorded",
+        # D-export-agent-enable: who selected a generated document, and the operator's veto
+        # (a lock) on it. A compaction that dropped these would lift a lock silently.
+        "export.enabled",
+        "export.disabled",
+        "export.acknowledged",
     }
 )
 

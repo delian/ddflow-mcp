@@ -673,6 +673,11 @@ class State:
     #: (decision D-reviewer-trust). An entry no tool wrote appears in neither.
     reviewer_writes: dict[str, dict[str, Any]] = field(default_factory=dict)
     reviewer_approvals: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: document kind -> who last enabled or disabled its export and when, and whether the
+    #: operator vetoed it: {"enabled", "by", "human", "at", "path", "mode", "local",
+    #: "locked", "acked"}. The SELECTION itself lives in the config; this is the record
+    #: of who changed it (decision D-export-agent-enable).
+    exports: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: record id -> its links and additions. Only records that have any appear.
     links: dict[str, RecordLinks] = field(default_factory=dict)
     last_lamport: int = 0
@@ -1848,6 +1853,49 @@ def _h_reviewer_approved(st: State, ev: Event) -> None:
         }
 
 
+def _h_export_enabled(st: State, ev: Event) -> None:
+    d = ev.data
+    human = bool(d.get("human"))
+    st.exports[ev.subject] = {
+        "enabled": True,
+        "by": str(d.get("by") or ev.agent),
+        "human": human,
+        "at": ev.ts,
+        "path": str(d.get("path", "")),
+        "mode": str(d.get("mode", "")),
+        "local": bool(d.get("local")),
+        # Only a person at a terminal lifts the operator's veto. The writer enforces that
+        # (an agent's enable of a locked document is refused); the fold ignores the event's
+        # own `locked` claim and honours its `human` flag as it does for every event kind:
+        # the log has no authenticity beyond what its writers record.
+        "locked": bool(st.exports.get(ev.subject, {}).get("locked")) and not human,
+        "acked": human,  # an agent's enable waits for the operator to acknowledge it
+    }
+
+
+def _h_export_disabled(st: State, ev: Event) -> None:
+    d = ev.data
+    prev = st.exports.get(ev.subject, {})
+    st.exports[ev.subject] = {
+        **prev,
+        "enabled": False,
+        "by": str(d.get("by") or ev.agent),
+        "human": bool(d.get("human")),
+        "at": ev.ts,
+        "locked": bool(prev.get("locked")) or bool(d.get("locked")),
+        "acked": True,  # stopping a document needs no acknowledgement
+    }
+
+
+def _h_export_acknowledged(st: State, ev: Event) -> None:
+    if not ev.data.get("human"):  # only a person's acknowledgement clears the notice
+        return
+    docs = ev.data.get("documents")
+    for doc in docs if isinstance(docs, list) else []:
+        if isinstance(doc, str) and doc in st.exports:
+            st.exports[doc]["acked"] = True
+
+
 #: kind -> handler. The single declaration of the event vocabulary.
 def _links(st: State, record: str) -> RecordLinks:
     return st.links.setdefault(record, RecordLinks(id=record))
@@ -1979,6 +2027,9 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "reviewer.approved": _h_reviewer_approved,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
+    "export.enabled": _h_export_enabled,
+    "export.disabled": _h_export_disabled,
+    "export.acknowledged": _h_export_acknowledged,
 }
 
 
