@@ -157,6 +157,24 @@ def test_region_mode_moves_unreleased_below_the_markers(proj):
     assert f"[1.1.0]: {REMOTE_URL}/compare/v1.0.0...v1.1.0" in text
 
 
+def test_region_mode_does_not_duplicate_a_section_on_a_rerun(proj):
+    repo = proj
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write('\n[export.changelog]\nmode = "region"\n')
+    from ddflow.services.export import write
+
+    (repo / "CHANGELOG.md").write_text(
+        "# Changelog\n\n"
+        + write.region_text("changelog", "## [Unreleased]\n")
+        + "\n## [1.1.0] - 2026-01-01\n\n- Already here.\n"
+    )
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-qm", "docs: changelog")
+    code, out, err = _cut(repo, "--changelog")
+    assert code == 3 and "already has a section for 1.1.0" in out + err
+    assert _git(repo, "tag", "-l") == "v1.0.0"
+
+
 def test_a_git_failure_is_exit_2_and_leaves_no_tag(proj, monkeypatch):
     from ddflow.api import flow as A
     from ddflow.services import changelog_cut as CC

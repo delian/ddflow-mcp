@@ -162,6 +162,11 @@ def _region(
                     f"refusing to overwrite (--force to replace)"
                 )
             rest = old[e.end() + 1 :]
+            if re.search(rf"^## \[{re.escape(version)}\]", rest, re.M):
+                raise EW.Refused(
+                    f"{rel} already has a section for {version}: a second one would duplicate "
+                    f"it. Remove it (or the earlier changelog commit) and cut again"
+                )
             new_section = F.normalize(section)
             if rest and not rest.startswith(("\n", "\r\n")):
                 new_section += "\n"
