@@ -118,8 +118,13 @@ def test_url_carries_exactly_the_previewed_text():
 
 
 def test_url_rejects_a_malformed_repo():
-    with pytest.raises(ValueError):
-        D.issue_url(_bundle(), "owner/repo?x=1")
+    for bad in ("owner/repo?x=1", "-owner/repo", "owner", "a/b/c", ""):
+        with pytest.raises(ValueError):
+            D.issue_url(_bundle(), bad)
+    b = _bundle()
+    r = Runner()
+    out = D.send_gh(Path("."), b, "-owner/repo", _consent(b), runner=r, now=NOW)
+    assert out.status == "refused" and r.calls == []
 
 
 def _real_bug_texts() -> list[str]:
