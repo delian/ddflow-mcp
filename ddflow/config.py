@@ -915,6 +915,26 @@ _doc(
 )
 
 
+#: The tool tiers `[mcp].tools` accepts. Kept here, not imported from the MCP surface, so
+#: config validation does not depend on the surface above it; `tests/test_mcp_tool_tiers.py`
+#: asserts the two lists agree.
+MCP_TOOL_TIERS = ("core", "standard", "all")
+
+
+@dataclass
+class McpConfig:
+    """The MCP server's own knobs. A START-TIME choice: read once when a connection starts."""
+
+    tools: str = "all"
+
+
+_doc(
+    "mcp",
+    "tools",
+    "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). An unrecognised value is refused on write; in a config file it is skipped with a warning (a newer release's tier) and `all` applies.",
+)
+
+
 @dataclass
 class LoopsConfig:
     """Runtime loop detection — work that repeats instead of finishing."""
@@ -1209,6 +1229,7 @@ class Config:
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    mcp: McpConfig = field(default_factory=McpConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
@@ -1334,6 +1355,12 @@ class Config:
                 value = _coerce(raw, known[knob].type)
                 check = _KNOB_CHECKS.get(f"{sec}.{knob}")
                 if check and (why := check(value)):
+                    if lenient and f"{sec}.{knob}" in _TOLERANT_VALUES:
+                        # A value this code does not know, in a file that may be NEWER
+                        # than the code (a later release's tier): recorded like an unknown
+                        # knob and left at its default, so no command stops loading config.
+                        self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
+                        continue
                     raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
@@ -1438,7 +1465,15 @@ def _unit_interval(v: Any) -> str:
 #: load and by `Config.check`, so `config set` refuses the value instead of writing it.
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
+#: Knobs whose VALUE set can grow in a later release (an enum), so a config FILE carrying a
+#: value this version does not know is skipped with a warning rather than refused; the
+#: write paths (`config --set`, `ddflow_configure`) still refuse it.
+_TOLERANT_VALUES = frozenset({"mcp.tools"})
+
 _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+    "mcp.tools": lambda v: (
+        "" if v in MCP_TOOL_TIERS else f"must be one of {', '.join(MCP_TOOL_TIERS)}"
+    ),
     # TOML arrives typed and `_coerce` passes it through untouched, so a string where a
     # list belongs (`hydrafusion = "openai"`) would iterate as letters: a set of nonsense
     # families that matches no reviewer, and so clears every one.

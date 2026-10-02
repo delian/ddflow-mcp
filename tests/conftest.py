@@ -27,6 +27,13 @@ def _dedupe_off_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("DDFLOW_DEDUPE_ON_MATCH", "off")
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_mcp_tool_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``DDFLOW_MCP_TOOLS`` is a documented env knob; one exported in a developer's shell
+    must not narrow ``tools/list`` under every test (and `run_cli` subprocesses inherit)."""
+    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A real git repository. Real, not mocked: every worktree, lease-recovery and

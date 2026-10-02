@@ -26,6 +26,7 @@
     gate_gaps          list    gate ids in the task pipeline with no companion behind them
     recoverable        int     crashed agents' worktrees waiting
     ready, running, blocked, open_bugs, loops   int
+    tool_tier_note     str     what this connection's `[mcp].tools` tier hides, or ""
     task_pipeline      list    the gate ids every task passes through, in order
     require_outcome    bool    whether a silent gate blocks completion
     importable         int     source files an import could read
@@ -34,6 +35,10 @@
     imported_no_globs  int     imported tasks with no declared globs
     imported_shipped_drift int phases claiming SHIPPED over an open task
 #}
+{% if tool_tier_note %}
+**Tool tier.** {{ tool_tier_note }}
+
+{% endif %}
 {% if adopted %}
 This repository's work is a queue managed by ddflow. Follow it — the rules below are
 enforced by the tools, not merely requested.

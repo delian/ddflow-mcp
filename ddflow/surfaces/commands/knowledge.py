@@ -350,6 +350,7 @@ def cmd_bug(a, c: Ctx) -> int:
         lesson=a.lesson or "",
         lesson_title=getattr(a, "lesson_title", "") or "",
         lesson_rule=getattr(a, "lesson_rule", "") or "",
+        changelog=getattr(a, "changelog", "") or "",
         agent=c.requested_agent,
     )
     # Every non-OK exit, not just 1: checking only FAIL let a REFUSED unknown id print
