@@ -361,10 +361,10 @@ class Bug:
     invalid_reason: str = ""
     evidence: str = ""
     #: Optional, from `bug found --title/--severity/--scope`; an old event carries none
-    #: and folds to "" (an unrecorded scope reads as `project`).
+    #: and folds to "" (scope: `project`, the default; only `ddflow` is ever written).
     title: str = ""
     severity: str = ""
-    scope: str = ""
+    scope: str = "project"
     #: `bug.reported_upstream`: where the report about this bug went (a ddflow bug filed
     #: against ddflow itself).
     upstream_url: str = ""
@@ -1527,7 +1527,7 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug.summary = ev.data.get("summary", "") or bug.summary
     bug.title = ev.data.get("title", "") or bug.title
     bug.severity = ev.data.get("severity", "") or bug.severity
-    bug.scope = ev.data.get("scope", "") or bug.scope
+    bug.scope = ev.data.get("scope", "") or bug.scope  # absent: the default, `project`
     bug.found_at = bug.found_at or ev.ts
 
 
@@ -1541,7 +1541,8 @@ def _h_bug_reported_upstream(st: State, ev: Event) -> None:
     bug.upstream_number = str(d.get("number", "") or "") or bug.upstream_number
     bug.upstream_delivery = str(d.get("delivery", "") or "") or bug.upstream_delivery
     bug.upstream_digest = str(d.get("digest", "") or "") or bug.upstream_digest
-    bug.upstream_sent_at = str(d.get("sent_at", "") or "") or bug.upstream_sent_at or ev.ts
+    # Only a recorded `sent_at` says it went: a prepared report has none yet.
+    bug.upstream_sent_at = str(d.get("sent_at", "") or "") or bug.upstream_sent_at
 
 
 def _h_bug_fixed(st: State, ev: Event) -> None:

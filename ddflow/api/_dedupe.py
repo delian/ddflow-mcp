@@ -210,14 +210,9 @@ def rows(st, matcher, cands, text: str) -> list[dict[str, Any]]:
         }
         bg = st.bugs.get(c.id) if c.kind == "bug" else None
         if bg is not None:
-            # `scope` only when it is the unusual one: a bug in ddflow itself.
-            row.update(
-                {
-                    k: v
-                    for k, v in (("severity", bg.severity), ("scope", bg.scope))
-                    if v and (k != "scope" or v != "project")
-                }
-            )
+            row.update({"severity": bg.severity} if bg.severity else {})
+            if bg.scope != "project":  # shown only when it is the unusual one
+                row["scope"] = bg.scope
         out.append(row)
     return out
 

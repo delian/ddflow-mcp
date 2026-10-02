@@ -516,18 +516,21 @@ def bug_found(
     if chk.extension:
         return DD.extend(log, cfg, chk, "bug.found")
     with log.transaction():
-        extra = {k: v for k, v in (("title", title), ("severity", severity)) if v}
-        log.append(
-            "bug.found",
-            bid,
-            {"item": item, "summary": summary, "scope": scope, **extra, **chk.fields},
-        )
+        # Only what was said is written: `project` is the default, so a plain re-report of
+        # a ddflow-scoped bug (same summary and item, same id) does not turn it back.
+        extra = {
+            k: v
+            for k, v in (("title", title), ("severity", severity), ("scope", scope))
+            if v and (k != "scope" or v != "project")
+        }
+        log.append("bug.found", bid, {"item": item, "summary": summary, **extra, **chk.fields})
         DD.after_add(log, cfg, bid, chk)
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
     # out loud, because otherwise a real recurrence filed under an id already closed --
     # the same summary and item give the same auto id -- vanishes without a word.
     prior = st.bugs.get(bid)
-    offer = upstream_offer(scope, bid)
+    stored = prior.scope if prior is not None else "project"
+    offer = upstream_offer("ddflow" if "ddflow" in (scope, stored) else "project", bid)
     more = {"offer": offer} if offer else {}
     if prior is not None and prior.resolution:
         return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())
