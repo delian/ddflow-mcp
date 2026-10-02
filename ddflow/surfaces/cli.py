@@ -472,8 +472,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     up.set_defaults(fn=cmd_item_update)
 
-    nx = s.add_parser("next", help="what may start now (exit 2 = nothing actionable)")
-    nx.add_argument("--phase", default="")
+    nx = s.add_parser(
+        "next",
+        help="what may start now (exit 2 = nothing actionable, exit 1 = unknown --phase)",
+    )
+    nx.add_argument(
+        "--phase", default="", help="limit to this phase; exit 1 if it names no phase or item"
+    )
     nx.add_argument("--kind", default=A_LIFECYCLE.DEFAULT_NEXT_KIND, choices=["task", "phase"])
     nx.set_defaults(fn=cmd_next)
 
@@ -558,9 +563,19 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         gr = g_s.add_parser(name)
         gr.add_argument("id")
         gr.add_argument("gate")
-        gr.add_argument("--outcome", default="passed", choices=list(GATE_OUTCOMES))
-        gr.add_argument("--reason", default="")
-        gr.add_argument("--evidence", default="")
+        gr.add_argument(
+            "--outcome",
+            default="passed",
+            choices=list(GATE_OUTCOMES),
+            help="failed, unavailable, partial and skipped each require --reason",
+        )
+        gr.add_argument(
+            "--reason",
+            default="",
+            help="why the gate did not pass; REQUIRED for outcomes failed, unavailable, "
+            "partial and skipped (--evidence is what you observed, not a substitute)",
+        )
+        gr.add_argument("--evidence", default="", help="what you observed: output, a summary")
         gr.add_argument("--command", default="")
         gr.add_argument("--exit-code", type=int)
         gr.add_argument("--model", default="", help="reviewer model, for family independence")
