@@ -253,3 +253,20 @@ def test_from_source_follows_root_not_the_calling_interpreter(tmp_path):
     )
     info = I.install_info(root=site)
     assert (info.kind, info.commit) == ("vcs", COMMIT)
+
+
+def test_missing_distribution_never_borrows_the_running_installs_record(tmp_path):
+    site = tmp_path / "x" / "site-packages"
+    (site / "ddflow").mkdir(parents=True)
+    assert I._direct_url(None) is None
+    assert I.install_info(root=site).kind == "unknown"
+
+
+def test_home_replacement_needs_a_leading_boundary(monkeypatch):
+    monkeypatch.setenv("HOME", "/home/ann")
+    assert I.normalise_path("/srv/backup/home/ann/ddflow") == "/srv/backup/home/ann/ddflow"
+
+
+def test_non_table_project_in_pyproject_is_tolerated(tmp_path):
+    (tmp_path / "pyproject.toml").write_text('project = "x"\n')
+    assert I.is_own_dev_tree(tmp_path) is False

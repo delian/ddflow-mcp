@@ -38,7 +38,7 @@ class InstallInfo:
     kind: str
     commit: str | None
     is_own_dev_tree: bool
-    location: str | None = None  # home-normalised; only for a source tree or local install
+    location: str | None = None  # home-normalised; only for a source tree or editable install
 
     def as_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -69,7 +69,6 @@ def _direct_url(dist=None) -> dict | None:
     """The PEP 610 record of the install (private: it carries the URL), or None when there is none (an index install,
     no distribution, or an unreadable file -- the last is also 'not evidence of an
     index', and `kind` says so)."""
-    dist = dist if dist is not None else own_distribution()
     if dist is None:
         return None
     text = dist.read_text("direct_url.json")
@@ -115,7 +114,7 @@ def normalise_path(value: str | Path) -> str:
     if not home or home == "/":
         return str(value)
     # Only at a path-component boundary: `/home/ann` must not eat `/home/anna`.
-    return re.sub(re.escape(home) + r"(?=/|$|[^\w.-])", "~", str(value))
+    return re.sub(r"(?<![\w.-])" + re.escape(home) + r"(?=/|$|[^\w.-])", "~", str(value))
 
 
 def is_own_dev_tree(root: Path | None = None) -> bool:
@@ -125,9 +124,10 @@ def is_own_dev_tree(root: Path | None = None) -> bool:
     root = Path(root) if root is not None else _paths.package_parent()
     pyproject = root / "pyproject.toml"
     try:
-        name = tomllib.loads(pyproject.read_text(encoding="utf-8")).get("project", {}).get("name")
+        project = tomllib.loads(pyproject.read_text(encoding="utf-8")).get("project")
     except (OSError, ValueError):
-        name = None
+        project = None
+    name = project.get("name") if isinstance(project, dict) else None
     if name == DIST_NAME and (root / "ddflow").is_dir():
         return True
     return bool(_OWN_REMOTE.search(_git(root, "remote", "get-url", "origin") or ""))
@@ -185,7 +185,7 @@ def install_info(root: Path | None = None) -> InstallInfo:
         commit = record["vcs_info"].get("commit_id")
     if commit is None and kind in ("source-tree", "editable"):
         commit = _git(root, "rev-parse", "HEAD")
-    location = normalise_path(root) if kind in ("source-tree", "editable", "local-dir") else None
+    location = normalise_path(root) if kind in ("source-tree", "editable") else None
     return InstallInfo(
         version=version,
         kind=kind,
