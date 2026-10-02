@@ -37,7 +37,10 @@ def test_shared_parameter_descriptions_are_not_repeated_in_full():
             if arg in props and len(props[arg]["description"]) > SHARED_DESCRIPTION_MAX:
                 long_ones.append((name, arg))
     assert not long_ones, long_ones
-    assert ADD_TOOLS  # the add tools still carry the answer arguments
+    # ...and the add tools still carry the answer arguments at all.
+    for name in ADD_TOOLS:
+        props = _schema(TOOLS[name])["properties"]
+        assert "relation" in props and "check_only" in props, name
 
 
 def test_the_trimmed_text_still_has_a_home():
