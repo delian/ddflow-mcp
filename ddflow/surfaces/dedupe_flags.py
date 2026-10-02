@@ -172,15 +172,13 @@ def parse_reply(reply: str, rows: list[dict[str, Any]]) -> Answer | bool | None:
 
 
 def commands(argv: list[str], rows: list[dict[str, Any]]) -> list[str]:
-    """The invocation again with each answer appended: ready to copy."""
-    base = "ddflow " + shlex.join(argv)
-    top = shlex.quote(rows[0]["id"])
-    return [
-        f"{base} --new",
-        f"{base} --extends {top}",
-        f"{base} --duplicate-of {top}",
-        f"{base} --related {top}",
-    ]
+    """The invocation again with each answer added: ready to copy. The flag goes BEFORE a
+    ``--`` end-of-options separator, which would otherwise swallow it as text."""
+    cut = argv.index("--") if "--" in argv else len(argv)
+    head, tail = argv[:cut], argv[cut:]
+    top = rows[0]["id"]
+    answers = [["--new"], ["--extends", top], ["--duplicate-of", top], ["--related", top]]
+    return ["ddflow " + shlex.join([*head, *answer, *tail]) for answer in answers]
 
 
 def settle(a, c, out: Outcome) -> int | None:
