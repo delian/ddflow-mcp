@@ -156,5 +156,5 @@ def test_block_refuses_a_gate_rerun_on_an_unchanged_tree_with_the_evidence(repo)
 
 def test_loops_reports_repeated_failures_among_what_it_checked(repo):
     run_cli(repo, "init")
-    code, out, _ = run_cli(repo, "loops", "--json")
+    code, out, _ = run_cli(repo, "loops")
     assert code == NOTHING and "repeated failures" in out
