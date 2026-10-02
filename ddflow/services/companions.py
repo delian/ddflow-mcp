@@ -746,6 +746,43 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
     return None
 
 
+def _register_toml(path: Path, rel: str, c: Companion, dry_run: bool) -> tuple[str, str]:
+    """The TOML (codex) half of `register`."""
+    text = path.read_text("utf-8") if path.exists() else ""
+    block = f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
+    if c.env:
+        block += f"env = {_toml(dict(c.env))}\n"
+    replaced = False
+    if _toml_stale_entry(text, c):
+        # Refreshed like the JSON path (B662a1ace82): the old table is cut out and the
+        # registry's launch appended -- unless the same launch already runs under
+        # another name (a second copy), or the table is not one that can be cut out.
+        if other := _launched_elsewhere((tomllib.loads(text)["mcp_servers"], text), c, rel):
+            return "unchanged", other
+        if (cut := _toml_without(text, c.id)) is None:
+            return "refused", (
+                f"SKIPPED {rel}: [mcp_servers.{c.id}] launches something other than the "
+                f"registry's launch and is not a plain table that can be rewritten; "
+                f"replace it by hand"
+            )
+        text, replaced = cut, True
+    new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
+    if verdict := _toml_present(text, new_text, c, rel):
+        return verdict
+    if dry_run and replaced:
+        return "written", f"WOULD replace in {rel}:\n{block.lstrip()}"
+    if dry_run:
+        # The block as it will be APPENDED, minus the leading blank line that only
+        # separates it from what is above. `test_the_preview_matches_the_write_for_a
+        # _TOML_target_too` asserts this text appears verbatim in the written file,
+        # which is the guarantee that matters; showing the whole merged file here
+        # would bury one added stanza in the operator's entire config.
+        return "written", f"WOULD add to {rel}:\n{block.lstrip()}"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(new_text, "utf-8")
+    return "written", f"{'refreshed' if replaced else 'registered'} {c.id} in {rel}"
+
+
 def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> tuple[str, str]:
     """Add one companion to one agent's MCP config, preserving everything there.
 
@@ -787,41 +824,7 @@ def register(repo: Path, c: Companion, agent: str, *, dry_run: bool = False) -> 
     # over a file the write would REFUSE as unparseable -- an operator signing off on a
     # change that could not happen, which is the failure the preview exists to prevent.
     if target.shape == SHAPE_TOML:
-        text = path.read_text("utf-8") if path.exists() else ""
-        block = (
-            f"\n[mcp_servers.{c.id}]\ncommand = {_toml(c.command)}\nargs = {_toml(list(c.args))}\n"
-        )
-        if c.env:
-            block += f"env = {_toml(dict(c.env))}\n"
-        replaced = False
-        if _toml_stale_entry(text, c):
-            # Refreshed like the JSON path (B662a1ace82): the old table is cut out and the
-            # registry's launch appended -- unless the same launch already runs under
-            # another name (a second copy), or the table is not one that can be cut out.
-            if other := _launched_elsewhere((tomllib.loads(text)["mcp_servers"], text), c, rel):
-                return "unchanged", other
-            if (cut := _toml_without(text, c.id)) is None:
-                return "refused", (
-                    f"SKIPPED {rel}: [mcp_servers.{c.id}] launches something other than the "
-                    f"registry's launch and is not a plain table that can be rewritten; "
-                    f"replace it by hand"
-                )
-            text, replaced = cut, True
-        new_text = text.rstrip() + "\n" + block if text.strip() else block.lstrip()
-        if verdict := _toml_present(text, new_text, c, rel):
-            return verdict
-        if dry_run and replaced:
-            return "written", f"WOULD replace in {rel}:\n{block.lstrip()}"
-        if dry_run:
-            # The block as it will be APPENDED, minus the leading blank line that only
-            # separates it from what is above. `test_the_preview_matches_the_write_for_a
-            # _TOML_target_too` asserts this text appears verbatim in the written file,
-            # which is the guarantee that matters; showing the whole merged file here
-            # would bury one added stanza in the operator's entire config.
-            return "written", f"WOULD add to {rel}:\n{block.lstrip()}"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(new_text, "utf-8")
-        return "written", f"{'refreshed' if replaced else 'registered'} {c.id} in {rel}"
+        return _register_toml(path, rel, c, dry_run)
 
     data: dict = {}
     if path.exists():
