@@ -226,9 +226,7 @@ def triage(
             "--confirmed the fix or test that answers it"
         )
     if not gate:
-        withf = sorted(
-            g for g, r in it.gates.items() if (r.evidence or {}).get("chunk_findings")
-        )
+        withf = sorted(g for g, r in it.gates.items() if (r.evidence or {}).get("chunk_findings"))
         if len(withf) > 1:
             return bad(
                 f"{item} has findings on gates {', '.join(withf)} and finding numbers are "
