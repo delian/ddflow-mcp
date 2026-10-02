@@ -30,6 +30,23 @@ def _list(repo: Path) -> list[dict]:
     ]
 
 
+@pytest.fixture(autouse=True)
+def _no_ambient_tier(monkeypatch):
+    """The default-tier tests assert the DEFAULT, not the developer's environment."""
+    monkeypatch.delenv("DDFLOW_MCP_TOOLS", raising=False)
+
+
+def _call(srv: Server, name: str, args: dict | None = None) -> dict:
+    return srv.handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 9,
+            "method": "tools/call",
+            "params": {"name": name, "arguments": args or {}},
+        }
+    )["result"]
+
+
 def _with_tier(repo: Path, tier: str, monkeypatch) -> None:
     monkeypatch.setenv("DDFLOW_MCP_TOOLS", tier)
 
@@ -90,6 +107,8 @@ def test_unknown_tier_is_refused_on_write_but_lists_everything_at_start(repo, mo
     (repo / ".ddflow" / "config.toml").write_text('[mcp]\ntools = "tiny"\n')
     assert Server(repo).tier == "all"
     assert len(_list(repo)) == len(TOOLS)
+    # ...and the rest of the server keeps working: the config is not a hard error.
+    assert not _call(Server(repo), "ddflow_status").get("isError")
 
 
 def test_hidden_tool_is_still_callable_and_named_by_help(repo, monkeypatch):
@@ -97,15 +116,11 @@ def test_hidden_tool_is_still_callable_and_named_by_help(repo, monkeypatch):
     srv = Server(repo)
     hidden = "ddflow_loops"
     assert hidden not in {t["name"] for t in _list(repo)}
-    called = srv.handle(
-        {
-            "jsonrpc": "2.0",
-            "id": 2,
-            "method": "tools/call",
-            "params": {"name": hidden, "arguments": {}},
-        }
-    )["result"]
-    assert "unknown tool" not in json.dumps(called)
+    called = _call(srv, hidden)
+    assert not called.get("isError"), called
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", "all")
+    assert called == _call(Server(repo), hidden)
+    monkeypatch.setenv("DDFLOW_MCP_TOOLS", "core")
     helped = srv.handle(
         {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "ddflow_help"}}
     )["result"]
@@ -133,6 +148,7 @@ def test_list_changed_stays_false_and_handshake_names_the_tier(repo, monkeypatch
         "result"
     ]
     assert "tool tier" not in init["instructions"]
+    assert not init["instructions"].startswith(("\n", " "))
 
 
 def test_the_budget_ratchet_applies_to_the_full_list(repo):
