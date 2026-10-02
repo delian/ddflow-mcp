@@ -376,3 +376,17 @@ def test_malformed_candidate_rows_are_unavailable_not_a_crash():
 def test_lone_surrogates_do_not_break_the_bundle():
     out = _build(title="bad \ud800 title", expected="x \udfff y")
     assert out.verify() and "\ud800" not in out.rendered
+
+
+def test_relative_ddflow_frame_keeps_its_public_source_line():
+    got = B.normalise_traceback('  File "ddflow/cli.py", line 10, in main\n    raise SystemExit(1)')
+    assert got == '  File "ddflow/cli.py", line 10, in main\n    raise SystemExit(1)'
+
+
+def test_a_dash_led_value_after_a_flag_is_a_value():
+    assert B.redact_argv(["ddflow", "--token", "-hunter2", "-q"]) == [
+        "ddflow",
+        "--token",
+        "<value>",
+        "-q",
+    ]

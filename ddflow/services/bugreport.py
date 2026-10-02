@@ -77,6 +77,7 @@ EXPECTED_MAX = 1000
 STDERR_MAX = 4000
 TRACEBACK_MAX = 6000
 UNKNOWN_KIND = "(unknown)"
+_SHORT_FLAG = 2  # `-q`, `-m`: a single-letter flag; longer is a word
 _CUT = " [truncated]"
 _SURROGATES = re.compile("[\ud800-\udfff]")
 
@@ -187,6 +188,8 @@ def _frame_path(path: str) -> tuple[str, bool]:
     if norm.startswith("<"):
         return norm, True  # <frozen ...>, <string>: not a path
     marker = "/ddflow/"
+    if norm.startswith(("ddflow/", "./ddflow/")):
+        return "ddflow/" + norm.split("ddflow/", 1)[1], True
     if marker in norm:
         return "ddflow/" + norm.rsplit(marker, 1)[1], True
     for lib, label in (("site-packages", "<site-packages>"), ("dist-packages", "<site-packages>")):
@@ -199,6 +202,17 @@ def _frame_path(path: str) -> tuple[str, bool]:
 
 
 # ------------------------------------------------------------------------- argv
+
+
+def _is_value_of_previous(out: list[str], tok: str) -> bool:
+    """`--token -hunter2`: a single-dash word after a bare long flag is that flag's value."""
+    return (
+        len(out) > 1
+        and out[-1].startswith("--")
+        and "=" not in out[-1]
+        and not tok.startswith("--")
+        and len(tok) > _SHORT_FLAG
+    )
 
 
 def redact_argv(argv: Sequence[str], subcommands: Iterable[str] | None = None) -> list[str]:
@@ -214,7 +228,7 @@ def redact_argv(argv: Sequence[str], subcommands: Iterable[str] | None = None) -
         if i == 0:
             base = tok.replace("\\", "/").rsplit("/", 1)[-1]
             out.append(base if base in _PROGRAMS else "<program>")
-        elif tok.startswith("-") and tok != "-":
+        elif tok.startswith("-") and tok != "-" and not _is_value_of_previous(out, tok):
             leading = False
             name, eq, _value = tok.partition("=")
             out.append(f"{name}=<value>" if eq else name)
