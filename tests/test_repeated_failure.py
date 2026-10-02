@@ -61,7 +61,12 @@ def test_different_digests_do_not_warn():
 
 
 def test_only_the_trailing_run_of_one_digest_counts():
-    evs = [*BASE, _fail(2, digest="a"), _fail(3, digest="b"), _fail(4, digest="b")]
+    evs = [
+        *BASE,
+        *(_fail(n, digest="a") for n in (2, 3, 4)),
+        _fail(5, digest="b"),
+        _fail(6, digest="b"),
+    ]
     assert _repeats(evs) == []
 
 
@@ -71,7 +76,7 @@ def test_a_pass_in_between_resets_the_count():
 
 
 def test_a_failure_with_no_digest_breaks_the_streak():
-    evs = [*BASE, _fail(2), _fail(3, digest=""), _fail(4)]
+    evs = [*BASE, _fail(2), _fail(3), _fail(4, digest=""), _fail(5)]
     assert _repeats(evs) == []
 
 
