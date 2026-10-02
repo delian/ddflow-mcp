@@ -80,6 +80,8 @@ def cmd_version(a, c: Ctx) -> int:
         push=a.push,
         dry_run=a.dry_run,
         line=a.line or "",
+        changelog=a.changelog,
+        force=a.force,
         agent=c.requested_agent,
     )
     if c.json:

@@ -119,13 +119,29 @@ def version_cut(
     push: bool = False,
     dry_run: bool = False,
     line: str = "",
+    changelog: bool = False,
+    force: bool = False,
     agent: str = "",
 ) -> O.Outcome:
-    """Tag the next version (gitflow: through a release branch). Exit 2 = nothing to release."""
+    """Tag the next version (gitflow: through a release branch). Exit 2 = nothing to release.
+
+    ``changelog`` also writes the version's section into CHANGELOG.md as part of the cut
+    (refused, exit 3, over a hand-edited file unless ``force``; git failure is exit 2)."""
     from ..services import flow as FS
 
     log, cfg, _st = _load(repo, agent)
-    c = FS.cut(repo, cfg, log, bump=bump, version=version, push=push, dry_run=dry_run, line=line)
+    c = FS.cut(
+        repo,
+        cfg,
+        log,
+        bump=bump,
+        version=version,
+        push=push,
+        dry_run=dry_run,
+        line=line,
+        changelog=changelog,
+        force=force,
+    )
     data: dict[str, Any] = {
         "version": c.version,
         "tag": c.tag,
@@ -134,6 +150,7 @@ def version_cut(
         "url": c.url,
         "steps": c.steps,
         "dry_run": dry_run,
+        "changelog": c.changelog,
         "notes": c.plan.notes if c.plan else "",
         "warning": c.reason if c.ok else "",
     }

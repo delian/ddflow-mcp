@@ -2501,6 +2501,22 @@ develop, merges it into production, tags it and merges the tag back into develop
 mode it opens the release request instead, and `pr sync` tags the merge commit once a
 person merges it and opens the back-merge request.
 
+**Changelog with the cut.** `version cut --changelog` also writes the new version's
+section into `CHANGELOG.md` (the path of `[export.changelog]`, default `CHANGELOG.md`)
+through [`ddflow export changelog`](#exporting-documents): the Unreleased entries
+become `## [x.y.z] - date` with the right compare link, and an empty Unreleased remains. The
+file is committed on the branch the tag names, so the tag's commit holds it; in gitflow with
+pull requests it is a commit on the release branch, part of the release request, and the
+request body is the same section (the tag, cut later by `pr sync`, carries its usual
+message); otherwise the tag message is the section. Mode `whole` (the default) rewrites the
+file; mode `region` rewrites only the marked region and puts the new section below it,
+updating the `[Unreleased]:` link line when the file keeps one. Nothing is written without
+the flag (the tag message is then the commit-derived notes as before), `--dry-run` shows what
+would be written, a hand-edited file or uncommitted changes to it are refused (exit 3) unless
+`--force`, and a git or log failure is exit 2. Trunk or maintenance cuts with pull requests
+refuse `--changelog` (no request to carry the commit). The MCP tool takes `changelog` and
+`force`. Bumping version files is a separate task.
+
 An item counts as shipped on a line when its landing merge commit **or the branch it merged**
 (the merge's second parent) is reachable from it: a hotfix landed on production reaches
 `develop` by the back-merge as that branch, with production's merge commit nowhere in it. A
@@ -3404,6 +3420,7 @@ ddflow pr sync [--item]         what reviewers did: complete / reopen / park / m
 ddflow pr status               every item's request, from the log (no forge call)
 ddflow version show            current and next version, why, release notes (2 = nothing new)
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
+ddflow version cut --changelog  also write the version's CHANGELOG.md section (--force over a hand-edited file)
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
 ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
 ddflow promote add <env>        file a promotion one step downstream (2 = nothing to carry)
