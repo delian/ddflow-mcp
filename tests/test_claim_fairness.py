@@ -290,3 +290,17 @@ def test_a_refusal_while_woken_renews_the_same_place(proj):
 
 def test_a_woken_registration_without_a_deadline_does_not_live_forever():
     assert not WT.Waiter(agent="x", item="T", woken=True, until=0.0).live(1e12)
+
+
+def test_an_item_id_that_is_not_valid_utf8_still_gets_a_place_path(proj):
+    assert WT._queue_path(proj, B, "T\udcff") != WT._queue_path(proj, B, "T")
+
+
+def test_a_wait_after_a_refused_claim_carries_the_older_place(proj):
+    first = _claim(proj, "TC", C)  # refused by A's lease: C joins the line
+    assert first.exit == O.REFUSED
+    (queued,) = WT.live_waiters(proj)
+    out = A.wait(proj, item="TC", timeout_s=0.3, poll_s=0.05, agent=C)
+    assert out.exit == O.NOTHING  # the deadline passed: still blocked
+    (kept,) = WT.live_waiters(proj)  # one place, still the first refusal's, for the window
+    assert (kept.agent, kept.item, kept.since) == (C, "TC", queued.since)

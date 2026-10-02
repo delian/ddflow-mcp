@@ -689,6 +689,7 @@ def wait(
     deadline = started + timeout
     # A place already held by a refused `claim` of this item is kept: queuing by `wait`
     # must not send an agent to the back of a line it has stood in for an hour.
+    carried = WT.take_place(repo, me, item)  # a place a refused claim already holds
     w = WT.register(
         repo,
         WT.Waiter(
@@ -697,11 +698,13 @@ def wait(
             phase=phase,
             waiting_on=v["waiting_on"],
             reason=v["why"],
-            since=WT.take_place(repo, me, item),
+            since=carried,
             until=time.time() + timeout,
         ),
     )
-    keep = False  # woken for an item: the registration stays on as a reservation
+    # Woken for an item, or carrying an older place: the place in line stays on at the end.
+    keep = carried > 0
+    WT.drop_queue(repo, me, item)  # the wait record is on disk: it carries the place now
     say(f"waiting (up to {round(timeout)}s): {v['why']}")
     # None, so the first pass re-judges whatever landed between the load above and
     # the registration -- a release in that gap must not cost a whole RECHECK_S.
