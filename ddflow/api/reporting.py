@@ -570,9 +570,8 @@ def _driver_drift_notes(repo: Path) -> list[str]:
 def _orphan_notes(events: list) -> list[str]:
     from ..services import sessions as SS
 
-    lost = len(SS.orphans(events)) - len(
-        {e.data["adopted_from"] for e in events if e.data.get("adopted_from")}
-    )
+    adopted = {e.data["adopted_from"] for e in events if e.data.get("adopted_from")}
+    lost = sum(1 for o in SS.orphans(events) if o.id not in adopted)
     if lost <= 0:
         return []
     return [
