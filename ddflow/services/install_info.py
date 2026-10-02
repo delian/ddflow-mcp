@@ -137,12 +137,9 @@ def _version(dist) -> str:
             return dist.version
         except Exception:
             pass
-    try:
-        from .. import __version__
+    import ddflow
 
-        return str(__version__)
-    except ImportError:
-        return "unknown"
+    return str(getattr(ddflow, "__version__", "unknown"))
 
 
 def install_info(root: Path | None = None) -> InstallInfo:
