@@ -12,16 +12,29 @@ import json
 import sys
 
 from ...api import export as A
-from ..context import NOTHING, OK, Ctx
+from ..context import NOTHING, OK, REFUSED, Ctx
 
 
 def add_export_parser(sub) -> None:
     """Register `export` on the top-level subparsers (called by `cli.build_parser`)."""
     p = sub.add_parser(
         "export",
-        help="documents generated from the log: list, print, --diff, --check, --update, --all",
+        help="documents generated from the log: list, print, enable, disable, --diff, --check, --update",
     )
-    p.add_argument("doc", nargs="?", default="", help="the document kind; omit to list the kinds")
+    p.add_argument(
+        "doc",
+        nargs="?",
+        default="",
+        help="the document kind; omit to list the kinds. Or a verb: enable <doc>, disable <doc>, "
+        "ack, eject <doc>, validate [<doc>]",
+    )
+    p.add_argument("target", nargs="?", default="", help="the document, after a verb")
+    p.add_argument("--path", default="", help="enable: the target file (repo-relative)")
+    p.add_argument("--mode", default="", help="enable: whole, region or append")
+    p.add_argument("--local", action="store_true", help="enable/disable: this machine only")
+    p.add_argument(
+        "--lock", action="store_true", help="disable: the operator's veto; agents cannot enable it"
+    )
     p.add_argument("--all", action="store_true", help="act on the selected documents")
     for flag, what in (
         ("--since", "entries at or after this date (YYYY-MM-DD or a timestamp prefix)"),
@@ -67,8 +80,11 @@ def _confirm(rel: str, diff: str) -> bool:
     return sys.stdin.readline().strip().lower() in ("y", "yes")
 
 
+VERBS = ("enable", "disable", "ack", "eject", "validate")
+
+
 def _list(c: Ctx) -> int:
-    out = A.export_list(c.repo)
+    out = A.export_list(c.repo, c.requested_agent)
     if c.json:
         print(json.dumps(out.body(), indent=2, default=str))
         return out.exit
@@ -81,6 +97,13 @@ def _list(c: Ctx) -> int:
     print(f"{'DOCUMENT':<{w}}  {'TARGET':<{t}}  {'MODE':<6}  STATE")
     for r in rows:
         state = r["state"] + (f" ({r['detail']})" if r["detail"] else "")
+        if r.get("locked"):
+            state += " (locked by the operator)"
+        if r.get("enabled_by"):
+            state += (
+                f" -- enabled by {r['enabled_by']} {str(r['enabled_at'])[:16].replace('T', ' ')}"
+            )
+            state += "" if r["acknowledged"] or not r["by_agent"] else " (not acknowledged)"
         print(f"{r['doc']:<{w}}  {r['target']:<{t}}  {r['mode']:<6}  {state}")
     sel = out.data["selected"]
     print(
@@ -89,10 +112,82 @@ def _list(c: Ctx) -> int:
     )
     if sel and not out.data["redaction_applied"]:
         print("redaction: [export].redact is not applied yet (B-export-redact-fence)")
+    pending = out.data.get("unacknowledged") or []
+    if pending:
+        print(
+            "enabled by an agent: "
+            + ", ".join(f"{r['doc']} (by {r['by'] or '?'})" for r in pending)
+            + ". Stop one with `ddflow export disable <doc>`; add --lock to veto it."
+        )
+        if sys.stdin.isatty() and sys.stdout.isatty() and not c.requested_agent:
+            # A person looking at the list is the acknowledgement (an agent's marker refuses).
+            ack = A.export_ack(c.repo, agent=c.requested_agent)
+            if ack.exit == OK and ack.data.get("documents"):
+                print("(acknowledged)")
     return OK
 
 
+def _plain(out, c: Ctx) -> int:
+    """One-line result of enable / disable / ack / eject."""
+    if c.json:
+        print(json.dumps(out.body(), indent=2, default=str))
+        return out.exit
+    if out.exit:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    print(out.data["text"])
+    for w in out.data.get("warnings", []) + out.data.get("notes", []):
+        print(f"note: {w}", file=sys.stderr)
+    return OK
+
+
+def _validate(a, c: Ctx) -> int:
+    out = A.export_validate(c.repo, a.target)
+    if c.json:
+        print(json.dumps(out.body(), indent=2, default=str))
+        return out.exit
+    for r in out.data.get("results", []):
+        if r["ok"]:
+            print(f"{r['doc']}: ok ({r['template']})")
+        else:
+            print(f"{r['doc']}: {r['message']}", file=sys.stderr)
+    for n in out.data.get("notes", []):
+        print(f"note: {n}")
+    if out.exit and not out.data.get("results"):
+        print(out.reason, file=sys.stderr)
+    return out.exit
+
+
+def _verb(a, c: Ctx) -> int:
+    verb, doc = a.doc, a.target
+    if verb == "validate":
+        return _validate(a, c)
+    if verb == "ack":
+        return _plain(A.export_ack(c.repo, agent=c.requested_agent), c)
+    if not doc:
+        print(f"ddflow export {verb} needs a document: ddflow export {verb} <doc>", file=sys.stderr)
+        return REFUSED
+    if verb == "enable":
+        return _plain(
+            A.export_enable(
+                c.repo, doc, path=a.path, mode=a.mode, local=a.local, agent=c.requested_agent
+            ),
+            c,
+        )
+    if verb == "disable":
+        return _plain(
+            A.export_disable(c.repo, doc, lock=a.lock, local=a.local, agent=c.requested_agent),
+            c,
+        )
+    return _plain(A.export_eject(c.repo, doc, force=a.force), c)
+
+
 def cmd_export(a, c: Ctx) -> int:
+    if a.doc in VERBS:
+        return _verb(a, c)
+    if a.target:
+        print(f"unexpected argument {a.target!r}", file=sys.stderr)
+        return REFUSED
     if not a.doc and not a.all:
         return _list(c)
     interactive = bool(

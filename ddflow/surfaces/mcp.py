@@ -1747,28 +1747,31 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_export": {
         "description": (
-            "Project documents from the log (roadmap, bugs, status, worklog, sessions, decisions, "
-            "rules, changelog). No doc: list kinds with state. doc: capped markdown (`truncated`). Writes "
-            "only with write=true AND a repo-relative path."
+            "Documents from the log (roadmap, bugs, status, worklog, sessions, decisions, rules, "
+            "changelog). No doc: list. doc: capped markdown (`truncated`). Writes only with "
+            "write=true AND a repo path. action: list|enable|disable|validate (enable names you "
+            "and how to stop it)."
         ),
         "properties": {
+            "action": ("string", "list|enable|disable|validate.", False),
+            "mode": ("string", "enable: whole|region|append.", False),
             "doc": ("string", "Kind; omit to list.", False),
             "all": ("boolean", "The selected documents.", False),
             "since": ("string", "From YYYY-MM-DD.", False),
             "version": ("string", "One release.", False),
             "phase": ("string", "One phase.", False),
-            "item": ("string", "One item (bugs).", False),
+            "item": ("string", "Bugs item.", False),
             "status": ("string", "e.g. open.", False),
             "limit": ("integer", "At most N.", False),
             "tag": ("string", "One tag.", False),
             "session": ("string", "One session.", False),
-            "max_bytes": ("integer", "Cap, at most 60000.", False),
-            "diff": ("boolean", "What a write would change.", False),
-            "check": ("boolean", "Is the target fresh.", False),
+            "max_bytes": ("integer", "Max 60000.", False),
+            "diff": ("boolean", "Preview a write.", False),
+            "check": ("boolean", "Is it fresh.", False),
             "write": ("boolean", "Write to path.", False),
-            "path": ("string", "Repo-relative file.", False),
+            "path": ("string", "Repo path.", False),
         },
-        "api": lambda repo, a, agent: _api().export_tool(repo, a),
+        "api": lambda repo, a, agent: _api().export_tool(repo, a, agent),
         "payload": "",
     },
     "ddflow_pins": {
