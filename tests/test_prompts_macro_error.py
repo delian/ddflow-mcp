@@ -23,7 +23,7 @@ def _get(repo, name):
     "config, why",
     [
         ('\n[[macro]]\nname = "x"\nprompt = "p"\nbogus = 1\n', "unknown field"),
-        ('\n[[macro]]\nname = "x"\nprompt = \n', "x"),
+        ('\n[[macro]]\nname = "x"\nprompt = \n', "Invalid value"),
     ],
 )
 def test_prompts_get_names_why_the_macro_config_could_not_be_loaded(repo, config, why):
