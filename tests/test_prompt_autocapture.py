@@ -73,8 +73,9 @@ def test_hook_json_records_one_prompt_in_a_session_keyed_on_the_harness_id(repo)
 
 def test_a_secret_never_reaches_the_log(repo):
     run_cli(repo, "init")
-    _hook(repo, {"session_id": "s1", "prompt": f"use key {SECRET} please"})
+    _code, out, err = _hook(repo, {"session_id": "s1", "prompt": f"use key {SECRET} please"})
     assert SECRET not in _all_text(repo)
+    assert SECRET not in out and SECRET not in err
     (p,) = _events(repo, "session.prompt")
     assert "[REDACTED]" in p["data"]["text"] and p["data"]["redactions"] >= 1
 
@@ -174,3 +175,29 @@ def test_adopt_installs_the_prompt_hook_for_claude(repo):
         for g in data["hooks"]["UserPromptSubmit"]
         for h in g["hooks"]
     )
+
+
+def test_parallel_sessions_typing_the_same_words_are_both_recorded(repo):
+    # The hook's double-fire guard is per session: B's "continue" a moment after A's is kept.
+    run_cli(repo, "init")
+    _hook(repo, {"session_id": "A", "prompt": "continue"})
+    _hook(repo, {"session_id": "B", "prompt": "continue"})
+    assert len(_events(repo, "session.prompt")) == 2
+
+
+def test_distinct_harness_ids_that_sanitise_alike_stay_distinct_sessions():
+    from ddflow.services.sessions import harness_session_id
+
+    assert harness_session_id("conv/abc") != harness_session_id("convabc")
+    assert harness_session_id("abc-123") == "h-abc-123"
+    assert harness_session_id("x" * 80) != harness_session_id("x" * 81)
+
+
+def test_uninstall_with_no_prompt_hook_in_the_file_is_a_quiet_no_op(repo):
+    run_cli(repo, "init")
+    (repo / ".claude").mkdir()
+    only = {"hooks": {"Stop": [{"hooks": [{"type": "command", "command": "echo"}]}]}}
+    (repo / ".claude" / "settings.json").write_text(json.dumps(only))
+    code, _o, err = run_cli(repo, "hooks", "uninstall", "--claude")
+    assert code == 0, err
+    assert json.loads((repo / ".claude" / "settings.json").read_text()) == only
