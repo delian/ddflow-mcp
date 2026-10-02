@@ -812,6 +812,7 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
     unknown = _unknown_phase(st, phase, phases_only=True)
     if unknown:  # as `next` refuses it, not an empty board (Bc2acd426f4)
         return O.failed("board", unknown, phase=phase, text="")
+
     def rows(tasks: list, root: str) -> list[dict]:
         return [
             {

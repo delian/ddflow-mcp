@@ -38,6 +38,7 @@ def test_text_that_renders_as_itself_is_left_alone(text):
         ("# head", "\\# head"),
         ("> quote", "\\> quote"),
         ("- item", "\\- item"),
+        ("* item", "\\* item"),
         ("1. one", "1\\. one"),
         ("[a](http://x)", "[a\\](http://x)"),
         ("~~gone~~", "\\~\\~gone\\~\\~"),

@@ -47,3 +47,14 @@ def test_a_phase_filter_shows_no_unphased_section(repo):
     text = run_cli(repo, "board", "--phase", "P1")[1]
     assert "Unphased" not in text and "LOOSE" not in text, text
     assert json.loads(run_cli(repo, "--json", "board", "--phase", "P1")[1])["unphased"] == []
+
+
+def test_an_empty_phase_and_an_all_abandoned_unphased_section_render(repo):
+    run_cli(repo, "init")
+    assert run_cli(repo, "phase", "add", "EMPTY", "--title", "nothing yet")[0] == 0
+    assert run_cli(repo, "task", "add", "GONE", "--title", "dropped")[0] == 0
+    assert run_cli(repo, "abandon", "GONE", "--reason", "no longer needed")[0] == 0
+    code, text, err = run_cli(repo, "board")
+    assert code == 0, err
+    assert "## EMPTY" in text and "## Unphased" in text and "**GONE**" in text, text
+    assert "0/0 tasks" in text.split("## Unphased")[1] and "1 abandoned" in text
