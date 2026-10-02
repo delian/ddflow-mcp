@@ -73,6 +73,9 @@ class Waiter:
     #: reservation: a place in line that outlives the process that earned it, but only
     #: for a bounded time.
     woken: bool = False
+    #: Refusals of a polling claim (0 for a `wait`). One ask is only a pending place: it
+    #: reserves nothing until the agent asks AGAIN (see `reserves`).
+    asks: int = 0
     path: str = ""  #: the registration file; not serialised
 
     def live(self, now: float | None = None) -> bool:
@@ -87,6 +90,12 @@ class Waiter:
             # the deadline is the only evidence -- and it has not passed.
             return True
         return _pid_alive(self.pid)
+
+    def reserves(self) -> bool:
+        """Does this place hold a file against others? A `wait` does; a polling claim only
+        from its second ask: one refused agent that took the offered alternative and never
+        came back must hold nothing."""
+        return self.asks != 1
 
     def summary(self, now: float | None = None) -> dict[str, object]:
         now = time.time() if now is None else now
@@ -189,8 +198,10 @@ def queue(
     """Hold ``agent``'s place in line for ``item`` after a refused claim.
 
     A claim that is refused and tried again is a waiter that never typed `wait`: it polls.
-    Its place is its FIRST refusal; each refusal renews the deadline, so it stays in line
-    while it keeps asking and loses the place ``window_s`` after it stops. Advisory: an
+    Its place is its FIRST refusal, but the first refusal is only a PENDING place that
+    reserves nothing (an agent that follows the refusal's alternative never returns); the
+    second ask makes it real. Each refusal renews the deadline, so it stays in line while
+    it keeps asking and loses the place ``window_s`` after it stops. Advisory: an
     unwritable registry means no queue, never a failed claim.
     """
     path = _queue_path(repo, agent, item)
@@ -206,6 +217,8 @@ def queue(
         if w.agent == agent and w.item == item:
             if w.woken:
                 w.until = now + window_s
+                if w.path == str(path):
+                    w.asks += 1
                 _write(w)
             return
     w = Waiter(
@@ -216,6 +229,7 @@ def queue(
         since=since,
         until=now + window_s,
         woken=True,
+        asks=1,
         path=str(path),
     )
     w.host = socket.gethostname()
@@ -276,6 +290,8 @@ def _well_formed(w: Waiter) -> bool:
         and isinstance(w.pid, int)
         and not isinstance(w.pid, bool)
         and isinstance(w.woken, bool)
+        and isinstance(w.asks, int)
+        and not isinstance(w.asks, bool)
     )
 
 
