@@ -168,6 +168,8 @@ def test_pull_requests_are_not_issues():
         (Fake(status=503), "503"),
         (Fake(raw="<html>not json</html>"), "unparseable"),
         (Fake(raw='{"message": "x"}'), "unparseable"),
+        (Fake(raw="[1, 2, 3]"), "unparseable"),
+        (Fake(raw='[{"title": "no number"}]'), "unparseable"),
     ],
 )
 def test_failure_is_unavailable_never_no_duplicates(fake, why):
@@ -262,6 +264,7 @@ def test_local_hits_are_checked_without_the_network():
     res = U.check(FILINGS["B5d98a4da0a"], "", repo=REPO, fetch=f, local=local)
     assert res.local and res.local[0].source == "local" and res.local[0].score >= 0.55
     assert res.local[0].band == "ask" and res.offer is None
+    assert res.local[0].kind == "bug" and "bug B78324ec086" in res.summary()
     assert res.upstream_state == "no_issues"
 
     # a local failure is its own state; it never reads as "nothing local"
