@@ -29,19 +29,19 @@ def test_doctor_names_unknown_kinds_and_counts(repo):
     run_cli(repo, "init")
     _newer_events(repo, "record.extended", 2)
     _newer_events(repo, "link.recorded", 1)
-    code, out, _ = run_cli(repo, "doctor")
+    _, out, _ = run_cli(repo, "doctor")
     assert "record.extended x2" in out and "link.recorded x1" in out
     assert "newer ddflow" in out
 
 
 def test_doctor_is_silent_on_a_log_it_fully_understands(repo):
     run_cli(repo, "init")
-    code, out, _ = run_cli(repo, "doctor")
+    _, out, _ = run_cli(repo, "doctor")
     assert "newer ddflow" not in out
 
 
 def test_status_carries_the_skipped_kinds(repo):
     run_cli(repo, "init")
     _newer_events(repo, "record.extended", 3)
-    code, out, _ = run_cli(repo, "--json", "status")
+    _, out, _ = run_cli(repo, "--json", "status")
     assert json.loads(out)["skipped_kinds"] == {"record.extended": 3}
