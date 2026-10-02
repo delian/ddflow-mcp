@@ -1776,7 +1776,8 @@ merges — it lists the candidates and records the add as `new` — and `off` sk
 entirely. Adding an id that already exists keeps the refusal or merge it always had. The
 check is also a function, `api.dedupe_check_add`, taking a config that may have `on_match`
 replaced (`api._dedupe.with_check`), so a bulk caller need not go through the add paths. The
-importer does not call it yet: it writes its events directly (task B-importer-dedupe).
+importer applies the same engine and `[dedupe]` thresholds to a batch with its own
+reconciliation (see the import section), not through this function.
 
 ## Operational memory
 
