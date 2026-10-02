@@ -150,7 +150,7 @@ def test_worklog_coalesces_one_item_into_one_line(q):
     day = body.split("## 2026-09-20")[1].split("\n## ")[0]
     lines = [ln for ln in day.splitlines() if "`T-fix`" in ln]
     assert len(lines) == 1
-    assert "**completed, merged, bug fixed**" in lines[0]
+    assert "**merged, completed, bug fixed**" in lines[0]
     # the fixed bug rode on the item's line instead of getting its own
     assert not any(
         ln.startswith("- ") and "`B-x`" in ln.split("`T-fix`")[0] for ln in day.splitlines()
@@ -234,7 +234,7 @@ def test_sessions_summary_comes_first_and_brief_is_labelled():
     q = query.build(_events())
     body = _body("sessions", q, session="s-live")
     section = body.split("## s-live")[1]
-    assert section.index("**Summary.**") < section.index("Prompts:")
+    assert section.index("**Summary and handoff.**") < section.index("Prompts:")
     assert "Built the feature; handoff: docs still open." in section
     assert "[operator] please look at the roadmap" in section
     assert "[brief] You are a subagent" in section
@@ -245,7 +245,7 @@ def test_sessions_summary_comes_first_and_brief_is_labelled():
 def test_sessions_without_a_summary_say_so_and_filters_apply():
     q = query.build(_events())
     body = _body("sessions", q)
-    assert "**Summary.** none recorded." in body.split("## s-quiet")[1]
+    assert "**Summary and handoff.** none recorded." in body.split("## s-quiet")[1]
     assert "1 carry a summary" in body
     assert "## s-live" in body and "## s-quiet" in body
     assert body.index("## s-quiet") < body.index("## s-live")  # newest first
@@ -287,3 +287,43 @@ def test_decisions_status_filter(q):
 def test_decisions_newest_first(q):
     body = _body("decisions", q)
     assert body.index("`D-two`") < body.index("`D-one`")
+
+
+def test_worklog_limit_keeps_the_newest_lines_inside_a_day():
+    def note(i: int, hh: str) -> Event:
+        return Event(
+            "item.completed", f"T-{i}", {}, agent=AG, lamport=i, ts=f"2026-09-01T{hh}:00:00Z"
+        )
+
+    q = query.build([note(1, "09"), note(2, "12"), note(3, "17")])
+    body = registry.render_body("worklog", q, Filters(since="2026-09-01", limit=1))
+    assert "`T-3`" in body and "`T-1`" not in body and "`T-2`" not in body
+
+
+def test_session_without_started_at_uses_its_first_prompt_and_does_not_crash():
+    evs = [
+        Event(
+            "session.prompt",
+            "s-x",
+            {"text": "hello"},
+            agent=SA,
+            lamport=1,
+            ts="2026-09-01T09:00:00Z",
+        ),
+        Event("item.started", "T-1", {}, agent=SA, lamport=2, ts="2026-09-01T09:05:00Z"),
+        Event(
+            "task.added",
+            "T-1",
+            {"title": "t", "parent": ""},
+            agent=SA,
+            lamport=0,
+            ts="2026-09-01T08:00:00Z",
+        ),
+    ]
+    body = registry.render_body("sessions", query.build(evs), Filters())
+    assert "`T-1`" in body and "hello" in body
+
+
+def test_decisions_live_count_is_of_the_whole_set_not_the_page(q):
+    body = registry.render_body("decisions", q, Filters(limit=1))
+    assert "1 of 3 decisions; 2 accepted in all" in body

@@ -38,6 +38,11 @@ def _is_brief(text: str) -> bool:
 _WORK = ("item.started", "lease.acquired", "item.completed", "worktree.merged")
 
 
+def _opened(s: Any) -> str:
+    """When a session began: its start, else its first prompt, else unknown."""
+    return s.started_at or (s.prompts[0]["at"] if s.prompts else "")
+
+
 def _touched(q: Query) -> dict[str, set[str]]:
     """session id -> item ids named by its prompts and notes, plus the items its agent
     started, leased, merged or completed during the session's window. The log has no
@@ -49,7 +54,7 @@ def _touched(q: Query) -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for s in q.sessions():
         ids = {p.get("item", "") for p in s.prompts} | {n.get("item", "") for n in s.notes}
-        lo = s.started_at
+        lo = _opened(s)
         hi = s.ended_at or "9999"
         for ts, subject in by_agent.get(s.agent, ()):
             if ts >= lo and ts <= hi:
@@ -69,7 +74,7 @@ def data(q: Query, f: registry.Filters) -> dict[str, Any]:
     for s in q.sessions():
         if f.session and s.id != f.session:
             continue
-        opened = s.started_at or (s.prompts[0]["at"] if s.prompts else "")
+        opened = _opened(s)
         if f.since and (s.ended_at or opened or "") < f.since:
             continue
         summary = summaries.get(s.id, "")
