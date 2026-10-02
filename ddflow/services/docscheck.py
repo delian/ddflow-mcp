@@ -346,24 +346,22 @@ def anchors_of(text: str) -> set[str]:
         seen[slug] += 1
         out.add(slug if n == 0 else f"{slug}-{n}")
 
-    previous = ""  #: the prose line before this one, if it can be a setext heading's text
+    paragraph: list[str] = []  #: prose lines so far; a setext underline makes them a heading
     for _, line, code in _lines(text):
         if code:
-            previous = ""
+            paragraph = []
             continue
         h = _ATX.match(line)
         if h:
             add(h.group(2))
-            previous = ""
-        elif previous and _SETEXT.match(line):
-            add(previous)
-            previous = ""
+            paragraph = []
+        elif paragraph and _SETEXT.match(line):
+            add(" ".join(paragraph))
+            paragraph = []
+        elif line.strip() and not line.lstrip().startswith(("-", "*", "+", ">", "|")):
+            paragraph.append(line.strip())
         else:
-            previous = (
-                line.strip()
-                if line.strip() and not line.lstrip().startswith(("-", "*", "+", ">", "|"))
-                else ""
-            )
+            paragraph = []
         out.update(a.lower() for a in _HTML_ANCHOR.findall(line))
     return out
 
@@ -384,7 +382,7 @@ class _Scan:
 
     def run(self) -> None:
         for n, line, code in _lines(self.text):
-            if code:  # fence markers start with a backtick, so no command matches them
+            if code:  # fence markers are no command either: the first word must be a script
                 self._command(line.strip().lstrip("$ ").strip(), n)
                 continue
             prose = _SPAN.sub(lambda s: " " * len(s.group(0)), line)

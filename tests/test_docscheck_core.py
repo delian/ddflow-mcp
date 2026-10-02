@@ -163,7 +163,7 @@ def test_runtime_on_this_repositorys_readme():
     start = time.perf_counter()
     report = D.check_docs(root, docs=["README.md"])
     assert time.perf_counter() - start < 2.0
-    assert report.checked["identifiers"] > 0
+    assert report.checked["identifiers"] > 50
 
 
 def test_a_named_document_that_cannot_be_read_is_not_a_clean_report(tmp_path):
@@ -176,7 +176,7 @@ def test_anchor_forms(tmp_path):
     readme = (
         "[a](#my-anchor) [b](#MyAnchor) [c](#setext-title) [d](#sub) [e](#ghost)\n\n"
         '<a name="MyAnchor"></a>\n\nSetext title\n============\n\nSub\n---\n\n'
-        "- item\n---\n"
+        "- item\n---\n\nFoo bar\nbaz\n===\n[f](#foo-bar-baz)"
     )
     report = D.check_docs(repo_with(tmp_path, readme))
     assert found(report) == [("anchor", "#ghost"), ("anchor", "#my-anchor")]
