@@ -1598,7 +1598,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             id=a.get("id", "") or "",
             title=a.get("title", "") or "",
             severity=a.get("severity", "") or "",
-            scope=a.get("scope", "") or "project",
+            scope=a.get("scope", "") or "",
             answer=_answer(a),
             agent=agent,
         ),

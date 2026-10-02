@@ -361,7 +361,7 @@ class Bug:
     invalid_reason: str = ""
     evidence: str = ""
     #: Optional, from `bug found --title/--severity/--scope`; an old event carries none
-    #: and folds to "" (scope: `project`, the default; only `ddflow` is ever written).
+    #: and folds to "" (scope: `project`, the default).
     title: str = ""
     severity: str = ""
     scope: str = "project"
@@ -1533,7 +1533,7 @@ def _h_bug_found(st: State, ev: Event) -> None:
 
 def _h_bug_reported_upstream(st: State, ev: Event) -> None:
     """A report about a ddflow-scoped bug went (or was prepared) upstream. Merge, never
-    replace: a later event fills what an earlier one (say, a prepared report with no url
+    blank: a later event fills what an earlier one (say, a prepared report with no url
     yet) left empty, and an empty field never blanks one that is set."""
     bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
     d = ev.data
