@@ -15,7 +15,6 @@ from __future__ import annotations
 import copy
 import json
 import re
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -144,9 +143,13 @@ def test_the_oci_packages_carry_no_version_but_the_pypi_one_does():
     assert pypi["version"] == SERVER["version"]
 
 
-def test_the_server_version_is_pyprojects():
-    proj = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]["version"]
-    assert SERVER["version"] == proj
+def test_the_server_version_is_the_one_declared_in_init_py():
+    """pyproject.toml has no version (hatch reads ddflow/__init__.py); server.json's is
+    rendered from it, so the two cannot be different numbers in a committed tree."""
+    m = re.search(
+        r'^__version__ = "([^"]+)"$', (ROOT / "ddflow" / "__init__.py").read_text("utf-8"), re.M
+    )
+    assert m and SERVER["version"] == m.group(1)
 
 
 def test_the_rules_catch_what_publish_40_hit():

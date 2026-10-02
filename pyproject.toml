@@ -13,9 +13,16 @@
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+# The version is declared ONCE, as `__version__ = "X.Y.Z"` in ddflow/__init__.py. The wheel
+# takes it from there; uv.lock therefore records no version for this project, so a bump
+# never makes the lock stale. server.json is rendered from server.template.json by
+# scripts/render_server_json.py; scripts/bump.sh does both.
+[tool.hatch.version]
+path = "ddflow/__init__.py"
+
 [project]
 name = "ddflow-mcp"
-version = "0.1.9"
+dynamic = ["version"]   # ddflow/__init__.py is the one place the version is declared (hatch reads it, below)
 description = "A portable, agent-agnostic work-queue kernel for AI coding agents — MCP server and CLI."
 readme = "README.md"
 requires-python = ">=3.11"

@@ -9,7 +9,9 @@ Read `docs/ARCHITECTURE.md` for why, and `docs/RESEARCH.md` for the probes that
 decided each choice.
 """
 
-#: One of the SIX places the version is declared; `scripts/bump.sh` moves them together
-#: and `tests/test_packaging.py::test_the_declared_versions_agree` holds them equal.
-#: This one sat at 0.1.0 through the 0.1.1 release because neither knew it existed.
+#: THE one place the version is declared, and the only line a bump edits (`scripts/bump.sh`
+#: does it, then renders server.json). pyproject.toml reads this file (hatch `dynamic`
+#: version), `surfaces/mcp.py` builds SERVER_INFO from it, and server.json is generated
+#: from server.template.json. Keep it a plain `__version__ = "X.Y.Z"` literal: hatch and
+#: scripts/render_server_json.py both read it as text.
 __version__ = "0.1.9"
