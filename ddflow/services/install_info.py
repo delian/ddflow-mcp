@@ -86,6 +86,11 @@ def _direct_url(dist=None) -> dict | None:
     return data if isinstance(data, dict) else {}
 
 
+def _editable(record: dict) -> bool:
+    info = record.get("dir_info")
+    return bool(info.get("editable")) if isinstance(info, dict) else False
+
+
 def _editable_record(root: Path) -> dict | None:
     """The PEP 610 record of an editable install of the tree at `root`, or None.
 
@@ -95,7 +100,7 @@ def _editable_record(root: Path) -> dict | None:
 
     for dist in metadata.distributions(name=DIST_NAME):
         record = _direct_url(dist)
-        if not record or not (record.get("dir_info") or {}).get("editable"):
+        if not record or not _editable(record):
             continue
         url = str(record.get("url", ""))
         if (
@@ -164,7 +169,7 @@ def _kind(dist, record: dict | None, from_source: bool) -> str:
         if "vcs_info" in record:
             return "vcs"
         if "dir_info" in record:
-            return "editable" if (record["dir_info"] or {}).get("editable") else "local-dir"
+            return "editable" if _editable(record) else "local-dir"
         if "archive_info" in record:
             return "archive"
         return "unknown"

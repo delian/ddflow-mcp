@@ -325,3 +325,7 @@ def test_index_install_into_a_target_dir_is_not_a_checkout(tmp_path):
     (info / "METADATA").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
     got = I.install_info(root=target)
     assert (got.kind, got.version) == ("index", "1.2.3")
+
+
+def test_malformed_dir_info_degrades_instead_of_crashing(installed):
+    assert installed({"url": "file:///x", "dir_info": "bogus"}).kind == "local-dir"
