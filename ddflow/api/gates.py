@@ -120,7 +120,12 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
             f"\n  NOTE: {', '.join(s.unavailable)} did not run. "
             f"That is a gap in coverage, not a pass."
         )
-    return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines))
+    from ..services.completion import readme_report
+
+    readme = readme_report(st, cfg, item, repo=repo)
+    if readme:
+        lines.append(f"\n  NOTE: {readme}")
+    return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
 
 
 def verify(repo: Path, item: str, gate: str, *, agent: str = "") -> O.Outcome:
