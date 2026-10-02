@@ -12,8 +12,9 @@ Properties the callers rely on:
 * total -- odd input (None, bytes, lone surrogates, huge text) never raises;
 * conservative about versions -- `v0.11.0.1` and `0.1.7` are not addresses.
 
-The secret patterns are the session redaction defaults (`SessionConfig.redact_patterns`),
-imported, not copied. A bad caller-supplied pattern is a configuration error and raises:
+The secret patterns are the session redaction patterns (`redact_patterns` plus
+`redact_extra`), imported, not copied. Callers pass the loaded `Config` as `cfg`; with
+none, only the built-in defaults apply. A bad caller-supplied pattern is a configuration error and raises:
 a control that silently stops matching is the failure mode that matters.
 """
 
