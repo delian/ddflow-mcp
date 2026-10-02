@@ -559,3 +559,8 @@ def test_non_mapping_data_is_an_export_error_and_bar_never_underflows():
         with pytest.raises(ExportError):
             registry.render("{{ a }}", bad)
     assert registry.render("{{ -1|bar(4, 10) }}", {}) == "[..........]\n"
+
+
+def test_truncate_cap_equal_to_the_footer_adds_no_separator():
+    out = frame.truncate("x" * 100 + "\n", 41)
+    assert out == "[truncated: 1 more; use --since/--limit]\n" and len(out.encode()) == 41

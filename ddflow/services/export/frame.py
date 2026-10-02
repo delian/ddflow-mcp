@@ -134,7 +134,9 @@ def truncate(body: str, max_bytes: int) -> str:
         shown.pop()
     if not shown:  # not even one whole line fits: cut the first on a character boundary
         room = max_bytes - size(footer(n)) - 1
-        cut = lines[0].encode("utf-8")[: max(room, 0)].decode("utf-8", "ignore")
+        if room <= 0:  # the footer alone fills the cap: say so, add nothing else
+            return footer(n)
+        cut = lines[0].encode("utf-8")[:room].decode("utf-8", "ignore")
         return cut.rstrip("\n") + "\n" + footer(n)  # the cut line counts as not shown
     return "".join(shown) + footer(n - len(shown))
 
