@@ -132,7 +132,7 @@ def test_unrelated_report_is_not_offered():
         fetch=Fake([corpus()]),
     )
     assert res.offer is None and res.upstream_state == "checked"
-    assert res.issues_seen == 4 and res.upstream_state == "checked"
+    assert res.issues_seen == len(corpus()) and res.upstream_state == "checked"
 
 
 def test_between_floor_and_threshold_is_listed_not_offered():
