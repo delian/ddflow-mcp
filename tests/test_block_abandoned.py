@@ -69,3 +69,4 @@ def test_block_help_and_mcp_description_name_abandoned(repo):
     reply = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
     tool = next(t for t in reply["result"]["tools"] if t["name"] == "ddflow_block")
     assert "ABANDONED" in tool["description"]
+    assert "ABANDONED" in tool["inputSchema"]["properties"]["reopen"]["description"]
