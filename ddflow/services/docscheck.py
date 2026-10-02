@@ -166,11 +166,11 @@ def check_docs(
     ``commands`` are the script names whose `<script> <verb>` references are verified
     (default: the project's own `[project.scripts]` / package.json `bin`). ``ignore_names``
     are fnmatch patterns of identifiers and flags another tool owns (`ddflow_*` in an
-    agent-instructions page of a project that merely uses ddflow). Raises
-    ``generated`` are repo-relative paths of export targets (``shared_files.export_targets``):
-    a generated document is checked by ``ddflow export --check``, so it is neither scanned
-    nor named explicitly here, and a tracked file whose first line is an export header is
-    left out the same way. Raises
+    agent-instructions page of a project that merely uses ddflow). ``generated`` are
+    repo-relative paths of export targets (``shared_files.export_targets``): a generated
+    document is checked by ``ddflow export --check``, so it is neither scanned nor named
+    explicitly here, and a tracked file whose first line is an export header is left out
+    the same way. Raises
     OSError when git cannot list the tree or a named document cannot be read: "could not tell" is
     never a clean report.
     """
