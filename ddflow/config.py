@@ -915,6 +915,26 @@ _doc(
 )
 
 
+#: The tool tiers `[mcp].tools` accepts. Kept here, not imported from the MCP surface, so
+#: config validation does not depend on the surface above it; `tests/test_mcp_tool_tiers.py`
+#: asserts the two lists agree.
+MCP_TOOL_TIERS = ("core", "standard", "all")
+
+
+@dataclass
+class McpConfig:
+    """The MCP server's own knobs. A START-TIME choice: read once when a connection starts."""
+
+    tools: str = "all"
+
+
+_doc(
+    "mcp",
+    "tools",
+    "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). An unrecognised value is refused on write and falls back to `all` at server start.",
+)
+
+
 @dataclass
 class LoopsConfig:
     """Runtime loop detection — work that repeats instead of finishing."""
@@ -1209,6 +1229,7 @@ class Config:
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    mcp: McpConfig = field(default_factory=McpConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
@@ -1439,6 +1460,9 @@ def _unit_interval(v: Any) -> str:
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
 _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+    "mcp.tools": lambda v: (
+        "" if v in MCP_TOOL_TIERS else f"must be one of {', '.join(MCP_TOOL_TIERS)}"
+    ),
     # TOML arrives typed and `_coerce` passes it through untouched, so a string where a
     # list belongs (`hydrafusion = "openai"`) would iterate as letters: a set of nonsense
     # families that matches no reviewer, and so clears every one.
