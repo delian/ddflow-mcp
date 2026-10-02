@@ -221,3 +221,27 @@ def test_a_gate_timestamp_loses_only_a_utc_fraction():
     assert at("2026-10-01T21:29:42.425803Z") == "2026-10-01T21:29:42Z"
     assert at("2026-10-01T21:29:42Z") == "2026-10-01T21:29:42Z"
     assert at("2026-10-01T21:29:42.5+05:00") == "2026-10-01T21:29:42.5+05:00"
+
+
+def test_recall_budget_counts_the_returned_json_and_keeps_the_first_hit():
+    hit = {"id": 1, "kind": "K", "headline": "h", "body": "b" * 300, "raw": {"x": "y" * 900}}
+    body = {"a": [dict(hit), dict(hit)], "b": [dict(hit)]}
+    out, note = B.bound_recall(body, {"max_chars": 1})
+    assert [len(v) for v in out.values()] == [1, 0], "the first hit survives any budget"
+    assert "truncated: showing 1 of 3" in note
+    out, note = B.bound_recall(body, {"max_chars": 100_000})
+    assert sum(len(v) for v in out.values()) == 3 and "truncated" not in note
+    assert all("raw" not in h for v in out.values() for h in v)
+
+
+def test_show_names_every_rewrite_and_does_not_edit_the_callers_body():
+    body = {
+        "state": "open",
+        "gates": {"g": {"gate": "g", "outcome": "passed", "at": "2026-01-01T00:00:00.5Z"}},
+        "triage": {"g": {"f1": {"title": "T" * 300, "location": "T" * 300, "verdict": "open"}}},
+    }
+    snapshot = json.dumps(body)
+    out, _ = B.bound_show(body, {})
+    assert json.dumps(body) == snapshot
+    assert "location" not in out["triage"]["g"]["f1"] and out["truncated"]["left_out"]
+    assert out["gates"]["g"] == {"outcome": "passed", "at": "2026-01-01T00:00:00Z"}
