@@ -175,3 +175,11 @@ def test_configured_names_are_redacted(proj):
 
 def test_result_data_reports_redaction(proj):
     assert _print(proj, "decisions").data()["redacted"] is True
+
+
+def test_cap_below_the_fence_is_refused_not_exceeded(proj):
+    cfg = Config.load(proj)
+    q = ops.load(proj, cfg)
+    with pytest.raises(ExportError) as e:
+        ops.print_doc(proj, cfg, q, ops.spec_for(cfg, "decisions"), max_bytes=64, fenced=True)
+    assert e.value.code == 3
