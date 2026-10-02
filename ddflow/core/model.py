@@ -1306,7 +1306,7 @@ def _h_state(new_state: str):
             # so the one record of WHY an item was closed without running a single gate
             # existed only in the raw log. Third instance of this class in this series.
             it.completion_evidence = ev.data.get("evidence", it.completion_evidence)
-            it.changelog = changelog_of(ev.data.get("changelog")) or it.changelog
+            it.changelog = changelog_of(ev.data.get("changelog"))
         elif new_state == ABANDONED:
             it.blocked_reason = ev.data.get("reason", "")
 
