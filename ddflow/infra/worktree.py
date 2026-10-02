@@ -607,7 +607,18 @@ def capture_diff(
     return "\n".join(part for part in (committed, working) if part.strip())
 
 
-def diff_covers_everything(tree: Path, diff: str) -> tuple[bool, list[str]]:
+def untracked_files(tree: Path, exclude: tuple[str, ...] = ()) -> list[str]:
+    """Paths in ``tree`` git does not track and does not ignore, sorted."""
+    return sorted(
+        ln
+        for ln in git(tree, "ls-files", "--others", "--exclude-standard").out.splitlines()
+        if ln.strip() and not ln.startswith(exclude)
+    )
+
+
+def diff_covers_everything(
+    tree: Path, diff: str, *, ignore_untracked: bool = False
+) -> tuple[bool, list[str]]:
     """Cross-check: every path git reports as changed must appear in the diff.
 
     A silent omission is the failure this guards -- and it is silent by construction,
@@ -617,7 +628,7 @@ def diff_covers_everything(tree: Path, diff: str) -> tuple[bool, list[str]]:
     changed = [
         ln[3:].strip().strip('"')
         for ln in git(tree, "status", "--porcelain").out.splitlines()
-        if ln.strip()
+        if ln.strip() and not (ignore_untracked and ln.startswith("??"))
     ]
     missing = [p for p in changed if p and p not in diff]
     return (not missing), missing

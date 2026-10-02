@@ -54,6 +54,10 @@ def commit_diff(repo: Path, sha: str) -> tuple[str, str]:
     return (d.out + "\n") if d.ok and d.out else "", f"commit {full[:12]} vs its first parent"
 
 
+#: How many untracked files a review names before saying "... (N in all)".
+SHOWN_UNTRACKED = 10
+
+
 def diff_for(
     repo: Path,
     cfg,
@@ -63,12 +67,13 @@ def diff_for(
     branch: str = "",
     called_from: Path | None = None,
 ) -> tuple[str, str]:
-    """(diff, how) for an item: its worktree branch vs base, plus the working tree.
+    """(diff, how) for an item: its worktree branch vs base, plus tracked edits.
 
-    Goes through `worktree.capture_diff`, which includes UNTRACKED files via
-    intent-to-add. A plain `git diff` omits them, so the regression test an agent just
-    wrote is invisible to the reviewer — which then reports, correctly given its input and
-    wrongly given the facts, that the change ships no tests.
+    Untracked files in an item's tree are NOT in the diff (B2bf4d38cc1): a draft left
+    untracked was reviewed as part of the change. `how` names them -- "untracked, not
+    reviewed" -- in the output and the recorded `diff_source`, for whoever triages a
+    "no tests" finding; the reviewer itself does not see them. Commit what is to be
+    reviewed.
 
     For an item, the item's work (B60de9a57ed): ``branch`` when named; else its tree;
     else its recorded branch (the tree is gone); else the branch checked out in the
@@ -87,10 +92,17 @@ def diff_for(
     it = st.items.get(item)
     wt_path = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt_path and wt_path.exists():
-        diff = W.capture_diff(wt_path, base)
-        how = f"{base}..HEAD + working tree in {wt_path}"
+        # The branch's commits plus TRACKED edits. An untracked file is a draft nobody
+        # committed (B2bf4d38cc1): it is named, not reviewed.
+        diff = W.capture_diff(wt_path, base, include_untracked=False)
+        how = f"{base}..HEAD + tracked working-tree changes in {wt_path}"
+        if untracked := W.untracked_files(wt_path):
+            shown = ", ".join(untracked[:SHOWN_UNTRACKED]) + (
+                f", ... ({len(untracked)} in all)" if len(untracked) > SHOWN_UNTRACKED else ""
+            )
+            how += f" (untracked, not reviewed: {shown})"
         if diff.strip():
-            ok, missing = W.diff_covers_everything(wt_path, diff)
+            ok, missing = W.diff_covers_everything(wt_path, diff, ignore_untracked=True)
             if not ok:
                 how += f" (WARNING: {len(missing)} changed path(s) absent from the diff)"
         return diff, how

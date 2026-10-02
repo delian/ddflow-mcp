@@ -152,9 +152,23 @@ def test_complete_does_not_borrow_another_agents_session_model(repo, monkeypatch
 def test_complete_explicit_model_wins_over_the_session(repo, monkeypatch):
     _queue(repo)
     # The session names the REVIEWER's family; the explicit author model must decide.
-    run_cli(repo, "session", "start", "--model", "gemini-2.5-pro", agent="impl")
+    # (`--reviewer-model`: a plain --model in the session's family is refused on a
+    # reviewer gate, B1979dac602.)
+    run_cli(repo, "session", "start", "--model", "claude-opus", agent="impl")
     _ready_to_complete(repo, monkeypatch, "impl")
-    code, out, err = run_cli(repo, "complete", "T2", "--model", "claude-opus")
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T2",
+        "critic",
+        "--evidence",
+        "x",
+        "--reviewer-model",
+        "claude-sonnet",
+    )
+    assert code == 0, out + err
+    code, out, err = run_cli(repo, "complete", "T2", "--model", "gemini-2.5-pro")
     assert code == 0, out + err
 
 

@@ -244,9 +244,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Record the outcome of a gate you performed (research, a review, a bug hunt). "
             "outcome is one of passed/failed/unavailable/partial/skipped. "
-            "IMPORTANT: if a reviewer or tool could not run, record 'unavailable' with a "
-            "reason — recording it as 'passed' is how an entire review silently vanishes. "
-            "Pass the reviewer's model so family independence can be checked."
+            "If a reviewer or tool could not run, record 'unavailable' with a reason, "
+            "never 'passed'. Pass the reviewer's model for the family check."
         ),
         "properties": {
             "id": ("string", "Item id.", True),
@@ -254,19 +253,23 @@ TOOLS: dict[str, dict[str, Any]] = {
             "outcome": ("string", "passed | failed | unavailable | partial | skipped", True),
             "reason": ("string", "Required for failed/unavailable/partial/skipped.", False),
             "evidence": ("string", "What you ran and what it said. Required by some gates.", False),
-            "model": ("string", "Model that performed it, e.g. 'gemini-2.5-pro'.", False),
+            "model": ("string", "REVIEWER's model, e.g. 'gemini-2.5-pro'.", False),
+            "reviewer_model": ("string", "Like `model`; says it IS the reviewer.", False),
+            "reviewed_sha": (
+                "string",
+                "Commit reviewed (roborev review <sha>); must be the branch.",
+                False,
+            ),
             "command": (
                 "string",
-                "The command you actually ran. This and `exit_code` are what make an "
-                "outcome evidence rather than an assertion; a gate listed in "
-                "`gates.evidence_required` is rejected without them.",
+                "The command you ran. With `exit_code` it makes an outcome evidence; "
+                "a gate in `gates.evidence_required` is rejected without them.",
                 False,
             ),
             "exit_code": ("string", "That command's exit code.", False),
             "output_file": (
                 "string",
-                "Path to its full output. A digest is recorded, so the claim can be "
-                "checked against the file later rather than taken on trust.",
+                "Path to its full output; a digest is recorded.",
                 False,
             ),
         },
@@ -280,7 +283,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                 note=a.get("evidence", "") or "",
                 command=a.get("command", "") or "",
                 exit_code=a.get("exit_code"),
-                model=a.get("model", "") or "",
+                model=a.get("reviewer_model", "") or a.get("model", "") or "",
+                model_is_reviewer=bool(a.get("reviewer_model")),
+                reviewed_sha=a.get("reviewed_sha", "") or "",
                 output_file=a.get("output_file", "") or "",
             ),
             agent=agent,
