@@ -1005,7 +1005,7 @@ _doc(
 _doc(
     "export",
     "tables",
-    "The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact. Unknown keys in a table are skipped with a warning, so a newer release's keys do not stop an older checkout.",
+    "The per-document tables as one map; write them as [export.<doc>] tables instead, with keys path (repo-relative target), mode (whole | region | append), template (path of a Jinja2 template), filters ({since, limit, status, phase, session, tag}), refresh and redact. Unknown keys in an [export.<doc>] table are skipped with a warning (and ignored in this map form), so a newer release's keys do not stop an older checkout.",
 )
 
 #: Keys an `[export.<doc>]` table understands.

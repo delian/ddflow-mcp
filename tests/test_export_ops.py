@@ -367,7 +367,7 @@ def test_append_mode_refuses_a_template_instead_of_ignoring_it(proj):
 def test_append_mode_refuses_filters_and_a_last_event_the_log_lost(proj):
     _select(proj, '[export.changelog]\nmode = "append"\npath = "CHANGES.md"\n')
     out = api.export_documents(proj, "changelog", update=True, tag="unreleased")
-    assert out.exit == 3 and "no filters" in out.reason
+    assert out.exit == 3 and "no template and no filters" in out.reason
     # a header whose `last` is not in this log: refuse rather than repeat entries
     from ddflow.services.export import frame
 

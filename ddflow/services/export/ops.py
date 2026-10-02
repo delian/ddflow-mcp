@@ -137,12 +137,19 @@ def spec_for(
             f"whole or region",
             EXIT_REFUSED,
         )
+    flt = filters_of(t, filters)
+    if m == R.APPEND and (t.get("template") or flt.given()):
+        raise ExportError(
+            "append mode writes the entries the kind produces itself: it takes no template "
+            "and no filters",
+            EXIT_REFUSED,
+        )
     return Spec(
         doc=doc,
         path=path or str(t.get("path") or kind.default_target),
         mode=m,
         template=str(t.get("template") or ""),
-        filters=filters_of(t, filters),
+        filters=flt,
         redact=bool(t.get("redact", cfg.export.redact)),
         refresh=str(t.get("refresh") or cfg.export.refresh),
         selected=doc in cfg.export.documents,
