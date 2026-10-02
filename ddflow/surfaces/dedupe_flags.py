@@ -163,7 +163,7 @@ def parse_reply(reply: str, rows: list[dict[str, Any]]) -> Answer | bool | None:
             return False
         return Answer(rel, rows[0]["id"])
     ref = rest[-1]
-    if ref.isdigit() and 1 <= int(ref) <= len(rows):
+    if ref.isascii() and ref.isdigit() and 1 <= int(ref) <= len(rows):
         return Answer(rel, rows[int(ref) - 1]["id"])
     ids = {r["id"].lower(): r["id"] for r in rows}
     if ref in ids:

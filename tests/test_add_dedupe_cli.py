@@ -337,6 +337,7 @@ def test_the_prompt_reply_parser():
     assert parse_reply("e", rows) is False, "two candidates: which one?"
     assert parse_reply("e", rows[:1]).target == "A"
     assert parse_reply("r 9", rows) is False
+    assert parse_reply("e \u00b2", rows) is False, "a superscript is not a number"
     assert parse_reply("", rows) is False
 
 
