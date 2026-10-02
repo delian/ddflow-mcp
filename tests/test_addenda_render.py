@@ -186,3 +186,19 @@ def test_a_lesson_or_decision_linked_to_a_claimed_item_renders_in_the_brief(proj
     assert text.startswith("## 2 new reports") and "Trim nothing." in text
     assert "Never trim." in text
     assert OK == run_cli(proj, "show", "P1.T1")[0]
+
+
+def test_a_related_link_made_at_add_time_on_the_item_is_not_a_report_on_it(proj):
+    """An add-time `related` link on the item is the item's own link, not a report."""
+    from ddflow.api.reporting import new_reports
+    from ddflow.core.model import fold
+
+    log = _log(proj)
+    log.append("bug.found", "B2", {"item": "", "summary": FILED})
+    log.append("task.added", "P1.T3", {"title": "t3", "body": "", "related": "B2"})
+    st = fold(log.read_all(), strict=False)
+    assert [x["target"] for x in st.links["P1.T3"].links] == ["B2"]
+    assert new_reports(st, "P1.T3", 0.0)["count"] == 0
+    log.append("link.recorded", "P1.T3", {"relation": "related", "target": "P1.T4"})
+    st = fold(log.read_all(), strict=False)
+    assert new_reports(st, "P1.T3", 0.0)["count"] == 1
