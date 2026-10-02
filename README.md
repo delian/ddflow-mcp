@@ -1778,6 +1778,18 @@ prompt or note — runs the same check against the log **before it writes**, wit
 - **Every answer is recorded** on the add event (`dedupe`: the answer, the score, the
   candidates shown), `new` included, and an automatic merge is marked `auto`.
 
+**Seeing what was added.** `ddflow show X` (an item or a bug id; `--json` carries the same
+data as `additions`, `links` and `linked_from`) lists the additions on X verbatim with who,
+when and the score; the links X makes (`links`); the records that link to X
+(`linked_from`) — found by scanning every record's links for X, because a new record filed
+`extends` / `duplicate_of` X holds the link itself and only `related` also writes a
+back-link, which is listed once; and, for a bug, the task that fixes it. The holder of a
+claimed item is told what arrived: `ddflow brief` for it leads with **N new reports on your
+item since you claimed** (additions made, and records linked to it, since its lease was
+acquired), quoting each (the first five, clipped; `show` has the rest) inside the brief's
+token budget, and `ddflow heartbeat` and `ddflow gate status` carry the count in one line.
+MCP `ddflow_show` and `ddflow_brief` return the same data.
+
 `[dedupe].on_match` sets the policy: `ask` as above (the intended default, not shipped until B-add-dedupe-surfaces gives every surface a way to answer), `warn` (the current default) never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
 entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
