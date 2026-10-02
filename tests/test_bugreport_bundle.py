@@ -433,3 +433,11 @@ def test_environment_keys_are_redacted_too():
 def test_dot_slash_ddflow_frame():
     got = B.normalise_traceback('  File "./ddflow/cli.py", line 1, in main\n    x()')
     assert got == '  File "ddflow/cli.py", line 1, in main\n    x()'
+
+
+def test_truncation_counts_each_redaction_once_and_never_splits_a_marker():
+    out = _build(title="mail a@b.example " + "x" * 300)
+    assert out.redactions["email"] == 1
+    out = _build(title="y" * (B.TITLE_MAX - 20) + " a@b.example tail")
+    assert "[REDACTED:" not in out.data["title"] or "[REDACTED:email]" in out.data["title"]
+    assert out.redactions["email"] == 1

@@ -333,7 +333,7 @@ def build_bundle(
         if one_line:
             text = " ".join(text.split())
         if len(text) > limit:
-            text = clean(text[: limit - len(_CUT)]) + _CUT
+            text = _cut(text, limit - len(_CUT)) + _CUT
         return text
 
     agents = _Aliases("a")
@@ -400,6 +400,15 @@ def _command(failure: Failure | None, clean: Callable[[object], str]) -> dict[st
     if failure.traceback:
         out["traceback"] = _tail(clean(normalise_traceback(failure.traceback)), TRACEBACK_MAX)
     return out
+
+
+def _cut(text: str, n: int) -> str:
+    """The first `n` characters, not ending inside a `[REDACTED:...]` marker."""
+    head = text[:n]
+    start = head.rfind("[REDACTED:")
+    if start != -1 and "]" not in head[start:]:
+        head = head[:start]
+    return head
 
 
 def _tail(text: str, limit: int) -> str:
