@@ -47,7 +47,8 @@ from .docsync import glob_regex
 #: place a document's identifier lives, and reading it costs the second the check lacks.
 _MAX_CODE_BYTES = 1_000_000
 
-_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
+_FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
+_SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 _SPAN = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 _LINK = re.compile(r"(?<!\\)!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
 _REFDEF = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s+.*)?$")
@@ -310,27 +311,60 @@ class _Headings:
         return self._cache[path]
 
 
+def _lines(text: str):
+    """(number, line, in_code) for each line; fence lines themselves are in_code. A fence
+    closes only on a run of the SAME character at least as long as the one that opened it
+    and carrying no info string (CommonMark), so a short fence inside a long one is code."""
+    opened: tuple[str, int] | None = None
+    for n, line in enumerate(text.splitlines(), 1):
+        m = _FENCE.match(line)
+        if opened is None:
+            if m and not ("`" in m.group(2) and m.group(1)[0] == "`"):
+                opened = (m.group(1)[0], len(m.group(1)))
+            yield n, line, opened is not None
+        else:
+            yield n, line, True
+            if (
+                m
+                and m.group(1)[0] == opened[0]
+                and len(m.group(1)) >= opened[1]
+                and not m.group(2).strip()
+            ):
+                opened = None
+
+
 def anchors_of(text: str) -> set[str]:
-    """Every anchor a markdown document offers: heading slugs (GitHub numbers repeats
-    `-1`, `-2`, ...) and explicit `<a name=...>` / `id=...` targets."""
+    """Every anchor a markdown document offers, lower-cased: heading slugs (ATX and
+    setext; GitHub numbers repeats `-1`, `-2`, ...) and explicit `<a name=...>` / `id=...`
+    targets."""
     out: set[str] = set()
     seen: Counter = Counter()
-    fence = None
-    for line in text.splitlines():
-        m = _FENCE.match(line)
-        if m:
-            mark = m.group(1)[0]
-            fence = None if fence == mark else (fence or mark)
-            continue
-        if fence:
+
+    def add(heading: str) -> None:
+        slug = slugify(heading)
+        n = seen[slug]
+        seen[slug] += 1
+        out.add(slug if n == 0 else f"{slug}-{n}")
+
+    previous = ""  #: the prose line before this one, if it can be a setext heading's text
+    for _, line, code in _lines(text):
+        if code:
+            previous = ""
             continue
         h = _ATX.match(line)
         if h:
-            slug = slugify(h.group(2))
-            n = seen[slug]
-            seen[slug] += 1
-            out.add(slug if n == 0 else f"{slug}-{n}")
-        out.update(_HTML_ANCHOR.findall(line))
+            add(h.group(2))
+            previous = ""
+        elif previous and _SETEXT.match(line):
+            add(previous)
+            previous = ""
+        else:
+            previous = (
+                line.strip()
+                if line.strip() and not line.lstrip().startswith(("-", "*", "+", ">", "|"))
+                else ""
+            )
+        out.update(a.lower() for a in _HTML_ANCHOR.findall(line))
     return out
 
 
@@ -349,14 +383,8 @@ class _Scan:
         self.dir = posixpath.dirname(path)
 
     def run(self) -> None:
-        fence = None
-        for n, line in enumerate(self.text.splitlines(), 1):
-            m = _FENCE.match(line)
-            if m:
-                mark = m.group(1)[0]
-                fence = None if fence == mark else (fence or mark)
-                continue
-            if fence:
+        for n, line, code in _lines(self.text):
+            if code:  # fence markers start with a backtick, so no command matches them
                 self._command(line.strip().lstrip("$ ").strip(), n)
                 continue
             prose = _SPAN.sub(lambda s: " " * len(s.group(0)), line)
