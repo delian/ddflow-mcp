@@ -348,3 +348,27 @@ def test_a_json_refusal_is_parseable_and_carries_candidates(filed_as, kind):
     body = json.loads(out)
     assert body["candidates"][0]["id"] == OLD[kind]
     assert {"relation": "new", "target": ""} in body["options"]
+
+
+def test_the_commands_quote_a_hostile_candidate_id():
+    """A record id is nearly free text; the line printed as ready to paste must not run it."""
+    from ddflow.surfaces.dedupe_flags import commands
+
+    for line in commands(["task", "add", "T1"], [{"id": "X; rm -rf ~"}]):
+        assert shlex.split(line)[-1] in ("--new", "X; rm -rf ~"), line
+        assert "; rm" not in line.replace("'X; rm -rf ~'", "")
+
+
+def test_check_says_an_exact_copy_is_recorded_without_asking(filed_as):
+    filed = filed_as("task")
+    code, out, _e = run_cli(filed, "task", "add", "T-copy", "--title", FIRST, "--check")
+    assert code == 0 and "exact copy" in out and "T-old" in out
+    code, out, _e = run_cli(filed, "--json", "task", "add", "T-copy", "--title", FIRST, "--check")
+    assert json.loads(out)["would_extend"] == "T-old"
+
+
+def test_check_names_the_knob_when_the_kind_is_not_checked(filed_as):
+    filed = filed_as("task")
+    (filed / ".ddflow" / "config.toml").write_text('[dedupe]\nkinds = ["bug"]\n')
+    code, out, _e = run_cli(filed, *ADDS["task"], "--check")
+    assert code == 2 and "[dedupe].kinds" in out and "on_match = off" not in out

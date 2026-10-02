@@ -174,7 +174,7 @@ def parse_reply(reply: str, rows: list[dict[str, Any]]) -> Answer | bool | None:
 def commands(argv: list[str], rows: list[dict[str, Any]]) -> list[str]:
     """The invocation again with each answer appended: ready to copy."""
     base = "ddflow " + shlex.join(argv)
-    top = rows[0]["id"]
+    top = shlex.quote(rows[0]["id"])
     return [
         f"{base} --new",
         f"{base} --extends {top}",
@@ -194,15 +194,19 @@ def settle(a, c, out: Outcome) -> int | None:
             print(out.reason)
         else:
             print("\n".join(candidate_lines(data["candidates"])))
-            print(
-                "An add of this would be "
-                + (
-                    "REFUSED until answered (--new, --extends ID, --duplicate-of ID, --related ID)"
-                    if data["would_ask"]
-                    else "filed, with these listed beside it"
+            if data.get("would_extend"):
+                verdict = (
+                    f"An add of this is an exact copy: it would be recorded as a duplicate "
+                    f"of {data['would_extend']} without asking"
                 )
-                + "."
-            )
+            elif data["would_ask"]:
+                verdict = (
+                    "An add of this would be REFUSED until answered "
+                    "(--new, --extends ID, --duplicate-of ID, --related ID)"
+                )
+            else:
+                verdict = "An add of this would be filed, with these listed beside it"
+            print(verdict + ".")
         return out.exit
     if _asks(out):
         if c.json:
