@@ -3052,11 +3052,36 @@ invalid), `status`, `worklog` (coalesced per item, grouped by day), `sessions`, 
 Replay is not a kind (`ddflow export replay` is refused): it carries paths and addresses.
 Output is deterministic: the same log gives the same bytes, with no clock in the body.
 
+| kind | default target | filters it takes | what it holds |
+| --- | --- | --- | --- |
+| `roadmap` | `ROADMAP.md` | `phase` `limit` | phases in Now / Next / Later lanes, with progress bars |
+| `bugs` | `BUGS.md` | `since` `limit` `status` `phase` | open, fixed and invalid bugs (`--item` is `--phase`) |
+| `status` | `STATUS.md` | none | counts, agent-hours, work in flight, open bugs |
+| `worklog` | `LOG.md` | `since` `limit` | one line per item per day, newest first |
+| `sessions` | `SESSION.md` | `since` `limit` `session` | summary first, then prompts, notes and items touched |
+| `decisions` | `DECISIONS.md` | `since` `limit` `status` | an index: id, status, date, title, what it governs |
+| `rules` | `RULES.md` | `limit` `tag` | decisions in force by governing path, lessons by tag, the enforced workflow |
+| `changelog` | `CHANGELOG.md` | `tag` (`--version`) | Keep a Changelog 1.1: Unreleased and one section per version tag |
+
+Every default target is at the repo root; `[export.<doc>].path` moves it. `rules` exports
+decisions in force, lessons and workflow settings: imported rulebooks are not exported. The
+**changelog** takes each finished item (and each fixed bug that carries a changelog line) and
+files it under Added / Changed / Deprecated / Removed / Fixed / Security by the first rule that
+answers: the explicit `--changelog "Added: ..."` line given to `ddflow complete` (see
+[Changelog line](#the-default-workflow-at-a-glance)), then the Conventional Commit type of the item's landing commit, then
+the item's tags (`breaking`, `feature`, `bug`, `hotfix`), then a `(fixes bug X)` title suffix, else
+Changed. `--changelog skip` keeps an item out. An entry lands under the OLDEST version tag whose
+history contains it, otherwise under Unreleased; one with no merge commit is placed by date and
+says so. Nothing before the first version tag is reconstructed (that tag is the baseline). It
+reads git as well as the log (read-only: tags, merge commits, the `origin` URL for the compare
+links), and a git failure is exit 2, never an empty changelog. `ddflow version cut --changelog`
+writes the new section into the file with the cut (README, Versions).
+
 **Redaction is on.** These are public-repo documents, so `[export].redact` (default `true`;
 `[export.<doc>].redact` overrides one document) runs the report redactor over the rendered
 body: secrets, private IPv4/IPv6 addresses, `.lan`/`.local`/`.internal` hosts, home paths,
 emails and the machine's hostname become `[REDACTED:<kind>]`; version strings survive, and the
-project's own name stays (add words with `[upstream].redact_extra` when that section exists).
+project's own name stays (add words with `[upstream].redact_extra` when that section exists). The repository name is not redacted BY DESIGN: it is the project's public identity, and masking it would make every document unreadable. Never exported at all: replay (it carries paths and addresses), imported rulebooks, lease heartbeats and raw event payloads; a document holds only what its kind's table above names.
 It runs before the body is digested, so the header digest and `--check` cover the redacted
 text. In a whole-document header it says what happened: `redacted=3 redacted-kinds=ipv4:1,path:2`, or
 `redacted=off` for a document whose redaction is switched off (an append-mode document, the
@@ -3130,6 +3155,81 @@ text it came from, so a ddflow upgrade never touches it but `validate` and `doct
 the shipped default has moved on, and an unedited older copy is refreshed by a plain `eject`.
 `validate` renders every selected document (or the one named) against the current data and
 exits 2 on any template error, naming the file and line; it writes nothing.
+
+**The template contract.** A template sees ONLY the plain data of its kind (strings, numbers,
+lists, dicts), plus `schema_version` and a few filters; ddflow adds fields within a
+`schema_version` and bumps it only when it renames or removes one, so an edited template keeps
+rendering across an upgrade. The kinds' top-level variables:
+
+| kind | variables |
+| --- | --- |
+| `roadmap` | `lanes` (each: `label`, `blurb`, `phases` of `id` `title` `done` `total` `waits_on` `tasks`), `open_tasks`, `done_phases`, `hidden_phases` |
+| `bugs` | `sections` (each: `name`, `label`, `total`, `hidden`, `bugs` of `id` `title` `severity` `found` `fixed` `item` `summary` `reason` `test` `age_days`), `as_of` |
+| `status` | `task_counts` (`state`, `n`), `tasks_done`, `tasks_total`, `phases_done`, `phases_total`, `open_bugs`, `bugs_total`, `decisions`, `lessons`, `in_flight` (`id` `title` `holder` `state`), `agent_hours`, `as_of` |
+| `worklog` | `days` (each: `date`, `lines` of `text`), `since`, `has_since`, `window_days`, `windowed`, `entries` |
+| `sessions` | `sessions` (each: `id` `agent` `model` `opened` `closed` `summary` `prompts` `notes` `items_text`), `shown`, `total`, `with_summary` |
+| `decisions` | `rows` (`id` `status` `date` `title` `governs`), `shown`, `total`, `live` |
+| `rules` | `decision_groups` (each: `path`, `decisions`), `decisions_without_path`, `decision_count`, `lesson_groups` (each: `tag`, `lessons`), `lessons_shown`, `lessons_omitted`, `workflow`, `tag` |
+| `changelog` | `sections` (each: `title`, `version`, `date`, `unreleased`, `groups` of `category` and `entries` of `id` `line` `by_date`), `links` (`label`, `url`), `baseline`, `single`, `unplaced`, `has_by_date`, `shown` |
+
+(The authoritative list is the kind's `data()` in `ddflow/services/export/kind_<name>.py`; the
+shipped template in `ddflow/templates/export/` shows each variable in use, and
+`ddflow export eject <kind>` gives you a copy to read.) The filters, besides Jinja's
+built-ins: `md_escape` (escape markdown in free text), `wrap(width)`, `date` (the `YYYY-MM-DD`
+of a timestamp), `truncate(limit)` and `bar(done, total, width)` (a `[###.......]` bar).
+Templates run in Jinja2's sandbox (strict undefined variables, no autoescape): no attribute
+walks to `__class__`/`__globals__`, no `open`, no imports, a time limit and ceilings on output
+and on one operation's size, because a template may arrive with a cloned repository. Treat the
+ceilings as containment, not as a promise that a hostile template is harmless. A template error
+is exit 2 naming the file and line. The generated header and the body digest are added AROUND
+the template's output, so no template can remove hand-edit protection; and the redactor runs on
+what a template produced, so customising cannot leak what redaction would have caught.
+
+**Upgrade drift.** `eject` records the shipped text it copied (`{# ddflow-shipped: <digest> -#}`
+on line 1). When a later ddflow changes the shipped default, your copy is left alone, and
+`validate` and `doctor` print a note: `export template ... was ejected from an older shipped
+default`. To pick up the new default: copy your file aside, run `ddflow export eject <kind> --force` (it replaces your copy with the shipped one), diff the two, and re-apply your edits.
+
+**Worked example: a changelog in your own words.** Suppose release notes should name the item
+behind each line, drop the "placed by date" marker, and open with a product intro instead of
+the Keep a Changelog boilerplate.
+
+```console
+$ ddflow export eject changelog
+ejected changelog -> .ddflow/templates/export/changelog.md.j2
+$ $EDITOR .ddflow/templates/export/changelog.md.j2
+```
+
+Two edits in that file. Replace the entry line
+
+```jinja
+- {{ e.line }}{{ " _(placed by date, no merge commit)_" if e.by_date else "" }}
+```
+
+with
+
+```jinja
+- {{ e.line }} ({{ e.id }})
+```
+
+and replace the paragraph that begins `All notable changes to this project` with
+`Release notes for Acme Billing.` Then check and review before writing anything:
+
+```console
+$ ddflow export validate changelog      # renders it; errors name file and line
+changelog: ok (.ddflow/templates/export/changelog.md.j2)
+$ ddflow export changelog | head        # the new format, on stdout
+$ ddflow export changelog --diff        # what --update would change in CHANGELOG.md
+$ ddflow export changelog --update
+```
+
+Because the file's digest covers its body, the next `ddflow export --all --check` calls the
+old CHANGELOG.md stale until `--update` rewrites it with your format: that is the check
+working, not a fault. Commit `.ddflow/templates/export/changelog.md.j2` with the project so
+every clone and CI renders the same bytes. To try a template without installing it, use
+`ddflow export changelog --template my.md.j2` (writes nothing). Because a `schema_version`
+change is the only thing that renames a variable, a template written against version 1 keeps
+working, and a variable you misspell is an error (strict undefined), never an empty line.
 
 **The three update modes**, per `[export.<doc>].mode`: `whole` (the file is generated; its
 header carries the kind, the ddflow version and a digest of the BODY, so hand edits are
