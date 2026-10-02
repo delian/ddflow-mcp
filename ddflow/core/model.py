@@ -182,6 +182,12 @@ class Item:
     state: str = OPEN
     lease: Lease | None = None
     gates: dict[str, GateRecord] = field(default_factory=dict)
+    #: The author's triage of a review's findings: gate -> finding digest -> {verdict,
+    #: probe, n, severity, title, location, by, at}. Keyed by the DIGEST of the finding's
+    #: text and kept apart from `gates`, which a re-review replaces wholesale: a triage
+    #: therefore carries over to a later review exactly when the finding is word for
+    #: word the same (decision D-review-triage).
+    triage: dict[str, dict[str, dict[str, Any]]] = field(default_factory=dict)
     worktree: str = ""
     branch: str = ""
     #: True when the worktree was ADOPTED -- the agent's harness created it and ddflow
@@ -1261,6 +1267,23 @@ def _h_gate(outcome: str):
     return handler
 
 
+def _h_review_triaged(st: State, ev: Event) -> None:
+    it = st.items.get(ev.subject)
+    d = ev.data
+    if it is None or not d.get("gate") or not d.get("digest"):
+        return
+    it.triage.setdefault(d["gate"], {})[d["digest"]] = {
+        "verdict": d.get("verdict", ""),
+        "probe": d.get("probe", ""),
+        "n": d.get("finding", 0),
+        "severity": d.get("severity", ""),
+        "title": d.get("title", ""),
+        "location": d.get("location", ""),
+        "by": ev.agent,
+        "at": ev.ts,
+    }
+
+
 def _h_worktree_created(st: State, ev: Event) -> None:
     it = _item(st, ev, ev.data.get("kind", "task"))
     it.worktree = ev.data.get("path", "")
@@ -1733,6 +1756,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.completed": _h_state(DONE),
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},
+    "review.triaged": _h_review_triaged,
     "worktree.created": _h_worktree_created,
     # NOT the same handler. The two kinds were folded identically on the reasoning that
     # "the item is bound to a path and a branch either way" -- which threw away the one

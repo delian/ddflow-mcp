@@ -242,6 +242,12 @@ def _cli_flags(argv: list[str]) -> set[str]:
 #: CLI flags deliberately absent from an MCP tool, each with the reason. An entry here
 #: is a decision on the record; an omission that is NOT here is a divergence.
 FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
+    # `ddflow review triage <id>` is the same parser as `ddflow review`: its flags are
+    # listed there, and over MCP it is its own tool, `ddflow_review_triage`.
+    **{
+        ("ddflow_review", f): "belongs to `review triage`, which is ddflow_review_triage"
+        for f in ("--finding", "--refuted", "--confirmed", "--probe")
+    },
     # `gate skip` shares its argparse parent with `gate record`, so `--help` lists
     # record's evidence flags. They are meaningless for a skip: a skipped gate produced
     # no command, no exit code and no reviewer, which is the whole point of calling it
@@ -333,6 +339,7 @@ PROSE_TOOLS: dict[str, str] = {
     "ddflow_configure": "prints every knob with its documentation and its source",
     "ddflow_setup": "a checklist of what it wrote and what to do next",
     "ddflow_review": "reviewer findings, already formatted with their severities",
+    "ddflow_review_triage": "one confirmation line, which is the whole answer",
     "ddflow_reviewers_list": "a table, plus the warning about unclassified reviewers",
     "ddflow_reviewers_detect": "a probe report naming each endpoint and what answered",
     # Prose for SOME arguments: `--show <view>` returns the rendered document, while
