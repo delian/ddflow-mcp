@@ -185,11 +185,12 @@ def list_view(
 
     rows = _candidates(st, kind, cfg)
     if state:
-        rows = [r for r in rows if r["state"] == state.lower()]
+        rows = [r for r in rows if r["state"].lower() == state.lower()]
     if phase:
         rows = [r for r in rows if r["phase"] == phase]
     if tag:
-        rows = [r for r in rows if tag in r["tags"]]
+        want_tag = redact_text(tag, cfg).text  # compared as the row shows it
+        rows = [r for r in rows if want_tag in r["tags"]]
     if agent:
         rows = [r for r in rows if r["owner"] == agent]
     if since:

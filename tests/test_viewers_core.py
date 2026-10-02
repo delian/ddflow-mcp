@@ -191,3 +191,17 @@ def test_tags_are_redacted_too():
     st = State()
     st.items["T"] = Item(id="T", kind="task", tags=["ghp_" + "b" * 36], created_at="2026-01-01")
     assert "b" * 10 not in V.list_view(st, CFG, "task").rows[0]["tags"][0]
+
+
+def test_tag_filter_matches_the_redacted_form_a_row_shows():
+    st = State()
+    st.items["T"] = Item(id="T", kind="task", tags=["ops@example.com"], created_at="2026-01-01")
+    shown = V.list_view(st, CFG, "task").rows[0]["tags"][0]
+    assert shown != "ops@example.com"
+    assert [r["id"] for r in V.list_view(st, CFG, "task", tag="ops@example.com").rows] == ["T"]
+
+
+def test_state_filter_is_case_insensitive_on_both_sides():
+    st = State()
+    st.items["T"] = Item(id="T", kind="task", state="Done", created_at="2026-01-01")
+    assert [r["id"] for r in V.list_view(st, CFG, "task", state="done").rows] == ["T"]
