@@ -200,3 +200,12 @@ def test_odd_but_valid_links_and_one_letter_flags(tmp_path):
     readme = "[p](docs/a_(b).md) [q](docs/a%23b.md) [r](docs/a%23b.md#top) `--x`\n"
     extra = {"docs/a_(b).md": "# T\n", "docs/a#b.md": "# Top\n", "y.py": 'add("--x")\n'}
     assert D.check_docs(repo_with(tmp_path, readme, **extra)).clean
+
+
+def test_a_checked_document_is_never_its_own_evidence(tmp_path):
+    root = repo_with(tmp_path, "ok\n", **{"design.rst": "`widgetFactory` and `--only-here`\n"})
+    assert found(D.check_docs(root, docs=["design.rst"])) == [
+        ("flag", "--only-here"),
+        ("identifier", "widgetFactory"),
+    ]
+    assert D.anchors_of("Some text\n***\nHeading\n-------\n") == {"heading"}
