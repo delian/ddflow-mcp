@@ -301,9 +301,8 @@ def cmd_mcp(a, c: Ctx) -> int:
 
 
 class _PrintVersion(argparse.Action):
-    """`ddflow --version`. Reads `SERVER_INFO`, the version this layer already declares
-    (and `scripts/bump.sh` moves) -- not `ddflow.__version__`, because the package root
-    is not a layer `surfaces` may import (`tests/test_layering.py`)."""
+    """`ddflow --version`. Reads `SERVER_INFO`, what the server reports at handshake; it is
+    built from `ddflow.__version__`, the one declared version, so the two cannot differ."""
 
     def __call__(self, parser, namespace, values, option_string=None):
         from .mcp import SERVER_INFO
