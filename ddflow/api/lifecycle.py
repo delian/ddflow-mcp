@@ -2087,6 +2087,10 @@ def brief(
         text = undecided + "\n" + text
     text = reports_block + text
     text += _waiting_on_you(repo, held_ids)
+    from ..services.export import select as export_select
+
+    if line := export_select.brief_line(st, cfg):  # an agent-enabled document nobody has seen
+        text += "\n" + line
     if item and item in st.items:
         pr = st.items[item].pr
         if pr is not None and pr.review == "changes_requested" and pr.feedback:

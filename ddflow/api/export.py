@@ -21,17 +21,23 @@ from ..config import Config
 from ..core import outcome as O
 from ..services.export import ops
 from ..services.export import registry as R
+from ..services.export import select as S
+from ..services.export import templates as T
 from ..services.export.query import EXIT_REFUSED, EXIT_UNAVAILABLE, ExportError
 
 #: ``confirm(rel_path, unified_diff) -> bool``: the CLI asks on a terminal before --update.
 Confirm = Callable[[str, str], bool]
 
 
-def export_list(repo: Path) -> O.Outcome:
-    """Every document kind with its target, mode and state."""
+def export_list(repo: Path, agent: str = "") -> O.Outcome:
+    """Every document kind with its target, mode, state and who enabled it."""
+    from ._base import _load
+
     try:
-        cfg = Config.load(repo)
+        _log, cfg, st = _load(repo, agent)
         rows = ops.listing(repo, cfg)
+        S.annotate(rows, st)
+        pending = S.unacknowledged(st, cfg)
     except ExportError as exc:
         return O.Outcome("export.list", {}, exc.code, str(exc))
     except ValueError as exc:  # a config that does not load
@@ -40,11 +46,123 @@ def export_list(repo: Path) -> O.Outcome:
         "export.list",
         documents=rows,
         selected=ops.selection(cfg),
+        unacknowledged=pending,
         redact=cfg.export.redact,
         redaction_applied=ops.REDACTION_APPLIED,
         max_bytes=cfg.export.max_bytes,
         refresh=cfg.export.refresh,
     )
+
+
+# -- selection, templates (D-export-selection, D-export-agent-enable, D-export-templates) ---
+
+
+def _guard(kind: str, fn):
+    """Run ``fn`` -> Outcome data; an ``ExportError`` becomes its exit code."""
+    try:
+        return fn()
+    except ExportError as exc:
+        return O.Outcome(kind, {}, exc.code, str(exc))
+    except ValueError as exc:  # a config that does not load
+        return O.Outcome(kind, {}, EXIT_UNAVAILABLE, f"could not read the config: {exc}")
+
+
+def export_enable(
+    repo: Path,
+    doc: str,
+    *,
+    path: str = "",
+    mode: str = "",
+    local: bool = False,
+    agent: str = "",
+    via_mcp: bool = False,
+) -> O.Outcome:
+    """Select ``doc`` (no file is written). An agent may; the result says who and how to stop."""
+    from ._base import _load
+
+    def run() -> O.Outcome:
+        log, cfg, st = _load(repo, agent)
+        r = S.enable(
+            repo, log, cfg, st, doc, path=path, mode=mode, local=local,
+            requested_agent=agent, via_mcp=via_mcp,
+        )  # fmt: skip
+        return O.ok("export.enable", **r, text=r["message"])
+
+    return _guard("export.enable", run)
+
+
+def export_disable(
+    repo: Path,
+    doc: str,
+    *,
+    lock: bool = False,
+    local: bool = False,
+    agent: str = "",
+    via_mcp: bool = False,
+) -> O.Outcome:
+    """Stop selecting ``doc``; ``lock`` (the operator's veto) keeps agents from enabling it."""
+    from ._base import _load
+
+    def run() -> O.Outcome:
+        log, cfg, st = _load(repo, agent)
+        r = S.disable(
+            repo, log, cfg, st, doc, lock=lock, local=local,
+            requested_agent=agent, via_mcp=via_mcp,
+        )  # fmt: skip
+        return O.ok("export.disable", **r, text=r["message"])
+
+    return _guard("export.disable", run)
+
+
+def export_ack(repo: Path, *, agent: str = "") -> O.Outcome:
+    """The operator has seen every document an agent enabled (refused under an agent)."""
+    from ._base import _load
+
+    def run() -> O.Outcome:
+        log, cfg, st = _load(repo, agent)
+        docs = S.acknowledge(log, st, cfg, requested_agent=agent)
+        text = f"acknowledged: {', '.join(docs)}" if docs else "nothing to acknowledge"
+        return O.ok("export.ack", documents=docs, text=text)
+
+    return _guard("export.ack", run)
+
+
+def export_eject(repo: Path, doc: str, *, force: bool = False) -> O.Outcome:
+    """Copy the shipped template of ``doc`` into .ddflow/templates/export/ (CLI only)."""
+
+    def run() -> O.Outcome:
+        cfg = Config.load(repo)
+        e = T.eject(repo, doc, force=force, cfg=cfg)
+        return O.ok(
+            "export.eject", doc=e.doc, path=e.path, action=e.action, notes=e.notes, text=e.message
+        )
+
+    return _guard("export.eject", run)
+
+
+def export_validate(repo: Path, doc: str = "") -> O.Outcome:
+    """Render the selected documents (or ``doc``) against the current data; report template
+    errors with file and line. Exit 2 when any template does not render."""
+
+    def run() -> O.Outcome:
+        cfg = Config.load(repo)
+        docs = [doc] if doc else ops.selection(cfg)
+        if doc:
+            R.get(doc)
+        if not docs:
+            return O.Outcome(
+                "export.validate",
+                {"results": [], "notes": T.drift_notes(repo)},
+                O.NOTHING,
+                "no documents are selected ([export].documents is empty): name one "
+                "(ddflow export validate <doc>)",
+            )
+        data = T.validate(repo, cfg, docs)
+        bad = [r for r in data["results"] if not r["ok"]]
+        reason = "; ".join(r["message"] for r in bad)
+        return O.Outcome("export.validate", data, ops.worst([r["code"] for r in bad]), reason)
+
+    return _guard("export.validate", run)
 
 
 def _filters(
@@ -206,7 +324,7 @@ def _act(
 MCP_CEILING = 60_000
 
 
-def export_tool(repo: Path, a: dict[str, Any]) -> O.Outcome:
+def export_tool(repo: Path, a: dict[str, Any], agent: str = "") -> O.Outcome:
     """The `ddflow_export` tool: its arguments are the CLI's flags, plus ``write`` + ``path``.
 
     Nothing is written unless ``write`` is true AND ``path`` names a repo-relative file;
@@ -216,6 +334,9 @@ def export_tool(repo: Path, a: dict[str, Any]) -> O.Outcome:
     path-safety rules apply), never overrides hand-edit protection and never feeds the
     renderer an arbitrary file.
     """
+    act = str(a.get("action") or "")
+    if act:
+        return _tool_action(repo, a, act, agent)
     doc, every = str(a.get("doc") or ""), bool(a.get("all"))
     write, path = bool(a.get("write")), str(a.get("path") or "")
     diff, check = bool(a.get("diff")), bool(a.get("check"))
@@ -224,7 +345,7 @@ def export_tool(repo: Path, a: dict[str, Any]) -> O.Outcome:
             return O.refused(
                 "export", "write, path, diff and check need a doc (or all)", results=[]
             )
-        return export_list(repo)
+        return export_list(repo, agent)
     if write and not path:
         return O.refused(
             "export", "write=true needs path: a repo-relative file to write", results=[]
@@ -259,4 +380,33 @@ def export_tool(repo: Path, a: dict[str, Any]) -> O.Outcome:
         update=write and not path,
         out=path,
         ceiling=MCP_CEILING,
+    )
+
+
+def _tool_action(repo: Path, a: dict[str, Any], act: str, agent: str) -> O.Outcome:
+    """``action`` = list | enable | disable | validate. Templates are never edited from here,
+    an agent never locks or acknowledges (the operator's acts), and no file is written."""
+    doc = str(a.get("doc") or "")
+    others = [k for k in ("all", "write", "diff", "check") if a.get(k)]
+    if others:
+        return O.refused("export", f"{', '.join(others)} do not apply to action={act}", results=[])
+    if act == "list":
+        return export_list(repo, agent)
+    if act == "validate":
+        return export_validate(repo, doc)
+    if act in ("enable", "disable"):
+        if not doc:
+            return O.refused("export", f"action={act} needs doc", results=[])
+        if act == "disable":
+            return export_disable(repo, doc, agent=agent, via_mcp=True)
+        return export_enable(
+            repo,
+            doc,
+            path=str(a.get("path") or ""),
+            mode=str(a.get("mode") or ""),
+            agent=agent,
+            via_mcp=True,
+        )
+    return O.refused(
+        "export", f"unknown action {act!r}: list, enable, disable or validate", results=[]
     )
