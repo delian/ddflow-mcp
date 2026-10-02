@@ -295,8 +295,19 @@ def test_prepare_failure_messages_are_redacted(tmp_path, monkeypatch):
     assert HOME not in out.reason and ADDR not in out.reason
 
 
-def test_a_consent_can_be_consumed_only_once_across_threads():
+def test_consume_is_serialised_by_the_consents_lock():
+    """Within one process: holding the lock blocks a consumer (it fails without the lock),
+    and the many-threads race yields exactly one winner."""
     import threading
+
+    c = D.Consent("d" * 64, 1e18)
+    done = threading.Event()
+    with c._lock:
+        t = threading.Thread(target=lambda: (c.consume(), done.set()))
+        t.start()
+        assert not done.wait(0.2) and not c.used
+    t.join(5)
+    assert c.used
 
     c = D.Consent("d" * 64, 1e18)
     wins: list[bool] = []
@@ -307,6 +318,6 @@ def test_a_consent_can_be_consumed_only_once_across_threads():
         wins.append(c.consume())
 
     ts = [threading.Thread(target=go) for _ in range(16)]
-    [t.start() for t in ts]
-    [t.join() for t in ts]
+    [x.start() for x in ts]
+    [x.join() for x in ts]
     assert wins.count(True) == 1
