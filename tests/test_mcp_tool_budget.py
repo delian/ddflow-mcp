@@ -12,7 +12,9 @@ from ddflow.surfaces import mcp as mcp_module
 from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 
 #: Compact `tools/list` bytes. Raise only with a reason in the commit; lowering is welcome.
-TOOLS_LIST_BUDGET = 92_000
+# 93_500: ddflow_export (B-export-surfaces) is ~1.4 KB, 15 arguments because the CLI/MCP flag
+# parity ratchet needs every `ddflow export` filter flag reachable; main sat at 91,958.
+TOOLS_LIST_BUDGET = 93_500
 SHARED_DESCRIPTION_MAX = 200
 
 
