@@ -217,7 +217,7 @@ def _wire_hit(table: str, label: str, r: dict) -> dict:
     prov = r.get("provenance")
     if prov:
         origin = PV.Origin(prov["trust"], prov["by"], prov["source"])
-        kind = {"decisions": "decision", "lessons": "lesson", "memories": "memory"}[table]
+        kind = PV.TABLE_KIND[table]
         hit["headline"] = f"{r.get('id')} ({origin.label()})"
         hit["body"] = PV.fence(kind, str(r.get("id")), head + (f": {body}" if body else ""), origin)
         hit["provenance"] = prov

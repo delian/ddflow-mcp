@@ -45,6 +45,16 @@ _ENTITY = re.compile(r"&(?=#|\w+;)")
 _NOT_ATTR = re.compile(r"[\s\"'<>&`]+")
 
 
+#: The record kind a recalled index table is fenced as. ONE map for the CLI block and the
+#: JSON/MCP hit, which both name it.
+TABLE_KIND = {
+    "decisions": "decision",
+    "lessons": "lesson",
+    "memories": "memory",
+    "prompts": "prompt",
+}
+
+
 @dataclass(frozen=True)
 class Origin:
     trust: str
