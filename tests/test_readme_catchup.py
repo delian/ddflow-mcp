@@ -1,4 +1,4 @@
-"""The README names real commands, real tools, and every command at least once.
+"""The README names real commands, real tools, and every top-level command at least once.
 
 `test_readme_agent_reader.py` checks the short agent-reader section. This checks the whole
 file, because the README is also the reference a person reads, and on 2026-10-01 75 merges
