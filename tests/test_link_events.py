@@ -112,8 +112,8 @@ def test_later_links_and_distinct_dismissals_accumulate_in_any_order():
     c = _ev("link.recorded", "T1", 12, "bob", relation="duplicate_of", target="T9", by="bob")
     out = set()
     for order in permutations([a, b, c]):
-        links = fold([*BASE, *order]).links["T1"].links
-        out.add(json.dumps([(x["relation"], x["target"]) for x in links]))
+        rec = fold([*BASE, *order]).links["T1"]
+        out.add(json.dumps([(x["relation"], x["target"]) for x in [*rec.links, *rec.dismissals]]))
     assert len(out) == 1
     got = json.loads(out.pop())
     assert sorted(got) == [["distinct", "T8"], ["duplicate_of", "T9"], ["related", "T7"]]
@@ -123,6 +123,7 @@ def test_distinct_is_a_dismissal_not_a_link():
     st = fold([*BASE, _ev("link.recorded", "T1", 10, relation="distinct", target="T8", by="a")])
     rec = st.links["T1"]
     assert rec.dismissed() == {"T8"}
+    assert rec.links == [] and [d["target"] for d in rec.dismissals] == ["T8"]
     assert "T8" not in rec.linked()
 
 

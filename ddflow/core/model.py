@@ -431,9 +431,18 @@ class RecordLinks:
         """The additions in one order whatever order they folded in: oldest first."""
         return sorted(self.additions.values(), key=lambda a: (a["at"], a["event"]))
 
+    def _sorted(self, entries) -> list[dict[str, Any]]:
+        return sorted(entries, key=lambda x: (x["at"], x["event"], x["target"]))
+
     @property
     def links(self) -> list[dict[str, Any]]:
-        return sorted(self.link_entries.values(), key=lambda x: (x["at"], x["event"], x["target"]))
+        """The links: extends / duplicate_of / related. Dismissals are `dismissals`."""
+        return self._sorted(x for x in self.link_entries.values() if x["relation"] != "distinct")
+
+    @property
+    def dismissals(self) -> list[dict[str, Any]]:
+        """The 'distinct' entries: pairs somebody looked at and judged different."""
+        return self._sorted(x for x in self.link_entries.values() if x["relation"] == "distinct")
 
     @property
     def answer(self) -> dict[str, Any]:
