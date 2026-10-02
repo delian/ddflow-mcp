@@ -105,10 +105,12 @@ def test_no_distribution_outside_a_checkout_is_unknown(tmp_path, monkeypatch):
 def test_source_tree_reads_the_commit_from_git(tmp_path, monkeypatch):
     tree = tmp_path / "checkout"
     (tree / "ddflow").mkdir(parents=True)
+
     def git(*a):
-        return subprocess.run(["git", "-C", str(tree), *a], check=True, capture_output=True, text=True)
-        ["git", "-C", str(tree), *a], check=True, capture_output=True, text=True
-    )
+        return subprocess.run(
+            ["git", "-C", str(tree), *a], check=True, capture_output=True, text=True
+        )
+
     git("init", "-q")
     git(
         "-c",
