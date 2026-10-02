@@ -76,7 +76,7 @@ def _this_network(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
 
 
 def _parse(raw: str, ip_type: type):
-    """`ipaddress` rejects zero-padded octets (`172.16.001.1`), but a reader sees one."""
+    """`ipaddress` rejects zero-padded octets, but a reader sees one."""
     if ip_type is ipaddress.IPv4Address:
         raw = ".".join(part.lstrip("0") or "0" for part in raw.split("."))
     return ip_type(raw)
@@ -95,7 +95,7 @@ def _is_private(raw: str, ip_type: type) -> bool:
 def private_addresses(text: str) -> set[str]:
     """Private/link-local IPv4 and IPv6 literals in `text`.
 
-    The repo guard's rules, plus zero-padded octets (`172.16.001.1`).
+    The repo guard's rules, plus zero-padded octets.
 
     Loopback is excluded here to match tests/test_repo_is_generic.py; `redact_report`
     removes it as well, since a report has no use for it either.
