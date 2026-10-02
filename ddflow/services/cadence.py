@@ -16,6 +16,47 @@ import json
 from typing import Any
 
 
+def count_due(st, cfg, *, replaced: set[str] = frozenset()) -> list[dict[str, Any]]:
+    """Passes due by COMPLETED WORK (tasks or phases). Needs nothing but the folded state
+    and the config, so `complete <phase>` can ask it even when a calendar knob is malformed.
+    `replaced` names calendar entries, which take the place of the count-based pass."""
+    done_tasks = sum(1 for i in st.items.values() if i.kind == "task" and i.state == "done")
+    done_phases = sum(1 for i in st.items.values() if i.kind == "phase" and i.state == "done")
+    c = cfg.cadence
+    due: list[dict[str, Any]] = []
+    for name, every, unit, count in (
+        ("integration_tests", c.integration_tests_every_tasks, "tasks", done_tasks),
+        ("dedupe_sweep", c.dedupe_sweep_every_tasks, "tasks", done_tasks),
+        ("architecture_review", c.architecture_review_every_phases, "phases", done_phases),
+        ("mutation_tests", c.mutation_tests_every_phases, "phases", done_phases),
+        ("lessons_pass", c.lessons_pass_every_phases, "phases", done_phases),
+    ):
+        if name in replaced:
+            # The calendar entry of the same name REPLACES this pass; without the skip
+            # it would also fall due by completions, reported twice under one name.
+            continue
+        runs = st.cadences.get(name, [])
+        at_last = int(runs[-1].get("result", "0") or 0) if runs else 0
+        since = count - at_last
+        if every > 0 and since >= every:
+            due.append({"cadence": name, "since": since, "every": every, "unit": unit})
+    return due
+
+
+def phase_overdue(st, cfg) -> list[str]:
+    """Blockers for completing a phase: every phase-counted pass that is due. Calendar
+    names are read leniently (`name=days`, no validation) so a typo elsewhere in
+    `every_days` cannot switch this check off."""
+    replaced = {spec.partition("=")[0].strip() for spec in cfg.cadence.every_days}
+    return [
+        f"periodic pass overdue: {d['cadence']} ({d['since']} of {d['every']} phases since "
+        f"the last). Run it, then `ddflow cadence --ran {d['cadence']}`; to skip it on the "
+        f'record: `ddflow cadence --ran {d["cadence"]} --note "skipped: <reason>"`.'
+        for d in count_due(st, cfg, replaced=replaced)
+        if d["unit"] == "phases"
+    ]
+
+
 def lessons_cadence(st, cfg) -> list[dict[str, Any]]:
     """Is a lessons-compression pass due?
 

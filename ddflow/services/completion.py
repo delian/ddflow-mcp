@@ -119,6 +119,14 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
                 f"refuse it, and there is no MCP tool for it."
             )
 
+    if it.kind == "phase":
+        # Periodic passes counted in phases (architecture review, mutation tests, lessons)
+        # are the ones a phase close exists to run; task-counted ones stay advisory. Here,
+        # not in `api.complete`, so the PR-merge settle path enforces it too.
+        from .cadence import phase_overdue
+
+        v.blockers += phase_overdue(state, cfg)
+
     inert = G.inert_requirements(cfg)
     if inert:
         v.blockers.append(
