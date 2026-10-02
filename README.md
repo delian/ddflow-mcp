@@ -1876,7 +1876,7 @@ MCP `ddflow_show` and `ddflow_brief` return the same data.
 
 `[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
-entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
+entirely. Adding an id that already exists keeps the refusal or merge it always had. An id ddflow generates (no `--id`) is time-salted, so the same text filed twice gets two different ids; only the duplicate check, never the id, catches a re-filing: an exact copy of an open record is merged into it as an extension, of a closed one filed as a new record linked to it, both without asking under the default `ask` (`warn` and `off` leave two unlinked records). The check reads
 the log before the add writes, so it is advisory across agents: two adds of the same text
 racing in different clones can both pass, and a later `similar` will show the pair. The
 check is also a function, `api.dedupe_check_add`, taking a config that may have `on_match`
