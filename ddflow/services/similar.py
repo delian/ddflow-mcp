@@ -244,7 +244,8 @@ def open_store(store: Store) -> StoreIndex:
 class Candidate:
     """One existing record shown to whoever is adding. ``flags``: ``identical`` (the
     same text up to case and whitespace), ``named`` (the new text names its id),
-    ``same_item`` (filed against the same item, or the item itself)."""
+    ``same_item`` (filed against the same item, or the item itself), ``filed_against``
+    (the new record's item IS this one: it asks nothing)."""
 
     id: str
     kind: str
@@ -262,6 +263,23 @@ class Assessment:
     @property
     def identical(self) -> Candidate | None:
         return next((c for c in self.candidates if "identical" in c.flags), None)
+
+
+def _asks(c: Candidate, kind: str, words: int, dd) -> bool:
+    """Does this candidate make the add ask? An identical record of the SAME kind always
+    does (it is merged, not asked about, but it is the strongest match there is); a record
+    the new one is filed AGAINST asks nothing -- a bug with ``--item T`` already says T is
+    what fixes it -- even when the texts are identical; otherwise a named id or a score at
+    the ask threshold with enough words."""
+    if "identical" in c.flags and c.kind == kind:
+        return True
+    if "filed_against" in c.flags:
+        return False
+    return (
+        "identical" in c.flags
+        or "named" in c.flags
+        or (c.score >= dd.ask_threshold and words >= dd.min_words)
+    )
 
 
 def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessment:
@@ -306,15 +324,14 @@ def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessme
             flags.append("named")
         if item and item in (d.item, d.id):
             flags.append("same_item")
+        if item and item == d.id:
+            flags.append("filed_against")
         out.append(Candidate(i, d.kind, scores.get(i, 0.0), tuple(flags)))
     if not out:
         return Assessment("none", [], words)
-    asked = any(
-        "identical" in c.flags
-        or "named" in c.flags
-        or (c.score >= dd.ask_threshold and words >= dd.min_words)
-        for c in out
-    )
+    # A record filed AGAINST the candidate (a bug with --item T, T being the task that
+    # fixes it) is already answered: it is shown, and it asks nothing.
+    asked = any(_asks(c, kind, words, dd) for c in out)
     if not asked:
         return Assessment("show", out, words)
     return Assessment("ask" if dd.on_match == "ask" else "warn", out, words)

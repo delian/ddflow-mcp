@@ -13,6 +13,7 @@ import json
 import sys
 
 from ...api import knowledge as A
+from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 
 #: `event.kind` -> a verb a person reads. Imported from the CLI's table so there is one.
@@ -21,23 +22,31 @@ from ..history_verbs import HISTORY_VERBS
 
 def cmd_lesson(a, c: Ctx) -> int:
     if a.lesson_cmd == "add":
-        out = A.lesson_add(
-            c.repo,
-            A.LessonDraft(
-                title=a.title,
-                rule=a.rule or "",
-                why=a.why or "",
-                how=a.how or "",
-                summary=a.summary or "",
-                tags=a.tags or "",
-                seen_in=a.seen_in or "",
-                supersedes=a.supersedes or "",
-                pattern=a.pattern or "",
-                globs=a.globs or "",
-                id=a.id or "",
+        out = D.run(
+            a,
+            c,
+            lambda answer: A.lesson_add(
+                c.repo,
+                A.LessonDraft(
+                    title=a.title,
+                    rule=a.rule or "",
+                    why=a.why or "",
+                    how=a.how or "",
+                    summary=a.summary or "",
+                    tags=a.tags or "",
+                    seen_in=a.seen_in or "",
+                    supersedes=a.supersedes or "",
+                    pattern=a.pattern or "",
+                    globs=a.globs or "",
+                    id=a.id or "",
+                    answer=answer,
+                ),
+                agent=c.requested_agent,
             ),
-            agent=c.requested_agent,
         )
+        settled = D.settle(a, c, out)
+        if settled is not None:
+            return settled
         if out.exit:
             c.out(out.reason, out.body())
             return out.exit
@@ -128,9 +137,21 @@ def cmd_job(a, c: Ctx) -> int:
 
 def cmd_memory(a, c: Ctx) -> int:
     if a.memory_cmd == "add":
-        out = A.memory_add(
-            c.repo, a.text, tags=a.tags or "", id=a.id or "", agent=c.requested_agent
+        out = D.run(
+            a,
+            c,
+            lambda answer: A.memory_add(
+                c.repo,
+                a.text,
+                tags=a.tags or "",
+                id=a.id or "",
+                answer=answer,
+                agent=c.requested_agent,
+            ),
         )
+        settled = D.settle(a, c, out)
+        if settled is not None:
+            return settled
         msg = out.reason if out.exit else f"remembered {out.data['id']}"
         c.out(msg, out.body(("id", "replaced")))
         return out.exit
@@ -210,33 +231,36 @@ def cmd_similar(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason)
         return out.exit
-    for r in out.data["candidates"]:
-        flags = f"  [{', '.join(r['flags'])}]" if r["flags"] else ""
-        print(f"{r['id']}  {r['kind']}  {r['score']:.2f}  {r['state']}{flags}")
-        print(f"    {r['title']}")
-        if r["shared"]:
-            print(f"    shares: {', '.join(r['shared'])}")
+    print("\n".join(D.candidate_lines(out.data["candidates"])))
     return OK
 
 
 def cmd_research(a, c: Ctx) -> int:
-    out = A.research_add(
-        c.repo,
-        A.Finding(
-            question=a.question,
-            verdict=a.verdict,
-            claim=a.claim or "",
-            mechanism=a.mechanism or "",
-            falsifier=a.falsifier or "",
-            probe=a.probe or "",
-            probe_output=a.probe_output or "",
-            sources=a.sources or "",
-            budget=a.budget or "",
-            item=a.item or "",
-            id=a.id or "",
+    out = D.run(
+        a,
+        c,
+        lambda answer: A.research_add(
+            c.repo,
+            A.Finding(
+                question=a.question,
+                verdict=a.verdict,
+                claim=a.claim or "",
+                mechanism=a.mechanism or "",
+                falsifier=a.falsifier or "",
+                probe=a.probe or "",
+                probe_output=a.probe_output or "",
+                sources=a.sources or "",
+                budget=a.budget or "",
+                item=a.item or "",
+                id=a.id or "",
+                answer=answer,
+            ),
+            agent=c.requested_agent,
         ),
-        agent=c.requested_agent,
     )
+    settled = D.settle(a, c, out)
+    if settled is not None:
+        return settled
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
         return FAIL
@@ -249,9 +273,24 @@ def cmd_research(a, c: Ctx) -> int:
 
 def cmd_bug(a, c: Ctx) -> int:
     if a.bug_cmd == "found":
-        out = A.bug_found(
-            c.repo, summary=a.summary, item=a.item or "", id=a.id or "", agent=c.requested_agent
+        out = D.run(
+            a,
+            c,
+            lambda answer: A.bug_found(
+                c.repo,
+                summary=a.summary,
+                item=a.item or "",
+                id=a.id or "",
+                answer=answer,
+                agent=c.requested_agent,
+            ),
         )
+        settled = D.settle(a, c, out)
+        if settled is not None:
+            return settled
+        if out.exit:
+            print(out.reason, file=sys.stderr)
+            return out.exit
         closed = out.data.get("resolution", "")
         note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
         c.out(f"bug {out.data['id']} recorded{note}", out.body(("id",)))

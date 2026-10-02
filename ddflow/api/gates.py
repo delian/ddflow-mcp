@@ -125,6 +125,12 @@ def status(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     readme = readme_report(st, cfg, item, repo=repo)
     if readme:
         lines.append(f"\n  NOTE: {readme}")
+    from ..views.markdown import new_reports_line
+    from .lifecycle import _new_report_count
+
+    reports = new_reports_line(item, _new_report_count(st, item))
+    if reports:
+        lines.append(f"\n  NOTE: {reports}")
     return O.ok("gate.status", id=item, status=plain(s), text="\n".join(lines), readme=readme)
 
 

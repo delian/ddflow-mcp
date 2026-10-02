@@ -19,6 +19,14 @@ from ddflow.infra.store import Store
 from ddflow.services import similar
 from tests.test_dedupe_eval import CORPUS
 
+
+@pytest.fixture(autouse=True)
+def _default_policy(monkeypatch):
+    """The policy tests below read the DEFAULT [dedupe] ("ask"); conftest turns the add-time
+    check off for the rest of the suite."""
+    monkeypatch.delenv("DDFLOW_DEDUPE_ON_MATCH", raising=False)
+
+
 # ----------------------------------------------------------------------------- tokenizer
 
 
@@ -181,7 +189,7 @@ LONG = "subagent claim through the shared connection binds the parent session wo
 
 def _cfg(**kw) -> Config:
     cfg = Config.load()
-    cfg.dedupe = dataclasses.replace(cfg.dedupe, **kw)
+    cfg.dedupe = dataclasses.replace(cfg.dedupe, **{"on_match": "ask", **kw})
     return cfg
 
 

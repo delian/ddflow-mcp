@@ -7,7 +7,8 @@
 #   scripts/bump.sh 0.4.2     # ...or say it exactly
 #
 # WHY A SCRIPT. The version lives in SIX places that must agree: `pyproject.toml`,
-# `server.json`'s `version`, its per-package `version`, the TAG inside every `oci`
+# `server.json`'s `version`, the `pypi` package's `version` (an `oci` package must NOT
+# have one -- the registry rejects it, publish #40), the TAG inside every `oci`
 # identifier, `SERVER_INFO` in `surfaces/mcp.py` — which is what the server tells every
 # client it is, and what `ddflow --version` prints — and `__version__` in
 # `ddflow/__init__.py`, the package attribute, kept equal to the rest. Most are easy to
@@ -79,7 +80,9 @@ srv = pathlib.Path("server.json")
 d = json.loads(srv.read_text())
 d["version"] = new
 for pkg in d["packages"]:
-    if "version" in pkg:
+    # An `oci` package has NO version field (the registry rejects one); its tag below is
+    # the version. Every other registry type that carries one moves with it.
+    if pkg.get("registryType") != "oci" and "version" in pkg:
         pkg["version"] = new
     # The OCI tag. This is the one that gets left behind.
     if pkg.get("registryType") == "oci":
@@ -118,6 +121,8 @@ got_proj = tomllib.loads(proj.read_text())["project"]["version"]
 got = json.loads(srv.read_text())
 stale = [p["identifier"] for p in got["packages"]
          if p.get("registryType") == "oci" and not p["identifier"].endswith(f":{new}")]
+stale += [f"{p['identifier']} has a version field" for p in got["packages"]
+          if p.get("registryType") == "oci" and "version" in p]
 problems = []
 sys.path.insert(0, ".")
 # Bytecode from an EMPTY cache, i.e. compiled from the files just written. The tree's own

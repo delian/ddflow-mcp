@@ -7,13 +7,13 @@
     "url": "https://github.com/delian/ddflow-mcp",
     "source": "github"
   },
-  "version": "0.1.6",
+  "version": "0.1.9",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "ddflow-mcp",
-      "version": "0.1.6",
+      "version": "0.1.9",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"
@@ -35,8 +35,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "docker.io/delian/ddflow-mcp:0.1.6",
-      "version": "0.1.6",
+      "identifier": "docker.io/delian/ddflow-mcp:0.1.9",
       "transport": {
         "type": "stdio"
       },
@@ -57,8 +56,7 @@
     },
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/delian/ddflow-mcp:0.1.6",
-      "version": "0.1.6",
+      "identifier": "ghcr.io/delian/ddflow-mcp:0.1.9",
       "transport": {
         "type": "stdio"
       },
