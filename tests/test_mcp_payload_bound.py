@@ -242,3 +242,8 @@ def test_show_names_every_rewrite_and_does_not_edit_the_callers_body():
     assert json.dumps(body) == snapshot
     assert "location" not in out["triage"]["g"]["f1"] and out["truncated"]["left_out"]
     assert out["gates"]["g"] == {"outcome": "passed", "at": "2026-01-01T00:00:00Z"}
+
+
+def test_a_triage_record_without_location_or_title_is_not_reported_as_cut():
+    body = {"state": "open", "triage": {"g": {"f1": {"note": "x"}}}}
+    assert B.bound_show(body, {})[0] == body

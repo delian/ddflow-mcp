@@ -141,7 +141,11 @@ def bound_show(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         out["triage"] = copy.deepcopy(out["triage"])  # the caller's body is not edited
     for recs in (out.get("triage") or {}).values():
         for rec in recs.values() if isinstance(recs, dict) else ():
-            if isinstance(rec, dict) and rec.get("location") == rec.get("title"):
+            if (
+                isinstance(rec, dict)
+                and rec.get("location")
+                and rec["location"] == rec.get("title")
+            ):
                 rec.pop("location", None)  # before the cut, so it compares whole strings
                 stripped = True
     cut = [0]
