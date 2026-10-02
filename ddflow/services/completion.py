@@ -20,6 +20,7 @@ comes back as a `warning` and the surfaces show it before the verdict.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -230,9 +231,10 @@ def _is_test_or_doc_path(path: str) -> bool:
     name = parts[-1]
     stem = name.rsplit(".", 1)[0]
     return (
-        any(d in _TEST_DOC_DIRS for d in parts[:-1])
+        any(d.lower() in _TEST_DOC_DIRS or d.endswith("_tests") for d in parts[:-1])
         or name.startswith("test_")
-        or stem.endswith(("_test", "_spec"))
+        or stem.endswith(("_test", "_spec", "_tests"))
+        or re.search(r"[a-z0-9](Test|Tests|Spec)$", stem) is not None  # FooTest.java, widgetSpec.js
         or ".test." in name
         or ".spec." in name
         or name == "conftest.py"
