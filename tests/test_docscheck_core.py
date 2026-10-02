@@ -225,3 +225,8 @@ def test_bare_artifact_filenames_are_path_notes_not_identifiers(tmp_path):
     report = D.check_docs(repo_with(tmp_path, readme))
     assert report.clean
     assert [n.ref for n in report.notes] == ["logo.jpg", "notes.ipynb", "results.parquet"]
+
+
+def test_an_indented_fence_under_a_list_item_is_code(tmp_path):
+    readme = "1. Configure:\n\n    ```\n    `ghost_in_list` [x](nothing.md)\n    ```\n\n2. Done `ghost_after`\n"
+    assert found(D.check_docs(repo_with(tmp_path, readme))) == [("identifier", "ghost_after")]
