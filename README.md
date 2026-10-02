@@ -3086,8 +3086,9 @@ sweep, lessons compression.
 pass counted in phases (architecture review, mutation tests, lessons) as an unmet condition
 and refuses (exit 3). Run the pass and record it with `ddflow cadence --ran <name>`, or skip
 it on the record with `ddflow cadence --ran <name> --note "skipped: <reason>"`.
-Task-counted passes stay advisory, and completing a task never asks. The driver's phase
-close runs `ddflow cadence` first.
+Task-counted passes stay advisory, and completing a task never asks. `--force` overrides
+(recorded), and every completion path, including a merged pull request, applies the check.
+The driver's phase close runs `ddflow cadence` first.
 
 ---
 
@@ -3717,6 +3718,7 @@ part that matters.
   dedupe, lesson compression — from the log, counted in completed work; and, for a rule
   like "a bug hunt every week", by the calendar (`[cadence] every_days =
   ["bug_hunt=7"]`: never run means due now). The SessionStart hook lists what is due.
+  A phase will not complete while a phase-counted pass is overdue.
 * **Post-merge review**: `ddflow review <item> --commit <sha>` reviews one landed
   commit against its first parent — a merge as what it brought in — when the branch
   is gone.

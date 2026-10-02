@@ -110,8 +110,8 @@ def _calendar_due(
 def due_cadences(
     repo: Path, cfg, st, *, calendar: dict[str, float] | None = None
 ) -> list[dict[str, Any]]:
-    """Every periodic pass that is due now, derived from the log. Shared by `cadence` and
-    by `complete <phase>`, which refuses while a phase-counted pass is overdue."""
+    """Every periodic pass that is due now, derived from the log, for `cadence`. (`complete
+    <phase>` asks only `services.cadence.phase_overdue`, the phase-counted subset.)"""
     from ..services.cadence import count_due, export_cadence, lessons_cadence
 
     calendar = _calendar(cfg) if calendar is None else calendar
