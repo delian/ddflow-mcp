@@ -276,3 +276,20 @@ def test_credentials_are_never_read_or_logged():
         for opener in ("webbrowser", "xdg-open", "urlopen", "requests", "http.client", "socket"):
             assert opener not in code, f"{rel} reaches for {opener}"
         assert "print(" not in code and "logging" not in code
+
+
+def test_gh_not_logged_in_on_create_is_also_unavailable(tmp_path):
+    b = _bundle()
+    r = Runner(create=(1, "", "To get started with GitHub CLI, please run:  gh auth login"))
+    out = D.send_gh(tmp_path, b, REPO, _consent(b), runner=r, now=NOW)
+    assert out.status == "unavailable" and out.exit_code == 2 and "gh auth login" in out.reason
+
+
+def test_prepare_failure_messages_are_redacted(tmp_path, monkeypatch):
+    def broken(root, bundle):
+        raise OSError(f"cannot write {HOME}/x for {ADDR}")
+
+    monkeypatch.setattr(D, "write_report", broken)
+    out = D.prepare(tmp_path, _bundle(), REPO)
+    assert out.status == "failed" and out.exit_code == 1 and out.reason
+    assert HOME not in out.reason and ADDR not in out.reason
