@@ -298,3 +298,29 @@ def test_report_text_comes_from_the_bundle():
     )
     title, body = U.report_text(bundle)
     assert title == bundle.data["title"] and body == bundle.data["expected"]
+
+
+def test_both_failures_keep_their_own_reasons():
+    class Broken:
+        def query(self, *a, **k):
+            raise OSError("index gone")
+
+    res = U.check("t", "b", repo=REPO, fetch=Fake(raises=OSError("offline")), local=Broken())
+    assert "index gone" in res.local_reason and "offline" not in res.local_reason
+    assert "offline" in res.upstream_reason and "index gone" not in res.upstream_reason
+    lines = res.summary().splitlines()
+    assert any(
+        ln.startswith("upstream check unavailable") and "offline" in ln and "gone" not in ln
+        for ln in lines
+    )
+    assert any(
+        ln.startswith("local check unavailable") and "gone" in ln and "offline" not in ln
+        for ln in lines
+    )
+
+
+def test_a_truncated_response_is_unavailable_not_an_exception():
+    import http.client
+
+    res = U.check("t", "b", repo=REPO, fetch=Fake(raises=http.client.IncompleteRead(b"x")))
+    assert res.status == "unavailable" and "unreadable" in res.reason

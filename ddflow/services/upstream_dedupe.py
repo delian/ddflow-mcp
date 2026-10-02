@@ -18,6 +18,7 @@ empty answer). An upstream with zero issues IS an answer: ``no_issues``.
 
 from __future__ import annotations
 
+import http.client
 import json
 import re
 import urllib.error
@@ -88,7 +89,9 @@ class Result:
     upstream_state: str = "checked"
     #: "checked" | "not_checked" | "unavailable"
     local_state: str = "not_checked"
-    reason: str = ""
+    reason: str = ""  # why the check is unavailable: both places' reasons, joined
+    upstream_reason: str = ""
+    local_reason: str = ""
     upstream: list[Hit] = field(default_factory=list)
     local: list[Hit] = field(default_factory=list)
     #: the upstream hit to comment on instead of filing a new issue, when one is close
@@ -100,7 +103,7 @@ class Result:
     def summary(self) -> str:
         lines: list[str] = []
         if self.upstream_state == "unavailable":
-            lines.append(f"upstream check unavailable: {self.reason}")
+            lines.append(f"upstream check unavailable: {self.upstream_reason}")
         elif self.upstream_state == "no_issues":
             lines.append(f"no upstream issues in {self.repo} to compare with")
         else:
@@ -115,7 +118,7 @@ class Result:
             if h is not self.offer:
                 lines.append(f"  similar upstream {h.id} ({h.score:.2f}): {h.title}  {h.url}")
         if self.local_state == "unavailable":
-            lines.append(f"local check unavailable: {self.reason}")
+            lines.append(f"local check unavailable: {self.local_reason}")
         for h in self.local:
             tag = "likely already filed locally" if h.band == "ask" else "similar locally"
             lines.append(f"  {tag}: {h.kind} {h.id} ({h.score:.2f})")
@@ -153,6 +156,8 @@ def _page(fetch: Fetch, repo: str, page: int, timeout: float) -> tuple[list[dict
         raise UpstreamUnavailable(f"upstream timed out after {timeout:g}s") from exc
     except OSError as exc:
         raise UpstreamUnavailable(f"upstream unreachable: {exc}") from exc
+    except http.client.HTTPException as exc:  # a cut-short or garbled response
+        raise UpstreamUnavailable(f"upstream answer unreadable: {exc!r}") from exc
     spent = _rate_limited(r)
     if r.status in (HTTPStatus.FORBIDDEN, HTTPStatus.TOO_MANY_REQUESTS):
         if spent:
@@ -212,7 +217,7 @@ def check(
             hits = local.query(record)
         except (LookupError, OSError) as exc:
             res.local_state, res.status = "unavailable", "unavailable"
-            res.reason = f"local index: {exc}"
+            res.local_reason = f"local index: {exc}"
         else:
             res.local_state = "checked"
             for rid, score in hits:
@@ -226,8 +231,10 @@ def check(
         )
     except UpstreamUnavailable as exc:
         res.upstream_state, res.status = "unavailable", "unavailable"
-        res.reason = (res.reason + "; " if res.reason else "") + str(exc)
+        res.upstream_reason = str(exc)
+        res.reason = "; ".join(r for r in (res.local_reason, res.upstream_reason) if r)
         return res
+    res.reason = res.local_reason
     res.issues_seen = len(issues)
     if not issues:
         res.upstream_state = "no_issues"
