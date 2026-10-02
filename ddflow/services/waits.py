@@ -325,4 +325,6 @@ def live_waiters(repo: Path, now: float | None = None) -> list[Waiter]:
 def waiting_on(repo: Path, item: str, now: float | None = None) -> list[dict[str, object]]:
     """Summaries of the live waits that ``item`` is holding up."""
     now = time.time() if now is None else now
-    return [w.summary(now) for w in live_waiters(repo, now) if item in w.waiting_on]
+    return [
+        w.summary(now) for w in live_waiters(repo, now) if item in w.waiting_on and w.reserves()
+    ]
