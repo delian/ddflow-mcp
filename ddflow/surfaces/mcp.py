@@ -1632,7 +1632,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "dead end recorded is a dead end nobody walks down twice."
         ),
         "properties": {
-            "session": ("string", "Session id from ddflow_session_start.", True),
+            "session": (
+                "string",
+                "Session id; omit for the latest open.",
+                False,
+            ),
             "text": ("string", "The note.", True),
             "item": ("string", "Item it concerns.", False),
         },
@@ -1643,7 +1647,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             item=a.get("item", "") or "",
             agent=agent,
         ),
-        "payload": ("session",),
+        "payload": ("session", "how"),
     },
     "ddflow_session_end": {
         "description": (
@@ -1882,7 +1886,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "redacted before anything touches disk. Call it once per operator turn."
         ),
         "properties": {
-            "session": ("string", "Session id from ddflow_session_start.", True),
+            "session": (
+                "string",
+                "Session id; omit for the latest open.",
+                False,
+            ),
             "text": ("string", "The prompt, verbatim.", True),
             "item": ("string", "Item it concerns.", False),
         },
@@ -1893,7 +1901,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             item=a.get("item", "") or "",
             agent=agent,
         ),
-        "payload": ("redactions",),
+        "payload": ("redactions", "session", "how"),
     },
     "ddflow_setup": {
         "description": (

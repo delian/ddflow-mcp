@@ -567,6 +567,20 @@ def _driver_drift_notes(repo: Path) -> list[str]:
     ]
 
 
+def _orphan_notes(events: list) -> list[str]:
+    from ..services import sessions as SS
+
+    lost = len(SS.orphans(events)) - len(
+        {e.data["adopted_from"] for e in events if e.data.get("adopted_from")}
+    )
+    if lost <= 0:
+        return []
+    return [
+        f"{lost} prompt/note event(s) have no session id — "
+        "`ddflow session adopt-orphans` attaches them to the nearest session"
+    ]
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -607,6 +621,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
             "`[agent].id`, or drop both to derive a per-clone id)"
         )
     notes.extend(unknown_tier_notes(st.items.values()))
+    notes.extend(_orphan_notes(events))
     from ..services.export import select as export_select
 
     notes.extend(export_select.doctor_notes(repo, cfg, st))

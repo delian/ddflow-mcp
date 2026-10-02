@@ -3622,7 +3622,8 @@ ddflow lesson add|search        capture and retrieve lessons
 ddflow research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
 ddflow bug found|fixed          regression test required to close (--regression-test repeats)
 
-ddflow session start|prompt|note|end     provenance logging
+ddflow session start|prompt|note|end     provenance logging (prompt/note: id optional)
+ddflow session adopt-orphans             attach id-less prompts/notes to a session
 ddflow replay [--out DIR] [--verify]     reconstruct from the log
 
 ddflow recover [--apply]        find crashed agents' work   (2 = nothing)
@@ -3786,6 +3787,18 @@ part that matters.
   in `.cursor/hooks.json`), Codex, Kilo and opencode have no wiring yet: known gaps.
   `ddflow hooks status` reports whether the prompt hook is installed, and
   `ddflow hooks uninstall --claude` (or `--gemini`) removes only ddflow's own hooks.
+* **Every prompt and note carries a session id, even an implicit one.** The id on
+  `ddflow session prompt|note` (and the MCP `ddflow_session_prompt|note`) is optional.
+  Without one, the words go to the session named by `DDFLOW_SESSION_ID`/`CLAUDE_SESSION_ID`
+  if that session is open, else this agent's most recently active open session, else a
+  new session marked `implicit` in its start event. The output says which was used
+  (`recorded (0 redaction(s)) in session S (latest)`, `... (implicit, new)`); an explicit
+  id is unchanged and prints nothing extra. An ended session is never reused, text is
+  never refused for a missing id (only empty text is), and redaction runs before disk
+  as ever. The prompt hook does the same when a harness gives it no session id. Events
+  recorded earlier with no session id show up as a `ddflow doctor` note;
+  `ddflow session adopt-orphans` attaches each to the session nearest in time (writing a
+  copy marked `adopted_from`, since the log is append-only; run twice it adds nothing).
 
 **Not automated, on purpose:**
 
