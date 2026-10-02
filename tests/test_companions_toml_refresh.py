@@ -92,3 +92,10 @@ def test_a_comment_above_the_next_table_survives_the_refresh(tmp_path):
     )
     assert CO.register(tmp_path, _c(tmp_path), "codex")[0] == "written"
     assert "# the other one, keep me\n[mcp_servers.other]" in p.read_text("utf-8")
+
+
+def test_a_bare_mcp_servers_header_does_not_block_the_refresh(tmp_path):
+    p = _codex(tmp_path, '[mcp_servers]\n[mcp_servers.context7]\ncommand = "old-launcher"\n')
+    c = _c(tmp_path)
+    assert CO.register(tmp_path, c, "codex")[0] == "written"
+    assert _servers(p)["context7"]["command"] == c.command

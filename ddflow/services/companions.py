@@ -698,8 +698,10 @@ def _toml_without(text: str, cid: str) -> str | None:
     if not isinstance(srv, dict):
         return None
     expect = {**before, "mcp_servers": {k: v for k, v in srv.items() if k != cid}}
-    if not expect["mcp_servers"]:
-        expect.pop("mcp_servers")
+    # A bare `[mcp_servers]` header is an empty table on both sides, or on neither.
+    for d in (expect, after):
+        if d.get("mcp_servers") == {}:
+            d.pop("mcp_servers")
     return out if after == expect else None
 
 
