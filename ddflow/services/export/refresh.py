@@ -123,17 +123,22 @@ def refresh_selected(
     try:
         cfg = cfg or Config.load(repo)
         selected = ops.selection(cfg)
-        specs: list[ops.Spec] = []
-        for d in selected:
-            spec = ops.spec_for(cfg, d, writing=True)
-            if spec.refresh == trigger:
-                specs.append(spec)
-    except (ExportError, ValueError) as exc:
+    except (ExportError, ValueError, OSError) as exc:
         out.outcomes.append(
             DocOutcome("", action="failed", message=f"could not read settings: {exc}")
         )
         return out
-    if not specs:
+    specs: list[ops.Spec] = []
+    for d in selected:
+        # The effective refresh is read from the table first, so a document that is not
+        # refreshed by this trigger is never resolved (its settings cannot block the others).
+        try:
+            if str(cfg.export.table(d).get("refresh") or cfg.export.refresh) != trigger:
+                continue
+            specs.append(ops.spec_for(cfg, d, writing=True))
+        except Exception as exc:
+            out.outcomes.append(DocOutcome(d, action="failed", message=f"settings: {exc}"))
+    if not specs and not out.outcomes:
         out.note = (
             f"export refresh ({trigger}): no selected document has refresh = {trigger!r}; nothing to do"
             if selected

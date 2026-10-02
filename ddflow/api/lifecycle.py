@@ -1791,7 +1791,11 @@ def _refresh_documents(repo: Path, cfg, wt: W.Worktree) -> dict[str, Any]:
         )
         if not commit.ok:
             W.git(wt.path, "reset", "-q", "HEAD", "--", *paths)
-            W.git(wt.path, "checkout", "--", *paths)
+            for rel in paths:
+                if W.git(wt.path, "cat-file", "-e", f"HEAD:{rel}").ok:
+                    W.git(wt.path, "checkout", "--", rel)
+                else:  # a document this refresh created: no checkout can restore "absent"
+                    (wt.path / rel).unlink(missing_ok=True)
             data["changed"] = []
             data["problems_note"] = (
                 f"could not commit the refreshed documents: {commit.err or commit.out}"
