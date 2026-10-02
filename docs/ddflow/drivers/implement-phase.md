@@ -139,7 +139,7 @@ the ten steps below; `.ddflow/gates.toml` changes it per project.
 | 3 | `implement` | you | `gate record <ID> implement --outcome passed` |
 | 4 | `rubber_duck` | a **different-family** model | `gate record ... --model <reviewer model>` |
 | 5 | `critic` | a **different-family** critic | same |
-| 6 | `standards` | tooling | `ddflow gate run <ID> standards` |
+| 6 | `standards` | tooling | `ddflow gate run <ID> standards`; for roborev: `roborev review <sha>` (an explicit sha, never `HEAD` from a worktree), then `gate record ... --reviewed-sha <sha>` |
 | 7 | `unit_tests` | tooling | `ddflow gate run <ID> unit_tests` |
 | 8 | `bug_hunt` | you | `gate record` + a probe per finding |
 | 9 | `dedupe` | you | `gate record` |
