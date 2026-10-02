@@ -1499,8 +1499,20 @@ def review(
     return res
 
 
+def _tell_duplicates_apart(findings: list[Finding]) -> None:
+    """Give word-for-word identical findings of one review distinct digests: the second
+    is `<digest>-2`, and so on. Triage is keyed by digest, and two findings sharing one
+    would be triaged together and counted twice from a single event (critic)."""
+    seen: dict[str, int] = {}
+    for f in findings:
+        base = f.digest.split("-")[0]
+        seen[base] = seen.get(base, 0) + 1
+        f.digest = base if seen[base] == 1 else f"{base}-{seen[base]}"
+
+
 def _settle(res: ReviewResult) -> None:
     """Status and reason from coverage: every chunk, some, or none."""
+    _tell_duplicates_apart(res.findings)
     _name_unreviewed(res)
     if res.chunks_reviewed == 0:
         res.status = UNAVAILABLE
