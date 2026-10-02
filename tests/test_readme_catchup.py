@@ -89,8 +89,16 @@ def test_every_mcp_tool_the_readme_names_exists():
 
 def _export_section() -> str:
     start = README.index("## Exporting documents")
-    nxt = re.search(r"^## ", README[start + 5 :], flags=re.M)
-    return README[start : start + 5 + nxt.start()] if nxt else README[start:]
+    # The section ends at the next `## ` heading OUTSIDE a fenced block (an example may
+    # itself contain `## [1.2.3]` lines).
+    out, fenced = [], False
+    for i, ln in enumerate(README[start:].splitlines(keepends=True)):
+        if ln.startswith("```"):
+            fenced = not fenced
+        elif i and not fenced and ln.startswith("## "):
+            break
+        out.append(ln)
+    return "".join(out)
 
 
 _HELP = (

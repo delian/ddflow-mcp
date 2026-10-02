@@ -2903,7 +2903,7 @@ def _outcome_result(
         payload_key = ""
     if (
         isinstance(payload_key, tuple)
-        and out.data.get("export_refresh")
+        and "export_refresh" in out.data
         and "export_refresh" not in payload_key
     ):
         # merge / complete carry what the optional document refresh did (B-export-refresh),
