@@ -109,7 +109,7 @@ GOLDEN = """# Changelog
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Generated from the event log and the version tags: nothing before v1.0.0 is reconstructed.
+Generated from the event log and the version tags: versions up to and including v1.0.0 are not reconstructed.
 
 ## [Unreleased]
 
@@ -323,4 +323,38 @@ def test_no_tags_means_no_baseline_and_everything_is_unreleased(tmp_path):
     (tmp_path / ".ddflow" / "events").mkdir(parents=True)
     body = render(load(tmp_path, task("B-1", "First thing", "2026-09-06T00:00:00Z", sha)))
     assert "## [Unreleased]\n\n### Added\n\n- First thing\n" in body
-    assert "nothing before" not in body and "[Unreleased]:" not in body
+    assert "are not reconstructed" not in body and "[Unreleased]:" not in body
+
+
+def test_skipped_task_does_not_swallow_its_bugs_own_line(repo):
+    evs = task(
+        "T-s",
+        "Internal repair (fixes bug Bz9)",
+        "2026-09-27T00:00:00Z",
+        repo.shas["c5"],
+        **cl("skip"),
+    )
+    evs += [
+        ev("bug.found", "Bz9", "2026-09-26T00:00:00Z", summary="z"),
+        ev("bug.fixed", "Bz9", "2026-09-28T00:00:00Z", **cl("Fixed: crash on empty input")),
+    ]
+    body = render(load(repo, evs), tag="unreleased")
+    assert "crash on empty input" in body and "Internal repair" not in body
+
+
+def test_branch_tip_as_merged_sha_is_placed_by_ancestry(repo):
+    git(repo, "checkout", "-q", "-b", "feat", "v1.0.0")
+    tip = commit(repo, "g", "feat: topic", "2026-09-11T10:00:00+00:00")
+    git(repo, "checkout", "-q", "main")
+    git(
+        repo, "merge", "--no-ff", "-m", "merge B-t: topic", "feat", date="2026-09-15T10:00:00+00:00"
+    )
+    git(repo, "tag", "-a", "v1.2.0", "-m", "v1.2.0", date="2026-09-30T12:00:00+00:00")
+    got = kc.data(load(repo, task("B-t", "Topic", "2026-09-12T00:00:00Z", tip)), Filters())
+    placed = {
+        e["id"]: (s["title"], e["by_date"])
+        for s in got["sections"]
+        for g in s["groups"]
+        for e in g["entries"]
+    }
+    assert placed == {"B-t": ("1.2.0", False)}
