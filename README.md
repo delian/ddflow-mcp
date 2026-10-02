@@ -1508,10 +1508,8 @@ duplicate from a related record, which is why it is reported rather than decided
 real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson were
 reported this way. Tasks and phases are not checked (they carry dependencies);
 `[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
-`"off"` turns the check off. **While the shipped default is `warn`** (see "The check every
-add runs"), an import lists near-duplicates and imports them anyway; set
-`on_match = "ask"` to have them withheld, as the default will again once
-B-add-dedupe-surfaces lands. Re-running over the same files adds
+`"off"` turns the check off. Under the shipped default, `ask`, near-duplicates are
+withheld; set `on_match = "warn"` to list them and import them anyway. Re-running over the same files adds
 nothing.
 
 ### Verifying an import, at any time
@@ -1715,11 +1713,11 @@ stemmer), TF-IDF weights projected into `index.db` by `ddflow rebuild`, and an e
 over an inverted index — a record missing from the hits shares no term with the query, so
 nothing depends on how SQLite was built. Candidates cross kinds, so a new bug is shown the
 open task that fixes it. Its policy is the `[dedupe]` section (decision D-no-duplicates):
-`on_match` (`warn` default for now, `ask`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
+`on_match` (`ask` default, `warn`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
 on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds come from a
 labelled set of 84 duplicate / related / hard-negative pairs built from real logs
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
-duplicate from a different bug in the same function, which is why `ask` exists rather than an automatic decision. The shipped default is currently `warn`, because no surface can answer an ask yet (CLI flags, terminal prompt and MCP `relation` are task B-add-dedupe-surfaces, which flips it back to `ask`).
+duplicate from a different bug in the same function, which is why the default asks rather than decides. (It was `warn` for a short while, because no surface could answer an ask; the CLI flags, terminal prompt and MCP `relation` now can.)
 
 ### Similar — "is this already filed?"
 
@@ -1818,7 +1816,7 @@ acquired), quoting each (the first five, clipped; `show` has the rest) inside th
 token budget, and `ddflow heartbeat` and `ddflow gate status` carry the count in one line.
 MCP `ddflow_show` and `ddflow_brief` return the same data.
 
-`[dedupe].on_match` sets the policy: `ask` as above (the intended default, not shipped until B-add-dedupe-surfaces gives every surface a way to answer), `warn` (the current default) never refuses or
+`[dedupe].on_match` sets the policy: `ask` (default) as above, `warn` never refuses or
 merges — it lists the candidates and records the add as `new` — and `off` skips the check
 entirely. Adding an id that already exists keeps the refusal or merge it always had. The check reads
 the log before the add writes, so it is advisory across agents: two adds of the same text
