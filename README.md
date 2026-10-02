@@ -171,6 +171,7 @@ the same implementation, so neither drifts from the other.
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
+| **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
 | **read the engineering log** | `ddflow history` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
@@ -220,6 +221,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [Work that changes shape while you do it](#work-that-changes-shape-while-you-do-it)
 - [Architectural decisions](#architectural-decisions)
 - [Recall — "have we been here before?"](#recall--have-we-been-here-before)
+  - [Similar — "is this already filed?"](#similar--is-this-already-filed)
 - [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
   - [Proving a gate can fail at all](#proving-a-gate-can-fail-at-all)
@@ -1687,6 +1689,30 @@ labelled set of 84 duplicate / related / hard-negative pairs built from real log
 (`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
 duplicate from a different bug in the same function, which is why the default asks rather
 than decides.
+
+### Similar — "is this already filed?"
+
+```sh
+ddflow similar "claim refuses a worktree that already exists"
+ddflow similar "claim refuses a worktree that already exists" --kind task --json
+```
+
+Before you file a bug, task or lesson, ask what the log already holds that reads like
+it. `ddflow similar` (MCP: `ddflow_similar`) is read-only and takes the text you would
+file, and optionally `--kind` (a comma-separated subset of `[dedupe].kinds`; anything else
+is refused, exit 1). Each candidate shows its id, kind, title, **state** (open, claimed by
+whom, done, fixed, invalid...), **score** (0-1, TF-IDF cosine), the words it
+shares with your text, and flags: `identical` (the same text up to case and whitespace)
+and `named` (your text names its id). Candidates cross kinds, so a bug sees the open task
+that fixes it and a task the bug it would fix, and closed records are included: a new bug
+that repeats a fixed one is exactly the case worth catching.
+
+Exit codes: **0** with candidates, **2** with none. `--json` (and the MCP tool) return
+the same list of candidates, and an empty list when there are none. It uses the
+`[dedupe]` knobs `show_floor` (lowest score listed, default 0.35), `max_candidates`
+(default 3; records whose id the text names are listed as well) and `kinds`; it runs even
+when `[dedupe].on_match` is `off`, since that setting governs what an *add* does. A score
+is a prompt to look, not a verdict: two bugs in one function score high and are different.
 
 ## Operational memory
 

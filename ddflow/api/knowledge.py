@@ -248,6 +248,121 @@ def recall(
     return O.ok("recall", **data)
 
 
+#: Words listed to explain one match: enough to see why, few enough to read at a glance.
+SIMILAR_SHARED_WORDS = 5
+
+
+def _record_state(state, rid: str, kind: str) -> tuple[str, str]:
+    """(headline, state) of one indexed record, as a person reads them: an item's title
+    and where it is in the queue, a bug's summary and whether it is fixed."""
+    if kind in ("task", "phase"):
+        it = state.items.get(rid)
+        if it is None:
+            return "", "unknown"
+        if it.lease and not it.lease.expired_at and it.state not in ("done", "abandoned"):
+            return it.title, f"claimed by {it.lease.holder}"
+        return it.title, it.state
+    if kind == "bug":
+        bg = state.bugs.get(rid)
+        if bg is None:
+            return "", "unknown"
+        return bg.summary, bg.resolution or "open"
+    if kind == "lesson":
+        ls = state.lessons.get(rid)
+        return (ls.title, "superseded" if ls.superseded_by else "active") if ls else ("", "unknown")
+    if kind == "decision":
+        dc = state.decisions.get(rid)
+        return (dc.title, dc.status or "active") if dc else ("", "unknown")
+    if kind == "research":
+        rs = state.research.get(rid)
+        return (rs.question, rs.verdict.lower() or "recorded") if rs else ("", "unknown")
+    if kind == "memory":
+        mm = state.memories.get(rid)
+        return (mm.text, "live") if mm else ("", "unknown")
+    return "", "unknown"
+
+
+def similar(repo: Path, text: str, *, kinds: str = "", agent: str = "") -> O.Outcome:
+    """ "Is this already filed?" -- the records most like ``text``, before it is added.
+
+    Read-only: the same engine and the same ``[dedupe]`` knobs (``show_floor``,
+    ``max_candidates``, ``kinds``) the add-time check uses, asked in the open. Candidates
+    cross kinds -- a bug sees the open task that fixes it, a task the bug it would fix --
+    and closed records stay in, because a new bug that repeats a fixed one is the case
+    worth catching. Each says what it is, where it stands, how close it scored and which
+    words it shares, so the match can be judged without opening it. Always runs, whatever
+    ``[dedupe].on_match`` says: that setting governs what an ADD does, not whether one may
+    look. ``kinds`` narrows to some of ``[dedupe].kinds``.
+    """
+    import dataclasses
+
+    from ..core import textsim
+    from ..infra.store import similar_records
+    from ..services import similar as sim
+
+    text = (text or "").strip()
+    if not text:
+        return O.failed(
+            "similar",
+            "nothing to compare: give the text of the record to be filed",
+            candidates=[],
+        )
+    log, cfg, st = _load(repo, agent)
+    allowed = list(cfg.dedupe.kinds)
+    want = csv_list(kinds)
+    unknown = [k for k in want if k not in allowed]
+    if unknown:
+        return O.failed(
+            "similar",
+            f"unknown kind {', '.join(unknown)}: [dedupe].kinds is {', '.join(allowed)}",
+            candidates=[],
+        )
+    scope = want or allowed
+    store = _store(repo, log, cfg)
+    # The policy engine with the add-time switch forced on and the kinds narrowed.
+    dd = dataclasses.replace(cfg.dedupe, on_match="ask", kinds=scope)
+    scoped = dataclasses.replace(cfg, dedupe=dd)
+    with sim.open_store(store) as matcher:
+        found = sim.assess(matcher, {"kind": scope[0], "title": text, "body": ""}, scoped)
+        # `assess` lists a record the text NAMES whatever its kind; `kinds` narrows those too.
+        cands = [c for c in found.candidates if c.kind in scope]
+        n, df = matcher.doc_freq(textsim.tokens(text))
+    records = {r["id"]: r for r in similar_records(st)}
+    mine = set(textsim.tokens(text))
+    rows = []
+    for c in cands:
+        r = records[c.id]
+        shared = set(textsim.tokens(r["title"], r["body"])) & mine
+        ranked = sorted(shared, key=lambda t: (-textsim.idf(df.get(t, 0), n), t))
+        headline, where = _record_state(st, c.id, c.kind)
+        rows.append(
+            {
+                "id": c.id,
+                "kind": c.kind,
+                "title": " ".join((headline or r["body"]).split())[:200],
+                "state": where,
+                "score": c.score,
+                "shared": ranked[:SIMILAR_SHARED_WORDS],
+                "flags": [f for f in c.flags if f != "same_item"],
+            }
+        )
+    data = {
+        "text": text,
+        "kinds": scope,
+        "show_floor": cfg.dedupe.show_floor,
+        "candidates": rows,
+        "count": len(rows),
+    }
+    if not rows:
+        return O.nothing(
+            "similar",
+            f"Nothing in {', '.join(scope)} scores {cfg.dedupe.show_floor:g} or more "
+            "against that text.",
+            **data,
+        )
+    return O.ok("similar", **data)
+
+
 @dataclass
 class Finding:
     """One research result, named once.
