@@ -2617,6 +2617,104 @@ for _name in ADD_TOOLS:
     TOOLS[_name]["properties"].update(DEDUPE_PROPERTIES)
 
 
+# -- tool tiers -------------------------------------------------------------------------
+#
+# `[mcp].tools = core | standard | all` (D-lean-and-trusted (4)) decides which tools
+# `tools/list` ADVERTISES. It is a start-time knob and nothing more: `TOOLS` stays the one
+# registry, every tool stays callable by name whatever the tier, and `listChanged` stays
+# false. A client that loads every schema up front pays for what is advertised, so the tier
+# is a context-cost choice and never a permission.
+#
+# ONE data structure, three disjoint sets that together cover `TOOLS` exactly. A new tool
+# therefore has to be placed (`tests/test_mcp_tool_tiers.py` fails until it is), rather
+# than silently landing in whichever tier nobody thought about. Measured on this tree: core
+# 39 KB, standard 67 KB, all 92 KB of compact `tools/list`.
+
+#: The daily loop: pick work, claim it, satisfy gates, record what you learn, land it.
+#: `setup` is here because the handshake of an unadopted repository tells the agent to call
+#: it before anything else.
+CORE_TOOLS = frozenset(
+    "ddflow_" + n
+    for n in (
+        "brief next claim heartbeat gate_status gate_run gate_record gate_skip gate_verify "
+        "complete merge status show recall bug_found bug_fixed bug_invalid lesson_add "
+        "decision_add session_start session_end session_note session_prompt identify "
+        "task_add update wait review help pr_sync similar setup"
+    ).split()
+)
+
+#: Commonly used beyond the loop: reading the queue and memory, reshaping work, config.
+STANDARD_EXTRA_TOOLS = frozenset(
+    "ddflow_" + n
+    for n in (
+        "abandon block unblock release board progress doctor recover configure companions "
+        "decision_applicable decision_list decision_show decision_supersede lesson_search "
+        "flow_show pr_status reviewers_list version_show research_add phase_add split resolve "
+        "remove tests review_triage memory_add memory_list history cleanup render"
+    ).split()
+)
+
+#: Administration and rarely used capabilities: only in `all`.
+FULL_ONLY_TOOLS = frozenset(
+    "ddflow_" + n
+    for n in (
+        "external_sync import import_verify job_add job_end job_list job_run promote_add "
+        "promote_status workflow workflow_drop workflow_gate workflow_pipeline flow_choose "
+        "version_cut rebuild replay hooks precommit companions_add prompts pins loops cadence "
+        "reviewers_detect memory_forget lesson_verify"
+    ).split()
+)
+
+TIERS = ("core", "standard", "all")
+DEFAULT_TIER = "all"
+
+
+def tier_tools(tier: str) -> frozenset[str]:
+    """The tools `tools/list` advertises at `tier`; an unknown tier advertises everything."""
+    if tier == "core":
+        return CORE_TOOLS
+    if tier == "standard":
+        return CORE_TOOLS | STANDARD_EXTRA_TOOLS
+    return frozenset(TOOLS)
+
+
+def resolve_tier(repo: Path) -> str:
+    """`[mcp].tools` for this repository (env `DDFLOW_MCP_TOOLS` wins), read once.
+
+    Forward-compatible by construction: a value this version does not know (a newer
+    release's tier in a shared config), or a config that cannot be read at all, advertises
+    EVERYTHING rather than failing the handshake. Over-listing costs context; under-listing
+    would hide a tool the agent needs.
+    """
+    try:
+        from ..config import Config
+
+        tier = Config.load(repo).mcp.tools
+    except Exception:
+        return DEFAULT_TIER
+    return tier if tier in TIERS else DEFAULT_TIER
+
+
+def tier_note(tier: str, *, names: bool = True) -> str:
+    """What a tier hides and how to widen it. `ddflow_help` carries the names; the handshake
+    (paid for on every session) only counts them and points at `ddflow_help`."""
+    if tier not in TIERS or tier == "all":
+        return ""
+    hidden = sorted(set(TOOLS) - tier_tools(tier))
+    wider = "`standard` or `all`" if tier == "core" else "`all`"
+    head = (
+        f"This connection lists the `{tier}` tool tier ({len(TOOLS) - len(hidden)} of "
+        f"{len(TOOLS)} tools). The other {len(hidden)} are NOT in `tools/list` but are "
+        f"still callable by name with the same arguments"
+    )
+    listed = f": {', '.join(hidden)}" if names else " (`ddflow_help` names them)"
+    return (
+        f"{head}{listed}. To list "
+        f"them, set `[mcp].tools` to {wider} in .ddflow/config.toml (or "
+        f"`DDFLOW_MCP_TOOLS`) and restart the server; the tier is read once at start."
+    )
+
+
 def _answer(a: dict[str, Any]):
     """The duplicate-check answer an add call carries: ``relation`` and ``check_only``."""
     from ..api._dedupe import Answer
@@ -2888,6 +2986,9 @@ class Server:
         #: Declared identity for this connection; empty means "use the process
         #: default", which is the backward-compatible single-agent behaviour.
         self.agent = agent
+        #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
+        #: only -- `listChanged` is false and there is no call that widens it.
+        self.tier = resolve_tier(self.repo)
         #: What the client called itself at `initialize`. A LABEL, never an identity:
         #: every subagent of one harness reports the same `clientInfo.name`, so using
         #: it as an id would reproduce the exact collapse above while looking specific.
@@ -2937,7 +3038,7 @@ class Server:
                         "prompts": {"listChanged": False},
                     },
                     "serverInfo": SERVER_INFO,
-                    "instructions": _instructions(self.repo, self.agent),
+                    "instructions": _instructions(self.repo, self.agent, self.tier),
                 },
             )
         if method in ("notifications/initialized", "notifications/cancelled"):
@@ -2945,12 +3046,14 @@ class Server:
         if method == "ping":
             return _ok(mid, {})
         if method == "tools/list":
+            advertised = tier_tools(self.tier)
             return _ok(
                 mid,
                 {
                     "tools": [
                         {"name": n, "description": s["description"], "inputSchema": _schema(s)}
                         for n, s in sorted(TOOLS.items())
+                        if n in advertised
                     ]
                 },
             )
@@ -3103,6 +3206,8 @@ class Server:
                 # The footer goes on LAST, after the reason block, so it never comes between
                 # a caller and the answer it asked for — `content[0]` is still the body and
                 # `jtool`-style consumers are untouched.
+                if name == "ddflow_help" and (tiered := tier_note(self.tier)):
+                    out["content"].append({"type": "text", "text": tiered})
                 note = _obligation_footer(self)
                 if note:
                     out["content"].append({"type": "text", "text": note})
@@ -3370,6 +3475,9 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         "open_bugs": 0,
         "loops": 0,
         "task_pipeline": [],
+        # Set by `_instructions` from the connection's tier; seeded here so the template's
+        # variable contract holds on every path.
+        "tool_tier_note": "",
         "require_outcome": True,
         "importable": 0,
         "queue_is_empty": True,
@@ -3577,7 +3685,7 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
     return v
 
 
-def _instructions(repo: Path, agent: str = "") -> str:
+def _instructions(repo: Path, agent: str = "", tier: str = DEFAULT_TIER) -> str:
     """What the client injects into the model's context on connect.
 
     **State-aware on purpose.** A fixed blurb describing a workflow the project has not
@@ -3597,6 +3705,7 @@ def _instructions(repo: Path, agent: str = "") -> str:
     from ..services import prompts as P
 
     vars_ = _instruction_vars(repo, agent)
+    vars_["tool_tier_note"] = tier_note(tier, names=False)
     overrides: dict[str, str] = {}
     if vars_["adopted"]:
         try:
