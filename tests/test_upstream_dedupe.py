@@ -346,3 +346,11 @@ def test_capped_listing_of_only_pull_requests_is_unavailable_not_no_issues():
 def test_list_issues_itself_refuses_zero_pages():
     with pytest.raises(ValueError):
         U.list_issues(REPO, Fake([[]]), max_pages=0)
+
+
+@pytest.mark.parametrize("title, body", [("", ""), ("  ", "\n"), ("--", "!!")])
+def test_a_report_with_no_text_is_refused_not_read_as_no_duplicate(title, body):
+    f = Fake([corpus()])
+    with pytest.raises(ValueError):
+        U.check(title, body, repo=REPO, fetch=f)
+    assert f.calls == []
