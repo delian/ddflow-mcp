@@ -130,9 +130,14 @@ def _tags(repo: Path, prefix: str) -> list[_Tag]:
                 instant.astimezone(UTC).date().isoformat() if instant else "",
             )
         )
-    for t in tags:
-        t.commits = set(_git(repo, "rev-list", t.name).split())
     return tags
+
+
+def _load_commits(repo: Path, tags: list[_Tag], wanted: set[str]) -> None:
+    """Fill each tag's ``commits`` with the WANTED shas its history contains (a landing
+    commit or its merged branch tip), so memory is bounded by the items, not the history."""
+    for t in tags:
+        t.commits = wanted & set(_git(repo, "rev-list", t.name).split())
 
 
 def _subjects(repo: Path, shas: set[str]) -> dict[str, tuple[str, list[str]]]:
@@ -228,9 +233,8 @@ def _entries(q: Query, cfg: Any, tags: list[_Tag]) -> tuple[list[dict[str, Any]]
     info = _known(repo, shas)
     second = {p[1] for _, p in info.values() if len(p) > 1}
     info.update(_known(repo, second - set(info)))
-    named: set[str] = set()  # bugs a finished task already speaks for
-    for i in tasks:
-        named.update(_fixed_bugs(i.title))
+    _load_commits(repo, tags, shas | second)
+    named: set[str] = set()  # bugs a LISTED task already speaks for
 
     rows: list[dict[str, Any]] = []
     unplaced = 0
@@ -255,16 +259,19 @@ def _entries(q: Query, cfg: Any, tags: list[_Tag]) -> tuple[list[dict[str, Any]]
         category = field.get("category") or _category(it, cfg, info)
         line = field.get("line") or _first_sentence(_FIXES.sub("", it.title or "")) or it.id
         rows.append(_row(it.id, category, line, it.completed_at, idx, fallback))
+        named.update(_fixed_bugs(it.title))
 
     for bug in q.bugs():
         field = bug.changelog or {}
-        if not bug.fixed_at or not field.get("line") or bug.id in named:
+        if field.get("skip") or not bug.fixed_at or not field.get("line") or bug.id in named:
             continue
         idx, fallback = place(None, bug.fixed_at)
         if idx is None:
             unplaced += 1
             continue
-        rows.append(_row(bug.id, field["category"], field["line"], bug.fixed_at, idx, fallback))
+        rows.append(
+            _row(bug.id, field.get("category", ""), field["line"], bug.fixed_at, idx, fallback)
+        )
     return rows, unplaced
 
 
