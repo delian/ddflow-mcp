@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any
 
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "ddflow", "version": "0.1.7", "title": "ddflow work-queue kernel"}
+SERVER_INFO = {"name": "ddflow", "version": "0.1.8", "title": "ddflow work-queue kernel"}
 
 
 #: Tool surface. Each entry maps an MCP tool onto an argv the CLI already understands,
