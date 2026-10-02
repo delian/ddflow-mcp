@@ -5,11 +5,10 @@ under `.ddflow/local/reports/` and a prefilled issue URL (which this module neve
 SENDING (`gh issue create`) requires a `Consent` whose digest equals the digest of the exact
 bytes being sent, which is not expired and not already used; with none, the function refuses
 and calls no runner. The consent object is DEFINED here and MINTED elsewhere (the operator's
-interactive yes, or a one-time approval); nothing in this module can create one.
+interactive yes, or a one-time approval); no function here mints one.
 
 This module checks that a consent is BOUND to these bytes, unexpired and unused; it does
-not authenticate who made it,
-and nothing here can enforce that a caller obtained it from the operator. Authenticity is
+not authenticate who made it, and nothing here can enforce that a caller obtained it from the operator. Authenticity is
 the minter's job (B-upstream-consent); callers MUST pass only a consent minted from the
 operator's interactive yes or a one-time approval, never one an agent constructed.
 
