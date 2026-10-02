@@ -296,4 +296,10 @@ disposable on purpose.
 - **Before compressing or rewording an instruction file**, run `ddflow pins <file>`
   [ddflow_pins]. A sentence that reads like rationale is often a rule a test asserts; it
   names the suites to re-run afterwards and the text no test holds.
+- **Review a project document with `ddflow export <doc>`; never edit a generated file.**
+  `ROADMAP.md`, `BUGS.md`, `CHANGELOG.md` and the other exported documents carry a
+  `ddflow:generated` header and are regenerated from the log: a hand edit is detected and
+  refused (and the pre-commit check names it). Change the source (the log, or a template
+  from `ddflow export eject <doc>`), then `ddflow export <doc> --update`. Printing writes
+  nothing; `ddflow export` lists what is selected and each document's state.
 - If something goes sideways, **stop and re-plan**. Do not keep pushing.

@@ -82,3 +82,69 @@ def test_every_mcp_tool_the_readme_names_exists():
     assert named
     missing = sorted(t for t in named if t not in mcp.TOOLS)
     assert not missing, f"not MCP tools: {missing}"
+
+
+# -- exporting documents (B-export-docs) ---------------------------------------------------
+
+
+def _export_section() -> str:
+    start = README.index("## Exporting documents")
+    nxt = re.search(r"^## ", README[start + 5 :], flags=re.M)
+    return README[start : start + 5 + nxt.start()] if nxt else README[start:]
+
+
+_HELP = (
+    Path(__file__).resolve().parents[1] / "ddflow" / "templates" / "prompts" / "help" / "export.md"
+).read_text("utf-8")
+
+
+def _export_spans(text: str) -> list[str]:
+    spans = re.findall(r"`(ddflow export[^`\n]*)`", text)
+    for raw in text.splitlines():
+        ln = raw.strip().removeprefix("$ ")
+        if ln.startswith("ddflow export"):
+            spans.append(ln)
+    return spans
+
+
+def test_every_export_kind_is_documented_in_the_readme_and_the_help_topic():
+    from ddflow.services.export import registry
+
+    registry.discover()
+    kinds = sorted(registry._KINDS)
+    assert len(kinds) >= 8
+    section = _export_section()
+    for kind in kinds:
+        assert f"`{kind}`" in section, f"README 'Exporting documents' never names the kind {kind}"
+        assert re.search(rf"\b{kind}\b", _HELP), f"help/export.md never names the kind {kind}"
+        default = registry.get(kind).default_target
+        assert default in section, f"README does not give {kind}'s default target {default}"
+        assert default in _HELP, f"help/export.md does not give {kind}'s default target {default}"
+
+
+def test_every_export_flag_and_verb_the_docs_name_exists():
+    from ddflow.surfaces.commands import export as X
+
+    parser = _subcommands(cli.build_parser())["export"]
+    known = {o for a in parser._actions for o in a.option_strings}
+    bad = []
+    for where, text in (("README", _export_section()), ("help/export.md", _HELP)):
+        for raw in _export_spans(text):
+            span = re.split(r"\s{2,}|\s*(?:&&|;|\|\||\||#)\s*", raw)[0]
+            for flag in re.findall(r"(?<![\w-])(--[a-z][a-z-]*)(?![\w-])", span):
+                if flag not in known:
+                    bad.append(f"{where}: {span} [{flag}]")
+            m = re.match(r"ddflow export (enable|disable|ack|eject|validate)\b", span)
+            if m and m.group(1) not in X.VERBS:
+                bad.append(f"{where}: {span} [verb]")
+    assert not bad, f"export flags/verbs the docs name that do not exist: {bad}"
+    # and the reverse for verbs: every verb is documented in both places
+    for verb in X.VERBS:
+        assert f"ddflow export {verb}" in _export_section(), f"README never shows `export {verb}`"
+        assert f"ddflow export {verb}" in _HELP, f"help/export.md never shows `export {verb}`"
+
+
+def test_no_export_doc_says_a_shipped_feature_is_not_done_yet():
+    for where, text in (("README", _export_section()), ("help/export.md", _HELP)):
+        for stale in ("only off acts", "not applied yet", "arrives with", "not yet implemented"):
+            assert stale not in text, f"{where}: stale text {stale!r}"

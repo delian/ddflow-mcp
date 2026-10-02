@@ -2901,6 +2901,14 @@ def _outcome_result(
         # An add that went onto an existing record, or a dry run: what the check decided
         # IS the answer, and the tool's usual `{"id": ...}` projection would drop it.
         payload_key = ""
+    if (
+        isinstance(payload_key, tuple)
+        and out.data.get("export_refresh")
+        and "export_refresh" not in payload_key
+    ):
+        # merge / complete carry what the optional document refresh did (B-export-refresh),
+        # as the CLI's --json does; absent when nothing was refreshed, so the shape is unchanged.
+        payload_key = (*payload_key, "export_refresh")
     if as_text:
         body = out.body(payload_key)
         if not isinstance(body, str):
