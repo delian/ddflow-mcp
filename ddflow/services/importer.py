@@ -2835,13 +2835,11 @@ def _resolve_chains(dropped: dict[int, Duplicate], in_plan: dict[str, Found]) ->
     """A summary bullet that repeats a record of this import which is itself left out
     repeats what THAT repeats: point at the record that is actually held, so the outcome
     does not depend on the order the records were read."""
+    # One hop is all there is: only a summary-born lesson targets a record of this import,
+    # and that record is never summary-born, so it was dropped against the queue.
     for d in dropped.values():
-        seen = {d.found.ident}
-        while d.where == "import" and id(in_plan[d.of]) in dropped:
-            nxt = dropped[id(in_plan[d.of])]
-            if nxt.of in seen:
-                break
-            seen.add(nxt.of)
+        nxt = dropped.get(id(in_plan[d.of])) if d.where == "import" else None
+        if nxt is not None:
             d.of, d.where = nxt.of, nxt.where
             # Word for word only if every hop was; the score is the weakest hop's.
             d.identical = d.identical and nxt.identical
