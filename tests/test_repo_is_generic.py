@@ -62,7 +62,7 @@ def _private_addresses(text: str, *, path: str = "") -> set[str]:
     candidates += [(m.group(1), ipaddress.IPv6Address) for m in _IPV6.finditer(text)]
     for raw, kind in candidates:
         try:
-            ip = kind(raw)
+            ip = kind(_unpad(raw) if kind is ipaddress.IPv4Address else raw)
         except ValueError:
             continue
         # Loopback is the documented default for a local endpoint; the unspecified
@@ -73,6 +73,13 @@ def _private_addresses(text: str, *, path: str = "") -> set[str]:
         if ip.is_private or ip.is_link_local:
             found.add(raw)
     return found
+
+
+def _unpad(raw: str) -> str:
+    """Drop leading zeros per octet: ipaddress rejects a padded octet (172, 16, 001, 1), which is still a
+    private host to every human and tool that reads it (Bdb8b195284). The original text
+    is what gets reported."""
+    return ".".join(part.lstrip("0") or "0" for part in raw.split("."))
 
 
 def _this_network(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
@@ -137,6 +144,22 @@ def test_the_address_check_can_see_one():
     ula, link = "fd" + "00::1", "fe" + "80::2"
     assert _private_addresses(f"base_url = http://[{ula}]:8000/v1 or {link}") == {ula, link}
     assert _private_addresses(":" + ":1 is loopback, 12:30:45 is a time") == set()
+
+
+def test_a_zero_padded_private_address_is_still_seen():
+    """Bug Bdb8b195284: ipaddress rejects a zero-padded octet, and the check skipped it
+    silently, so a private address written that way would be committed."""
+    padded_corp = ".".join(("172", "16", "001", "1"))
+    padded_ten = ".".join(("010", "0", "0", "1"))
+    padded_home = ".".join(("192", "168", "000", "004"))
+    assert _private_addresses(f"{padded_corp} {padded_ten} {padded_home}") == {
+        padded_corp,
+        padded_ten,
+        padded_home,
+    }
+    # Padding does not turn a public or loopback address private.
+    assert _private_addresses(".".join(("008", "008", "8", "8"))) == set()
+    assert _private_addresses(".".join(("127", "000", "0", "1"))) == set()
 
 
 def test_an_exemption_is_exactly_the_path_it_names(monkeypatch):

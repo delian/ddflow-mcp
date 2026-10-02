@@ -31,20 +31,29 @@ def _finish(repo, item, model="claude-opus-5"):
     return finish(repo, item, model=model)
 
 
+def _ok(step, result):
+    """Setup must not shrug: a step that failed names itself here, not three steps on."""
+    code, out, err = result
+    assert code == OK, f"setup step {step!r} exited {code}: {out!r} {err!r}"
+
+
 def _proj(repo):
-    run_cli(repo, "init")
-    run_cli(repo, "phase", "add", "P1", "--title", "Core")
-    run_cli(
-        repo,
-        "task",
-        "add",
-        "P1.T1",
-        "--phase",
-        "P1",
-        "--title",
-        "importer",
-        "--globs",
-        "src/import/*",
+    _ok("init", run_cli(repo, "init"))
+    _ok("phase add", run_cli(repo, "phase", "add", "P1", "--title", "Core"))
+    _ok(
+        "task add",
+        run_cli(
+            repo,
+            "task",
+            "add",
+            "P1.T1",
+            "--phase",
+            "P1",
+            "--title",
+            "importer",
+            "--globs",
+            "src/import/*",
+        ),
     )
     return repo
 
@@ -253,7 +262,7 @@ def test_splitting_into_one_piece_is_refused(repo):
 
 def test_splitting_finished_work_is_refused(repo):
     _proj(repo)
-    run_cli(repo, "claim", "P1.T1", "--no-worktree")
+    _ok("claim", run_cli(repo, "claim", "P1.T1", "--no-worktree"))
     _finish(repo, "P1.T1")
     code, _, err = run_cli(repo, "split", "P1.T1", "--into", "A", "--into", "B")
     assert code == REFUSED and "already done" in err
