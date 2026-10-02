@@ -73,7 +73,12 @@ def _direct_url(dist=None) -> dict | None:
         return None
     text = dist.read_text("direct_url.json")
     if text is None:
-        return None
+        # `read_text` also answers None for a file that exists but cannot be read.
+        try:
+            present = (Path(str(dist._path)) / "direct_url.json").exists()  # type: ignore[attr-defined]
+        except Exception:
+            present = False
+        return {} if present else None
     try:
         data = json.loads(text)
     except ValueError:
@@ -105,7 +110,7 @@ def installed_from_index() -> bool:
     """True when this installation came from a package index, so `uvx ddflow-mcp`
     reaches the same project. No distribution metadata is not evidence of an index."""
     dist = own_distribution()
-    return dist is not None and dist.read_text("direct_url.json") is None
+    return dist is not None and _direct_url(dist) is None
 
 
 def normalise_path(value: str | Path) -> str:

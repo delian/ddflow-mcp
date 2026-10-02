@@ -270,3 +270,22 @@ def test_home_replacement_needs_a_leading_boundary(monkeypatch):
 def test_non_table_project_in_pyproject_is_tolerated(tmp_path):
     (tmp_path / "pyproject.toml").write_text('project = "x"\n')
     assert I.is_own_dev_tree(tmp_path) is False
+
+
+def test_unreadable_direct_url_is_not_an_index_install(installed):
+    import os
+
+    if os.geteuid() == 0:
+        pytest.skip("root reads everything")
+    info = installed(
+        {"url": "https://example.invalid/x", "vcs_info": {"vcs": "git", "commit_id": COMMIT}}
+    )
+    assert info.kind == "vcs"
+    site = Path(I._paths.package_parent())
+    record = next(site.glob("*.dist-info")) / "direct_url.json"
+    record.chmod(0)
+    try:
+        assert I.install_info(root=site).kind == "unknown"
+        assert I.installed_from_index() is False
+    finally:
+        record.chmod(0o644)
