@@ -297,7 +297,9 @@ def cmd_loops(a, c: Ctx) -> int:
 def cmd_mcp(a, c: Ctx) -> int:
     from ..surfaces.mcp import serve
 
-    serve(c.repo)
+    # The caller's own start (--repo, DDFLOW_REPO or cwd), as ddflow-mcp passes it: without it every
+    # called_from-aware tool treats the caller as standing in the primary (Bc1fe69741f).
+    serve(c.repo, called_from=c._start)
     return OK
 
 
@@ -631,6 +633,11 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bl = s.add_parser("block")
     bl.add_argument("id")
     bl.add_argument("--reason", required=True)
+    bl.add_argument(
+        "--reopen",
+        action="store_true",
+        help="block an item that is already DONE (moves it out of done; refused without)",
+    )
     bl.set_defaults(fn=cmd_block)
 
     ub = s.add_parser(
