@@ -150,6 +150,93 @@ def _recorded_recently(
     return False
 
 
+def open_sessions(events: list, agent: str) -> list[str]:
+    """Ids of this agent's sessions that have not ended, the most recently active first.
+
+    Activity is the last event of any kind on the session, ordered by the Lamport clock
+    (the wall clock breaks a tie), so a session someone is still writing to outranks one opened later and
+    then abandoned. An ended session is never listed.
+    """
+    started: dict[str, bool] = {}
+    ended: set[str] = set()
+    last: dict[str, tuple[int, str]] = {}
+    for ev in events:
+        if not ev.kind.startswith("session.") or not ev.subject:
+            continue
+        if ev.kind == "session.started" and ev.agent == agent:
+            started[ev.subject] = True
+        elif ev.kind == "session.ended":
+            ended.add(ev.subject)
+        last[ev.subject] = max(last.get(ev.subject, (0, "")), (ev.lamport, ev.ts))
+    live = [sid for sid in started if sid not in ended]
+    return sorted(live, key=lambda sid: last.get(sid, (0, "")), reverse=True)
+
+
+def resolve(
+    log: EventLog, session_id: str = "", *, model: str = "", tool: str = ""
+) -> tuple[str, str]:
+    """The session a prompt or note belongs to, and how it was found.
+
+    explicit (the caller's id) / harness (the session the prompt hook keys on, named by
+    the environment) / latest (this agent's most recently active open session) / implicit
+    (nothing open: a new session, marked implicit in its start event). Never empty.
+    """
+    if session_id.strip():
+        return session_id.strip(), "explicit"
+    events = log.read_all()
+    live = open_sessions(events, log.agent_id)
+    literal = os.environ.get("DDFLOW_SESSION_ID", "").strip()
+    if literal and literal in live:
+        return literal, "harness"
+    for var in ("DDFLOW_SESSION_ID", "CLAUDE_SESSION_ID", "CLAUDE_CODE_SESSION_ID"):
+        hid = harness_session_id(os.environ.get(var, ""))
+        if hid and hid in live:
+            return hid, "harness"
+    if live:
+        return live[0], "latest"
+    sid = new_session_id()
+    log.append(
+        "session.started",
+        sid,
+        {"model": model, "tool": tool, "cwd": str(Path.cwd()), "implicit": True},
+    )
+    return sid, "implicit"
+
+
+def orphans(events: list) -> list:
+    """Prompts and notes recorded with no session id."""
+    return [
+        e for e in events if e.kind in ("session.prompt", "session.note") and not e.subject.strip()
+    ]
+
+
+def adopt_orphans(log: EventLog) -> int:
+    """Attach each orphan to the nearest session by time; returns how many were attached.
+
+    The log is append-only, so the orphan stays and a copy carrying `adopted_from` is
+    written under the session. A copy already written is not written again. Nearest is
+    the session whose start is the latest one not after the orphan, else the earliest;
+    with no session at all, an implicit one is opened.
+    """
+    events = log.read_all()
+    done = {e.data.get("adopted_from") for e in events if e.data.get("adopted_from")}
+    starts = sorted((e.ts, e.subject) for e in events if e.kind == "session.started" and e.subject)
+    n = 0
+    for o in orphans(events):
+        if o.id in done:
+            continue
+        if starts:
+            before = [sid for ts, sid in starts if ts <= o.ts]
+            sid = before[-1] if before else starts[0][1]
+        else:
+            sid = new_session_id()
+            log.append("session.started", sid, {"model": "", "tool": "", "implicit": True})
+            starts = [(o.ts, sid)]
+        log.append(o.kind, sid, {**o.data, "adopted_from": o.id, "orphan_at": o.ts})
+        n += 1
+    return n
+
+
 def prompt(log: EventLog, cfg: Config, session_id: str, text: str, *, item: str = "") -> int:
     """Record one operator prompt verbatim (after redaction). Returns redaction count.
 
@@ -191,7 +278,7 @@ def capture_prompt(
         return "off"
     if not (text or "").strip():
         return "empty"
-    sid = harness_session_id(harness_id) or new_session_id()
+    sid = harness_session_id(harness_id) or resolve(log, model=model, tool=tool)[0]
     clean, n = redact(text, cfg)
     events = log.read_all()
     if not any(e.kind == "session.started" and e.subject == sid for e in events):
@@ -235,7 +322,12 @@ def replay(events: list[Event], *, include_outcomes: bool = True) -> list[Replay
     """
     steps: list[ReplayStep] = []
     n = 0
+    # An adopted orphan lives on as the copy under its session; the id-less original
+    # would read as the same words twice.
+    adopted = {e.data["adopted_from"] for e in events if e.data.get("adopted_from")}
     for ev in events:
+        if ev.id in adopted:
+            continue
         if ev.kind not in PROVENANCE_KINDS and not (
             include_outcomes and ev.kind == "item.completed"
         ):
