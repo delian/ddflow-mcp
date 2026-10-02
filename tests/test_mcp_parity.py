@@ -114,6 +114,10 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "invoked BY the Claude Code SessionStart hook to put the brief into a new "
         "session; over MCP that is ddflow_brief"
     ),
+    ("hooks", "prompt"): (
+        "invoked BY the harness's prompt hook with the prompt's JSON on stdin; an agent "
+        "records its own words with ddflow_session_prompt"
+    ),
     ("hooks", "check-msg"): (
         "invoked BY the installed commit-msg hook with the message being committed; "
         "it is not something an agent calls"
