@@ -245,7 +245,7 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     # `ddflow review triage <id>` is the same parser as `ddflow review`: its flags are
     # listed there, and over MCP it is its own tool, `ddflow_review_triage`.
     **{
-        ("ddflow_review", f): "belongs to `review triage`, which is ddflow_review_triage"
+        ("ddflow_review", f): "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)"
         for f in ("--finding", "--refuted", "--confirmed", "--probe")
     },
     # `gate skip` shares its argparse parent with `gate record`, so `--help` lists
