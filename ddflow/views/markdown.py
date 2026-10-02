@@ -345,6 +345,12 @@ def _brief_current(
         )
     todo = [g for g in pipeline_for(it, cfg) if it.gate_outcome(g) not in ("passed", "skipped")]
     out.append("- gates remaining: " + (" → ".join(todo) if todo else "none — ready to complete"))
+    if repo is not None and not suggested:
+        from ..services.completion import readme_report
+
+        readme = readme_report(state, cfg, item, repo=repo)
+        if readme:
+            out.append(f"- docs: {readme}")
     if it.body:
         out += ["", textwrap.indent(it.body.strip()[:700], "> ")]
     out.append("")
