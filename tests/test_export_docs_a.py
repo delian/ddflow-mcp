@@ -138,6 +138,8 @@ def test_roadmap_is_deterministic_across_event_order_and_has_no_clock(monkeypatc
     g = road_log()
     docs = [registry.render_document("roadmap", g.query(rev)) for rev in (False, False, True)]
     assert docs[0] == docs[1] == docs[2]
+    keys = [e.sort_key() for e in g.events]
+    assert len(set(keys)) == len(keys)  # a total order: no ties for a fold order to break
     q, r = g.query(), g.query(reverse=True)
     assert list(q.state.items) == list(reversed(list(r.state.items)))  # the order really differs
     assert not frame.hand_edited(docs[0])
