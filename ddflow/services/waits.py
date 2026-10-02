@@ -28,6 +28,7 @@ holder believe someone is waiting who is not.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import os
 import secrets
@@ -172,8 +173,11 @@ def mark_woken(w: Waiter, window_s: float) -> None:
 
 
 def _queue_path(repo: Path, agent: str, item: str) -> Path:
+    # Sanitised for the filesystem, then keyed by a hash of the exact pair: two pairs that
+    # sanitise alike ("a/b" and "a_b") must not share one place in line.
+    digest = hashlib.sha1(f"{agent}\0{item}".encode(), usedforsecurity=False).hexdigest()[:10]
     safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in f"{agent}-q-{item}")
-    return _dir(repo) / f"{safe}.json"
+    return _dir(repo) / f"{safe[:80]}-{digest}.json"
 
 
 def queue(

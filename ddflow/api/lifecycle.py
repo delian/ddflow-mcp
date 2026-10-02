@@ -1181,7 +1181,9 @@ def _join_line(repo: Path, cfg, agent: str, item: str, waiting_on: list[str], wh
     """A refused claim is a place in line (`waits.queue`). Never fails the refusal."""
     from ..services import waits as WT
 
-    if cfg.lease.waiter_reservation_s > 0:
+    if cfg.lease.waiter_reservation_s <= 0:
+        return
+    try:
         WT.queue(
             repo,
             agent,
@@ -1190,6 +1192,8 @@ def _join_line(repo: Path, cfg, agent: str, item: str, waiting_on: list[str], wh
             reason=why,
             window_s=cfg.lease.waiter_reservation_s,
         )
+    except (OSError, ValueError, TypeError):
+        pass  # advisory: no queue place is better than no refusal
 
 
 def _leave_line(repo: Path, agent: str, item: str) -> None:

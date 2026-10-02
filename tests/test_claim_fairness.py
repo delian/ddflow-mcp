@@ -9,9 +9,9 @@ waiter could claim. Dead, lapsed, self and disjoint waiters never block.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
-import threading
 import time
 from pathlib import Path
 
@@ -108,9 +108,9 @@ def test_a_waiter_past_its_deadline_never_blocks(proj):
 
 def test_the_reservation_lapses_after_the_window(proj):
     (proj / ".ddflow" / "config.toml").write_text("[lease]\nwaiter_reservation_s = 1\n")
-    t = _wait_until_woken(proj, B, "TB")
+    p = _wait_until_woken(proj, B, "TB")
     assert A.release(proj, "HOT", agent=HOLDER).ok
-    t.join(20)
+    p.wait(30)
     assert _claim(proj, "TC", C).exit == O.REFUSED, "inside the window the place is kept"
     time.sleep(1.3)
     assert _claim(proj, "TC", C).ok, "the waiter did not come back: its place lapsed"
@@ -184,26 +184,58 @@ def test_the_holder_is_told_in_its_brief_who_waits_on_it(proj):
     assert "Waiting on you" in text and B in text and "TB" in text
 
 
-def _wait_until_woken(repo: Path, agent: str, item: str) -> threading.Thread:
-    """Start a real `wait` for ``item`` and return once it is registered."""
-    t = threading.Thread(
-        target=lambda: A.wait(repo, item=item, timeout_s=30, poll_s=0.05, agent=agent),
-        daemon=True,
+def _wait_until_woken(repo: Path, agent: str, item: str, window: int = 0) -> subprocess.Popen:
+    """Start a real `wait` for ``item`` in ANOTHER process and return once it is registered:
+    the process exits when it wakes, so its pid is dead by the time the claims run."""
+    code = (
+        "import sys; from ddflow.api import lifecycle as A; "
+        "A.wait(sys.argv[1], item=sys.argv[2], timeout_s=60, poll_s=0.05, agent=sys.argv[3])"
     )
-    t.start()
-    deadline = time.time() + 10
+    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+    env.pop("DDFLOW_AGENT", None)
+    p = subprocess.Popen([sys.executable, "-c", code, str(repo), item, agent], env=env)
+    deadline = time.time() + 20
     while time.time() < deadline and not WT.live_waiters(repo):
-        time.sleep(0.02)
+        time.sleep(0.05)
     assert WT.live_waiters(repo), "the wait never registered"
-    return t
+    return p
 
 
 def test_a_woken_wait_keeps_its_place_after_its_process_is_gone(proj):
-    t = _wait_until_woken(proj, B, "TB")
+    p = _wait_until_woken(proj, B, "TB")
     assert A.release(proj, "HOT", agent=HOLDER).ok
-    t.join(20)
+    p.wait(30)
+    assert not WT._pid_alive(p.pid), "the waiting process must be gone for this to mean anything"
     kept = WT.live_waiters(proj)
     assert [(w.agent, w.item, w.woken) for w in kept] == [(B, "TB", True)]
     assert _claim(proj, "TC", C).exit == O.REFUSED
     assert _claim(proj, "TB", B).ok
     assert [w for w in WT.live_waiters(proj) if w.agent == B] == [], "claiming spends the place"
+
+
+def test_a_registration_from_before_the_woken_field_still_reserves(proj):
+    import json
+
+    _queue(proj, B, "TB", time.time() - 120)
+    f = next((proj / ".ddflow" / "local" / "waits").glob("*.json"))
+    body = json.loads(f.read_text())
+    body.pop("woken")
+    f.write_text(json.dumps(body))
+    assert A.release(proj, "HOT", agent=HOLDER).ok
+    assert f"reserved for {B}" in _claim(proj, "TC", C).reason
+
+
+def test_places_in_line_that_sanitise_alike_stay_apart(proj):
+    a, b = WT._queue_path(proj, "a/b", "TB"), WT._queue_path(proj, "a_b", "TB")
+    assert a != b
+
+
+def test_an_unwritable_registry_never_fails_the_refusal(proj):
+    waits = proj / ".ddflow" / "local" / "waits"
+    waits.mkdir(parents=True, exist_ok=True)
+    waits.chmod(0o500)
+    try:
+        out = _claim(proj, "TC", C)  # refused by A's lease; joining the line cannot be written
+    finally:
+        waits.chmod(0o700)
+    assert out.exit == O.REFUSED
