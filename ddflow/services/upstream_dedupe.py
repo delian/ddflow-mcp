@@ -213,6 +213,9 @@ def check(
     ``repo``. ``fetch`` defaults to the real unauthenticated GET."""
     if not _REPO.fullmatch(repo or "") or ".." in repo:
         raise ValueError(f"upstream repo {repo!r} must look like owner/name")
+    if not re.search(r"\w", f"{title}{body}"):
+        # Nothing to compare: every score would be 0, which must not read as "no duplicate".
+        raise ValueError("the report has no title or body text to compare")
     res = Result(repo=repo)
     record = {"title": title, "body": body}
     if local is not None:
