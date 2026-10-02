@@ -20,6 +20,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from ..config import Config
+from ..core import provenance as PV
 from ..core.model import ABANDONED, BLOCKED, DONE, OUTCOME_MARK, REVIEW, RUNNING, State
 from ..core.schedule import Plan, critical_path
 
@@ -494,12 +495,20 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
         "",
     ]
     for d in decisions:
-        line = f"- **{d.title}** — {d.decision}"
+        # The title and decision are somebody's words: fenced as data, with who recorded
+        # them. A decision keeps its status whoever wrote it (D-lean-and-trusted, 3);
+        # `trust=` says whether that was the operator.
+        line = "- " + PV.fence(
+            "decision", d.id, f"**{d.title}** — {d.decision}", PV.decision_origin(d)
+        )
         if d.superseded_by:
             line += f"  ⚠ SUPERSEDED by {d.superseded_by}"
         out.append(line)
         if d.alternatives:
-            out.append(f"  - rejected: {d.alternatives[:160]}")
+            out.append(
+                "  - rejected: "
+                + PV.fence("decision", d.id, d.alternatives[:160], PV.decision_origin(d))
+            )
 
 
 def _brief_jobs(out: list[str], state: State) -> None:
@@ -541,10 +550,11 @@ def _brief_memories(out: list[str], memories: list) -> None:
     out += ["", "## Operational memory", "", "_Facts about this machine and repository._", ""]
     for m in memories:
         when = (m.origin_at or m.at)[:10]
-        out.append(f"- {m.text}  `[{m.id}{' ' + when if when else ''}]`")
+        fenced = PV.fence("memory", m.id, m.text, PV.memory_origin(m))
+        out.append(f"- {fenced}  `[{m.id}{' ' + when if when else ''}]`")
 
 
-def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict]) -> None:
+def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict], state: State) -> None:
     if not lessons:
         return
     out += [
@@ -556,7 +566,12 @@ def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict]) -> None:
     ]
     for ls in lessons:
         rule = (ls.get("rule") or "")[: cfg.lessons.snippet_chars]
-        out.append(f"- **{ls.get('title', '')}** — {rule}")
+        rec = state.lessons.get(ls.get("id", ""))
+        origin = PV.lesson_origin(rec) if rec else PV.Origin(PV.AGENT)
+        out.append(
+            "- "
+            + PV.fence("lesson", ls.get("id", ""), f"**{ls.get('title', '')}** — {rule}", origin)
+        )
 
 
 def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/suggested decide the heading
@@ -600,8 +615,10 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
         )
     if rules:
         out += ["", "## Project rules", "", rules.strip()]
-    _brief_lessons(out, cfg, lessons or [])
+    _brief_lessons(out, cfg, lessons or [], state)
 
+    if any(PV.TAG in line for line in out):
+        out[1:1] = [f"_{PV.DATA_RULE}_", ""]
     text = "\n".join(out)
     # `reserve`: tokens a caller will PREPEND (the new-reports block), so the whole stays
     # inside the budget and it is the bottom that gives way.

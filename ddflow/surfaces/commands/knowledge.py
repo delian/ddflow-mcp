@@ -13,6 +13,7 @@ import json
 import sys
 
 from ...api import knowledge as A
+from ...core import provenance as PV
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 
@@ -208,18 +209,35 @@ def cmd_recall(a, c: Ctx) -> int:
         used += len(header)
         for r in rows:
             head, body = summarise_row(table, r)
-            block = f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
+            block = _recall_block(table, r, head, body)
             if used + len(block) > budget:
                 print(f"      … truncated at {budget} chars (--max-chars to raise)")
                 return OK
             print(block, end="")
             used += len(block)
+    print("\n" + PV.DATA_RULE)
     print(
         "\nRecall is a prompt to CHECK, not a verdict. A decision above is binding "
         "unless the operator says otherwise; a lesson is advice; a past prompt is "
         "context."
     )
     return OK
+
+
+_KIND = {"decisions": "decision", "lessons": "lesson", "memories": "memory"}
+
+
+def _recall_block(table: str, r: dict, head: str, body: str) -> str:
+    """One hit. A decision, lesson or memory carries who recorded it and is fenced as
+    data (`core/provenance.py`); the other kinds print as they always did."""
+    prov = r.get("provenance")
+    if not prov:
+        return f"  [{r.get('id', '?')}] {head}\n" + (f"      {body}\n" if body else "")
+    origin = PV.Origin(prov["trust"], prov.get("by", ""), prov.get("source", ""))
+    fenced = PV.fence(
+        _KIND[table], r.get("id", ""), head + (f"\n{body}" if body else ""), origin, inline=False
+    )
+    return f"  [{r.get('id', '?')}] ({origin.label()})\n      {fenced}\n"
 
 
 def cmd_similar(a, c: Ctx) -> int:
