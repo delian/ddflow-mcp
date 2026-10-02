@@ -323,6 +323,13 @@ def new_reports(st, rid: str, since: float) -> dict[str, Any]:
     a = addenda(st, rid)
     adds = [x for x in a["additions"] if _epoch(x["at"]) >= since]
     linked = [x for x in a["linked_from"] if _epoch(x["at"]) >= since]
+    # A `related` record writes a back-link on X, which `addenda` lists once (as X's own
+    # link) and not again as inbound -- but for a holder it IS a new report.
+    for x in a["links"]:
+        if x["relation"] == "related" and _epoch(x["at"]) >= since:
+            linked.append(
+                {**x, "record": x["target"], "text": record_summary(st, x["target"])["text"]}
+            )
     return {"count": len(adds) + len(linked), "additions": adds, "linked_from": linked}
 
 

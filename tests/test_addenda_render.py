@@ -6,6 +6,7 @@ reports arrived since it claimed."""
 from __future__ import annotations
 
 import json
+import re
 
 import pytest
 from conftest import run_cli
@@ -56,6 +57,7 @@ def test_show_a_bug_prints_additions_links_and_the_fixing_task(proj):
     code, out, _ = run_cli(proj, "show", "B1")
     assert code == OK
     assert "additions (1)" in out and ADD1 in out and "by reporter" in out and "0.61" in out
+    assert re.search(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\S* by reporter", out)
     assert "fix task(s): P1.FIX" in out
     assert "linked from" in out and "B2" in out and "extends this" in out
     # ... and the other direction, from the record that was filed
@@ -71,6 +73,7 @@ def test_show_json_carries_additions_and_inbound_links(proj):
     d = json.loads(out)
     assert code == OK
     assert d["additions"][0]["text"] == ADD2 and d["additions"][0]["who"] == "reporter"
+    assert d["additions"][0]["score"] == 0.61 and d["additions"][0]["at"]
     assert [x["record"] for x in d["linked_from"]] == ["B2"]
     assert d["linked_from"][0]["relation"] == "duplicate_of"
 
@@ -114,8 +117,17 @@ def test_brief_with_many_reports_stays_within_its_budget(proj):
     for i in range(30):
         _addition(proj, "P1.T1", f"report {i} " + "padding " * 200)
     for i in range(40):
-        run_cli(
-            proj, "lesson", "add", "--title", f"Lesson {i} " + "padding " * 40, "--rule", "x " * 200
+        assert (
+            run_cli(
+                proj,
+                "lesson",
+                "add",
+                "--title",
+                f"Lesson {i} " + "padding " * 40,
+                "--rule",
+                "x " * 200,
+            )[0]
+            == OK
         )
     out = run_cli(proj, "--json", "brief", "--item", "P1.T1", agent="a")[1]
     data = json.loads(out)
@@ -130,3 +142,23 @@ def test_heartbeat_and_gate_status_mention_the_count(proj):
     assert "2 new reports on P1.T1 since you claimed" in hb
     gs = run_cli(proj, "gate", "status", "P1.T1", agent="a")[1]
     assert "2 new reports on P1.T1 since you claimed" in gs
+
+
+def test_a_related_record_filed_after_the_claim_is_counted(proj):
+    run_cli(proj, "claim", "P1.T1", "--no-worktree", agent="a")
+    log = _log(proj)
+    log.append("bug.found", "B2", {"item": "", "summary": FILED, "related": "P1.T1"})
+    log.append("link.recorded", "P1.T1", {"relation": "related", "target": "B2"})
+    text = json.loads(run_cli(proj, "--json", "brief", "--item", "P1.T1", agent="a")[1])["brief"]
+    assert text.startswith("## 1 new report on your item since you claimed")
+    assert "B2" in text
+
+
+def test_the_reports_block_is_clipped_to_a_small_budget(proj):
+    run_cli(proj, "claim", "P1.T1", "--no-worktree", agent="a")
+    for i in range(5):
+        _addition(proj, "P1.T1", f"report {i} " + "padding " * 100)
+    (proj / ".ddflow" / "config.toml").write_text("[session]\nbrief_max_tokens = 300\n")
+    data = json.loads(run_cli(proj, "--json", "brief", "--item", "P1.T1", agent="a")[1])
+    assert data["brief"].startswith("## 5 new reports")
+    assert data["approx_tokens"] <= 300 * 1.1

@@ -1767,6 +1767,11 @@ def brief(
         reports_block = render_md.new_reports_block(
             item, new_reports(st, item, st.items[item].lease.acquired_at)
         )
+        # The block is prepended to a budgeted brief: it may take at most half of it, so a
+        # small `brief_max_tokens` still leaves the head of the brief itself.
+        cap = cfg.session.brief_max_tokens * 4 // 2
+        if len(reports_block) > cap:
+            reports_block = reports_block[:cap].rsplit("\n", 1)[0] + "\n\n"
     text = render_md.brief(
         st,
         cfg,
