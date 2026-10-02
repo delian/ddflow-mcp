@@ -481,7 +481,7 @@ def bug_found(
     id: str = "",
     title: str = "",
     severity: str = "",
-    scope: str = "project",
+    scope: str = "",
     answer: DD.Answer | None = None,
     agent: str = "",
 ) -> O.Outcome:
@@ -490,10 +490,10 @@ def bug_found(
     that candidate. ``answer`` extending an OPEN bug appends to it and files nothing.
     ``title``, ``severity`` (low|medium|high|critical) and ``scope`` (``project``, or
     ``ddflow`` for a bug in ddflow itself) are optional event fields."""
-    scope = (scope or "project").strip().lower()
+    scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
     title = " ".join((title or "").split())
-    if scope not in BUG_SCOPES:
+    if scope and scope not in BUG_SCOPES:
         return O.failed("bug.found", f"unknown scope {scope!r}: one of {', '.join(BUG_SCOPES)}")
     if severity and severity not in BUG_SEVERITIES:
         return O.failed(
@@ -513,23 +513,19 @@ def bug_found(
     )
     if chk.refusal is not None:
         return chk.refusal
-    # Only what was said is written: `project` is the default, so a plain re-report of
-    # a ddflow-scoped bug (same summary and item, same id) does not turn it back.
-    extra = {
-        k: v
-        for k, v in (("title", title), ("severity", severity), ("scope", scope))
-        if v and (k != "scope" or v != "project")
-    }
+    # Only what was said is written, so a plain re-report of a ddflow-scoped bug (same
+    # id) does not turn it back to `project`; `--scope project` says it and does.
+    extra = {k: v for k, v in (("title", title), ("severity", severity), ("scope", scope)) if v}
     if chk.extension:
         # The text goes onto the OPEN bug it was answered onto; what was said about its
         # title, severity or scope goes with it (a merge: an empty field never blanks one).
         target = chk.extension["target"]
-        if extra:
-            log.append("bug.found", target, dict(extra))
-        out = DD.extend(log, cfg, chk, "bug.found")
-        held = st.bugs.get(target)
-        ddflow_scoped = scope == "ddflow" or (held is not None and held.scope == "ddflow")
-        offer = upstream_offer("ddflow" if ddflow_scoped else "project", target)
+        held = st.bugs.get(target)  # the target may be another kind of record
+        with log.transaction():
+            if extra and held is not None:
+                log.append("bug.found", target, dict(extra))
+            out = DD.extend(log, cfg, chk, "bug.found")
+        offer = upstream_offer(scope or (held.scope if held else "project"), target)
         return O.ok("bug.found", **{**out.data, **({"offer": offer} if offer else {})})
     with log.transaction():
         log.append("bug.found", bid, {"item": item, "summary": summary, **extra, **chk.fields})
@@ -538,8 +534,7 @@ def bug_found(
     # out loud, because otherwise a real recurrence filed under an id already closed --
     # the same summary and item give the same auto id -- vanishes without a word.
     prior = st.bugs.get(bid)
-    stored = prior.scope if prior is not None else "project"
-    offer = upstream_offer("ddflow" if "ddflow" in (scope, stored) else "project", bid)
+    offer = upstream_offer(scope or (prior.scope if prior else "project"), bid)
     more = {"offer": offer} if offer else {}
     if prior is not None and prior.resolution:
         return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())

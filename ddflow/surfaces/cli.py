@@ -910,7 +910,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bf.add_argument("--severity", default="", help="low | medium | high | critical (optional)")
     bf.add_argument(
         "--scope",
-        default="project",
+        default="",
         help="project (default), or ddflow for a bug in ddflow itself",
     )
     dedupe_flags.add_flags(bf)

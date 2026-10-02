@@ -224,3 +224,21 @@ def test_the_offer_is_produced_once_the_command_is_set(repo, monkeypatch):
     # a plain re-report of the ddflow bug still gets the offer: the scope is the record's
     again = K.bug_found(repo, summary="x", id="B-o", agent="a")
     assert "`ddflow bug example B-o`" in again.data["offer"], again.data
+
+
+def test_an_explicit_project_scope_demotes_and_a_task_target_gets_no_phantom_bug(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "bug", "found", "--id", "B-d", "--summary", "mis scoped one", "--scope", "ddflow")
+    assert _bugs(repo)["B-d"].scope == "ddflow"
+    run_cli(
+        repo, "bug", "found", "--id", "B-d", "--summary", "mis scoped one", "--scope", "project"
+    )
+    assert _bugs(repo)["B-d"].scope == "project"
+    # `--extends` pointing at a task: the text goes onto the task, no bug record appears
+    run_cli(repo, "task", "add", "T-x", "--title", "widget resize handles flicker on drag")
+    code, _, err = run_cli(
+        repo, "bug", "found", "--id", "B-t", "--summary", "widget resize handles flicker on drag",
+        "--extends", "T-x", "--severity", "high",
+    )  # fmt: skip
+    assert code == 0, err
+    assert set(_bugs(repo)) == {"B-d"}, "extending a task must not create a bug record"
