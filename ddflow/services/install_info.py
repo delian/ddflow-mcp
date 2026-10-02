@@ -109,6 +109,8 @@ def _editable_record(root: Path) -> dict | None:
 def installed_from_index() -> bool:
     """True when this installation came from a package index, so `uvx ddflow-mcp`
     reaches the same project. No distribution metadata is not evidence of an index."""
+    if running_from_source(_paths.package_parent()):
+        return False  # a checkout is never an index install, whatever egg-info it carries
     dist = own_distribution()
     return dist is not None and _direct_url(dist) is None
 

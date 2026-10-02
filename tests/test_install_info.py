@@ -305,3 +305,12 @@ def test_a_real_record_beside_the_package_survives_a_source_run(tmp_path, monkey
     monkeypatch.setattr(I, "running_from_source", lambda *a: True)
     got = I.install_info(root=tree)
     assert (got.kind, got.commit) == ("vcs", COMMIT)
+
+
+def test_a_checkout_with_an_egg_info_is_not_from_the_index(tmp_path, monkeypatch):
+    tree = _checkout(tmp_path)
+    egg = tree / "ddflow_mcp.egg-info"
+    egg.mkdir()
+    (egg / "PKG-INFO").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    assert I.installed_from_index() is False
