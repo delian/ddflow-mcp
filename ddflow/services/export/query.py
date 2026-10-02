@@ -165,7 +165,12 @@ def _cutoff(since: str) -> Callable[[str], bool] | None:
             datetime.fromisoformat((since + "-01-01")[:10] if len(since) < _DATE_LEN else since)
         except ValueError:
             raise ExportError(f"--since {since!r} is not a real date", EXIT_REFUSED) from None
-        return lambda ts: ts[: len(since)] >= since
+
+        def on_or_after(ts: str) -> bool:
+            # An event whose ts is not a date at all cannot be shown to be in range.
+            return bool(_DAY.match(ts)) and ts[: len(since)] >= since
+
+        return on_or_after
     try:
         floor = _parse_ts(since)
     except ValueError:
@@ -183,6 +188,7 @@ def _cutoff(since: str) -> Callable[[str], bool] | None:
 
 
 _DATE_LEN = len("2026-10-01")
+_DAY = re.compile(r"^\d{4}-\d{2}-\d{2}")
 _DATE_PREFIX = re.compile(r"^\d{4}(-\d{2}(-\d{2})?)?$")
 
 
