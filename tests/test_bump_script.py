@@ -18,20 +18,17 @@ import re
 import shutil
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-# Stands in for `uv lock`, offline: record pyproject's version as the project's own.
+# `uv` stands in for nothing now: a bump no longer re-locks (uv.lock records no version for
+# the project). The stub exists only to FAIL if bump.sh calls it again.
 _UV_STUB = """\
-import pathlib, re, sys, tomllib
-assert sys.argv[1:2] == ["lock"], sys.argv
-new = tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"]
-lock = pathlib.Path("uv.lock")
-lock.write_text(re.sub(r'(name = "ddflow-mcp"\\nversion = )"[^"]*"', rf'\\g<1>"{new}"', lock.read_text()))
+import sys
+sys.exit("bump.sh must not run uv: the version lives in ddflow/__init__.py alone")
 """
 
 
@@ -41,7 +38,10 @@ def _checkout(tmp_path: Path) -> Path:
     shutil.copytree(ROOT / "ddflow", repo / "ddflow", ignore=shutil.ignore_patterns("__pycache__"))
     (repo / "scripts").mkdir()
     shutil.copy(ROOT / "scripts" / "bump.sh", repo / "scripts" / "bump.sh")
-    for name in ("pyproject.toml", "server.json", "uv.lock"):
+    shutil.copy(
+        ROOT / "scripts" / "render_server_json.py", repo / "scripts" / "render_server_json.py"
+    )
+    for name in ("pyproject.toml", "server.json", "server.template.json", "uv.lock"):
         shutil.copy(ROOT / name, repo / name)
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     return repo
@@ -60,7 +60,9 @@ def _path_with_stubs(tmp_path: Path) -> str:
 
 
 def _version(repo: Path) -> str:
-    return tomllib.loads((repo / "pyproject.toml").read_text())["project"]["version"]
+    m = re.search(r'^__version__ = "([^"]+)"$', (repo / "ddflow" / "__init__.py").read_text(), re.M)
+    assert m
+    return m.group(1)
 
 
 def test_a_bump_is_verified_against_the_source_it_wrote_not_stale_bytecode(tmp_path):
@@ -101,6 +103,13 @@ def test_a_bump_is_verified_against_the_source_it_wrote_not_stale_bytecode(tmp_p
         else:
             assert pkg["version"] == want, pkg
     assert f'__version__ = "{want}"' in (repo / "ddflow" / "__init__.py").read_text()
-    assert re.search(
-        rf'name = "ddflow-mcp"\nversion = "{re.escape(want)}"', (repo / "uv.lock").read_text()
+    # Only these move: the literal, and the rendered manifest. Not pyproject, not uv.lock.
+    assert (repo / "uv.lock").read_text() == (ROOT / "uv.lock").read_text()
+    assert (repo / "pyproject.toml").read_text() == (ROOT / "pyproject.toml").read_text()
+    check = subprocess.run(
+        [sys.executable, "scripts/render_server_json.py", "--check"],
+        cwd=repo,
+        capture_output=True,
+        text=True,
     )
+    assert check.returncode == 0, check.stderr

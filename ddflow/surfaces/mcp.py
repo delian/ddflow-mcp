@@ -36,8 +36,13 @@ import traceback
 from pathlib import Path
 from typing import Any
 
+# Absolute on purpose: `ddflow/__init__.py` is the one declaration of the version and has no
+# dependencies, so this cannot cycle; a relative `from .. import` would read as a layer.
+# A plain import, never importlib.metadata: installed metadata is stale in a source tree.
+from ddflow import __version__ as _VERSION
+
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
-SERVER_INFO = {"name": "ddflow", "version": "0.1.9", "title": "ddflow work-queue kernel"}
+SERVER_INFO = {"name": "ddflow", "version": _VERSION, "title": "ddflow work-queue kernel"}
 
 
 #: Tool surface. Each entry maps an MCP tool onto an argv the CLI already understands,
