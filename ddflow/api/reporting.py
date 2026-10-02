@@ -10,6 +10,7 @@ from ..config import Config
 from ..core import outcome as O
 from ..core.model import fold
 from ..core.plain import plain
+from ..core.tier import unknown_tier_notes
 from ..infra.log import EventLog
 from ._base import _load
 
@@ -605,6 +606,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
             "clones wrote as one agent id; give each its own (`DDFLOW_AGENT`, "
             "`[agent].id`, or drop both to derive a per-clone id)"
         )
+    notes.extend(unknown_tier_notes(st.items.values()))
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)

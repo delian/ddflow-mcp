@@ -83,6 +83,15 @@ ddflow next --phase <NAME>                       # [ddflow_next]
 
 Never take an item that `next` did not offer.
 
+**Model-tier hint (advisory).** An item tagged `tier:fast`, `tier:balanced` or `tier:deep`
+shows it beside its title in `next` and in the brief's header; an untagged item shows
+nothing. A harness that dispatches a subagent for the item may map it to its own model
+choice: `fast` -- a cheap model for mechanical bulk work (renames, format sweeps, large
+mechanical edits); `balanced` -- the everyday model for implementation; `deep` -- a
+top-tier model for architecture trade-offs. It is advice only: ignoring it is always
+correct, it never changes which reviewers count as independent, which gates run or what
+`next` offers, and an unknown value (`tier:foo`) is ignored and noted by `ddflow doctor`.
+
 ### 2b. Claim it
 
 ```sh
