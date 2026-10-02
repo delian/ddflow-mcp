@@ -175,7 +175,7 @@ def extendable(st, rid: str, kind: str) -> bool:
         return bool(ls and not ls.superseded_by)
     if kind == "decision":
         dc = st.decisions.get(rid)
-        return bool(dc and not dc.superseded_by and dc.status in ("accepted", "proposed"))
+        return bool(dc and not dc.superseded_by and dc.status in ("", "accepted", "proposed"))
     return kind in ("research", "memory")
 
 

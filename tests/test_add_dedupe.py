@@ -300,3 +300,15 @@ def test_an_exact_recurrence_without_an_id_is_a_new_linked_bug(repo):
     assert again.exit == 0 and again.data["id"] != first.data["id"]
     assert again.data["holder"]["state"] == "fixed"
     assert state(repo).links[again.data["id"]].linked("duplicate_of") == {first.data["id"]}
+
+
+def test_a_decision_is_extendable_until_superseded():
+    from types import SimpleNamespace as NS
+
+    def st(**kw):
+        return NS(decisions={"D1": NS(**{"superseded_by": "", "status": "accepted", **kw})})
+
+    for status in ("", "accepted", "proposed"):
+        assert DD.extendable(st(status=status), "D1", "decision")
+    assert not DD.extendable(st(status="superseded"), "D1", "decision")
+    assert not DD.extendable(st(superseded_by="D2"), "D1", "decision")
