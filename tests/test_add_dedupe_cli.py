@@ -448,3 +448,11 @@ def test_check_cannot_be_combined_with_an_answer(filed_as):
     code, _o, err = run_cli(filed, *ADDS["task"], "--check", "--new")
     assert code == 2 and "not allowed with" in err
     assert events(filed) == before
+
+
+def test_a_json_check_that_finds_nothing_still_says_why_on_stderr(filed_as):
+    filed = filed_as("task")
+    (filed / ".ddflow" / "config.toml").write_text('[dedupe]\nkinds = ["bug"]\n')
+    code, out, err = run_cli(filed, "--json", *ADDS["task"], "--check")
+    assert code == 2 and "[dedupe].kinds" in err
+    assert json.loads(out)["candidates"] == []
