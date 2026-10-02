@@ -1826,6 +1826,10 @@ def _unapproved_reviewer(state: State, evidence: dict[str, Any]) -> str:
     return ""
 
 
+#: The gates whose recorded model counts toward reviewer independence.
+REVIEWER_GATES = ("rubber_duck", "critic", "standards")
+
+
 def reviewer_independence(
     state: State, cfg: Config, item_id: str, author_model: str
 ) -> tuple[bool, str]:
@@ -1849,7 +1853,7 @@ def reviewer_independence(
     fams: list[tuple[str, str]] = []
     anonymous: list[str] = []
     unapproved: list[tuple[str, str]] = []
-    for gname in ("rubber_duck", "critic", "standards"):
+    for gname in REVIEWER_GATES:
         rec = it.gates.get(gname)
         if not rec or rec.outcome not in ("passed", "failed", "partial"):
             continue

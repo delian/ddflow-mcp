@@ -222,3 +222,40 @@ def test_reviewer_model_states_that_the_model_is_the_reviewer(repo):
     )
     assert code == OK, out + err
     assert _gate(repo, "critic").evidence["model"] == "claude-sonnet"
+
+
+def test_a_symbolic_ref_is_not_a_reviewed_sha(repo):
+    _item(repo)
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "standards",
+        "--evidence",
+        "x",
+        "--reviewed-sha",
+        "HEAD",
+        agent="impl",
+    )
+    assert code == REFUSED, out + err
+    assert "symbolic ref" in err
+
+
+def test_the_standards_gate_is_guarded_too(repo):
+    _item(repo)
+    _author(repo)
+    code, out, err = run_cli(
+        repo,
+        "gate",
+        "record",
+        "T1",
+        "standards",
+        "--evidence",
+        "x",
+        "--model",
+        "claude",
+        agent="impl",
+    )
+    assert code == REFUSED, out + err
+    assert "--reviewer-model" in err
