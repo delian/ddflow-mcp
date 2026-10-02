@@ -48,10 +48,14 @@ from .docsync import glob_regex
 _MAX_CODE_BYTES = 1_000_000
 
 _FENCE = re.compile(r"^\s{0,3}(`{3,}|~{3,})(.*)$")
+#: A line that cannot continue a paragraph: a list item, a quote or a table row.
+_NOT_PARAGRAPH = re.compile(r"^\s*(?:[-*+]\s|\d+[.)]\s|>|\|)")
 _SETEXT = re.compile(r"^\s{0,3}(=+|-+)\s*$")
 _SPAN = re.compile(r"(`+)(?!`)(.+?)(?<!`)\1(?!`)")
 _LINK = re.compile(r"(?<!\\)!?\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
-_REFDEF = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*<?(\S+?)>?(?:\s+.*)?$")
+#: `[label]: destination`; a footnote (`[^1]: prose`) is not one, and a destination must look
+#: like one (a path, a URL or an anchor) so that prose after the colon is never a link.
+_REFDEF = re.compile(r"^\s{0,3}\[(?!\^)[^\]]+\]:\s*<?([^\s<>]*[./#:][^\s<>]*)>?(?:\s+.*)?$")
 _ATX = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
 _HTML_ANCHOR = re.compile(r"""<a\s[^>]*?\b(?:name|id)\s*=\s*["']([^"']+)["']""", re.I)
 _SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
@@ -358,7 +362,7 @@ def anchors_of(text: str) -> set[str]:
         elif paragraph and _SETEXT.match(line):
             add(" ".join(paragraph))
             paragraph = []
-        elif line.strip() and not line.lstrip().startswith(("-", "*", "+", ">", "|")):
+        elif line.strip() and not (_SETEXT.match(line) or _NOT_PARAGRAPH.match(line)):
             paragraph.append(line.strip())
         else:
             paragraph = []
