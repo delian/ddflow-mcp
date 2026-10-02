@@ -112,8 +112,9 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
         "item": draft.item,
         "supersedes": csv_list(draft.supersedes),
     }
-    log.append("decision.recorded", did, fields | chk.fields)
-    DD.after_add(log, cfg, did, chk)
+    with log.transaction():
+        log.append("decision.recorded", did, fields | chk.fields)
+        DD.after_add(log, cfg, did, chk)
     return O.ok(
         "decision.recorded",
         id=did,

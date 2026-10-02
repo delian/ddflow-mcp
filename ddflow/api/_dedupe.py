@@ -88,7 +88,8 @@ class Checked:
     shown: list[dict[str, Any]] = field(default_factory=list)
     #: Set when the check could not run (an index that would not open); the add goes ahead.
     unavailable: str = ""
-    #: Who is told, for a link onto a record somebody is working: {id, holder, state}.
+    #: Who is told, for a link onto a record somebody is working: {id, state, holder} --
+    #: ``holder`` is the agent holding its lease, '' when nobody does (it is closed).
     notify: dict[str, str] = field(default_factory=dict)
     #: ``related`` also links the other way, after the add: [(subject, target)].
     back_links: list[tuple[str, str]] = field(default_factory=list)
@@ -359,7 +360,13 @@ def _point(st, rec: Record, chosen: Answer, note: dict[str, Any], out: Checked) 
         }
     else:
         out.fields |= {chosen.relation: chosen.target, "dedupe": note}
-        out.notify = {"id": chosen.target, "state": record_state(st, chosen.target, tkind)[1]}
+        it = st.items.get(chosen.target)
+        live = bool(it and it.lease and not it.lease.expired_at)
+        out.notify = {
+            "id": chosen.target,
+            "state": record_state(st, chosen.target, tkind)[1],
+            "holder": it.lease.holder if live and it and it.lease else "",
+        }
     return out
 
 
@@ -377,6 +384,7 @@ def extend(log, cfg: Config, chk: Checked, event_kind: str) -> O.Outcome:
             "score": ex["score"],
             "relation": ex["relation"],
             "auto": ex["auto"],
+            "dedupe": ex["dedupe"],
         },
     )
     return O.ok(
