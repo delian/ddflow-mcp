@@ -241,6 +241,106 @@ def rebuild(repo: Path, *, agent: str = "") -> O.Outcome:
     )
 
 
+#: How much of one record's text a rendering carries. The record is whole in the log and
+#: in `show --json`; a brief is budgeted.
+_TEXT_CAP = 600
+
+
+def _epoch(ts: str) -> float:
+    """An event's ISO timestamp as epoch seconds; 0.0 for one that does not parse."""
+    from datetime import datetime
+
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
+    except (ValueError, AttributeError):
+        return 0.0
+
+
+def record_summary(st, rid: str) -> dict[str, Any]:
+    """What a link points at, in one dict: its kind, title, state and own text."""
+    if rid in st.items:
+        i = st.items[rid]
+        return {"kind": i.kind, "title": i.title or "", "state": i.state, "text": i.body or ""}
+    if rid in st.bugs:
+        b = st.bugs[rid]
+        return {"kind": "bug", "title": "", "state": b.resolution or "open", "text": b.summary}
+    if rid in st.lessons:
+        ls = st.lessons[rid]
+        return {"kind": "lesson", "title": ls.title, "state": "", "text": ls.text()}
+    for kind, pool in (
+        ("research", st.research),
+        ("decision", st.decisions),
+        ("memory", st.memories),
+    ):
+        if rid in pool:
+            r = pool[rid]
+            # `text` is a field on a memory and a METHOD on a decision: call what is callable.
+            text = (
+                getattr(r, "summary", "")
+                or getattr(r, "text", "")
+                or getattr(r, "claim", "")
+                or getattr(r, "question", "")
+                or ""
+            )
+            return {
+                "kind": kind,
+                "title": getattr(r, "title", "") or getattr(r, "question", "") or "",
+                "state": "",
+                "text": text() if callable(text) else text,
+            }
+    return {"kind": "", "title": "", "state": "", "text": ""}
+
+
+def addenda(st, rid: str) -> dict[str, Any]:
+    """Everything the log says was ADDED to, or LINKED to, one record (D-no-duplicates).
+
+    `additions`: the verbatim `record.extended` texts, oldest first. `links`: what this
+    record points at. `linked_from`: the records that point at it -- found by scanning
+    every record's links for this target, because a new record filed `extends` /
+    `duplicate_of` X is stored as a link ON THE NEW RECORD; State keeps no index under X
+    and only `related` also writes a back-link.
+    """
+    mine = st.links.get(rid)
+    links = []
+    for x in mine.links if mine else []:
+        links.append(
+            {**x, **{k: v for k, v in record_summary(st, x["target"]).items() if k != "text"}}
+        )
+    out_related = {x["target"] for x in links if x["relation"] == "related"}
+    inbound = []
+    for src, rl in st.links.items():
+        if src == rid:
+            continue
+        for x in rl.links:
+            if x["target"] != rid:
+                continue
+            if x["relation"] == "related" and src in out_related:
+                continue  # the back-link already listed it
+            inbound.append({**x, "record": src, **record_summary(st, src)})
+    inbound.sort(key=lambda x: (x["at"], x["event"], x["record"]))
+    return {
+        "additions": list(mine.extensions) if mine else [],
+        "links": links,
+        "linked_from": inbound,
+    }
+
+
+def new_reports(st, rid: str, since: float) -> dict[str, Any]:
+    """The additions and inbound links on `rid` made at or after `since` (epoch seconds):
+    what was reported against an item after its holder claimed it."""
+    a = addenda(st, rid)
+    adds = [x for x in a["additions"] if _epoch(x["at"]) >= since]
+    linked = [x for x in a["linked_from"] if _epoch(x["at"]) >= since]
+    # A `related` record writes a back-link on X (a later `link.recorded`, never an add), which `addenda` lists once (as X's own
+    # link) and not again as inbound -- but for a holder it IS a new report.
+    for x in a["links"]:
+        if x["relation"] == "related" and x["source"] == "later" and _epoch(x["at"]) >= since:
+            linked.append(
+                {**x, "record": x["target"], "text": record_summary(st, x["target"])["text"]}
+            )
+    return {"count": len(adds) + len(linked), "additions": adds, "linked_from": linked}
+
+
 def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     """One item, with its gate status -- or one bug, by its id. The wire body is the item
     (or the bug's record) itself.
@@ -266,9 +366,13 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     return O.ok(
         "show",
         id=item,
-        item=absolutise(repo, plain(it)),
+        item={**absolutise(repo, plain(it)), **addenda(st, item)},
         gates=plain(G.status(st, cfg, item)),
-        _render={"item": it, "gate_status": G.status(st, cfg, item)},
+        _render={
+            "item": it,
+            "gate_status": G.status(st, cfg, item),
+            "addenda": addenda(st, item),
+        },
     )
 
 
@@ -299,6 +403,7 @@ def _show_bug(st, bug) -> O.Outcome:
         "state": bug.resolution or "open",
         "fixing": fixing,
         "mentioned_by": mentions,
+        **addenda(st, bug.id),
     }
     return O.ok("show", id=bug.id, item=record, _render={"bug": record})
 

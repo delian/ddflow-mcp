@@ -181,9 +181,13 @@ jobs:
         # README must carry `mcp-name: <server name>`, each image the
         # `io.modelcontextprotocol.server.name` label. It checks the exact version, and a
         # PyPI version cannot be replaced -- so a miss found by `mcp-publisher` (publish
-        # #36) costs a version number. Run first, in `verify`, which every publishing job
-        # needs; the test file is the one definition of the check.
-        run: uv run pytest tests/test_registry_ownership.py -q
+        # #36) costs a version number. The registry also enforces per-registryType package
+        # rules the JSON schema does not express (publish #40: an OCI package must not carry
+        # `version`; the tag goes in `identifier`) -- test_registry_manifest_rules.py encodes
+        # them. Run first, in `verify`, which every publishing job needs, so a manifest the
+        # registry would reject stops the release before PyPI and Docker; the test files are
+        # the one definition of the check.
+        run: uv run pytest tests/test_registry_ownership.py tests/test_registry_manifest_rules.py -q
       - name: Test before publishing
         run: uv run pytest tests/ -q --timeout=420 -n auto
       - name: Scenarios before publishing

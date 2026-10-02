@@ -189,7 +189,7 @@ LONG = "subagent claim through the shared connection binds the parent session wo
 
 def _cfg(**kw) -> Config:
     cfg = Config.load()
-    cfg.dedupe = dataclasses.replace(cfg.dedupe, **kw)
+    cfg.dedupe = dataclasses.replace(cfg.dedupe, **{"on_match": "ask", **kw})
     return cfg
 
 

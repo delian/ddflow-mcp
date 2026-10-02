@@ -45,6 +45,9 @@ class Answer:
 
     relation: str = ""
     target: str = ""
+    #: A dry run: ``check_add`` writes nothing and returns the candidates (``--check``,
+    #: ``check_only``). The add function returns it as it returns a refusal.
+    check_only: bool = False
 
     @classmethod
     def parse(cls, spec: str) -> Answer:
@@ -62,6 +65,8 @@ class Answer:
 
     @property
     def problem(self) -> str:
+        if self.check_only and self.relation:
+            return "a dry run (check) cannot also carry an answer: drop one of them"
         if not self.relation:
             return ""
         if self.relation not in RELATIONS:
@@ -299,11 +304,14 @@ def check_add(
     Never raises for an index that cannot be read: the add goes ahead, and ``unavailable``
     says the check did not run.
     """
-    answer = answer or Answer()
+    answer = Answer() if answer is None else answer
     bad = _bad_answer(st, rec, answer)
     if bad:
         return Checked(refusal=O.failed(rec.event_kind, bad, id=rec.rid))
-    if rec.kind and kind_of(st, rec.rid) == rec.kind:
+    taken = bool(rec.kind) and kind_of(st, rec.rid) == rec.kind
+    if answer.check_only:
+        return _dry_run(repo, log, cfg, st, rec, taken)
+    if taken:
         return Checked()
     found, shown, unavailable = _assess(repo, log, cfg, st, rec)
     out = Checked(shown=shown, unavailable=unavailable)
@@ -340,6 +348,62 @@ def check_add(
     if auto:
         note["auto"] = True
     return _point(st, rec, chosen, note, out)
+
+
+def _dry_run(repo: Path, log, cfg: Config, st, rec: Record, taken: bool) -> Checked:
+    """What an add of ``rec`` would meet, with nothing written: exit 0 with the candidates
+    (and whether the add would be refused), exit 2 when none reads like it. Returned in
+    ``Checked.refusal``, which every add already hands back unchanged."""
+    base = {"id": rec.rid, "check_only": True, "on_match": cfg.dedupe.on_match}
+    if taken:
+        # Adding an id that exists keeps its own rule and is never checked (see
+        # `check_add`): the dry run says so instead of reporting a refusal that will not come.
+        return Checked(
+            refusal=O.nothing(
+                rec.event_kind,
+                f"{rec.rid} is already recorded: re-adding it keeps its own rule and the "
+                f"duplicate check is not run",
+                **base,
+                would_ask=False,
+                would_extend="",
+                would_link="",
+                candidates=[],
+                options=[],
+            )
+        )
+    found, shown, unavailable = _assess(repo, log, cfg, st, rec)
+    exact = getattr(found, "identical", None)
+    merged = found.action == "ask" and exact is not None and exact.kind == rec.kind
+    data: dict[str, Any] = {
+        **base,
+        "would_ask": found.action == "ask" and not merged,
+        # An exact copy is recorded without asking: onto the record when it is open and
+        # unclaimed, else as a new record linked to it (`_point`).
+        "would_extend": exact.id if merged and extendable(st, exact.id, exact.kind) else "",
+        "would_link": exact.id if merged and not extendable(st, exact.id, exact.kind) else "",
+        "candidates": shown,
+        "options": options(shown) if shown else [],
+    }
+    if unavailable:
+        data["dedupe_unavailable"] = unavailable
+        # NOT "nothing reads like it": the check did not run, and a caller gating on the
+        # exit code must not read an outage as a clean bill.
+        return Checked(
+            refusal=O.failed(
+                rec.event_kind, f"the duplicate check could not run: {unavailable}", **data
+            )
+        )
+    if not shown:
+        if cfg.dedupe.on_match == "off":
+            why = "the check is off ([dedupe].on_match = off)"
+        elif rec.kind not in cfg.dedupe.kinds:
+            why = f"{rec.kind} is not checked ([dedupe].kinds = {', '.join(cfg.dedupe.kinds)})"
+        else:
+            why = f"nothing scores {cfg.dedupe.show_floor:g} or more against it"
+        return Checked(
+            refusal=O.nothing(rec.event_kind, f"no existing record reads like this: {why}", **data)
+        )
+    return Checked(refusal=O.ok(rec.event_kind, **data), shown=shown)
 
 
 def _point(st, rec: Record, chosen: Answer, note: dict[str, Any], out: Checked) -> Checked:

@@ -226,6 +226,12 @@ def test_the_declared_versions_agree():
         if k["registryType"] == "oci" and not k["identifier"].endswith(f":{proj}")
     ]
     assert not stale, f"OCI identifiers not tagged {proj}: {stale}"
+    # ...and carries NO `version` field: the registry rejects an OCI package with one
+    # (publish #40). tests/test_registry_manifest_rules.py holds the full rule set.
+    versioned = [
+        k["identifier"] for k in srv["packages"] if k["registryType"] == "oci" and "version" in k
+    ]
+    assert not versioned, f"OCI packages must not have 'version': {versioned}"
 
 
 def proj_name() -> str:

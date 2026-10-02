@@ -6,6 +6,7 @@ import shlex
 import sys
 
 from ...api import items as A
+from .. import dedupe_flags as D
 from ..context import OK, Ctx
 
 #: `task add`'s wire body, the same on `ddflow_task_add`: the ports it generated are
@@ -14,19 +15,27 @@ TASK_ADD_PAYLOAD = ("id", "line", "ports", "port_strategy", "defaulted")
 
 
 def cmd_phase_add(a, c: Ctx) -> int:
-    out = A.phase_add(
-        c.repo,
-        a.id,
-        title=a.title,
-        needs=a.needs or "",
-        globs=a.globs or "",
-        body=a.body or "",
-        tags=a.tags or "",
-        priority=a.priority,
-        line=a.line or "",
-        readd=a.readd,
-        agent=c.requested_agent,
+    out = D.run(
+        a,
+        c,
+        lambda answer: A.phase_add(
+            c.repo,
+            a.id,
+            title=a.title,
+            needs=a.needs or "",
+            globs=a.globs or "",
+            body=a.body or "",
+            tags=a.tags or "",
+            priority=a.priority,
+            line=a.line or "",
+            readd=a.readd,
+            answer=answer,
+            agent=c.requested_agent,
+        ),
     )
+    settled = D.settle(a, c, out)
+    if settled is not None:
+        return settled
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
@@ -36,21 +45,29 @@ def cmd_phase_add(a, c: Ctx) -> int:
 
 def cmd_task_add(a, c: Ctx) -> int:
     parent = a.parent or a.phase
-    out = A.task_add(
-        c.repo,
-        a.id,
-        title=a.title,
-        parent=parent,
-        needs=a.needs or "",
-        globs=a.globs or "",
-        body=a.body or "",
-        tags=a.tags or "",
-        priority=a.priority,
-        line=a.line or "",
-        lines=a.lines or "",
-        readd=a.readd,
-        agent=c.requested_agent,
+    out = D.run(
+        a,
+        c,
+        lambda answer: A.task_add(
+            c.repo,
+            a.id,
+            title=a.title,
+            parent=parent,
+            needs=a.needs or "",
+            globs=a.globs or "",
+            body=a.body or "",
+            tags=a.tags or "",
+            priority=a.priority,
+            line=a.line or "",
+            lines=a.lines or "",
+            readd=a.readd,
+            answer=answer,
+            agent=c.requested_agent,
+        ),
     )
+    settled = D.settle(a, c, out)
+    if settled is not None:
+        return settled
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
