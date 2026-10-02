@@ -1,0 +1,9 @@
+# Decisions
+
+{{ shown }} of {{ total }} decisions; {{ live }} accepted. Full text: `ddflow decision show <id>`.
+
+| Id | Status | Date | Title | Governs |
+| --- | --- | --- | --- | --- |
+{% for r in rows %}
+| `{{ r.id }}` | {{ r.status }} | {{ r.date }} | {{ r.title }} | {{ r.governs }} |
+{% endfor %}
