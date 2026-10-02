@@ -1104,7 +1104,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "your whole session and distinct from the other agents': your role or "
             "assignment, not a random string. Idempotent; call it again to correct it. "
             "A SUBAGENT sharing its parent's connection must NOT call this -- it would "
-            "rename the parent -- and passes `as_agent` on each call instead."
+            "rename the parent -- and passes `as_agent` on each call instead (every other "
+            "tool takes it; same name rules as here, equivalent to the CLI's `--agent`: "
+            "claims, gate outcomes and reviews are attributed to that name for that one "
+            "call and conflict-checked against its siblings', and the connection's "
+            "identity is untouched)."
         ),
         "properties": {
             "agent": (
@@ -2535,11 +2539,8 @@ def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:
 AS_AGENT = "as_agent"
 _AS_AGENT_SPEC = (
     "string",
-    "Act as THIS agent for this one call only, without changing the connection's "
-    "identity. For subagents that share their parent's MCP connection (Claude Code "
-    "subagents do): each passes its own stable name here so claims, gate outcomes and "
-    "reviews are attributed to it and its claims conflict-check against its siblings'. "
-    "Same rules as ddflow_identify's name. Equivalent to the CLI's `--agent`.",
+    "Subagent sharing the parent's connection: your own stable name, for this call only "
+    "(see ddflow_identify).",
     False,
 )
 
@@ -2589,20 +2590,13 @@ ADD_TOOLS = (
 DEDUPE_PROPERTIES: dict[str, tuple[str, str, bool]] = {
     "relation": (
         "string",
-        "Answers the duplicate check when an add is refused as 'possible duplicate' "
-        "(the refusal lists `candidates` and the `options` it accepts): 'new' (a "
-        "different record), 'extends:ID' (adds to record ID: appended to it while it is "
-        "open and unclaimed, else filed as a new record linked to it), "
-        "'duplicate_of:ID' (the same thing; handled like extends), 'related:ID' (a "
-        "different record, linked both ways). Prefer extending an open, unclaimed "
-        "record. Omit it on the first call.",
+        "Answer a 'possible duplicate' refusal: new | extends:ID | duplicate_of:ID | "
+        "related:ID (see the refusal's `candidates`/`options`). Omit on the first call.",
         False,
     ),
     "check_only": (
         "boolean",
-        "Dry run: write nothing and return the existing records this add would be "
-        "refused as a duplicate of (`candidates`, `would_ask`). Exit 0 with candidates, "
-        "2 with none.",
+        "Dry run: write nothing, return the `candidates` this add would be refused for.",
         False,
     ),
 }

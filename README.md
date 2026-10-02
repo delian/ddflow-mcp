@@ -3092,6 +3092,12 @@ previous one turned out to be too shallow:
 | every CLI **subcommand** has a tool | `ddflow gate skip` and `bug found` had none — `gate` counted as "covered" by `gate run`, and a parent's coverage says nothing about its children |
 | every CLI **flag** is reachable from its tool | **27 divergences** — 16 on its first run, and 11 more the moment it derived its own coverage instead of using a hand-written list. Including `phase add --globs`: over MCP a phase could not declare what it writes, so the conflict detector had nothing to compare at phase level |
 
+A fourth ratchet bounds the cost of that surface: the whole tool list is sent to the model
+on every session, so `tests/test_mcp_tool_budget.py` fails if the compact `tools/list`
+exceeds its byte budget (about 91 KB for 90 tools, down from 119 KB) or if the shared
+`as_agent` / `relation` / `check_only` descriptions are repeated at length on any tool.
+Their full text lives once, in `ddflow_identify` and the handshake instructions.
+
 The flag ratchet derives its own input from the parser rather than a hand-written list —
 its first version carried eleven tools and was blind to `remove --force` for exactly
 that reason. Omissions are allowed, but each must be an entry in `FLAG_EXEMPTIONS` with
