@@ -161,10 +161,10 @@ def test_export_targets_are_excluded_from_stale_docs_and_docscheck(proj):
     assert DOC in SF.doc_exclude(cfg)
     assert set(cfg.enforce.doc_exclude) <= set(SF.doc_exclude(cfg))
     _export(proj)
-    (proj / "README.md").write_text("# proj\n\nSee [nowhere](docs/missing.md) and `no_such_fn()`.\n")
-    (proj / DOC).write_text(
-        (proj / DOC).read_text() + "\nSee [gone](docs/also-missing.md).\n"
+    (proj / "README.md").write_text(
+        "# proj\n\nSee [nowhere](docs/missing.md) and `no_such_fn()`.\n"
     )
+    (proj / DOC).write_text((proj / DOC).read_text() + "\nSee [gone](docs/also-missing.md).\n")
     _git(proj, "add", "-A")
     _git(proj, "commit", "-qm", "docs", "--no-verify")
     rep = docscheck.check_docs(proj, docs=["README.md", DOC], generated=SF.export_targets(cfg))
