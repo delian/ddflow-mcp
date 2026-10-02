@@ -188,3 +188,13 @@ def test_a_branch_that_diffs_to_nothing_is_unknown_not_clean(repo):
     it = st.items["T1"]
     it.branch, it.base = "main", "main"
     assert CM.changed_paths(repo, it) is None
+
+
+def test_a_docs_pass_without_the_section_named_does_not_silence_it(repo, tree):
+    _commit(tree, {"ddflow/feature.py": "x = 1\n"})
+    run_cli(repo, "gate", "record", "T1", "docs", "--outcome", "passed", "--reason", "n/a")
+    assert len(_reported(repo)) == 1
+    run_cli(
+        repo, "gate", "record", "T1", "docs", "--outcome", "passed", "--evidence", "README: Gates"
+    )
+    assert _reported(repo) == []
