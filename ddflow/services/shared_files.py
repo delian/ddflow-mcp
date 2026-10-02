@@ -24,6 +24,32 @@ from pathlib import Path
 from ..config import Config
 
 
+def export_targets(cfg: Config, *, generated_only: bool = False) -> list[str]:
+    """Repo-relative paths of every SELECTED export document (D-export-selection).
+
+    ``generated_only`` leaves out `region` targets: those are hand-written files holding a
+    generated region, so their own text is still scanned for stale mentions.
+
+    They are shared paths already (`core.schedule.shared_globs` adds them, so no claim is
+    needed and the lease check passes them); the whole and append ones are generated
+    documents (``generated_only=True``): `ddflow export --check` judges them, so
+    `[enforce].stale_docs` and docscheck leave them alone, and doctor's "no
+    merge strategy" note (which reads only `[lease].shared_globs`) never names one.
+    """
+    return [
+        p for _doc, p, mode in cfg.export.targets() if not (generated_only and mode == "region")
+    ]
+
+
+def doc_exclude(cfg: Config) -> list[str]:
+    """`[enforce].doc_exclude` plus every whole or append export target (not a region
+    one): a generated document is checked by `export --check`, not by the stale-mention
+    scan."""
+    out = list(cfg.enforce.doc_exclude)
+    out += [p for p in export_targets(cfg, generated_only=True) if p not in out]
+    return out
+
+
 def union_line(glob: str) -> str:
     return f"{glob} merge=union"
 

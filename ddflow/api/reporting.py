@@ -610,6 +610,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     from ..services.export import select as export_select
 
     notes.extend(export_select.doctor_notes(repo, cfg, st))
+    notes.extend(_export_target_notes(repo, cfg))
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
@@ -751,6 +752,34 @@ def _only_ids(title: str) -> bool:
 
 #: How many untitled ids one note names before it counts the rest.
 _UNTITLED_SHOWN = 8
+
+
+def _export_target_notes(repo: Path, cfg: Config) -> list[str]:
+    """A NOTE for each selected export target that is stale or hand-edited (B-export-enforce).
+
+    Not a problem: regenerating is one command, and a doctor that fails on a document the log
+    has simply moved past would block work. `[enforce].generated_views = "off"` silences it.
+    """
+    if cfg.enforce.generated_views == "off" or not cfg.export.documents:
+        return []
+    from ..services.export import ops as X
+    from ..services.export.query import ExportError
+
+    try:
+        rows = X.listing(repo, cfg)
+    except ExportError as exc:
+        return [f"export: could not check the selected documents ({exc})"]
+    return [
+        f"export: {r['target']} ({r['doc']}) is {r['state']}"
+        + (f": {r['detail']}" if r.get("detail") else "")
+        + (
+            f" (`ddflow export {r['doc']} --update`)"
+            if r["state"] == "stale"
+            else " (`ddflow export --check`; regenerating needs --force)"
+        )
+        for r in rows
+        if r["selected"] and r["state"] in ("stale", "hand-edited")
+    ]
 
 
 def _untitled(st) -> list[str]:
