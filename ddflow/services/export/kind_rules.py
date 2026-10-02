@@ -41,7 +41,7 @@ def _first_paragraph(text: str) -> str:
     return ""
 
 
-def _decisions(q: Query, f: registry.Filters) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _decisions(q: Query) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """(decisions grouped by governing glob, decisions with no glob), both stably ordered."""
     by_glob: dict[str, list[dict[str, Any]]] = {}
     loose: list[dict[str, Any]] = []
@@ -142,7 +142,7 @@ def workflow_data(q: Query) -> dict[str, Any] | None:
 
 
 def data(q: Query, f: registry.Filters) -> Mapping[str, Any]:
-    groups, loose = _decisions(q, f)
+    groups, loose = _decisions(q)
     lessons, shown, omitted = _lessons(q, f)
     return {
         "decision_groups": groups,
