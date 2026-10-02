@@ -280,6 +280,8 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
         "--force",
     ): "overriding hand-edit protection is the operator's, at a terminal",
     ("ddflow_export", "--template"): "an agent never feeds the renderer an arbitrary file",
+    ("ddflow_export", "--lock"): "the operator's veto: a person at a terminal locks a document",
+    ("ddflow_export", "--local"): "a per-machine selection is the operator's, at a terminal",
     ("ddflow_export", "--yes"): "answers the terminal confirmation, which MCP has none of",
     # The answer flags of the add-time duplicate check are ONE MCP argument: `relation`
     # ("new", "extends:ID", "duplicate_of:ID", "related:ID" -- a mutually exclusive set

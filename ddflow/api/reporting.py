@@ -607,6 +607,9 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
             "`[agent].id`, or drop both to derive a per-clone id)"
         )
     notes.extend(unknown_tier_notes(st.items.values()))
+    from ..services.export import select as export_select
+
+    notes.extend(export_select.doctor_notes(repo, cfg, st))
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)

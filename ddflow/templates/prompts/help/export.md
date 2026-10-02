@@ -45,6 +45,35 @@ exported event). A hand-edited generated file, an unmarked file or an edited reg
 overwritten without `--force`. Paths outside the repo, symlinks, `.git` and `.ddflow` are
 refused. Every selected target is a shared path for leases: regenerate it without a claim.
 
+## Choosing documents
+
+    ddflow export enable roadmap                  select it; no file is created
+    ddflow export enable status --path docs/S.md --mode region
+    ddflow export enable bugs --local             this machine only
+    ddflow export disable roadmap                 deselect (the file stays; printing still works)
+    ddflow export disable roadmap --lock          the operator's veto
+    ddflow export ack                             the operator has seen what agents enabled
+
+An agent may enable a document without approval, but never silently: the result names the
+agent and the stop command (`ddflow export disable <doc>`), `ddflow export` lists who
+enabled each document and when, `brief` shows one `Export:` line and `doctor` a note until
+`ddflow export ack` (or `ddflow export` at a terminal). After `disable --lock` an agent's
+enable exits 3 (locked by the operator); locking, acknowledging and unlocking
+(`ddflow export enable <doc>` at a terminal) are refused under `--agent`, `DDFLOW_AGENT` or a
+harness's shell. The events are `export.enabled`, `export.disabled`, `export.acknowledged`.
+
+## Templates
+
+    ddflow export eject roadmap          copy the shipped template to .ddflow/templates/export/
+    ddflow export eject roadmap --force  replace an edited copy with the shipped default
+    ddflow export validate [roadmap]     render the selected documents; errors with file and line
+
+Resolution: `[export.<doc>].template`, then `.ddflow/templates/export/<kind>.md.j2`, then the
+shipped default. `eject` is idempotent and never overwrites an edited copy without `--force`;
+its first line, `{# ddflow-shipped: <digest> -#}`, renders to nothing and records the shipped
+text the copy came from, so `validate` and `doctor` say when the default has moved on and a
+plain `eject` refreshes an unedited older copy. `validate` exits 2 on a template error.
+
 ## Configuration
 
     [export]
@@ -66,5 +95,7 @@ checkout.
 
 `ddflow_export` with no `doc` lists the kinds; with a `doc` it returns the markdown and a
 `truncated` field. It writes only with `write=true` and a repo-relative `path`; `diff` and
-`check` compare against a path. Exit codes everywhere: 0 done or fresh, 1 stale (`--check`),
+`check` compare against a path. `action` = `list`, `enable`, `disable` or `validate` selects
+documents and checks templates (an enable names the agent and the stop command; MCP never
+locks, acknowledges or ejects). Exit codes everywhere: 0 done or fresh, 1 stale (`--check`),
 2 could not run or nothing selected, 3 refused.

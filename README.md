@@ -3060,6 +3060,48 @@ Every selected target is registered automatically as a shared path for leases (a
 file) so regenerating it needs no claim. The list shows each kind as `not selected`,
 `fresh`, `stale`, `hand-edited` or `missing`.
 
+**Choosing documents.** You, or an agent, select a document with one command; no file is
+created by it (the first write is the next export run, with every hand-edit protection below):
+
+```console
+$ ddflow export enable roadmap                       # select it (shared config)
+$ ddflow export enable status --path docs/S.md --mode region
+$ ddflow export enable bugs --local                  # this machine only (.ddflow/local/)
+$ ddflow export disable roadmap                      # deselect; the file stays, printing still works
+$ ddflow export disable roadmap --lock               # the operator's veto: agents cannot enable it again
+$ ddflow export ack                                  # the operator has seen what agents enabled
+```
+
+An agent may enable a document without approval (decision D-export-agent-enable), but never
+silently: the result says `enabled <doc> -> <path> (by <agent>); the operator can stop it
+with ddflow export disable <doc>`, an `export.enabled` event records the agent, document,
+path, mode and time (`export.disabled` and `export.acknowledged` are the other two new event
+kinds; an older ddflow reports them as skipped), `ddflow export` lists who enabled each
+document and when, `brief` carries one `Export:` line and `doctor` a note until the
+operator acknowledges (`ddflow export ack`, or `ddflow export` at a terminal), and
+`disable --lock` makes an agent's later `enable` exit 3 (`locked by the operator`). Locking,
+acknowledging and unlocking (`ddflow export enable <doc>` at a terminal) are the operator's
+acts, refused under `--agent`, `DDFLOW_AGENT` or a harness's shell (as `reviewers approve`
+is). Enable edits the selection through the same guarded write as `config --set`, and an
+`append` target is registered as an append-only path.
+
+**Templates are yours to change.** The format of every kind is a Jinja2 template; resolution
+is `[export.<doc>].template`, then `.ddflow/templates/export/<kind>.md.j2`, then the
+shipped default.
+
+```console
+$ ddflow export eject roadmap        # copy the shipped template into .ddflow/templates/export/
+$ ddflow export eject roadmap --force  # replace an edited copy with the shipped default
+$ ddflow export validate [roadmap]   # render the selected documents; errors with file and line
+```
+
+`eject` is idempotent and never overwrites an edited copy without `--force`; the copy starts
+with a comment (`{# ddflow-shipped: <digest> -#}`, renders to nothing) recording the shipped
+text it came from, so a ddflow upgrade never touches it but `validate` and `doctor` say when
+the shipped default has moved on, and an unedited older copy is refreshed by a plain `eject`.
+`validate` renders every selected document (or the one named) against the current data and
+exits 2 on any template error, naming the file and line; it writes nothing.
+
 **The three update modes**, per `[export.<doc>].mode`: `whole` (the file is generated; its
 header carries the kind, the ddflow version and a digest of the BODY, so hand edits are
 detected and `--check` regenerates and compares exactly), `region` (only the text between
@@ -3086,7 +3128,10 @@ markdown and says `truncated: true` (with `truncated_more`) when it was cut, bou
 bytes whatever `max_bytes` asks. It writes only with `write=true` AND a repo-relative `path`
 (`path` alone is refused); `diff` and `check` compare against a path. It has no `force`, no
 `update` and no ad hoc template: an agent never overrides hand-edit protection or points the
-renderer at an arbitrary file. It is in the `all` tool tier only.
+renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc`, and `path` /
+`mode` for enable) or `validate` does the matching selection or template check; an enable over
+MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
+acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
 **The `[export]` knobs** (5 of the 147): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
