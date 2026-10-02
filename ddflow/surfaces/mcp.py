@@ -1834,7 +1834,16 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "Comma-separated agents to write driver deltas for: "
                 f"{','.join(_AGENT_KEYS())}. Default: all.",
                 False,
-            )
+            ),
+            "refresh_docs": (
+                "boolean",
+                "Rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the "
+                "adopted agents' native rules from this ddflow's templates -- no MCP "
+                "launch, hook or command-file changes. Use it when ddflow_doctor notes "
+                "that driver docs differ from the templates. Refused on a project that "
+                "was never adopted.",
+                False,
+            ),
         },
         # Where the server stands decides where the committed files go: a linked
         # worktree's own checkout, not the shared primary (bug B1e7ad10c6c). A foreign
@@ -1843,7 +1852,9 @@ TOOLS: dict[str, dict[str, Any]] = {
         "wants_called_from": True,
         "api": lambda repo, a, agent, called_from=None: _api().adopt_project(
             repo,
-            _api().Adoption(agents=a.get("agents", "") or ""),
+            _api().Adoption(
+                agents=a.get("agents", "") or "", refresh_docs=bool(a.get("refresh_docs"))
+            ),
             agent=agent,
             called_from=called_from,
         ),

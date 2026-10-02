@@ -404,6 +404,19 @@ def _primary_mid_merge(repo: Path, problems: list[str], notes: list[str]) -> Non
     )
 
 
+def _driver_drift_notes(repo: Path) -> list[str]:
+    """One note naming driver docs that differ from the templates this ddflow ships."""
+    from ..services.adopt import driver_drift
+
+    lagging = driver_drift(repo)
+    if not lagging:
+        return []
+    return [
+        f"driver docs differ from the templates this ddflow ships: {', '.join(lagging)}"
+        " — `ddflow adopt --refresh-docs` rewrites them (and the rules blocks) and nothing else"
+    ]
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -529,11 +542,16 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     for state in rules_status(repo):
         if not state.needs_attention:
             continue
-        line = f"{state.render()} — `ddflow adopt` rewrites it"
+        line = (
+            f"{state.render()} — `ddflow adopt --refresh-docs` rewrites it "
+            "(plain `ddflow adopt` also rewrites MCP launches)"
+        )
         # NOT_BINDING sits with MISSING: a rule the agent may never load is not a
         # milder version of a drifted one, it is the mechanism switched off.
         severe = state.state in (MISSING, NOT_BINDING)
         (problems if severe else notes).append(line)
+
+    notes += _driver_drift_notes(repo)
 
     for f in PR.detect(log.read_all(), st, cfg):
         (problems if f.severity == "block" else notes).append(f.render())
