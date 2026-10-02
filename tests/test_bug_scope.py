@@ -125,11 +125,11 @@ def _parser_has_bug_report() -> bool:
 
 def test_the_upstream_offer_is_made_only_while_the_command_exists(repo):
     # The offer names `ddflow bug report`: true only once that command is in the parser.
-    assert K.BUG_REPORT_COMMAND == _parser_has_bug_report()
+    assert bool(K.BUG_REPORT_COMMAND) == _parser_has_bug_report()
     run_cli(repo, "init")
     code, out, _ = run_cli(repo, "bug", "found", "--summary", "ddflow bug", "--scope", "ddflow")
     assert code == 0
-    assert ("ddflow bug report" in out) == K.BUG_REPORT_COMMAND
+    assert bool(K.BUG_REPORT_COMMAND) == ("prepares an upstream report" in out)
     assert K.upstream_offer("project", "B1") == ""
 
 
