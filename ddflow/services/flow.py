@@ -669,7 +669,8 @@ def reached(repo: Path, cfg: Config, it: Item, ref: str) -> str:
     had merged its base in, is just an old base tip that every line already contains.
 
     A squash landing has one parent and its back-merge is another squash, so neither
-    commit reaches the other line: such an item is not found there, as before this.
+    commit reaches the other line by ancestry: such an item is found there by its change
+    instead (`_squash_on`: the same patch-id, or ddflow's own back-merge commit).
     A fast-forward landing (``merge_strategy = "ff-only"``) IS the branch head, whose
     second parent, if it has one, is something the branch merged in, not the branch:
     only a ``no-ff`` landing (or a forge's merge commit) has the branch as ``^2``.
@@ -722,6 +723,15 @@ def _line_patch_ids(repo: str, tip: str) -> dict[str, str]:
     return _patch_ids(Path(repo), f"--max-count={_SQUASH_SEARCH}", tip)
 
 
+@lru_cache(maxsize=64)
+def _line_subjects(repo: str, tip: str) -> tuple[tuple[str, str], ...]:
+    log = W.git(
+        Path(repo), "log", f"--max-count={_SQUASH_SEARCH}", "--no-merges", "--format=%H %s", tip
+    )
+    rows = (line.partition(" ") for line in log.out.splitlines()) if log.ok else ()
+    return tuple((sha, subj) for sha, _, subj in rows)
+
+
 def _squash_on(repo: Path, it: Item, merged: str, ref: str) -> str:
     """The commit on ``ref`` carrying a SQUASH landing's change, or "" (B20d45f540c).
 
@@ -743,16 +753,7 @@ def _squash_on(repo: Path, it: Item, merged: str, ref: str) -> str:
         if hit := _line_patch_ids(str(repo), tip).get(next(iter(mine))):
             return hit
     subject = f"back-merge {it.id} into "
-    log = W.git(
-        repo,
-        "log",
-        f"--max-count={_SQUASH_SEARCH}",
-        "--no-merges",
-        "--format=%H %s",
-        ref,
-    )
-    for line in log.out.splitlines() if log.ok else []:
-        sha, _, subj = line.partition(" ")
+    for sha, subj in _line_subjects(str(repo), tip):
         if subj.startswith(subject):
             return sha
     return ""
