@@ -113,28 +113,42 @@ def next_(
         "_render": {"plan": p},
     }
     if p.ready and cfg.lease.waiter_reservation_s > 0:
-        # An item whose files are held for a waiter in line is not on offer to anyone
-        # else (`claim` would refuse it), so it is listed as blocked instead.
-        from ..core.schedule import Blocked
-
-        now = time.time()
-        live = st.active_leases(now, cfg.lease.grace_s)
-        me = cfg.agent.id or log.agent_id
-        kept = []
-        for i in p.ready:
-            ahead = _reserved_for(repo, st, cfg, i, me, list(i.globs), live, now)
-            if ahead is None:
-                kept.append(i)
-            else:
-                p.blocked.append(
-                    Blocked(i.id, "conflict", _reserved_msg(i.id, ahead, cfg), [ahead.item])
-                )
-        p.ready[:] = kept
+        _hold_reserved(repo, st, cfg, p, cfg.agent.id or log.agent_id)
         data["ready"] = [plain(i) for i in p.ready]
         data["blocked"] = [plain(b) for b in p.blocked]
     if p.ready:
         return O.ok("next", **data)
     return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
+
+
+def _hold_reserved(repo: Path, st, cfg, p, me: str) -> None:
+    """Take what is held for a waiter in line off the offer, in place.
+
+    `claim` would refuse it, so `next` must not offer it. A slot it frees goes to the
+    next item the parallelism cap held back (`plan` trimmed the ready list to the free
+    slots, and a reserved item is not a claim that will use one).
+    """
+    from ..core.schedule import Blocked
+
+    now = time.time()
+    live = st.active_leases(now, cfg.lease.grace_s)
+    slots = len(p.ready)
+    kept = []
+    for i in [*p.ready, *(st.items[c] for c in p.capped if c in st.items)]:
+        if len(kept) >= slots:
+            break
+        ahead = _reserved_for(repo, st, cfg, i, me, list(i.globs), live, now)
+        if ahead is None:
+            kept.append(i)
+            continue
+        if i in p.ready:
+            p.blocked.append(
+                Blocked(i.id, "conflict", _reserved_msg(i.id, ahead, cfg), [ahead.item])
+            )
+    promoted = {i.id for i in kept if i.id in p.capped}
+    p.blocked[:] = [b for b in p.blocked if b.item not in promoted]
+    p.capped[:] = [c for c in p.capped if c not in promoted]
+    p.ready[:] = kept
 
 
 #: How many ids under an unknown `--phase` prefix the refusal names before "and N more".

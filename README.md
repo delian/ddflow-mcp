@@ -2208,7 +2208,9 @@ the oldest waiter could claim its item right now, a younger or unqueued claim of
 overlapping file is refused with exit 3: `TC is reserved for agent-b (waiting since
 14:02:11Z for TB, which needs the same files); their place is held for 300s after they could
 claim`. `next` lists such an item as blocked instead of offering it, and `wait --item` stays
-blocked on it. Only the waiter's own claim passes, and it spends the place.
+blocked on it. The waiter's own claim passes, and it spends the place. This is a
+best-effort queue, not a lock: the registry is checked when a claim is asked, not inside the
+lease transaction, so two claims landing in the very same instant at a release can still race.
 
 The rule cannot hold anyone up for long: a waiter whose process died or whose wait deadline
 passed is dead, and blocks nobody; a waiter that was woken and does not come back loses its
