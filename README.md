@@ -2904,7 +2904,9 @@ part that matters.
   `ddflow gate skip <id> docs --reason "..."` (or `gate record <id> docs --outcome
   passed --evidence "<section>"`). `[enforce] readme_with_code` picks the severity:
   `warn` (default), `block` (refuses `complete`) or `off`. Test-only and docs-only
-  changes and ddflow's own event-log commits (`.ddflow/**`) are never reported. It is a
+  changes (a `tests/` directory, `test_*.py`) and ddflow's own event-log commits
+  (`.ddflow/**`) are never reported; when git cannot say what the task changed, `complete`
+  says the check could not run (a warning, never a block). It is a
   check, not a pipeline gate, so a task with nothing to document is not asked for a
   `docs` outcome; the phase-level `docs` gate is unchanged.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —

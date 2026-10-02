@@ -146,7 +146,9 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     readme = readme_report(state, cfg, item_id, repo=repo)
     if readme:
-        (v.blockers if cfg.enforce.readme_with_code == "block" else v.warnings).append(readme)
+        # "Could not run" is never a blocker: only a README that is known to be missing is.
+        blocks = cfg.enforce.readme_with_code == "block" and readme != README_UNKNOWN
+        (v.blockers if blocks else v.warnings).append(readme)
 
     cwd, landed = _tree_being_completed(repo, it)
     for note in G.stale_evidence_detail(state, cfg, item_id, cwd, landed=landed):
@@ -163,6 +165,10 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     return v
 
 
+README_UNKNOWN = (
+    "README check could not run: no diff for this task (no worktree, branch or landed "
+    "commit git can read), so whether the README moved is unknown."
+)
 README_REMEDY = (
     "README not updated: record the section you changed, or "
     "`ddflow gate skip <id> docs --reason ...`"
@@ -189,16 +195,22 @@ def readme_report(state: State, cfg: Config, item_id: str, *, repo: Path) -> str
     docs = it.gates.get("docs")
     if docs and docs.outcome in ("passed", "skipped") and (docs.reason or docs.evidence):
         return ""
-    changed = changed_paths(repo, it, cfg)
-    if not changed:
-        return ""
+    changed = changed_paths(repo, it)
+    if changed is None:
+        return README_UNKNOWN
     code = [
         p for p in changed if is_shared(p, cfg.enforce.readme_code_globs) and not _is_test_path(p)
     ]
-    if not code or any(is_shared(p, cfg.enforce.readme_files) for p in changed):
+    if not code or any(_is_readme(p, cfg.enforce.readme_files) for p in changed):
         return ""
     more = f" (+{len(code) - 3} more)" if len(code) > 3 else ""  # noqa: PLR2004
     return f"{README_REMEDY}. Changed: {', '.join(code[:3])}{more}."
+
+
+def _is_readme(path: str, files: list[str]) -> bool:
+    """Anchored at the root: git's slashless pattern matches at any depth, which made
+    `docs/README.md` count as the project's README."""
+    return is_shared(path, [f if f.startswith("/") else f"/{f}" for f in files])
 
 
 def _is_test_path(path: str) -> bool:
@@ -213,9 +225,9 @@ def _is_test_path(path: str) -> bool:
     )
 
 
-def changed_paths(repo: Path, it, cfg: Config) -> list[str]:
+def changed_paths(repo: Path, it) -> list[str] | None:
     """The paths the item changed: what landed (`landed_before..landed_after`), or before
-    it lands its worktree (or, with none, its branch) against its base. Empty when git cannot say."""
+    it lands its worktree (or, with none, its branch) against its base. None when git cannot say -- never an empty \"nothing changed\"."""
     from ..infra import worktree as W
     from . import testselect as TS
 
@@ -223,17 +235,16 @@ def changed_paths(repo: Path, it, cfg: Config) -> list[str]:
         out = W.git_paths(
             repo, "diff", "--name-only", "--no-renames", it.landed_before, it.landed_after
         )
-        return sorted(out or ())
+        return None if out is None else sorted(out)
     base = it.base or W.default_branch(repo)
     path = W.load_path(repo, it.worktree) if it.worktree else None
     if path and path.is_dir():
-        return TS.changed_files(path, base) or []
+        return TS.changed_files(path, base)
     # Claimed --no-worktree: the work is a branch in a tree that is not ours to read.
     if it.branch and W.rev(repo, it.branch):
-        return sorted(
-            W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{base}...{it.branch}") or ()
-        )
-    return []
+        out = W.git_paths(repo, "diff", "--name-only", "--no-renames", f"{base}...{it.branch}")
+        return None if out is None else sorted(out)
+    return None
 
 
 def _tree_being_completed(repo: Path, it) -> tuple[Path, str]:
