@@ -125,12 +125,27 @@ def test_the_waiters_own_claim_passes_and_spends_the_place(proj):
 
 
 def test_waiters_on_disjoint_files_never_block_each_other(proj):
-    _queue(proj, B, "TB", time.time() - 120)  # needs src/mcp.py
+    _queue(proj, B, "TB", time.time() - 120)  # B needs src/mcp.py
+    _queue(proj, "agent-d", "TD", time.time() - 500)  # D, older still, needs src/other.py
     assert A.release(proj, "HOT", agent=HOLDER).ok
-    assert _claim(proj, "TD", C).ok, "TD writes src/other.py: nothing is reserved on it"
-    # And the reverse: a waiter for TD does not hold up TC's claim of mcp.py once B has it.
-    _queue(proj, "agent-d", "TD", time.time() - 500)
-    assert _claim(proj, "TB", B).ok
+    # Both waiters could claim now. C wants mcp.py: only B stands ahead of it, not D.
+    out = _claim(proj, "TC", C)
+    assert f"reserved for {B}" in out.reason and "agent-d" not in out.reason
+    # And a claimant of other.py is held for D, not for B.
+    out = _claim(proj, "TD", "agent-e")
+    assert "reserved for agent-d" in out.reason and B not in out.reason
+
+
+def test_a_waiter_held_back_by_an_older_one_reserves_nothing(proj):
+    """B is first for TB; TX needs a file TB also needs. TX's waiter is behind B, so a
+    claimant of an unrelated-to-B file that overlaps only TX is not held for it."""
+    run_cli(proj, "task", "add", "TX", "--globs", "src/mcp.py,src/x.py")
+    run_cli(proj, "task", "add", "TY", "--globs", "src/x.py")
+    _queue(proj, B, "TB", time.time() - 300)  # first, needs mcp.py
+    _queue(proj, "agent-x", "TX", time.time() - 200)  # behind B: overlaps TB on mcp.py
+    assert A.release(proj, "HOT", agent=HOLDER).ok
+    # TY shares only x.py with TX, and TX cannot be claimed while B is ahead of it.
+    assert _claim(proj, "TY", C).ok
 
 
 def test_a_waiter_still_behind_another_holder_reserves_nothing(proj):
@@ -252,3 +267,26 @@ def test_next_backfills_the_slot_a_reserved_item_gives_up(proj):
     assert out.exit == O.OK, out.reason
     offered = [i["id"] for i in out.data["ready"]]
     assert offered == ["TD"], offered
+
+
+def test_wait_for_anything_agrees_with_next_when_a_slot_is_freed(proj):
+    (proj / ".ddflow" / "config.toml").write_text("[schedule]\nmax_parallel_tasks = 1\n")
+    _queue(proj, B, "TB", time.time() - 120)
+    assert A.release(proj, "HOT", agent=HOLDER).ok
+    out = A.wait(proj, timeout_s=0, agent=C)
+    assert out.exit == O.OK and out.data["ready"] == ["TD"], out.data
+
+
+def test_a_refusal_while_woken_renews_the_same_place(proj):
+    p = _wait_until_woken(proj, B, "TB")
+    assert A.release(proj, "HOT", agent=HOLDER).ok
+    p.wait(30)
+    (before,) = WT.live_waiters(proj)
+    WT.queue(proj, B, "TB", waiting_on=["X"], reason="again", window_s=900)
+    (after,) = WT.live_waiters(proj)  # still ONE place, and it is the original one
+    assert after.since == before.since and after.until > before.until
+    assert after.path == before.path
+
+
+def test_a_woken_registration_without_a_deadline_does_not_live_forever():
+    assert not WT.Waiter(agent="x", item="T", woken=True, until=0.0).live(1e12)

@@ -80,7 +80,7 @@ class Waiter:
         if self.until and now > self.until:
             return False
         if self.woken:
-            return True
+            return bool(self.until)  # no process to fall back on: only a deadline lapses it
         if self.host and self.host != socket.gethostname():
             # Another machine sharing the checkout (NFS). Its pid means nothing here, so
             # the deadline is the only evidence -- and it has not passed.
@@ -197,9 +197,13 @@ def queue(
         old = json.loads(path.read_text("utf-8"))
         if float(old["until"]) > now:  # a lapsed place is gone: the next refusal re-joins
             since = float(old["since"])
-    # A live `wait` of the same agent for the same item already holds this place.
+    # A place the agent already holds for this item (a live `wait`, or a wait that woke
+    # and has not been claimed on yet) is the place: renew it, never start a younger one.
     for w in live_waiters(repo, now):
-        if w.agent == agent and w.item == item and not w.woken:
+        if w.agent == agent and w.item == item:
+            if w.woken:
+                w.until = now + window_s
+                _write(w)
             return
     w = Waiter(
         agent=agent,

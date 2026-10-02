@@ -315,6 +315,8 @@ def _judge_any(
 
     others = {i: lz for i, lz in live.items() if lz.holder != me}
     p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me)
+    if repo is not None and p.ready and cfg.lease.waiter_reservation_s > 0:
+        _hold_reserved(repo, st, cfg, p, me)  # the same offer `next` makes
     out: dict[str, Any] = {
         "why": "",
         "waiting_on": [],
@@ -542,7 +544,9 @@ def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now:
             continue
         if CF.line_key(st, target, cfg) != CF.line_key(st, it, cfg):
             continue
-        if _claim_blocker(st, cfg, target, w.agent, live, now, fair=False) is not None:
+        # Reservation-aware too: a waiter held back by an even older one reserves nothing.
+        # Terminates: asked as `w.agent`, only waiters OLDER than `w` stand ahead of it.
+        if _claim_blocker(st, cfg, target, w.agent, live, now, repo=repo) is not None:
             continue  # still behind another holder: nothing to keep free for it yet
         return w
     return None
