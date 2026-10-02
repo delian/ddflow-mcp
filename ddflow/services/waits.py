@@ -175,7 +175,9 @@ def mark_woken(w: Waiter, window_s: float) -> None:
 def _queue_path(repo: Path, agent: str, item: str) -> Path:
     # Sanitised for the filesystem, then keyed by a hash of the exact pair: two pairs that
     # sanitise alike ("a/b" and "a_b") must not share one place in line.
-    digest = hashlib.sha1(f"{agent}\0{item}".encode(), usedforsecurity=False).hexdigest()[:10]
+    digest = hashlib.sha1(
+        f"{agent}\0{item}".encode("utf-8", "surrogateescape"), usedforsecurity=False
+    ).hexdigest()[:10]
     safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in f"{agent}-q-{item}")
     return _dir(repo) / f"{safe[:80]}-{digest}.json"
 
@@ -241,13 +243,13 @@ def drop_queue(repo: Path, agent: str, item: str) -> None:
 
 def take_place(repo: Path, agent: str, item: str) -> float:
     """When ``agent`` joined the line for ``item`` (its earliest live place), or 0.0 for
-    "now". A place held by a refused claim is handed to the wait that follows it, so
-    typing `wait` never sends an agent to the back of a line it has stood in for an
-    hour."""
+    "now". A place held by a refused claim is handed to the wait that follows it (the
+    wait carries this ``since`` and then `drop_queue`s the old record, in that order, so
+    there is no moment with no place on disk), so typing `wait` never sends an agent to
+    the back of a line it has stood in for an hour."""
     if not item:
         return 0.0
     since = [w.since for w in live_waiters(repo) if w.agent == agent and w.item == item]
-    drop_queue(repo, agent, item)
     return min(since) if since else 0.0
 
 
