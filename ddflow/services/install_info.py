@@ -106,12 +106,22 @@ def _editable_record(root: Path) -> dict | None:
     return None
 
 
+def _is_checkout(root: Path, dist) -> bool:
+    """A checkout, not an install: outside site-packages AND no real dist-info beside
+    the package. A build's `*.egg-info` in a checkout does not make it an install; a
+    `*.dist-info` (an installer wrote it, e.g. `pip install --target`) does."""
+    if not running_from_source(root):
+        return False
+    path = getattr(dist, "_path", None)
+    return not (path is not None and str(path).endswith(".dist-info"))
+
+
 def installed_from_index() -> bool:
     """True when this installation came from a package index, so `uvx ddflow-mcp`
     reaches the same project. No distribution metadata is not evidence of an index."""
-    if running_from_source(_paths.package_parent()):
-        return False  # a checkout is never an index install, whatever egg-info it carries
     dist = own_distribution()
+    if _is_checkout(_paths.package_parent(), dist):
+        return False  # a checkout is never an index install, whatever egg-info it carries
     return dist is not None and _direct_url(dist) is None
 
 
@@ -178,8 +188,8 @@ def install_info(root: Path | None = None) -> InstallInfo:
     """Describe the running ddflow. `root` is the directory holding the `ddflow`
     package (default: where it was imported from)."""
     root = Path(root) if root is not None else _paths.package_parent()
-    from_source = running_from_source(root)
     dist = own_distribution(root)
+    from_source = _is_checkout(root, dist)
     version = _version(dist)
     record = _direct_url(dist)
     if from_source and record is None:
