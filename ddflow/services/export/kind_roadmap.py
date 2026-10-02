@@ -3,7 +3,9 @@
 A phase is in NOW when any of its tasks is running or in review, NEXT when it has an open
 task nothing blocks, LATER when every open task waits on something (a dependency of its
 own or of an ancestor, or the blocked state), and DONE (a count only) when all its tasks
-are. Abandoned tasks are not counted. Pure over the Query: built from the single-pass
+are. A phase with no live tasks is DONE when its own state says so, else NEXT (nothing
+waits on it) or LATER (it names a dependency not met). A dependency in review with a branch
+counts as met, the scheduler's default stacking policy. Abandoned tasks are not counted. Pure over the Query: built from the single-pass
 children index, so a log of thousands of items renders in milliseconds.
 """
 
@@ -11,11 +13,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ...core.model import ABANDONED, BLOCKED, DONE, OPEN, REVIEW, RUNNING, Item, State
+from ...core.model import ABANDONED, BLOCKED, DONE, REVIEW, RUNNING, Item, State
 from ...core.schedule import inherited_deps
 from . import registry
 from .frame import one_line
-from .query import Query
+from .query import ExportError, Query
 
 _LANE_LABELS = (
     ("now", "Now", "work in flight"),
@@ -32,7 +34,7 @@ def _met(state: State, dep: str) -> bool:
     if it is None or it.removed:
         seen = state.external.get(dep)
         return bool(seen and seen.get("state") == DONE)
-    if it.state == DONE:
+    if it.state == DONE or (it.state == REVIEW and it.branch):
         return True
     if it.kind == "phase":
         kids = [t for t in state.tasks(it.id) if t.state != ABANDONED]
@@ -61,22 +63,29 @@ def _task_row(q: Query, t: Item) -> dict[str, Any]:
 
 
 def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
+    if f.phase and (q.item(f.phase) is None or q.item(f.phase).kind != "phase"):
+        raise ExportError(f"--phase {f.phase!r}: no such phase", registry.EXIT_REFUSED)
     lanes: dict[str, list[dict[str, Any]]] = {k: [] for k in _LANES}
     done = 0
+    open_tasks = 0
     for p in q.phases():
         if f.phase and p.id != f.phase:
             continue
         tasks = [t for t in q.tasks_under(p.id) if t.state != ABANDONED]
         n_done = sum(1 for t in tasks if t.state == DONE)
-        if tasks and n_done == len(tasks):
+        if (tasks and n_done == len(tasks)) or (not tasks and p.state == DONE):
             done += 1
             continue
         rows = [_task_row(q, t) for t in tasks if t.state != DONE]
+        open_tasks += len(rows)
+        own_waits = waits_on(q.state, p) if not rows else []
         # tasks_under is in item_key order (priority, id): the lane's own order is stable.
         if any(r["status"] in (RUNNING, REVIEW) for r in rows):
             lane = "now"
         elif any(r["status"] == "ready" for r in rows):
             lane = "next"
+        elif not rows and not own_waits:
+            lane = "next"  # an empty phase nothing waits on is not blocked
         else:
             lane = "later"
         lanes[lane].append(
@@ -86,7 +95,7 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
                 "done": n_done,
                 "total": len(tasks),
                 "tasks": rows,
-                "waits_on": waits_on(q.state, p) if not rows else [],
+                "waits_on": own_waits,
             }
         )
     cut = f.limit or 0
@@ -101,7 +110,7 @@ def _data(q: Query, f: registry.Filters) -> dict[str, Any]:
         ],
         "done_phases": done,
         "hidden_phases": hidden,
-        "open_tasks": sum(1 for t in q.tasks() if t.state in (OPEN, BLOCKED, RUNNING, REVIEW)),
+        "open_tasks": open_tasks,
     }
 
 

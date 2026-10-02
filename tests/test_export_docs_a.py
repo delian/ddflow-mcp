@@ -55,8 +55,13 @@ class Log:
         self.add("bug.invalid", bid, {"reason": reason}, _ts(day))
 
     def query(self, reverse: bool = False) -> query.Query:
-        evs = list(reversed(self.events)) if reverse else list(self.events)
-        return query.build(sorted(evs, key=lambda e: e.sort_key()))
+        q = query.build(sorted(self.events, key=lambda e: e.sort_key()))
+        if reverse:  # the same state with every dict in the opposite fold order
+            st = q.state
+            st.items = dict(reversed(st.items.items()))
+            st.bugs = dict(reversed(st.bugs.items()))
+            q = query.Query(st, q.events)
+        return q
 
 
 def road_log() -> Log:
@@ -133,6 +138,8 @@ def test_roadmap_is_deterministic_across_event_order_and_has_no_clock(monkeypatc
     g = road_log()
     docs = [registry.render_document("roadmap", g.query(rev)) for rev in (False, False, True)]
     assert docs[0] == docs[1] == docs[2]
+    q, r = g.query(), g.query(reverse=True)
+    assert list(q.state.items) == list(reversed(list(r.state.items)))  # the order really differs
     assert not frame.hand_edited(docs[0])
 
     def boom():  # a body that read the clock would differ run to run
@@ -140,6 +147,39 @@ def test_roadmap_is_deterministic_across_event_order_and_has_no_clock(monkeypatc
 
     monkeypatch.setattr(time, "time", boom)
     assert registry.render_document("roadmap", g.query()) == docs[0]
+
+
+def test_roadmap_phase_filter_scopes_the_count_and_validates():
+    q = road_log().query()
+    assert _body("roadmap", q, phase="P2").startswith("# Roadmap\n\n1 open tasks.")
+    with pytest.raises(ExportError) as e:
+        _body("roadmap", q, phase="NOPE")
+    assert e.value.code == EXIT_REFUSED
+    with pytest.raises(ExportError):
+        _body("roadmap", q, phase="T1")  # a task is not a phase
+
+
+def test_roadmap_empty_phases_and_dependency_in_review():
+    g = road_log()
+    g.phase("P6", "No tasks yet", 60)
+    g.phase("P7", "Empty but waiting", 70, needs=["P1"])
+    g.task("T8", "P2", "stacks on a review", needs=["T9"])
+    g.task("T9", "P2", "in review")
+    g.add("pr.opened", "T9", {"branch": "feat/x"}, _ts(3))
+    q = g.query()
+    assert q.state.items["T9"].state == "review"
+    q.state.items["T9"].branch = "feat/x"
+    body = _body("roadmap", q)
+    nxt = body.split("## Next", 1)[1].split("## Later", 1)[0]
+    later = body.split("## Later", 1)[1]
+    assert "### P6: No tasks yet (0/0)" in nxt
+    assert "### P7: Empty but waiting (0/0)" in later and "Waits on P1." in later
+    t8 = next(ln for ln in body.splitlines() if "`T8`" in ln)
+    assert "blocked" not in t8  # a dependency in review with a branch is stackable
+    g2 = road_log()
+    g2.add("phase.added", "P6", {"title": "Closed empty", "priority": 60}, _ts(1))
+    g2.add("item.completed", "P6", {"kind": "phase"}, _ts(2))
+    assert "2 phases complete (not listed)" in _body("roadmap", g2.query())
 
 
 def test_roadmap_scale_uses_the_index():
@@ -217,6 +257,14 @@ def test_filters_cut_the_unfiltered_document_to_the_slice():
     with pytest.raises(ExportError) as e:
         _body("bugs", q, since="last week")
     assert e.value.code == EXIT_REFUSED
+
+
+def test_bugs_item_scope_accepts_a_task_id():
+    q = bug_log().query()
+    body = _body("bugs", q, phase="T1", status="open")  # what a surface's --item maps to
+    assert "Ba1b2c3d4e5" in body and "Bf6a7b8c9d0" not in body
+    t2 = _body("bugs", q, phase="T2", status="fixed")
+    assert "## Fixed (30)" in t2
 
 
 def test_bugs_filter_by_phase_and_refuse_bad_values():
