@@ -194,3 +194,9 @@ def test_footnotes_and_emphasised_setext_headings(tmp_path):
     )
     report = D.check_docs(repo_with(tmp_path, readme, **{"docs/a.md": "## Second part\n"}))
     assert found(report) == [("link", "LICENSEX"), ("link", "docs/gone.md")]
+
+
+def test_odd_but_valid_links_and_one_letter_flags(tmp_path):
+    readme = "[p](docs/a_(b).md) [q](docs/a%23b.md) [r](docs/a%23b.md#top) `--x`\n"
+    extra = {"docs/a_(b).md": "# T\n", "docs/a#b.md": "# Top\n", "y.py": 'add("--x")\n'}
+    assert D.check_docs(repo_with(tmp_path, readme, **extra)).clean
