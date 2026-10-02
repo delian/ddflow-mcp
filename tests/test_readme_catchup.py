@@ -131,8 +131,11 @@ def test_every_export_kind_is_documented_in_the_readme_and_the_help_topic():
 
 
 def test_every_export_flag_and_verb_the_docs_name_exists():
+    from ddflow.services.export import registry
     from ddflow.surfaces.commands import export as X
 
+    registry.discover()
+    kinds = set(registry._KINDS) | {"replay"}  # `export replay` is documented as refused
     parser = _subcommands(cli.build_parser())["export"]
     known = {o for a in parser._actions for o in a.option_strings}
     bad = []
@@ -142,9 +145,9 @@ def test_every_export_flag_and_verb_the_docs_name_exists():
             for flag in re.findall(r"(?<![\w-])(--[a-z][a-z-]*)(?![\w-])", span):
                 if flag not in known:
                     bad.append(f"{where}: {span} [{flag}]")
-            m = re.match(r"ddflow export (enable|disable|ack|eject|validate)\b", span)
-            if m and m.group(1) not in X.VERBS:
-                bad.append(f"{where}: {span} [verb]")
+            m = re.match(r"ddflow export ([a-z][a-z-]*)", span)
+            if m and m.group(1) not in X.VERBS and m.group(1) not in kinds:
+                bad.append(f"{where}: {span} [not a verb or a kind]")
     assert not bad, f"export flags/verbs the docs name that do not exist: {bad}"
     # and the reverse for verbs: every verb is documented in both places
     for verb in X.VERBS:

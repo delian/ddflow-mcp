@@ -102,8 +102,9 @@ A template sees only its kind's plain data plus `schema_version` and the filters
 (strict undefined, no attribute walks, no `open`, no imports, a time limit). The variables per
 kind are listed in the README, section Exporting documents; the shipped template shows them
 in use. The header and body digest are added around the output, and redaction runs on what the
-template produced. Example, a changelog line that names its item: eject `changelog`, change
-{% raw %}`- {{ e.line }}{{ ... by_date ... }}` to `- {{ e.line }} ({{ e.id }})`{% endraw %}, then `ddflow export
+template produced. Example, a changelog line that names its item: eject `changelog`, edit the
+entry line so it prints the entry's `line` followed by its `id` in parentheses (and drops the
+`by_date` marker; the README shows the exact lines), then `ddflow export
 validate changelog`, `ddflow export changelog --diff` and `ddflow export changelog --update`.
 When a later ddflow changes the shipped default, `validate` and `doctor` note that your copy
 is older; your copy is never touched (copy it aside, `eject --force`, diff, re-apply).
