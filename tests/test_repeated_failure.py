@@ -152,3 +152,9 @@ def test_block_refuses_a_gate_rerun_on_an_unchanged_tree_with_the_evidence(repo)
     # changing the tree is the way out: the next run is allowed
     (repo / "a.py").write_text("print('changed')\n")
     assert run_cli(repo, "gate", "run", "T1", "unit_tests")[0] == FAIL
+
+
+def test_loops_reports_repeated_failures_among_what_it_checked(repo):
+    run_cli(repo, "init")
+    code, out, _ = run_cli(repo, "loops", "--json")
+    assert code == NOTHING and "repeated failures" in out
