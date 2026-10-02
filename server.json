@@ -36,7 +36,6 @@
     {
       "registryType": "oci",
       "identifier": "docker.io/delian/ddflow-mcp:0.1.8",
-      "version": "0.1.8",
       "transport": {
         "type": "stdio"
       },
@@ -58,7 +57,6 @@
     {
       "registryType": "oci",
       "identifier": "ghcr.io/delian/ddflow-mcp:0.1.8",
-      "version": "0.1.8",
       "transport": {
         "type": "stdio"
       },
