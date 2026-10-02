@@ -222,7 +222,7 @@ def test_warn_mode_reports_but_still_imports(repo):
 def test_two_plain_records_of_one_import_are_both_kept(repo):
     """By design (see `_dedupe_found`): only a summary bullet is weighed against the other
     records of its own import. Which of two plain lessons to keep is not decided by read
-    order -- both are proposed, and the queue check catches the pair on the next import."""
+    order -- both are proposed."""
     body = (
         "Always rebase an agent branch onto the current main before merging it, "
         "otherwise the merge silently reverts work another agent landed."
