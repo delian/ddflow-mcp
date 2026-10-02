@@ -185,3 +185,12 @@ def test_anchor_forms(tmp_path):
 def test_a_short_fence_inside_a_long_one_is_code(tmp_path):
     readme = "````\n```\n`ghost_in_code` [x](nothing.md)\n```\n````\n\n`ghost_after`\n"
     assert found(D.check_docs(repo_with(tmp_path, readme))) == [("identifier", "ghost_after")]
+
+
+def test_footnotes_and_emphasised_setext_headings(tmp_path):
+    readme = (
+        "[^1]: See the [install](docs/a.md) page.\n[ref]: docs/a.md#second-part\n"
+        "[bad]: docs/gone.md\n\n**Install**\n===\n\n[i](#install)\n"
+    )
+    report = D.check_docs(repo_with(tmp_path, readme, **{"docs/a.md": "## Second part\n"}))
+    assert found(report) == [("link", "docs/gone.md")]
