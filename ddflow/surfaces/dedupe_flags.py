@@ -107,8 +107,13 @@ def candidate_lines(rows: list[dict[str, Any]], *, numbered: bool = False) -> li
     for i, r in enumerate(rows, 1):
         flags = f"  [{', '.join(r['flags'])}]" if r.get("flags") else ""
         lead = f"{i}. " if numbered else ""
+        # A bug may carry a severity and a scope (`bug found --severity --scope`).
+        marks = "".join(
+            f"  {r[k]}" for k in ("severity", "scope") if r.get(k) not in (None, "", "project")
+        )
         lines.append(
-            f"{lead}{r['id']}  {r['kind']}  {r['score']:.2f}  {r['state']}{flags}\n    {r['title']}"
+            f"{lead}{r['id']}  {r['kind']}  {r['score']:.2f}  {r['state']}{marks}{flags}"
+            f"\n    {r['title']}"
         )
         if r.get("shared"):
             lines[-1] += f"\n    shares: {', '.join(r['shared'])}"

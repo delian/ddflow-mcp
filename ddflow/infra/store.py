@@ -561,7 +561,7 @@ def similar_records(state: State) -> list[dict[str, str]]:
         if not it.removed
     ]
     out += [
-        {"id": b.id, "kind": "bug", "title": "", "body": b.summary, "item": b.item}
+        {"id": b.id, "kind": "bug", "title": b.title, "body": b.summary, "item": b.item}
         for b in state.bugs.values()
     ]
     out += [

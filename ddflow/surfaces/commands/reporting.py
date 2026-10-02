@@ -182,7 +182,16 @@ def _bug_lines(b: dict) -> str:
     """`show`'s answer for a bug id: what it is, where it was found, what fixes it, and
     how it was closed."""
     found = f"found {b['found_at']}" + (f" on {b['item']}" if b["item"] else "")
-    lines = [f"{b['id']} [bug] {b['state']}", f"  {found}"]
+    lines = [f"{b['id']} [bug] {b['state']}"]
+    if b.get("title"):
+        lines.append(f"  title {b['title']}")
+    marks = [f"{k} {b[k]}" for k in ("severity", "scope") if b.get(k) and b[k] != "project"]
+    if marks:
+        lines.append(f"  {'; '.join(marks)}")
+    lines.append(f"  {found}")
+    if b.get("upstream_sent_at"):
+        where = b.get("upstream_url") or b.get("upstream_delivery") or "upstream"
+        lines.append(f"  reported upstream {b['upstream_sent_at']}: {where}")
     if b["fixing"]:
         lines.append(f"  fix task(s): {', '.join(b['fixing'])}")
     if b["mentioned_by"]:
