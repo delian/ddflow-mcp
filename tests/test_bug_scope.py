@@ -63,7 +63,13 @@ def test_reported_upstream_is_registered_and_folds_onto_the_bug():
     sent = Event(
         kind="bug.reported_upstream",
         subject="B1",
-        data={"url": "https://x/1", "number": 7, "delivery": "issue", "sent_at": "t1", "digest": "d"},
+        data={
+            "url": "https://x/1",
+            "number": 7,
+            "delivery": "issue",
+            "sent_at": "t1",
+            "digest": "d",
+        },
         ts="t1",
     )
     b = fold([found, sent]).bugs["B1"]
@@ -77,9 +83,7 @@ def test_the_title_takes_part_in_the_duplicate_match(repo):
         repo, "bug", "found", "--id", "B-a", "--summary", "it breaks", "--new",
         "--title", "worktree adoption refuses existing directory on claim",
     )  # fmt: skip
-    code, out, _ = run_cli(
-        repo, "--json", "similar", "claim refuses an existing worktree directory"
-    )
+    _, out, _ = run_cli(repo, "--json", "similar", "claim refuses an existing worktree directory")
     rows = json.loads(out)
     assert any(r["id"] == "B-a" for r in rows), rows
     hit = next(r for r in rows if r["id"] == "B-a")
