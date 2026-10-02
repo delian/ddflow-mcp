@@ -91,8 +91,18 @@ ddflow claim <ID> --globs "<paths this task will write>"   # [ddflow_claim]
 
 - **exit 0** — you hold the lease and a git worktree was created. `cd` into it. Work
   ONLY there.
-- **exit 3** — refused, and the message names the holder and lists what you could take
-  instead. Re-order; do not wait, and never `--force` past another live agent.
+- **exit 3** — refused, and the message names the holder (or, "reserved for <agent>",
+  the waiter who is next in line for those files) and lists what you could take instead.
+  Re-order, or `ddflow wait --item <ID>` for your place in line (first come, first
+  served; a hot file no longer starves its longest waiter). Never `--force` past another
+  live agent.
+
+**Keep the claim short.** Claim when you are ready to edit, not when you start reading;
+run the gates promptly; and do not sit on file globs while only a slow review or roborev
+is pending -- record that gate `partial`, merge, and read the result later. `heartbeat`,
+`release` and `brief` name who waits on you: that is your cue to finish. Releasing globs
+before the merge is deliberately not a command: the next agent would edit files whose
+unmerged changes then conflict at merge.
 
 Renew during long work: `ddflow heartbeat <ID>` (interval: `lease.heartbeat_s`).
 

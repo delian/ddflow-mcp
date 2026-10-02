@@ -740,7 +740,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 139 knobs.
+cadences, and the rest of the 140 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -2235,6 +2235,32 @@ narrower driver the project set for a file inside the glob: it is written before
 line, so the narrower one keeps winning. Only the committed config writes union lines; a
 `.ddflow/local` edit syncs nothing.
 
+**A contended file is served first come, first served.** An agent refused for an overlap
+used to have no place in line: it polled, and whoever polled first after the release took
+the file, so a hot file (the one every change touches) starved its longest waiter for
+hours. Now a live `ddflow wait --item X`, or a `claim` that was refused and is asked again,
+is a place in line (kept in `.ddflow/local/waits/`, this machine's, never committed). While
+the oldest waiter could claim its item right now, a younger or unqueued claim of an
+overlapping file is refused with exit 3: `TC is reserved for agent-b (waiting since
+14:02:11Z for TB, which needs the same files); their place is held for 300s after they could
+claim`. `next` lists such an item as blocked instead of offering it, and `wait --item` stays
+blocked on it. The waiter's own claim passes, and it spends the place. This is a
+best-effort queue, not a lock: the registry is checked when a claim is asked, not inside the
+lease transaction, so two claims landing in the very same instant at a release can still race.
+
+The rule cannot hold anyone up for long: a waiter whose process died or whose wait deadline
+passed is dead, and blocks nobody; a waiter that was woken and does not come back loses its
+place `[lease].waiter_reservation_s` seconds later (default 300; `0` turns the queue off); a
+waiter still behind another holder, or waiting for files disjoint from yours, reserves
+nothing against you; and the order is strict (older first), so two waiters cannot reserve
+against each other. A refused claim keeps its place as long as it is asked again within the
+window. The holder is told who it holds up: `heartbeat` and `release` name the waiters, and
+`brief` adds a "Waiting on you" section. Releasing globs while only gates are pending is
+deliberately not offered: until the branch is merged another agent editing the same files
+would only meet the conflict at merge. The honest remedy is a short claim: claim when you
+are ready to edit, run the gates promptly, and do not sit on a lease waiting for a slow
+review (record `partial` and merge instead).
+
 **When two clones disagree.** A merge can bring in a rival definition of one id (two
 clones added it) or two claims on one item whose windows overlapped. ddflow records the
 contest instead of letting the later event silently win: `show` prints a `CONTESTED` block
@@ -3181,7 +3207,7 @@ declared once and persists — see
 
 ## Configuration
 
-139 knobs across 18 sections, every one documented in place:
+140 knobs across 18 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

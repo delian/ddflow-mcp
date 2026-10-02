@@ -44,6 +44,8 @@ class LeaseConfig:
     heartbeat_s: int = 300
     grace_s: int = 120
     acquire_timeout_s: int = 30
+    #: How long a waiter keeps its place in line once it could claim (see the knob doc).
+    waiter_reservation_s: int = 300
     reclaim_policy: str = "report"  # report | auto
     #: Paths many items may hold at once (D-shared-globs). See the knob docs below.
     shared_globs: list[str] = field(default_factory=list)
@@ -84,6 +86,11 @@ _doc(
     "lease",
     "reclaim_policy",
     "'report' (default) never steals an expired lease — it names the worktree so a human can rescue in-flight work. 'auto' reclaims it. 'report' exists because a killed agent leaves FINISHED, uncommitted work behind more often than it leaves garbage.",
+)
+_doc(
+    "lease",
+    "waiter_reservation_s",
+    "Claims on a contended file are served first come, first served. A live `ddflow wait` (or a claim refused for an overlap and retried) is a place in line; while a waiter is next and its item could be claimed now, a younger or unqueued claim of an overlapping file is refused as 'reserved for <agent>'. The place lapses this many seconds after the waiter could claim (it woke and did not come back), and at once when its process died or its wait deadline passed, so a dead or slow waiter never blocks anyone for long. 0 turns the queue off: whoever claims first wins.",
 )
 
 

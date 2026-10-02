@@ -28,7 +28,9 @@ holder believe someone is waiting who is not.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
+import math
 import os
 import secrets
 import socket
@@ -65,6 +67,12 @@ class Waiter:
     until: float = 0.0
     pid: int = 0
     host: str = ""
+    #: Deadline-only: valid until ``until`` whatever its process does. Set when a wait
+    #: WAKES (the process then exits, and the agent claims in another one) and for a
+    #: place in line held by a refused `claim` (no process to watch). This is the
+    #: reservation: a place in line that outlives the process that earned it, but only
+    #: for a bounded time.
+    woken: bool = False
     path: str = ""  #: the registration file; not serialised
 
     def live(self, now: float | None = None) -> bool:
@@ -72,6 +80,8 @@ class Waiter:
         now = time.time() if now is None else now
         if self.until and now > self.until:
             return False
+        if self.woken:
+            return bool(self.until)  # no process to fall back on: only a deadline lapses it
         if self.host and self.host != socket.gethostname():
             # Another machine sharing the checkout (NFS). Its pid means nothing here, so
             # the deadline is the only evidence -- and it has not passed.
@@ -149,12 +159,113 @@ def unregister(w: Waiter) -> None:
             Path(w.path).unlink()
 
 
+def mark_woken(w: Waiter, window_s: float) -> None:
+    """Keep ``w``'s place in line for ``window_s`` more seconds, whatever its process does.
+
+    A wait returns the moment its item is claimable and exits; the agent claims a moment
+    later, from another process. Dropping the registration at the return would leave that
+    gap -- the very moment the queue exists for -- open to whoever polls first.
+    """
+    if not w.path:
+        return
+    # Not waiting any more, so no holder is told it holds this agent up.
+    w.woken, w.waiting_on, w.until = True, [], time.time() + window_s
+    _write(w)
+
+
+def _queue_path(repo: Path, agent: str, item: str) -> Path:
+    # Sanitised for the filesystem, then keyed by a hash of the exact pair: two pairs that
+    # sanitise alike ("a/b" and "a_b") must not share one place in line.
+    digest = hashlib.sha1(
+        f"{agent}\0{item}".encode("utf-8", "surrogateescape"), usedforsecurity=False
+    ).hexdigest()[:10]
+    safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in f"{agent}-q-{item}")
+    return _dir(repo) / f"{safe[:80]}-{digest}.json"
+
+
+def queue(
+    repo: Path, agent: str, item: str, *, waiting_on: list[str], reason: str, window_s: float
+) -> None:
+    """Hold ``agent``'s place in line for ``item`` after a refused claim.
+
+    A claim that is refused and tried again is a waiter that never typed `wait`: it polls.
+    Its place is its FIRST refusal; each refusal renews the deadline, so it stays in line
+    while it keeps asking and loses the place ``window_s`` after it stops. Advisory: an
+    unwritable registry means no queue, never a failed claim.
+    """
+    path = _queue_path(repo, agent, item)
+    now = time.time()
+    since = now
+    with contextlib.suppress(OSError, ValueError, TypeError, KeyError):
+        old = json.loads(path.read_text("utf-8"))
+        if float(old["until"]) > now:  # a lapsed place is gone: the next refusal re-joins
+            since = float(old["since"])
+    # A place the agent already holds for this item (a live `wait`, or a wait that woke
+    # and has not been claimed on yet) is the place: renew it, never start a younger one.
+    for w in live_waiters(repo, now):
+        if w.agent == agent and w.item == item:
+            if w.woken:
+                w.until = now + window_s
+                _write(w)
+            return
+    w = Waiter(
+        agent=agent,
+        item=item,
+        waiting_on=list(waiting_on),
+        reason=reason,
+        since=since,
+        until=now + window_s,
+        woken=True,
+        path=str(path),
+    )
+    w.host = socket.gethostname()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        ignore = path.parent.parent / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("*\n", "utf-8")
+    except OSError:
+        return
+    _write(w)
+
+
+def clear(repo: Path, agent: str, item: str) -> None:
+    """``agent`` got ``item``: every place in line it held for it is spent."""
+    for w in live_waiters(repo):
+        if w.agent == agent and w.item == item:
+            unregister(w)
+
+
+def drop_queue(repo: Path, agent: str, item: str) -> None:
+    """Remove the place a refused claim holds (a `wait` for the item has taken it over)."""
+    with contextlib.suppress(OSError):
+        _queue_path(repo, agent, item).unlink()
+
+
+def take_place(repo: Path, agent: str, item: str) -> float:
+    """When ``agent`` joined the line for ``item`` (its earliest live place), or 0.0 for
+    "now". A place held by a refused claim is handed to the wait that follows it (the
+    wait carries this ``since`` and then `drop_queue`s the old record, in that order, so
+    there is no moment with no place on disk), so typing `wait` never sends an agent to
+    the back of a line it has stood in for an hour."""
+    if not item:
+        return 0.0
+    since = [w.since for w in live_waiters(repo) if w.agent == agent and w.item == item]
+    return min(since) if since else 0.0
+
+
 def _well_formed(w: Waiter) -> bool:
     """Every field the right type. Checked whole, up front: a field that is only wrong
     when USED (`since` in the sort) once broke the read for every waiter beside it."""
 
     def num(v: object) -> bool:
-        return isinstance(v, (int, float)) and not isinstance(v, bool)
+        # Finite: json.loads reads Infinity and NaN, and an infinite `since` never lapses.
+        if not isinstance(v, (int, float)) or isinstance(v, bool):
+            return False
+        try:
+            return math.isfinite(v)
+        except OverflowError:
+            return False  # an integer too large for a float: arithmetic on it would raise
 
     return (
         all(isinstance(v, str) for v in (w.agent, w.item, w.phase, w.reason, w.host))
@@ -164,6 +275,7 @@ def _well_formed(w: Waiter) -> bool:
         and num(w.until)
         and isinstance(w.pid, int)
         and not isinstance(w.pid, bool)
+        and isinstance(w.woken, bool)
     )
 
 
