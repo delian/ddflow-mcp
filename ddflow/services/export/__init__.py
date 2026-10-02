@@ -83,6 +83,7 @@ from .registry import (
     render_document,
     resolve_template,
     shipped_digest,
+    shipped_template,
 )
 
 __all__ = [
@@ -111,5 +112,6 @@ __all__ = [
     "render_document",
     "resolve_template",
     "shipped_digest",
+    "shipped_template",
     "split",
 ]

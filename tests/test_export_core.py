@@ -620,3 +620,47 @@ def test_header_doc_and_version_must_be_parseable():
         with pytest.raises(ValueError):
             frame.frame("x\n", doc, ver)
     assert frame.split(frame.frame("x\n", "my-doc.v2", "0.1.9-rc1"))[0] is not None
+
+
+#: Each of these is a single C-level allocation that no deadline can interrupt; the sandbox
+#: has to refuse it before it runs (found by the critic review: `'x' * 10**10` took 11 s and
+#: 10 GB, `[0] * 10**10`-style lists a minute).
+BOMBS = [
+    "{{ 'x' * 10**10 }}",
+    "{{ 10**10 * 'x' }}",
+    "{{ ([0] * 100000) * 100000 }}",
+    "{{ (range(99999)|list * 100000)|length }}",
+    "{{ 9 ** 99999 }}",
+    "{{ (9 ** 9) ** (9 ** 9) }}",
+    "{{ 2.0 ** 100000 }}",
+    "{{ 'x'|center(10**10) }}",
+    "{{ 'x'|indent(10**10) }}",
+    "{{ 'x'.center(10**10) }}",
+    "{{ 'x'.ljust(10**10) }}",
+    "{{ '%99999999999d'|format(1) }}",
+    "{{ '%99999999999d' % 1 }}",
+    "{{ '{:>99999999999}'.format(1) }}",
+    "{{ '%*d' % (10, 1) }}",
+    "{{ '{:{}}'.format(1, 10**10) }}",
+    "{{ range(10**12)|sum }}",
+    "{% for i in range(99999) %}{{ 'x' * 99999 }}{% endfor %}",  # output ceiling
+]
+
+
+@pytest.mark.parametrize("src", BOMBS)
+def test_allocation_bombs_are_refused_fast(src):
+    start = time.perf_counter()
+    with pytest.raises(ExportError) as e:
+        registry.render(src, {}, timeout_s=5)
+    assert e.value.code == EXIT_UNAVAILABLE
+    assert time.perf_counter() - start < 4, src
+
+
+def test_ordinary_sized_operators_still_work():
+    r = registry.render
+    assert r("{{ 'ab' * 3 }}|{{ 2 ** 10 }}|{{ '%s-%d' % ('a', 2) }}", {}) == "ababab|1024|a-2\n"
+    assert (
+        r("{{ 'x'|center(5) }}|{{ 'a\nb'|indent(2) }}|{{ '{:>4}'.format(7) }}", {})
+        == "  x  |a\n  b|   7\n"
+    )
+    assert r("{{ '%5.2f'|format(3.14159) }}", {}) == " 3.14\n"
