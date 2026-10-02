@@ -242,7 +242,8 @@ the same bug shipping twice.
 ddflow cadence                                   # [ddflow_cadence]
 ```
 
-Exit 2 means none due. When one is due, run it and record it with `--ran <name>`.
+Exit 2 means none due. `complete <phase>` refuses while a phase-counted pass
+(architecture review, mutation tests, lessons) is overdue. When one is due, run it and record it with `--ran <name>`.
 These are the passes a per-task gate structurally cannot do: integration tests,
 architecture review, mutation testing, a duplication sweep across files, lessons
 compression.
@@ -254,6 +255,9 @@ compression.
 When `ddflow next --phase <NAME>` reports no remaining tasks:
 
 ```sh
+ddflow cadence                                   # run every phase-counted pass that is due,
+                                                 # then `cadence --ran <name>` (or record a
+                                                 # skip: `--ran <name> --note "skipped: ..."`)
 ddflow gate run <NAME> unit_tests                # the WHOLE suite, in parallel, not a slice
 ddflow gate record <NAME> bug_hunt   --outcome passed --evidence "..."
 ddflow gate record <NAME> dedupe     --outcome passed --evidence "..."
