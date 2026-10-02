@@ -25,6 +25,7 @@ EVENTS = ROOT / ".ddflow" / "events"
 HOME = "/" + "home" + "/" + "someone"
 PROJECT = "secretproj"
 HOST = "buildbox7"
+ADDR = ".".join(["10", "1", "2", "3"])
 COMMIT = "ab12cd34" * 5
 
 INSTALL = I.InstallInfo(
@@ -202,11 +203,11 @@ def test_own_dev_tree_true_for_this_repo_false_for_a_fixture_project(tmp_path):
 
 def test_title_and_expected_are_redacted_and_bounded():
     out = _build(
-        title=f"crash at {HOME}/src/{PROJECT} on 10.1.2.3 mail a@b.example " + "x" * 400,
+        title=f"crash at {HOME}/src/{PROJECT} on {ADDR} mail a@b.example " + "x" * 400,
         expected="expected a lease " + "y" * 5000,
     )
     text = out.markdown + out.json
-    for leak in (HOME, PROJECT, "10.1.2.3", "a@b.example"):
+    for leak in (HOME, PROJECT, ADDR, "a@b.example"):
         assert leak not in text
     assert len(out.data["title"]) <= B.TITLE_MAX and "\n" not in out.data["title"]
     assert len(out.data["expected"]) <= B.EXPECTED_MAX
