@@ -47,16 +47,14 @@ def _probe_paths(repo: Path, glob: str) -> list[str]:
     return hits or [glob]
 
 
-def driver(repo: Path, glob: str) -> str:
-    """The merge driver git applies to EVERY file ``glob`` covers -- `union`, `ours`, ...
-    -- or "" when any of them has none.
+def drivers(repo: Path, glob: str) -> dict[str, str]:
+    """{covered path: the merge driver git applies to it, or ""} for ``glob``.
 
     Asked of git (`git check-attr merge`), not read off the file: patterns match like
     gitignore and the LAST matching line wins across different patterns, so a later
     `*.md merge=ours` overrides `CHANGELOG.md merge=union` (review finding). A bare
-    `merge` (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; so is a
-    git that cannot answer. When the covered files disagree, `union` is reported only if
-    all are union, and otherwise the first other driver found.
+    `merge` (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; a git
+    that cannot answer gives every path "".
     """
     from ..infra import proc as P
 
@@ -67,12 +65,177 @@ def driver(repo: Path, glob: str) -> str:
         text=True,
     )
     if r.returncode != 0:
+        return dict.fromkeys(paths, "")
+    out: dict[str, str] = {}
+    for ln in r.stdout.splitlines():
+        if not ln.strip():
+            continue
+        path, _attr, value = ln.rsplit(": ", 2)
+        out[path] = "" if value in ("unspecified", "set", "unset") else value
+    return out or dict.fromkeys(paths, "")
+
+
+def driver(repo: Path, glob: str) -> str:
+    """The merge driver ``glob`` has as a whole: "" when any covered file has none;
+    `union` when union applies to some file -- the rest carry narrower drivers the
+    project set, which win by design (operator 2026-10-01); otherwise the project's
+    driver for all of it."""
+    values = list(drivers(repo, glob).values())
+    if not values or "" in values:
         return ""
-    values = [ln.rsplit(": ", 1)[-1] for ln in r.stdout.splitlines() if ln.strip()]
-    if not values or any(v in ("unspecified", "set", "unset") for v in values):
-        return ""
-    others = [v for v in values if v != "union"]
-    return others[0] if others else "union"
+    if "union" in values:
+        return "union"
+    return values[0]
+
+
+def _split_pattern(row: str) -> tuple[str, list[str]]:
+    """(pattern, attributes) of one `.gitattributes` line, as git reads it.
+
+    A pattern may be C-quoted (`"docs/My File.md" merge=ours`) or hold `\\ ` escapes;
+    a plain `split()` cut it at the space and the rule was never recognised (review).
+    """
+    row = row.strip()
+    if row.startswith('"'):
+        out, i = [], 1
+        while i < len(row) and row[i] != '"':
+            if row[i] == "\\" and i + 1 < len(row):
+                i += 1
+            out.append(row[i])
+            i += 1
+        return "".join(out), row[i + 1 :].split()
+    out, i = [], 0
+    while i < len(row) and not row[i].isspace():
+        if row[i] == "\\" and i + 1 < len(row):
+            i += 1
+        out.append(row[i])
+        i += 1
+    return "".join(out), row[i:].split()
+
+
+def _merge_rows(rows: list[str]) -> list[tuple[int, str, str]]:
+    """(index, pattern, merge value) of every `.gitattributes` line setting a merge
+    attribute; the value is the driver after `merge=`, or the bare form itself."""
+    out = []
+    for k, row in enumerate(rows):
+        if not row.strip() or row.lstrip().startswith("#"):
+            continue
+        pattern, attrs = _split_pattern(row)
+        for a in attrs:
+            if a.startswith("merge="):
+                out.append((k, pattern, a.split("=", 1)[1]))
+            elif a in ("merge", "-merge", "!merge"):
+                out.append((k, pattern, a))
+    return out
+
+
+def _witness(pattern: str) -> str:
+    """A stand-in path for ``pattern``: `**` -> two segments, `*`/`?`/a class -> U+0001,
+    which no literal holds. It is matched by `*`, `?`, `**` and a NEGATED class, NOT by a
+    positive class -- so a pattern with one may read "not inside" a true superset, and
+    the caller then writes an inert union line rather than a wrong one. Read as a path, `docs/**` was matched by `docs/*`
+    (a `*` matches `**`); a plain `x` was matched by a narrower `docs/x*` (review
+    findings). The stand-in is matched only by wildcards -- including a NEGATED class
+    (`[!x]`), which is why `_relation` treats containment both ways as ambiguous."""
+    import re
+
+    w = re.sub(r"\[[^]]*\]", "\x01", pattern)
+    return w.replace("**", "\x01/\x01").replace("*", "\x01").replace("?", "\x01")
+
+
+def _inside(a: str, b: str) -> bool:
+    """Is every file pattern ``a`` names also named by ``b``? (Judged on a witness of
+    ``a``: exact for literals; for wildcards, a path only another wildcard matches.)"""
+    from ..core.schedule import is_shared
+
+    return a == b or is_shared(_witness(a), [b])
+
+
+def _relation(glob: str, pattern: str) -> str:
+    """ "broader", "narrower" or "" (unknown) for ``pattern`` against ``glob``.
+
+    Containment one way only. Both ways while different (`docs/[!x]*` vs `docs/*`: a
+    negated class matches the stand-in too) is ambiguous, and left to the files that
+    exist (review finding) -- never assumed broader, which wrote no union line at all.
+    """
+    if pattern == glob:
+        return "broader"
+    up, down = _inside(glob, pattern), _inside(pattern, glob)
+    if up and not down:
+        return "broader"
+    if down and not up:
+        return "narrower"
+    return ""
+
+
+def _broad_rule(repo: Path, glob: str) -> bool:
+    """Does a `.gitattributes` merge rule cover the WHOLE glob -- the glob itself, or a
+    pattern it falls inside (`*.md` for `docs/*.md`)? Then the project chose for all of
+    it -- by `_relation`, so only one-way containment counts. A narrower rule
+    (`docs/README.md`, `docs/R*.md`) or an ambiguous one chose for part only."""
+    path = Path(repo) / ".gitattributes"
+    rows = path.read_text("utf-8").splitlines() if path.exists() else []
+    return any(_relation(glob, p) == "broader" for _k, p, _v in _merge_rows(rows))
+
+
+def _has_line(repo: Path, line: str) -> bool:
+    path = Path(repo) / ".gitattributes"
+    rows = path.read_text("utf-8").splitlines() if path.exists() else []
+    return any(" ".join(r.split()) == line for r in rows)
+
+
+def _placed(repo: Path, glob: str, line: str) -> tuple[list[str], list[str]]:
+    """(the `.gitattributes` lines now, the lines with ``line`` where it belongs).
+
+    It belongs BEFORE the first line that sets a driver for a NARROWER part of the glob
+    -- some, not all, of the files it covers, or one literal file -- so that line keeps
+    winning (git applies the LAST matching line; operator 2026-10-01: the narrower
+    driver wins). A broader or equal line is not narrower and does not move it. An
+    existing union line after a narrower one -- what 08af811 wrote -- is moved, not
+    duplicated; one already in place is left alone.
+    """
+    from ..core.schedule import is_shared
+
+    path = Path(repo) / ".gitattributes"
+    rows = path.read_text("utf-8").splitlines() if path.exists() else []
+    norm = [" ".join(r.split()) for r in rows]
+    have = norm.index(line) if line in norm else -1
+    covered = _probe_paths(repo, glob)
+    last_broad, narrower = -1, []
+    for k, pattern, value in _merge_rows(rows):
+        if k == have:
+            continue
+        # By the patterns themselves first (`_inside`): `docs/R*.md` is narrower than
+        # `docs/*.md` whatever files exist today (review finding), `*.md` is broader. A
+        # broader UNION rule changes nothing for us wherever our line sits, so it does
+        # not pull the line after it.
+        rel = _relation(glob, pattern)
+        if rel == "broader":
+            if value != "union":
+                last_broad = k
+            continue
+        if rel == "narrower":
+            narrower.append(k)
+            continue
+        # Not positively broader: a rule that covers files the glob covers today, or
+        # whose relation is ambiguous, is treated as the project's narrower choice and
+        # keeps winning -- full coverage of TODAY's files is no proof it is broader
+        # (review finding: `docs/[!x]*` over only `docs/guide.md`).
+        ambiguous = _inside(glob, pattern) and _inside(pattern, glob)
+        if ambiguous or any(p == pattern or is_shared(p, [pattern]) for p in covered):
+            narrower.append(k)
+    # A broader line wins over everything before it; the union line must follow the last
+    # one, and precede the first narrower line after it. A narrower line BEFORE the last
+    # broad one was already overridden by it, and moving lines around cannot revive it
+    # without reordering the project's own rules -- which ddflow does not do.
+    after = [k for k in narrower if k > last_broad]
+    target = after[0] if after else None
+    if have != -1 and have > last_broad and (target is None or have < target):
+        return rows, rows  # present, and in place
+    # Indices below are in ``rows``; removing an existing line before them shifts by one.
+    at = target if target is not None else (last_broad + 1 if have != -1 else len(rows))
+    new = [r for k, r in enumerate(rows) if k != have]
+    new.insert(at - (1 if have != -1 and have < at else 0), line)
+    return rows, new
 
 
 def committed_append_only(repo: Path) -> list[str]:
@@ -101,20 +264,24 @@ def sync_attributes(repo: Path) -> list[str]:
     driver; the lines added. A glob holding whitespace is skipped -- a pattern ends at the
     first space -- and `findings` says how to write it.
 
-    Idempotent and append-only (`adopt._append_once`): the project's own lines stay, and a
-    glob already given a merge DRIVER is left alone -- the project chose one. Reads the
+    Idempotent; the project's own lines stay and keep working: the union line goes before
+    any narrower line that sets a driver for a file inside the glob (the narrower driver
+    wins). A glob whose WHOLE extent a project rule already covers (the glob itself, or a
+    broader pattern) is left alone when that rule is not union -- the project chose; a
+    rule covering only part of the glob does not stop the union line. Reads the
     committed config (`committed_append_only`), never the local layer.
     """
-    from .adopt import _append_once
-
     added: list[str] = []
     for glob in committed_append_only(repo):
         if any(ch.isspace() for ch in glob):
             continue  # one pattern per line, ended by whitespace: doctor says how to write it
-        if driver(repo, glob):
-            continue  # union already, or a driver the project chose -- doctor says which
         line = union_line(glob)
-        if _append_once(Path(repo) / ".gitattributes", frozenset({line}), line + "\n"):
+        d = driver(repo, glob)
+        if d and _broad_rule(repo, glob) and (d != "union" or not _has_line(repo, line)):
+            continue  # the project's own rule covers the whole glob: its call, or union already
+        rows, placed = _placed(repo, glob, line)
+        if placed != rows:
+            (Path(repo) / ".gitattributes").write_text("\n".join(placed) + "\n", "utf-8")
             added.append(line)
     return added
 
@@ -123,7 +290,8 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
     """(problems, notes) for doctor.
 
     A PROBLEM: an append-only glob whose `merge=union` line is missing -- two items'
-    lines will conflict at merge, the exact thing the setting promises not to happen.
+    lines will conflict at merge, the exact thing the setting promises not to happen --
+    or whose union line sits after a narrower driver the project set, overriding it.
     A NOTE: a shared (generated) glob with no merge attribute -- not wrong, but every
     parallel merge of it will conflict until someone regenerates it.
     """
@@ -152,7 +320,16 @@ def findings(repo: Path, cfg: Config) -> tuple[list[str], list[str]]:
             )
             continue
         d = driver(repo, g)
-        if not d:
+        rows, placed = (
+            _placed(repo, g, union_line(g)) if _has_line(repo, union_line(g)) else ([], [])
+        )
+        if d == "union" and placed != rows:
+            problems.append(
+                f"[lease] append_only_globs has {g!r}, and its '{union_line(g)}' line comes "
+                f"AFTER a narrower merge driver the project set, overriding it. `ddflow "
+                f"init` (or setting the knob again) moves it before that line; commit it."
+            )
+        elif not d:
             problems.append(
                 f"[lease] append_only_globs has {g!r} but git applies no merge driver to "
                 f"it, so parallel items' lines conflict at merge. `ddflow init` (or setting "
