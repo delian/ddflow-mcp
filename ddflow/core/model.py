@@ -405,6 +405,8 @@ class Lesson:
 #: How a record points at another. `distinct` is a dismissal -- "I looked, these are
 #: different" -- kept so the same pair is not asked about again; the others are links.
 LINK_RELATIONS = ("extends", "duplicate_of", "related", "distinct")
+#: The ones an ADD event can carry as a field (`distinct` is only ever said afterwards).
+ADD_RELATIONS = ("extends", "duplicate_of", "related")
 
 
 @dataclass
@@ -1835,7 +1837,7 @@ def _linking(handler: Callable[[State, Event], None]) -> Callable[[State, Event]
     def handle(st: State, ev: Event) -> None:
         handler(st, ev)
         d = ev.data
-        for relation in ("extends", "duplicate_of", "related"):
+        for relation in ADD_RELATIONS:
             for target in link_targets(d.get(relation)):
                 _link(st, ev, relation, target, "add")
         if isinstance(d.get("dedupe"), dict):
@@ -1863,9 +1865,9 @@ def _h_record_extended(st: State, ev: Event) -> None:
 def _h_link_recorded(st: State, ev: Event) -> None:
     """A link made after the record was added, or a 'distinct' dismissal."""
     d = ev.data
-    relation = d.get("relation", "")
-    if relation not in LINK_RELATIONS:
-        return
+    # Recorded as given, even a relation this code does not know: a newer ddflow's new
+    # relation or a typo must stay visible to a reader, not fold to "nothing happened".
+    relation = d.get("relation", "") or "unspecified"
     for target in link_targets(d.get("target")):
         _link(st, ev, relation, target, "later")
 

@@ -175,3 +175,20 @@ def test_the_log_accepts_the_new_kinds_and_replay_survives_a_real_log(repo):
     assert "added words" in out
     st = fold(EventLog(repo, "bob").read_all())
     assert st.links["T1"].extensions[0]["text"] == "added words"
+
+
+def test_an_unknown_relation_is_kept_as_given_not_dropped():
+    st = fold([*BASE, _ev("link.recorded", "T1", 10, relation="supersedes", target="T2", by="a")])
+    assert [(x["relation"], x["target"]) for x in st.links["T1"].links] == [("supersedes", "T2")]
+
+
+def test_replay_notes_links_on_every_replayed_add():
+    steps = replay(
+        [
+            _ev("lesson.recorded", "L1", 3, title="a lesson", rule="r", related="L0"),
+            _ev("research.recorded", "R1", 4, question="q", claim="c", extends="R0"),
+            _ev("decision.recorded", "D1", 5, title="d", duplicate_of="D0"),
+        ]
+    )
+    text = "\n".join(s.text for s in steps)
+    assert "related L0" in text and "extends R0" in text and "duplicate of D0" in text

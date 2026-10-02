@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
-from ..core.model import State, link_targets
+from ..core.model import ADD_RELATIONS, State, link_targets
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 
 
@@ -186,7 +186,7 @@ def _rs_phase(n, ev):
 def _link_note(d: dict) -> str:
     """` [extends T1; related T2]` -- how an add said it relates to what was there."""
     parts = []
-    for relation in ("extends", "duplicate_of", "related"):
+    for relation in ADD_RELATIONS:
         for t in link_targets(d.get(relation)):
             parts.append(f"{relation.replace('_', ' ')} {t}")
     return f" [{'; '.join(parts)}]" if parts else ""
@@ -239,7 +239,7 @@ def _rs_decision(n, ev):
             parts.append(f"{label}: {d[key]}")
     if d.get("globs"):
         parts.append(f"Governs: {', '.join(d['globs'])}")
-    return ReplayStep(n, ev.ts, "decision", "\n\n".join(parts), d.get("item", ""))
+    return ReplayStep(n, ev.ts, "decision", "\n\n".join(parts) + _link_note(d), d.get("item", ""))
 
 
 def _rs_decision_superseded(n, ev):
@@ -259,7 +259,7 @@ def _rs_research(n, ev):
         n,
         ev.ts,
         "research",
-        f"{d.get('question', '')} -> {d.get('claim', '')}",
+        f"{d.get('question', '')} -> {d.get('claim', '')}{_link_note(d)}",
         d.get("item", ""),
         verdict=d.get("verdict", ""),
     )
@@ -267,7 +267,9 @@ def _rs_research(n, ev):
 
 def _rs_lesson(n, ev):
     d = ev.data
-    return ReplayStep(n, ev.ts, "lesson", f"{d.get('title', '')}: {d.get('rule', '')}")
+    return ReplayStep(
+        n, ev.ts, "lesson", f"{d.get('title', '')}: {d.get('rule', '')}{_link_note(d)}"
+    )
 
 
 def _rs_completed(n, ev):
