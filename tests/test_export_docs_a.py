@@ -240,6 +240,17 @@ def test_title_severity_and_scope_render_when_the_record_has_them():
     assert "- `Ba1b2c3d4e5` **Stale entry**: The first is old. [high] [ddflow] _(found" in body
 
 
+def test_default_project_scope_is_not_tagged_but_other_scopes_are():
+    q = bug_log(0).query()
+    b = q.state.bugs["Ba1b2c3d4e5"]
+    b.scope = "project"
+    assert "[project]" not in _body("bugs", q)
+    b.scope = None
+    assert "[None]" not in _body("bugs", q)
+    b.scope = "ddflow"
+    assert "[ddflow]" in _body("bugs", q)
+
+
 def test_filters_cut_the_unfiltered_document_to_the_slice():
     q = bug_log().query()
     full = registry.render_document("bugs", q, max_bytes=0)
