@@ -171,7 +171,7 @@ def test_mcp_complete_records_the_changelog(repo):
     assert "Security" in str(bug_bad["content"]), bug_bad
 
 
-def test_a_later_completion_without_the_key_resets_the_item_field():
+def test_a_later_keyless_event_leaves_a_recorded_line_alone():
     from ddflow.core.events import Event
 
     ok = {"category": "Added", "line": "x", "skip": False}
@@ -179,4 +179,11 @@ def test_a_later_completion_without_the_key_resets_the_item_field():
         Event("item.completed", "T1", {"kind": "task", "changelog": ok}, lamport=1),
         Event("item.completed", "T1", {"kind": "task"}, lamport=2),
     ]
-    assert fold(evs).items["T1"].changelog == {}
+    assert fold(evs).items["T1"].changelog == ok
+    # ... and the fold does not depend on which writer's event sorts last
+    assert fold(evs[::-1]).items["T1"].changelog == ok
+    bugs = [
+        Event("bug.fixed", "B1", {"changelog": {"category": "Fixed", "line": "y"}}, lamport=1),
+        Event("bug.fixed", "B1", {}, lamport=2),
+    ]
+    assert fold(bugs).bugs["B1"].changelog["line"] == "y"
