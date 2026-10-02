@@ -169,7 +169,7 @@ the same implementation, so neither drifts from the other.
 | **see everything about one item or bug** | `ddflow show <id>` (phase, task or bug id) | `ddflow_show` |
 | **see progress / effort** | `ddflow progress` · `ddflow status` · `ddflow board` | `ddflow_progress` · `ddflow_status` · `ddflow_board` |
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
-| **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research` · `ddflow_bug_*` |
+| **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
@@ -423,6 +423,14 @@ that enforces claim-before-you-edit.
   `ddflow://research`.
 - **Prompts** — which a client turns into slash commands. **Tools are things an agent
   calls; prompts are things you invoke.**
+
+**A refused call says so first.** Over MCP a tool that did not do what was asked — a claim
+refused for an overlap (exit 3), or any call whose result would otherwise be its success
+shape in nulls — returns a JSON body whose first key is
+`"refusal": {"reason": ..., "outcome": ..., "exit": ...}`, followed by whatever the
+operation actually said (a refused claim's `alternatives`). Exit 2 ("nothing") keeps its
+declared keys after that lead; a result that fills its declared shape is left as the CLI's
+`--json` prints it, with the reason in the second content block.
 
 Two tools exist so an agent can orient itself without being told: `ddflow_help` (what
 is this, what is the loop) and `ddflow_workflow` (what are the rules *here*).
@@ -680,7 +688,9 @@ Three things a macro refuses, because each alternative fails quietly: a **missin
 parameter** (a prompt with a hole in it reads as a complete instruction), a **name that
 belongs to a shipped command** (silent shadowing leaves you editing a block that does
 nothing), and **both `prompt` and `prompt_file`** (two sources for one body means one is
-dead and looks live).
+dead and looks live). A refused macro is refused **alone and by name** — the others still
+load — and `ddflow prompts list`, `prompts show`, `doctor` and the MCP `prompts/list` say
+which one and why; an undecodable `prompt_file` is a named problem too.
 
 **Including the one the agent actually reads first.** `mcp_instructions.md` is the block
 an MCP client injects into the model's context on connect — the workflow, the reporting
@@ -799,6 +809,19 @@ with no change to the workflow.
 package named in the manifest exists, so the registry step runs *after* both PyPI and
 Docker — publishing the manifest first would advertise a version nobody can fetch.
 
+**The registry verifies ownership, and the workflow checks it first.** The registry accepts
+a package only when the artefact itself names the server: the PyPI package's README
+carries `<!-- mcp-name: io.github.delian/ddflow-mcp -->` (the first lines of this file),
+and each image carries the label `io.modelcontextprotocol.server.name` with the same name.
+The `verify` job runs `tests/test_registry_ownership.py` first, so a release the registry
+would reject — a missing marker, or a label that does not match — is refused before
+anything is uploaded; a `server.json` `description` over the registry's 100-character limit
+fails the suite the same way. The publish step also retries a *transient* registry failure
+(a 504, a 408/429, a network error) with backoff, checking the registry for the exact
+version after every attempt, because the publish behind a 504 may have committed; a 4xx
+that retrying cannot fix fails at once, and only after the budget does it fail with a
+"Re-run failed jobs" hint.
+
 Four things gate a release, and each exists because the failure it catches is public and
 irreversible:
 
@@ -821,7 +844,8 @@ $ git push origin main           # that is the whole release
 **Every push to main that changes shipped code releases, with the PATCH version bumped.**
 Major and minor move only when you move them.
 "Shipped" means `ddflow/`, `pyproject.toml`, `uv.lock`, `Dockerfile`,
-`docker-entrypoint.sh` or `.dockerignore`: a push of docs, tests or the ddflow event log
+`docker-entrypoint.sh`, `.dockerignore`, `server.json` or `README.md` (the PyPI page, and
+the line the registry verifies): a push of other docs, tests or the ddflow event log
 releases nothing, because PyPI keeps every version forever and one identical to the last
 is noise nobody can withdraw. CI runs `scripts/bump.sh patch`, commits `release 0.1.2` to
 main, publishes PyPI, Docker Hub, ghcr.io and the MCP registry, then creates `v0.1.2` and
@@ -1038,6 +1062,30 @@ server (an `ollama` with `OLLAMA_NUM_PARALLEL=1`) the extra copies queue behind 
 ones, which are always sent first; there, set `max_concurrency` to the server's slots so a
 queued request's `timeout_s` does not run out while it waits.
 
+**What a review reports, and how to finish one that was partial.** Every chunk that was not
+reviewed is named, with its files and its cause: a chunk whose generation ran out the
+clock is labelled *did not converge* (the model was reachable), distinct from an endpoint
+that was down. No chunk is header-only and none is dropped; hunk-header context is stripped
+so a finding cannot cite a function the diff does not touch. Progress is printed per chunk,
+the caller's lease is renewed while the review runs, and `extra_rules` on a `[[reviewer]]`
+reaches its prompt. Findings are numbered `#1..#N`.
+
+```sh
+ddflow review T1 --gate critic --chunk 2,5      # re-review only chunks 2 and 5 of that review
+ddflow review triage T1 --gate critic --finding 3 --refuted --probe "tests/test_x.py::t shows..."
+ddflow review triage T1 --gate critic --finding 1 --confirmed --probe "fixed in 4f2a, test_y"
+```
+
+`--chunk` re-runs the named chunks of the **same cut** — the same diff, `max_chunk_chars`
+and reviewer, checked before anything is sent — and merges their coverage into the gate's
+recorded outcome. `review triage` records what became of each finding as its own event
+(`review.triaged`): *refuted*, with the run that shows it false, or *confirmed*, with the
+fix or test that answers it. The gate's outcome is not changed — a review that reported
+findings stays `failed`, and that does not block completion; the log now shows what became
+of each finding. Triage appears in `gate status` and `show`, and a re-review carries it over
+only for a finding whose text is identical (decision D-review-triage). Over MCP it is
+`ddflow_review_triage`; `--chunk` is an argument of `ddflow_review`.
+
 ### Companion tools
 
 ddflow imposes the order and demands the evidence. It does not *perform* the judgement
@@ -1073,6 +1121,11 @@ Companion tools
 Gates in this project's task pipeline with no companion behind them:
   implement, rubber_duck, critic, unit_tests, bug_hunt, dedupe, merge
 ```
+
+A companion counts as **registered** only when an entry under its id can actually launch
+something: a bare or junk table with its name does not hide a real launch registered
+elsewhere, and does not pass for one. A non-table `mcp_servers` is refused with the parser's
+reason, and `companions add` appends TOML only when the result still parses.
 
 Three states, reported separately because the remedies differ: **registered**,
 **installed but not wired up** (one command away), **not installed** (with the command
@@ -1386,7 +1439,9 @@ Four guard rails, each of which exists because the alternative is silent:
 - **Dry run by default.** `--apply` writes. Looking is free and never a side effect.
 - **Finished work stays out** — it is history, not a queue — *except* a completed item
   that open work depends on, which comes along as done so the open item is not stranded
-  on an id the queue has never heard of.
+  on an id the queue has never heard of. A needed *phase* is judged over every task under
+  it, so a ticked task pulled in as a dependency does not keep the phase open, and a plain
+  import completes a finished phase that open work needs (re-running repairs one left empty).
 - **`[importer] max_tasks` (default 200) refuses a whole history.** An import writes
   events into a log that is committed to git; one real repository yielded 4,799
   checkboxes. Over the cap it proposes none and says so — the phases are withheld with
@@ -1420,7 +1475,8 @@ journal and another's generated index of it; an `Index` section is never importe
 
 Lessons are split at the level they actually live at: `### L100. …` entries grouped under
 `## <date>` headings import one per lesson **with their own ids**, so `[L147]`
-cross-references still resolve. A lesson's `**Compressed:**` paragraph becomes its
+cross-references still resolve — and so do hyphenated ids (`L-12`, `R-7`), kept as ids in
+headings and citations alike. A lesson's `**Compressed:**` paragraph becomes its
 **summary**; a hand-written `lessons-summary.md` bullet that cites exactly one lesson
 becomes that lesson's summary, and every other bullet becomes a consolidated lesson tagged
 `summary`. A GENERATED summary file is skipped. `ddflow render` writes them all back out
@@ -1621,6 +1677,19 @@ It exists so the operator does not have to say the same thing twice and the agen
 not have to learn the same thing twice. Both failures are invisible in the moment and
 obvious in the log.
 
+**Which existing record is this new one like?** The similarity engine answers that without
+an LLM: a code-aware tokenizer (identifiers split on case and underscores, a light
+stemmer), TF-IDF weights projected into `index.db` by `ddflow rebuild`, and an exact cosine
+over an inverted index — a record missing from the hits shares no term with the query, so
+nothing depends on how SQLite was built. Candidates cross kinds, so a new bug is shown the
+open task that fixes it. Its policy is the `[dedupe]` section (decision D-no-duplicates):
+`on_match` (`ask` default, `warn`, `off`), `show_floor` (0.35) and `ask_threshold` (0.55)
+on the cosine, `max_candidates` (3), `min_words` (8) and `kinds`. The thresholds come from a
+labelled set of 84 duplicate / related / hard-negative pairs built from real logs
+(`tests/fixtures/dedupe/`), which the engine must keep meeting; no score separates a
+duplicate from a different bug in the same function, which is why the default asks rather
+than decides.
+
 ### Similar — "is this already filed?"
 
 ```sh
@@ -1715,6 +1784,27 @@ ddflow progress    # attempts, hours held, gate runs, commits, per item
 ddflow loops       # circular references and runtime loops (exit 2 = none)
 ```
 
+`progress` counts a landing once (`commits` holds distinct shas). `ddflow show <id>` takes a
+**bug** id too: its state, where it was found, the fix task(s) — a task that says "fixes
+bug X" is a fix, a mention is not — the regression tests it was closed with, and an
+invalid closure a later fix superseded. `ddflow --json board` prints the board as JSON;
+`--agent`, `--repo` and `--json` are accepted after the subcommand as well as before it.
+
+`next --phase`, `brief --phase` and `board --phase` refuse an id that is not an item
+and `next` names the phases that start with it; `board --phase` given a task id refuses,
+naming that task's phase. `ddflow status` over MCP is **bounded**: the counts are exact, but each
+long list is cut to the 25 most recent (the first 25 in scheduler order for the others),
+with a `truncated` note naming the real lengths; the CLI, and `ddflow --json status`,
+list everything. `doctor` and `status` also say when the log holds events from a **newer
+ddflow** than this checkout runs — they were skipped, so the numbers are computed without
+them — and the remedy is to merge main or run the newer ddflow.
+
+**`brief` says whose work it is.** Run under an identity, its `## Current` is the agent's
+own most recent lease (several are listed, with `--item <id>` for another); an agent
+holding nothing sees `## Suggested next` — the queue's top ready item, to `claim` first —
+because calling it Current told an agent it was working on something it never claimed.
+`complete` likewise defaults the author model from the agent's open `session start`.
+
 Dependency cycles are the easy case. The expensive ones are *runtime* loops, where the
 graph is perfectly acyclic and the work still never finishes:
 
@@ -1776,7 +1866,12 @@ module is untracked until its first commit, which is the ordinary state of agent
 ddflow's own `.ddflow/` is excluded, or recording a gate's outcome would invalidate the
 gate that just recorded it. If the tree moves afterwards, `complete` warns that the pass
 describes source nobody is shipping — a warning, not a block, because refusing on a
-comment-sized change is how a check gets switched off.
+comment-sized change is how a check gets switched off. The comparison is of **content
+trees**, not commit ids, so an amended message is not a change; once the item has
+landed it is made against the commit that landed (a merge commit's second parent, which is
+what the gates ran on — never the primary checkout, whose files are everyone's), and the
+note names what differs. Evidence that cannot be compared says so rather than passing
+silently.
 
 Beside it, `diff_stat` records files, insertions, deletions and untracked count —
 including the *lines* in untracked files, because a new module is untracked until its
@@ -1882,6 +1977,15 @@ fail_output = '^\s*- \[(HIGH|MEDIUM)\]'   # exit 0 WITH findings = failed
 command runs, so a 25-minute suite does not outlive a 30-minute lease and read as
 abandoned work.
 
+It keeps the run's **whole output** in `.ddflow/runs/<item>/<gate>-<time>-<pid>.log` (the
+newest ten per item and gate; the directory ignores itself, so nothing is committed) and
+records its path beside the digest, so the digest can be checked against bytes that still
+exist. The evidence also carries the suite's own verdict lines (`summary`: pytest's
+`=== 3 failed, 112 passed ===`, unittest's `FAILED (failures=2)`) lifted from the *whole*
+output, because a gate that reruns its failures ends on the rerun's "112 passed" and the
+tail alone would hide the first pass's "115 failed". `gate record --output-file` keeps the
+file's path the same way.
+
 ---
 
 ## The phase pipeline
@@ -1977,6 +2081,16 @@ These are independent — run them in parallel worktrees.
 
 `ddflow claim <ID>` leases the item and binds it to a worktree.
 
+**What a claim holds is what you said it holds.** `claim --globs` is recorded on the item,
+so no later heartbeat — live, or reviving a lapsed lease — resets the lease to the globs
+the item had before; the claim prints the globs it recorded. Globs are comma-separated or
+a JSON array, and the flag may repeat (every value is kept; over MCP a JSON array is read
+whole). A glob mangled by quoting is refused with the form every surface reads. `update
+--globs` **replaces** the item's globs, and a claimed item's lease with them; the result
+names what it dropped, and `show` prints the lease's globs beside the item's. `--resources`
+works the same way. `ddflow wait --item X --globs ..` judges the claim you are about to make
+rather than the stored globs, so READY means that claim will not be refused.
+
 **Files every item touches** — a changelog, a research log, a regenerated config — would
 make every pair of items collide. Declare them, and many leases may hold them at once:
 
@@ -1993,7 +2107,34 @@ append-only glob in the committed config ddflow **writes** `<glob> merge=union` 
 `ddflow_configure`, and again on `ddflow init` / `adopt` after a hand edit — and prints
 the line; commit it with the config. A generated file never gets `union` (it would be
 interleaved): `doctor` notes a shared glob git has no merge driver for, and reports an
-append-only glob git does not union-merge.
+append-only glob git does not union-merge. Git decides which driver a file gets
+(`check-attr`), globs match as `.gitattributes` does, and a union line never overrides a
+narrower driver the project set for a file inside the glob: it is written before that
+line, so the narrower one keeps winning. Only the committed config writes union lines; a
+`.ddflow/local` edit syncs nothing.
+
+**When two clones disagree.** A merge can bring in a rival definition of one id (two
+clones added it) or two claims on one item whose windows overlapped. ddflow records the
+contest instead of letting the later event silently win: `show` prints a `CONTESTED` block
+with every rival whole, `next` withholds the item, and `doctor` names it. A person settles
+it with one event:
+
+```console
+$ ddflow resolve P1.T1 --keep alpha            # a claim: by its holder, or its event id
+$ ddflow resolve P1.T1 --keep 3fa9c2 --refile-as P1.T1b   # a definition; the loser is re-added
+```
+
+Keeping a claim releases every claim that overlapped it and starts the kept claim's lease
+window **now**: a claim that had already lapsed is not stretched back over the gap, so a
+claim another agent legitimately made in the meantime is not retroactively contested. A
+holder's own lapsed claim, every displaced claim (no cap), and a contestant's late renewal
+are all kept in the record. `--keep` may also name the current holder when it met no part
+of the contest. An item that is not contested is refused.
+
+**A wrong worktree binding can be corrected.** `ddflow update <id> --worktree PATH` rebinds
+the item, and your live lease on it, to that linked worktree and the branch checked out
+there. The field edit lands first and the rebind under the same lock, from a fresh read; an
+empty path is refused, and `complete`'s tree check then follows the new tree.
 
 **If you are already in one, it adopts that one.** Agent harnesses — Claude Code, Cursor
 — often isolate the agent themselves. Claiming from inside a linked worktree binds the
@@ -2015,7 +2156,10 @@ something ddflow did not make. A tree already bound to another open item is refu
 items in one tree cannot be merged or recovered separately — unless that item has let go
 of it: merged, lease released, and nothing left in the tree (no uncommitted change, a
 `HEAD` its target already contains). `worktree.adopt_existing = false` restores the old
-behaviour; `--no-worktree` skips binding entirely.
+behaviour; `--no-worktree` skips binding entirely. `[worktree] local_files` copies
+git-ignored, machine-local files (a `.roborev.toml`) from the primary into every tree a
+claim binds — one it creates, the harness tree it adopts, or the item's own tree on a
+re-claim — and never overwrites a file already there.
 
 An item claimed `--no-worktree` has no branch of its own, so `merge` and `review` take
 one: the branch checked out in the worktree you run them from, or `--branch <branch>`
@@ -2034,6 +2178,16 @@ $ ddflow merge B-fix --branch agent-work
   no worktree of its own: 'agent-work' was landed, no tree touched.
 merged B-fix (1c2d3e4f) into main
 ```
+
+**What `merge` reports and what it leaves alone.** `sha` is the commit the base points at
+after the landing — the merge commit, or the branch head on a fast-forward; the forge's
+merge commit in PR mode — and `branch_head` is the merged branch's own head, which under a
+squash is not on the base at all. A tree you are standing in is kept (its directory is your
+shell's cwd; deleting it fails your next command), and `ddflow cleanup --apply` removes it
+once the item is complete. A merge that fails is **aborted**, so the primary checkout is
+never left mid-merge (`doctor` flags one that was left, with the `git merge --abort` that
+clears it). A branch with nothing ahead of its target is refused — it would record the item
+merged with nothing landed — unless `--allow-empty`.
 
 A second agent is refused, and told what to take instead:
 
@@ -2058,6 +2212,12 @@ tell them apart invents work.
 
 **The critical path is reported**, because it, not the task count, sets the wall-clock
 floor — adding a fifth agent to a phase whose runtime is a four-deep chain buys nothing.
+It walks nested sub-tasks: an umbrella's open sub-tasks count as steps before it, and a
+phase another depends on contributes its chain. Items held back only by a cap
+(`schedule.max_parallel_tasks`, or a resource's capacity) are counted by `status` and `brief`, and the cap's message says when a slot
+is free. `ddflow wait` sleeps until something is ready, but when every blocker needs a
+person — a dependency cycle, an expired lease under `reclaim_policy = "report"` — it
+refuses at once rather than sleeping to its timeout.
 
 ---
 
@@ -2125,6 +2285,11 @@ tags it — annotated, with generated release notes. Under gitflow it cuts `rele
 develop, merges it into production, tags it and merges the tag back into develop; in PR
 mode it opens the release request instead, and `pr sync` tags the merge commit once a
 person merges it and opens the back-merge request.
+
+An item counts as shipped on a line when its landing merge commit **or the branch it merged**
+(the merge's second parent) is reachable from it: a hotfix landed on production reaches
+`develop` by the back-merge as that branch, with production's merge commit nowhere in it. A
+squash or fast-forward landing is the one commit it made.
 
 ddflow holds no token: it drives `gh` or `glab`, logged in as the operator, so every
 permission question is answered by the forge. A forge that cannot be reached is exit 2 —
@@ -2265,6 +2430,13 @@ Nothing errors. There is no signal that can tell them apart, so identity is **de
 | `DDFLOW_AGENT` env var | A harness that spawns agents and knows their names. Process-wide. |
 | `--agent` (CLI) | Scripts and one-off commands. |
 | tree-derived default | One agent per worktree. Reported as *undeclared*, so you can see it. `{host}-{tree}-{clone}`: the last part is a random suffix kept in `.ddflow/local/clone-id`, so two clones of one repository never write one shard even on same-named machines. |
+
+Under a declared identity a call uses what *that* agent holds, on every surface: an MCP
+tool called with a foreign `as_agent` asks from the primary and `ddflow_claim` creates that
+agent's own tree instead of adopting the connection's harness worktree, and `ddflow --agent
+X claim` does not adopt a tree another identity is working in. `ddflow_setup` writes into
+the tree the server stands in, as `adopt` does; `adopt` run from a linked worktree writes
+the project's tracked files into **that worktree** (the event log and hooks stay shared).
 
 A name you set yourself is never suffixed, so the same `DDFLOW_AGENT` in two clones is
 still one agent to ddflow; `ddflow doctor` notes a shard whose clock goes backwards, which
@@ -2651,7 +2823,7 @@ may retain none of it, and MCP has no server-to-client primitive for injecting c
 the three that exist (`roots/list`, `sampling/createMessage`, `elicitation/create`) all go
 the other way or ask a question. Three things already survive:
 
-- the **AGENTS.md / CLAUDE.md sections** `ddflow setup` writes, plus each agent's native
+- the **AGENTS.md / CLAUDE.md sections** `ddflow adopt` (or `ddflow_setup`) writes, plus each agent's native
   rules file — the client re-reads its own rules, so this is the durable channel;
 - the **commit hook**, which refuses a commit with no item trailer and says what to add.
   Enforcement at the moment of the act needs no context at all;
@@ -2772,7 +2944,9 @@ ddflow init                     create .ddflow/ only
 
 ddflow phase add <id> [...]     add a phase
 ddflow task add <id> --phase .. add a task
-ddflow update <id> [...]        change title/body/needs/globs/tags/priority
+ddflow update <id> [...]        change title/body/needs/globs/tags/priority (--globs REPLACES)
+ddflow update <id> --worktree P rebind the item and its lease to the linked worktree at P
+ddflow resolve <id> --keep X    settle a contested item: keep one definition or one claim
 
 ddflow next [--phase P]         what may start now       (2 = nothing actionable)
 ddflow claim <id> [--globs ..]  lease + create worktree  (3 = refused)
@@ -2789,6 +2963,7 @@ ddflow gate verify <id> <gate>  prove the gate CAN fail  (1 = it cannot)
 ddflow tests [--item <id>]      tests the change reaches + a parallel command  (2 = none)
 
 ddflow merge <id>               merge from the primary checkout, no checkout
+ddflow merge <id> --allow-empty land a branch with nothing ahead of its target (refused otherwise)
 ddflow merge <id> --branch <b>  an item claimed --no-worktree: land <b> (default: your tree's branch)
                                 ([flow].integration=pr: push + open/update a PR instead)
 ddflow pr sync [--item]         what reviewers did: complete / reopen / park / merge (2 = forge unreachable)
@@ -2803,9 +2978,12 @@ ddflow flow show                how this project works: model, lines, every choi
 ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)
 ddflow block <id> --reason ..   mark blocked
+ddflow abandon <id> --reason .. stop work on an item without completing it
+ddflow remove <id> [--force]    take an item out of the queue (recorded, not erased)
 
 ddflow brief [--item|--phase]   budgeted session-start pack
-ddflow board / show <id>        human views
+ddflow board / show <id>        human views (show also takes a bug id; --json board is JSON)
+ddflow wait [--item|--phase]    sleep until something is ready  (--globs: judge the claim you will make)
 ddflow render                   regenerate docs/ddflow/*.md
 
 ddflow help [topic]             what this is, what it can do, the workflow
@@ -2819,12 +2997,15 @@ ddflow history [--item|--kind]  one timeline of everything that happened (2 = no
 
 ddflow lesson add|search        capture and retrieve lessons
 ddflow research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
-ddflow bug found|fixed          regression test required to close
+ddflow bug found|fixed          regression test required to close (--regression-test repeats)
 
 ddflow session start|prompt|note|end     provenance logging
 ddflow replay [--out DIR] [--verify]     reconstruct from the log
 
 ddflow recover [--apply]        find crashed agents' work   (2 = nothing)
+ddflow cleanup [--apply]        classify ddflow worktrees/branches; --apply lands the safe ones
+ddflow pins <file>              which text of an instruction file a test pins, before you compress it
+ddflow precommit [--write]      propose a .pre-commit-config.yaml for this repo's stacks (writes only with --write)
 ddflow doctor                   integrity + health
 ddflow rebuild                  re-derive the index
 ddflow cadence [--ran NAME]     which periodic passes are due  (2 = none)
@@ -2832,6 +3013,10 @@ ddflow config --explain         every knob, its value, its source and its docs
 ddflow config --append-toml ..  add config without a shell editor (validated first; --local: not committed)
 ddflow reviewers detect|list|test   find and check cross-family review endpoints
 ddflow review <id> --gate ..    run the configured reviewer, record the evidence
+ddflow review <id> --gate G --chunk N   re-review only chunk N of the recorded review
+ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ..
+                                record what became of one finding
+ddflow reviewers approve [name] a PERSON approves a tool-written reviewer  (no MCP tool)
 ddflow mcp                      run the MCP stdio server
 ```
 
@@ -2862,8 +3047,13 @@ lease.ttl_s = 1800   [default]
 ```
 
 Resolution: dataclass defaults → `.ddflow/config.toml` → `DDFLOW_<SECTION>_<KNOB>` env.
-An unknown knob is an **error**, never a silent drop. A test asserts every knob carries
-documentation, so the reference cannot rot.
+An unknown knob **in a file** is never a silent drop: ddflow skips it, so a config written
+by a newer ddflow does not stop an older checkout, but it warns on every command and
+`ddflow doctor` reports it as a problem (a typo, or a config newer than this code — merge
+main). `ddflow config --set` refuses an unknown knob or an invalid value outright, before
+writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
+refuses a non-string element instead of casting it (`null` is not the string `"None"`).
+A test asserts every knob carries documentation, so the reference cannot rot.
 
 ---
 
@@ -2921,6 +3111,19 @@ part that matters.
   words instead (`trailer_waivers = { "Phase-ships" = ["none", "recon"] }`). It also refuses any trailer named in `[enforce] forbidden_trailers` (e.g. a
   tool-attribution line), merges included, for every agent and every route that runs
   git hooks -- which a harness-side hook reading only the command text cannot promise.
+  The hook's refusals say what to do. A **lapsed lease** on the item whose tree you commit
+  from is named with when it lapsed and its remedy (`ddflow --agent <holder> heartbeat <id>`
+  for its holder; for anyone else `recover --item`, `release --note salvaged`, `claim`). When
+  nothing declared who is committing, it says the name was derived from the tree and how to
+  declare one. A **clean merge commit** — the automatic one concluding `git merge <base>`,
+  or a squash that names what it squashes — passes without a lease lookup, and a conflicted
+  merge is judged only on the paths the merge changed, not on everything the base brought
+  in. `ddflow merge` itself aborts a merge it fails, and `doctor` flags a primary checkout
+  left mid-merge with the command that clears it.
+  Over a hook the **pre-commit framework** generated, `hooks install` does not edit it (the
+  next `pre-commit install` would discard the edit): it advises a `repo: local` hook in
+  `.pre-commit-config.yaml` (`ddflow precommit` proposes it), says nothing needs installing
+  when the framework already runs ddflow's check, and `--force` replaces the generated hook.
 * **A Claude Code SessionStart hook** (`ddflow hooks install --claude`) puts the brief —
   crashed work to recover, ready items, binding decisions, operational memory — into
   every session, including after a context compaction, whether or not the agent
