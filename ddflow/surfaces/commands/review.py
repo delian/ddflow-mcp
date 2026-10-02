@@ -29,7 +29,7 @@ def _triage(a, c: Ctx, item: str) -> int:
     out = A.triage(
         c.repo,
         item,
-        gate=a.gate,
+        gate=a.gate or "",
         finding=a.finding or 0,
         verdict="refuted" if a.refuted else "confirmed" if a.confirmed else "",
         probe=a.probe or "",
@@ -70,7 +70,7 @@ def cmd_review(a, c: Ctx) -> int:
         print(
             f"{', '.join(stray)} record a verdict on a finding and need the `triage` verb; "
             "without it this would start a full re-review. Did you mean:\n"
-            f"  ddflow review triage {item} --gate {a.gate} --finding N "
+            f"  ddflow review triage {item} --gate {a.gate or 'critic'} --finding N "
             '--refuted|--confirmed --probe "..."',
             file=sys.stderr,
         )
@@ -80,7 +80,7 @@ def cmd_review(a, c: Ctx) -> int:
         return FAIL
     out = A.review(
         c.repo,
-        gate=a.gate,
+        gate=a.gate or "critic",
         item=ids[0] if ids else "",
         intent=a.intent or "",
         context=a.context or "",
