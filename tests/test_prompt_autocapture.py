@@ -201,3 +201,29 @@ def test_uninstall_with_no_prompt_hook_in_the_file_is_a_quiet_no_op(repo):
     code, _o, err = run_cli(repo, "hooks", "uninstall", "--claude")
     assert code == 0, err
     assert json.loads((repo / ".claude" / "settings.json").read_text()) == only
+
+
+def test_hook_stdin_falls_back_to_a_thread_read_when_select_cannot_take_the_fd(monkeypatch):
+    import io
+    import select
+    import time
+
+    from ddflow.surfaces.commands import setup as S
+
+    class _Stdin:
+        buffer = io.BytesIO('{"prompt": "café"}'.encode())
+
+        def isatty(self):
+            return False
+
+        def fileno(self):
+            return 99
+
+    def boom(*a, **k):
+        raise OSError("select only takes sockets here")
+
+    monkeypatch.setattr(select, "select", boom)
+    monkeypatch.setattr(sys, "stdin", _Stdin())
+    t0 = time.monotonic()
+    assert json.loads(S._hook_stdin(timeout_s=5)) == {"prompt": "café"}
+    assert time.monotonic() - t0 < 5

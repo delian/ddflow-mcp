@@ -174,7 +174,7 @@ def harness_session_id(raw: str) -> str:
         # Sanitising or truncating made distinct ids collide; a digest keeps them apart.
         import hashlib
 
-        safe += "-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:8]
+        safe += "-" + hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
     return f"h-{safe}"
 
 
