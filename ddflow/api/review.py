@@ -397,7 +397,9 @@ def reviewers_detect(
     if write:
         from ..services.configwrite import append_block
 
-        written = str(append_block(repo, "".join(blocks), shared=shared, own="reviewers.toml"))
+        written = str(
+            append_block(repo, "".join(blocks), shared=shared, own="reviewers.toml", agent=agent)
+        )
     from ..views import human
 
     out = O.ok(
