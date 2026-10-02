@@ -2668,7 +2668,8 @@ agent's own tree instead of adopting the connection's harness worktree, and `ddf
 X claim` does not adopt a tree another identity is working in -- one it has worked in under
 its tree-derived name, or one it ADOPTED (`worktree.adopted` names the adopter, so a parent
 that always declares `--agent` still owns its tree once it has claimed from it; a parent that
-has never claimed from its tree is not yet detectable). A reviewer written through
+has never claimed from its tree is not yet detectable, and the first identity to adopt a
+tree owns it). A reviewer written through
 `ddflow_configure` is recorded under the per-call `as_agent`. `ddflow_setup` writes into
 the tree the server stands in, as `adopt` does; `adopt` run from a linked worktree writes
 the project's tracked files into **that worktree** (the event log and hooks stay shared).
