@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,7 @@ from ..config import Config
 from ..core import flow as F
 from ..core.model import DONE, REVIEW, GateRecord, Item, State, fold
 from ..infra import forge as FG
+from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.log import EventLog
 from . import completion as CM
@@ -686,6 +688,73 @@ def reached(repo: Path, cfg: Config, it: Item, ref: str) -> str:
     for c in candidates:
         if c and W.git(repo, "merge-base", "--is-ancestor", c, ref).ok:
             return c
+    return _squash_on(repo, it, merged, ref)
+
+
+ONE_PARENT = 1
+
+#: How much of a line's history is searched for a squash's copy (patch-id match).
+_SQUASH_SEARCH = 1000
+
+
+def _patch_ids(repo: Path, *log_args: str) -> dict[str, str]:
+    """``{patch-id: commit}`` for the commits ``git log`` names, newest first; {} on failure."""
+    log = P.run(
+        ["git", "-C", str(repo), "log", "-p", "--no-ext-diff", "--no-merges", *log_args],
+        capture_output=True,
+    )
+    if log.returncode != 0 or not log.stdout:
+        return {}
+    ids = P.run(
+        ["git", "-C", str(repo), "patch-id", "--stable"],
+        input=log.stdout,
+        capture_output=True,
+    )
+    out: dict[str, str] = {}
+    for line in ids.stdout.decode("utf-8", "replace").splitlines() if ids.returncode == 0 else []:
+        pid, _, commit = line.partition(" ")
+        out.setdefault(pid, commit.strip())
+    return out
+
+
+@lru_cache(maxsize=64)
+def _line_patch_ids(repo: str, tip: str) -> dict[str, str]:
+    return _patch_ids(Path(repo), f"--max-count={_SQUASH_SEARCH}", tip)
+
+
+def _squash_on(repo: Path, it: Item, merged: str, ref: str) -> str:
+    """The commit on ``ref`` carrying a SQUASH landing's change, or "" (B20d45f540c).
+
+    A squash is one parent commit, so no merge parent leads to its branch, and gitflow's
+    back-merge of a hotfix is a second squash: neither commit is an ancestor of the other
+    line. The change itself is the proof: a commit on ``ref`` with the same patch-id (or,
+    where develop has drifted around the hunks and the patch-ids differ, the back-merge
+    commit ddflow wrote for this item). Only a single-parent landing is looked up -- a
+    merge commit is found by ancestry above.
+    """
+    parents = W.git(repo, "rev-list", "--parents", "-n", "1", merged).out.split()
+    if len(parents) != ONE_PARENT + 1:  # merged + its one parent; "" (unreadable) lands here too
+        return ""
+    tip = W.rev(repo, ref)
+    if not tip:
+        return ""
+    mine = _patch_ids(repo, "-n", "1", merged)
+    if mine:
+        if hit := _line_patch_ids(str(repo), tip).get(next(iter(mine))):
+            return hit
+    subject = f"back-merge {it.id} into "
+    log = W.git(
+        repo,
+        "log",
+        f"--max-count={_SQUASH_SEARCH}",
+        "--no-merges",
+        "--format=%H %s",
+        ref,
+    )
+    for line in log.out.splitlines() if log.ok else []:
+        sha, _, subj = line.partition(" ")
+        if subj.startswith(subject):
+            return sha
     return ""
 
 
