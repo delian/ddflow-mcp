@@ -589,6 +589,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     cp.add_argument("--sha", default="")
     cp.add_argument("--model", default="", help="the AUTHOR's model, for independence check")
     cp.add_argument("--force", action="store_true")
+    cp.add_argument(
+        "--changelog",
+        default="",
+        help="'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or "
+        "skip / internal to keep it out of the changelog; optional",
+    )
     cp.set_defaults(fn=cmd_complete)
 
     ab = s.add_parser("abandon", help="stop work on an item without completing it")
@@ -927,6 +933,9 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     bx.add_argument("--lesson", default="")
     bx.add_argument("--lesson-title", default="")
     bx.add_argument("--lesson-rule", default="")
+    bx.add_argument(
+        "--changelog", default="", help="'Fixed: text' (any category), or skip / internal"
+    )
     bx.set_defaults(fn=cmd_bug)
     bv = bg_s.add_parser(
         "invalid", help="close a bug as a FALSE finding (never as fixed), with why and the probe"
