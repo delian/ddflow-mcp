@@ -266,6 +266,23 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     # it in would let an agent send `apply=true, verify=true`, which means nothing and
     # would silently do one of them.
     ("ddflow_import", "--verify"): "covered by ddflow_import_verify, its own tool",
+    # The answer flags of the add-time duplicate check are ONE MCP argument: `relation`
+    # ("new", "extends:ID", "duplicate_of:ID", "related:ID" -- a mutually exclusive set
+    # is a single string, not four booleans), and `--check` is `check_only`. The pair is
+    # on every add tool (tests/test_add_dedupe_mcp.py).
+    **{
+        (tool, flag): "the duplicate-check answer: MCP `relation` / `check_only`"
+        for tool in (
+            "ddflow_phase_add",
+            "ddflow_task_add",
+            "ddflow_bug_found",
+            "ddflow_lesson_add",
+            "ddflow_decision_add",
+            "ddflow_research_add",
+            "ddflow_memory_add",
+        )
+        for flag in ("--new", "--extends", "--duplicate-of", "--related", "--check")
+    },
 }
 
 

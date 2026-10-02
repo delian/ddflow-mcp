@@ -1770,7 +1770,35 @@ prompt or note — runs the same check against the log **before it writes**, wit
   ways** (a `link.recorded` on X). The API takes the answer as one `answer` argument
   (`api.DedupeAnswer("extends", "B5d98a4da0a")`; `DedupeAnswer.parse("related B1")`)
   carried on `task_add`, `phase_add`, `bug_found`, `memory_add` and the lesson, decision
-  and research drafts; the CLI flags and the MCP `relation` field come next.
+  and research drafts. The CLI and MCP surfaces are below.
+- **Answering a refusal, on every surface.**
+  - **CLI flags** on every add command (`task add`, `phase add`, `bug found`, `lesson add`,
+    `decision add`, `research add`, `memory add`): `--new`, `--extends ID`,
+    `--duplicate-of ID`, `--related ID` (at most one; argparse refuses two), and `--check`.
+    `--check` is a dry run: it writes nothing, prints the candidates and whether the add
+    would be refused, and exits 0 with candidates or 2 with none (`--json` prints
+    `candidates`, `options`, `would_ask`). `ddflow similar "<text>"` asks the same question
+    before you have an id or a command to run.
+  - **On a terminal** (stdin and stdout are both terminals, no `--json`, no answer flag) a
+    refused add asks instead of failing: it lists the candidates numbered and prompts
+    `[n]ew / [e]xtends # / [d]uplicate of # / [r]elated # / [a]bort`. `e 1` and `r T-old`
+    both work (the number or the id; the number alone is enough when there is one
+    candidate). Anything else asks again; abort, or end of input, files nothing and exits 3.
+  - **Without a terminal** (a script, an agent's shell, a pipe) it exits 3 with
+    `refused: possible duplicate`, the candidates, and the same command again with each
+    answer appended -- `--new`, `--extends TOP`, `--duplicate-of TOP`, `--related TOP` --
+    ready to paste. `--json` prints the same refusal as `candidates` plus `options`. Nothing
+    is written.
+  - **MCP**: every add tool (`ddflow_task_add`, `ddflow_phase_add`, `ddflow_bug_found`,
+    `ddflow_lesson_add`, `ddflow_decision_add`, `ddflow_research_add`, `ddflow_memory_add`)
+    takes `relation` -- `new`, `extends:ID`, `duplicate_of:ID` or `related:ID` -- and
+    `check_only` (the dry run). The refusal leads the reply as `{"refusal": {...}}` with
+    `candidates` and `options` beside it; answer it by calling the tool again with
+    `relation`. An answer that lands on an existing record returns `extended` (the record
+    that received the text), `extended_kind` and `relation` in place of a new id.
+  - **Agents:** run `ddflow similar` before filing; prefer extending an open, unclaimed
+    record; a claimed or closed one gets a new record linked to it (`extends` does that on
+    its own).
 - **Identical text** (up to case and whitespace) as an existing record of the same kind is
   recorded as a duplicate of it **without asking**, under the same open-or-linked rule.
 - **Below the threshold, at or above `show_floor` (0.35):** the add goes through and its
