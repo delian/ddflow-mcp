@@ -2945,7 +2945,8 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
         lines = [
             f"{len(near)} record(s) look like ones already held and "
             f"{'WILL be imported anyway ([dedupe].on_match = warn)' if warn else 'were NOT imported'} -- "
-            f"decide each (file one anyway with the matching `ddflow <kind> add`; "
+            f"decide each (file one anyway with the matching `ddflow <kind> add`, answering "
+            f"its duplicate check with --new; "
             f"otherwise the existing record already says it). Candidate and score:"
         ]
         lines += [

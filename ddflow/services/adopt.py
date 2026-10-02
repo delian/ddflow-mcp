@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from ..infra import paths
+from . import install_info as _INSTALL
 
 #: Where an operator reads the manual step for an agent with no project config.
 _DOCS_HINT = "docs/ddflow/drivers/deltas/"
@@ -1074,40 +1075,22 @@ def _launch_entry(
 
 def _running_from_source() -> bool:
     """True when this module lives in a checkout rather than in site-packages."""
-    here = Path(__file__).resolve()
-    return not any(part in ("site-packages", "dist-packages") for part in here.parts)
+    return _INSTALL.running_from_source()
 
 
 #: The distribution name on the index, and what `uvx` resolves.
-DIST_NAME = "ddflow-mcp"
+DIST_NAME = _INSTALL.DIST_NAME
 
 
 def _own_distribution():
-    """The installed distribution that THIS `ddflow` package came from, or None.
-
-    Looked up in the directory holding the package rather than by name across
-    `sys.path`: a second copy installed elsewhere says nothing about this one."""
-    from importlib import metadata
-
-    from ..infra.paths import package_parent
-
-    for dist in metadata.distributions(name=DIST_NAME, path=[str(package_parent())]):
-        return dist
-    return None
+    """The installed distribution that THIS `ddflow` package came from, or None."""
+    return _INSTALL.own_distribution()
 
 
 def _installed_from_index() -> bool:
     """True when this installation came from a package index, so `uvx ddflow-mcp`
-    reaches the same project.
-
-    PEP 610: an installer writes `direct_url.json` into the dist-info for every install
-    that did NOT come from an index -- a VCS URL, a local directory, an archive URL, an
-    editable install -- and never for one that did. No distribution metadata at all is
-    not evidence of an index either, so it counts as not from one."""
-    dist = _own_distribution()
-    if dist is None:
-        return False
-    return dist.read_text("direct_url.json") is None
+    reaches the same project (PEP 610; see `install_info`)."""
+    return _INSTALL.installed_from_index()
 
 
 def _installed_entry() -> dict[str, object]:
