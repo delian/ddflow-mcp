@@ -2085,6 +2085,24 @@ defaults the reviewer to the agent id, so a `standards` gate recorded with no `-
 arrived as family "host-12345", compared unequal to "anthropic", and satisfied the
 independence requirement on its own.)
 
+`--model` on `gate record` names the *reviewer*; the author's model is `complete --model`
+(or the one declared at `session start`). Recording the author's own model on a reviewer
+gate used to overwrite the reviewer's, and `complete` then judged independence against the
+author's family. Now a `--model` in the author's family on `rubber_duck`/`critic` is refused
+(exit 3, naming `--reviewer-model`); `--reviewer-model <m>` (MCP `reviewer_model`) is the
+explicit spelling for a reviewer that really is of that family.
+
+**`--reviewed-sha` ties a review to the commit that merges.** `roborev review HEAD` run from
+an item's worktree has enqueued the primary checkout's HEAD, so a `standards` gate was
+recorded against the wrong commit. Run `roborev review <sha>` with your branch head and
+record `gate record <id> standards --reviewed-sha <sha>`: the full sha is stored in the
+evidence, an older commit of the item's branch is accepted with a warning, and any other
+commit (main, another branch, an unknown sha) is refused with exit 3.
+
+`ddflow review` of an item reviews the branch's commits plus tracked edits in its worktree.
+Untracked files are *not* sent to the reviewer; they are listed in the output and in the
+evidence's `diff_source` as "untracked, not reviewed" — commit a file to have it reviewed.
+
 A **router** author is a set of families. Copilot CLI's HydraFusion is chosen like a model
 but routes each task across models from several providers, so `[agent].routers` maps its
 name to the families it draws on, and a reviewer counts as independent only when its
@@ -3523,7 +3541,7 @@ ddflow release <id>             give it up
 
 ddflow gate status <id>         pipeline position + the next gate's instruction
 ddflow gate run <id> <gate>     execute a command gate, record its evidence
-ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model)
+ddflow gate record <id> <gate>  record an agent gate    (--outcome, --reason, --model, --reviewer-model, --reviewed-sha)
 ddflow gate skip <id> <gate>    skip, with a mandatory reason
 ddflow approve <id> <gate>      a PERSON clears a human gate  (no MCP equivalent)
 ddflow approve .. --reject      ...or refuses it, with --reason
