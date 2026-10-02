@@ -423,7 +423,7 @@ class RecordLinks:
     additions: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: event id + relation + target -> {event, relation, target, by, at, score, source}.
     link_entries: dict[str, dict[str, Any]] = field(default_factory=dict)
-    #: add event id -> the answer recorded with it: {answer, score, candidates}.
+    #: add event id -> the answer recorded with it: {answer, score, candidates, at}.
     answers: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     @property
