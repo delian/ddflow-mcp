@@ -968,6 +968,9 @@ class EnforceConfig:
         ]
     )  # fmt: skip
     stale_rules: str = "block"  # block | warn | off
+    readme_with_code: str = "warn"  # block | warn | off
+    readme_code_globs: list[str] = field(default_factory=lambda: ["ddflow/**"])
+    readme_files: list[str] = field(default_factory=lambda: ["README.md"])
     behind: str = "warn"  # block | warn | off
     max_behind: int = 50
 
@@ -1027,6 +1030,21 @@ _doc(
     "enforce",
     "stale_rules",
     "What the pre-commit hook does when the branch the work merges into (the item's recorded base, else the default branch) changed a rulebook since this branch forked and the change is not merged in: AGENTS.md, CLAUDE.md, CLAUDE.local.md, .ddflow/config.toml, the driver docs under docs/ddflow/drivers/, or any agent's native rules file. A session loads its rules once, so the edit is silently ignored here until merged. 'block' refuses and says `git merge <base>` then re-read the named files, 'warn' prints and allows, 'off' disables. Default 'block': it is precise, and the commit concluding that merge is never refused. The SessionStart hook reports the same drift but only informs.",
+)
+_doc(
+    "enforce",
+    "readme_with_code",
+    "What `complete`, `gate status` and `brief` do about a TASK whose diff changes a path in readme_code_globs but none of readme_files, with no 'docs' outcome recorded for it (`gate skip <id> docs --reason ...`, or `gate record <id> docs --outcome passed --evidence ...` naming the section changed). 'warn' reports it (a `complete` warning, a line in `gate status` and in the item's `brief`), 'block' makes `complete` refuse, 'off' disables. Test files (a tests/, test/, spec/, specs/ or __tests__/ directory; test_*.*, *_test.*, *_spec.*, *.test.*, *.spec.*, conftest.py) and documentation (a docs/ or doc/ directory; .md, .rst, .adoc, .txt files) never count as code, and ddflow's own event-log commits (`.ddflow/**`) are not in the default readme_code_globs. When git cannot say what the task changed, `complete` says the check could not run (a warning, never a blocker). Default 'warn': a README is the user's, and the report names the one-line remedy.",
+)
+_doc(
+    "enforce",
+    "readme_code_globs",
+    "Paths whose change is user-visible and so should reach the README (readme_with_code), in git's glob pathspec syntax. Default `ddflow/**`, ddflow's own package; set a project's own source directories. Docs and `.ddflow/**` are not listed and so are exempt; a test or documentation file inside a listed path is exempt too.",
+)
+_doc(
+    "enforce",
+    "readme_files",
+    "The files that count as updating the README for readme_with_code, as paths from the repository root (`docs/README.md` is not `README.md`). Default README.md.",
 )
 _doc(
     "enforce",
