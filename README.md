@@ -836,8 +836,8 @@ that retrying cannot fix fails at once, and only after the budget does it fail w
 Four things gate a release, and each exists because the failure it catches is public and
 irreversible:
 
-* the tag, `pyproject.toml`, `server.json`'s version **and every OCI identifier's tag**
-  must agree — a `:0.1.0` left behind while `version` moved on publishes a manifest
+* the tag, `ddflow/__init__.py` (the one declared version), `server.json`'s version **and
+  every OCI identifier's tag** must agree — a `:0.1.0` left behind while `version` moved on publishes a manifest
   pointing at the previous image, installable and wrong;
 * the full suite, plus the slow end-to-end scenarios, which `-m 'not slow'` otherwise
   excludes from every ordinary run;
@@ -855,7 +855,7 @@ $ git push origin main           # that is the whole release
 **Every push to main that changes shipped code releases, with the PATCH version bumped.**
 Major and minor move only when you move them.
 "Shipped" means `ddflow/`, `pyproject.toml`, `uv.lock`, `Dockerfile`,
-`docker-entrypoint.sh`, `.dockerignore`, `server.json` or `README.md` (the PyPI page, and
+`docker-entrypoint.sh`, `.dockerignore`, `server.json`, `server.template.json` or `README.md` (the PyPI page, and
 the line the registry verifies): a push of other docs, tests or the ddflow event log
 releases nothing, because PyPI keeps every version forever and one identical to the last
 is noise nobody can withdraw. CI runs `scripts/bump.sh patch`, commits `release 0.1.2` to
@@ -886,12 +886,16 @@ loses a race with another commit fails the run and publishes nothing, where push
 would leave PyPI holding a version main does not declare. Runs are serialized, and only
 `main` or a `v*` tag releases.
 
-The version lives in seven places — `pyproject.toml`, `server.json`'s version, the `pypi`
-package's version (an `oci` package has none), the tag inside every OCI identifier, `SERVER_INFO` (what the server
-tells every client it is), `ddflow.__version__`, and `uv.lock`, which records the project's
-own version. `scripts/bump.sh` moves them all and re-reads them to check it did;
-`tests/test_packaging.py` fails if the first six ever drift. (That test caught the bump
-script missing `SERVER_INFO` on its first run.)
+The version is declared in **one** place: `__version__` in `ddflow/__init__.py`, the only
+line a bump edits. `pyproject.toml` reads it (a hatch dynamic version, so `uv.lock` records no
+version for the project and a bump never makes the lock stale), `SERVER_INFO` (what the
+server tells every client it is, and what `ddflow --version` prints) is built from it, and
+`server.json` — the manifest's version, the `pypi` package's version and the tag inside every
+OCI identifier (an `oci` package has no version field) — is a **generated, committed** file:
+edit `server.template.json`, then run `scripts/render_server_json.py` (`--check` fails when
+`server.json` is not the render; a test and the publish workflow both run it).
+`scripts/bump.sh` edits the literal, renders `server.json` and re-reads the result;
+`tests/test_packaging.py` fails if anything drifts. Do not edit `server.json` by hand.
 
 **`scripts/release.sh` runs all of that locally and publishes nothing.** It is dry by
 default, needs no credentials, and exists because a tag is not reversible: PyPI refuses a

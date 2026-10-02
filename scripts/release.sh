@@ -37,10 +37,11 @@ IMAGE_GH="ghcr.io/delian/ddflow-mcp"
 
 # ---------------------------------------------------------------- 1. versions agree
 say "versions"
-VERSION=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+VERSION=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' ddflow/__init__.py | head -n 1)
 SRV=$(python3 -c 'import json;print(json.load(open("server.json"))["version"])')
-[ -n "$VERSION" ] || die "no version in pyproject.toml"
-[ "$VERSION" = "$SRV" ] || die "pyproject $VERSION != server.json $SRV"
+[ -n "$VERSION" ] || die "no __version__ in ddflow/__init__.py"
+[ "$VERSION" = "$SRV" ] || die "ddflow/__init__.py $VERSION != server.json $SRV (run scripts/render_server_json.py)"
+python3 scripts/render_server_json.py --check || die "server.json is not the render of server.template.json"
 # Every OCI identifier's TAG must be the version. One left at an old tag publishes a
 # manifest that points at the previous image: discoverable, installable, wrong build.
 python3 - "$VERSION" <<'PY' || exit 1
@@ -56,7 +57,7 @@ bad = [p["identifier"] for p in pkgs if p.get("registryType") == "oci" and "vers
 if bad:
     sys.exit(f"OCI packages must not have a version field: {bad}")
 PY
-echo "  $VERSION — pyproject, server.json and every OCI tag agree"
+echo "  $VERSION — ddflow/__init__.py, server.json and every OCI tag agree"
 
 # ---------------------------------------------------------------- 2. the suite
 say "tests"
