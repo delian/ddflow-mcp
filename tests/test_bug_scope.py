@@ -196,3 +196,16 @@ def test_similar_hides_the_default_scope(repo):
     run_cli(repo, "bug", "found", "--id", "B-q", "--summary", "lease expiry drops claims silently")
     _, out, _ = run_cli(repo, "similar", "lease expiry drops claims silently")
     assert "B-q" in out and "project" not in out, out
+
+
+def test_extending_an_open_bug_carries_severity_and_scope_onto_it(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "bug", "found", "--id", "B-e", "--summary", "lease expiry drops claims silently")
+    code, _, err = run_cli(
+        repo, "bug", "found", "--summary", "lease expiry drops claims silently again",
+        "--extends", "B-e", "--severity", "critical", "--scope", "ddflow",
+    )  # fmt: skip
+    assert code == 0, err
+    b = _bugs(repo)["B-e"]
+    assert (b.severity, b.scope) == ("critical", "ddflow")
+    assert len(_bugs(repo)) == 1
