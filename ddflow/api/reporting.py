@@ -169,6 +169,8 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "loops": [f.__dict__ for f in findings],
         "recoverable": [plain(r) for r in rec if r.salvageable],
     }
+    if st.skipped_kinds:
+        data["skipped_kinds"] = dict(st.skipped_kinds)
     if not full:
         _bound(data)
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
@@ -452,6 +454,15 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         "ddflow than this checkout runs (merge main)"
         for k in cfg.unknown_knobs
     ]
+    # Events this code has no handler for: the fold skipped them (B168), so every number
+    # below is computed WITHOUT them. A note, as an unknown config knob is named but the
+    # old code keeps working -- the remedy is the same: bring in the newer ddflow.
+    if st.skipped_kinds:
+        kinds = ", ".join(f"{k} x{n}" for k, n in sorted(st.skipped_kinds.items()))
+        notes.append(
+            f"this log has events from a newer ddflow than this checkout runs, skipped: "
+            f"{kinds} (merge main, or run the newer ddflow)"
+        )
 
     p = plan(st, cfg, agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]
