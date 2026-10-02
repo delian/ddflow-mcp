@@ -427,7 +427,7 @@ def _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence: Evidence, skip
     if skip:
         return _Vetted()
     if evidence.model and not evidence.model_is_reviewer:
-        if why := _author_model_on_reviewer_gate(st, cfg, log, gdef, gate, evidence.model):
+        if why := _author_model_on_reviewer_gate(st, cfg, log, gate, evidence.model):
             return _Vetted(refusal=why)
     if not evidence.reviewed_sha:
         return _Vetted()
@@ -435,7 +435,7 @@ def _vet_claims(repo, cfg, st, log, it, gdef, gate, wt, evidence: Evidence, skip
     return _Vetted(refusal=why, note=note, evidence={"reviewed_sha": full} if full else {})
 
 
-def _author_model_on_reviewer_gate(st, cfg, log, gdef, gate: str, model: str) -> str:
+def _author_model_on_reviewer_gate(st, cfg, log, gate: str, model: str) -> str:
     """A refusal when ``model`` is the AUTHOR's family on a reviewer gate, else "".
 
     `gate record --model` names the REVIEWER's model; `complete --model` the author's.
@@ -474,7 +474,7 @@ def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple
     """
     from ..infra import worktree as W
 
-    if not re.fullmatch(r"[0-9a-fA-F]{7,40}", sha):
+    if not re.fullmatch(r"[0-9a-fA-F]{7,64}", sha):
         # `HEAD` resolves to a different commit in every checkout: it is the very input
         # that was wrong, so it cannot be told apart from a right one.
         return (
