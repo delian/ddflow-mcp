@@ -23,6 +23,7 @@ and cost something:
 from __future__ import annotations
 
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -111,6 +112,26 @@ def next_(
         "critical_path": critical_path(st, phase),
         "_render": {"plan": p},
     }
+    if p.ready and cfg.lease.waiter_reservation_s > 0:
+        # An item whose files are held for a waiter in line is not on offer to anyone
+        # else (`claim` would refuse it), so it is listed as blocked instead.
+        from ..core.schedule import Blocked
+
+        now = time.time()
+        live = st.active_leases(now, cfg.lease.grace_s)
+        me = cfg.agent.id or log.agent_id
+        kept = []
+        for i in p.ready:
+            ahead = _reserved_for(repo, st, cfg, i, me, list(i.globs), live, now)
+            if ahead is None:
+                kept.append(i)
+            else:
+                p.blocked.append(
+                    Blocked(i.id, "conflict", _reserved_msg(i.id, ahead, cfg), [ahead.item])
+                )
+        p.ready[:] = kept
+        data["ready"] = [plain(i) for i in p.ready]
+        data["blocked"] = [plain(b) for b in p.blocked]
     if p.ready:
         return O.ok("next", **data)
     return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
@@ -174,7 +195,14 @@ DEFAULT_WAIT_TIMEOUT_S = 600
 
 
 def _judge_wait(
-    st, cfg, me: str, item: str, phase: str, kind: str, globs: list[str] | None = None
+    st,
+    cfg,
+    me: str,
+    item: str,
+    phase: str,
+    kind: str,
+    globs: list[str] | None = None,
+    repo: Path | None = None,
 ) -> dict[str, Any]:
     """Can the caller start work NOW, must it wait, or would waiting never end?
 
@@ -187,7 +215,7 @@ def _judge_wait(
     live = st.active_leases(now, cfg.lease.grace_s)
     others = {i: lz for i, lz in live.items() if lz.holder != me}
     if not item:
-        return _judge_any(st, cfg, me, phase, kind, now, live)
+        return _judge_any(st, cfg, me, phase, kind, now, live, repo)
     it = st.items.get(item)
     out: dict[str, Any] = {"why": "", "waiting_on": [], "ready": [], "blocked": []}
     if it is None or it.removed:
@@ -204,7 +232,7 @@ def _judge_wait(
     mine = live.get(item)
     if mine is not None and mine.holder == me:
         return {**out, "status": "ready", "why": f"you already hold {item}", "ready": [item]}
-    b = _claim_blocker(st, cfg, it, me, live, now, globs=globs)
+    b = _claim_blocker(st, cfg, it, me, live, now, globs=globs, repo=repo)
     if b is None:
         return {**out, "status": "ready", "why": f"{item} is free to claim", "ready": [item]}
     out["blocked"] = [plain(b)]
@@ -265,7 +293,9 @@ def _judge_wait(
     return {**out, "status": "blocked", "why": f"{item}: deps — {b.detail}", "waiting_on": moving}
 
 
-def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dict[str, Any]:
+def _judge_any(
+    st, cfg, me: str, phase: str, kind: str, now: float, live, repo: Path | None = None
+) -> dict[str, Any]:
     """`_judge_wait` for "anything": the same ready set `next` offers."""
     from ..core.schedule import plan
 
@@ -279,7 +309,7 @@ def _judge_any(st, cfg, me: str, phase: str, kind: str, now: float, live) -> dic
     }
     # Only what `claim` would grant: under `ready_policy = deps_only` the plan offers
     # items another agent's lease or globs still cover.
-    refused = [(i, _claim_blocker(st, cfg, i, me, live, now)) for i in p.ready]
+    refused = [(i, _claim_blocker(st, cfg, i, me, live, now, repo=repo)) for i in p.ready]
     ready = [i.id for i, b in refused if b is None]
     if ready:
         return {**out, "status": "ready", "ready": ready}
@@ -368,7 +398,18 @@ def _blocking_leases(st, blocked, others) -> list[str]:
     return sorted(named) or sorted(others)
 
 
-def _claim_blocker(st, cfg, it, me: str, live, now: float, *, globs: list[str] | None = None):
+def _claim_blocker(
+    st,
+    cfg,
+    it,
+    me: str,
+    live,
+    now: float,
+    *,
+    globs: list[str] | None = None,
+    repo: Path | None = None,
+    fair: bool = True,
+):
     """Why `claim` would refuse ``it`` for ``me`` right now, as a `Blocked`; None if not.
 
     The scheduler's predicate plus the checks `claim` applies unconditionally -- an
@@ -431,6 +472,65 @@ def _claim_blocker(st, cfg, it, me: str, live, now: float, *, globs: list[str] |
             short = ""  # a declaration error: claim reports it, and waiting cannot fix it
         if short:
             return Blocked(it.id, "resources", short, [])
+    if fair and repo is not None:
+        # Last: the files are free, and the question is only whether someone is in line.
+        want = list(it.globs if globs is None else globs)
+        w = _reserved_for(repo, st, cfg, it, me, want, live, now)
+        if w is not None:
+            return Blocked(it.id, "conflict", _reserved_msg(it.id, w, cfg), [w.item])
+    return None
+
+
+def _fmt_since(t: float) -> str:
+    return datetime.fromtimestamp(t, tz=UTC).strftime("%H:%M:%SZ")
+
+
+def _reserved_msg(item: str, w, cfg) -> str:
+    return (
+        f"{item} is reserved for {w.agent} (waiting since {_fmt_since(w.since)} for "
+        f"{w.item}, which needs the same files); their place is held for "
+        f"{cfg.lease.waiter_reservation_s}s after they could claim "
+        f"([lease].waiter_reservation_s)"
+    )
+
+
+def _reserved_for(repo: Path, st, cfg, it, me: str, globs: list[str], live, now: float):
+    """The live waiter that stands ahead of ``me`` for files ``it`` would take, or None.
+
+    First come, first served on a contended file. Without it, a claim freed a file for
+    whoever polled first, and a hot one starved its longest waiter for hours. A waiter
+    reserves only while its own claim would succeed (it is not still behind someone
+    else, and has not lapsed: see `Waiter.live`), only against a claim of overlapping
+    files, and only when it is older than the claimant -- a strict order, so it cannot
+    deadlock, and two waiters on disjoint files never see each other.
+    """
+    from ..core import flow as CF
+    from ..core.schedule import conflicts, shared_globs
+    from ..services import waits as WT
+
+    if cfg.lease.waiter_reservation_s <= 0:
+        return None
+    try:
+        waiters = WT.live_waiters(repo, now)
+    except (OSError, ValueError, TypeError):
+        return None  # advisory: an unreadable registry is no queue
+    mine = next(((w.since, w.agent) for w in waiters if w.agent == me and w.item == it.id), None)
+    shared = shared_globs(cfg)
+    for w in waiters:  # oldest first
+        if w.agent == me or not w.item or (mine is not None and mine <= (w.since, w.agent)):
+            continue
+        target = st.items.get(w.item)
+        if target is None or target.removed or target.state in (DONE, ABANDONED, REVIEW):
+            continue
+        if w.item in live:
+            continue  # someone holds its item: the lease and glob checks speak for it
+        if w.item != it.id and not conflicts(globs, list(target.globs), shared):
+            continue
+        if CF.line_key(st, target, cfg) != CF.line_key(st, it, cfg):
+            continue
+        if _claim_blocker(st, cfg, target, w.agent, live, now, fair=False) is not None:
+            continue  # still behind another holder: nothing to keep free for it yet
+        return w
     return None
 
 
@@ -563,12 +663,14 @@ def wait(
             **data,
         )
 
-    v = _judge_wait(st, cfg, me, item, phase, kind, want)
+    v = _judge_wait(st, cfg, me, item, phase, kind, want, repo)
     if v["status"] != "blocked" or timeout == 0:
         return result(v, 0.0, [])
 
     started = time.monotonic()
     deadline = started + timeout
+    # A place already held by a refused `claim` of this item is kept: queuing by `wait`
+    # must not send an agent to the back of a line it has stood in for an hour.
     w = WT.register(
         repo,
         WT.Waiter(
@@ -577,9 +679,11 @@ def wait(
             phase=phase,
             waiting_on=v["waiting_on"],
             reason=v["why"],
+            since=WT.take_place(repo, me, item),
             until=time.time() + timeout,
         ),
     )
+    keep = False  # woken for an item: the registration stays on as a reservation
     say(f"waiting (up to {round(timeout)}s): {v['why']}")
     # None, so the first pass re-judges whatever landed between the load above and
     # the registration -- a release in that gap must not cost a whole RECHECK_S.
@@ -598,8 +702,9 @@ def wait(
             seen, checked = ext, time.monotonic()
             log, cfg, st = _load(repo, agent)
             was = v
-            v = _judge_wait(st, cfg, me, item, phase, kind, want)
+            v = _judge_wait(st, cfg, me, item, phase, kind, want, repo)
             if v["status"] != "blocked":
+                keep = v["status"] == "ready" and bool(item)
                 freed = _freed(st, cfg, was["waiting_on"], me)
                 if freed:
                     say("woke: " + "; ".join(freed))
@@ -608,6 +713,16 @@ def wait(
                 say(f"still waiting: {v['why']}")
                 WT.update(w, waiting_on=v["waiting_on"], reason=v["why"])
     finally:
+        _end_wait(WT, w, keep, cfg)
+
+
+def _end_wait(WT, w, keep: bool, cfg) -> None:
+    """Leave the registry. A wait that WOKE for an item keeps its place in line: the wait
+    ends when the item is claimable, and the CLAIM follows from another process; until it
+    lands, this registration is the reservation (`_reserved_for`)."""
+    if keep and cfg.lease.waiter_reservation_s > 0:
+        WT.mark_woken(w, cfg.lease.waiter_reservation_s)
+    else:
         WT.unregister(w)
 
 
@@ -783,7 +898,6 @@ def claim(
     is read by a human later, while a refused claim is read by the agent now.
     """
     from ..config import csv_list
-    from ..core import progress as PR
     from ..core.model import fold
 
     log, cfg, _ = _load(repo, agent)
@@ -801,29 +915,17 @@ def claim(
             id=item,
             alternatives=[],
         )
-    looping = [f for f in PR.detect(events, st, cfg) if f.item == item and f.severity == "block"]
-    if looping and not force:
-        return O.refused(
-            "item.claimed",
-            f"refusing to claim {item}: it is already looping.\n"
-            + "\n".join(f"  {f.render()}" for f in looping)
-            + "\n\nRe-claiming it would continue the loop. Change the task, abandon it, "
-            "or --force if you have fixed the underlying cause.",
-            id=item,
-            looping=[f.__dict__ for f in looping],
-        )
     # One reader for every surface: a repeated flag's values, or a JSON array sent as one
     # string over MCP, read whole -- split on commas it was refused as mangled.
     want = GS.parse(globs) or None
     # A holder re-claiming its own LIVE lease only renews it; a refusal below must not
     # then take away a lease the caller already had, with its tree full of work.
-    prior = st.items[item].lease if item in st.items else None
-    held_before = bool(
-        prior
-        and prior.holder == log.agent_id
-        and not prior.expired_at
-        and not prior.expired(time.time(), cfg.lease.grace_s)
+    prior, held_before = _prior_lease(st, cfg, item, log.agent_id)
+    early = _early_refusal(
+        repo, cfg, events, st, item, want, log.agent_id, force=force, held_before=held_before
     )
+    if early is not None:
+        return early
     try:
         lz = L.acquire(
             log,
@@ -843,6 +945,14 @@ def claim(
             own.expired_at or own.expired(time.time(), cfg.lease.grace_s)
         )
         if exc.holder and exc.holder != log.agent_id and not lapsed:
+            _join_line(
+                repo,
+                cfg,
+                log.agent_id,
+                item,
+                _blocking_items(st, cfg, item, want, log.agent_id),
+                str(exc),
+            )
             # The refusal is the moment an agent decides between idling, polling and
             # asking a person. None of the three is needed when the block is a live
             # holder: `wait` wakes it when that holder lets go. Not for an EXPIRED lease,
@@ -853,6 +963,7 @@ def claim(
             )
         return O.refused("item.claimed", reason, id=item, alternatives=list(exc.alternatives or []))
 
+    _leave_line(repo, log.agent_id, item)
     wt = None
     ours = False  # a tree ddflow made (now or on an earlier claim), not one it adopted
     rebound = False  # bound to the item's OWN recorded tree from an earlier claim
@@ -984,6 +1095,111 @@ def _new_report_count(st, item: str) -> int:
     if it is None or it.lease is None:
         return 0
     return new_reports(st, item, it.lease.acquired_at)["count"]
+
+
+def _early_refusal(
+    repo: Path, cfg, events, st, item: str, want, me: str, *, force: bool, held_before: bool
+) -> O.Outcome | None:
+    """A claim turned away before it asks for the lease: the item is looping, or its
+    files are held for a waiter in line. (An `Outcome` is falsy when refused, so these
+    are compared to None, never chained with `or`.)"""
+    looped = _refuse_looping(events, st, cfg, item, force)
+    if looped is not None:
+        return looped
+    return _refuse_if_reserved(repo, cfg, st, item, want, me, skip=force or held_before)
+
+
+def _refuse_looping(events, st, cfg, item: str, force: bool) -> O.Outcome | None:
+    """The refusal for an item that is already looping (`[loops].on_detect = "block"`)."""
+    from ..core import progress as PR
+
+    looping = [f for f in PR.detect(events, st, cfg) if f.item == item and f.severity == "block"]
+    if not looping or force:
+        return None
+    return O.refused(
+        "item.claimed",
+        f"refusing to claim {item}: it is already looping.\n"
+        + "\n".join(f"  {f.render()}" for f in looping)
+        + "\n\nRe-claiming it would continue the loop. Change the task, abandon it, "
+        "or --force if you have fixed the underlying cause.",
+        id=item,
+        looping=[f.__dict__ for f in looping],
+    )
+
+
+def _prior_lease(st, cfg, item: str, me: str):
+    """(the item's lease as folded, whether it is a LIVE one of ``me``'s). A holder
+    re-claiming its own live lease only renews it."""
+    it = st.items.get(item)
+    prior = it.lease if it is not None else None
+    live = bool(
+        prior
+        and prior.holder == me
+        and not prior.expired_at
+        and not prior.expired(time.time(), cfg.lease.grace_s)
+    )
+    return prior, live
+
+
+def _refuse_if_reserved(
+    repo: Path, cfg, st, item: str, want, me: str, *, skip: bool
+) -> O.Outcome | None:
+    """The refusal for a claim of files that are held for a waiter in line; None if free."""
+    it = st.items.get(item)
+    if skip or it is None:
+        return None
+    now = time.time()
+    live = st.active_leases(now, cfg.lease.grace_s)
+    ahead = _reserved_for(
+        repo, st, cfg, it, me, list(want if want is not None else it.globs), live, now
+    )
+    if ahead is None:
+        return None
+    reason = _reserved_msg(item, ahead, cfg)
+    _join_line(repo, cfg, me, item, [ahead.item], reason)
+    return O.refused(
+        "item.claimed",
+        reason + f"\n\n`ddflow wait --item {item}` sleeps until it is yours; your place in "
+        f"line is kept while you wait or keep asking.",
+        id=item,
+        alternatives=[],
+        reserved_for=ahead.agent,
+    )
+
+
+def _blocking_items(st, cfg, item: str, want, me: str) -> list[str]:
+    """The held items a refused claim of ``item`` is waiting behind: what `waiters` names."""
+    it = st.items.get(item)
+    if it is None:
+        return [item]
+    now = time.time()
+    clash = L.glob_clash(st, cfg, it, me, list(want if want is not None else it.globs), now)
+    return [clash[0]] if clash else [item]
+
+
+def _join_line(repo: Path, cfg, agent: str, item: str, waiting_on: list[str], why: str) -> None:
+    """A refused claim is a place in line (`waits.queue`). Never fails the refusal."""
+    from ..services import waits as WT
+
+    if cfg.lease.waiter_reservation_s > 0:
+        WT.queue(
+            repo,
+            agent,
+            item,
+            waiting_on=waiting_on,
+            reason=why,
+            window_s=cfg.lease.waiter_reservation_s,
+        )
+
+
+def _leave_line(repo: Path, agent: str, item: str) -> None:
+    """The claim landed: the place in line it held is spent."""
+    from ..services import waits as WT
+
+    try:
+        WT.clear(repo, agent, item)
+    except (OSError, ValueError, TypeError):
+        pass  # advisory
 
 
 def heartbeat(
@@ -1689,6 +1905,25 @@ def _open_request(
     return O.ok("worktree.merged", **data)
 
 
+def _waiting_on_you(repo: Path, held_ids: list[str]) -> str:
+    """The brief's section on who the agent holds up, "" when nobody waits."""
+    lines = [
+        f"- {w['agent']} has waited {w['waiting_s'] // 60}m for the files {iid} holds"
+        + (f" (for {w['item']})" if w["item"] else "")
+        for iid in held_ids
+        for w in _waiters(repo, iid)
+    ]
+    if not lines:
+        return ""
+    return (
+        "\n\n## Waiting on you\n\n"
+        + "\n".join(lines)
+        + "\n\nFirst come, first served: the oldest gets the files the moment you let go. "
+        "Claim when you are ready to edit; do not hold file globs while only gates, "
+        "reviews or roborev are pending -- finish and merge, or `ddflow release` it."
+    )
+
+
 def brief(
     repo: Path,
     *,
@@ -1793,6 +2028,7 @@ def brief(
     if undecided:
         text = undecided + "\n" + text
     text = reports_block + text
+    text += _waiting_on_you(repo, held_ids)
     if item and item in st.items:
         pr = st.items[item].pr
         if pr is not None and pr.review == "changes_requested" and pr.feedback:
