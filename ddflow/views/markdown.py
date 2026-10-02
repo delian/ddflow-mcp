@@ -567,7 +567,7 @@ def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict], state: Stat
     for ls in lessons:
         rule = (ls.get("rule") or "")[: cfg.lessons.snippet_chars]
         rec = state.lessons.get(ls.get("id", ""))
-        origin = PV.lesson_origin(rec) if rec else PV.Origin(PV.AGENT)
+        origin = PV.lesson_origin(rec) if rec else PV.Origin(PV.UNKNOWN)
         out.append(
             "- "
             + PV.fence("lesson", ls.get("id", ""), f"**{ls.get('title', '')}** — {rule}", origin)
