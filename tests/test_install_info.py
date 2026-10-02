@@ -114,6 +114,8 @@ def test_source_tree_reads_the_commit_from_git(tmp_path, monkeypatch):
     git("init", "-q")
     git(
         "-c",
+        "commit.gpgsign=false",
+        "-c",
         "user.name=t",
         "-c",
         "user.email=t@example.invalid",
@@ -165,4 +167,47 @@ def test_own_dev_tree_by_origin_remote(tmp_path):
 
 
 def test_adopt_and_enforce_share_the_one_implementation():
+    assert E.running_from_source is I.running_from_source
     assert E._running_from_source() == I.running_from_source() == A._running_from_source()
+    assert A.DIST_NAME == I.DIST_NAME
+
+
+def _checkout(tmp_path: Path) -> Path:
+    tree = tmp_path / "checkout"
+    (tree / "ddflow").mkdir(parents=True)
+    return tree
+
+
+def test_editable_install_is_found_in_site_packages(tmp_path, monkeypatch):
+    """PEP 660: the dist-info (and its direct_url.json) lives in site-packages, not
+    beside the package, so it is looked up by name and matched on the tree."""
+    tree = _checkout(tmp_path)
+    site = tmp_path / "site"
+    info = site / "ddflow_mcp-1.2.3.dist-info"
+    info.mkdir(parents=True)
+    (info / "METADATA").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
+    (info / "direct_url.json").write_text(
+        json.dumps({"url": tree.as_uri(), "dir_info": {"editable": True}})
+    )
+    monkeypatch.syspath_prepend(str(site))
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setattr(I, "running_from_source", lambda: True)
+    assert I.install_info(root=tree).kind == "editable"
+
+
+def test_egg_info_in_a_checkout_is_not_an_index_install(tmp_path, monkeypatch):
+    tree = _checkout(tmp_path)
+    egg = tree / "ddflow_mcp.egg-info"
+    egg.mkdir()
+    (egg / "PKG-INFO").write_text("Metadata-Version: 2.1\nName: ddflow-mcp\nVersion: 1.2.3\n")
+    monkeypatch.setattr(PATHS, "package_parent", lambda: tree)
+    monkeypatch.setattr(I, "running_from_source", lambda: True)
+    info = I.install_info(root=tree)
+    assert info.kind == "source-tree" and info.version == "1.2.3"
+
+
+def test_home_replacement_respects_path_boundaries(monkeypatch):
+    monkeypatch.setenv("HOME", "/home/ann")
+    assert I.normalise_path("/home/anna/checkout") == "/home/anna/checkout"
+    assert I.normalise_path("/home/ann/checkout") == "~/checkout"
+    assert I.normalise_path("/home/ann") == "~"
