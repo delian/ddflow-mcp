@@ -43,6 +43,8 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
         ["--refuted"],
         ["--probe", "p"],
         ["--finding", "2"],
+        ["--finding", "0"],  # given but falsy: still a triage flag
+        ["--probe", ""],
     ],
 )
 def test_triage_flags_without_the_verb_are_refused_before_any_reviewer_runs(
@@ -82,4 +84,4 @@ def test_help_says_the_verb_is_required() -> None:
         env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
     )
     assert "ddflow review triage <id>" in p.stdout
-    assert "REQUIRES the verb" in p.stdout
+    assert "REQUIRES the\n`triage` verb" in p.stdout
