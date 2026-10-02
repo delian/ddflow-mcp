@@ -229,6 +229,16 @@ def test_warn_mode_reports_but_still_imports(repo, monkeypatch):
     assert any("WILL be imported anyway" in n for n in plan.notes), plan.notes
 
 
+def test_shipped_default_lists_near_duplicates_but_imports_them(repo, monkeypatch):
+    """The shipped default is warn (B-dedupe-default-warn): flips with B-add-dedupe-surfaces."""
+    monkeypatch.delenv("DDFLOW_DEDUPE_ON_MATCH")
+    _corpus(repo)
+    run_cli(repo, "init")
+    plan = _plan(repo)
+    assert len(plan.duplicates) == 1
+    assert sum(1 for i in _lessons(plan) if i.startswith("LS-")) == 2, "nothing withheld"
+
+
 def test_two_plain_records_of_one_import_are_both_kept(repo):
     """By design (see `_dedupe_found`): only a summary bullet is weighed against the other
     records of its own import. Which of two plain lessons to keep is not decided by read

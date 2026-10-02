@@ -1503,7 +1503,10 @@ duplicate from a related record, which is why it is reported rather than decided
 real project's lessons-summary, 68 of 86 bullets that restate a corpus lesson were
 reported this way. Tasks and phases are not checked (they carry dependencies);
 `[dedupe].on_match = "warn"` reports the same list but imports them anyway, and
-`"off"` turns the check off. Re-running over the same files adds
+`"off"` turns the check off. **While the shipped default is `warn`** (see "The check every
+add runs"), an import lists near-duplicates and imports them anyway; set
+`on_match = "ask"` to have them withheld, as the default will again once
+B-add-dedupe-surfaces lands. Re-running over the same files adds
 nothing.
 
 ### Verifying an import, at any time
