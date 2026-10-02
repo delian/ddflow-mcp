@@ -83,7 +83,9 @@ _VERB = re.compile(r"[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 
 _EXT = (
     "py|md|rst|adoc|toml|json|jsonl|yml|yaml|sh|txt|cfg|ini|lock|rs|go|ts|tsx|js|jsx|html|css|"
-    "c|h|cpp|java|rb|sql|xml|csv|log|svg|png"
+    "c|h|cpp|hpp|java|kt|swift|php|rb|pl|lua|sql|xml|csv|tsv|log|svg|png|jpg|jpeg|gif|webp|ico|pdf|"
+    "zip|tar|gz|tgz|whl|exe|dll|so|ps1|bat|cmd|env|conf|proto|tf|tfvars|vue|mjs|cjs|ipynb|parquet|"
+    "db|sqlite|pkl|npy|npz|pt|pth|bin|onnx|gguf|safetensors|ckpt|md5|sha256"
 )
 _PATHY = re.compile(rf"[\w.\-]+\.(?:{_EXT})|[\w.\-]+(?:/[\w.\-]+)+/?")
 

@@ -218,3 +218,10 @@ def test_suffixed_slugs_that_collide_are_bumped_like_github():
     assert D.anchors_of("# Foo-1\n# Foo\n# Foo\n") == {"foo-1", "foo", "foo-2"}
 
     assert D.anchors_of('<a name="foo"></a>\n# Foo\n# Foo\n') == {"foo", "foo-1"}
+
+
+def test_bare_artifact_filenames_are_path_notes_not_identifiers(tmp_path):
+    readme = "Writes `results.parquet`, `logo.jpg` and `notes.ipynb`.\n"
+    report = D.check_docs(repo_with(tmp_path, readme))
+    assert report.clean
+    assert [n.ref for n in report.notes] == ["logo.jpg", "notes.ipynb", "results.parquet"]
