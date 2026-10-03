@@ -402,3 +402,56 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
     ):
         text = (root / rel).read_text()
         assert "delta_default" in text and ("--full" in text or "full=true" in text), rel
+
+
+# -- findings of the review of this change ----------------------------------------------
+
+
+def test_force_is_a_full_round_even_when_the_default_would_make_it_a_delta(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _review(repo)
+    _review(repo, full=True)  # the cap (2) is spent
+    _fix(repo)
+    out = _review(repo, force=True, reason="operator asked")
+    assert out.exit == OK, out.reason
+    ev = _ev(repo)
+    assert ev["review_kind"] == "full" and ev["round"] == 3 and ev["budget_forced"]
+    assert "delta review" not in out.data["text"]
+
+
+def test_a_delta_that_reached_no_reviewer_does_not_move_the_reviewed_head(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _review(repo)
+    _fix(repo, "a.py")
+    (tmp_path / "fake-reviewer").write_text("#!/bin/sh\nexit 1\n")  # the reviewer is down
+    down = _review(repo)
+    assert down.exit != OK
+    assert "reviewed_head" not in _ev(repo), "no reviewer saw this head"
+    (tmp_path / "fake-reviewer").write_text(
+        "#!/bin/sh\ncat >/dev/null\necho 'STATUS: NO FINDINGS'\n"
+    )
+    _fix(repo, "b.py")
+    out = _review(repo)
+    assert out.exit == OK, out.reason
+    assert "delta review of 2 commits since" in out.data["text"], out.data["text"]
+
+
+def test_a_plain_review_after_a_gate_skip_is_still_a_delta(repo, tmp_path):
+    """Probe for a review finding: the log still knows the reviewed head after a skip
+    replaced the gate's record, and a delta from it is sound (the skip changed no code)."""
+    _setup(repo, tmp_path)
+    _review(repo)
+    run_cli(repo, "gate", "skip", "T1", "critic", "--reason", "x")
+    _fix(repo)
+    out = _review(repo)
+    assert out.exit == OK and _ev(repo)["review_kind"] == "delta", out.reason
+
+
+def test_the_evidence_carries_the_resolved_round_kind_not_the_flag(repo, tmp_path):
+    """Probe for a review finding: `full` is an argument, never an evidence field."""
+    _setup(repo, tmp_path)
+    _review(repo)
+    _fix(repo)
+    _review(repo, full=False)
+    ev = _ev(repo)
+    assert "full" not in ev and ev["review_kind"] == "delta"

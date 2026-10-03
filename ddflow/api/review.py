@@ -543,8 +543,11 @@ def _round_evidence(
         "review_kind": kind if counted or kind != "full" else "full_unavailable",
         "rounds": done + (1 if counted else 0),
         "delta_rounds": deltas + (1 if kind == "delta" and reviewed else 0),
-        "reviewed_head": _head_of(repo, it, branch, commit),
     }
+    if reviewed:
+        # Only a review that reached a reviewer covered this head: recording it for one
+        # that did not would let the next delta start past commits nobody reviewed.
+        ev["reviewed_head"] = _head_of(repo, it, branch, commit)
     if counted:
         ev["round"] = done + 1
     if forced:
@@ -646,13 +649,15 @@ def _wants_delta(repo, cfg, log, it, a, say) -> bool:
     """Is this call a delta recheck? `--delta` says so; with `[review].delta_default` (on
     in every project) so does a plain review of a gate that already has a recorded one.
 
-    `--full`, `--chunk`, `--commit` and `--base` are left as they are asked for. A delta
-    is only sound from a head the branch still contains: one that is no ancestor of the
-    tip (rebased, amended) would diff the rebase's own changes, so it falls back to a
-    full round and says why -- as does a prior review that did not cover the whole diff.
+    `--full`, `--force` (a forced FULL round), `--chunk`, `--commit` and `--base` are left
+    as they are asked for. A delta is only sound from a head the branch still contains: one
+    that is no ancestor of the tip (rebased, amended) would diff the rebase's own changes,
+    so it falls back to a full round and says why -- as does, for the automatic delta only,
+    a prior review that did not cover the whole diff (an explicit `--delta` is the author's
+    own choice; the recorded `coverage` is kept beside the delta's).
     """
     explicit = bool(a["delta"])
-    plain = not (a["chunks"] or a["commit"] or a["base"] or a["full"])
+    plain = not (a["chunks"] or a["commit"] or a["base"] or a["full"] or a["force"])
     if not it or not (explicit or (plain and cfg.review.delta_default)):
         return False
     item, gate = a["item"], a["gate"]
