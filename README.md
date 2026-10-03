@@ -3040,6 +3040,28 @@ bytes it is re-using to prove they are still the same bytes:
 A command like `ddflow doctor` — which reads four times — pays the full cost once instead
 of four times.
 
+**The sort and the de-duplication are maintained too (B169).** `read_all` keeps the merged,
+Lamport-sorted, de-duplicated order between calls and folds each append into it by
+bisection, falling back to a full rebuild whenever the shortcut could not be proven
+identical (a shard whose bytes changed, a repeated event id, a batch of more than 64).
+Measured, one appended event, `tests/bench_log_read.py`: 20,000 events 14.8 ms to 3.8 ms;
+100,000 events 75.9 ms to 19.5 ms. What remains is reading and hashing the log's bytes,
+which is the price of verifying them and is linear in the log.
+
+**A one-shot CLI call no longer parses everything (B166).** Once a log has 5,000+ events,
+`read_all` writes a snapshot of the parsed events and their merged order to
+`.ddflow/local/read-snapshot.bin` (machine-local, git-ignored, never merged). A later
+process loads it instead of calling `Event.from_json` on every line: 100,000 events cold
+650-710 ms to 280-400 ms (about 2x), 20,000 events 118-129 ms to 54-59 ms. It is a cache
+and is trusted only as far as it verifies: per shard, the SHA-256 of the bytes it
+describes must still match the shard on disk (so a rewritten, truncated or switched-branch
+shard is re-parsed, and an appended or torn tail is parsed as usual); the file's own
+checksum, format, ddflow version and Event fields must match; any doubt means the snapshot
+is ignored and the log parsed. `ddflow doctor`'s integrity check (`EventLog.verify`) never
+uses it. Deleting the file is always safe; `DDFLOW_SNAPSHOT=0` turns it off for a
+process. It covers up to `max_cached_events` (a larger log is parsed each time, as
+before). The table above is reproduced by `python tests/bench_log_read.py`.
+
 Two knobs, `[log]`:
 
 | knob | default | what it trades |
