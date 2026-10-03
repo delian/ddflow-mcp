@@ -676,7 +676,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "lines": (
                 "string",
-                "Comma-separated release lines a FIX must reach, e.g. '1,2,3': the task is written on the line [flow].port_strategy dictates and a port task `<id>@<line>` is generated per other line, each starting once what it carries has landed.",
+                "Release lines a FIX must reach, e.g. '1,2,3': written where [flow].port_strategy says, plus a port task `<id>@<line>` per other line.",
+                False,
+            ),
+            "port_of": (
+                "string",
+                "Earlier fix this follows up: reuses the lines it reached.",
                 False,
             ),
             "readd": (
@@ -698,6 +703,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             priority=int(a.get("priority") or _api().DEFAULT_PRIORITY),
             line=a.get("line", "") or "",
             lines=a.get("lines", "") or "",
+            port_of=a.get("port_of", "") or "",
             readd=bool(a.get("readd")),
             answer=_answer(a),
             agent=agent,
