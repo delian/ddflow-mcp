@@ -160,7 +160,7 @@ the same implementation, so neither drifts from the other.
 | I want to… | CLI | MCP tool |
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
-| **check a done task really is done** | `ddflow verify <id>`: landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
+| **check a done task really is done** | `ddflow verify <id>` (or `--all` / `--phase P` to sweep every done task, worst first, `--file-bugs` to file what fails): landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
 | **what a finished task required and changed** | `ddflow show <id>` on a done task prints its completion ledger: requirement digest, files and tests the landing changed, skipped gates, forced flag, later amendments | `ddflow_show` |
 | **one-page state of the project** | `ddflow workflow state` | `ddflow_workflow_state` |
 | **project rules** | `ddflow rule add\|edit\|list\|search\|show\|remove` | `ddflow_rule_add` · `_edit` · `_list` · `_search` · `_show` · `_remove` |
