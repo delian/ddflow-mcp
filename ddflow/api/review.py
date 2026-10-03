@@ -430,6 +430,43 @@ def reviewers_detect(
     return out
 
 
+class _ReplyFile:
+    """Every chunk's whole reply, appended to ``.ddflow/local/reviews/<item>.<gate>.jsonl``
+    as it ARRIVES (bug B206): a review can outlive its caller (the MCP client gave up at
+    1800 s on a 2055 s critic), and a finding body that lives only in the tool response
+    is then lost. The gate evidence names the file and its digest."""
+
+    def __init__(self, repo: Path, item: str, gate: str) -> None:
+        import threading
+
+        self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.jsonl"
+        self._lock = threading.Lock()
+        self._started = False
+
+    def add(self, chunk: int, reply: str) -> None:
+        import json
+
+        with self._lock:
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.path.open("w" if not self._started else "a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"chunk": chunk, "reply": reply}) + "\n")
+                self._started = True
+            except OSError:
+                pass  # the evidence still carries the bodies; this is the belt
+
+    def evidence(self) -> dict[str, Any]:
+        import hashlib
+
+        if not self._started:
+            return {}
+        try:
+            digest = hashlib.sha256(self.path.read_bytes()).hexdigest()[:16]
+        except OSError:
+            return {}
+        return {"output_file": str(self.path), "output_digest": digest}
+
+
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -545,6 +582,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         revs, prior, only = scoped
         say(f"→ re-reviewing chunk(s) {only} of {item}.{gate} (recorded: {prior['coverage']})")
 
+    keep = _ReplyFile(repo, item, gate) if item else None
     overrides = P.overrides_from(cfg)
     tick_s = min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s))
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
@@ -562,6 +600,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             on_tick=keep_lease,
             tick_s=tick_s,
             only=only,
+            on_chunk=keep.add if keep else None,
         )
         if prior:
             # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
@@ -593,7 +632,12 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             gate,
             outcome,
             reason=best.reason or (f"{len(best.findings)} finding(s)" if best.findings else ""),
-            evidence={**best.evidence(), "diff_source": how, "diff_chars": len(diff)},
+            evidence={
+                **best.evidence(),
+                "diff_source": how,
+                "diff_chars": len(diff),
+                **(keep.evidence() if keep else {}),
+            },
             gates=gates,
             by=best.model,
         )
