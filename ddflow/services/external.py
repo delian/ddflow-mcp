@@ -70,7 +70,9 @@ def sync(log: EventLog, cfg: Config, root: Path, state: State) -> list[Observati
                 folded[name] = f"{path} has no ddflow log"
             else:
                 try:
-                    folded[name] = fold(EventLog(path, log_cfg=cfg.log).read_all(), strict=False)
+                    folded[name] = fold(
+                        EventLog(path, log_cfg=cfg.log, cache_writes=False).read_all(), strict=False
+                    )
                 except OSError as exc:
                     folded[name] = f"could not read {path}: {exc}"
         other = folded[name]

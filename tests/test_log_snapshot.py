@@ -309,3 +309,35 @@ def test_a_bad_saved_order_is_rejected_even_with_valid_checksums(repo, tamper):
     meta["size"], meta["sha256"] = len(payload), hashlib.sha256(payload).hexdigest()
     path.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
     _check(repo)
+
+
+def test_a_read_only_log_never_writes_a_snapshot_into_the_repo_it_reads(repo):
+    """`external.sync` and exports read SOMEONE ELSE's repository: no files there."""
+    log = _log(repo)
+    _put(log, "a", [_ev("a", i) for i in range(1, N + 1)])
+    reader = EventLog(repo, "x", log_cfg=CFG, cache_writes=False)
+    assert len(reader.read_all()) == N
+    assert not _snap(log).exists() and not _snap(log).parent.exists()
+
+
+def test_a_valid_saved_order_is_adopted_so_the_cold_read_does_not_sort(repo, monkeypatch):
+    """Adoption is the feature; the rejection tests alone would stay green if it never
+    happened. (`_sorted_unique` is the from-scratch sort+dedupe.)"""
+    _build(repo)
+    sorts = []
+    real = L._sorted_unique
+    monkeypatch.setattr(L, "_sorted_unique", lambda ev: sorts.append(1) or real(ev))
+    _check(repo)
+    assert not sorts, "a valid snapshot order was not adopted"
+    # control: with the order poisoned the same read must fall back to sorting
+    clear_parse_cache()
+    path = _snap(_log(repo))
+    head, _, payload = path.read_bytes().partition(b"\n")
+    body = marshal.loads(payload)
+    body["\0order"] = (body["\0order"][0], [])
+    payload = marshal.dumps(body)
+    meta = json.loads(head)
+    meta["size"], meta["sha256"] = len(payload), hashlib.sha256(payload).hexdigest()
+    path.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
+    _check(repo)
+    assert sorts, "the control did not fall back to a sort"
