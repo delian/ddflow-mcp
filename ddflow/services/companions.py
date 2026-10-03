@@ -305,6 +305,10 @@ _VERIFY_PROTOCOL = "2025-03-26"
 #: Most of a server's output kept while waiting for its answer.
 _MAX_BUF = 1 << 20
 
+#: How long a binary that echoed our request gets to ALSO answer it (a server that logs each
+#: line it receives does) before it is called a non-server.
+_ECHO_GRACE_S = 2.0
+
 #: What an echoing binary (`cat`) sends back: our own request, recognisable by its method.
 _ECHO_MARK = b'"method": "initialize"'
 
@@ -363,17 +367,18 @@ def _describe_answer(msg: dict) -> tuple[str, dict]:
     return f"answered initialize ({who or 'no serverInfo'})", server
 
 
-def _exited(proc: subprocess.Popen) -> bool:
-    """Has the direct child exited? WITHOUT reaping it (`poll`/`wait` would).
+def _exit_info(proc: subprocess.Popen) -> os.waitid_result | None:
+    """The direct child's exit record, or None while it runs. WITHOUT reaping it
+    (`poll`/`wait` would).
 
     An unreaped leader keeps its pid -- and so the process group's id -- reserved, which is
     what makes the final group-wide SIGKILL safe: once reaped, the pid may be recycled
     and `killpg` would hit whatever got it.
     """
     try:
-        return os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+        return os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
     except ChildProcessError:
-        return True
+        return None
 
 
 def _stop(proc: subprocess.Popen) -> None:
@@ -386,7 +391,7 @@ def _stop(proc: subprocess.Popen) -> None:
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, signal.SIGTERM)
     deadline = time.monotonic() + 3
-    while not _exited(proc) and time.monotonic() < deadline:
+    while _exit_info(proc) is None and time.monotonic() < deadline:
         time.sleep(0.02)
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, signal.SIGKILL)
@@ -457,7 +462,7 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
             except OSError:
                 return done(False, f"`{c.command}` exited before reading a request.{stderr_tail()}")
             fd = proc.stdout.fileno()
-            buf, deadline = b"", t0 + timeout_s
+            buf, deadline, echoed_at = b"", t0 + timeout_s, 0.0
             while True:
                 left = deadline - time.monotonic()
                 if left <= 0:
@@ -468,23 +473,23 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                         + stderr_tail(),
                     )
                 ready, _, _ = select.select([fd], [], [], min(left, 0.5))
+                if echoed_at and time.monotonic() - echoed_at > _ECHO_GRACE_S:
+                    return done(False, f"`{c.command}` echoed the request back and never answered")
                 if not ready:
-                    if proc.poll() is not None:
-                        break
-                    continue
+                    continue  # the pipe is still open: a wrapper's child may yet answer
                 chunk = os.read(fd, 65536)
                 if not chunk:
-                    break
+                    break  # EOF: nothing holds the pipe any more
                 buf = _keep(buf, chunk)
-                if _ECHO_MARK in buf:
-                    return done(False, f"`{c.command}` echoed the request back: it is not a server")
+                if not echoed_at and _ECHO_MARK in buf:
+                    echoed_at = time.monotonic()  # a log line may precede the answer
                 msg, buf = _reply_to(buf, 1)
                 if msg is not None:
                     return done(True, *_describe_answer(msg))
+            info = _exit_info(proc)
+            how = f"exited ({info.si_status})" if info is not None else "closed its output"
             return done(
-                False,
-                f"`{c.command}` exited ({proc.poll()}) without answering `initialize`."
-                + stderr_tail(),
+                False, f"`{c.command}` {how} without answering `initialize`." + stderr_tail()
             )
         finally:
             _stop(proc)

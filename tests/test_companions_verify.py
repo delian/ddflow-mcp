@@ -97,6 +97,39 @@ def test_log_lines_and_notifications_before_the_answer_are_skipped(tmp_path):
     assert v.speaks_mcp is True, v.detail
 
 
+def test_a_wrapper_that_forks_the_real_server_and_exits_is_still_verified(tmp_path):
+    """The direct child exits at once; its child (a slow-starting server) answers a moment
+    later on the inherited pipes. The exit of the wrapper is not the end of the wait."""
+    body = textwrap.dedent(
+        """
+        import json, os, sys, time
+        if os.fork() != 0:
+            sys.exit(0)  # the wrapper
+        time.sleep(1.5)  # the real server is still starting
+        for line in sys.stdin:
+            msg = json.loads(line)
+            print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
+            break
+        """
+    )
+    v = CO.verify_one(_companion("wrapper", sys.executable, _script(tmp_path, "wr.py", body)))
+    assert v.speaks_mcp is True, v.detail
+
+
+def test_a_server_that_logs_the_request_line_and_then_answers_is_verified(tmp_path):
+    body = textwrap.dedent(
+        """
+        import json, sys
+        for line in sys.stdin:
+            sys.stdout.write(line)  # debug: echo what arrived
+            msg = json.loads(line)
+            print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
+        """
+    )
+    v = CO.verify_one(_companion("logger", sys.executable, _script(tmp_path, "lg.py", body)))
+    assert v.speaks_mcp is True, v.detail
+
+
 def test_a_binary_that_echoes_its_input_is_not_a_server():
     """`cat` hands the request straight back: it has id 1 and a method, and no result."""
     v = CO.verify_one(_companion("cat", "cat", []))
