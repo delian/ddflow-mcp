@@ -23,6 +23,7 @@ from ..core.events import Event
 from ..core.model import Item, fold
 
 MAX_FILES = 100
+_BOOKKEEPING = (".ddflow/events/", ".ddflow/local/", ".ddflow/index.db")
 _TEST = re.compile(
     r"(^|/)(tests?|spec)/|(^|/)test_[^/]*$|_test\.[a-z]+$|\.(test|spec)\.[cm]?[jt]sx?$"
 )
@@ -54,10 +55,10 @@ def git_facts(repo: Path, sha: str, it: Item) -> dict[str, Any]:
     listed = git_paths(repo, "show", "--name-only", "--format=", "-m", "--first-parent", sha)
     if listed is None:
         return facts
-    # `.ddflow/` is the queue's own bookkeeping (event shards, config): it rides along in
-    # almost every landing and is not the work, so it is neither a "changed file" nor
-    # evidence that the landing touched anything.
-    files = sorted({f for f in listed if f.strip() and not f.startswith(".ddflow/")})
+    # The queue's own bookkeeping (event shards, the derived index, machine-local state)
+    # rides along in almost every landing and is not the work. Config, rules and prompts
+    # under `.ddflow/` ARE deliverables a task may own, so they stay.
+    files = sorted({f for f in listed if f.strip() and not f.startswith(_BOOKKEEPING)})
     facts.update(
         files_known=True,
         files_total=len(files),
