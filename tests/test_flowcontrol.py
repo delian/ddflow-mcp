@@ -326,3 +326,10 @@ def test_limited_by_stops_naming_a_signal_that_recovered():
     run += [Sample((3 + i) * STEP, {LOAD: 0.1, "q": 0}) for i in range(40)]
     d = fold(run, p)
     assert d.mode == "increase" and d.limited_by == LOAD
+
+
+def test_a_blind_sample_breaks_the_healthy_streak():
+    run = [Sample(i * STEP, dict(GOOD)) for i in range(10)]  # 540 s healthy
+    run.append(Sample(600.0, {}))
+    run += [Sample(660.0 + i * STEP, dict(GOOD)) for i in range(2)]
+    assert fold(run).limit == 4

@@ -183,7 +183,7 @@ class _Replay:
         p = self.params
         host, bad_signal, healthy = _classify(s, p)
         if not host:
-            self.prev_ok = False
+            self.prev_ok, self.accum = False, 0.0  # blind: cannot justify an increase
             return  # blind sample: neutral for everything
         self.saw_host = True
         self.window.append((bad_signal is not None, bad_signal))
