@@ -13,7 +13,7 @@ whose match disappears under redaction shows its start instead).
 
 `regex` runs Python's backtracking engine, which cannot be interrupted, so a pattern is
 checked before it runs (`check_regex`): too long, a back-reference, an unbounded repeat
-inside another repeat, an alternation inside an unbounded repeat, or more than
+inside another repeat, an alternation inside a repeat, or more than
 `MAX_OPEN_REPEATS` unbounded repeats are refused with the reason. What passes is run on
 at most `MAX_SCAN` characters per record under an overall time budget.
 """
@@ -169,10 +169,10 @@ def _walk(sre_parse, nodes, in_repeat: bool, in_open: bool, stats: dict[str, int
                 stats["open"] += 1
             _walk(c, sub, in_repeat or hi > 1, in_open or unbounded, stats)
         elif name == "BRANCH":
-            if in_open:
+            if in_open or in_repeat:
                 raise SearchError(
-                    "regex refused: an alternation inside an unbounded repeat can take "
-                    "exponential time"
+                    "regex refused: an alternation inside a repeat can take exponential "
+                    "time (use a character class, or repeat nothing)"
                 )
             for alt in av[1]:
                 _walk(c, alt, in_repeat, in_open, stats)
