@@ -151,13 +151,16 @@ def _config_key_value(a) -> tuple[str, str]:
     words = list(getattr(a, "value", None) or [])
     if a.set:
         return a.set, " ".join(words)
-    if len(words) == 2:  # noqa: PLR2004 -- KEY VALUE
-        return words[0], words[1]
+    if len(words) >= 2:  # noqa: PLR2004 -- KEY VALUE...
+        return words[0], " ".join(words[1:])
     return "", ""
 
 
 def cmd_config(a, c: Ctx) -> int:
     key, value = _config_key_value(a)
+    if getattr(a, "value", None) and not key:
+        print("a value alone sets nothing: ddflow config KEY VALUE [--local]", file=sys.stderr)
+        return FAIL
     out = A.configure(
         c.repo,
         A.ConfigEdit(
