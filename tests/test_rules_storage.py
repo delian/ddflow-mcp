@@ -583,9 +583,9 @@ def test_max_rules_does_not_block_rewriting_an_existing_rule(tmp_path):
     (tmp_path / ".ddflow").mkdir()
     (tmp_path / ".ddflow" / "config.toml").write_text("[rules]\nmax_rules = 1\n")
     assert (
-        api.rule_add(tmp_path, Rule(id="r1", title="t", content="a"), check_dedup=False).exit == 0
+        api.rule_add(tmp_path, Rule(id="r-one", title="t", content="a"), check_dedup=False).exit == 0
     )
-    again = api.rule_add(tmp_path, Rule(id="r1", title="t", content="b"), check_dedup=False)
+    again = api.rule_add(tmp_path, Rule(id="r-one", title="t", content="b"), check_dedup=False)
     assert again.exit == 0, again.reason
-    other = api.rule_add(tmp_path, Rule(id="r2", title="t", content="c"), check_dedup=False)
+    other = api.rule_add(tmp_path, Rule(id="r-two", title="t", content="c"), check_dedup=False)
     assert other.exit != 0 and "max_rules" in other.reason
