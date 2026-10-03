@@ -31,7 +31,9 @@ def find_commit(repo: Path, st: State, item_id: str) -> tuple[str, str] | None:
     it = st.items.get(item_id)
     if it is not None and _is_commit(repo, it.merged_sha):
         return it.merged_sha, "the merge sha the log recorded"
-    head = re.compile(rf"^(merge )?{re.escape(item_id)}(:| |\(|$)", re.I)
+    head = re.compile(
+        rf"^(merge )?{re.escape(item_id)}:"
+    )  # how `ddflow merge` and fix commits name it
     r = git(
         repo,
         "log",
@@ -53,7 +55,12 @@ def apply(repo: Path, st: State, led: dict[str, Any], item_id: str) -> dict[str,
     """Fill a reconstructed ledger's missing landing from git, marking where it came from."""
     if not led["reconstructed"] or led["done"]["files_known"]:
         return led
-    found = find_commit(repo, st, item_id)
+    # A recorded sha that is a real commit is the landing; only otherwise search. The file
+    # list must come from the SAME commit the ledger names.
+    found = (
+        (led["sha"], "the sha the completion recorded") if _is_commit(repo, led["sha"]) else None
+    )
+    found = found or find_commit(repo, st, item_id)
     it = st.items.get(item_id)
     if found is None or it is None:
         return led
@@ -63,7 +70,7 @@ def apply(repo: Path, st: State, led: dict[str, Any], item_id: str) -> dict[str,
         return led
     return {
         **led,
-        "sha": led["sha"] or sha,
+        "sha": sha,
         "done": {
             "files_known": True,
             "files_total": facts["files_total"],
