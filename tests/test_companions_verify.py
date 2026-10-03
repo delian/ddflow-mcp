@@ -193,6 +193,8 @@ def test_an_answering_server_and_a_sigterm_proof_grandchild_do_not_outlive_the_c
             os.replace(tmp, {str(pidfile)!r})
             time.sleep(120)
             sys.exit(0)
+        while not os.path.exists({str(pidfile)!r}):  # answer only once the grandchild is up
+            time.sleep(0.01)
         for line in sys.stdin:
             msg = json.loads(line)
             print(json.dumps({{"jsonrpc": "2.0", "id": msg["id"], "result": {{}}}}), flush=True)
