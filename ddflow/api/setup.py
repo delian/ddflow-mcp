@@ -673,6 +673,13 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         f"Claude Code SessionStart hook: {session_line}\n"
         f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
+    from ..services import launchers as LA
+
+    dangling = LA.findings(repo)
+    if dangling:
+        message += "\nDANGLING LAUNCHER: " + "\nDANGLING LAUNCHER: ".join(
+            d.render() for d in dangling
+        )
     data = {
         "installed": on,
         "policy": mode,
@@ -680,6 +687,7 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         "trailer_hook": msg_hook,
         # How each is armed: "ddflow", "pre-commit", "pre-commit legacy", or "".
         "armed_via": {"pre-commit": commit_hook.via, "commit-msg": msg_armed.via},
+        "dangling": [d.render() for d in dangling],
         "message": message,
     }
     if on or mode == "off":

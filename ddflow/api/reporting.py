@@ -580,6 +580,16 @@ def _orphan_notes(events: list) -> list[str]:
     ]
 
 
+def _launcher_findings(repo: Path, problems: list[str], notes: list[str]) -> None:
+    """A launcher recorded in a hook or MCP entry whose target is gone. The git hooks fail
+    open now, so the check silently stops: a PROBLEM, unless `ddflow` on PATH still runs
+    it (B-dangling-precommit-hook)."""
+    from ..services import launchers as LA
+
+    for d in LA.findings(repo):
+        (notes if d.fallback else problems).append(d.render())
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -720,6 +730,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         severe = state.state in (MISSING, NOT_BINDING)
         (problems if severe else notes).append(line)
 
+    _launcher_findings(repo, problems, notes)
     notes += _driver_drift_notes(repo)
     notes += _unknown_author_notes(repo, log)
 
