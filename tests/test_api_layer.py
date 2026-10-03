@@ -302,6 +302,12 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_precommit": (["precommit"], {}),
     "ddflow_import_verify": (["import", "--verify"], {}),
     "ddflow_companions": (["companions", "list"], {}),
+    # A command that cannot be spawned makes the result deterministic on both surfaces
+    # (state `unavailable`, one run that could not be made); a real run would not be.
+    "ddflow_bisect": (
+        ["bisect", "tests/t.py::t", "--cmd", "no-such-runner-xyz {tests}"],
+        {"victim": "tests/t.py::t", "cmd": "no-such-runner-xyz {tests}"},
+    ),
     # Verifying SPAWNS the servers, and the fixture's cache says the shipped ones are
     # installed, so a default run would start real `npx`/`docker` children whose timings
     # differ between the two calls. Naming a cli companion launches nothing: both surfaces
