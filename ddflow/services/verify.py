@@ -81,14 +81,17 @@ def _git_ok(repo: Path, *args: str) -> bool | None:
         return None
 
 
-def _ever_existed(repo: Path, path: str) -> bool:
+def _ever_existed(repo: Path, path: str, rev: str) -> bool:
+    """Was `path` ever in the history `rev` descends from? Scoped to that history, not
+    `--all`: a sibling branch that creates it says nothing about this landing. When git
+    cannot answer, say yes -- an unanswered question must not become an accusation."""
     from ..infra.worktree import git
 
     try:
-        r = git(repo, "log", "--all", "--oneline", "-1", "--", path, timeout=60)
-    except Exception:  # git missing or hung: assume it existed rather than accuse
+        r = git(repo, "log", "--oneline", "-1", rev, "--", path, timeout=60)
+    except Exception:  # git missing or hung
         return True
-    return r.ok and bool(r.out)
+    return bool(r.out) if r.ok else True
 
 
 def _tracked(repo: Path) -> set[str] | None:
@@ -146,7 +149,8 @@ def _declared(repo: Path, led: dict[str, Any], tracked: set[str] | None) -> Clai
     absent = [g for g in exact if g not in tracked and g not in landed]
     # Absent now and not in the landing: either it never existed (the false positive) or
     # it existed and was removed or renamed later -- history tells the two apart.
-    removed_later = [g for g in absent if _ever_existed(repo, g)]
+    rev = led["sha"] or "HEAD"
+    removed_later = [g for g in absent if _ever_existed(repo, g, rev)]
     never = [g for g in absent if g not in removed_later]
     gone = [g for g in exact if g not in tracked and g in landed] + removed_later
     if never:

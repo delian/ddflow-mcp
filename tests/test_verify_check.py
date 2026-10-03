@@ -242,3 +242,15 @@ def test_a_declared_file_removed_later_is_a_warning_but_one_never_created_is_a_f
     _task(repo, "never.py", "T2")
     run_cli(repo, "complete", "T2", "--sha", sha, "--force")
     assert _claims(verify(repo, "T2"))["declared_files"]["status"] == "fail"
+
+
+def test_a_file_that_only_a_sibling_branch_created_does_not_excuse_a_false_completion(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _git(repo, "checkout", "-q", "-b", "sibling")
+    _commit(repo, {"declared.py": "1\n"}, "sibling work")
+    _git(repo, "checkout", "-q", "-")
+    _task(repo, "declared.py")
+    sha = _commit(repo, {"other.py": "1\n"})
+    run_cli(repo, "complete", "T1", "--sha", sha, "--force")
+    assert _claims(verify(repo, "T1"))["declared_files"]["status"] == "fail"
