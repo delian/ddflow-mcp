@@ -268,7 +268,7 @@ def test_a_refused_deploy_record_leaves_what_is_live_untouched(envs):
     assert run_cli(repo, "promote", "deployed", "production", "--sha", good)[0] == 0
     assert run_cli(repo, "promote", "deployed", "production", "--sha", "nothere" * 6)[0] == 3
     assert run_cli(repo, "promote", "deployed", "staging")[0] == 3
-    code, out, _ = run_cli(repo, "--json", "promote", "status")
+    _, out, _ = run_cli(repo, "--json", "promote", "status")
     prod = {r["env"]: r for r in json.loads(out)["rows"]}["production"]
     assert prod["deployed"] == good[:12], "a refusal must not overwrite the recorded sha"
 
@@ -281,6 +281,6 @@ def test_status_says_so_when_the_undeployed_count_cannot_be_computed(envs):
     _Log(repo, "hook").append(
         "deploy.recorded", "production", {"env": "production", "sha": "f" * 40}
     )
-    code, out, _ = run_cli(repo, "promote", "status")
+    _, out, _ = run_cli(repo, "promote", "status")
     line = next(ln for ln in out.splitlines() if ln.strip().startswith("production"))
     assert "live ffffffffffff" in line and "unknown" in line, line
