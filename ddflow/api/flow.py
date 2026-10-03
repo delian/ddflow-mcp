@@ -43,7 +43,7 @@ def pr_sync(repo: Path, *, item: str = "", agent: str = "") -> O.Outcome:
         return O.refused("pr.sync", "; ".join(rep.refused), **data)
     if rep.unavailable and not rep.changes and not rep.waiting:
         return O.nothing("pr.sync", "; ".join(rep.unavailable), **data)
-    if not rep.checked:
+    if not rep.checked and not rep.changes:
         return O.nothing("pr.sync", "nothing is in review", **data)
     return O.ok("pr.sync", **data)
 
@@ -74,7 +74,10 @@ def pr_status(repo: Path, *, agent: str = "") -> O.Outcome:
         )
     releases = [{"version": v, **p} for v, p in sorted(st.pending_releases.items())]
     in_review = sum(1 for r in rows if r["state"] == REVIEW)
-    return O.ok("pr.status", rows=rows, in_review=in_review, releases=releases)
+    back_merges = [dict(r) for _k, r in sorted(st.back_merges.items())]
+    return O.ok(
+        "pr.status", rows=rows, in_review=in_review, releases=releases, back_merges=back_merges
+    )
 
 
 def _plan_data(vp) -> dict[str, Any]:
