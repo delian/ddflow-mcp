@@ -1013,7 +1013,11 @@ class EventLog:
             self.skipped_lines += d.skipped
         torn = [e for _, d in deltas for e in d.torn]
         if not self.log_cfg.reuse_parsed or any(d.parsed is None for _, d in deltas):
-            _MERGED.pop(self.dir, None)
+            if self.log_cfg.reuse_parsed:
+                # Over the memory ceiling: the maintained order would outlive its parse.
+                # (A cache-disabled reader leaves it alone: it is validated against the
+                # parse cache by lineage, so another reader's copy cannot go stale.)
+                _MERGED.pop(self.dir, None)
             return _sorted_unique([e for _, d in deltas for e in d.whole] + torn)
         merged = self._merge(deltas)
         if not torn:
