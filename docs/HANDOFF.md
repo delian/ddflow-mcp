@@ -71,7 +71,7 @@ claude`, `ddflow hooks install --claude`, and `ddflow import --max-tasks <n> --a
 (run_nemo_run needs `--max-tasks` > 1,125). The pre-commit framework both use owns their
 git hooks: add `ddflow hooks check-commit` / `check-msg "$1"` as local hooks there.
 
-**Dogfooding (B7) was evaluated, not done**: in a throwaway copy, `adopt` + the MCP
+**Dogfooding (B7) was evaluated, not done** *(superseded: DONE 2026-09-28, commits 6be308a7 and fec4106c; this paragraph is the state when this file was written)*: in a throwaway copy, `adopt` + the MCP
 surface work; `docs/BACKLOG.md` has no checkboxes, so it imports nothing until converted
 (~30 lines of conversion gave 23 open tasks, matching its audit). Seven defects that run
 found are fixed on this branch (`afd9755`). Still B7's operator decision (§8).
@@ -282,7 +282,7 @@ These three share a "what does this diff touch?" helper; build it once.
 
 ### Also open, outside B16–B26
 
-`B7` dogfooding (**needs operator approval** — adopting ddflow into its own repo installs a
+`B7` dogfooding (*done 2026-09-28, see the note in §0*; it needed operator approval — adopting ddflow into its own repo installs a
 commit hook and writes `AGENTS.md`/`CLAUDE.md`/`.mcp.json`), `B12` partial, `B13` Windows,
 `B52`, `B95`, `B109`–`B112` (deliberately deferred design thread), `B114`, `B148`, `B149`,
 `B166`–`B169`.
@@ -395,4 +395,4 @@ follow it."* Grep before designing.
 shelling out to the project's command. That is a significant architectural change and should
 be an explicit decision, not an inference from a backlog entry.
 
-**B7 (dogfooding)** likewise: it changes this repo's own workflow.
+**B7 (dogfooding)** likewise: it changes this repo's own workflow. *(Done 2026-09-28.)*
