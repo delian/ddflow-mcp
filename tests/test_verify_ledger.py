@@ -120,6 +120,7 @@ def test_a_non_ascii_file_name_is_recorded_as_the_file_is_named(repo):
 def test_js_style_test_files_are_counted_as_tests():
     assert all(LG._TEST.search(f) for f in ("src/a.test.ts", "src/a.spec.js", "pkg/a_test.go"))
     assert not LG._TEST.search("src/contest.py")
+    assert not LG._TEST.search("docs/openapi.spec.yaml") and not LG._TEST.search("schema.spec.json")
 
 
 def test_show_says_unknown_not_zero_when_files_were_not_recorded(repo):
