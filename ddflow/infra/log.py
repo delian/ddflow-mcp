@@ -600,35 +600,53 @@ def _held_key(path: Path) -> tuple[int, str]:
 
 
 def _holder_note(path: Path) -> str:
-    """Who holds `path`, from the note the holder left in the lock file; '' if none.
+    """Who last took `path`, from the note left in the lock file; '' if there is none.
 
-    flock cannot say who owns a lock, so the holder writes `pid <n> <epoch> <command>`
+    flock cannot say who owns a lock, so a process writes `pid <n> <epoch> <command>`
     into the (never replaced) lock file once it has it. Read without a lock: it is only
-    ever shown to a human after a timeout, and a stale or torn note is still a lead.
+    ever shown to a human after a timeout, so a stale, torn or hostile note must degrade to
+    '' or to a lead, never raise out of the timeout path.
     """
     try:
         parts = path.read_text(errors="replace").split(None, 3)
-    except OSError:
-        return ""
-    if len(parts) < _NOTE_FIELDS or parts[0] != "pid" or not parts[1].isdigit():
-        return ""
-    pid = int(parts[1])
-    try:
-        os.kill(pid, 0)
-        alive = "alive"
-    except ProcessLookupError:
-        alive = "NOT running -- a stale note: the lock is held by someone else, or by a child that inherited it"
-    except OSError:
-        alive = "alive (owned by another user)"
-    try:
-        held = f", held {max(0.0, time.time() - float(parts[2])):.1f}s"
-    except ValueError:
+        if len(parts) < _NOTE_FIELDS or parts[0] != "pid" or not parts[1].isascii():
+            return ""
+        pid = int(parts[1])
+        try:
+            os.kill(pid, 0)
+            alive = "alive"
+        except ProcessLookupError:
+            alive = "NOT running -- it may have released the lock since, or a child of it still holds it"
+        except PermissionError:
+            alive = "alive (owned by another user)"
         held = ""
-    return f" Last holder to leave a note: pid {pid} ({alive}{held}), command: {parts[3].strip()[:200]}."
+        with contextlib.suppress(ValueError, OverflowError):
+            held = f", held {max(0.0, time.time() - float(parts[2])):.1f}s"
+        return (
+            f" Last process to take the lock: pid {pid} ({alive}{held}); it may have released "
+            f"it since. Its command: {parts[3].strip()[:200]}."
+        )
+    except (OSError, ValueError, OverflowError):
+        return ""
 
 
 #: `pid`, the pid, the epoch it took the lock, and at least the start of its command line.
 _NOTE_FIELDS = 4
+
+#: The note is one fixed-size write at offset 0, so there is no truncate-then-write window in
+#: which a reader sees an empty file, and no tail of an older, longer note.
+_NOTE_BYTES = 256
+
+_ARGV: list[str] = []
+
+
+def _my_note() -> bytes:
+    """`pid <n> <epoch> <argv>`, padded to `_NOTE_BYTES`. The argv is joined once per
+    process: a long-lived server takes this lock for every append."""
+    if not _ARGV:
+        _ARGV.append(" ".join(sys.argv)[:160])
+    text = f"pid {os.getpid()} {time.time():.3f} {_ARGV[0]}"
+    return text.encode("utf-8", "replace")[: _NOTE_BYTES - 1].ljust(_NOTE_BYTES - 1) + b"\n"
 
 
 @contextlib.contextmanager
@@ -659,11 +677,10 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
                         f"overloaded -- check `ddflow doctor`"
                     ) from None
                 time.sleep(0.02)
-        with contextlib.suppress(OSError):
-            # Best effort: a note for the next waiter that times out. Never fatal.
-            note = f"pid {os.getpid()} {time.time():.3f} {' '.join(sys.argv)[:200]}\n"
-            os.ftruncate(fd, 0)
-            os.pwrite(fd, note.encode(), 0)
+        with contextlib.suppress(OSError, ValueError):
+            os.pwrite(
+                fd, _my_note(), 0
+            )  # best effort, for the next waiter that times out; never fatal
         yield
     finally:
         with contextlib.suppress(OSError):
