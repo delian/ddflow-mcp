@@ -70,6 +70,9 @@ class PRInfo:
     queue: str = ""
     queue_position: int = 0
     queue_state: str = ""
+    #: False when the queue could not be ASKED (rate limit, network, auth): "not queued"
+    #: would then be a guess, and a guess that reads as an ejection is worse than none.
+    queue_known: bool = True
 
     def event_data(self, forge: str) -> dict[str, Any]:
         return {
@@ -216,21 +219,24 @@ _GH_QUEUE_QUERY = (
 class GitHub(Forge):
     name = GITHUB
 
-    def _queue(self, number: int) -> tuple[str, int, str]:
-        """(``queued`` | ``""``, position, state). Best effort: a GitHub without merge
-        queues (older Enterprise, no GraphQL field) answers "not queued", which is what
-        it is -- unlike a view, nothing here may turn into ``unavailable``."""
-        p = _run(
-            self.repo,
-            ["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}"]
-            + ["-F", f"number={number}", "-f", f"query={_GH_QUEUE_QUERY}"],
-        )
+    def _queue(self, number: int) -> tuple[str, int, str] | None:
+        """(``queued`` | ``""``, position, state), or None when the queue could not be
+        asked. A GitHub without merge queues (older Enterprise: the schema has no such
+        field) answers "not queued", which is what it is; a rate limit or a network error
+        is NOT that answer -- it is "do not know", and nothing here may turn it into an
+        ejection."""
+        argv = ["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}"]
+        argv += ["-F", f"number={number}", "-f", f"query={_GH_QUEUE_QUERY}"]
+        p = _run(self.repo, argv)
+        text = (p.stdout or "") + (p.stderr or "")
+        if "mergeQueueEntry" in text and "doesn't exist" in text:
+            return "", 0, ""  # a schema with no merge queues: definitely not queued
         if p.returncode != 0:
-            return "", 0, ""
+            return None
         try:
             pr = json.loads(p.stdout or "{}")["data"]["repository"]["pullRequest"] or {}
         except (json.JSONDecodeError, KeyError, TypeError):
-            return "", 0, ""
+            return None
         entry = pr.get("mergeQueueEntry") or {}
         if not (pr.get("isInMergeQueue") or entry):
             return "", 0, ""
@@ -298,7 +304,11 @@ class GitHub(Forge):
         )
         info = self._info(d)
         if info.state == "open":
-            info.queue, info.queue_position, info.queue_state = self._queue(number)
+            got = self._queue(number)
+            if got is None:
+                info.queue_known = False
+            else:
+                info.queue, info.queue_position, info.queue_state = got
         if info.review == "changes_requested":
             info.feedback = _clip([info.feedback, self._inline(number)])
         return info

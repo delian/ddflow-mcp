@@ -38,7 +38,7 @@ def _row(repo) -> dict:
 
 
 def test_an_enqueued_request_is_reported_as_queued_with_its_position(pr_repo):
-    repo, forge = _approved_and_green(pr_repo)
+    repo, _forge = _approved_and_green(pr_repo)
     body = _sync(repo)
     queued = [c for c in body["changes"] if c["what"] == "queued"]
     assert queued and "position 1" in queued[0]["detail"], body["changes"]
@@ -75,3 +75,39 @@ def test_a_request_the_queue_landed_completes_the_item(pr_repo):
     whats = [c["what"] for c in body["changes"]]
     assert "merged" in whats and "completed" in whats, whats
     assert _state(repo).items["T1"].state == "done"
+
+
+def test_a_queue_that_could_not_be_asked_is_not_an_ejection(pr_repo):
+    """A rate limit on the GraphQL call is "do not know": the request is still queued, and
+    must neither be reported ejected nor be asked to merge again."""
+    repo, forge = _approved_and_green(pr_repo)
+    _sync(repo)
+    forge.set(graphql_down=True)
+    body = _sync(repo)
+    assert not [c for c in body["changes"] if c["what"] == "queue_ejected"], body["changes"]
+    assert len(forge.calls("pr", "merge")) == 1, "re-merged a request that is still queued"
+    assert _row(repo)["queue"] == "queued", "the last known queue state must be kept"
+
+
+def test_positions_move_up_as_the_queue_drains(pr_repo):
+    repo, forge, _ = pr_repo
+    forge.set(merge_queue=True)
+    for n, name in enumerate(("a.py", "b.py"), start=1):
+        _work(repo, f"T{n}", name, f"{n}\n")
+        run_cli(repo, "merge", f"T{n}", "--model", AUTHOR)
+        forge.approve(n)
+        forge.edit(n, checks=GREEN)
+    _sync(repo)
+    rows = {r["id"]: r for r in json.loads(run_cli(repo, "--json", "pr", "status")[1])["rows"]}
+    assert (rows["T1"]["queue_position"], rows["T2"]["queue_position"]) == (1, 2)
+    forge.queue_land(1)
+    _sync(repo)
+    rows = {r["id"]: r for r in json.loads(run_cli(repo, "--json", "pr", "status")[1])["rows"]}
+    assert rows["T2"]["queue_position"] == 1, rows["T2"]
+
+
+def test_pr_status_text_shows_the_queue(pr_repo):
+    repo, _forge = _approved_and_green(pr_repo)
+    _sync(repo)
+    _, out, _ = run_cli(repo, "pr", "status")
+    assert "[merge queue #1]" in out, out
