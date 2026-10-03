@@ -1173,7 +1173,7 @@ it is an error). A delta falls back to a full round, and says why, when the revi
 is no ancestor of the current head (the branch was rebased or amended) or, for the
 automatic delta, the earlier review was partial; a review that never reached a reviewer
 records no reviewed head at all, so the next delta starts from the last real one; with nothing changed since the reviewed
-head the review is refused and names `--full`. A `--force --reason` review is a full round, like `--full`; a `--chunk`, `--commit` or
+head the review is refused and names `--full`. A `--force --reason` review is a full round, like `--full` (and, like `--full`, an error with `--delta`); a `--chunk`, `--commit` or
 `--base` review is not second-guessed. `review.delta_default = false` is the behaviour before this knob:
 every review a full round. Knobs, changeable at every layer:
 
