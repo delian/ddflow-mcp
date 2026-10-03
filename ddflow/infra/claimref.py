@@ -51,7 +51,9 @@ def ref_name(item: str) -> str:
 
     Byte-wise and fixed-width, so the mapping is injective and ids stay distinct."""
     return PREFIX + "".join(
-        c if _SAFE.fullmatch(c) is None else "".join(f"%{b:02x}" for b in c.encode("utf-8"))
+        c
+        if _SAFE.fullmatch(c) is None
+        else "".join(f"%{b:02x}" for b in c.encode("utf-8", "surrogatepass"))
         for c in item
     )
 

@@ -143,3 +143,8 @@ def test_reasserting_our_own_live_claim_survives_an_unreachable_remote(clones):
     _git(a, "remote", "set-url", "origin", str(bare) + "-gone")
     again = A.claim(a, "T1", no_worktree=True, agent="agent-a")
     assert again.ok, again.reason
+
+
+def test_ref_name_accepts_any_string_including_lone_surrogates():
+    name = CR.ref_name("T\udcff1")  # what os.fsdecode gives for a non-UTF-8 argv byte
+    assert name.startswith(CR.PREFIX) and name != CR.ref_name("T1")
