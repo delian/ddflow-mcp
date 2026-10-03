@@ -121,8 +121,9 @@ def version_key(version: str) -> tuple:
         return (tuple(nums), (1,))
     # dev < alpha < beta < rc, then the number after the tag: `0.2.0.dev3` < `0.2.0a1` < `0.2.0rc1`.
     tag = re.match(r"[.\-_]*([A-Za-z]*)[.\-_]*(\d*)", rest)
-    rank = _PRE_RANK.get(tag.group(1).lower(), 0) if tag else 0
-    return (tuple(nums), (0, rank, int(tag.group(2) or 0) if tag else 0))
+    assert tag is not None  # every group is optional: it matches the empty string
+    rank = _PRE_RANK.get(tag.group(1).lower(), 0)
+    return (tuple(nums), (0, rank, int(tag.group(2) or 0)))
 
 
 def is_older(version: str, than: str) -> bool:
