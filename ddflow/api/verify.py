@@ -87,3 +87,8 @@ def verify_sweep(
             reason=f"{len(failing)} of {sw.checked} completions do not hold",
         )
     return O.ok("verify.sweep", **data)
+
+
+def refuse_sweep_args() -> O.Outcome:
+    """`phase`, `limit` and `file_bugs` are sweep arguments; they cannot ride on one id."""
+    return O.refused("verify", "phase, limit and file_bugs are for a sweep: omit id")

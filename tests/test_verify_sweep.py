@@ -115,3 +115,15 @@ def test_the_mcp_tool_sweeps_when_no_id_is_given(repo):
     text = reply["result"]["content"][0]["text"]
     body = json.loads(text[text.index("{") :])
     assert body["checked"] == 2 and body["worst"][0]["item"] == "T-FALSE"
+
+
+def test_the_mcp_tool_refuses_sweep_arguments_given_with_an_id(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _project(repo)
+    reply = Server(repo).handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "ddflow_verify", "arguments": {"id": "T-GOOD", "file_bugs": True}}}
+    )  # fmt: skip
+    text = reply["result"]["content"][0]["text"]
+    assert "for a sweep" in text and "T-GOOD: " not in text
