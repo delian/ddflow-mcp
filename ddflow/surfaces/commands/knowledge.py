@@ -361,18 +361,19 @@ def cmd_bug(a, c: Ctx) -> int:
             print(out.reason, file=sys.stderr)
             return out.exit
         probe = f" (evidence: {a.evidence})" if a.evidence else ""
-        gone = out.data.get("fix_task_removed", "")
-        kept = out.data.get("fix_task", "")
-        if gone:
-            tail = f"\nfix task {gone} removed from the queue"
-        elif kept:
-            tail = f"\nfix task {kept} stays in the queue (held, needed, or fixing another bug)"
-        else:
-            tail = ""
         c.out(
-            f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}{tail}",
+            f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}"
+            + _fix_task_tail(out.data),
             out.body(
-                ("id", "invalid_reason", "evidence", "unchecked", "fix_task", "fix_task_removed")
+                (
+                    "id",
+                    "invalid_reason",
+                    "evidence",
+                    "unchecked",
+                    "fix_task",
+                    "fix_task_removed",
+                    "fix_task_kept",
+                )
             ),
         )
         return OK
@@ -393,6 +394,27 @@ def cmd_bug(a, c: Ctx) -> int:
         return out.exit
     c.out(f"bug {a.id} closed (regression: {out.data['regression_test']})", out.body(("id",)))
     return OK
+
+
+_KEPT_WHY = {
+    "held": "somebody holds it",
+    "needed": "an item is filed under it or needs it",
+    "shared": "it fixes another open bug too",
+}
+
+
+def _fix_task_tail(data: dict) -> str:
+    """What `bug invalid` did about the bug's fix task, said only when true: removed, still
+    queued and why, or already finished/removed/missing (roborev job 1299)."""
+    gone = data.get("fix_task_removed", "")
+    task, why = data.get("fix_task", ""), data.get("fix_task_kept", "")
+    if gone:
+        return f"\nfix task {gone} removed from the queue"
+    if not task or not why:
+        return ""
+    if why in _KEPT_WHY:
+        return f"\nfix task {task} stays in the queue: {_KEPT_WHY[why]}"
+    return f"\nfix task {task} is already {why}; nothing to remove"
 
 
 def _misread_hint(a) -> str:

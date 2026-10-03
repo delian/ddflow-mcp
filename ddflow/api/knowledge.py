@@ -539,13 +539,16 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     # The bug's own event names its fix task, and is written FIRST: the lock is no
     # rollback (each append is durable on its own), so the order decides what a crash
     # between the two leaves behind. A bug naming a task not yet filed is repaired by
-    # `bug file-tasks`, which walks open bugs; a task for a bug that was never recorded
-    # would be repaired by nothing. A re-report (`prior`) files nothing: the record
-    # already has what it has. What the reply then SAYS about the task -- claim it now,
-    # it is queued, ask -- is the `[bugs].on_found` knob's business (B-bugs-fix-now),
-    # decided from `fix_task` here.
+    # `bug file-tasks`, which walks open bugs whose task is missing as well as those with
+    # none, and by a re-report of the same id, which files the task the record names and
+    # has not got; a task for a bug that was never recorded would be repaired by nothing.
+    # Any other re-report (`prior`) files nothing: the record already has what it has.
+    # What the reply then SAYS about the task -- claim it now, it is queued, ask -- is the
+    # `[bugs].on_found` knob's business (B-bugs-fix-now), decided from `fix_task` here.
     fix: dict[str, Any] = {"fix_task": "", "filed": False}
-    filing = cfg.bugs.file_task and not no_task and prior is None
+    dangling = prior is not None and prior.open and bool(prior.fix_task)
+    dangling = dangling and not _live(st, prior.fix_task)  # type: ignore[union-attr]
+    filing = cfg.bugs.file_task and not no_task and (prior is None or dangling)
     with log.transaction():
         fix_id = _fix_task_id(st, cfg, bid, item) if filing else ""
         linked = {"fix_task": fix_id} if fix_id else {}
@@ -702,18 +705,26 @@ def _file_fix_task(
     return {"fix_task": tid, "filed": True, "phase_made": phase_made}
 
 
+def _live(st, item: str) -> bool:
+    """Whether ``item`` names an item in the queue (recorded and not removed)."""
+    it = st.items.get(item) if item else None
+    return it is not None and not it.removed
+
+
 def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
     """Give every OPEN bug that has no fix task one -- the one-shot upgrade for a log
-    written before `bug found` filed them. A bug whose item is an open bug-fix task is
-    linked to it (``linked``); any other gets `fix-<bug>` filed (``filed``), as `bug
-    found` would have. Nothing to do is exit 2. ``dry_run`` reports and writes nothing."""
+    written before `bug found` filed them, and the repair for a bug whose `fix_task` names
+    an item that is not in the queue (a crash between the two appends of `bug found`). A
+    bug whose item is an open bug-fix task is linked to it (``linked``); any other gets
+    `fix-<bug>` filed (``filed``), as `bug found` would have. Nothing to do is exit 2.
+    ``dry_run`` reports and writes nothing."""
     log, cfg, st = _load(repo, agent)
     filed: list[str] = []
     linked: list[str] = []
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         todo = sorted(
-            (b for b in st.bugs.values() if b.open and not b.fix_task),
+            (b for b in st.bugs.values() if b.open and not _live(st, b.fix_task)),
             key=lambda b: (b.found_at, b.id),
         )
         for b in todo:
@@ -911,7 +922,8 @@ def bug_invalid(
         # Decided from the log as it is NOW, under the lock: a claim on the fix task made
         # since `_load` must be seen, or the task is removed under its holder.
         fresh = fold(log.read_all(), strict=False)
-        removed = _drop_fix_task(log, fresh, fresh.bugs.get(bug, rec))
+        rec = fresh.bugs.get(bug, rec)  # the record the removal is decided from, and reported
+        removed, kept = _drop_fix_task(log, fresh, rec)
     return O.ok(
         "bug.invalid",
         id=bug,
@@ -920,28 +932,44 @@ def bug_invalid(
         unchecked=unchecked,
         fix_task=rec.fix_task,
         fix_task_removed=removed,
+        fix_task_kept=kept,
     )
 
 
-def _drop_fix_task(log, st, rec) -> str:
+#: Why `bug invalid` left a fix task alone (`fix_task_kept`): the queue still wants it
+#: (`held`, `needed`, `shared`), or there is nothing to remove (`finished`, `removed`,
+#: `missing`). "" when the bug has no fix task or it was removed.
+FIX_TASK_KEPT = ("held", "needed", "shared", "finished", "removed", "missing")
+
+
+def _drop_fix_task(log, st, rec) -> tuple[str, str]:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
     still OPEN, nobody holds it, no other open bug names it, nothing is filed under it and
     nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
-    one. Returns the id removed or "". A task somebody has claimed, or that fixes a real
-    bug too, stays -- the reply names it and the agent decides."""
+    one. Returns ``(removed id, "")`` or ``("", why kept)`` with one of `FIX_TASK_KEPT`,
+    so the reply can say what is true: a task somebody has claimed, or that fixes a real
+    bug too, stays and the agent decides; a finished or removed one is not "still queued"."""
     from ..core.model import OPEN
 
-    t = st.items.get(rec.fix_task) if rec.fix_task else None
-    if t is None or t.removed or t.state != OPEN or t.lease:
-        return ""
+    if not rec.fix_task:
+        return "", ""
+    t = st.items.get(rec.fix_task)
+    if t is None:
+        return "", "missing"
+    if t.removed:
+        return "", "removed"
+    if t.lease:  # before the state: a claimed task is RUNNING, and held is the point
+        return "", "held"
+    if t.state != OPEN:
+        return "", "finished"
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
-        return ""
+        return "", "shared"
     if st.open_descendants(t.id) or any(
         not o.removed and t.id in o.needs for o in st.items.values()
     ):
-        return ""
+        return "", "needed"
     log.append("task.removed", t.id, {"reason": f"bug {rec.id} closed as invalid"})
-    return t.id
+    return t.id, ""
 
 
 def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:

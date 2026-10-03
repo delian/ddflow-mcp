@@ -965,6 +965,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "unchecked",
             "fix_task",
             "fix_task_removed",
+            "fix_task_kept",
         ),
     },
     "ddflow_recover": {
