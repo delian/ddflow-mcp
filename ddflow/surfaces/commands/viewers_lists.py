@@ -114,7 +114,11 @@ def cmd_list(a, c: Ctx) -> int:
 
 
 def register(s) -> None:
-    """Add `list` to the task, phase, bug and research parsers already on `s`."""
+    """Add `list` to the task, phase, bug and research parsers already on `s`, and the
+    sibling `search` viewer (registered here so `cli.py`, a hot file, needs no change)."""
+    from .viewers_search import register as register_search
+
+    register_search(s)
     for kind in ("task", "phase", "bug"):
         group = s.choices[kind]
         sub = next(x for x in group._actions if isinstance(x, argparse._SubParsersAction))
