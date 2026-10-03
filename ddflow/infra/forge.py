@@ -73,6 +73,9 @@ class PRInfo:
     #: False when the queue could not be ASKED (rate limit, network, auth): "not queued"
     #: would then be a guess, and a guess that reads as an ejection is worse than none.
     queue_known: bool = True
+    #: How many commits the request carries (0 when the forge does not say). A rebase-merge
+    #: lands exactly this many on the base; a squash or a merge commit lands one (B178).
+    commits: int = 0
 
     def event_data(self, forge: str) -> dict[str, Any]:
         return {
@@ -137,6 +140,14 @@ def _json(p, what: str) -> Any:
         raise ForgeUnavailable(f"{what}: unparseable output {out[:200]!r}") from exc
 
 
+def _count(commits: Any) -> int:
+    """How many commits `gh pr view --json commits` lists: it flattens the GraphQL
+    connection to an array, but a connection-shaped answer is read too."""
+    if isinstance(commits, dict):
+        return int(commits.get("totalCount") or len(commits.get("nodes") or []))
+    return len(commits or [])
+
+
 def _clip(parts: list[str]) -> str:
     text = "\n\n".join(p.strip() for p in parts if p and p.strip())
     if len(text) > FEEDBACK_MAX:
@@ -180,7 +191,7 @@ class Forge:
 
 _GH_FIELDS = (
     "number,url,state,isDraft,reviewDecision,statusCheckRollup,baseRefName,"
-    "headRefName,headRefOid,mergeCommit,latestReviews"
+    "headRefName,headRefOid,mergeCommit,latestReviews,commits"
 )
 _GH_FAILED = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
 _GH_OK = {"SUCCESS", "NEUTRAL", "SKIPPED"}
@@ -284,6 +295,7 @@ class GitHub(Forge):
             draft=bool(d.get("isDraft")),
             feedback=_clip(feedback),
             review_sha=review_sha,
+            commits=_count(d.get("commits")),
         )
 
     def find(self, head: str) -> PRInfo | None:
