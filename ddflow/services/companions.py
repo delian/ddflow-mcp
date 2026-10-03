@@ -305,10 +305,6 @@ _VERIFY_PROTOCOL = "2025-03-26"
 #: Most of a server's output kept while waiting for its answer.
 _MAX_BUF = 1 << 20
 
-#: How long a binary that echoed our request gets to ALSO answer it (a server that logs each
-#: line it receives does) before it is called a non-server.
-_ECHO_GRACE_S = 2.0
-
 #: What an echoing binary (`cat`) sends back: our own request, recognisable by its method.
 _ECHO_MARK = b'"method": "initialize"'
 
@@ -465,6 +461,12 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
             buf, deadline, echoed_at = b"", t0 + timeout_s, 0.0
             while True:
                 left = deadline - time.monotonic()
+                if left <= 0 and echoed_at:
+                    return done(
+                        False,
+                        f"`{c.command}` echoed the request back and sent no answer within "
+                        f"{timeout_s:g}s: not a server",
+                    )
                 if left <= 0:
                     return done(
                         None,
@@ -473,8 +475,6 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                         + stderr_tail(),
                     )
                 ready, _, _ = select.select([fd], [], [], min(left, 0.5))
-                if echoed_at and time.monotonic() - echoed_at > _ECHO_GRACE_S:
-                    return done(False, f"`{c.command}` echoed the request back and never answered")
                 if not ready:
                     continue  # the pipe is still open: a wrapper's child may yet answer
                 chunk = os.read(fd, 65536)
@@ -482,7 +482,7 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                     break  # EOF: nothing holds the pipe any more
                 buf = _keep(buf, chunk)
                 if not echoed_at and _ECHO_MARK in buf:
-                    echoed_at = time.monotonic()  # a log line may precede the answer
+                    echoed_at = time.monotonic()  # a log line may precede the (slow) answer
                 msg, buf = _reply_to(buf, 1)
                 if msg is not None:
                     return done(True, *_describe_answer(msg))
