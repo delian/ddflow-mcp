@@ -597,11 +597,6 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "line). Omit for the current line; tasks inherit a phase's line.",
                 False,
             ),
-            "port_of": (
-                "string",
-                "Earlier fix this follows up: reuses the lines it reached.",
-                False,
-            ),
             "readd": (
                 "boolean",
                 "File a REMOVED item's id again with this definition. An id still in the "
@@ -682,6 +677,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "lines": (
                 "string",
                 "Release lines a FIX must reach, e.g. '1,2,3': written where [flow].port_strategy says, plus a port task `<id>@<line>` per other line.",
+                False,
+            ),
+            "port_of": (
+                "string",
+                "Earlier fix this follows up: reuses the lines it reached.",
                 False,
             ),
             "readd": (
