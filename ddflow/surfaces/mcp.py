@@ -1309,7 +1309,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_list": {
         "description": (
-            "Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000); a cut says so. "
+            "Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. "
             "`kind`: task|phase|bug|research|session|search. Bugs: open unless `all`/`state`. "
             "History: ddflow_history."
         ),
@@ -1322,7 +1322,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "tag": ("string", "Only this tag.", False),
             "owner": ("string", "Only this agent's rows.", False),
             "since": ("string", "Changed at/after this ISO date.", False),
-            "limit": ("integer", "Rows (default 25; 0 = the most, 1000).", False),
+            "limit": ("integer", "Rows (default 25; 0 = the most: 1000, search 200).", False),
             "all": ("boolean", "kind=bug: include fixed/invalid.", False),
             "mode": ("string", "search: ranked|exact|regex.", False),
             "sources": ("string", "search: comma-separated record kinds.", False),
