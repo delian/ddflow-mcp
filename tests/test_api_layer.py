@@ -262,6 +262,7 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_decision_show": (["decision", "show", "D1"], {"id": "D1"}),
     "ddflow_decision_applicable": (["decision", "applicable", "T1"], {"id": "T1"}),
     "ddflow_workflow": (["workflow"], {}),
+    "ddflow_workflow_state": (["workflow", "state"], {}),
     "ddflow_bug_file_tasks": (["bug", "file-tasks"], {}),
     "ddflow_status": (["status"], {}),
     "ddflow_export": (["export"], {}),
@@ -440,6 +441,10 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
         "use the typed layer",
         "--globs",
         "a.py",
+    )
+    # A rule with an explicit id, so the rule tools have a row to compare, not two empties.
+    run_cli(
+        repo, "rule", "add", "--id", "r-test", "--title", "Test rule", "--content", "test content"
     )
     # A fixed probe result for every companion, so neither surface shells out to detect
     # one. Each probe runs the real tool (npx, docker, ...) with a timeout, and two live

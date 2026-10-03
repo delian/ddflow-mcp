@@ -1,291 +1,113 @@
-"""Workflow state overview: configuration, decisions, active work, and queue."""
+"""Workflow state overview: configuration, rules, decisions, active work, queue and bugs."""
 
 from __future__ import annotations
 
+import re
+import time
 from pathlib import Path
 
 from ..core import outcome as O
-from ..services.waits import Waiter
+from ..core.schedule import plan
 from ._base import _load
+
+_READY_SHOWN, _BLOCKED_SHOWN, _BUGS_SHOWN = 10, 5, 5
+_SEVERITY = {"critical": 0, "high": 1, "medium": 2, "low": 3, "": 4}
 
 
 def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
-    """Return comprehensive workflow state: config, rules, decisions, active work, queue.
-
-    Args:
-        repo: Path to the repository root
-        agent: Agent ID for logging
-
-    Returns:
-        Outcome with workflow_overview (prose or structured data)
-    """
+    """One read-only overview: workflow, rules, decisions, active work, queue, bugs."""
     log, cfg, st = _load(repo, agent)
+    p = plan(st, cfg, agent=cfg.agent.id or log.agent_id)
+    now = time.time()
+    leases = st.active_leases(now, cfg.lease.grace_s)
+    live_items = [i for i in st.items.values() if not i.removed]
 
-    # Gather components
-    workflow_config = _gather_workflow_config(cfg)
-    rules_summary = _gather_rules_summary(st)
-    decisions = _gather_decisions(st)
-    active_work = _gather_active_work(st)
-    project_summary = _gather_project_summary(st)
-    queue_state = _gather_queue_state(st, log)
-    blockers = _gather_blockers(st)
-    task_queue_detail = _gather_task_queue_detail(st)
-    bugs_detail = _gather_bugs_detail(st)
-    workflow_diagram = _generate_workflow_diagram(cfg, st)
+    tasks: dict[str, int] = {}
+    for i in live_items:
+        if i.kind == "task":
+            tasks[i.state] = tasks.get(i.state, 0) + 1
+    bugs = _bugs(st)
 
     overview = {
-        "workflow": workflow_config,
-        "workflow_diagram": workflow_diagram,
-        "rules": rules_summary,
-        "decisions": decisions,
-        "active_work": active_work,
-        "project": project_summary,
-        "queue": queue_state,
-        "task_queue": task_queue_detail,
-        "bugs": bugs_detail,
-        "blockers": blockers,
+        "workflow": {
+            "model": cfg.flow.model,
+            "integration": cfg.flow.integration,
+            "max_parallel_tasks": cfg.schedule.max_parallel_tasks,
+            "task_pipeline": list(cfg.gates.task_pipeline),
+            "phase_pipeline": list(cfg.gates.phase_pipeline),
+        },
+        "workflow_diagram": _diagram(list(cfg.gates.task_pipeline)),
+        "rules": _rules(repo),
+        "decisions": _decisions(st),
+        "active_work": {
+            "active_leases": len(leases),
+            "running": [i.id for i in live_items if i.state == "running"][:10],
+        },
+        "project": {
+            "phases": len(st.phases()),
+            "tasks": tasks,
+            "bugs_open": len(bugs),
+        },
+        "task_queue": {
+            "ready": [_task(i) for i in p.ready[:_READY_SHOWN]],
+            "ready_total": len(p.ready),
+            "in_progress": [_task(i) for i in p.running[:_READY_SHOWN]],
+            "blocked": [
+                {"id": b.item, "reason": b.reason, "waiting_on": b.waiting_on[:3]}
+                for b in p.blocked[:_BLOCKED_SHOWN]
+            ],
+            "blocked_total": len(p.blocked),
+        },
+        "bugs": {"open": bugs[:_BUGS_SHOWN], "total_open": len(bugs)},
+        "blockers": {"count": len(p.blocked), "capped": len(p.capped)},
         "discovery_hints": [
-            "Ask: 'show rules affecting task X'",
-            "Ask: 'list decisions about Y'",
-            "Ask: 'what's blocking phase Z'",
-            "Ask: 'show workflow diagram'",
-            "Command: `ddflow brief` for current queue",
-            "Command: `ddflow workflow` to manage flows",
+            "`ddflow brief` — what to do next and what governs it",
+            "`ddflow board` — every item and its state",
+            "`ddflow show <id>` — one item in full",
+            "`ddflow bug list` / `ddflow decision list` / `ddflow workflow` — details",
         ],
     }
-
-    return O.ok("workflow.state", overview=overview)
-
-
-def _gather_workflow_config(cfg) -> dict:
-    """Extract workflow configuration."""
-    flow_cfg = cfg.flow if hasattr(cfg, "flow") else None
-    return {
-        "type": getattr(flow_cfg, "integration", "unknown"),
-        "branching": getattr(flow_cfg, "branching", "unknown"),
-        "release_cadence": getattr(flow_cfg, "release_cadence", "unknown"),
-        "max_parallel_tasks": getattr(
-            cfg.schedule if hasattr(cfg, "schedule") else None, "max_parallel_tasks", 4
-        ),
-    }
+    return O.ok("workflow.state", **overview)
 
 
-def _gather_rules_summary(st) -> dict:
-    """Summarize project rules by scope."""
-    rules_by_scope = {}
-    if hasattr(st, "rules"):
-        for rule in st.rules.list():
-            scope = rule.scope if hasattr(rule, "scope") else "unknown"
-            if scope not in rules_by_scope:
-                rules_by_scope[scope] = []
-            rules_by_scope[scope].append({"id": rule.id, "title": getattr(rule, "title", "")})
-
-    return {
-        "total": sum(len(v) for v in rules_by_scope.values()),
-        "by_scope": {k: len(v) for k, v in rules_by_scope.items()},
-        "examples": {k: v[:2] for k, v in rules_by_scope.items()},
-    }
+def _task(i) -> dict:
+    return {"id": i.id, "title": i.title, "priority": i.priority, "phase": i.parent}
 
 
-def _gather_decisions(st) -> dict:
-    """Gather active architecture decisions."""
-    decisions_list = []
-    if hasattr(st, "decisions"):
-        for decision in st.decisions.values():
-            if hasattr(decision, "status") and decision.status == "accepted":
-                decisions_list.append(
-                    {
-                        "id": getattr(decision, "id", ""),
-                        "title": getattr(decision, "title", ""),
-                        "by": getattr(decision, "by", ""),
-                    }
-                )
-
-    return {"active": len(decisions_list), "list": decisions_list[:5]}
-
-
-def _gather_active_work(st) -> dict:
-    """Summarize active work and leases."""
-    active_leases = 0
-    active_items = 0
-
-    if hasattr(st, "leases"):
-        active_leases = len([l for l in st.leases if l.item])
-
-    if hasattr(st, "items"):
-        active_items = len([i for i in st.items.values() if i.state == "in_progress"])
-
-    return {
-        "active_leases": active_leases,
-        "items_in_progress": active_items,
-        "agents_working": min(active_leases, active_items),
-    }
-
-
-def _gather_project_summary(st) -> dict:
-    """Summarize project structure and state."""
-    phases = {}
-    tasks_by_state = {"open": 0, "in_progress": 0, "blocked": 0, "done": 0}
-    bugs_open = 0
-
-    if hasattr(st, "phases"):
-        phases = {p.id: p.title for p in st.phases}
-
-    if hasattr(st, "items"):
-        for item in st.items.values():
-            if hasattr(item, "kind") and item.kind == "bug":
-                if hasattr(item, "state") and item.state == "open":
-                    bugs_open += 1
-            else:
-                state = getattr(item, "state", "unknown")
-                if state in tasks_by_state:
-                    tasks_by_state[state] += 1
-
-    return {
-        "phases": len(phases),
-        "tasks": tasks_by_state,
-        "bugs_open": bugs_open,
-        "phase_titles": list(phases.values())[:5],
-    }
-
-
-def _gather_queue_state(st, log) -> dict:
-    """Summarize queue state and next work."""
-    ready = []
-    blocked = []
-
-    if hasattr(st, "items"):
-        for item in st.items.values():
-            if hasattr(item, "state"):
-                if item.state == "open" and not hasattr(item, "needs"):
-                    ready.append({"id": item.id, "title": getattr(item, "title", "")})
-                elif item.state == "open" and hasattr(item, "needs"):
-                    blocked.append({"id": item.id, "blocking": item.needs})
-
-    return {
-        "ready_count": len(ready),
-        "blocked_count": len(blocked),
-        "next": ready[:3] if ready else [],
-        "samples_blocked": blocked[:2] if blocked else [],
-    }
-
-
-def _gather_blockers(st) -> dict:
-    """Identify blockers and conflicts."""
-    blockers_list = []
-
-    if hasattr(st, "waits"):
-        for wait in st.waits:
-            if isinstance(wait, Waiter):
-                blockers_list.append(
-                    {"item": getattr(wait, "item", ""), "reason": getattr(wait, "reason", "")}
-                )
-
-    return {
-        "count": len(blockers_list),
-        "list": blockers_list[:3],
-    }
-
-
-def _gather_task_queue_detail(st) -> dict:
-    """Gather detailed task queue with names, priorities, and dependencies."""
-    ready_tasks = []
-    blocked_tasks = []
-    in_progress_tasks = []
-
-    if hasattr(st, "items"):
-        for item in st.items.values():
-            if not hasattr(item, "kind") or item.kind != "task":
-                continue
-
-            task_info = {
-                "id": getattr(item, "id", ""),
-                "title": getattr(item, "title", ""),
-                "phase": getattr(item, "phase", ""),
-                "priority": getattr(item, "priority", 50),
-                "state": getattr(item, "state", "unknown"),
-            }
-
-            state = getattr(item, "state", "unknown")
-            if state == "in_progress":
-                in_progress_tasks.append(task_info)
-            elif state == "open" and not hasattr(item, "needs"):
-                ready_tasks.append(task_info)
-            elif state == "open" and hasattr(item, "needs"):
-                task_info["blocked_by"] = item.needs
-                blocked_tasks.append(task_info)
-
-    # Sort by priority (higher first)
-    ready_tasks.sort(key=lambda t: -t["priority"])
-    blocked_tasks.sort(key=lambda t: -t["priority"])
-    in_progress_tasks.sort(key=lambda t: -t["priority"])
-
-    return {
-        "ready": ready_tasks[:10],
-        "in_progress": in_progress_tasks[:10],
-        "blocked": blocked_tasks[:5],
-    }
-
-
-def _gather_bugs_detail(st) -> dict:
-    """Gather detailed bug list with priorities and status."""
-    open_bugs = []
-    in_progress_bugs = []
-
-    if hasattr(st, "items"):
-        for item in st.items.values():
-            if not hasattr(item, "kind") or item.kind != "bug":
-                continue
-
-            bug_info = {
-                "id": getattr(item, "id", ""),
-                "subject": getattr(item, "subject", ""),
-                "priority": getattr(item, "priority", 50),
-                "state": getattr(item, "state", "unknown"),
-                "fix_task": getattr(item, "fix_task", None),
-            }
-
-            state = getattr(item, "state", "unknown")
-            if state == "in_progress":
-                in_progress_bugs.append(bug_info)
-            elif state == "open":
-                open_bugs.append(bug_info)
-
-    # Sort by priority (higher first)
-    open_bugs.sort(key=lambda b: -b["priority"])
-    in_progress_bugs.sort(key=lambda b: -b["priority"])
-
-    return {
-        "open": open_bugs[:5],
-        "in_progress": in_progress_bugs[:3],
-        "total_open": len(open_bugs),
-    }
-
-
-def _generate_workflow_diagram(cfg, st) -> str:
-    """Generate Mermaid state machine diagram of workflow configuration."""
-    diagram_lines = [
-        "graph LR",
-        "    Start([Start Task]) --> Validate{Ready?}",
-        "    Validate -->|No| Waiting[Waiting for deps]",
-        "    Waiting -->|Yes| Validate",
+def _bugs(st) -> list[dict]:
+    open_ = [b for b in st.bugs.values() if not b.fixed_at and not b.invalid_at]
+    open_.sort(key=lambda b: (_SEVERITY.get(b.severity, 4), b.found_at))
+    return [
+        {
+            "id": b.id,
+            "title": b.title or b.summary[:80],
+            "severity": b.severity or "unrated",
+            "fix_task": b.fix_task,
+        }
+        for b in open_
     ]
 
-    # Add gates from workflow config
-    if hasattr(cfg, "flow") and hasattr(cfg.flow, "task_pipeline"):
-        pipeline = getattr(cfg.flow, "task_pipeline", [])
-        prev_state = "Validate"
-        for i, gate in enumerate(pipeline if isinstance(pipeline, list) else []):
-            gate_id = str(gate) if gate else f"Gate{i}"
-            gate_state = gate_id.replace("-", "_").replace(" ", "_")
-            diagram_lines.append(f"    {prev_state} --> {gate_state}[{gate_id}]")
-            prev_state = gate_state
 
-    diagram_lines.append(f"    {prev_state} --> Done([Complete])")
+def _decisions(st) -> dict:
+    live = [d for d in st.decisions.values() if d.live]
+    return {"active": len(live), "list": [{"id": d.id, "title": d.title} for d in live[:5]]}
 
-    # Add completion rules
-    diagram_lines.append("    Done --> Release[Release item]")
-    diagram_lines.append("    Release --> Archive([Archived])")
 
-    return "\n".join(diagram_lines)
+def _rules(repo: Path) -> dict:
+    from ..services.rules import RulesStorage
 
+    rules = RulesStorage(repo).list()
+    by_scope: dict[str, int] = {}
+    for r in rules:
+        by_scope[r.scope] = by_scope.get(r.scope, 0) + 1
+    return {"total": len(rules), "by_scope": by_scope}
+
+
+def _diagram(pipeline: list[str]) -> str:
+    """Mermaid flowchart of the task pipeline: claim, each gate in order, merge, complete."""
+    nodes = ["Claim"] + [re.sub(r"\W", "_", g) or "gate" for g in pipeline] + ["Complete"]
+    labels = ["Claim"] + list(pipeline) + ["Complete"]
+    lines = ["flowchart LR"]
+    for a, b, lb in zip(nodes, nodes[1:], labels[1:], strict=False):
+        lines.append(f"    {a} --> {b}[{lb}]")
+    return "\n".join(lines)
