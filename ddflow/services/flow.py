@@ -721,6 +721,11 @@ def _waiting(item: str, info: FG.PRInfo) -> dict[str, Any]:
     }
     if info.queue:
         row.update(queued=True, queue_position=info.queue_position, queue_state=info.queue_state)
+    if not info.queue_known:
+        row["note"] = (
+            "the merge queue could not be read, so ddflow will not merge this until it can "
+            "(a second `gh pr merge` on a queued request is a second enqueue)"
+        )
     return row
 
 
