@@ -613,10 +613,14 @@ invisible. Fixed by moving templates inside the package; pinned by
 `tests/test_packaging.py`, which builds the real wheel and looks inside it.
 Mutation-verified by moving the directory back out (2 tests red).
 
-**Zero runtime dependencies is load-bearing, not minimalism for its own sake.** It is
-what lets the server install inside a sandbox with no reachable package index, a CI
-image, or another tool's ephemeral container. `test_the_package_has_no_runtime_dependencies`
-fails if one creeps in.
+**Runtime dependencies are an allowlist, and the allowlist is short.** Zero was the
+original design: it is what lets the server install inside a sandbox with no reachable
+package index, a CI image, or another tool's ephemeral container. Jinja2 is now the one
+deliberate exception (prompts are Jinja templates; leaving it undeclared shipped a second,
+untested renderer). `test_the_package_declares_only_the_dependencies_we_chose` asserts
+the built wheel's metadata against `ALLOWED_RUNTIME_DEPS`, so a dependency cannot creep in
+by accident. (An earlier zero-dependencies assertion was replaced by it
+in 48aae97.)
 
 **Registry.** `server.json` follows the
 [MCP registry schema](https://modelcontextprotocol.io/registry/quickstart)
