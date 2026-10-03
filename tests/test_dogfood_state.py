@@ -27,8 +27,11 @@ def test_this_repository_runs_its_own_queue():
 
 def test_the_docs_no_longer_say_dogfooding_is_undone():
     backlog = (ROOT / "docs" / "BACKLOG.md").read_text()
-    entry = backlog[backlog.index("- **B7 ") :][:400]
-    assert "CLOSED" in entry, entry
+    assert backlog.count("\n- **B7 ") == 1
+    start = backlog.index("\n- **B7 ")
+    end = backlog.find("\n- **", start + 1)
+    entry = backlog[start : end if end != -1 else None]
+    assert "CLOSED" in entry.split("\n\n")[0], entry
     handoff = (ROOT / "docs" / "HANDOFF.md").read_text()
-    assert "(**needs operator approval**" not in handoff
+    assert "needs operator approval" not in handoff
     assert "superseded: DONE 2026-09-28" in handoff
