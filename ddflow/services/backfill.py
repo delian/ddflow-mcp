@@ -31,9 +31,8 @@ def find_commit(repo: Path, st: State, item_id: str) -> tuple[str, str] | None:
     it = st.items.get(item_id)
     if it is not None and _is_commit(repo, it.merged_sha):
         return it.merged_sha, "the merge sha the log recorded"
-    head = re.compile(
-        rf"^(merge )?{re.escape(item_id)}:"
-    )  # how `ddflow merge` and fix commits name it
+    # How `ddflow merge` and fix commits name an item; the keyword is any case, the id is not.
+    head = re.compile(rf"^((?i:merge) )?{re.escape(item_id)}:")
     r = git(
         repo,
         "log",

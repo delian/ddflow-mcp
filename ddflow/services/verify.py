@@ -305,11 +305,12 @@ def _survives(led: dict[str, Any], tracked: set[str] | None) -> Claim:
 
 
 def _rebuilt_claim(rebuilt: dict[str, str], why: str) -> Claim:
+    if rebuilt["how"].startswith("the sha the completion recorded"):
+        what = f"the recorded landing {rebuilt['sha'][:10]} had no file facts; they were rebuilt from git"
+    else:
+        what = f"the landing {rebuilt['sha'][:10]} was found afterwards by {rebuilt['how']}"
     return Claim(
-        "ledger",
-        WARN,
-        f"{why}; the landing {rebuilt['sha'][:10]} was found afterwards by {rebuilt['how']} -- "
-        f"reconstructed, not what the completing agent recorded",
+        "ledger", WARN, f"{why}; {what} -- reconstructed, not what the completing agent recorded"
     )
 
 
