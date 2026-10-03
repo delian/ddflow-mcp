@@ -18,6 +18,9 @@ from ..core.model import State
 from . import ledger as LG
 
 
+RECORDED = "the sha the completion recorded"
+
+
 def _is_commit(repo: Path, sha: str) -> bool:
     from ..infra.worktree import git
 
@@ -56,9 +59,7 @@ def apply(repo: Path, st: State, led: dict[str, Any], item_id: str) -> dict[str,
         return led
     # A recorded sha that is a real commit is the landing; only otherwise search. The file
     # list must come from the SAME commit the ledger names.
-    found = (
-        (led["sha"], "the sha the completion recorded") if _is_commit(repo, led["sha"]) else None
-    )
+    found = (led["sha"], RECORDED) if _is_commit(repo, led["sha"]) else None
     found = found or find_commit(repo, st, item_id)
     it = st.items.get(item_id)
     if found is None or it is None:
@@ -76,5 +77,9 @@ def apply(repo: Path, st: State, led: dict[str, Any], item_id: str) -> dict[str,
             "files": facts["files"],
             "tests": facts["tests"],
         },
-        "backfill": {"sha": sha, "how": how},
+        "backfill": {
+            "sha": sha,
+            "how": how,
+            "kind": "recorded" if how.startswith(RECORDED) else "found",
+        },
     }
