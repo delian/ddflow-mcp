@@ -758,7 +758,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 150 knobs.
+cadences, and the rest of the 151 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3080,8 +3080,51 @@ newer one may hold event kinds this code has no handler for. They are skipped, a
 unknown config key is, but **not silently**: `ddflow doctor` adds a note naming each
 unknown kind and how many events were skipped (`this log has events from a newer ddflow
 ... skipped: record.extended x2`), and `ddflow status` carries them as `skipped_kinds`.
-Every number the older ddflow shows is computed without those events, so the remedy is the
-same as for a config key: merge main, or run the newer ddflow.
+Every number the older ddflow shows is computed without those events, so the remedy is to
+**upgrade ddflow-mcp** (and restart the MCP server) to at least the version the log was
+last stamped by (next section); the note names it. An event whose `schema` is newer than
+this code knows is counted the same way (`phase.added (schema 2) x1`).
+
+### The version stamp and the skew guard
+
+A project's log records which ddflow versions have worked on it, so an upgrade, or a
+checkout running an older ddflow than its teammates, is a fact instead of a guess
+(decisions D-upgrade-event-kinds and D-upgrade-skew-guard). Three event kinds, all skipped
+with a note by a ddflow that predates them:
+
+| kind | written | carries |
+|---|---|---|
+| `ddflow.seen` | once per (agent, version), on that agent's first write after a version change | `version`, install kind (`installed` or `source-tree`) |
+| `skew.overridden` | when an agent insists on an older ddflow writing (below) | running version, the log's version, session, the reason |
+| `upgrade.applied` | when an upgrade is applied (the apply step is a later task) | from, to, categories, backup |
+
+The fold keeps the **highest** version stamped (`State.ddflow_versions`; `ddflow status
+--json` and `ddflow doctor` show it); an older ddflow stamping later does not lower it.
+A machine-local, git-ignored marker `.ddflow/local/seen.json` holds the last version *this
+machine* acted under. It works the same on a fresh `ddflow init` and on a project that
+predates the stamp: an old log with no stamp reads clean and is stamped on its next write.
+
+**The skew guard.** A write by a ddflow *older* than the log's highest stamp is refused
+(exit 3) before anything is written:
+
+```text
+REFUSED: this project's log has been worked on by ddflow 0.2.0 (stamped by alice), and
+this ddflow is 0.1.9, which is older: writing now could drop or misread what the newer
+one recorded. Upgrade ddflow-mcp to >= 0.2.0 and retry ...
+```
+
+Reads are always allowed. The agent upgrades or asks the user; only if the user insists
+does it rerun with an explicit override: `--allow-older-version --reason "<why>"` on any
+CLI command, or the `allow_older_version` argument (the reason) on any MCP tool. That
+writes a `skew.overridden` event and **marks every event of that session** with the older
+version (`older_ddflow` in its data): `ddflow history` shows `[older ddflow 0.1.9]`,
+`ddflow replay` says so, and `ddflow doctor` lists the overrides and how many events they
+cover, to be reviewed after upgrading. The override is per session, not per command: a new
+session, another agent, or a newer stamp is refused again. Only versions that ship the
+guard can refuse; releases before it cannot.
+
+`[upgrade].skew` is the policy: `refuse` (default), `warn` (write, say so on stderr) or
+`off`. Set it with `ddflow config` or `ddflow_configure`.
 
 Two such kinds describe how records relate (decision D-no-duplicates). Add events
 (`task.added`, `phase.added`, `bug.found`, `lesson.recorded`, `research.recorded`,
@@ -3822,7 +3865,7 @@ declared once and persists — see
 
 ## Configuration
 
-150 knobs across 21 sections, every one documented in place:
+151 knobs across 22 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

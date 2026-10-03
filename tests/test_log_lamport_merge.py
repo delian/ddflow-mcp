@@ -26,6 +26,13 @@ from ddflow.infra import log as L
 from tests.conftest import run_cli
 
 
+@pytest.fixture(autouse=True)
+def _no_version_stamp(monkeypatch):
+    """These tests are about the log's storage mechanics (event counts, byte offsets, clock
+    values); the version stamp (B-upgrade.1-stamp) is tested in tests/test_upgrade_stamp.py."""
+    monkeypatch.setattr(L.EventLog, "stamp", False)
+
+
 def _git(cwd: Path, *argv: str) -> str:
     return subprocess.run(
         ["git", "-C", str(cwd), *argv], check=True, capture_output=True, text=True
@@ -229,4 +236,4 @@ def test_reading_another_repositorys_log_writes_nothing_there(repo: Path, monkey
     L.EventLog(repo, "someone").append("task.added", "X1", {"title": "t"})
     L._AGENT_ID_CACHE.clear()
     L.EventLog(repo).read_all()
-    assert not (repo / ".ddflow" / "local").exists()
+    assert not (repo / ".ddflow" / "local" / "clone-id").exists()
