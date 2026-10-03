@@ -72,7 +72,7 @@ def _rounds(repo: Path, gate: str = "critic") -> int:
 
 
 def test_the_default_is_two_rounds_then_refuse_for_every_project():
-    cfg = Config.load()
+    cfg = Config.load(env={})
     assert (cfg.review.max_rounds, cfg.review.on_exceed) == (2, "refuse")
     assert cfg.sources["review.max_rounds"] == "default"
 
@@ -293,3 +293,95 @@ def test_the_shipped_docs_describe_it_and_name_no_repository():
             assert private not in doc.lower(), (key, private)
     src = (root / "ddflow" / "api" / "review.py").read_text()
     assert "/home/delian" not in src
+
+
+# -- round 1 findings of the review of this very change ----------------------------------
+
+
+def test_a_base_reaching_before_the_reviewed_head_is_a_full_round(repo, tmp_path):
+    _setup(repo, tmp_path)
+    old = _git(repo, "rev-parse", "HEAD")
+    (repo / "z.txt").write_text("later\n")
+    _git(repo, "add", "z.txt")
+    _git(repo, "commit", "-qm", "later")
+    api.review(repo, gate="critic", item="T1")
+    api.review(repo, gate="critic", item="T1")
+    out = api.review(repo, gate="critic", item="T1", base=old)
+    assert out.exit == REFUSED and "--delta" in out.reason, "a wide --base must not dodge the cap"
+    out = api.review(repo, gate="critic", item="T1", commit=old)
+    assert out.exit == REFUSED, "nor a --commit that is not after the reviewed head"
+
+
+def test_a_base_after_the_reviewed_head_is_a_delta(repo, tmp_path):
+    _setup(repo, tmp_path)
+    api.review(repo, gate="critic", item="T1")
+    api.review(repo, gate="critic", item="T1")
+    head = _git(repo, "rev-parse", "HEAD")
+    (repo / "y.py").write_text("y = 1  # FINDME\n")
+    _git(repo, "add", "y.py")
+    _git(repo, "commit", "-qm", "fix")
+    out = api.review(repo, gate="critic", item="T1", base=head)
+    assert out.exit == OK, out.reason
+    ev = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].evidence
+    assert ev["review_kind"] == "delta"
+
+
+def test_delta_survives_a_gate_skip_that_replaced_the_record(repo, tmp_path):
+    _setup(repo, tmp_path)
+    api.review(repo, gate="critic", item="T1")
+    api.review(repo, gate="critic", item="T1")
+    run_cli(repo, "gate", "skip", "T1", "critic", "--reason", "x")
+    _git(repo, "add", "x.py")
+    _git(repo, "commit", "-qm", "work")
+    out = api.review(repo, gate="critic", item="T1", delta=True)
+    assert out.exit == OK, out.reason  # not "no review on record": the log still knows
+    assert api.review(repo, gate="critic", item="T1").exit == REFUSED
+
+
+def test_a_refusal_carries_how(repo, tmp_path):
+    _setup(repo, tmp_path)
+    out = api.review(repo, gate="critic", item="T1", delta=True)
+    assert out.exit == REFUSED and "how" in out.data
+
+
+def test_the_refusal_does_not_assume_a_cap_of_two(repo, tmp_path):
+    _setup(repo, tmp_path, "[review]\nmax_rounds = 1\n")
+    api.review(repo, gate="critic", item="T1")
+    out = api.review(repo, gate="critic", item="T1")
+    assert out.exit == REFUSED and "after the second" not in out.reason
+
+
+def _configure(repo, **args):
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_configure", "arguments": args},
+        }
+    )
+    return json.dumps(reply)
+
+
+def test_a_quoted_table_header_is_still_reported_and_the_revert_names_the_knob(repo, tmp_path):
+    _setup(repo, tmp_path)
+    reply = _configure(repo, toml='["review"]\nmax_rounds = 0\non_exceed = "warn"')
+    assert "operator" in reply.lower(), reply
+    assert "review.max_rounds 2" in reply and "review.on_exceed" in reply and "refuse" in reply
+    only = _configure(repo, set='"review".on_exceed', value="refuse", local=True)
+    assert "review.on_exceed refuse" in only and "review.max_rounds 2" not in only
+    commented = _configure(repo, set="lease.ttl_s", value="1800")
+    assert "operator" not in commented.lower()
+
+
+def test_config_takes_key_and_value_without_set(repo, tmp_path):
+    _setup(repo, tmp_path)
+    code, out, err = run_cli(repo, "config", "review.max_rounds", "4", "--local")
+    assert code == OK, err
+    assert Config.load(repo, env={}).review.max_rounds == 4
+    assert "review.max_rounds = 4" in out
+    code, _out, err = run_cli(repo, "config", "--set", "review.max_rounds", "1")
+    assert code == OK, err
+    assert Config.load(repo, env={}).review.max_rounds == 4, "local still wins"

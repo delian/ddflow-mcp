@@ -307,6 +307,23 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
 _BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed")
 
 
+def _budget_keys(edit: ConfigEdit) -> list[str]:
+    """The `review.*` knobs this edit sets, parsed (not substring-matched): quoting,
+    spacing and a commented-out header do not change what TOML says."""
+    import tomllib
+
+    def norm(k: str) -> str:
+        return ".".join(seg.strip().strip("\"'") for seg in k.split("."))
+
+    if edit.set:
+        return [k for k in _BUDGET_KNOBS if norm(edit.set) == k]
+    try:
+        table = tomllib.loads(edit.append_toml).get("review")
+    except tomllib.TOMLDecodeError:
+        return []
+    return [f"review.{k}" for k in table if f"review.{k}" in _BUDGET_KNOBS] if table else []
+
+
 def report_budget_change(
     repo: Path, edit: ConfigEdit, out: O.Outcome, *, agent: str = ""
 ) -> O.Outcome:
@@ -321,20 +338,23 @@ def report_budget_change(
     """
     if out.exit != O.OK:
         return out
-    if edit.set.strip() not in _BUDGET_KNOBS and "[review]" not in edit.append_toml.replace(
-        " ", ""
-    ):
+    touched = _budget_keys(edit)
+    if not touched:
         return out
     from ..config import ReviewConfig
 
+    default = ReviewConfig()
     layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
-    what = f"{edit.set} = {edit.value}" if edit.set else "the [review] table (appended TOML)"
+    revert = "; ".join(
+        f"`ddflow config --set {k} {getattr(default, k.split('.')[1])}"
+        f"{' --local' if edit.local else ''}`"
+        for k in touched
+    )
     note = (
-        f"NOTE FOR THE OPERATOR: the review budget was changed over MCP: {what}, {layer} "
-        f"layer. This is recorded as a session note. The shipped default is "
-        f"{ReviewConfig().max_rounds} full rounds per gate; if you did not ask for this "
-        "change, revert it with `ddflow config --set review.max_rounds "
-        f"{ReviewConfig().max_rounds}` (add --local for the machine layer)."
+        f"NOTE FOR THE OPERATOR: the review budget was changed over MCP "
+        f"({', '.join(touched)}; {layer} layer). Shipped default: {default.max_rounds} full "
+        f"rounds per gate, on_exceed = {default.on_exceed!r}. If you did not ask for this, "
+        f"revert it with {revert}. Recorded as a session note."
     )
     from .knowledge import session_note
 

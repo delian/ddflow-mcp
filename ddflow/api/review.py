@@ -516,7 +516,7 @@ def _full_rounds(log, item: str, gate: str) -> int:
 def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
     return (
         f"{item}.{gate} has had {done} full review rounds ([review].max_rounds = {cap}). "
-        "Each round after the second finds fewer defects than the one before, so instead:\n"
+        "Later rounds find fewer defects than earlier ones, so instead:\n"
         f"  ddflow review {item} --gate {gate} --delta    recheck ONLY what changed since the "
         "reviewed head (always allowed)\n"
         f"  ddflow review triage {item} --gate {gate} --finding N --refuted|--confirmed "
@@ -548,7 +548,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
-    kind = _kind(cfg, repo, a["chunks"], a["delta"], a["commit"], a["base"])
+    kind = _kind(repo, log, item, gate, a["chunks"], a["delta"], a["commit"], a["base"])
     done = _full_rounds(log, item, gate) if item else 0
     forced, diff, how, why = "", "", "", ""
     if kind == "full" and item:
@@ -556,7 +556,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     if why:
         return kind, done, forced, diff, how, why, None
     if a["delta"]:
-        diff, how, why = _delta_scope(repo, it, gate, a["branch"])
+        diff, how, why = _delta_scope(repo, it, log, gate, a["branch"])
     elif a["commit"]:
         diff, how = commit_diff(repo, a["commit"])
     else:
@@ -570,12 +570,35 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     return kind, done, forced, diff, how, why, rerun
 
 
-def _kind(cfg, repo, chunks, delta, commit, base) -> str:
-    """full | delta | chunk: only a `full` round counts against `[review].max_rounds`."""
+def _last_head(log, item: str, gate: str) -> str:
+    """The head the gate's latest `ddflow review` covered, read from the LOG: a re-claim,
+    `gate skip` or `gate record` replaces the gate's current evidence, and a delta must
+    stay possible after any of them (the count survives them too)."""
+    for e in reversed(log.read_all()):
+        if e.subject == item and e.kind.startswith("gate.") and e.data.get("gate") == gate:
+            head = (e.data.get("evidence") or {}).get("reviewed_head")
+            if head:
+                return str(head)
+    return ""
+
+
+def _kind(repo, log, item, gate, chunks, delta, commit, base) -> str:
+    """full | delta | chunk: only a `full` round counts against `[review].max_rounds`.
+
+    Judged by what a review COVERS, not by the flag that asked for it: `--delta` always
+    is one; a `--commit` or `--base` review is one only when that ref is at or after the
+    head the last review of this gate covered (so it can only be narrower). Any other ref
+    can reach the whole diff, and counts.
+    """
     if chunks:
         return "chunk"
-    default_base = cfg.worktree.base_ref or W.default_branch(repo)
-    return "delta" if delta or commit or (base and base != default_base) else "full"
+    if delta:
+        return "delta"
+    ref = commit or base
+    head = _last_head(log, item, gate) if ref and item else ""
+    if head and W.git(repo, "merge-base", "--is-ancestor", head, ref).ok:
+        return "delta"
+    return "full"
 
 
 def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
@@ -597,10 +620,9 @@ def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
     return _budget_refusal(item, gate, done, cap), ""
 
 
-def _delta_scope(repo, it, gate, branch) -> tuple[str, str, str]:
+def _delta_scope(repo, it, log, gate, branch) -> tuple[str, str, str]:
     """(diff, how, why not) for `--delta`: the changes since the recorded review's head."""
-    rec = it.gates.get(gate) if it else None
-    head = str(((rec.evidence if rec else None) or {}).get("reviewed_head", ""))
+    head = _last_head(log, it.id, gate) if it else ""
     if not head:
         return (
             "",
@@ -667,9 +689,10 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
 ) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
 
-    A FULL round (no `chunks`, `delta`, `commit` or a `base` other than the default) is
-    counted against `[review].max_rounds`; `delta` reviews only what changed since the
-    head the gate's last review covered, and neither it nor triage is ever refused.
+    A FULL round -- anything that can cover the item's whole diff -- is counted against
+    `[review].max_rounds`; `delta` reviews only what changed since the head the gate's
+    last review covered (as does a `commit`/`base` at or after that head), and neither
+    it nor triage is ever refused.
     `force` with a `reason` runs a full round past the cap, recorded in the evidence.
 
     `chunks` re-reviews only those chunks (numbered as the recorded review printed
@@ -749,7 +772,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     if why:
         return O.Outcome(
             kind="review",
-            data={"id": item, "gate": gate, "outcome": "", "findings": [], "text": why},
+            data={"id": item, "gate": gate, "outcome": "", "findings": [], "how": how, "text": why},
             exit=O.REFUSED,
             reason=why,
         )

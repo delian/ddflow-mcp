@@ -146,12 +146,23 @@ def cmd_companions(a, c: Ctx) -> int:
     return _companions_list(a, c)
 
 
+def _config_key_value(a) -> tuple[str, str]:
+    """(key, value): `--set KEY VALUE`, or the shorter `KEY VALUE` with no flag."""
+    words = list(getattr(a, "value", None) or [])
+    if a.set:
+        return a.set, " ".join(words)
+    if len(words) == 2:  # noqa: PLR2004 -- KEY VALUE
+        return words[0], words[1]
+    return "", ""
+
+
 def cmd_config(a, c: Ctx) -> int:
+    key, value = _config_key_value(a)
     out = A.configure(
         c.repo,
         A.ConfigEdit(
-            set=a.set or "",
-            value=getattr(a, "value", "") or "",
+            set=key,
+            value=value,
             append_toml=a.append_toml or "",
             filter=a.filter or "",
             explain=bool(a.explain),
@@ -167,7 +178,7 @@ def cmd_config(a, c: Ctx) -> int:
     added = "".join(
         f"\n  added to .gitattributes: {ln}" for ln in out.data.get("gitattributes_added", [])
     )
-    if a.set:
+    if key:
         where = f"   (in {out.data['path']}, not committed)" if out.data.get("local") else ""
         c.out(
             f"{out.data['key']} = {out.data['literal']}{where}{added}",
