@@ -471,7 +471,31 @@ def _history_line(ev) -> str:
     elif ev.kind == "item.completed" and d.get("sha"):
         detail = f"as {d['sha'][:8]}"
     detail = " ".join(str(detail).split())[:88]
-    return f"  {ev.ts[:16].replace('T', ' ')}  {ev.subject:<22.22s} {verb:<22s} {detail}"
+    return (
+        f"  {ev.ts[:16].replace('T', ' ')}  {ev.agent:<14.14s} "
+        f"{ev.subject:<22.22s} {verb:<22s} {detail}"
+    )
+
+
+#: a payload string longer than this is cut in `--json`, with a note saying so.
+_JSON_FIELD_CAP = 500
+
+
+def _bounded_events(events: list[dict]) -> list[dict]:
+    """Copies of the events with any oversized string in `data` truncated, marked
+    `truncated: true` on the event so a reader knows the payload is not whole."""
+    out = []
+    for e in events:
+        cut = False
+        data = {}
+        for k, v in (e.get("data") or {}).items():
+            if isinstance(v, str) and len(v) > _JSON_FIELD_CAP:
+                data[k] = f"{v[:_JSON_FIELD_CAP]}... [truncated {len(v) - _JSON_FIELD_CAP} chars]"
+                cut = True
+            else:
+                data[k] = v
+        out.append({**e, "data": data, **({"truncated": True} if cut else {})})
+    return out
 
 
 def cmd_history(a, c: Ctx) -> int:
@@ -488,19 +512,26 @@ def cmd_history(a, c: Ctx) -> int:
         since=a.since or "",
         limit=a.limit,
         agent=c.requested_agent,
+        by_agent=getattr(a, "log_agent", "") or "",
+        tail=getattr(a, "tail", 0) or 0,
     )
     if c.json:
-        print(json.dumps(out.body(("total", "shown", "events")), indent=2, default=str))
+        body = out.body(("total", "shown", "events"))
+        body["events"] = _bounded_events(body.get("events") or [])
+        print(json.dumps(body, indent=2, default=str))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason)
         return NOTHING
     shown, total = out.data["_render"]["events"], out.data["total"]
-    print(f"{total} event(s); newest {len(shown)} first:\n")
+    if getattr(a, "tail", 0):
+        print(f"{total} event(s); last {len(shown)}, oldest first:\n")
+    else:
+        print(f"{total} event(s); newest {len(shown)} first:\n")
     for e in shown:
         print(_history_line(e))
     if total > len(shown):
-        print(f"\n  ... {total - len(shown)} older. --limit to see more.")
+        print(f"\n  ... {total - len(shown)} older. --limit/--tail to see more.")
     print(
         "\n  Ordered by Lamport clock, not wall time: two agents have two clocks, and "
         "\n  sorting a merged history by timestamp interleaves them wrongly."
