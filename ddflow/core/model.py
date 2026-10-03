@@ -2051,6 +2051,9 @@ def known_kinds() -> frozenset[str]:
     return frozenset(HANDLERS)
 
 
+_SESSION_TEXT = ("session.prompt", "session.note")
+
+
 def fold(events: list[Event], *, strict: bool = True) -> State:
     """Replay events into state. Pure; no I/O; deterministic.
 
@@ -2059,9 +2062,18 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
     unknown part -- but it counts what it skipped so the caller can refuse to act.
     """
     st = State()
+    # An adopted orphan lives on as the copy under its session; the id-less original
+    # stays in the append-only log but is not folded, or its text would appear twice.
+    adopted = {
+        ev.data["adopted_from"]
+        for ev in events
+        if ev.kind in _SESSION_TEXT and ev.data.get("adopted_from")
+    }
     for ev in events:
         st.event_count += 1
         st.last_lamport = max(st.last_lamport, ev.lamport)
+        if ev.kind in _SESSION_TEXT and ev.id in adopted:
+            continue
         handler = HANDLERS.get(ev.kind)
         if handler is None:
             if strict:
