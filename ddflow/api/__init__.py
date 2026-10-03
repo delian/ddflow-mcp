@@ -168,8 +168,8 @@ from .setup import (
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
+from .verify import refuse_sweep_args, verify_sweep
 from .verify import verify as verify_item
-from .verify import verify_sweep
 from .viewers import phase_progress, view_list, view_read
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
@@ -208,8 +208,8 @@ __all__ = [
     "claim",
     "cleanup",
     "companions_add",
-    "companions_verify",
     "companions_list",
+    "companions_verify",
     "complete",
     "completion_verdict",
     "configure",
@@ -264,6 +264,7 @@ __all__ = [
     "rebuild",
     "recall",
     "recover",
+    "refuse_sweep_args",
     "release_item",
     "relevant_tests",
     "remove_item",
@@ -303,7 +304,7 @@ __all__ = [
     "wait_item",
     "workflow_drop",
     "workflow_gate",
+    "workflow_overview",
     "workflow_pipeline",
     "workflow_show",
-    "workflow_overview",
 ]

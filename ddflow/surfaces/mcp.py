@@ -1446,7 +1446,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             "file_bugs": ("boolean", "File a bug per failing completion.", False),
         },
         "api": lambda repo, a, agent: (
-            _api().verify_item(repo, a["id"], agent=agent)
+            (
+                _api().refuse_sweep_args()
+                if (a.get("phase") or a.get("limit") or a.get("file_bugs"))
+                else _api().verify_item(repo, a["id"], agent=agent)
+            )
             if a.get("id")
             else _api().verify_sweep(
                 repo,
