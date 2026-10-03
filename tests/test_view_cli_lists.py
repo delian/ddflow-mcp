@@ -20,8 +20,10 @@ def proj(repo):
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--title", "login", "--tags", "web")
     run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--title", "logout")
     run_cli(repo, "task", "add", "P2.T1", "--phase", "P2", "--title", "invoice")
-    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "crash on login", "--item", "P1.T1")
-    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "bad total", "--item", "P2.T1")
+    # --no-task keeps the task counts below about the three tasks filed by hand.
+    bug = ("bug", "found", "--no-task")
+    run_cli(repo, *bug, "--id", "B1", "--summary", "crash on login", "--item", "P1.T1")
+    run_cli(repo, *bug, "--id", "B2", "--summary", "bad total", "--item", "P2.T1")
     run_cli(repo, "bug", "invalid", "B2", "--reason", "not a bug")
     for rid, q, v in (("R1", "does x work", "CONFIRMED"), ("R2", "does y work", "REFUTED")):
         argv = ("research", "--id", rid, "--question", q, "--verdict", v, "--probe", "ran it")

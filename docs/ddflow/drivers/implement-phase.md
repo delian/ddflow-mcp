@@ -244,11 +244,19 @@ Any bug, any operator correction, any surprise:
 
 ```sh
 ddflow lesson add --title "<the rule, as one line>" --rule "..." --why "..." --how "..."
+ddflow bug found --summary "..." --item <ITEM>                   # files fix-<BUG> in the queue
 ddflow bug fixed <BUG> --regression-test "<test that now guards this>"
 ```
 
 `bug fixed` refuses without a regression test. That refusal is the mechanism that stops
 the same bug shipping twice.
+
+A bug is an item in the queue: `bug found` files its fix task `fix-<BUG>` (tagged a bug
+fix, on the named item's files, under its phase) so the next free agent claims it before
+new features and a feature on the same files waits. Record the bug FIRST, then: a bug
+inside your claimed files that blocks your work is fixed in your item -- file it with
+`--no-task`; anything else is left to the fix task. `complete fix-<BUG>` refuses while
+the bug is open; `complete fix-<BUG> --regression-test <test>` closes it and completes.
 
 ### 2f. Check the cadences
 

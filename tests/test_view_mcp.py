@@ -39,8 +39,10 @@ def proj(repo):
     run_cli(repo, "phase", "add", "P1", "--title", "Auth")
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--title", "login", "--tags", "web")
     run_cli(repo, "task", "add", "P1.T2", "--phase", "P1", "--title", "logout")
-    run_cli(repo, "bug", "found", "--id", "B1", "--summary", "crash on login", "--item", "P1.T1")
-    run_cli(repo, "bug", "found", "--id", "B2", "--summary", "bad total", "--item", "P1.T2")
+    # --no-task keeps the phase progress below about the tasks filed by hand.
+    bug = ("bug", "found", "--no-task")
+    run_cli(repo, *bug, "--id", "B1", "--summary", "crash on login", "--item", "P1.T1")
+    run_cli(repo, *bug, "--id", "B2", "--summary", "bad total", "--item", "P1.T2")
     run_cli(repo, "bug", "invalid", "B2", "--reason", "not a bug")
     argv = ("research", "--id", "R1", "--question", "does x work", "--verdict", "CONFIRMED")
     assert run_cli(repo, *argv, "--probe", "ran it")[0] == 0

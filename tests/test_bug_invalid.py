@@ -299,6 +299,8 @@ def test_mcp_and_cli_agree(repo):
     )
     assert code == OK
     from_cli = json.loads(out)
-    assert {**from_mcp, "id": "B2"} == from_cli, (from_mcp, from_cli)
+    # Each bug's own fix task (`bug found` files one) goes with it: the only other
+    # difference between the two bodies is which one.
+    assert {**from_mcp, "id": "B2", "fix_task_removed": "fix-B2"} == from_cli, (from_mcp, from_cli)
     refused = _mcp(repo, "ddflow_bug_invalid", {"id": "B1", "reason": "again"})
     assert refused["_meta"]["exit"] == REFUSED, refused
