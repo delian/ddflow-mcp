@@ -89,6 +89,81 @@ def companions(repo: Path, *, no_probe: bool = False, agent: str = "") -> O.Outc
     return O.ok("companions", **data)
 
 
+def companions_verify(repo: Path, ids: str = "", *, agent: str = "") -> O.Outcome:
+    """Launch each MCP companion and require an answer to a JSON-RPC `initialize`.
+
+    OPT-IN and never on the scan path: it spawns the servers' launch commands, and
+    `ddflow companions` is what the MCP handshake calls. Without `ids` it launches those
+    that are registered in an agent's config or detected as installed (an `npx` entry
+    that is merely in the registry would be DOWNLOADED to be tested); with `ids` it
+    launches exactly those, installed or not, because the point of asking is to find out.
+
+    Exit 0 when every launched server answered; 1 when one is not an MCP server (a
+    FACT: absent, exited, or answered something that is not a JSON-RPC response); 2 when
+    nothing could be launched or one could not be told (no answer in time).
+    """
+    from ..services import companions as CO
+
+    statuses = _scan(repo, probe=True)
+    if isinstance(statuses, O.Outcome):
+        return statuses
+    by_id = {st.companion.id: st for st in statuses}
+    wanted = csv_list(ids)
+    unknown_ids = [w for w in wanted if w not in by_id]
+    if unknown_ids:
+        return O.failed(
+            "companions.verified",
+            f"unknown companion id(s): {', '.join(unknown_ids)}",
+            verified=[],
+            skipped=[],
+        )
+    mcp = [st for st in statuses if st.companion.is_mcp]
+    chosen = (
+        [st for st in mcp if st.companion.id in wanted]
+        if wanted
+        else [st for st in mcp if st.registered_in or st.installed]
+    )
+    chosen_ids = {st.companion.id for st in chosen}
+    skipped = [
+        {
+            "id": st.companion.id,
+            "reason": "not an MCP server entry: nothing to launch"
+            if not st.companion.is_mcp
+            else (
+                "install state unknown (the probe could not tell); "
+                if st.installed is None
+                else "not registered with an agent and not detected as installed; "
+            )
+            + "name it with --id to launch it anyway",
+        }
+        for st in statuses
+        if st.companion.id not in chosen_ids and (st.companion.is_mcp or st.companion.id in wanted)
+    ]
+    results = CO.verify(repo, sorted(chosen_ids))
+    state_of = {True: "speaks_mcp", False: "not_mcp", None: "unknown"}
+    rows = [
+        {
+            "id": v.companion.id,
+            "state": state_of[v.speaks_mcp],
+            "detail": v.detail,
+            "server": v.server,
+            "elapsed_s": v.elapsed_s,
+            "command": " ".join([v.companion.command, *v.companion.args]),
+        }
+        for v in results
+    ]
+    data: dict[str, Any] = {"verified": rows, "skipped": skipped}
+    bad = [r["id"] for r in rows if r["state"] == "not_mcp"]
+    if bad:
+        return O.failed("companions.verified", f"not an MCP server: {', '.join(bad)}", **data)
+    if not rows:
+        return O.nothing("companions.verified", "no MCP companion to launch", **data)
+    unknown = [r["id"] for r in rows if r["state"] == "unknown"]
+    if unknown:
+        return O.nothing("companions.verified", f"could not tell: {', '.join(unknown)}", **data)
+    return O.ok("companions.verified", **data)
+
+
 @dataclass
 class Registration:
     """What to register, for whom. Named because five fields travel together through the
