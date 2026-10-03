@@ -66,7 +66,11 @@ def test_versions_compare_as_numbers_not_text():
     assert not is_older("0.1.10", "0.1.10")
     assert not is_older("unknown", "0.1.10")  # an unparsable version is never a reason to refuse
     assert not is_older("0.1.10", "")
-    assert version_key("0.2.0rc1") == (0, 2, 0)
+    # Two spellings of one release are one release; a pre-release is older than its release.
+    assert not is_older("0.2", "0.2.0") and not is_older("0.2.0", "0.2")
+    assert is_older("0.2.0rc1", "0.2.0") and not is_older("0.2.0", "0.2.0rc1")
+    assert is_older("0.2.0rc1", "0.2.0rc2") and is_older("0.1.10", "0.2.0rc1")
+    assert version_key("v0.2.0") == version_key("0.2.0") and version_key("dev") == ()
 
 
 # -- the stamp ---------------------------------------------------------------------------
@@ -403,3 +407,54 @@ def test_status_json_carries_the_stamped_versions(repo: Path):
         "highest": ddflow.__version__,
         "seen": [ddflow.__version__],
     }
+
+
+def test_the_highest_stamp_is_the_same_in_any_order_and_ignores_a_nameless_stamp():
+    def seen(version, lamport):
+        e = Event(
+            kind="ddflow.seen",
+            subject="ddflow",
+            data={"version": version},
+            agent="a",
+            lamport=lamport,
+        )
+        return e
+
+    evs = [seen("0.2.0", 1), seen("v0.2.0", 2), seen(None, 3), seen("junk", 4)]
+    for order in (evs, evs[::-1]):
+        assert fold(list(order)).highest_version == "v0.2.0"
+        assert stamp_facts(order, "a", "0.1.0").highest == "v0.2.0"
+
+
+def test_a_strict_fold_refuses_a_newer_schema_like_an_unknown_kind():
+    e = Event(kind="phase.added", subject="P1", data={"title": "p"}, lamport=1, schema=99)
+    with pytest.raises(ValueError, match="schema 99"):
+        fold([e], strict=True)
+
+
+def test_override_with_policy_warn_has_nothing_to_override(older_than_log: Path, monkeypatch):
+    monkeypatch.setenv("DDFLOW_UPGRADE_SKEW", "warn")
+    assert EventLog(older_than_log, "me").override_skew("not needed") is None
+    assert kinds(EventLog(older_than_log, "me"), "skew.overridden") == []
+
+
+def test_the_mcp_override_argument_writes_nothing_when_there_is_no_skew(repo: Path):
+    res = _mcp(
+        repo,
+        "ddflow_phase_add",
+        {"id": "P1", "title": "p", "as_agent": "me", "allow_older_version": "x"},
+    )
+    assert not res.get("isError"), res
+    log = EventLog(repo, "me")
+    assert kinds(log, "skew.overridden") == []
+    assert OLDER_MARK not in kinds(log, "phase.added")[0].data
+
+
+def test_status_lists_seen_versions_in_version_order(repo: Path, monkeypatch):
+    monkeypatch.setenv("DDFLOW_UPGRADE_SKEW", "off")  # the older stamp is written after the newer
+    for v in ("0.1.10", "0.1.9"):
+        monkeypatch.setattr(ddflow, "__version__", v)
+        EventLog(repo, "a").append("phase.added", f"P{v}", {"title": "p"})
+    assert run_cli(repo, "init")[0] == 0
+    _code, out, _err = run_cli(repo, "--json", "status")
+    assert json.loads(out)["ddflow_version"]["seen"][:2] == ["0.1.9", "0.1.10"]

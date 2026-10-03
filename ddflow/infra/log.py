@@ -738,9 +738,9 @@ class EventLog:
         """Record a session-scoped override: let this agent's open session write although
         the running ddflow is OLDER than the log's highest stamp (`skew.overridden`).
 
-        Returns the event, or None when there is no skew to override. A reason is required:
-        refusing once and then overriding silently would only be a slower way of not asking.
-        Nothing is written for policy `off` or `warn` -- those never refuse."""
+        Returns the event, or None when there is nothing to override: no skew, or a policy
+        (`warn`, `off`) that never refuses. A reason is required otherwise: refusing once and
+        then overriding silently would only be a slower way of not asking."""
         from ..core.events import is_older
 
         reason = (reason or "").strip()
@@ -752,6 +752,8 @@ class EventLog:
                 return None
             if facts.override is not None:
                 return facts.override
+            if self._skew_policy() != "refuse":
+                return None  # warn/off never refuse, so there is nothing to override
             if not reason:
                 raise SkewRefused(
                     f"--allow-older-version needs --reason: say why this session may write "

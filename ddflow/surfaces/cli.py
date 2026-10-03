@@ -1490,7 +1490,10 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "allow_older", False):
             reason = getattr(args, "skew_reason", "") or str(getattr(args, "reason", "") or "")
             if ctx.log.override_skew(reason) is None:
-                print("ddflow: no version skew; --allow-older-version ignored", file=sys.stderr)
+                print(
+                    "ddflow: nothing to override (no skew); --allow-older-version ignored",
+                    file=sys.stderr,
+                )
         return int(args.fn(args, ctx))
     except KeyboardInterrupt:
         return 130

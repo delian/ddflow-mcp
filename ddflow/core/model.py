@@ -23,7 +23,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .events import OLDER_MARK, SCHEMA_VERSION, Event, changelog_of
+from .events import OLDER_MARK, SCHEMA_VERSION, Event, changelog_of, version_key
 
 # Item states. These are DERIVED, never written: an item's state is a function of the
 # events about it. A state field that can be set directly is a field that can drift
@@ -703,9 +703,7 @@ class State:
     @property
     def highest_version(self) -> str:
         """The highest ddflow version that has stamped this log, "" when none has."""
-        from .events import version_key
-
-        return max(self.ddflow_versions, key=version_key, default="")
+        return max(self.ddflow_versions, key=lambda v: (version_key(v), v), default="")
 
     # -- convenience views ----------------------------------------------------------
     def phases(self) -> list[Item]:
@@ -1823,8 +1821,8 @@ def _h_session_note(st: State, ev: Event) -> None:
 
 
 def _h_ddflow_seen(st: State, ev: Event) -> None:
-    v = str(ev.data.get("version", ""))
-    if not v:
+    v = ev.data.get("version")
+    if not isinstance(v, str) or not version_key(v):
         return
     rec = st.ddflow_versions.setdefault(
         v, {"agents": [], "at": ev.ts, "install": str(ev.data.get("install", ""))}
@@ -2139,8 +2137,14 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
         if ev.kind in _SESSION_TEXT and ev.id in adopted:
             continue
         if ev.schema > SCHEMA_VERSION:
-            # Written by a ddflow whose event shape this code does not know: counted like a
-            # skipped kind, so the same "run the newer ddflow" advice applies, never guessed at.
+            # Written by a ddflow whose event shape this code does not know: refused when
+            # strict, like an unknown kind, else counted like a skipped kind so the same
+            # "run the newer ddflow" advice applies. Never guessed at.
+            if strict:
+                raise ValueError(
+                    f"event {ev.kind!r} at lamport {ev.lamport} has schema {ev.schema}; "
+                    f"this code knows {SCHEMA_VERSION}"
+                )
             key = f"{ev.kind} (schema {ev.schema})"
             st.skipped_kinds[key] = st.skipped_kinds.get(key, 0) + 1
             continue
