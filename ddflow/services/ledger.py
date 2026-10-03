@@ -76,6 +76,8 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
     )
     if idx < 0:
         return None
+    if any(ev.kind == "item.reopened" for ev in events[idx + 1 :]):
+        return None  # sent back by verification: not completed until it is completed again
     done = events[idx]
     it = fold(events[: idx + 1], strict=False).items.get(item_id)
     if it is None:
