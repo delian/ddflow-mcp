@@ -359,4 +359,5 @@ def test_an_untracked_file_and_a_declared_directory_that_exist_are_not_never_cre
     (repo / "local-dir" / "x.txt").write_text("x\n")
     run_cli(repo, "complete", "T1", "--sha", sha, "--force")
     d = _claims(verify(repo, "T1"))["declared_files"]
-    assert d["status"] != "fail" and "never created" not in d["detail"], d
+    assert d["status"] == "warn" and "never created" not in d["detail"], d
+    assert "untracked" in d["detail"] and ".mcp.json" in d["detail"]
