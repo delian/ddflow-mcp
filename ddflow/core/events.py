@@ -101,6 +101,7 @@ UPGRADE_APPLIED_KIND = "upgrade.applied"
 #: the version of the (older) ddflow that wrote it. Shown by history, replay and doctor.
 OLDER_MARK = "older_ddflow"
 
+_PRE_RANK = {"dev": 0, "a": 1, "alpha": 1, "b": 2, "beta": 2, "c": 3, "rc": 3, "pre": 3}
 _VERSION_PARTS = re.compile(r"^\s*v?(\d+(?:\.\d+)*)(.*)$", re.DOTALL)
 
 
@@ -118,8 +119,10 @@ def version_key(version: str) -> tuple:
     rest = m.group(2).strip()
     if not rest:
         return (tuple(nums), (1,))
-    pre = re.search(r"\d+", rest)
-    return (tuple(nums), (0, int(pre.group()) if pre else 0))
+    # dev < alpha < beta < rc, then the number after the tag: `0.2.0.dev3` < `0.2.0a1` < `0.2.0rc1`.
+    tag = re.match(r"[.\-_]*([A-Za-z]*)[.\-_]*(\d*)", rest)
+    rank = _PRE_RANK.get(tag.group(1).lower(), 0) if tag else 0
+    return (tuple(nums), (0, rank, int(tag.group(2) or 0) if tag else 0))
 
 
 def is_older(version: str, than: str) -> bool:
