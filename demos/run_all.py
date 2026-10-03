@@ -7,9 +7,11 @@ python3 demos/run_all.py crash       # substring-matched subset
 
 from __future__ import annotations
 
+import os
 import pathlib
 import shutil
 import sys
+import tempfile
 import time
 import traceback
 
@@ -34,12 +36,28 @@ SCENARIOS = [
 ]
 
 
+def demo_base() -> pathlib.Path:
+    """A directory for THIS run only (B184).
+
+    This was a fixed /tmp/ddflow-demos that every run rmtree'd first, so two runs on one
+    machine (two sessions, or a run beside CI) deleted each other's repositories
+    mid-scenario: `no such item 'P1.T1'` after a successful `task add`. Reproduced by
+    starting two `run_all.py parallel-phase` 20 s apart. `DDFLOW_DEMOS_DIR` pins a path
+    when you want to inspect one; otherwise each run gets a fresh mkdtemp.
+    """
+    pinned = os.environ.get("DDFLOW_DEMOS_DIR")
+    if pinned:
+        return pathlib.Path(pinned)
+    return pathlib.Path(tempfile.mkdtemp(prefix="ddflow-demos-"))
+
+
 def main(argv: list[str]) -> int:
     wanted = [s for s in SCENARIOS if not argv or any(a in s[0] for a in argv)]
     if not wanted:
         print(f"no scenario matches {argv}; known: {[s[0] for s in SCENARIOS]}")
         return 2
-    base = pathlib.Path("/tmp/ddflow-demos")
+    base = demo_base()
+    print(f"demo workspace: {base}")
     if base.exists():
         shutil.rmtree(base)
     results = []
@@ -56,7 +74,12 @@ def main(argv: list[str]) -> int:
             ok = False
             traceback.print_exc()
         results.append((name, ok, sc.steps, sc.checks, time.time() - t0))
-    return summarise(results)
+    rc = summarise(results)
+    if rc == 0 and not os.environ.get("DDFLOW_DEMOS_DIR"):
+        shutil.rmtree(base, ignore_errors=True)  # a green run leaves nothing behind
+    else:
+        print(f"demo workspace kept for inspection: {base}")
+    return rc
 
 
 if __name__ == "__main__":
