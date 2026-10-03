@@ -27,7 +27,14 @@ from ..infra import worktree as W
 
 
 class VersionFileError(ValueError):
-    """The bump cannot be made as configured; the message says which file and why."""
+    """The bump cannot be made as configured; the message says which file and why.
+
+    ``unavailable`` is "git could not run" (exit 2), as opposed to a refusal (exit 3).
+    """
+
+    def __init__(self, message: str, *, unavailable: bool = False):
+        super().__init__(message)
+        self.unavailable = unavailable
 
 
 @dataclass
@@ -103,7 +110,9 @@ def commit_on(repo: Path, cfg: Config, branch: str, prep: Prepared, *, message: 
     try:
         root, throwaway = CC._tree_for(repo, cfg, branch)
     except ExportError as exc:
-        raise VersionFileError(str(exc)) from exc
+        from .export.query import EXIT_UNAVAILABLE
+
+        raise VersionFileError(str(exc), unavailable=exc.code == EXIT_UNAVAILABLE) from exc
     tmp: Path | None = None
     tree = root
     if throwaway:
@@ -113,11 +122,15 @@ def commit_on(repo: Path, cfg: Config, branch: str, prep: Prepared, *, message: 
         tmp.rmdir()
         add = W.git(root, "worktree", "add", str(tmp), branch)
         if not add.ok:
-            raise VersionFileError(f"could not stage {branch} for the bump: {add.err}")
+            raise VersionFileError(
+                f"could not stage {branch} for the bump: {add.err}", unavailable=True
+            )
         tree = tmp
     try:
         paths = list(prep.edits)
         dirty = W.git(tree, "status", "--porcelain", "--", *paths)
+        if not dirty.ok:
+            raise VersionFileError(f"git status failed: {dirty.err}", unavailable=True)
         if dirty.out.strip():
             raise VersionFileError(
                 f"{', '.join(paths)} has uncommitted changes; refusing to commit them into "
