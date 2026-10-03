@@ -2574,9 +2574,8 @@ raising it.
 A fresh project simply reports the first three as unavailable until it has history; nothing
 needs configuring. A merge git tried and failed (a conflict) is recorded as a failed `merge` gate
 outcome, which is what `merge_failure_rate` counts; a merge refused before git tried (target
-checked out elsewhere, another merge in progress) is not. Reviewer latency needs the review's start:
-`gate.started` is written for command gates today, so until `ddflow review` writes it too the
-ratio stays unavailable on a real log (filed as a follow-up).
+checked out elsewhere, another merge in progress) is not. Reviewer latency is the time from the
+`gate.started` that `ddflow review` writes before it calls the reviewer to the gate's outcome.
 
 ## Gitflow, pull requests and version tags
 

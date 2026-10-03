@@ -73,9 +73,8 @@ def test_mcp_review_sends_progress_when_the_client_asks(repo, tmp_path):
 
     def notify(frame: dict) -> None:
         if not sent:  # the gate is recorded only when the review ends
-            first_seen.append(
-                "critic" in fold(EventLog(repo).read_all(), strict=False).items["T1"].gates
-            )
+            rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates.get("critic")
+            first_seen.append(bool(rec and rec.outcome))  # `gate.started` alone is no outcome
         sent.append(frame)
 
     srv.notify = notify
