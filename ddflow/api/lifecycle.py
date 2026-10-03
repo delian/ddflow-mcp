@@ -2150,6 +2150,10 @@ def brief(
         query = f"{target.title} {target.body} {' '.join(target.tags)}"
     lessons = store.search("lessons", query, cfg.session.brief_lesson_count) if query else []
 
+    from ..services import skills as SK
+
+    project_skills = SK.relevant(repo, query) if query else []
+
     rules = ""
     for candidate in ("AGENTS.md", "CLAUDE.md", ".ddflow/RULES.md"):
         if (repo / candidate).is_file():
@@ -2194,6 +2198,7 @@ def brief(
         repo=repo,
         item=item,
         lessons=lessons,
+        skills=project_skills,
         rules=rules,
         recovery=[r for r in recovery if r.salvageable],
         decisions=decisions,
