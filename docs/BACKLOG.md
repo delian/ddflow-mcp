@@ -91,7 +91,7 @@ mechanically the entry was left open.
 * **Two were compaction** (B6, B86): both CLOSED 2026-09-27. B6 as a DECLINE (the kind
   is removed; the recipe breaks `progress` and `loops`), B86 by making the read cheap
   instead — parsing was 84% of it, not the fold the entry blamed.
-* **Six are individual items**: B7 (dogfooding, below), B13 (Windows untested — `fcntl.flock`
+* **Six are individual items**: B7 (dogfooding, CLOSED, below), B13 (Windows untested — `fcntl.flock`
   is POSIX-only), B95 (THEORETICAL: `tree_fingerprint` is blind to a re-edited binary),
   B114 (`companions --verify` should launch and check it speaks MCP), B148 (blocked on the
   protocol-version question), B163 (three of the C901-hidden functions are split; whether
@@ -247,9 +247,14 @@ closes an item mechanically and `ddflow import --verify` reports exactly this cl
   "add a pointer rather than a second copy, which would drift" appears in nine delta docs,
   which is the tell that it should be mechanism rather than advice.*
 
-- **B7 — ddflow does not dogfood itself.** This backlog should be an ddflow queue, and
-  this project's own development should run through its own gates. The reason it does
-  not yet is bootstrapping order, not principle.
+- **B7 — ddflow does not dogfood itself. ✅ CLOSED 2026-09-28; this entry was never
+  marked.** Both halves shipped: 6be308a7 migrated this backlog into the project's own
+  queue (`.ddflow/events/`, every entry an item with `source = docs/BACKLOG.md:<line>`), and
+  fec4106c adopted ddflow for Claude Code and VS Code (`AGENTS.md`, `CLAUDE.md`,
+  `.ddflow/config.toml`, `docs/ddflow/`, the commit hooks). Verified 2026-10-03 against the
+  repository, not the marker: `tests/test_dogfood_state.py` pins it. Two honest caveats:
+  `.mcp.json` is git-excluded here (it carries this machine's absolute interpreter path),
+  and this file is now a narrative archive; the queue is `ddflow board`.
 
 ## Mechanical cleanups
 

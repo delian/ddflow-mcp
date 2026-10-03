@@ -71,10 +71,10 @@ claude`, `ddflow hooks install --claude`, and `ddflow import --max-tasks <n> --a
 (run_nemo_run needs `--max-tasks` > 1,125). The pre-commit framework both use owns their
 git hooks: add `ddflow hooks check-commit` / `check-msg "$1"` as local hooks there.
 
-**Dogfooding (B7) was evaluated, not done**: in a throwaway copy, `adopt` + the MCP
+**Dogfooding (B7) was evaluated, not done** *(superseded: DONE 2026-09-28, commits 6be308a7 and fec4106c; this paragraph is the state when this file was written)*: in a throwaway copy, `adopt` + the MCP
 surface work; `docs/BACKLOG.md` has no checkboxes, so it imports nothing until converted
 (~30 lines of conversion gave 23 open tasks, matching its audit). Seven defects that run
-found are fixed on this branch (`afd9755`). Still B7's operator decision (§8).
+found are fixed on this branch (`afd9755`). (That was B7's operator decision; it was then taken and carried out.)
 
 ---
 
@@ -82,13 +82,13 @@ found are fixed on this branch (`afd9755`). Still B7's operator decision (§8).
 
 | # | File | Why |
 |---|---|---|
-| 1 | *(none yet)* | **This repo has no `AGENTS.md` or `CLAUDE.md`** — adopting ddflow into itself is B7, an operator decision (§8). Earlier versions of this file said to read them |
+| 1 | `CLAUDE.md` / `AGENTS.md` | Added 2026-09-28 when ddflow was adopted into itself (B7): they carry ddflow's managed driver block, not the house rules below. Start with `ddflow brief` |
 | 2 | `docs/BACKLOG.md` | 170 entries, with `✅ CLOSED` markers. The **top** section is a 2026-09-27 audit |
 | 3 | `docs/RESEARCH.md` | R15 is the agent-config research; §R-log covers the event log |
 | 4 | `docs/ARCHITECTURE.md` | the layering the AST test enforces |
 | 5 | `README.md` | the user-facing surface. It has ratchets pointing at it — see §4 |
 
-**The house rules that are not negotiable** (they live HERE, since there is no `CLAUDE.md`;
+**The house rules that are not negotiable** (they live HERE; `CLAUDE.md` holds only ddflow's managed block;
 every one of them caught a real defect — see §6):
 
 * **No source change without a runnable probe that fails before the fix and passes after.**
@@ -282,8 +282,9 @@ These three share a "what does this diff touch?" helper; build it once.
 
 ### Also open, outside B16–B26
 
-`B7` dogfooding (**needs operator approval** — adopting ddflow into its own repo installs a
-commit hook and writes `AGENTS.md`/`CLAUDE.md`/`.mcp.json`), `B12` partial, `B13` Windows,
+(B7, dogfooding, is not in this list: it shipped 2026-09-28 and needed the operator's approval, since adopting ddflow into a repo installs a commit hook and writes `AGENTS.md`/`CLAUDE.md`/`.mcp.json`.)
+
+`B12` partial, `B13` Windows,
 `B52`, `B95`, `B109`–`B112` (deliberately deferred design thread), `B114`, `B148`, `B149`,
 `B166`–`B169`.
 
@@ -395,4 +396,4 @@ follow it."* Grep before designing.
 shelling out to the project's command. That is a significant architectural change and should
 be an explicit decision, not an inference from a backlog entry.
 
-**B7 (dogfooding)** likewise: it changes this repo's own workflow.
+**B7 (dogfooding)** likewise: it changes this repo's own workflow. *(Done 2026-09-28.)*
