@@ -1398,6 +1398,14 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("gate", "removed_from", "applied"),
     },
+    "ddflow_workflow_state": {
+        "description": (
+            "Comprehensive workflow state snapshot: configured workflow, active rules, architecture decisions, active work, project structure, queue status, and blockers. One call to understand the whole project: its configuration, what rules govern it, what work is active, what's next, and what's blocked. Includes hints on how to ask for more details. Read-only."
+        ),
+        "properties": {},
+        "api": lambda repo, a, agent: _api().workflow_state(repo, agent),
+        "payload": "overview",
+    },
     "ddflow_help": {
         "description": (
             "What ddflow IS, what it can do, and what the workflow is. Call this first if you have not used it before: the other descriptions explain one tool each and the connection instructions describe THIS repository; neither answers 'how am I meant to work here'. No argument: the loop from picking work to landing it, the exit codes, and every capability grouped by purpose. `topic`: workflow, import, gates, parallel, memory, recovery, config. Read-only; the pages are templates a project may override."

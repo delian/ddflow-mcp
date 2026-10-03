@@ -205,10 +205,60 @@ def _workflow_drop(a, c: Ctx) -> int:
     )
 
 
+def _workflow_state(a, c: Ctx) -> int:
+    """Report comprehensive workflow state."""
+    from ...api.workflow_state import workflow_state
+
+    out = workflow_state(c.repo)
+    if c.json:
+        print(json.dumps(out.data, indent=2, default=str))
+        return out.exit
+
+    # Render prose overview
+    overview = out.data.get("overview", {})
+    lines = [
+        "# Workflow State Overview",
+        "",
+        "## Configuration",
+        f"- Flow type: {overview.get('workflow', {}).get('type')}",
+        f"- Max parallel: {overview.get('workflow', {}).get('max_parallel_tasks')}",
+        "",
+        "## Rules",
+        f"- Total: {overview.get('rules', {}).get('total', 0)}",
+        f"- By scope: {overview.get('rules', {}).get('by_scope', {})}",
+        "",
+        "## Architecture Decisions",
+        f"- Active: {overview.get('decisions', {}).get('active', 0)}",
+        "",
+        "## Active Work",
+        f"- Leases: {overview.get('active_work', {}).get('active_leases', 0)}",
+        f"- In progress: {overview.get('active_work', {}).get('items_in_progress', 0)}",
+        "",
+        "## Project",
+        f"- Phases: {overview.get('project', {}).get('phases', 0)}",
+        f"- Tasks: {overview.get('project', {}).get('tasks', {})}",
+        f"- Open bugs: {overview.get('project', {}).get('bugs_open', 0)}",
+        "",
+        "## Queue",
+        f"- Ready: {overview.get('queue', {}).get('ready_count', 0)}",
+        f"- Blocked: {overview.get('queue', {}).get('blocked_count', 0)}",
+        "",
+        "## Discovery",
+        "Ask for more details:",
+    ]
+
+    for hint in overview.get("discovery_hints", []):
+        lines.append(f"  - {hint}")
+
+    c.out("workflow state", "\n".join(lines))
+    return out.exit
+
+
 def cmd_workflow(a, c: Ctx) -> int:
     """`ddflow workflow` — the rules in force here, and how to change them."""
     return {
         "pipeline": _workflow_pipeline,
         "gate": _workflow_gate,
         "drop": _workflow_drop,
+        "state": _workflow_state,
     }.get(a.workflow_cmd or "", _workflow_show)(a, c)
