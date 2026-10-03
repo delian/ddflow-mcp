@@ -129,8 +129,12 @@ def companions_verify(repo: Path, ids: str = "", *, agent: str = "") -> O.Outcom
             "id": st.companion.id,
             "reason": "not an MCP server entry: nothing to launch"
             if not st.companion.is_mcp
-            else "not registered with an agent and not detected as installed; "
-            "name it with --id to launch it anyway",
+            else (
+                "install state unknown (the probe could not tell); "
+                if st.installed is None
+                else "not registered with an agent and not detected as installed; "
+            )
+            + "name it with --id to launch it anyway",
         }
         for st in statuses
         if st.companion.id not in chosen_ids and (st.companion.is_mcp or st.companion.id in wanted)
