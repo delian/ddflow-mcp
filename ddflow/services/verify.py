@@ -173,19 +173,30 @@ def _landed(repo: Path, cfg: Config, led: dict[str, Any]) -> Claim:
     return Claim("landed", FAIL, f"{sha[:10]} exists but is on none of {', '.join(on)}")
 
 
+def _present(repo: Path, path: str, tracked: set[str]) -> bool:
+    """Does `path` exist now? Tracked, on disk (untracked and ignored files count: a
+    declared `.mcp.json` is real even though git never saw it), or a directory that
+    contains tracked files."""
+    bare = path.rstrip("/")
+    if path in tracked or (repo / bare).exists():
+        return True
+    prefix = bare + "/"
+    return any(t.startswith(prefix) for t in tracked)
+
+
 def _declared(repo: Path, led: dict[str, Any], tracked: set[str] | None) -> Claim:
     globs = led["requirement"]["globs"]
     landed = set(led["done"]["files"])
     if tracked is None:
         return Claim("declared_files", UNKNOWN, "the tracked file list could not be read")
     exact = [g for g in globs if not _WILD.search(g)]
-    absent = [g for g in exact if g not in tracked and g not in landed]
+    absent = [g for g in exact if not _present(repo, g, tracked) and g not in landed]
     # Absent now and not in the landing: either it never existed (the false positive) or
     # it existed and was removed or renamed later -- history tells the two apart.
     rev = led["sha"] or "HEAD"
     removed_later = [g for g in absent if _ever_existed(repo, g, rev)]
     never = [g for g in absent if g not in removed_later]
-    gone = [g for g in exact if g not in tracked and g in landed] + removed_later
+    gone = [g for g in exact if not _present(repo, g, tracked) and g in landed] + removed_later
     if never:
         return Claim("declared_files", FAIL, f"declared but never created: {_trim(never)}")
     notes = []
