@@ -335,3 +335,18 @@ def test_dotdot_spellings_and_a_glob_that_misses_the_victims_file(project):
         project, "tests/test_c.py::test_sets_a_flag", [], "tests/test_[a-z].py"
     )
     assert cands == ["tests/test_a.py", "tests/test_b.py"]
+
+
+def test_ddmin_complement_is_by_position_so_duplicates_stay_one_minimal():
+    files = ["a", "a", "b"]
+
+    def fails(s):
+        return "a" in s and "b" in s
+
+    out = B.ddmin(files, fails)
+    assert sorted(out) == ["a", "b"], out
+
+
+def test_bisect_treats_a_duplicated_candidate_as_one_file():
+    r = B.bisect("V", ["a", "b", "a", "c"], _probe({"c"}))
+    assert r.state == "found" and r.polluters == ["c"] and r.candidates == 3

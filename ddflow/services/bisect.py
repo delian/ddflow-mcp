@@ -173,8 +173,10 @@ def ddmin(candidates: list[str], fails: Callable[[list[str]], bool]) -> list[str
                 current, n, reduced = chunk, _HALVES, True
                 break
         if not reduced and len(chunks) > _HALVES:
-            for chunk in chunks:  # or everything BUT one chunk
-                rest = [c for c in current if c not in chunk]
+            start = 0
+            for chunk in chunks:  # or everything BUT one chunk (by position, not by value)
+                rest = current[:start] + current[start + len(chunk) :]
+                start += len(chunk)
                 if rest and fails(rest):
                     current, n, reduced = rest, max(n - 1, _HALVES), True
                     break
@@ -198,6 +200,7 @@ def bisect(
     `probe(tests)` runs `tests` (candidates first, the victim last) and says whether the
     command passed. Candidates keep their given order, which is the suite's order.
     """
+    candidates = list(dict.fromkeys(candidates))  # a file listed twice is one file
     res = Bisection(
         "unavailable", victim, candidates=len(candidates), runs=runs if runs is not None else []
     )
