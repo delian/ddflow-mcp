@@ -26,6 +26,7 @@ import sys
 from ..api import items as A_ITEMS
 from ..api import lifecycle as A_LIFECYCLE
 from ..api import reporting as A_REPORTING
+from ..core.events import SkewRefused
 from ..core.model import GATE_OUTCOMES, fold
 from ..infra import worktree as W
 from ..services import gates as G
@@ -383,6 +384,20 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     p.add_argument("--agent", help="agent identity (default: host-pid). Shards the log.")
     p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument(
+        "--allow-older-version",
+        action="store_true",
+        dest="allow_older",
+        help="let THIS session write although this ddflow is older than the one that last "
+        "worked on the log (the skew guard); needs --reason, is recorded, and only the "
+        "operator's insistence justifies it",
+    )
+    p.add_argument(
+        "--reason",
+        dest="skew_reason",
+        default="",
+        help="with --allow-older-version: why (a command's own --reason is used if it has one)",
+    )
     # There was no such flag at all, and CI's build step -- `python -m ddflow --version`
     # against the built wheel -- failed with "the following arguments are required: cmd".
     # An Action rather than argparse's `version=` string: it runs, and exits, before the
@@ -1472,9 +1487,16 @@ def main(argv: list[str] | None = None) -> int:
     args._argv = list(sys.argv[1:] if argv is None else argv)
     try:
         ctx = Ctx(args)
+        if getattr(args, "allow_older", False):
+            reason = getattr(args, "skew_reason", "") or str(getattr(args, "reason", "") or "")
+            if ctx.log.override_skew(reason) is None:
+                print("ddflow: no version skew; --allow-older-version ignored", file=sys.stderr)
         return int(args.fn(args, ctx))
     except KeyboardInterrupt:
         return 130
+    except SkewRefused as exc:
+        print(str(exc), file=sys.stderr)
+        return REFUSED
     except L.LeaseError as exc:
         print(str(exc), file=sys.stderr)
         return REFUSED

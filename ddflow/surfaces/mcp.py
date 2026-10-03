@@ -41,6 +41,7 @@ from typing import Any
 # dependencies, so this cannot cycle; a relative `from .. import` would read as a layer.
 # A plain import, never importlib.metadata: installed metadata is stale in a source tree.
 from ddflow import __version__ as _VERSION
+from ddflow.core.events import SkewRefused
 
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 SERVER_INFO = {"name": "ddflow", "version": _VERSION, "title": "ddflow work-queue kernel"}
@@ -2619,6 +2620,12 @@ def _opt(flag: str, args: dict[str, Any], key: str | None = None) -> list[str]:
 #: holder's own leases (`leases.acquire`), so two subagents claiming overlapping files
 #: are both granted. The CLI has always had the per-call form (`--agent`); this is the
 #: same thing on the other surface.
+#: The skew-guard override (decision D-upgrade-skew-guard): the REASON an agent was told by the
+#: operator to let this older ddflow write anyway. Accepted by every tool, stripped before the
+#: tool sees its arguments, and deliberately NOT in any schema -- 90 copies of it would cost
+#: more of every session's context than the rare refusal it answers; the refusal message and
+#: the connection instructions name it where it is needed.
+ALLOW_OLDER = "allow_older_version"
 AS_AGENT = "as_agent"
 _AS_AGENT_SPEC = (
     "string",
@@ -3164,6 +3171,46 @@ class Server:
         own = self.agent or _default_agent(self.repo)[0]
         return per_call != own
 
+    def _invoke(self, spec, args, agent, per_call, params):
+        """Run a tool's typed `api`; the connection facts it needs are passed in."""
+        # `called_from` only where the tool asks for it. `claim` is the one
+        # operation whose behaviour depends on WHERE the caller is standing
+        # rather than which repo it is in: an agent whose harness already put
+        # it in a worktree should have that tree ADOPTED, and resolving to the
+        # primary loses the only fact that says so. `main()` computed it and
+        # discarded it, which is why adoption was unreachable from MCP.
+        if spec.get("wants_called_from"):
+            where = self.called_from
+            if self._someone_else(per_call):
+                # Where the connection stands is where the CONNECTION's
+                # identity works, for EVERY tool that asks. A subagent sharing
+                # it (Claude Code's do) is not standing in its parent's
+                # harness tree: `claim` adopted that tree and branch
+                # (B7c7a0d9222), and for an item claimed --no-worktree,
+                # `gate_run` ran the parent's tree as the subagent's pass and
+                # `merge` landed the parent's branch (B11e4c5a185). Asked from
+                # the primary, the ITEM decides -- its own tree and branch,
+                # else the "name the branch" answers -- as from the CLI.
+                where = self.repo
+            extra = {}
+            if spec.get("wants_progress") and (say := self._progress(params)):
+                extra["on_progress"] = say
+            result = spec["api"](self.repo, args, agent, called_from=where, **extra)
+        else:
+            result = spec["api"](self.repo, args, agent)
+        return result
+
+    def _override_skew(self, reason: Any, agent: str) -> None:
+        """Record the session-scoped skew override this call carries (`allow_older_version`)."""
+        from ..config import Config
+        from ..infra.log import EventLog, effective_agent_id
+
+        if not isinstance(reason, str):
+            raise ValueError("allow_older_version must be a string: the reason")
+        cfg = Config.load(self.repo)
+        log = EventLog(self.repo, effective_agent_id(self.repo, cfg, agent), log_cfg=cfg.log)
+        log.override_skew(reason)
+
     def handle(self, msg: dict[str, Any]) -> dict[str, Any] | None:
         method = msg.get("method", "")
         mid = msg.get("id")
@@ -3211,6 +3258,10 @@ class Server:
             params = msg.get("params") or {}
             name = params.get("name", "")
             args = params.get("arguments") or {}
+            allow_older: Any = None
+            if ALLOW_OLDER in args:
+                args = dict(args)
+                allow_older = args.pop(ALLOW_OLDER)
             spec = TOOLS.get(name)
             if spec is None:
                 return _ok(
@@ -3309,31 +3360,12 @@ class Server:
                 )
             if "api" in spec:
                 try:
-                    # `called_from` only where the tool asks for it. `claim` is the one
-                    # operation whose behaviour depends on WHERE the caller is standing
-                    # rather than which repo it is in: an agent whose harness already put
-                    # it in a worktree should have that tree ADOPTED, and resolving to the
-                    # primary loses the only fact that says so. `main()` computed it and
-                    # discarded it, which is why adoption was unreachable from MCP.
-                    if spec.get("wants_called_from"):
-                        where = self.called_from
-                        if self._someone_else(per_call):
-                            # Where the connection stands is where the CONNECTION's
-                            # identity works, for EVERY tool that asks. A subagent sharing
-                            # it (Claude Code's do) is not standing in its parent's
-                            # harness tree: `claim` adopted that tree and branch
-                            # (B7c7a0d9222), and for an item claimed --no-worktree,
-                            # `gate_run` ran the parent's tree as the subagent's pass and
-                            # `merge` landed the parent's branch (B11e4c5a185). Asked from
-                            # the primary, the ITEM decides -- its own tree and branch,
-                            # else the "name the branch" answers -- as from the CLI.
-                            where = self.repo
-                        extra = {}
-                        if spec.get("wants_progress") and (say := self._progress(params)):
-                            extra["on_progress"] = say
-                        result = spec["api"](self.repo, args, agent, called_from=where, **extra)
-                    else:
-                        result = spec["api"](self.repo, args, agent)
+                    if allow_older is not None:
+                        self._override_skew(allow_older, agent)
+                    result = self._invoke(spec, args, agent, per_call, params)
+                except SkewRefused as exc:
+                    # Exit 3, like every refusal: a result to act on, not a failed call.
+                    return _ok(mid, _text(str(exc), meta={"exit": 3}))
                 except (KeyError, TypeError, ValueError) as exc:
                     return _ok(mid, _text(f"bad arguments: {exc}", error=True))
                 # `text` may be a bool or a predicate on the arguments: `render`

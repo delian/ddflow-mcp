@@ -123,6 +123,10 @@ Do not raise the cap yourself: a `ddflow_configure` change to `review.*` is repo
 the operator.
 Exit code 2 means "could not run / nothing to do" — it is a result, not an error, and
 never a success.
+Exit code 3 that says "Upgrade ddflow-mcp to >= X" is the skew guard: this ddflow is older
+than one that already worked on the project's log. Upgrade and restart the server; if you
+cannot, ask the operator, and only if they insist pass `allow_older_version` (the reason) on
+the call. It is recorded and covers this session only; never add it on your own.
 
 **Your services stay on this machine.** Reviewer endpoints, private model names, API-key
 variable names, hosts and worker counts sized to this box go to the git-ignored

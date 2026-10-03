@@ -11,6 +11,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ddflow.infra.log import Event, EventLog, canonical
 
 
+@pytest.fixture(autouse=True)
+def _no_version_stamp(monkeypatch):
+    """These tests are about the log's storage mechanics (event counts, byte offsets, clock
+    values); the version stamp (B-upgrade.1-stamp) is tested in tests/test_upgrade_stamp.py."""
+    monkeypatch.setattr(EventLog, "stamp", False)
+
+
 def test_event_id_is_a_content_address(log):
     e = log.append("phase.added", "P1", {"title": "x"})
     assert e.id == e.compute_id()
