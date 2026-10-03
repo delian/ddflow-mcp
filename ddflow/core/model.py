@@ -1379,8 +1379,9 @@ def _h_gate(outcome: str):
         it = _item(st, ev, d.get("kind", "task"))
         gate = d.get("gate", "")
         if outcome == "started":
-            it.gates.setdefault(gate, GateRecord(gate=gate))
-            it.gates[gate].at = ev.ts
+            rec = it.gates.setdefault(gate, GateRecord(gate=gate))
+            if not rec.outcome:  # a recorded outcome keeps the time it was recorded
+                rec.at = ev.ts
         else:
             # The denominator for the order-violation rate. `started` is excluded: it
             # is not a recording, and counting it would deflate the rate by the number

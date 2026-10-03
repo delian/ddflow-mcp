@@ -40,3 +40,14 @@ def test_a_refused_review_does_not_log_started(repo, tmp_path):
     out = api.review(repo, gate="critic", item="T1", full=True)  # third full round: refused
     assert out.exit == 3
     assert _gate_events(repo, "critic").count("gate.started") == before
+
+
+def test_started_does_not_move_a_recorded_gates_timestamp(repo, tmp_path):
+    from ddflow.core.model import fold
+
+    _setup(repo, tmp_path)
+    api.review(repo, gate="critic", item="T1")
+    rec = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
+    EventLog(repo).append("gate.started", "T1", {"gate": "critic"})
+    after = fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"]
+    assert after.at == rec.at and after.outcome == rec.outcome
