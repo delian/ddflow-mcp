@@ -172,6 +172,7 @@ from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
 from .workflow import pipeline as workflow_pipeline
 from .workflow import show as workflow_show
+from .workflow_state import workflow_state
 
 __all__ = [
     "DEFAULT_CHECK_RECOVERY",
@@ -296,4 +297,5 @@ __all__ = [
     "workflow_gate",
     "workflow_pipeline",
     "workflow_show",
+    "workflow_state",
 ]
