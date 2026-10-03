@@ -84,3 +84,11 @@ def test_tail_with_bad_value_is_refused(repo):
     _two_agents(repo)
     code, _out, _ = run_cli(repo, "history", "--tail", "0")
     assert code != 0
+
+
+def test_mcp_history_reaches_agent_and_tail(repo):
+    from ddflow import api
+
+    _two_agents(repo)
+    out = api.history(repo, by_agent="beta", tail=2)
+    assert [e["data"]["reason"] for e in out.data["events"]] == ["beta reason 1", "beta reason 2"]
