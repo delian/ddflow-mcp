@@ -39,7 +39,18 @@ def cmd_session_list(a, c: Ctx) -> int:
         print(str(exc), file=sys.stderr)
         return REFUSED
     if c.json:
-        print(json.dumps(view.rows, indent=2, default=str))
+        # The shape `task|phase|bug|research list --json` prints, so a consumer tells a
+        # page from the whole; the filter is echoed under the flag's own name.
+        body = {
+            "record_kind": "session",
+            "rows": view.rows,
+            "total": view.total,
+            "shown": len(view.rows),
+            "limit": view.limit,
+            "truncated": view.truncated,
+            "filters": {("owner" if k == "agent" else k): v for k, v in view.filters.items()},
+        }
+        print(json.dumps(body, indent=2, default=str))
         return OK if view.rows else NOTHING
     if not view.rows:
         which = f" matching {view.filters}" if view.filters else ""
@@ -56,7 +67,7 @@ def cmd_session_list(a, c: Ctx) -> int:
             f"{r['prompts']}p {r['notes']}n {r['items']} item(s)  [{flags}]"
         )
     if view.truncated:
-        print(f"\n(showing {len(view.rows)} of {view.total}; --limit raises it)")
+        print(f"\n(showing {len(view.rows)} of {view.total}; raise --limit, at most {V.MAX_LIMIT})")
     return OK
 
 

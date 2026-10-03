@@ -79,7 +79,9 @@ def test_list_newest_first_with_span_items_counts_and_markers(repo):
     _fixture(repo)
     code, out, err = run_cli(repo, "--json", "session", "list")
     assert code == 0, err
-    rows = json.loads(out)
+    body = json.loads(out)
+    rows = body["rows"]
+    assert body["total"] == 2 and body["truncated"] is False and body["record_kind"] == "session"
     assert [r["id"] for r in rows] == ["S-imp", "S-old"]
     imp, old = rows
     assert imp["implicit"] is True and old["implicit"] is False
@@ -106,9 +108,13 @@ def test_list_filters_since_limit_agent_state(repo):
     _fixture(repo)
 
     def ids(*a):
-        return [r["id"] for r in json.loads(run_cli(repo, "--json", "session", "list", *a)[1])]
+        return [
+            r["id"] for r in json.loads(run_cli(repo, "--json", "session", "list", *a)[1])["rows"]
+        ]
 
     assert ids("--limit", "1") == ["S-imp"]
+    one = json.loads(run_cli(repo, "--json", "session", "list", "--limit", "1")[1])
+    assert one["total"] == 2 and one["shown"] == 1 and one["truncated"] is True
     assert ids("--since", "2026-10-01") == ["S-imp"]
     assert ids("--owner", "alice") == ["S-old"]
     assert ids("--state", "ended") == ["S-old"]
@@ -122,7 +128,7 @@ def test_list_filters_since_limit_agent_state(repo):
 def test_global_agent_flag_is_the_caller_not_a_filter(repo):
     _fixture(repo)
     code, out, _ = run_cli(repo, "--json", "session", "list", agent="someone-else")
-    assert code == 0 and len(json.loads(out)) == 2
+    assert code == 0 and len(json.loads(out)["rows"]) == 2
 
 
 def test_list_with_nothing_to_show_is_exit_2(repo):
@@ -207,4 +213,4 @@ def test_an_event_with_null_data_does_not_break_the_viewer(repo):
         )
     code, out, err = run_cli(repo, "--json", "session", "list")
     assert code == 0, err
-    assert len(json.loads(out)) == 2
+    assert len(json.loads(out)["rows"]) == 2
