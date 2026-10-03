@@ -675,6 +675,10 @@ class State:
     #: version -> the release request awaiting approval (gitflow + pull requests), as
     #: {"branch", "number", "url", "base", "forge"}. Tagging it removes it.
     pending_releases: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: "<item>><branch>" -> a gitflow hotfix's BACK-MERGE request (B171), as {"item", "into",
+    #: "number", "url", "forge", "state"}; state is open | merged | closed. The item itself
+    #: completes once production has the fix; this is what remembers develop still needs it.
+    back_merges: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: knob -> the recorded workflow CHOICE: {"value", "by", "agent", "user", "at",
     #: "reason"}. `by` is "explicit" or "default" -- a default applied at first use is
     #: recorded so the project keeps following it even if ddflow's default changes.
@@ -1556,6 +1560,17 @@ def _h_release_opened(st: State, ev: Event) -> None:
     }
 
 
+def _h_back_merge_recorded(st: State, ev: Event) -> None:
+    d = ev.data
+    into = d.get("into", "")
+    st.back_merges[f"{ev.subject}>{into}"] = {
+        "item": ev.subject,
+        "into": into,
+        **{k: d.get(k, "") for k in ("number", "url", "forge")},
+        "state": d.get("state") or "open",
+    }
+
+
 def _h_release_closed(st: State, ev: Event) -> None:
     st.pending_releases.pop(ev.subject, None)
 
@@ -2090,6 +2105,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "pr.closed": _h_pr_closed,
     "port.applied": _h_port_applied,
     "flow.chosen": _h_flow_chosen,
+    "backmerge.recorded": _h_back_merge_recorded,
     "deploy.recorded": _h_deploy_recorded,
     "release.opened": _h_release_opened,
     "release.tagged": _h_release_tagged,
