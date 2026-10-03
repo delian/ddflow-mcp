@@ -1316,13 +1316,12 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_history": {
         "description": (
-            "ONE timeline of everything that happened, in the order it happened: "
-            "claims, releases, gates, bugs, decisions, lessons, completions. The other "
-            "views answer 'what is true now'; this one answers 'how did it get like "
-            "this', which is the question you have when something looks wrong.\n\n"
-            "Filter with `item` for one task's whole life, `kind` for one family "
-            "('gate', 'lease.acquired', 'decision,bug'), `since` for a time window. "
-            "Exit 2 means nothing matched — which is an answer, not a failure."
+            "ONE timeline of everything that happened: claims, releases, gates, bugs, "
+            "decisions, lessons, completions. Other views say what is true now; this says "
+            "how it got that way.\n\n"
+            "Filter with `item` (one task's life), `kind` (a family: 'gate', "
+            "'lease.acquired', 'decision,bug'), `since`, `by_agent`. Exit 2 means nothing "
+            "matched: an answer, not a failure."
         ),
         "properties": {
             "item": ("string", "Restrict to one item's timeline.", False),
@@ -1334,6 +1333,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "since": ("string", "ISO timestamp lower bound.", False),
             "limit": ("integer", "Most recent N entries (default 40).", False),
+            "tail": ("integer", "Last N entries, oldest first (overrides limit).", False),
+            "by_agent": ("string", "Only this agent's events.", False),
         },
         "api": lambda repo, a, agent: _api().history(
             repo,
@@ -1342,6 +1343,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             since=a.get("since", "") or "",
             limit=int(a.get("limit") or 40),
             agent=agent,
+            by_agent=a.get("by_agent", "") or "",
+            tail=int(a.get("tail") or 0),
         ),
         "payload": ("total", "shown", "events"),
     },
