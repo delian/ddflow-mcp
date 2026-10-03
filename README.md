@@ -3665,6 +3665,7 @@ ddflow task|phase|bug|research list   one line per record, filters, --json (2 = 
 
 ddflow session start|prompt|note|end     provenance logging (prompt/note: id optional)
 ddflow session adopt-orphans             attach id-less prompts/notes to a session
+ddflow session list|show <id>            read sessions back (newest first; --state --owner --since --limit)
 ddflow replay [--out DIR] [--verify]     reconstruct from the log
 
 ddflow recover [--apply]        find crashed agents' work   (2 = nothing)
@@ -3842,6 +3843,16 @@ part that matters.
   copy marked `adopted_from`, since the log is append-only; run twice it adds nothing, and
   `replay` shows the words once). With `session.log_prompts = false` a prompt is not
   recorded and the output says so, rather than opening a session for nothing.
+* **Sessions can be read back.** `ddflow session list` prints sessions newest activity
+  first with the agent, span, prompt/note/item counts, `open` or `ended` and an `implicit`
+  marker (`--state open|ended`, `--owner` (the session's agent; `--agent` is who you are), `--since <date|timestamp>`, `--limit`, `--json` prints the same
+  `{rows, total, shown, truncated, filters}` object as the other `list` commands;
+  exit 2 when nothing matches, 3 for a bad filter). `ddflow session show <id>` prints one
+  session: every prompt and note in order with its item, then the end summary, redacted
+  like the exports; an unknown id is refused with the near matches. Both read the log
+  directly, so they work with `export sessions` disabled; an adopted orphan appears once,
+  and a prompt nobody has adopted yet belongs to no session (`doctor` counts those). No MCP
+  tool yet (planned: `ddflow_list kind=session`).
 
 **Not automated, on purpose:**
 

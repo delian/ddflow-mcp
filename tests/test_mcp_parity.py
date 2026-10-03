@@ -114,6 +114,8 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "invoked BY the Claude Code SessionStart hook to put the brief into a new "
         "session; over MCP that is ddflow_brief"
     ),
+    ("session", "list"): "read-only viewer; MCP parity arrives with ddflow_list (B-view-mcp-list)",
+    ("session", "show"): "read-only viewer; MCP parity arrives with ddflow_list (B-view-mcp-list)",
     ("session", "adopt-orphans"): (
         "a one-off backfill an operator runs after ddflow doctor names id-less prompts; "
         "agents record with ddflow_session_prompt, which never lacks a session now"
