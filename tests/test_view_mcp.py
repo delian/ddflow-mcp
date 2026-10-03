@@ -94,7 +94,17 @@ def test_session_id_shows_one_session_in_full(proj):
 
 
 def test_refusals(proj):
-    for args in ({"kind": "nope"}, {"kind": "search"}, {"kind": "task", "id": "S1"}):
+    stray = (
+        {"kind": "session", "tag": "x"},
+        {"kind": "session", "phase": "P1"},
+        {"kind": "search", "query": "x", "id": "S1"},
+        {"kind": "search", "query": "x", "tag": "web"},
+        {"kind": "task", "query": "login"},
+        {"kind": "task", "mode": "regex"},
+        {"kind": "task", "all": True},
+        {"kind": "bug", "sources": "task"},
+    )
+    for args in ({"kind": "nope"}, {"kind": "search"}, {"kind": "task", "id": "S1"}, *stray):
         r = _call(proj, **args)
         assert r["_meta"]["exit"] == 3, (args, r)
     assert _call(proj, kind="session", id="nope")["_meta"]["exit"] == 3
@@ -132,3 +142,10 @@ def test_one_tool_not_six():
     assert "ddflow_list" in TOOLS
     assert not [t for t in TOOLS if t.startswith(("ddflow_task_list", "ddflow_session_list"))]
     assert len(TOOLS["ddflow_list"]["description"]) < 700
+
+
+def test_the_owner_filter_is_echoed_under_its_own_name_for_every_kind(proj):
+    for kind in ("task", "session"):
+        assert _body(_call(proj, kind=kind, owner="alice", limit=5))["filters"] == {
+            "owner": "alice"
+        }, kind

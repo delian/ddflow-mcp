@@ -258,13 +258,13 @@ def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
         cut = [0]
         out = {**body, "entries": _clip(kept, cut)}
         if cut[0]:
-            more = f"{cut[0]} long entry text(s) end in [...]: `ddflow session show <id>` has them whole."
+            more = f"{cut[0]} long entry text(s) end in [...]: the CLI's `ddflow session show <id>` has them whole."
             note = f"{note} {more}" if note else more
         return out, note
     if body.get("truncated") is True and isinstance(body.get("rows"), list):
         return body, (
             f"truncated: showing {body.get('shown')} of {body.get('total')}; "
-            "raise limit (0 = all, at most 1000)."
+            "narrow the filters, or raise limit (0 = the most a list gives: 1000, a search 200)."
         )
     return body, None
 
