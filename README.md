@@ -2468,7 +2468,7 @@ is committed with the code, one shard per writer, so distinct writers merge with
 conflict; a forge's merge button may not honour `merge=union` (unverified; it only matters
 when two branches append to one shard, and a local `git pull --no-rebase` clears it);
 offline divergence is *detected* (`contested`), not prevented, unless the opt-in remote
-claim lock (`[flow].claims = "remote"`, B192) is on; and committed session prompts, notes
+claim lock (B192; not shipped yet, so claims are local-only today) is on; and committed session prompts, notes
 and evidence are readable by everyone with access to the repository.
 
 **A wrong worktree binding can be corrected.** `ddflow update <id> --worktree PATH` rebinds

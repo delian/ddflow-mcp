@@ -52,13 +52,14 @@ settles it with `ddflow resolve <id> --keep <holder-or-event>`. See the README s
 ## What is locked
 
 By default **nothing** is: a claim is an event in this clone's log, and two clones that
-have not yet pulled each other can both claim one item. The opt-in remedy (B192) is a
-cross-machine claim lock: with `[flow] claims = "remote"` a claim also creates
-`refs/ddflow/claims/<id>` on the remote by compare-and-swap, so only one online clone wins;
-release, completion and expiry delete the ref. A refused claim exits 3 and names the
-holder. An unreachable remote is recorded as unavailable, never silently treated as local.
-B192 ships separately from this page; until your ddflow includes it, claims are local only.
-Even with it, an agent that is offline claims locally and is detected as above.
+have not yet pulled each other can both claim one item. **Not shipped yet:** an opt-in
+cross-machine claim lock (B192, in progress; `ddflow show B192` says where it stands). As
+designed, a claim would also create `refs/ddflow/claims/<id>` on the remote by
+compare-and-swap, so only one online clone wins; release, completion and expiry delete the
+ref; a refused claim exits 3 and names the holder; an unreachable remote is recorded as
+unavailable, never silently treated as local. Until it lands (check the README for a
+`[flow]` knob before relying on it), claims are local only. Even with it, an agent that is
+offline claims locally and is detected as above.
 
 ## What everyone with repository access can read
 
