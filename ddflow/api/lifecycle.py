@@ -32,6 +32,7 @@ from ..core import outcome as O
 from ..core.events import parse_changelog
 from ..core.model import ABANDONED, DONE, REVIEW, State
 from ..core.plain import plain
+from ..core.schedule import needs_tree
 from ..infra import worktree as W
 from ..services import leases as L
 from ._base import _load
@@ -936,6 +937,8 @@ def claim(
     events = log.read_all()
     st = fold(events, strict=False)
     parked = st.items.get(item)
+    if parked is not None and not needs_tree(parked):  # declared by its `no-worktree` tag
+        no_worktree = True
     if parked is not None and parked.state == REVIEW and not force:
         # Claiming it would let a push ride into the request its reviewers already
         # judged -- and while it ran, `pr sync` would stop watching the request at all.
