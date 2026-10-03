@@ -70,7 +70,30 @@ def _companion_lines(statuses) -> list[str]:
     return lines
 
 
+def _companions_verify(a, c: Ctx) -> int:
+    out = A.companions_verify(c.repo, getattr(a, "id", "") or "", agent=c.requested_agent)
+    if out.exit == FAIL and "verified" not in out.data:
+        print(out.reason, file=sys.stderr)
+        return FAIL
+    if c.json:
+        print(json.dumps(out.body(("verified", "skipped")), indent=2))
+        return out.exit
+    marks = {"speaks_mcp": "[x]", "not_mcp": "[!]", "unknown": "[?]"}
+    lines = ["MCP companions, launched and asked `initialize`", ""]
+    for r in out.data["verified"]:
+        lines.append(f"  {marks[r['state']]} {r['id']:<12s} {r['detail']}  ({r['elapsed_s']}s)")
+        lines.append(f"       {r['command']}")
+    for r in out.data["skipped"]:
+        lines.append(f"  [ ] {r['id']:<12s} not launched: {r['reason']}")
+    if out.exit != OK:
+        lines += ["", out.reason]
+    print("\n".join(lines))
+    return out.exit
+
+
 def _companions_list(a, c: Ctx) -> int:
+    if getattr(a, "verify", False):
+        return _companions_verify(a, c)
     out = A.companions(
         c.repo, no_probe=bool(getattr(a, "no_probe", False)), agent=c.requested_agent
     )
