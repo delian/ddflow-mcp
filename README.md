@@ -173,6 +173,7 @@ the same implementation, so neither drifts from the other.
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
+| **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | not yet exposed |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
@@ -3069,6 +3070,33 @@ the title, the severity and a scope other than `project`. A later `bug.reported_
 a skipped kind. Once a command to prepare that report exists, filing a `ddflow`-scoped bug ends with a
 one-line offer to run it.
 
+### Listing tasks, phases, bugs and research
+
+`ddflow task list`, `phase list`, `bug list` and `research list` print one line per
+record -- id, state, title, owner and the date of the last change -- newest change first.
+They read the folded log and write nothing; `ddflow show <id>` is the whole record.
+
+```sh
+ddflow task list --phase P2 --state open        # what is left in a phase
+ddflow phase list                               # id, state, done/total tasks, title
+ddflow bug list                                 # OPEN bugs only
+ddflow bug list --all                           # also fixed and invalid ones
+ddflow bug list --state invalid --since 2026-10-01
+ddflow research list --state refuted            # the state is the verdict, lower-cased
+ddflow task list --tag web --limit 20 --json    # {rows, total, shown, truncated, ...}
+```
+
+Filters are `--state`, `--phase`, `--tag`, `--owner` (the leaseholder; not `--agent`, which is
+always who *you* are), `--since` (an ISO
+date or timestamp, compared with the last change) and `--limit` (default 50, at most
+1000; a cut list says how many matched). A kind offers only the filters it has data for:
+bugs have no tag or owner, so `bug list --tag x` is an unknown option rather than a
+silent "everything" (and the list flags are refused on `research` when recording a finding). Titles and tags are redacted as the export documents are. Exit
+codes: 0 rows, 2 none matched (the message, and `reason` in `--json`, name the filters), 3 a refused value such
+as an unknown `--phase`. `research list` is the optional-verb form of `research`, like
+`research add`. These commands have no MCP tool yet: the one consolidated read tool
+for them is the next task of the viewers phase.
+
 ---
 
 ## Cadences
@@ -3626,6 +3654,7 @@ ddflow history [--item|--kind|--agent|--tail]  one timeline of everything that h
 ddflow lesson add|search        capture and retrieve lessons
 ddflow research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
 ddflow bug found|fixed          regression test required to close (--regression-test repeats)
+ddflow task|phase|bug|research list   one line per record, filters, --json (2 = none match)
 
 ddflow session start|prompt|note|end     provenance logging (prompt/note: id optional)
 ddflow session adopt-orphans             attach id-less prompts/notes to a session

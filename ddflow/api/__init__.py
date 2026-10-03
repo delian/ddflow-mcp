@@ -154,6 +154,7 @@ from .setup import (
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
+from .viewers import view_list
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -265,6 +266,7 @@ __all__ = [
     "update",
     "version_cut",
     "version_show",
+    "view_list",
     "wait_item",
     "workflow_drop",
     "workflow_gate",
