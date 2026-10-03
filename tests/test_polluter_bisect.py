@@ -171,7 +171,17 @@ def test_the_fixture_really_is_order_dependent(project):
 
     def run(*files):
         return subprocess.run(
-            [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *files],
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                "-q",
+                "-p",
+                "no:cacheprovider",
+                "-p",
+                "no:randomly",
+                *files,
+            ],
             cwd=project,
             capture_output=True,
         ).returncode
@@ -282,3 +292,30 @@ def test_all_subsets_agree_with_brute_force_on_a_small_suite():
         for culprit_set in itertools.combinations(files, r):
             res = B.bisect("V", files, _probe(set(culprit_set)))
             assert res.state == "found" and set(res.polluters) == set(culprit_set)
+
+
+@pytest.mark.parametrize(
+    "spelling", ["./tests/test_zz_victim.py", "tests/test_zz_victim.py", "ABS"]
+)
+def test_the_victim_may_be_spelled_any_way_a_shell_would(project, spelling):
+    path = str(project / "tests" / "test_zz_victim.py") if spelling == "ABS" else spelling
+    cands = API.candidates_before(project, f"{path}::test_victim", [], "")
+    assert cands == [f"tests/test_{n}.py" for n in "abcdefg"], cands
+
+
+def test_named_candidates_are_normalised_and_the_victims_file_dropped(project):
+    cands = API.candidates_before(
+        project,
+        "./tests/test_zz_victim.py::test_victim",
+        ["./tests/test_a.py", "tests/test_zz_victim.py"],
+        "",
+    )
+    assert cands == ["tests/test_a.py"]
+
+
+def test_undecodable_output_is_a_result_not_a_crash(project):
+    """A byte that is not valid text (a test printing latin-1 under LC_ALL=C) must not
+    escape as an exception: the run's verdict is its exit code."""
+    cmd = f"{sys.executable} -c 'import sys; sys.stdout.buffer.write(bytes([0xff, 0xfe])); sys.exit(1)' {{tests}}"
+    probe = B.command_probe(cmd, project)
+    assert probe(["x"]) is False

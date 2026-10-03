@@ -6,7 +6,7 @@ candidates, what the command is) and the exit-code contract.
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from ..config import csv_list
@@ -17,6 +17,18 @@ from ..services import bisect as B
 DEFAULT_GLOB = "tests/**/test_*.py"
 
 
+def _norm(repo: Path, path: str) -> str:
+    """`path` as the repo-relative, forward-slash spelling the glob produces, so that
+    `./tests/t.py`, `tests/t.py` and `/abs/repo/tests/t.py` are one file."""
+    p = PurePath(path)
+    if p.is_absolute():
+        try:
+            p = p.relative_to(repo)
+        except ValueError:
+            return p.as_posix()
+    return PurePath(*[part for part in p.parts if part != "."]).as_posix()
+
+
 def candidates_before(repo: Path, victim: str, names: list[str], glob: str) -> list[str]:
     """The files that run before `victim` in a full run, excluding the victim's own file.
 
@@ -24,10 +36,12 @@ def candidates_before(repo: Path, victim: str, names: list[str], glob: str) -> l
     expanded and sorted, which is how a default pytest run orders files, and only the files
     that sort BEFORE the victim's are candidates: a file that runs after cannot pollute it.
     """
-    victim_file = victim.split("::", 1)[0]
+    victim_file = _norm(repo, victim.split("::", 1)[0])
     if names:
-        return [n for n in names if n != victim_file]
-    found = sorted(str(p.relative_to(repo)) for p in repo.glob(glob or DEFAULT_GLOB) if p.is_file())
+        return [_norm(repo, n) for n in names if _norm(repo, n) != victim_file]
+    found = sorted(
+        p.relative_to(repo).as_posix() for p in repo.glob(glob or DEFAULT_GLOB) if p.is_file()
+    )
     if victim_file in found:
         found = found[: found.index(victim_file)]
     return [f for f in found if f != victim_file]
