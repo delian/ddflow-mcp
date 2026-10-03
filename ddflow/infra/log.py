@@ -28,7 +28,6 @@ import os
 import secrets
 import socket
 import subprocess
-import sys
 import time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, fields
@@ -600,64 +599,45 @@ def _held_key(path: Path) -> tuple[int, str]:
 
 
 def _holder_note(path: Path) -> str:
-    """Who last took `path`, from the note left in the lock file; '' if there is none.
+    """Who holds the flock on `path` right now, from the kernel; '' when it cannot say.
 
-    flock cannot say who owns a lock, so a process writes `pid <n> <epoch> <command>`
-    into the (never replaced) lock file once it has it. Read without a lock: it is only
-    ever shown to a human after a timeout, so a stale, torn or hostile note must degrade to
-    '' or to a lead, never raise out of the timeout path.
+    flock cannot say who owns a lock, but Linux lists every flock in /proc/locks with the
+    holder's pid and the file's device and inode. Asking the kernel costs the hot path
+    nothing and writes nothing: an earlier design had each holder write a note INTO the
+    lock file, which put per-writer bytes into a file that an un-adopted project commits
+    (no `.ddflow/.gitignore` yet), where two clones' notes conflict on merge.
+
+    Best effort and never raises: this runs while a TimeoutError is being built. Other
+    platforms (no /proc/locks) and a pid from another namespace give ''.
     """
     try:
-        with path.open(
-            "rb"
-        ) as fh:  # bounded: bytes past the note are a stale tail, never part of it
-            raw = fh.read(_NOTE_BYTES)
-        parts = raw.split(b"\n", 1)[0].decode("utf-8", "replace").split(None, 3)  # one line
-        if (
-            len(parts) < _NOTE_FIELDS
-            or parts[0] != "pid"
-            or not (parts[1].isascii() and parts[1].isdigit())
-        ):
-            return ""
-        pid = int(parts[1])
-        if pid <= 0:
-            return ""  # kill(0)/kill(-n) address groups, not a process
-        try:
-            os.kill(pid, 0)
-            alive = "alive"
-        except ProcessLookupError:
-            alive = "NOT running -- it may have released the lock since, or a child of it still holds it"
-        except PermissionError:
-            alive = "alive (owned by another user)"
-        held = ""
-        with contextlib.suppress(ValueError, OverflowError):
-            held = f", held {max(0.0, time.time() - float(parts[2])):.1f}s"
-        return (
-            f" Last process to take the lock: pid {pid} ({alive}{held}); it may have released "
-            f"it since. Its command: {parts[3].strip()[:200]}."
-        )
-    except (OSError, ValueError, OverflowError):
+        st = os.stat(path)
+        want = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
+        for line in Path("/proc/locks").read_text().splitlines():
+            f = line.split()
+            # `1: FLOCK ADVISORY WRITE 4242 fd:00:131077 0 EOF`; a waiter's own blocked
+            # request is prefixed `->` and is not the holder.
+            if len(f) >= _LOCK_FIELDS and f[1] == "FLOCK" and f[5] == want:
+                pid = int(f[4])
+                if pid > 0:
+                    return f" Held by {_describe_pid(pid)}."
+    except (OSError, ValueError):
         return ""
+    return ""
 
 
-#: `pid`, the pid, the epoch it took the lock, and at least the start of its command line.
-_NOTE_FIELDS = 4
-
-#: The note is one fixed-size write at offset 0 followed by a trim to that size: a reader
-#: never sees an empty file (write-then-truncate, not truncate-then-write) or the tail of an
-#: older, longer note.
-_NOTE_BYTES = 256
-
-_ARGV: list[str] = []
+#: Fields on a /proc/locks line up to and including the `major:minor:inode` column.
+_LOCK_FIELDS = 6
 
 
-def _my_note() -> bytes:
-    """`pid <n> <epoch> <argv>`, padded to `_NOTE_BYTES`. The argv is joined once per
-    process: a long-lived server takes this lock for every append."""
-    if not _ARGV:
-        _ARGV.append(" ".join(sys.argv)[:160])
-    text = f"pid {os.getpid()} {time.time():.3f} {_ARGV[0]}"
-    return text.encode("utf-8", "replace")[: _NOTE_BYTES - 1].ljust(_NOTE_BYTES - 1) + b"\n"
+def _describe_pid(pid: int) -> str:
+    """`pid N (command line)` -- the command from /proc, or just the pid."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+        cmd = raw.replace(b"\0", b" ").decode("utf-8", "replace").strip()[:200]
+    except OSError:
+        cmd = ""
+    return f"pid {pid} ({cmd})" if cmd else f"pid {pid}"
 
 
 @contextlib.contextmanager
@@ -665,10 +645,12 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
     """Exclusive advisory lock, with a bounded wait and a real error on timeout.
 
     The lock file is created once and NEVER atomically replaced: renaming over a lock
-    file puts two holders on two different inodes, each believing it is exclusive.
+    file puts two holders on two different inodes, each believing it is exclusive. It is
+    also never WRITTEN: its content is empty, so a project that commits it (before
+    `.ddflow/.gitignore` exists) cannot get a merge conflict from it.
 
-    A timeout says how long this process waited and who last took the lock (B184: a
-    timeout under machine load was suspected and could not be told from a wedged agent).
+    A timeout says how long this process waited and, on Linux, who holds the lock (B184:
+    a timeout under machine load was suspected and could not be told from a wedged agent).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
@@ -688,12 +670,6 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
                         f"overloaded -- check `ddflow doctor`"
                     ) from None
                 time.sleep(0.02)
-        with contextlib.suppress(OSError, ValueError):
-            # Best effort, for the next waiter that times out; never fatal. The write comes
-            # first and the truncate only trims an older, longer note (a previous version
-            # wrote up to ~800 bytes), so a reader never meets an empty file.
-            os.pwrite(fd, _my_note(), 0)
-            os.ftruncate(fd, _NOTE_BYTES)
         yield
     finally:
         with contextlib.suppress(OSError):
