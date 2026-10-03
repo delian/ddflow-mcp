@@ -563,7 +563,7 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
     msgs: list[str] = []
     if claude:
         if action == "install":
-            line = E.command_line(CH.MARKER)
+            line = E.command_line(CH.MARKER, refresh="ddflow hooks install --claude")
             msgs.append(CH.install(repo, line))
             if note := E.redirect_note(line):
                 msgs.append(note)
@@ -574,8 +574,12 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
             continue
         if action == "install":
             cmd = (
-                E.command_line(CH.PROMPT_MARKER)
-                + (" --gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "")
+                E.command_line(
+                    CH.PROMPT_MARKER,
+                    extra="--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "",
+                    refresh="ddflow hooks install "
+                    + ("--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "--claude"),
+                )
                 + " || true"
             )
             msgs.append(CH.install(repo, cmd, matcher=None, **kw))
@@ -673,6 +677,13 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         f"Claude Code SessionStart hook: {session_line}\n"
         f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
+    from ..services import launchers as LA
+
+    dangling = LA.findings(repo)
+    if dangling:
+        message += "\nDANGLING LAUNCHER: " + "\nDANGLING LAUNCHER: ".join(
+            d.render() for d in dangling
+        )
     data = {
         "installed": on,
         "policy": mode,
@@ -680,6 +691,7 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         "trailer_hook": msg_hook,
         # How each is armed: "ddflow", "pre-commit", "pre-commit legacy", or "".
         "armed_via": {"pre-commit": commit_hook.via, "commit-msg": msg_armed.via},
+        "dangling": [d.render() for d in dangling],
         "message": message,
     }
     if on or mode == "off":
