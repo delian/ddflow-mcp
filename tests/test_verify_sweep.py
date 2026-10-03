@@ -149,6 +149,8 @@ def test_an_explicit_limit_with_an_id_is_refused_on_both_surfaces_whatever_its_v
 
     _project(repo)
     assert run_cli(repo, "verify", "T-GOOD", "--limit", "20")[0] == 1
+    code, _, err = run_cli(repo, "verify", "T-GOOD", "--limit", "0")
+    assert code == 1 and "sweep" in err
     reply = Server(repo).handle(
         {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
          "params": {"name": "ddflow_verify", "arguments": {"id": "T-GOOD", "limit": 0}}}
