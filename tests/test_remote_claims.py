@@ -68,14 +68,14 @@ def test_release_frees_the_remote_claim(clones):
 
 
 def test_a_lapsed_remote_claim_is_replaced_by_compare_and_swap(clones):
-    a, b, bare = clones
+    a, b, _bare = clones
     cfg = Config.load(a)
     assert CR.take(a, cfg.flow.remote, "T1", "ghost", time.time() - 10).ok
     assert A.claim(b, "T1", no_worktree=True, agent="agent-b").ok
 
 
 def test_an_unreachable_remote_refuses_instead_of_claiming_locally(clones):
-    a, b, bare = clones
+    a, _b, bare = clones
     _git(a, "remote", "set-url", "origin", str(bare) + "-gone")
     out = A.claim(a, "T1", no_worktree=True, agent="agent-a")
     assert not out.ok and "remote" in out.reason, out.reason
@@ -94,10 +94,34 @@ def test_ref_names_are_valid_and_distinct():
 
 
 def test_a_heartbeat_extends_the_remote_claim_so_it_is_not_stolen(clones):
-    a, b, bare = clones
+    a, b, _bare = clones
     remote = Config.load(a).flow.remote
     assert CR.take(a, remote, "T1", "agent-a", time.time() + 1).ok
     assert CR.renew(a, remote, "T1", "agent-a", time.time() + 3600).ok
     time.sleep(2)
     got = CR.take(b, remote, "T1", "agent-b", time.time() + 60)
     assert got.status == "held" and got.holder == "agent-a"
+
+
+def test_a_stalled_holder_releasing_does_not_delete_its_successors_claim(clones):
+    a, b, bare = clones
+    remote = Config.load(a).flow.remote
+    assert CR.take(a, remote, "T1", "ghost", time.time() - 10).ok  # lapsed
+    assert CR.take(b, remote, "T1", "agent-b", time.time() + 600).ok  # b replaced it
+    assert CR.drop(a, remote, "T1", "ghost").status == "held"  # the ghost's late release
+    assert len(_refs(bare)) == 1
+    assert CR.drop(b, remote, "T1", "agent-b").ok and _refs(bare) == []
+
+
+def test_ref_names_are_injective_for_non_ascii_ids():
+    assert CR.ref_name("€") != CR.ref_name(" ac")
+    assert CR.ref_name("Ā") != CR.ref_name("\x100")
+
+
+def test_an_unreadable_existing_claim_is_unavailable_not_lapsed(clones, monkeypatch):
+    a, b, bare = clones
+    remote = Config.load(a).flow.remote
+    assert CR.take(a, remote, "T1", "agent-a", time.time() + 600).ok
+    monkeypatch.setattr(CR, "_read", lambda *args: None)
+    assert CR.take(b, remote, "T1", "agent-b", time.time() + 600).status == "unavailable"
+    assert len(_refs(bare)) == 1

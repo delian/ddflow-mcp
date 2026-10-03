@@ -25,7 +25,7 @@ from .worktree import git
 PREFIX = "refs/ddflow/claims/"
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # built into git; needs no object
 TIMEOUT_S = 30
-_SAFE = re.compile(r"[^A-Za-z0-9_-]")
+_SAFE = re.compile(r"[^A-Za-z0-9_-]")  # a character that must be escaped
 _IDENT = {
     "GIT_AUTHOR_NAME": "ddflow",
     "GIT_AUTHOR_EMAIL": "ddflow@localhost",
@@ -47,8 +47,13 @@ class Result:
 
 
 def ref_name(item: str) -> str:
-    """A valid ref for any item id: unsafe characters become `%XX`, so ids stay distinct."""
-    return PREFIX + _SAFE.sub(lambda m: f"%{ord(m.group()):02x}", item)
+    """A valid ref for any item id: every UTF-8 byte outside [A-Za-z0-9_-] becomes `%XX`.
+
+    Byte-wise and fixed-width, so the mapping is injective and ids stay distinct."""
+    return PREFIX + "".join(
+        c if _SAFE.fullmatch(c) is None else "".join(f"%{b:02x}" for b in c.encode("utf-8"))
+        for c in item
+    )
 
 
 def _run(root: Path, *args: str, env: dict[str, str] | None = None):
@@ -79,12 +84,14 @@ def _remote_sha(root: Path, remote: str, ref: str) -> tuple[str | None, str]:
     return (r.out.split()[0] if r.out else ""), ""
 
 
-def _read(root: Path, remote: str, ref: str, sha: str) -> tuple[str, float]:
+def _read(root: Path, remote: str, ref: str, sha: str) -> tuple[str, float] | None:
+    """(holder, expires) of the claim at `sha`; None when it could not be read -- which is
+    NOT the same as lapsed, and a caller must not treat it as one."""
     got = _run(root, "fetch", "--no-tags", remote, ref)
     if got is None or isinstance(got, OSError) or not got.ok:
-        return "", 0.0
+        return None
     body = git(root, "cat-file", "commit", sha, timeout=TIMEOUT_S)
-    return _parse(body.out) if body.ok else ("", 0.0)
+    return _parse(body.out) if body.ok else None
 
 
 def take(root: Path, remote: str, item: str, holder: str, expires: float) -> Result:
@@ -92,7 +99,7 @@ def take(root: Path, remote: str, item: str, holder: str, expires: float) -> Res
     ref = ref_name(item)
     try:
         sha = _make_commit(root, item, holder, expires)
-    except Exception as exc:  # noqa: BLE001 -- any local git failure means "cannot claim remotely"
+    except Exception as exc:
         return Result("unavailable", detail=f"could not build the claim commit: {exc}")
     pushed = _run(root, "push", "--quiet", remote, f"{sha}:{ref}")
     if pushed is not None and not isinstance(pushed, OSError) and pushed.ok:
@@ -103,7 +110,10 @@ def take(root: Path, remote: str, item: str, holder: str, expires: float) -> Res
     if not cur:  # the ref is not there, so the push failed for another reason
         err = getattr(pushed, "err", "") or "push failed"
         return Result("unavailable", detail=err)
-    owner, lapses = _read(root, remote, ref, cur)
+    read = _read(root, remote, ref, cur)
+    if read is None:
+        return Result("unavailable", detail="the existing claim could not be read")
+    owner, lapses = read
     if owner == holder or lapses <= time.time():
         swapped = _run(
             root, "push", "--quiet", f"--force-with-lease={ref}:{cur}", remote, f"{sha}:{ref}"
@@ -113,7 +123,10 @@ def take(root: Path, remote: str, item: str, holder: str, expires: float) -> Res
         cur, why = _remote_sha(root, remote, ref)
         if cur is None:
             return Result("unavailable", detail=why)
-        owner, lapses = _read(root, remote, ref, cur) if cur else ("", 0.0)
+        read = _read(root, remote, ref, cur) if cur else None
+        if read is None:
+            return Result("unavailable", detail="the existing claim could not be read")
+        owner, lapses = read
     return Result("held", owner, lapses, "claimed on the remote")
 
 
@@ -125,10 +138,16 @@ def renew(root: Path, remote: str, item: str, holder: str, expires: float) -> Re
         return Result("unavailable", detail=why)
     if not cur:
         return take(root, remote, item, holder, expires)
-    owner, _ = _read(root, remote, ref, cur)
+    read = _read(root, remote, ref, cur)
+    if read is None:
+        return Result("unavailable", detail="the existing claim could not be read")
+    owner = read[0]
     if owner != holder:
-        return Result("held", owner, 0.0, "the remote claim is another agent's")
-    sha = _make_commit(root, item, holder, expires, parent=cur)
+        return Result("held", owner, read[1], "the remote claim is another agent's")
+    try:
+        sha = _make_commit(root, item, holder, expires, parent=cur)
+    except Exception as exc:
+        return Result("unavailable", detail=f"could not build the claim commit: {exc}")
     pushed = _run(root, "push", "--quiet", remote, f"{sha}:{ref}")
     ok = pushed is not None and not isinstance(pushed, OSError) and pushed.ok
     return (
@@ -136,14 +155,22 @@ def renew(root: Path, remote: str, item: str, holder: str, expires: float) -> Re
     )
 
 
-def drop(root: Path, remote: str, item: str) -> Result:
-    """Delete the claim ref (compare-and-swap on the sha just read)."""
+def drop(root: Path, remote: str, item: str, holder: str) -> Result:
+    """Delete the claim ref IF `holder` still owns it (compare-and-swap on the sha read).
+
+    A holder that stalled past its expiry and was replaced must not delete its
+    successor's claim when it finally releases."""
     ref = ref_name(item)
     cur, why = _remote_sha(root, remote, ref)
     if cur is None:
         return Result("unavailable", detail=why)
     if not cur:
         return Result("ok")
+    read = _read(root, remote, ref, cur)
+    if read is None:
+        return Result("unavailable", detail="the existing claim could not be read")
+    if read[0] != holder:
+        return Result("held", read[0], read[1], "the remote claim is another agent's; left alone")
     gone = _run(root, "push", "--quiet", f"--force-with-lease={ref}:{cur}", remote, f":{ref}")
     ok = gone is not None and not isinstance(gone, OSError) and gone.ok
     return Result("ok") if ok else Result("unavailable", detail="could not delete the claim ref")
