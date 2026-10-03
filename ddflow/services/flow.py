@@ -741,11 +741,21 @@ def _apply(
 
 
 def _remote_tip(repo: Path, cfg: Config, branch: str) -> str:
-    """The remote's current tip of ``branch`` ("" when it cannot be read)."""
+    """The remote's current tip of ``branch`` ("" when it cannot be read).
+
+    Asked of the remote itself (`ls-remote`): it needs no remote-tracking ref (a
+    single-branch clone or an odd refspec has none) and no shared FETCH_HEAD (parallel
+    worktrees fetch concurrently). The fetch is only to have the objects. A tip that moved
+    between the two, or whose objects are missing, is safe: `_rebase_start` proves the range
+    by count and by the change itself, and falls back to the old first parent when neither
+    holds.
+    """
     remote = cfg.flow.remote
-    if not W.fetch(repo, remote, branch).ok:
+    asked = W.git(repo, "ls-remote", remote, f"refs/heads/{branch}")
+    tip = asked.out.split()[0] if asked.ok and asked.out else ""
+    if not tip or not W.fetch(repo, remote, branch).ok:
         return ""
-    return W.rev(repo, f"{remote}/{branch}")
+    return tip if W.rev(repo, tip) else ""
 
 
 def _report_queue(

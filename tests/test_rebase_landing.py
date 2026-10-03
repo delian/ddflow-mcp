@@ -164,3 +164,23 @@ def test_the_pre_merge_tip_proves_a_range_the_patch_id_cannot(pr_repo, tmp_path)
     assert it.landed_before == moved, (it.landed_before, moved)
     assert _git(repo, "rev-list", "--count", f"{it.landed_before}..{it.landed_after}") == "3"
     assert _range_files(repo, it.landed_before, it.landed_after) == ["lib.txt", "x.py"]
+
+
+def test_the_remote_tip_needs_no_remote_tracking_ref(pr_repo):
+    from ddflow.config import Config
+    from ddflow.services.flow import _remote_tip
+
+    repo, _forge, remote = pr_repo
+    # A remote with no fetch refspec: a fetch writes FETCH_HEAD and no remote-tracking ref.
+    _git(repo, "config", "--unset-all", "remote.origin.fetch")
+    subprocess.run(
+        ["git", "-C", str(repo), "update-ref", "-d", "refs/remotes/origin/main"], check=False
+    )
+    want = subprocess.run(
+        ["git", "--git-dir", str(remote), "rev-parse", "main"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    assert _remote_tip(repo, Config.load(repo), "main") == want
+    assert _remote_tip(repo, Config.load(repo), "no-such-branch") == ""
