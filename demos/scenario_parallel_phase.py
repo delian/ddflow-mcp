@@ -96,11 +96,16 @@ def run(sc: Scenario) -> None:
     plan = sc.jddflow("next", "--phase", "P1")
     ready = [r["id"] for r in plan["ready"]]
     sc.check(
-        "T1, T2 and T4 are all offered (nothing is claimed yet)",
-        set(ready) == {"P1.T1", "P1.T2", "P1.T4"},
+        "T1 and T2 are offered, T4 is not: it overlaps T1, which is offered with it",
+        set(ready) == {"P1.T1", "P1.T2"},
         f"got {ready}",
     )
     blocked = {b["item"]: b for b in plan["blocked"]}
+    sc.check(
+        "T4 is withheld as a conflict naming the offered T1",
+        blocked["P1.T4"]["reason"] == "conflict" and "P1.T1" in blocked["P1.T4"]["detail"],
+        str(blocked.get("P1.T4")),
+    )
     sc.check(
         "T3 is withheld on its dependencies",
         blocked["P1.T3"]["reason"] == "deps",
