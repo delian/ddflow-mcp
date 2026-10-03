@@ -45,6 +45,21 @@ def _sha(remote: str, branch: str) -> str:
         return ""
 
 
+def _commits(st: dict, pr: dict) -> list[dict]:
+    """The PR's own commits (`gh pr view --json commits`): the head's, not on the base."""
+    if "commit_count" in pr:
+        return [{"oid": f"{i:040x}"} for i in range(pr["commit_count"])]
+    head = pr.get("merged_head") or _sha(st["remote"], pr["head"])
+    try:
+        base = pr.get("base_at_open") or _git(
+            "--git-dir", st["remote"], "merge-base", head, f"refs/heads/{pr['base']}"
+        )
+        out = _git("--git-dir", st["remote"], "rev-list", f"{base}..{head}")
+    except subprocess.CalledProcessError:
+        return []
+    return [{"oid": o} for o in out.split()]
+
+
 def _view(st: dict, pr: dict) -> dict:
     head_sha = pr.get("merged_head") or _sha(st["remote"], pr["head"])
     return {
@@ -59,6 +74,7 @@ def _view(st: dict, pr: dict) -> dict:
         "headRefOid": head_sha,
         "mergeCommit": {"oid": pr["merge_sha"]} if pr.get("merge_sha") else None,
         "latestReviews": pr.get("reviews", []),
+        "commits": _commits(st, pr),
     }
 
 
@@ -69,11 +85,38 @@ def _arg(argv: list[str], flag: str, default: str = "") -> str:
 def merge_on_remote(st: dict, pr: dict, how: str = "--merge") -> str:
     """Perform the merge for real, in a scratch clone, and push it to the remote."""
     remote = st["remote"]
+    pr["commit_count"] = len(_commits(st, {k: v for k, v in pr.items() if k != "commit_count"}))
     with tempfile.TemporaryDirectory() as tmp:
         _git("clone", "-q", remote, tmp)
         for k, v in (("user.email", "forge@example.com"), ("user.name", "Forge")):
             _git("config", k, v, cwd=tmp)
         _git("checkout", "-q", pr["base"], cwd=tmp)
+        if st.get("foreign_on_merge"):
+            # Someone else lands on the base between ddflow's look and the merge.
+            (Path(tmp) / "foreign.txt").write_text("foreign\n")
+            _git("add", "foreign.txt", cwd=tmp)
+            _git("commit", "-qm", "foreign commit", cwd=tmp)
+            _git("push", "-q", "origin", pr["base"], cwd=tmp)
+        if how == "--rebase":
+            # GitHub's "rebase and merge": the PR's commits replayed one by one on top of
+            # the base -- N new commits, no merge commit, a fast-forward.
+            _git("checkout", "-q", "-b", "_rebased", f"origin/{pr['head']}", cwd=tmp)
+            # Always new commits, even when the base has not moved (a different committer),
+            # as GitHub's rebase-merge makes -- never a fast-forward onto the same shas.
+            env = {"GIT_COMMITTER_NAME": "GitHub", "GIT_COMMITTER_EMAIL": "noreply@github.com"}
+            subprocess.run(
+                ["git", "rebase", "-q", "--force-rebase", f"origin/{pr['base']}"],
+                cwd=tmp,
+                check=True,
+                capture_output=True,
+                env={**os.environ, **env},
+            )
+            _git("push", "-q", "origin", f"_rebased:{pr['base']}", cwd=tmp)
+            sha = _git("rev-parse", "HEAD", cwd=tmp)
+            pr["merged_head"] = _sha(remote, pr["head"])
+            pr["state"] = "MERGED"
+            pr["merge_sha"] = sha
+            return sha
         if how == "--squash":
             _git("merge", "--squash", f"origin/{pr['head']}", cwd=tmp)
             _git("commit", "-qm", f"{pr['title']} (#{pr['number']})", cwd=tmp)
