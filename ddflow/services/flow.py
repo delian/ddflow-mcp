@@ -319,7 +319,7 @@ def _settle_merged(
     rep.changes.append(Change(it.id, "merged", f"into {info.base}", info.url))
     line = F.effective_line(_state(log), it)
     for extra in F.back_merge_targets(it, cfg, W.default_branch(repo), line):
-        _back_merge(repo, cfg, forge, it, extra, rep)
+        _back_merge(repo, cfg, log, forge, it, extra, rep)
     st = _state(log)
     model = it.pr.author_model if it.pr else ""
     v = CM.verdict(st, cfg, it.id, repo=repo, model=model)
@@ -360,13 +360,14 @@ def _settle_merged(
 
 
 def _back_merge(
-    repo: Path, cfg: Config, forge: FG.Forge, it: Item, into: str, rep: SyncReport
+    repo: Path, cfg: Config, log: EventLog, forge: FG.Forge, it: Item, into: str, rep: SyncReport
 ) -> None:
     """A gitflow hotfix must reach develop too, or the next release re-breaks production.
 
     Opened as a request of its own, because develop is protected in exactly the
-    repositories that route work through requests. Its outcome is reported, not tracked
-    on the item: the item's work is done once production has it (BACKLOG B171).
+    repositories that route work through requests. The item's work is done once production
+    has it, so the request is tracked separately (`State.back_merges`) and every later
+    `pr sync` re-asks about it until it lands or is closed (B171).
 
     FROM production, not from the hotfix branch: a forge that deletes merged head
     branches has already deleted it by now, and production is where the fix is.
@@ -375,6 +376,7 @@ def _back_merge(
     try:
         found = forge.find(source)
         if found is not None and found.state == "open" and found.base == into:
+            _track_back_merge(log, forge, it, into, found)
             rep.changes.append(Change(it.id, "back_merge", f"already open into {into}", found.url))
             return
         info = forge.create(
@@ -386,9 +388,68 @@ def _back_merge(
             labels=list(cfg.flow.pr_labels),
             reviewers=list(cfg.flow.pr_reviewers),
         )
+        _track_back_merge(log, forge, it, into, info)
         rep.changes.append(Change(it.id, "back_merge", f"opened into {into}", info.url))
     except (FG.ForgeError, FG.ForgeUnavailable) as exc:
         rep.refused.append(f"{it.id}: back-merge into {into} could not be opened: {exc}")
+
+
+def _track_back_merge(log: EventLog, forge: FG.Forge, it: Item, into: str, info: FG.PRInfo) -> None:
+    log.append(
+        "backmerge.recorded",
+        it.id,
+        {
+            "into": into,
+            "number": info.number,
+            "url": info.url,
+            "forge": forge.name,
+            "state": info.state,
+        },
+    )
+
+
+def _sync_back_merges(log: EventLog, forge: FG.Forge, rep: SyncReport, *, only: str = "") -> None:
+    """Re-ask about every back-merge request still open: it landed, or it was closed
+    without merging -- in which case develop does NOT have a fix production already ships,
+    and the next release would re-break it (B171)."""
+    for rec in [r for r in _state(log).back_merges.values() if r["state"] == "open"]:
+        if only and rec["item"] != only:
+            continue
+        try:
+            info = forge.view(int(rec["number"]))
+        except FG.ForgeUnavailable as exc:
+            rep.unavailable.append(f"{rec['item']}: back-merge #{rec['number']}: {exc}")
+            return
+        except FG.ForgeError as exc:
+            rep.refused.append(f"{rec['item']}: back-merge #{rec['number']}: {exc}")
+            continue
+        if info.state == "open":
+            rep.waiting.append(
+                {
+                    "id": rec["item"],
+                    "url": info.url,
+                    "back_merge": rec["into"],
+                    "review": "",
+                    "checks": "",
+                    "base": rec["into"],
+                }
+            )
+            continue
+        log.append(
+            "backmerge.recorded",
+            rec["item"],
+            {**{k: rec[k] for k in ("into", "number", "url", "forge")}, "state": info.state},
+        )
+        if info.state == "merged":
+            rep.changes.append(
+                Change(rec["item"], "back_merge", f"merged into {rec['into']}", info.url)
+            )
+        else:
+            rep.refused.append(
+                f"{rec['item']}: back-merge request into {rec['into']} was closed without "
+                f"merging ({info.url}) -- {rec['into']} does not have the hotfix. Merge production "
+                f"into {rec['into']} yourself; ddflow stops re-checking a closed request."
+            )
 
 
 def sync(repo: Path, cfg: Config, log: EventLog, *, only: str = "") -> SyncReport:
@@ -404,7 +465,12 @@ def sync(repo: Path, cfg: Config, log: EventLog, *, only: str = "") -> SyncRepor
         for it in sorted(st.items.values(), key=lambda i: i.id)
         if it.state == REVIEW and it.pr and it.pr.number and (not only or it.id == only)
     ]
-    if not waiting and not st.pending_releases:
+    open_back = [
+        r
+        for r in st.back_merges.values()
+        if r["state"] == "open" and (not only or r["item"] == only)
+    ]
+    if not waiting and not st.pending_releases and not open_back:
         return rep
     try:
         forge = FG.detect(repo, cfg)
@@ -427,6 +493,7 @@ def sync(repo: Path, cfg: Config, log: EventLog, *, only: str = "") -> SyncRepor
             rep.refused.append(f"{it.id}: {exc}")
             continue
         _apply(repo, cfg, log, forge, it, info, rep)
+    _sync_back_merges(log, forge, rep, only=only)
     if not only:
         _sync_releases(repo, cfg, log, forge, rep)
     return rep

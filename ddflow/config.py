@@ -293,7 +293,7 @@ _doc(
 _doc(
     "flow",
     "sync_on_next",
-    "Let `ddflow next` run `pr sync` first when items wait in REVIEW, so merged work completes and requested changes come back without anyone remembering to ask. Costs one forge call per open request; a forge that cannot be reached is reported, never treated as 'nothing changed'.",
+    "Let `ddflow next` run `pr sync` first when items wait in REVIEW or a hotfix's back-merge request is open, so merged work completes and requested changes come back without anyone remembering to ask. Costs one forge call per open request; a forge that cannot be reached is reported, never treated as 'nothing changed'.",
 )
 _doc(
     "flow",
