@@ -44,7 +44,7 @@ class _Acc:
 
 
 def _gather(events: list) -> dict[str, _Acc]:
-    adopted = {e.data["adopted_from"] for e in events if e.data.get("adopted_from")}
+    adopted = {(e.data or {})["adopted_from"] for e in events if (e.data or {}).get("adopted_from")}
     out: dict[str, _Acc] = {}
     for ev in events:
         if ev.kind not in _KINDS or not (ev.subject or "").strip() or ev.id in adopted:
@@ -156,12 +156,12 @@ def show_session(events: list, cfg: Config, session_id: str) -> dict[str, Any]:
     d.update(
         tool=redact_text(s.tool, cfg).text,
         summary=redact_text(s.summary, cfg).text,
-        items=_items(s),
+        items=[redact_text(i, cfg).text for i in _items(s)],
         entries=[
             {
                 "kind": e["kind"],
                 "at": e["at"],
-                "item": e["item"],
+                "item": redact_text(e["item"], cfg).text,
                 "text": redact_text(e["text"], cfg).text,
             }
             for e in s.entries
