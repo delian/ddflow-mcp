@@ -3887,6 +3887,17 @@ part that matters.
   next `pre-commit install` would discard the edit): it advises a `repo: local` hook in
   `.pre-commit-config.yaml` (`ddflow precommit` proposes it), says nothing needs installing
   when the framework already runs ddflow's check, and `--force` replaces the generated hook.
+* **Hooks find ddflow when they run, and fail open.** The git hooks and the Claude/Gemini
+  hook commands record the launcher that installed them, but try it only first: if that
+  script or interpreter no longer exists or is no longer executable (a deleted venv, an uninstalled tool, a removed
+  worktree) they run `ddflow` from `PATH`, and when there is none they print one line
+  (`ddflow: not found ... run: ddflow hooks install`) and let the commit or turn go on.
+  A missing tool never blocks a commit, but a check that silently stopped is reported:
+  `ddflow hooks status` prints a `DANGLING LAUNCHER` line and `ddflow doctor` a problem
+  (a note when `ddflow` on `PATH` still runs the hook) for each git hook, Claude/Gemini
+  hook command and `ddflow` MCP entry (`.mcp.json` and the other agents' JSON configs) whose
+  recorded path is gone, naming the refresh: `ddflow hooks install` (git hooks),
+  `ddflow hooks install --claude` / `--gemini` (harness hooks), `ddflow adopt` (MCP entries).
 * **A per-task README check** (decision D-readme-current). A task whose diff changed
   code under `[enforce] readme_code_globs` (default `ddflow/**`) but none of
   `readme_files` (default `README.md`), with no `docs` outcome recorded for it, is

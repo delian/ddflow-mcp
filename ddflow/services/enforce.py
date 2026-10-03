@@ -77,29 +77,55 @@ def _invocation() -> str:
     source checkout -- a hook that fails is indistinguishable from a hook that refuses,
     so the commit was blocked for entirely the wrong reason.
     """
-    return f'{command_line("hooks check-commit", exec_=True)} "$@"'
+    return command_line("hooks check-commit", exec_=True, extra='"$@"')
 
 
-def command_line(args: str, *, exec_: bool = False) -> str:
+def command_line(
+    args: str, *, exec_: bool = False, extra: str = "", refresh: str = "ddflow hooks install"
+) -> str:
     """A shell line running `ddflow <args>` from an environment that has none of ours.
 
     Shared by the git hook and the Claude Code SessionStart hook: both run with the
     caller's environment rather than the agent's, and both must reach THIS ddflow.
+
+    The launcher recorded at install time is only the FIRST choice, tried at RUN time:
+    when it no longer exists (the venv was deleted, the tool uninstalled, a worktree
+    removed) the line falls back to `ddflow` on PATH, and when that is missing too it
+    prints one line and succeeds. A missing tool must not block every commit -- the line
+    used to `exec` a dead absolute path, so every `git commit` failed with "not found"
+    and nothing noticed (bug B-dangling-precommit-hook). `services.launchers` reads the
+    recorded paths back out of the line, for `doctor` and `hooks status`.
+    ``extra`` is appended to the arguments in every branch (`"$@"` for a git hook);
+    ``refresh`` is the command the one-line notice names.
     """
     import shutil
 
     run = "exec " if exec_ else ""
+    tail = f" {extra}" if extra else ""
     script = shutil.which("ddflow")
     if script and not _running_from_source():
-        return f'{run}"{script}" {args}'
-    from ..infra.paths import launch_parent, launch_python
+        probe = f'[ -x "{script}" ]'
+        recorded = f'{run}"{script}" {args}{tail}'
+    else:
+        from ..infra.paths import launch_parent, launch_python
 
-    pkg_parent = str(launch_parent())
-    # The environment prefix goes BEFORE `exec`: `exec VAR=x cmd` runs a command
-    # literally named `VAR=x`.
+        pkg_parent = str(launch_parent())
+        probe = f'[ -x "{launch_python()}" ] && [ -f "{pkg_parent}/ddflow/__init__.py" ]'
+        # The environment prefix goes BEFORE `exec`: `exec VAR=x cmd` runs a command
+        # literally named `VAR=x`.
+        recorded = (
+            f'PYTHONPATH="{pkg_parent}${{PYTHONPATH:+:$PYTHONPATH}}" '
+            f'{run}"{launch_python()}" -m ddflow {args}{tail}'
+        )
+    note = shlex.quote(
+        "ddflow: not found (the launcher recorded in this hook no longer exists and none "
+        f"is on PATH), so this check was skipped. Install ddflow, then run: {refresh}"
+    )
+    miss = f"echo {note} >&2" + ("; exit 0" if exec_ else "")
     return (
-        f'PYTHONPATH="{pkg_parent}${{PYTHONPATH:+:$PYTHONPATH}}" '
-        f'{run}"{launch_python()}" -m ddflow {args}'
+        f"if {probe}; then {recorded}; "
+        f"elif command -v ddflow >/dev/null 2>&1; then {run}ddflow {args}{tail}; "
+        f"else {miss}; fi"
     )
 
 
@@ -139,7 +165,7 @@ _COMMIT_MSG = """#!/bin/sh
 
 
 def _msg_invocation() -> str:
-    return f'{command_line("hooks check-msg", exec_=True)} "$@"'
+    return command_line("hooks check-msg", exec_=True, extra='"$@"')
 
 
 #: hook name -> (template, invocation builder). ONE table, so install, uninstall and
@@ -192,7 +218,7 @@ def _install_one(
             return (
                 f"REFUSED: {hook} already exists and is not managed by ddflow. "
                 f"Add this line to it yourself:\n"
-                f"    {invocation.replace('exec ', '')} || exit 1\n"
+                f"    {invocation.replace('exec ', '').replace('; exit 0', '')} || exit 1\n"
                 f"or re-run with --force to replace it."
             )
     hook.write_text(text, "utf-8")
