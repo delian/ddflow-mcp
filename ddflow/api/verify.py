@@ -8,7 +8,6 @@ from ..core import outcome as O
 from ..services import verify as V
 from ._base import _load
 
-
 _BUG_PREFIX = "verify: the completion of "
 
 
