@@ -224,7 +224,7 @@ def open_request(
 @dataclass
 class Change:
     item: str
-    what: str  # merged | completed | blocked | changes_requested | closed | merged_by_ddflow | retargeted | updated | back_merge
+    what: str  # merged | completed | blocked | changes_requested | closed | merged_by_ddflow | retargeted | updated | back_merge | queued | queue_ejected
     detail: str = ""
     url: str = ""
 
@@ -239,6 +239,22 @@ class SyncReport:
 
 
 def _changed(it: Item, info: FG.PRInfo) -> bool:
+    pr = it.pr
+    if pr is None:
+        return True
+    return (pr.review, pr.checks, pr.base, pr.head_sha, pr.state, pr.queue, pr.queue_position) != (
+        info.review,
+        info.checks,
+        info.base,
+        info.head_sha,
+        info.state,
+        info.queue,
+        info.queue_position,
+    )
+
+
+def _changed_but_queue(it: Item, info: FG.PRInfo) -> bool:
+    """`_changed`, ignoring the merge queue: what the old "updated" line was about."""
     pr = it.pr
     if pr is None:
         return True
@@ -525,37 +541,36 @@ def _apply(
         log.append("pr.changes_requested", it.id, data)
         rep.changes.append(Change(it.id, "changes_requested", info.feedback[:200], info.url))
         return
-    if _changed(it, info):
+    was_queued = bool(it.pr and it.pr.queue)
+    moved = _changed(it, info)
+    if moved:
         log.append("pr.synced", it.id, data)
-        rep.changes.append(
-            Change(
-                it.id,
-                "updated",
-                f"review={info.review or '-'} checks={info.checks or '-'}",
-                info.url,
+        if _changed_but_queue(it, info):
+            rep.changes.append(
+                Change(
+                    it.id,
+                    "updated",
+                    f"review={info.review or '-'} checks={info.checks or '-'}",
+                    info.url,
+                )
             )
-        )
+    _report_queue(it, info, moved, was_queued, rep)
     final = target(repo, cfg, it, _state(log))
     ready = (
         cfg.flow.pr_merge == "on_approval"
         and info.review == "approved"
         and info.checks in ("passing", "")
         and not info.draft
+        # Already in the merge queue: asking the forge to merge it again is not a retry,
+        # it is noise (and on some forges a second enqueue).
+        and not info.queue
         # A stacked request merges into its dependency's branch, not into the target;
         # merging it there first would land it on the target UNREVIEWED as part of the
         # dependency's merge. It waits to be retargeted.
         and info.base == final
     )
     if not ready:
-        rep.waiting.append(
-            {
-                "id": it.id,
-                "url": info.url,
-                "review": info.review,
-                "checks": info.checks,
-                "base": info.base,
-            }
-        )
+        rep.waiting.append(_waiting(it.id, info))
         return
     try:
         forge.merge(
@@ -566,23 +581,62 @@ def _apply(
         rep.unavailable.append(f"{it.id}: {exc}")
         return
     except FG.ForgeError as exc:
-        # Branch protection, a merge queue, a head that moved: the forge's rules win.
+        # Branch protection, a head that moved: the forge's rules win.
         rep.refused.append(f"{it.id}: approved, but the forge refused the merge: {exc}")
         return
     if after.state == "merged":
         rep.changes.append(Change(it.id, "merged_by_ddflow", "approved and green", after.url))
         _settle_merged(repo, cfg, log, forge, _state(log).items[it.id], after, rep)
-    else:
-        rep.waiting.append(
-            {
-                "id": it.id,
-                "url": after.url,
-                "review": after.review,
-                "checks": after.checks,
-                "base": after.base,
-                "queued": True,
-            }
+        return
+    if after.queue:
+        # `gh pr merge` on a queue-protected branch ENQUEUES: the request stays open while
+        # the queue builds it. Said as what it is, not as "waiting".
+        qdata = after.event_data(forge.name)
+        qdata["kind"] = it.kind
+        log.append("pr.synced", it.id, qdata)
+        rep.changes.append(Change(it.id, "queued", _queue_detail(after), after.url))
+    rep.waiting.append({**_waiting(it.id, after), "queued": True})
+
+
+def _report_queue(
+    it: Item, info: FG.PRInfo, moved: bool, was_queued: bool, rep: SyncReport
+) -> None:
+    """Say what the merge queue did since the last look: entered, moved, or ejected."""
+    if info.queue:
+        same_place = (
+            was_queued and it.pr is not None and it.pr.queue_position == info.queue_position
         )
+        if moved and not same_place:
+            rep.changes.append(Change(it.id, "queued", _queue_detail(info), info.url))
+    elif was_queued and info.state == "open":
+        rep.changes.append(
+            Change(
+                it.id,
+                "queue_ejected",
+                "ejected from the merge queue without merging (the queue's own checks failed, "
+                f"or someone dequeued it); checks={info.checks or '-'}. Fix it and it is "
+                "queued again once approved and green.",
+                info.url,
+            )
+        )
+
+
+def _queue_detail(info: FG.PRInfo) -> str:
+    where = f"position {info.queue_position}" if info.queue_position else "position unknown"
+    return f"in the merge queue, {where}" + (f" ({info.queue_state})" if info.queue_state else "")
+
+
+def _waiting(item: str, info: FG.PRInfo) -> dict[str, Any]:
+    row: dict[str, Any] = {
+        "id": item,
+        "url": info.url,
+        "review": info.review,
+        "checks": info.checks,
+        "base": info.base,
+    }
+    if info.queue:
+        row.update(queued=True, queue_position=info.queue_position, queue_state=info.queue_state)
+    return row
 
 
 # -- versions -----------------------------------------------------------------------
