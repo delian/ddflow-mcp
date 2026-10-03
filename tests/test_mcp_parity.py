@@ -119,8 +119,6 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "invoked BY the Claude Code SessionStart hook to put the brief into a new "
         "session; over MCP that is ddflow_brief"
     ),
-    ("session", "list"): "read-only viewer; MCP parity arrives with ddflow_list (B-view-mcp-list)",
-    ("session", "show"): "read-only viewer; MCP parity arrives with ddflow_list (B-view-mcp-list)",
     ("session", "adopt-orphans"): (
         "a one-off backfill an operator runs after ddflow doctor names id-less prompts; "
         "agents record with ddflow_session_prompt, which never lacks a session now"
@@ -153,29 +151,25 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
     ("reviewers", "detect"): "covered by ddflow_reviewers_detect",
     ("reviewers", "list"): "covered by ddflow_reviewers_list",
     ("reviewers", "test"): "covered by ddflow_reviewers_detect, which probes the same way",
-    ("task", "list"): (
-        "read-only viewer over the shared list engine; the consolidated ddflow_list MCP "
-        "tool (task B-view-mcp-list) will cover it, so it is exempt until then"
-    ),
-    ("phase", "list"): (
-        "read-only viewer over the shared list engine; the consolidated ddflow_list MCP "
-        "tool (task B-view-mcp-list) will cover it, so it is exempt until then"
-    ),
-    ("bug", "list"): (
-        "read-only viewer over the shared list engine; the consolidated ddflow_list MCP "
-        "tool (task B-view-mcp-list) will cover it, so it is exempt until then"
-    ),
-    ("search",): (
-        "people-facing viewer; the consolidated MCP read tool that will carry it is the "
-        "later task B-view-mcp-list, so it is exempt until then (agents use ddflow_recall)"
-    ),
     ("adopt",): "covered by ddflow_setup",
     ("init",): "covered by ddflow_setup",
 }
 
 
+#: Read-only viewer leaves served by ONE consolidated tool (a per-leaf tool would cost
+#: tools/list bytes for no capability): leaf -> (tool, the `kind` that selects it).
+LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = {
+    ("task", "list"): ("ddflow_list", "task"),
+    ("phase", "list"): ("ddflow_list", "phase"),
+    ("bug", "list"): ("ddflow_list", "bug"),
+    ("session", "list"): ("ddflow_list", "session"),
+    ("session", "show"): ("ddflow_list", "session"),
+    ("search",): ("ddflow_list", "search"),
+}
+
+
 def leaf_covered(path: tuple[str, ...]) -> bool:
-    if path in LEAF_NOT_EXPOSED:
+    if path in LEAF_NOT_EXPOSED or path in LEAF_VIA:
         return True
     joined = "_".join(path)
     return f"ddflow_{joined}" in TOOLS or any(t.startswith(f"ddflow_{joined}_") for t in TOOLS)
@@ -278,6 +272,12 @@ def _cli_flags(argv: list[str]) -> set[str]:
 #: CLI flags deliberately absent from an MCP tool, each with the reason. An entry here
 #: is a decision on the record; an omission that is NOT here is a divergence.
 FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
+    # `ddflow search` shares ddflow_list with the other viewers, whose `kind` selects the
+    # viewer; the search's own `--kind` (which sources) is `sources`, and `--exact` /
+    # `--regex` (a mutually exclusive pair) are `mode`.
+    ("ddflow_list", "--kind"): "carried by `sources`: `kind` selects the viewer",
+    ("ddflow_list", "--exact"): "carried by `mode`=exact",
+    ("ddflow_list", "--regex"): "carried by `mode`=regex",
     # `ddflow review triage <id>` is the same parser as `ddflow review`: its flags are
     # listed there, and over MCP it is its own tool, `ddflow_review_triage`.
     **{
@@ -342,6 +342,8 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
 
 
 def _tool_for(path: tuple[str, ...]) -> str | None:
+    if path in LEAF_VIA:
+        return LEAF_VIA[path][0]
     joined = "_".join(path)
     return f"ddflow_{joined}" if f"ddflow_{joined}" in TOOLS else None
 
@@ -483,3 +485,10 @@ def test_the_prose_list_only_describes_tools_that_exist():
     for name, reason in PROSE_TOOLS.items():
         assert len(reason) > 20, f"{name}: the reason has to say something"
         assert _returns_prose(name), f"{name} now emits JSON; drop it from PROSE_TOOLS"
+
+
+def test_every_viewer_leaf_names_a_kind_ddflow_list_accepts():
+    from ddflow.api.viewers import READ_KINDS
+
+    for path, (tool, kind) in LEAF_VIA.items():
+        assert tool in TOOLS and kind in READ_KINDS, path
