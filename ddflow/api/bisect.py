@@ -6,6 +6,7 @@ candidates, what the command is) and the exit-code contract.
 
 from __future__ import annotations
 
+import os
 from pathlib import Path, PurePath
 from typing import Any
 
@@ -26,15 +27,17 @@ def _norm(repo: Path, path: str) -> str:
             p = p.relative_to(repo)
         except ValueError:
             return p.as_posix()
-    return PurePath(*[part for part in p.parts if part != "."]).as_posix()
+    return PurePath(os.path.normpath(p)).as_posix()
 
 
 def candidates_before(repo: Path, victim: str, names: list[str], glob: str) -> list[str]:
     """The files that run before `victim` in a full run, excluding the victim's own file.
 
-    Named files are taken exactly as given and in the given order. Otherwise `glob` is
+    Named files are normalised (repo-relative, forward slashes, `./` and `..` collapsed),
+    dropped if they are the victim's file, and kept in the order given. Otherwise `glob` is
     expanded and sorted, which is how a default pytest run orders files, and only the files
     that sort BEFORE the victim's are candidates: a file that runs after cannot pollute it.
+    The rule is the same whether or not the glob happens to match the victim's own file.
     """
     victim_file = _norm(repo, victim.split("::", 1)[0])
     if names:
@@ -42,9 +45,7 @@ def candidates_before(repo: Path, victim: str, names: list[str], glob: str) -> l
     found = sorted(
         p.relative_to(repo).as_posix() for p in repo.glob(glob or DEFAULT_GLOB) if p.is_file()
     )
-    if victim_file in found:
-        found = found[: found.index(victim_file)]
-    return [f for f in found if f != victim_file]
+    return [f for f in found if f < victim_file]
 
 
 def bisect(
@@ -57,7 +58,6 @@ def bisect(
     timeout_s: float = 600,
     repeat: int = 1,
     max_runs: int = 200,
-    agent: str = "",
 ) -> O.Outcome:
     """Find which earlier test file makes `victim` fail only after it.
 

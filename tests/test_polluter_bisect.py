@@ -319,3 +319,19 @@ def test_undecodable_output_is_a_result_not_a_crash(project):
     cmd = f"{sys.executable} -c 'import sys; sys.stdout.buffer.write(bytes([0xff, 0xfe])); sys.exit(1)' {{tests}}"
     probe = B.command_probe(cmd, project)
     assert probe(["x"]) is False
+
+
+def test_dotdot_spellings_and_a_glob_that_misses_the_victims_file(project):
+    cands = API.candidates_before(project, "tests/../tests/test_zz_victim.py::test_victim", [], "")
+    assert cands == [f"tests/test_{n}.py" for n in "abcdefg"]
+    (project / "tests" / "test_zzz_after.py").write_text(CLEAN)
+    # A glob that does not include the victim's file must still never offer a file that
+    # sorts after it.
+    cands = API.candidates_before(
+        project, "tests/test_zz_victim.py::test_victim", [], "tests/test_[a-z].py"
+    )
+    assert cands == [f"tests/test_{n}.py" for n in "abcdefg"]
+    cands = API.candidates_before(
+        project, "tests/test_c.py::test_sets_a_flag", [], "tests/test_[a-z].py"
+    )
+    assert cands == ["tests/test_a.py", "tests/test_b.py"]
