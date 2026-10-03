@@ -3838,7 +3838,8 @@ part that matters.
   recorded and the output says so, rather than opening a session for nothing.
 * **Sessions can be read back.** `ddflow session list` prints sessions newest activity
   first with the agent, span, prompt/note/item counts, `open` or `ended` and an `implicit`
-  marker (`--state open|ended`, `--owner` (the session's agent; `--agent` is who you are), `--since <date|timestamp>`, `--limit`, `--json`;
+  marker (`--state open|ended`, `--owner` (the session's agent; `--agent` is who you are), `--since <date|timestamp>`, `--limit`, `--json` prints the same
+  `{rows, total, shown, truncated, filters}` object as the other `list` commands;
   exit 2 when nothing matches, 3 for a bad filter). `ddflow session show <id>` prints one
   session: every prompt and note in order with its item, then the end summary, redacted
   like the exports; an unknown id is refused with the near matches. Both read the log
