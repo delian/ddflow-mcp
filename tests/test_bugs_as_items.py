@@ -301,7 +301,18 @@ def test_bug_invalid_keeps_a_fix_task_somebody_holds_and_names_it(repo):
     out = K.bug_invalid(repo, "Bx", reason="by design", agent="a")
     assert out.exit == 0 and out.data["fix_task_removed"] == ""
     assert out.data["fix_task"] == "fix-Bx", "rubber_duck #3: the kept task is named"
+    assert out.data["fix_task_kept"] == "held"
     assert not state(repo).items["fix-Bx"].removed
+
+
+def test_bug_invalid_says_a_finished_fix_task_is_finished_not_queued(repo):
+    """roborev job 1299 #2: 'stays in the queue' only when it does."""
+    seed(repo)
+    K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
+    EventLog(repo, "seed").append("item.completed", "fix-Bx", {"sha": "abc"})
+    code, out, err = run_cli(repo, "bug", "invalid", "Bx", "--reason", "by design")
+    assert code == 0, err
+    assert "already finished" in out and "stays in the queue" not in out
 
 
 def test_bug_invalid_keeps_a_fix_task_something_depends_on(repo):
@@ -314,6 +325,7 @@ def test_bug_invalid_keeps_a_fix_task_something_depends_on(repo):
     )
     out = K.bug_invalid(repo, "Bx", reason="by design", agent="a")
     assert out.exit == 0 and out.data["fix_task_removed"] == ""
+    assert out.data["fix_task_kept"] == "needed"
     assert not state(repo).items["fix-Bx"].removed
 
 
@@ -346,6 +358,66 @@ def test_file_tasks_gives_every_open_bug_without_one_a_fix_task_and_is_idempoten
     assert "fix-B-done" not in st.items
     again = K.bug_file_tasks(repo, agent="a")
     assert again.exit == 2 and again.data["filed"] == [] and again.data["linked"] == []
+
+
+def test_file_tasks_repairs_a_bug_whose_fix_task_was_never_written(repo):
+    """roborev job 1299 #1: a crash between `bug found`'s two appends leaves an open bug
+    naming `fix-<bug>` with no such item; the upgrade files it."""
+    seed(repo)
+    EventLog(repo, "crashed").append(
+        "bug.found", "B-cut", {"item": "T1", "summary": "cut off", "fix_task": "fix-B-cut"}
+    )
+    assert "fix-B-cut" not in state(repo).items
+    out = K.bug_file_tasks(repo, agent="a")
+    assert out.exit == 0 and out.data["filed"] == ["B-cut"], out.data
+    assert state(repo).items["fix-B-cut"].globs == ["src/parser.py"]
+    assert K.bug_file_tasks(repo, agent="a").exit == 2
+
+
+def test_a_re_report_files_the_task_the_record_names_and_lacks(repo):
+    """rubber_duck delta #4: after a crash between `bug found`'s two appends, reporting
+    the same id again files the missing task; a whole record is otherwise left alone."""
+    seed(repo)
+    EventLog(repo, "crashed").append(
+        "bug.found", "B-cut", {"item": "T1", "summary": "cut off", "fix_task": "fix-B-cut"}
+    )
+    out = K.bug_found(repo, summary="cut off", item="T1", id="B-cut", agent="a")
+    assert out.exit == 0 and out.data["fix_task_filed"] is True
+    assert state(repo).items["fix-B-cut"].parent == "P1"
+    again = K.bug_found(repo, summary="cut off", item="T1", id="B-cut", agent="a")
+    assert again.exit == 0 and again.data["fix_task_filed"] is False
+
+
+def test_a_bug_on_a_removed_item_still_gets_its_fix_task(repo):
+    """critic delta #1 (refuted by this probe): a removed source item only stops the
+    inheritance (globs, priority); the task is filed and the bug's link is live."""
+    seed(repo)
+    EventLog(repo, "seed").append("task.removed", "F1", {"reason": "dropped"})
+    out = K.bug_found(repo, summary="left behind", item="F1", id="Bx", agent="a")
+    assert out.exit == 0 and out.data["fix_task_filed"] is True
+    st = state(repo)
+    assert st.bugs["Bx"].fix_task == "fix-Bx" and not st.items["fix-Bx"].removed
+    assert st.items["fix-Bx"].globs == [] and st.items["fix-Bx"].parent == "bugs"
+
+
+def test_the_lifted_blocker_is_only_the_one_about_the_bugs_being_closed(repo):
+    """rubber_duck delta #6 (refuted by this probe): the verdict carries ONE open-bug
+    blocker, about the bugs this item is the fix task of; another bug on the same files
+    is not a completion blocker at all (files are a claim-time rule), so nothing of it is
+    lifted and it stays open, untouched, with its own fix task."""
+    seed(repo)
+    K.bug_found(repo, summary="parser drops the last line", item="T1", id="B1", agent="a")
+    K.bug_found(repo, summary="parser doubles tabs", item="T1", id="B2", agent="a")
+    pass_pipeline(repo, "fix-B1")
+    out = LC.complete(repo, "fix-B1", model="claude-opus-5", agent="a")
+    bug_blockers = [b for b in out.data["blockers"] if b.startswith("fixes open bug(s) ")]
+    assert bug_blockers == [b for b in out.data["blockers"] if "B1" in b]
+    assert len(bug_blockers) == 1 and "B2" not in bug_blockers[0]
+    node = _fixed(repo)
+    out = LC.complete(repo, "fix-B1", model="claude-opus-5", regression_test=node, agent="a")
+    assert out.exit == 0 and out.data["bugs_closed"] == ["B1"], out.reason
+    st = state(repo)
+    assert st.bugs["B2"].open and st.items["fix-B2"].state == "open"
 
 
 def test_file_tasks_on_the_cli(repo):
