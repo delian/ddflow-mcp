@@ -304,7 +304,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     return out
 
 
-_BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed")
+_BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed", "review.delta_default")
 
 
 def _budget_keys(edit: ConfigEdit) -> list[str]:
@@ -333,8 +333,8 @@ def report_budget_change(
 ) -> O.Outcome:
     """Tell the operator when an AGENT (the MCP surface) changed the review budget.
 
-    The cap is the operator's: `ddflow_configure` accepts `review.max_rounds` and
-    `review.on_exceed` on either layer, so an operator without a shell can tune it, but
+    The cap is the operator's: `ddflow_configure` accepts `review.max_rounds`,
+    `review.on_exceed` and `review.delta_default` on either layer, so an operator without a shell can tune it, but
     an agent raising or disabling it to get more review rounds must not do so silently.
     The change is returned as a NOTE and recorded as a session note the operator reads
     in `session show` and the brief; a per-item exception is `ddflow review --force
@@ -350,14 +350,15 @@ def report_budget_change(
     default = ReviewConfig()
     layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
     revert = "; ".join(
-        f"`ddflow config --set {k} {getattr(default, k.split('.')[1])}"
+        f"`ddflow config --set {k} {str(getattr(default, k.split('.')[1])).lower()}"
         f"{' --local' if edit.local else ''}`"
         for k in touched
     )
     note = (
         f"NOTE FOR THE OPERATOR: the review budget was changed over MCP "
         f"({', '.join(touched)}; {layer} layer). Shipped default: {default.max_rounds} full "
-        f"rounds per gate, on_exceed = {default.on_exceed!r}. If you did not ask for this, "
+        f"rounds per gate, on_exceed = {default.on_exceed!r}, delta_default = "
+        f"{str(default.delta_default).lower()}. If you did not ask for this, "
         f"revert it with {revert}. Recorded as a session note."
     )
     from .knowledge import session_note

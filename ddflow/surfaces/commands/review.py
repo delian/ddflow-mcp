@@ -94,6 +94,7 @@ def cmd_review(a, c: Ctx) -> int:
         agent=c.requested_agent,
         chunks=a.chunk or None,
         delta=bool(a.delta),
+        full=bool(getattr(a, "full", False)),
         force=bool(a.force),
         reason=a.reason or "",
     )

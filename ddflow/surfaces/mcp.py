@@ -2044,7 +2044,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Item whose diff to review.", True),
-            "gate": ("string", "Gate to record under: critic (default) or rubber_duck.", False),
+            "gate": ("string", "Gate: critic (default) or rubber_duck.", False),
             "intent": (
                 "string",
                 "What the change is MEANT to do. The reviewer flags where the diff "
@@ -2052,8 +2052,8 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "disagree with. Defaults to the item's title and body.",
                 False,
             ),
-            "base": ("string", "Ref to diff against (default: the item's base branch).", False),
-            "context": ("string", "Extra context to hand the reviewer.", False),
+            "base": ("string", "Ref to diff against (default: the base branch).", False),
+            "context": ("string", "Extra context for the reviewer.", False),
             "commit": (
                 "string",
                 "Review this ONE landed commit (against its first parent) instead of the "
@@ -2069,14 +2069,18 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "delta": (
                 "boolean",
-                "Recheck only what changed since the reviewed head (not a full round).",
+                "Recheck only what changed since the reviewed head.",
+                False,
+            ),
+            "full": (
+                "boolean",
+                "Force a full round (else a delta once reviewed).",
                 False,
             ),
             "chunk": (
                 "array",
                 "Re-review ONLY these chunk numbers (as the recorded review numbered them, "
-                "e.g. [5]) and merge the result into that record. Refused unless the "
-                "recorded review is of the same diff, chunk size and reviewer.",
+                "e.g. [5]) and merge into that record; needs the same diff, chunk size and reviewer.",
                 False,
             ),
         },
@@ -2094,6 +2098,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             agent=agent,
             chunks=a.get("chunk") or None,
             delta=bool(a.get("delta")),
+            full=bool(a.get("full")),
         ),
         "wants_called_from": True,
         "wants_progress": True,
