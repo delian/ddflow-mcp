@@ -208,7 +208,6 @@ def _declared(repo: Path, led: dict[str, Any], tracked: set[str] | None) -> Clai
         for g in exact
         if g not in tracked
         and _present(repo, g, tracked)
-        and g not in landed
         and not any(t.startswith(g.rstrip("/") + "/") for t in tracked)
     ]
     if local_only:
