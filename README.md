@@ -2641,6 +2641,7 @@ at first use and followed from then on.
   | changes requested | returns the item to the queue **with the review text** (bodies and line comments); `brief` leads with it; a re-claim resumes the same tree and a re-`merge` updates the same request |
   | closed | parks it for a person — a "no" is not something to retry |
   | approved, checks green | merges it (`pr_merge = "on_approval"`, pinned to the approved head) |
+  | enqueued in a **merge queue** (GitHub; `gh pr merge` on a queue-protected branch enqueues) | stays in review and is said to be queued: `queued` with its position, `pr status` shows `[merge queue #N]`, and it is not asked to merge again. A request that was queued and no longer is, still open, was **ejected** (`queue_ejected`); the queue landing it is an ordinary `merged` |
 
 * **Stacking keeps work moving through review.** While `T1` waits in review, a task that
   needs it may start **on top of `T1`'s branch** (`stack = true`); its request targets
