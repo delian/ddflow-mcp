@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 #: Written by `command_line`: the probe that decides whether the recorded launcher runs.
-_PROBE = re.compile(r'\[ -[xf] "([^"]+)" \]')
+_PROBE = re.compile(r'\[ -([xf]) "([^"]+)" \]')
 #: Lines written before the fallback existed: `exec "<script or python>"` and the
 #: package directory on PYTHONPATH.
 _LEGACY_EXEC = re.compile(r'exec "([^"]+)"')
@@ -47,17 +47,24 @@ class Dangling:
         return f"{self.where} records {gone}, which no longer exists; {tail} -- run `{self.fix}`"
 
 
-def recorded_paths(command: str) -> list[str]:
-    """The files a hook line needs, in the order it records them."""
-    found = _PROBE.findall(command)
+def _needs(command: str) -> list[tuple[str, bool]]:
+    """(path, must be executable) for each file a hook line needs, in recorded order."""
+    found = [(p, f == "x") for f, p in _PROBE.findall(command)]
     if not found:
-        found = _LEGACY_EXEC.findall(command)
-        found += [f"{r}/ddflow/__init__.py" for r in _LEGACY_PYPATH.findall(command)]
+        found = [(p, True) for p in _LEGACY_EXEC.findall(command)]
+        found += [(f"{r}/ddflow/__init__.py", False) for r in _LEGACY_PYPATH.findall(command)]
     return list(dict.fromkeys(found))
 
 
-def _gone(paths: list[str]) -> tuple[str, ...]:
-    return tuple(p for p in paths if not os.path.exists(p))
+def recorded_paths(command: str) -> list[str]:
+    """The files a hook line needs, in the order it records them."""
+    return list(dict.fromkeys(p for p, _x in _needs(command)))
+
+
+def _gone(needs: list[tuple[str, bool]]) -> tuple[str, ...]:
+    """What is missing -- or no longer executable, which the hook's `[ -x ]` probe also
+    treats as gone, so it quietly takes the fallback."""
+    return tuple(p for p, x in needs if not (os.access(p, os.X_OK) if x else os.path.exists(p)))
 
 
 def _on_path() -> bool:
@@ -66,7 +73,7 @@ def _on_path() -> bool:
 
 def check_command(where: str, command: str, fix: str) -> Dangling | None:
     """A hook command line whose recorded launcher is gone, or None."""
-    missing = _gone(recorded_paths(command))
+    missing = _gone(_needs(command))
     # Only a line written WITH the fallback has one; an older line execs its dead path.
     return (
         Dangling(where, missing, _on_path() and bool(_PROBE.search(command)), fix)
@@ -150,7 +157,7 @@ def check_mcp(repo: Path) -> list[Dangling]:
             continue
         missing: list[str] = []
         if os.path.isabs(cmd):
-            missing += _gone([cmd])
+            missing += _gone([(cmd, True)])
         elif shutil.which(cmd) is None:
             missing.append(cmd)
         root = env.get("PYTHONPATH")
