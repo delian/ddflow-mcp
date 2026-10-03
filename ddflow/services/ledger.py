@@ -8,7 +8,7 @@ was completed, every gate's outcome including skips and their reasons, and each 
 the ledger is rebuilt from the log alone and says so (`reconstructed`).
 
 Nothing here copies diffs or text: digests, short lists and counts, so it stays cheap to
-store and to show. `ddflow verify` (B-verify-check) judges a ledger against the repository.
+store and to show. Judging a ledger against the repository is the next task (B-verify-check).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from ..core.events import Event
 from ..core.model import Item, fold
 
 MAX_FILES = 100
-_TEST = re.compile(r"(^|/)(tests?|spec)/|(^|/)test_[^/]*$|_test\.[a-z]+$")
+_TEST = re.compile(r"(^|/)(tests?|spec)/|(^|/)test_[^/]*$|_test\.[a-z]+$|\.(test|spec)\.[a-z]+$")
 
 
 def requirement_digest(title: str, body: str, globs: Sequence[str]) -> str:
@@ -42,15 +42,17 @@ def git_facts(repo: Path, sha: str, it: Item) -> dict[str, Any]:
     `files` is empty (and `files_known` false) when there is no sha or git could not list
     it: a missing fact is recorded as missing, never as "no files changed".
     """
-    from ..infra.worktree import git
+    from ..infra.worktree import git_paths
 
     facts: dict[str, Any] = {"req": item_digest(it), "files_known": False}
     if not sha:
         return facts
-    r = git(repo, "show", "--name-only", "--format=", "-m", "--first-parent", sha, timeout=60)
-    if not r.ok:
+    # `git_paths` reads -z bytes: plain `--name-only` C-quotes a non-ASCII name into text
+    # that names no file, and the log cannot be corrected afterwards.
+    listed = git_paths(repo, "show", "--name-only", "--format=", "-m", "--first-parent", sha)
+    if listed is None:
         return facts
-    files = sorted({f for f in r.out.splitlines() if f.strip()})
+    files = sorted({f for f in listed if f.strip()})
     facts.update(
         files_known=True,
         files_total=len(files),
@@ -83,7 +85,8 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
         if ev.subject == item_id and ev.kind.endswith(".updated")
     ]
     now = fold(events, strict=False).items.get(item_id)
-    drifted = bool(now and stored.get("req") and item_digest(now) != stored["req"])
+    at_completion = stored.get("req") or item_digest(it)  # the folded item IS completion-time
+    drifted = bool(now and item_digest(now) != at_completion)
     return {
         "completed_at": done.ts,
         "completed_by": done.agent,
@@ -92,7 +95,7 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
         "overridden": list(done.data.get("overridden") or []),
         "requirement": {
             "title": it.title,
-            "digest": stored.get("req") or item_digest(it),
+            "digest": at_completion,
             "globs": list(it.globs),
             "needs": list(it.needs),
             "body_chars": len(it.body),
@@ -119,6 +122,7 @@ def summary(ledger: dict[str, Any], files_shown: int = 8) -> dict[str, Any]:
         "completed_at": ledger["completed_at"],
         "sha": ledger["sha"],
         "requirement": ledger["requirement"]["digest"],
+        "files_known": d["files_known"],
         "files_total": d["files_total"],
         "files": d["files"][:files_shown],
         "tests": len(d["tests"]),

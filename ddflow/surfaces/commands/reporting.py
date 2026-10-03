@@ -192,8 +192,12 @@ def _ledger_lines(led: dict) -> str:
         ),
         f"  completed {led['completed_at']} as {led['sha'] or '-'}; requirement {led['requirement']}"
         + ("; FORCED" if led["forced"] else ""),
-        f"  files changed {led['files_total']}, tests among them {led['tests']}"
-        + (f": {', '.join(led['files'])}" if led["files"] else ""),
+        (
+            f"  files changed {led['files_total']}, tests among them {led['tests']}"
+            + (f": {', '.join(led['files'])}" if led["files"] else "")
+            if led["files_known"]
+            else "  files changed: UNKNOWN (no sha, or git could not list it)"
+        ),
     ]
     if led["skipped_gates"]:
         lines.append(f"  gates skipped: {', '.join(led['skipped_gates'])}")
