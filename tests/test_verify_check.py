@@ -227,3 +227,18 @@ def test_a_landing_that_changed_no_files_is_not_reported_as_ok(repo):
     run_cli(repo, "complete", "T1", "--sha", _git(repo, "rev-parse", "HEAD"), "--force")
     cl = _claims(verify(repo, "T1"))
     assert cl["tests"]["status"] == "warn" and cl["survives"]["status"] == "warn"
+
+
+def test_a_declared_file_removed_later_is_a_warning_but_one_never_created_is_a_failure(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _commit(repo, {"old.py": "1\n"}, "old")  # existed before the task
+    _git(repo, "rm", "-q", "old.py")
+    _git(repo, "commit", "-qm", "removed")
+    _task(repo, "old.py")
+    sha = _commit(repo, {"other.py": "1\n"})
+    run_cli(repo, "complete", "T1", "--sha", sha, "--force")
+    assert _claims(verify(repo, "T1"))["declared_files"]["status"] == "warn"
+    _task(repo, "never.py", "T2")
+    run_cli(repo, "complete", "T2", "--sha", sha, "--force")
+    assert _claims(verify(repo, "T2"))["declared_files"]["status"] == "fail"
