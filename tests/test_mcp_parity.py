@@ -146,6 +146,18 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
     ("reviewers", "detect"): "covered by ddflow_reviewers_detect",
     ("reviewers", "list"): "covered by ddflow_reviewers_list",
     ("reviewers", "test"): "covered by ddflow_reviewers_detect, which probes the same way",
+    ("task", "list"): (
+        "read-only viewer over the shared list engine; the consolidated ddflow_list MCP "
+        "tool (task B-view-mcp-list) will cover it, so it is exempt until then"
+    ),
+    ("phase", "list"): (
+        "read-only viewer over the shared list engine; the consolidated ddflow_list MCP "
+        "tool (task B-view-mcp-list) will cover it, so it is exempt until then"
+    ),
+    ("bug", "list"): (
+        "read-only viewer over the shared list engine; the consolidated ddflow_list MCP "
+        "tool (task B-view-mcp-list) will cover it, so it is exempt until then"
+    ),
     ("adopt",): "covered by ddflow_setup",
     ("init",): "covered by ddflow_setup",
 }
