@@ -89,3 +89,27 @@ def test_a_rebase_merge_by_a_person_is_recognised_from_the_change_itself(pr_repo
     run_cli(repo, "pr", "sync")
     it = _state(repo).items["T1"]
     assert _range_files(repo, it.landed_before, it.landed_after) == ["a.py", "b.py", "c.py"]
+
+
+def test_a_squash_whose_range_matches_the_commit_count_by_coincidence_is_still_a_squash(pr_repo):
+    """Two commits, squash strategy, one foreign commit lands first: base_before..merge is
+    2 commits -- the request's count -- but it is NOT a rebase, and merge_sha^1 is exact."""
+    repo, forge, _remote = pr_repo
+    run_cli(repo, "config", "--set", "worktree.merge_strategy", "squash")
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py,b.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, err
+    tree = Path(json.loads(out)["worktree"])
+    for name in ("a.py", "b.py"):
+        _commit(tree, name, f"{name}\n", f"feat: {name}")
+    pass_pipeline(repo, "T1", omit=("merge",))
+    assert run_cli(repo, "merge", "T1", "--model", AUTHOR)[0] == 0
+    forge.approve(1)
+    forge.edit(1, checks=GREEN)
+    forge.set(foreign_on_merge=True)
+    run_cli(repo, "pr", "sync")
+    it = _state(repo).items["T1"]
+    assert it.landed_before == _git(repo, "rev-parse", f"{it.landed_after}^1"), (
+        "a squash's range must start at its first parent, not at the pre-merge tip"
+    )
+    assert _range_files(repo, it.landed_before, it.landed_after) == ["a.py", "b.py"]
