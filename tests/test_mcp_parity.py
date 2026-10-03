@@ -36,6 +36,11 @@ ALIASES: dict[str, tuple[str, ...]] = {
 #: CLI commands deliberately NOT exposed, each with its reason.
 NOT_EXPOSED: dict[str, str] = {
     "mcp": "starts the MCP server itself; exposing it over MCP would be recursive",
+    "search": (
+        "people-facing viewer; the consolidated MCP read tool that will carry it is the "
+        "later task B-view-mcp-list (tools/list byte budget), until then agents use "
+        "`ddflow_recall` and `ddflow_history`"
+    ),
     "approve": (
         "clears a HUMAN-approval gate, and the whole point is that the agent cannot. "
         "A human checkpoint reachable from the MCP surface is not a human checkpoint — "
@@ -159,6 +164,10 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
     ("bug", "list"): (
         "read-only viewer over the shared list engine; the consolidated ddflow_list MCP "
         "tool (task B-view-mcp-list) will cover it, so it is exempt until then"
+    ),
+    ("search",): (
+        "people-facing viewer; the consolidated MCP read tool that will carry it is the "
+        "later task B-view-mcp-list, so it is exempt until then (agents use ddflow_recall)"
     ),
     ("adopt",): "covered by ddflow_setup",
     ("init",): "covered by ddflow_setup",
