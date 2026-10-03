@@ -608,7 +608,11 @@ def _holder_note(path: Path) -> str:
     '' or to a lead, never raise out of the timeout path.
     """
     try:
-        parts = path.read_text(errors="replace").split(None, 3)
+        with path.open(
+            "rb"
+        ) as fh:  # bounded: bytes past the note are a stale tail, never part of it
+            raw = fh.read(_NOTE_BYTES)
+        parts = raw.decode("utf-8", "replace").split(None, 3)
         if (
             len(parts) < _NOTE_FIELDS
             or parts[0] != "pid"
