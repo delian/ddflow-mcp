@@ -45,6 +45,15 @@ Two caps, because they are two different statements:
 
 Both are counted across the WHOLE queue, not the slice you asked about.
 
+**What `next` offers never overlaps itself.** The free slots are filled in priority order,
+but an item whose globs overlap one already offered in the same answer is not offered with
+it (the second claim would be refused): it stays queued, blocked as `conflict` with
+"globs overlap <id> ... offered in this plan", and the next independent item takes its
+slot. It is not held by a cap, so `status` counts it separately ("N overlap an offered
+item" against "N held by the parallelism cap"), and it becomes offerable once the item it
+overlaps is done or released. Globs listed in `shared_globs` overlap nothing. When no two
+ready items overlap, the offer is exactly the priority order.
+
 When the ready set is larger than the free slots, **bug fixes get them first**
 (`schedule.bugs_first`, on by default): a task tagged with one of `flow.bugfix_tags` or
 `flow.hotfix_tags`, or named by an open bug record, is offered before any feature, and

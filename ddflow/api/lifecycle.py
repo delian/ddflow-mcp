@@ -100,7 +100,8 @@ def next_(
         }
         if rep.changes:
             log, cfg, st = _load(repo, agent)
-    p = plan(st, cfg, kind=kind, phase=phase, agent=cfg.agent.id or log.agent_id)
+    me = cfg.agent.id or log.agent_id
+    p = plan(st, cfg, kind=kind, phase=phase, agent=me, hold=_reservation_hold(repo, st, cfg, me))
     data: dict[str, Any] = {
         "review": [i.id for i in p.review],
         "synced": synced,
@@ -113,10 +114,6 @@ def next_(
         "critical_path": critical_path(st, phase),
         "_render": {"plan": p},
     }
-    if p.ready and cfg.lease.waiter_reservation_s > 0:
-        _hold_reserved(repo, st, cfg, p, cfg.agent.id or log.agent_id)
-        data["ready"] = _ready_rows(p.ready)
-        data["blocked"] = [plain(b) for b in p.blocked]
     if p.ready:
         return O.ok("next", **data)
     return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
@@ -136,34 +133,28 @@ def _ready_rows(items) -> list[dict[str, Any]]:
     return rows
 
 
-def _hold_reserved(repo: Path, st, cfg, p, me: str) -> None:
-    """Take what is held for a waiter in line off the offer, in place.
+def _reservation_hold(repo: Path, st, cfg, me: str, now: float | None = None):
+    """The `hold` hook for `plan`: an item reserved for a waiter in line is not offered.
 
-    `claim` would refuse it, so `next` must not offer it. A slot it frees goes to the
-    next item the parallelism cap held back (`plan` trimmed the ready list to the free
-    slots, and a reserved item is not a claim that will use one).
+    `claim` would refuse it, so `next` must not offer it. `plan` applies this BEFORE it
+    cuts the ready list to the free slots and checks offered items against each other, so
+    the slot it frees goes to the next item and nothing is blocked on an item that is not
+    in fact offered. None when reservations are off.
     """
     from ..core.schedule import Blocked
 
-    now = time.time()
+    if cfg.lease.waiter_reservation_s <= 0:
+        return None
+    now = time.time() if now is None else now
     live = st.active_leases(now, cfg.lease.grace_s)
-    slots = len(p.ready)
-    kept = []
-    for i in [*p.ready, *(st.items[c] for c in p.capped if c in st.items)]:
-        if len(kept) >= slots:
-            break
+
+    def hold(i):
         ahead = _reserved_for(repo, st, cfg, i, me, list(i.globs), live, now)
         if ahead is None:
-            kept.append(i)
-            continue
-        if i in p.ready:
-            p.blocked.append(
-                Blocked(i.id, "conflict", _reserved_msg(i.id, ahead, cfg), [ahead.item])
-            )
-    promoted = {i.id for i in kept if i.id in p.capped}
-    p.blocked[:] = [b for b in p.blocked if b.item not in promoted]
-    p.capped[:] = [c for c in p.capped if c not in promoted]
-    p.ready[:] = kept
+            return None
+        return Blocked(i.id, "conflict", _reserved_msg(i.id, ahead, cfg), [ahead.item])
+
+    return hold
 
 
 #: How many ids under an unknown `--phase` prefix the refusal names before "and N more".
@@ -329,9 +320,9 @@ def _judge_any(
     from ..core.schedule import plan
 
     others = {i: lz for i, lz in live.items() if lz.holder != me}
-    p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me)
-    if repo is not None and p.ready and cfg.lease.waiter_reservation_s > 0:
-        _hold_reserved(repo, st, cfg, p, me)  # the same offer `next` makes
+    # The same offer `next` makes: what is reserved for a waiter in line is not ready.
+    hold = _reservation_hold(repo, st, cfg, me, now) if repo is not None else None
+    p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me, hold=hold)
     out: dict[str, Any] = {
         "why": "",
         "waiting_on": [],

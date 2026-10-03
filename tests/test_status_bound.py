@@ -24,7 +24,7 @@ def _big_queue(repo) -> None:
         log.append("task.added", tid, {"title": f"finished task number {i} " + "x" * 80})
         log.append("item.completed", tid, {"sha": f"{i:040x}"})
     for i in range(40):
-        log.append("task.added", f"R{i:02d}", {"title": f"ready {i}", "globs": [f"r{i}"]})
+        log.append("task.added", f"R{i:02d}", {"title": f"ready {i}", "globs": [f"r{i:02d}/f.py"]})
 
 
 def _mcp_status(repo) -> str:
