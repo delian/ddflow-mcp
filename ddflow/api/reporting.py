@@ -724,6 +724,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     # The rules surface. MISSING is a PROBLEM: an agent with no project rules does not know
     # it must claim before editing, and every coordination guarantee here rests on that. A
     # drifted or stripped block is a note — the agent has rules, they are just not current.
+    from ..services import cleanup as CL
     from ..services.adopt import MISSING, NOT_BINDING, rules_status
 
     for state in rules_status(repo):
@@ -752,7 +753,10 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         path = w.get("worktree", "")
         if (
             path
-            and cfg.worktree.branch_prefix.rstrip("/") in w.get("branch", "")
+            and (
+                cfg.worktree.branch_prefix.rstrip("/") in w.get("branch", "")
+                or CL.is_ours(w.get("branch", "").replace("refs/heads/", ""), cfg)
+            )
             and path not in known
         ):
             notes.append(f"worktree {path} exists but no item claims it")
