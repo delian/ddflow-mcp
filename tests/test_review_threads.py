@@ -124,3 +124,58 @@ def test_gitlab_reply_and_resolve(tmp_path, monkeypatch):
     assert after.resolved is True and after.replies == 1
     saved = json.loads(state.read_text())
     assert saved["discussions"][0]["notes"][-1]["body"] == "renamed in abc123"
+
+
+# -- through the CLI and the MCP twin -------------------------------------------------------
+
+
+def test_the_cli_lists_replies_and_resolves(pr_repo):
+    repo, forge = _in_review(pr_repo)
+    code, out, err = run_cli(repo, "pr", "threads", "T1")
+    assert code == 0, err
+    assert "PRRT_a" in out and "OPEN" in out and "a.py:3" in out and "1 open of 2" in out, out
+    code, out, err = run_cli(
+        repo,
+        "--json",
+        "pr",
+        "threads",
+        "T1",
+        "--thread",
+        "PRRT_a",
+        "--reply",
+        "renamed in abc123",
+        "--resolve",
+    )
+    assert code == 0, err
+    body = json.loads(out)
+    assert body["replied"] and body["resolved"] and body["unresolved"] == 0, body
+    assert forge.thread(1, "PRRT_a")["resolved"] is True
+
+
+def test_the_cli_refuses_with_exit_3_and_unreachable_is_2(pr_repo):
+    repo, forge = _in_review(pr_repo)
+    code, _out, err = run_cli(repo, "pr", "threads", "T1", "--resolve")
+    assert code == 3 and "--thread" in err, err
+    forge.set(offline=True)
+    code, _out, _err = run_cli(repo, "pr", "threads", "T1")
+    assert code == 2
+
+
+def test_the_mcp_twin_replies_and_resolves(pr_repo):
+    from ddflow.surfaces.mcp import Server
+
+    repo, forge = _in_review(pr_repo)
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_pr_threads",
+                "arguments": {"id": "T1", "thread": "PRRT_a", "reply": "done", "resolve": True},
+            },
+        }
+    )
+    assert not reply["result"].get("isError"), reply
+    assert forge.thread(1, "PRRT_a")["resolved"] is True
+    assert forge.thread(1, "PRRT_a")["comments"][-1]["body"] == "done"

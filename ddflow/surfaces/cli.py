@@ -33,13 +33,13 @@ from ..services import gates as G
 from ..services import leases as L
 from ..services.adopt import AGENT_TARGETS
 from . import dedupe_flags
+from .commands.bisect import add_bisect_parser
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
     _workflow_problems,
     _write_config,
 )
 from .commands.decisions import cmd_decision
-from .commands.bisect import add_bisect_parser
 from .commands.export import add_export_parser
 from .commands.flow import cmd_flow, cmd_pr, cmd_promote, cmd_version
 from .commands.gates import cmd_gate
@@ -78,8 +78,6 @@ from .commands.operations import (
     cmd_tests,
 )
 from .commands.queue import cmd_phase_add, cmd_resolve, cmd_split, cmd_task_add
-from .commands.rules import cmd_rule
-from .commands.verify import add_verify_parser
 from .commands.reporting import (
     cmd_board,
     cmd_doctor,
@@ -91,6 +89,7 @@ from .commands.reporting import (
     cmd_status,
 )
 from .commands.review import cmd_review, cmd_reviewers
+from .commands.rules import cmd_rule
 from .commands.setup import (
     cmd_adopt,
     cmd_companions,
@@ -101,6 +100,7 @@ from .commands.setup import (
     cmd_prompts,
     help_topics,
 )
+from .commands.verify import add_verify_parser
 from .commands.viewers_lists import register as register_list_viewers
 from .commands.viewers_sessions import add_session_view_parsers
 from .commands.workflow import cmd_workflow
@@ -725,6 +725,15 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     psy.set_defaults(fn=cmd_pr)
     pst = pr_s.add_parser("status", help="every item's request, from the log (no forge call)")
     pst.set_defaults(fn=cmd_pr)
+    pth = pr_s.add_parser(
+        "threads",
+        help="an item's review threads from the forge; with --thread, reply and/or resolve one",
+    )
+    pth.add_argument("id")
+    pth.add_argument("--thread", default="", help="the thread's id (as listed)")
+    pth.add_argument("--reply", default="", help="post this reply on --thread")
+    pth.add_argument("--resolve", action="store_true", help="mark --thread resolved")
+    pth.set_defaults(fn=cmd_pr)
 
     ver = s.add_parser("version", help="version tags: the next version, and cutting it")
     ver_s = ver.add_subparsers(dest="version_cmd", required=True)
