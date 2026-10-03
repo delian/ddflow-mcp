@@ -52,3 +52,15 @@ def test_an_unadopted_orphan_is_still_folded(repo):
     log.append("session.prompt", "", {"text": "still lost", "item": ""})
     st = fold(log.read_all(), strict=False)
     assert [p["text"] for p in st.sessions[""].prompts] == ["still lost"]
+
+
+def test_an_orphan_recorded_after_an_adoption_is_not_swallowed(repo):
+    """Event ids are content hashes, not the (empty) subject: adopting one orphan must
+    not hide another, whether older or newer."""
+    from ddflow.core.model import fold
+
+    log = _adopted_repo(repo)
+    log.append("session.prompt", "", {"text": "later orphan", "item": ""})
+    st = fold(log.read_all(), strict=False)
+    assert [p["text"] for p in st.sessions[""].prompts] == ["later orphan"]
+    assert [p["text"] for p in st.sessions["s-early"].prompts] == ["lost prompt"]
