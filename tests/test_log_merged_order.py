@@ -49,18 +49,41 @@ def _put(log: EventLog, agent: str, events: list[Event], mode: str = "ab") -> No
             fh.write((e.to_json() + "\n").encode())
 
 
+def _reference(log: EventLog) -> tuple[list[str], int]:
+    """The unoptimised definition, written independently of the code under test: parse
+    every line of every shard, sort by (lamport, agent, id), keep the first of each id.
+    (Not `EventLog(reuse_parsed=False)`: that reader evicts the shared parse cache, which
+    would make every comparison below a rebuild and test nothing.)"""
+    events, skipped = [], 0
+    for path in sorted(log.dir.glob("*.jsonl")):
+        for line in path.read_bytes().decode().splitlines():
+            if not line.strip():
+                continue
+            try:
+                events.append(Event.from_json(line))
+            except ValueError:
+                skipped += 1
+    seen, out = set(), []
+    for e in sorted(events, key=lambda e: (e.lamport, e.agent, e.id)):
+        if e.id not in seen:
+            seen.add(e.id)
+            out.append(e.id)
+    return out, skipped
+
+
 def _same(repo, cached: EventLog) -> None:
-    plain = EventLog(repo, "x", log_cfg=LogConfig(reuse_parsed=False))
-    want = plain.read_all()
+    want, want_skipped = _reference(cached)
     got = cached.read_all()
-    assert [e.id for e in got] == [e.id for e in want]
-    assert cached.skipped_lines == plain.skipped_lines
+    assert [e.id for e in got] == want
+    assert cached.skipped_lines == want_skipped
 
 
 def test_random_workload_matches_the_unoptimised_path_after_every_step(repo):
     rng = random.Random(7)
     log = EventLog(repo, "x")
     clocks = {"a": 0, "b": 0, "c": 0}
+    serial = 0
+    history: list[Event] = []
     for _ in range(120):
         agent = rng.choice(list(clocks))
         n = rng.choice([1, 1, 2, 5, 70])  # 70 exceeds the incremental batch limit
@@ -69,7 +92,11 @@ def test_random_workload_matches_the_unoptimised_path_after_every_step(repo):
         evs = []
         for _ in range(n):
             clocks[agent] += rng.randint(0, 3)  # ties and repeats of a Lamport value
-            evs.append(_ev(agent, clocks[agent], str(rng.randint(0, 5))))
+            serial += 1
+            evs.append(_ev(agent, clocks[agent], f"-{serial}"))  # unique: stays incremental
+        history.extend(evs)
+        if rng.random() < 0.1:
+            evs.append(rng.choice(history))  # an occasional duplicate forces a rebuild
         _put(log, agent, evs)
         _same(repo, log)
 
