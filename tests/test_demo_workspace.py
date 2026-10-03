@@ -28,18 +28,24 @@ def test_workspace_can_be_pinned(monkeypatch, tmp_path):
     assert run_all.demo_base() == tmp_path / "x"
 
 
-def test_two_runs_do_not_wipe_each_other(tmp_path):
-    """Real processes: run B starts while run A is mid-way; A's tree must survive."""
-    code = (
-        "import sys; sys.path[:0]=[%r,%r]\n"
-        "import run_all; b = run_all.demo_base(); print(b)\n"
-    ) % (str(ROOT / "demos"), str(ROOT))
-    a = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True).stdout.strip()
-    marker = Path(a) / "marker"
-    marker.write_text("x")
-    subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
-    try:
-        assert marker.exists()
-    finally:
-        marker.unlink()
-        Path(a).rmdir()
+def test_run_never_wipes_the_workspace_it_does_not_own(monkeypatch, tmp_path):
+    """The real main(): a pinned directory's other contents (another run's scenarios)
+    survive; only the scenario being run has its own subdirectory cleared."""
+    import run_all
+
+    base = tmp_path / "pinned"
+    (base / "other-run").mkdir(parents=True)
+    (base / "other-run" / "marker").write_text("x")
+    (base / "mine").mkdir()
+    (base / "mine" / "stale").write_text("old")
+    seen = {}
+
+    def fake(sc):
+        seen["dir"] = sc.dir
+        seen["stale_gone"] = not (sc.dir / "stale").exists()
+
+    monkeypatch.setenv("DDFLOW_DEMOS_DIR", str(base))
+    monkeypatch.setattr(run_all, "SCENARIOS", [("mine", fake)])
+    run_all.main([])
+    assert (base / "other-run" / "marker").read_text() == "x"
+    assert seen["stale_gone"] and seen["dir"] == base / "mine"
