@@ -156,7 +156,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "force": (
                 "boolean",
-                "Override a refusal. Legitimate for one thing: retrying after `ddflow_recover` said a crashed agent's worktree holds nothing. Forcing past a dependency or a live lease is how two agents write the same file; the override is recorded either way.",
+                "Override a refusal. Legitimate only to retry after `ddflow_recover` said a crashed agent's worktree holds nothing. Forcing past a dependency or live lease is how two agents write one file; recorded either way.",
                 False,
             ),
         },
@@ -772,7 +772,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "pattern": (
                 "string",
-                "A regex naming the mistake in CODE. Scans the repository now and stores WHICH sites match, so `ddflow_lesson_verify` can later name the ones that reappeared. Prefer it to a remembered rule whenever the pattern is mechanical: a count says 'worse', never 'which'. Refused if it does not compile.",
+                "A regex naming the mistake in CODE. Scans now and stores WHICH sites match, so `ddflow_lesson_verify` can name those that reappear. Prefer it to a remembered rule when mechanical: a count says 'worse', never 'which'. Refused if it does not compile.",
                 False,
             ),
             "globs": (
@@ -1075,12 +1075,12 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_identify": {
         "description": (
-            "Declare WHO you are on this connection before anything that writes. Call it first when more than one agent or subagent works this repository at once: identity is what attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role), distinct from the other agents'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (the CLI's `--agent`)."
+            "Declare WHO you are on this connection before anything that writes. Call it first when 2+ agents or subagents work this repository at once: identity attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role), distinct from the others'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (the CLI's `--agent`)."
         ),
         "properties": {
             "agent": (
                 "string",
-                "A short stable name for you on this connection, e.g. 'reviewer-2'. Letters, digits, '.', '_', '-', up to 64 characters (it becomes a log filename). OMIT it to reset to the tree-derived default and be told what that is.",
+                "A short stable name, e.g. 'reviewer-2' (letters, digits, . _ -; max 64; it names your log file). OMIT to reset to the tree-derived default.",
                 False,
             ),
         },
@@ -1093,8 +1093,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "id": (
                 "string",
-                "Stable id, e.g. 'D1'. Choose one: `supersedes`, commit messages and "
-                "docs all reference it, and a generated id cannot be cited in advance.",
+                "Stable id, e.g. 'D1'. Choose one: a generated id cannot be cited in advance.",
                 False,
             ),
             "title": ("string", "The decision as a one-line statement.", True),
@@ -1114,7 +1113,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "sources": (
                 "string",
-                "Where this came from, comma-separated: an ADR path, a URL, a commit sha. Structured, so an audit can check the source still exists.",
+                "Where this came from, comma-separated: an ADR path, a URL, a commit sha (so an audit can check it exists).",
                 False,
             ),
         },
@@ -1463,16 +1462,12 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_import_verify": {
         "description": (
-            "Was this project's history imported, is that import still true, and did "
-            "anyone FINISH it? Read-only. STATUS: what carries import provenance, and "
-            "when. STILL TRUE: whether the source files moved on since (what a re-run "
-            "would add) or an imported item names a file that no longer exists. "
-            "FINISHED: imported tasks with no globs (the conflict detector cannot "
-            "protect them) and phases whose heading claims the work shipped while a "
-            "task under them is open. Call it after any import and before handing out "
-            "imported work. Exit 1 = findings for the operator; exit 2 = nothing was "
-            "ever imported. `ddflow_doctor` covers the rest (dependencies, globs, "
-            "cycles)."
+            "Was this project's history imported, is that still true, and did anyone FINISH it? Read-only. "
+            "STATUS: what carries import provenance. STILL TRUE: whether the sources moved on (what a "
+            "re-run would add) or an imported item names a missing file. FINISHED: imported tasks with "
+            "no globs (the conflict detector cannot protect them) and phases claiming shipped work "
+            "while a task under them is open. Call after any import. Exit 1 = findings; exit 2 = "
+            "nothing ever imported. `ddflow_doctor` covers the rest."
         ),
         "properties": {},
         "api": lambda repo, a, agent: _api().import_verify(repo, agent=agent),
@@ -1489,6 +1484,19 @@ TOOLS: dict[str, dict[str, Any]] = {
             repo, no_probe=bool(a.get("no_probe")), agent=agent
         ),
         "payload": ("companions", "gate_coverage", "uncovered_gates"),
+    },
+    "ddflow_bisect": {
+        "description": (
+            "Which earlier test file makes `victim` fail only in full-suite order? Delta-debugs the files before it, running `cmd` many times. Exit 2: nothing to report."
+        ),
+        "properties": {
+            "victim": ("string", "Failing test id.", True),
+            "cmd": ("string", "Test command; {tests} = the list.", True),
+            "candidates": ("string", "Comma-separated files in run order.", False),
+            "timeout": ("integer", "Seconds per run (600).", False),
+        },
+        "api": lambda repo, a, agent: _bisect(repo, a),
+        "payload": ("state", "victim", "polluters", "candidates", "summary", "runs"),
     },
     "ddflow_companions_verify": {
         "description": (
@@ -1658,7 +1666,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "action": ("string", "status (default), install, uninstall.", False),
             "claude": (
                 "boolean",
-                "Install/uninstall the Claude Code SessionStart hook in .claude/settings.json instead of the git hook: every session, including after a context compaction, starts with the ddflow brief and the operational memory. Other hooks in that file are left as they are.",
+                "Install/uninstall the Claude Code SessionStart hook in .claude/settings.json instead of the git hook: every session, even after compaction, starts with the ddflow brief. Other hooks there are untouched.",
                 False,
             ),
         },
@@ -1783,7 +1791,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_tests": {
         "description": (
-            "AFTER EACH CHANGE, while you work: the tests your change reaches (changed test files, tests importing a changed module directly or one step removed, tests named after a changed file, everything under a changed conftest.py), each with why, and a command that runs them IN PARALLEL: the project's own test command with its runner and worker flags, the files swapped in. Run it; do not reason about which tests matter. Never a pass: the unit_tests gate runs the WHOLE suite. `item`: diff that item's worktree against its base. Exit 2: no test reaches the change."
+            "AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly or one step removed, tests named after it, a changed conftest's), each with why, and a command running them IN PARALLEL (the project's test command, files swapped in). Run it; do not reason about which tests matter. Never a pass: unit_tests runs the WHOLE suite. `item`: diff that item's worktree. Exit 2: no test reaches the change."
         ),
         "properties": {
             "item": ("string", "The item whose worktree and base to use.", False),
@@ -1843,7 +1851,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "refresh_docs": (
                 "boolean",
-                "Rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the adopted agents' native rules from this ddflow's templates (no MCP, hook or command-file changes), e.g. when ddflow_doctor notes drifted driver docs. Refused on a project never adopted.",
+                "Rewrite ONLY the driver docs, AGENTS.md/CLAUDE.md blocks and adopted agents' native rules from this ddflow's templates (no MCP, hook or command-file changes), e.g. when ddflow_doctor notes drift. Refused on a never-adopted project.",
                 False,
             ),
         },
@@ -2075,12 +2083,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "line": ("string", "Move it to another release line.", False),
             "resources": (
                 "string",
-                "Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses the item while live claims use up the capacity ([schedule] resources). Declare it for anything that starts a GPU job, a model server or a long run. Empty string clears.",
+                "Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses while live claims use up the capacity ([schedule] resources). Declare for a GPU job, model server or long run. Empty clears.",
                 False,
             ),
             "worktree": (
                 "string",
-                "Rebind the item and your live lease to this linked worktree (absolute, or relative to the repository root) and its checked-out branch: the way out of a binding to the wrong tree, since re-claiming keeps the item's recorded tree and merge lands that tree's branch.",
+                "Rebind the item and your live lease to this linked worktree (absolute, or repo-relative) and its branch: the way out of a wrong-tree binding, since re-claiming keeps the recorded tree and merge lands that tree's branch.",
                 False,
             ),
         },
@@ -2796,7 +2804,7 @@ FULL_ONLY_TOOLS = frozenset(
     for n in (
         "external_sync import import_verify job_add job_end job_list job_run promote_add promote_deployed "
         "promote_status workflow workflow_drop workflow_gate workflow_pipeline flow_choose "
-        "version_cut rebuild replay hooks precommit companions_add companions_verify prompts pins loops cadence "
+        "version_cut rebuild replay hooks precommit companions_add companions_verify bisect prompts pins loops cadence "
         "reviewers_detect memory_forget lesson_verify export bug_file_tasks"
     ).split()
 )
@@ -2872,6 +2880,19 @@ def _configure_reported(repo, a, agent):
         local=bool(a.get("local")),
     )
     return report_budget_change(repo, edit, _api().configure(repo, edit, agent=agent), agent=agent)
+
+
+def _bisect(repo, a):
+    """`ddflow_bisect`. `glob`, `repeat` and `max_runs` are CLI-only: the tools/list byte budget."""
+    from ..api import bisect as B
+
+    return B.bisect(
+        repo,
+        a.get("victim", "") or "",
+        a.get("cmd", "") or "",
+        candidates=a.get("candidates", "") or "",
+        timeout_s=float(a.get("timeout") or 600),
+    )
 
 
 def _api():

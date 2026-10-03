@@ -153,6 +153,12 @@ class PullRequest:
     #: How many times it went back for changes. Read by the loop detector's reader
     #: (`pr status`), because a request that bounces five times is not converging.
     rounds: int = 0
+    #: The forge's merge queue (B172): "queued" while the request has an entry, with its
+    #: position and the queue's own state word. An open request that WAS queued and is not
+    #: now was ejected -- `pr sync` says so when it sees the change.
+    queue: str = ""
+    queue_position: int = 0
+    queue_state: str = ""
 
 
 @dataclass
@@ -1486,6 +1492,9 @@ _PR_FIELDS = (
     "merge_sha",
     "feedback",
     "author_model",
+    "queue",
+    "queue_position",
+    "queue_state",
 )
 
 

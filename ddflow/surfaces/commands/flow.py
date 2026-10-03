@@ -31,6 +31,11 @@ def cmd_pr(a, c: Ctx) -> int:
                 f"  {r['id']:<14} {r['state']:<8} #{r['number']} {r['pr_state']:<7} "
                 f"review={r['review'] or '-'} checks={r['checks'] or '-'} "
                 f"-> {r['base']}  (as of {r['synced_at'] or 'never'})"
+                + (
+                    f"  [merge queue{' #' + str(r['queue_position']) if r.get('queue_position') else ''}]"
+                    if r.get("queue")
+                    else ""
+                )
             )
         for r in out.data["releases"]:
             print(
@@ -47,6 +52,7 @@ def cmd_pr(a, c: Ctx) -> int:
     for w in out.data["waiting"]:
         print(
             f"  {w['id']}: waiting (review={w['review'] or '-'}, checks={w['checks'] or '-'}) {w['url']}"
+            + (f"  -- {w['note']}" if w.get("note") else "")
         )
     for u in out.data["unavailable"]:
         print(f"UNAVAILABLE: {u}", file=sys.stderr)
