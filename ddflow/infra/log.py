@@ -42,7 +42,6 @@ from ..core.events import (
     Event,
     SkewRefused,
     canonical,
-    current_session,
     stamp_facts,
     utcnow,
 )
@@ -702,12 +701,10 @@ class EventLog:
         Returns extra `data` for the event about to be written: the older-version mark when
         a session-scoped override is what lets it through. Raises `SkewRefused` otherwise.
         Caller holds the lock."""
-        from ..core.events import is_older
-
         version = running_version()
         facts = stamp_facts(self._all_events(), self.agent_id, version)
         extra: dict[str, Any] = {}
-        if facts.highest and is_older(version, facts.highest):
+        if facts.skewed:
             policy = self._skew_policy()
             if policy == "refuse":
                 if facts.override is None:
@@ -737,14 +734,11 @@ class EventLog:
         Returns the event, or None when there is nothing to override: no skew, or a policy
         (`warn`, `off`) that never refuses. A reason is required otherwise: refusing once and
         then overriding silently would only be a slower way of not asking."""
-        from ..core.events import is_older
-
         reason = (reason or "").strip()
         with self.transaction():
             version = running_version()
-            events = list(self._all_events())
-            facts = stamp_facts(events, self.agent_id, version)
-            if not facts.highest or not is_older(version, facts.highest):
+            facts = stamp_facts(self._all_events(), self.agent_id, version)
+            if not facts.skewed:
                 return None
             if facts.override is not None:
                 return facts.override
@@ -756,17 +750,16 @@ class EventLog:
                     f"with ddflow {version} to a log ddflow {facts.highest} has worked on "
                     f"(ask the operator first)."
                 )
-            ev = self._write(
+            return self._write(
                 SKEW_OVERRIDDEN_KIND,
-                current_session(events, self.agent_id) or "ddflow",
+                facts.session or "ddflow",
                 {
                     "running": version,
                     "log_version": facts.highest,
-                    "session": current_session(events, self.agent_id),
+                    "session": facts.session,
                     "reason": reason,
                 },
             )
-            return ev
 
     def _highest_lamport(self) -> int:
         """The highest clock value in ANY event of any shard.

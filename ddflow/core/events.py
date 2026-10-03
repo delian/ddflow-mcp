@@ -151,6 +151,10 @@ class StampFacts:
     #: An override of this agent's open session that covers this running version and the
     #: log's current highest stamp, or None.
     override: Event | None = None
+    #: The agent's open session ("" when it has none).
+    session: str = ""
+    #: The running version is OLDER than the log's highest stamp.
+    skewed: bool = False
 
 
 def _open_session(started: dict[str, tuple[int, str]], ended: set[str]) -> str:
@@ -203,19 +207,14 @@ def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts
             and (session or e.lamport > last_session_event)
         ):
             override = e
-    return StampFacts(highest, highest_by, seen_by_me, override)
-
-
-def current_session(events: Iterable[Event], agent: str) -> str:
-    """The id of `agent`'s open session ("" when it has none)."""
-    started: dict[str, tuple[int, str]] = {}
-    ended: set[str] = set()
-    for e in events:
-        if e.kind == "session.started" and e.agent == agent:
-            started[e.subject] = max(started.get(e.subject, (0, "")), (e.lamport, e.id))
-        elif e.kind == "session.ended":
-            ended.add(e.subject)
-    return _open_session(started, ended)
+    return StampFacts(
+        highest,
+        highest_by,
+        seen_by_me,
+        override,
+        session=session,
+        skewed=bool(highest) and is_older(version, highest),
+    )
 
 
 def utcnow() -> str:
