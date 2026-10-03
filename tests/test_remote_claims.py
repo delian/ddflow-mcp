@@ -148,3 +148,12 @@ def test_reasserting_our_own_live_claim_survives_an_unreachable_remote(clones):
 def test_ref_name_accepts_any_string_including_lone_surrogates():
     name = CR.ref_name("T\udcff1")  # what os.fsdecode gives for a non-UTF-8 argv byte
     assert name.startswith(CR.PREFIX) and name != CR.ref_name("T1")
+
+
+def test_reasserting_a_live_claim_whose_remote_ref_vanished_retakes_it(clones):
+    a, _b, bare = clones
+    assert A.claim(a, "T1", no_worktree=True, agent="agent-a").ok
+    _git(bare, "update-ref", "-d", CR.ref_name("T1"))  # lapsed during an outage
+    assert _refs(bare) == []
+    assert A.claim(a, "T1", no_worktree=True, agent="agent-a").ok
+    assert len(_refs(bare)) == 1
