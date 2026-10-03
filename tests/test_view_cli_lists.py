@@ -103,3 +103,27 @@ def test_research_add_verb_form_records_and_an_empty_value_counts_as_given(proj)
     # `--question ""` was GIVEN: whatever refuses it, it is not "required arguments".
     _, _, err = run_cli(proj, "research", "--question", "", "--verdict", "THEORETICAL")
     assert "required" not in err
+
+
+def test_the_global_agent_is_identity_not_a_filter(proj):
+    """B-view-cli-lists review: `--agent X` is mirrored onto every subparser, so a list
+    filter spelled --agent would make `ddflow --agent me bug list` refuse (and
+    `--agent me task list` silently show only my leases)."""
+    assert run_cli(proj, "bug", "list", agent="alice")[0] == 0
+    assert run_cli(proj, "research", "list", agent="alice")[0] == 0
+    code, out, _ = run_cli(proj, "--json", "task", "list", agent="alice")
+    assert code == 0 and len(_ids(out)) == 3
+    code, out, _ = run_cli(proj, "--json", "task", "list", "--owner", "alice")
+    assert code == 2 and json.loads(out)["filters"] == {"agent": "alice"}
+
+
+def test_list_flags_on_the_add_form_are_refused_not_dropped(proj):
+    argv = ("research", "--question", "q9", "--verdict", "THEORETICAL", "--limit", "3")
+    code, _, err = run_cli(proj, *argv)
+    assert code != 0 and "--limit" in err and "research list" in err
+    assert "R9" not in run_cli(proj, "research", "list")[1]
+
+
+def test_json_carries_the_reason_when_nothing_matches(proj):
+    code, out, _ = run_cli(proj, "--json", "task", "list", "--tag", "nope")
+    assert code == 2 and "No task records" in json.loads(out)["reason"]
