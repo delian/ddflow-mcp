@@ -137,6 +137,17 @@ from .reporting import (
 from .review import review as run_review
 from .review import reviewers_detect, reviewers_list
 from .review import triage as review_triage
+from .rules import (
+    Rule,
+    RuleDedupAnswer,
+    rule_add,
+    rule_dedup_check_dry_run,
+    rule_get,
+    rule_list,
+    rule_remove,
+    rule_search,
+    rule_update,
+)
 
 # `run_review`, not `review`: a name re-exported here SHADOWS the submodule of the same
 # name, so `from ddflow.api import review` would bind the function and every
@@ -174,6 +185,8 @@ __all__ = [
     "LessonDraft",
     "Registration",
     "ResearchFinding",
+    "Rule",
+    "RuleDedupAnswer",
     "WorkflowGateEdit",
     "_load",
     "abandon",
@@ -252,6 +265,13 @@ __all__ = [
     "review_triage",
     "reviewers_detect",
     "reviewers_list",
+    "rule_add",
+    "rule_dedup_check_dry_run",
+    "rule_get",
+    "rule_list",
+    "rule_remove",
+    "rule_search",
+    "rule_update",
     "run_review",
     "session_adopt_orphans",
     "session_end",

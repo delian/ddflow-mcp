@@ -2625,6 +2625,237 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("session",),
     },
+    "ddflow_rule_add": {
+        "description": (
+            "Add a new rule to the project. Checks for similar rules and offers to extend "
+            "or mark as duplicate. Answer: 'new', 'extends:ID', 'duplicate_of:ID', or "
+            "'related:ID' to resolve dedup refusal."
+        ),
+        "properties": {
+            "id": ("string", "Rule id (kebab-case with 'r-' prefix, e.g. 'r-naming').", True),
+            "title": ("string", "One-line rule statement.", True),
+            "content": ("string", "Rule text (may be empty for check_only).", False),
+            "tags": ("string", "Comma-separated tags for categorization.", False),
+            "scope": (
+                "string",
+                "Scope: 'project' (default), 'phase', 'task', or 'global'.",
+                False,
+            ),
+            "priority": ("integer", "Priority 0-100 (default 50).", False),
+            "globs": ("string", "Comma-separated path globs this rule governs.", False),
+            "new": (
+                "boolean",
+                "Answer: this is a different record (for dedup refusal).",
+                False,
+            ),
+            "extends": (
+                "string",
+                "Answer: this rule extends record ID (adds to existing rule).",
+                False,
+            ),
+            "duplicate_of": (
+                "string",
+                "Answer: this is the same as record ID (handled as extends).",
+                False,
+            ),
+            "related": (
+                "string",
+                "Answer: this is related to record ID (linked both ways).",
+                False,
+            ),
+            "check": (
+                "boolean",
+                "Dry run: check for duplicates without adding (exit 2 = none, 3 = found).",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: (
+            _api().rule_dedup_check_dry_run(
+                repo,
+                a.get("content", "") or "",
+            )
+            if bool(a.get("check"))
+            else _api().rule_add(
+                repo,
+                _api().Rule(
+                    id=a["id"],
+                    title=a["title"],
+                    content=a.get("content", "") or "",
+                    tags=_list_or_none(a, "tags") or [],
+                    scope=a.get("scope", "project") or "project",
+                    priority=int(a.get("priority", 50) or 50),
+                    globs=_list_or_none(a, "globs") or [],
+                ),
+                agent=agent,
+                check_dedup=True,
+                dedup_answer=(
+                    _api().RuleDedupAnswer("new", "")
+                    if bool(a.get("new"))
+                    else (
+                        _api().RuleDedupAnswer("extends", a["extends"])
+                        if a.get("extends")
+                        else (
+                            _api().RuleDedupAnswer("duplicate_of", a["duplicate_of"])
+                            if a.get("duplicate_of")
+                            else (
+                                _api().RuleDedupAnswer("related", a["related"])
+                                if a.get("related")
+                                else None
+                            )
+                        )
+                    )
+                ),
+            )
+        ),
+        "payload": ("id", "candidates"),
+    },
+    "ddflow_rule_list": {
+        "description": (
+            "List all project rules, optionally filtered by tag or scope. Use this to see "
+            "what rules apply to the current work."
+        ),
+        "properties": {
+            "tag": ("string", "Filter by this tag.", False),
+            "scope": ("string", "Filter by this scope.", False),
+            "limit": ("integer", "Maximum results (default 100).", False),
+            "json": ("boolean", "Return as JSON array.", False),
+        },
+        "api": lambda repo, a, agent: _api().rule_list(
+            repo,
+            tag=a.get("tag") or None,
+            scope=a.get("scope") or None,
+        ),
+        "payload": ("rows", "count"),
+    },
+    "ddflow_rule_search": {
+        "description": (
+            "Search rules by content or title, ranked by relevance. Use this to find rules "
+            "that govern a specific area or topic."
+        ),
+        "properties": {
+            "query": ("string", "Search query (keywords or regex).", True),
+            "exact": ("boolean", "Exact phrase match (default false).", False),
+            "regex": ("boolean", "Treat query as a regular expression (default false).", False),
+            "tag": ("string", "Filter results by this tag.", False),
+            "scope": ("string", "Filter results by this scope.", False),
+            "limit": ("integer", "Maximum results to return (default 10).", False),
+        },
+        "api": lambda repo, a, agent: _api().rule_search(
+            repo,
+            a["query"],
+            limit=int(a.get("limit", 10) or 10),
+            exact=bool(a.get("exact")),
+            regex=bool(a.get("regex")),
+            tag=a.get("tag") or None,
+            scope=a.get("scope") or None,
+        ),
+        "payload": ("rows", "count", "query"),
+    },
+    "ddflow_rule_edit": {
+        "description": (
+            "Update fields of an existing rule. Omitted fields remain unchanged. "
+            "Changes are recorded in the project manifest."
+        ),
+        "properties": {
+            "id": ("string", "Rule id to edit.", True),
+            "title": ("string", "New title (unchanged if omitted).", False),
+            "content": ("string", "New content (unchanged if omitted).", False),
+            "tags": ("string", "Comma-separated tags (unchanged if omitted).", False),
+            "scope": ("string", "New scope (unchanged if omitted).", False),
+            "priority": ("integer", "New priority (unchanged if omitted).", False),
+            "globs": ("string", "Comma-separated globs (unchanged if omitted).", False),
+        },
+        "api": lambda repo, a, agent: _api().rule_update(
+            repo,
+            a["id"],
+            **(
+                {
+                    "title": a["title"],
+                }
+                if a.get("title")
+                else {}
+            ),
+            **(
+                {
+                    "content": a["content"],
+                }
+                if a.get("content")
+                else {}
+            ),
+            **(
+                {
+                    "tags": _list_or_none(a, "tags") or [],
+                }
+                if "tags" in a
+                else {}
+            ),
+            **(
+                {
+                    "scope": a["scope"],
+                }
+                if a.get("scope")
+                else {}
+            ),
+            **(
+                {
+                    "priority": int(a.get("priority") or 50),
+                }
+                if a.get("priority") is not None
+                else {}
+            ),
+            **(
+                {
+                    "globs": _list_or_none(a, "globs") or [],
+                }
+                if "globs" in a
+                else {}
+            ),
+        ),
+        "payload": ("id",),
+    },
+    "ddflow_rule_remove": {
+        "description": (
+            "Delete a rule from the project. The rule is removed from the manifest and "
+            "the deletion is logged as an event."
+        ),
+        "properties": {
+            "id": ("string", "Rule id to remove.", True),
+            "reason": (
+                "string",
+                "Why this rule is being removed (recorded for history).",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().rule_remove(
+            repo,
+            a["id"],
+        ),
+        "payload": ("id",),
+    },
+    "ddflow_rule_show": {
+        "description": (
+            "Retrieve a single rule with all its metadata: title, content, tags, scope, "
+            "priority, globs, and creation/update timestamps."
+        ),
+        "properties": {
+            "id": ("string", "Rule id to retrieve.", True),
+        },
+        "api": lambda repo, a, agent: _api().rule_get(
+            repo,
+            a["id"],
+        ),
+        "payload": (
+            "id",
+            "title",
+            "content",
+            "tags",
+            "scope",
+            "priority",
+            "globs",
+            "created",
+            "updated",
+        ),
+    },
 }
 
 
@@ -2764,7 +2995,8 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "abandon block unblock release board progress doctor recover configure companions "
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status reviewers_list version_show research_add phase_add split resolve "
-        "remove tests review_triage memory_add memory_list history cleanup render list"
+        "remove tests review_triage memory_add memory_list history cleanup render list "
+        "rule_add rule_list rule_search rule_edit rule_remove rule_show"
     ).split()
 )
 
