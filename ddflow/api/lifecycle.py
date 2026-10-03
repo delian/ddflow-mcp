@@ -1458,10 +1458,13 @@ def complete(
             closed.append(bid)
         base["bugs_closed"] = closed
     waiting = _waiters(repo, item)  # before the release: see `release`
+    from ..services import ledger as LG
+
     log.append(
         "item.completed",
         item,
         {
+            "ledger": LG.git_facts(repo, sha, it),
             "sha": sha,
             "kind": it.kind,
             "forced": forced,
