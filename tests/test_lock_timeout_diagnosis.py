@@ -115,3 +115,15 @@ def test_the_note_is_one_fixed_size_write(tmp_path):
         with _flock(lock, 1):
             pass
     assert lock.stat().st_size == 256
+
+
+def test_the_reader_never_shows_bytes_past_the_note(tmp_path):
+    """Between a writer's pwrite and its trim, the file holds a new note followed by the
+    tail of an older, longer one; the reader takes the note's bytes only."""
+    from ddflow.infra.log import _holder_note
+
+    lock = tmp_path / "events.lock"
+    note = b"pid 1 1700000000.0 ddflow new".ljust(255) + b"\n"
+    lock.write_bytes(note + b"STALE-TAIL-OF-AN-OLDER-NOTE" * 5)
+    out = _holder_note(lock)
+    assert "ddflow new" in out and "STALE" not in out, out
