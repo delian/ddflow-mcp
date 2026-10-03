@@ -698,11 +698,22 @@ def _offered_overlap(
     return None
 
 
+NO_TREE_TAG = "no-worktree"
+
+
+def needs_tree(it: Item) -> bool:
+    """False for an item that declares it takes no worktree (`no-worktree` tag): a review,
+    a research task. Such an item counts against `schedule.max_parallel_tasks` only."""
+    return NO_TREE_TAG not in (t.strip().lower() for t in it.tags)
+
+
 def _cut_ready(
     state: State,
     cfg: Config,
     p: Plan,
     slots: int,
+    flight_slots: int,
+    tree_slots: int,
     live_items: list[str],
     live_note: str,
     reached: str,
@@ -715,6 +726,7 @@ def _cut_ready(
     # the offered item it waits behind.
     taken: list[Item] = []
     cut: list[Item] = []
+    trees = 0  # taken items that will make a worktree
     shared = shared_globs(cfg)
     for it in p.ready:
         held = hold(it) if hold else None
@@ -733,8 +745,9 @@ def _cut_ready(
                 )
             )
             p.overlapped.append(it.id)
-        elif len(taken) < slots:
+        elif len(taken) < flight_slots and (not needs_tree(it) or trees < tree_slots):
             taken.append(it)
+            trees += needs_tree(it)
         else:
             cut.append(it)
     if cut:
@@ -843,15 +856,9 @@ def plan(
     # Under the old `min()` a queue allowed four in flight silently became one on a
     # machine allowed one worktree, whatever the leases were actually doing.
     #
-    # What this does NOT do, precisely because it cannot: apply the tree cap per item.
-    # `--no-worktree` is a flag on `claim`, not a field on `Item`, so at planning time
-    # nothing distinguishes a task that will take a tree from one that will not, and
-    # `slots` is necessarily one number for all of them. A full tree cap therefore
-    # still withholds a task that would have taken no tree. The counting is right and
-    # the granularity is not; making it right needs an item-level declaration, which is
-    # filed rather than guessed (docs/BACKLOG.md, B52). Raised as THEORETICAL by the
-    # cross-family critic on 2026-09-24 and confirmed as a granularity gap, not a
-    # counting bug: the new form is a strict relaxation of the old one in every case.
+    # The tree cap is applied PER ITEM: an item tagged `no-worktree` (a review, a research
+    # task) declares it takes no tree, so a full tree cap does not withhold it and `claim`
+    # makes it none (B52). An untagged item is assumed to take a tree.
     #
     # Counted across the WHOLE queue, not the slice this call asked about: `p.running`
     # holds only candidates from `phase`, so with `--phase` the cap was applied against
@@ -876,7 +883,7 @@ def plan(
         live_note = f"{with_trees} worktrees live across the queue"
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
-    _cut_ready(state, cfg, p, slots, live_items, live_note, reached, hold)
+    _cut_ready(state, cfg, p, slots, flight_slots, tree_slots, live_items, live_note, reached, hold)
     return p
 
 
