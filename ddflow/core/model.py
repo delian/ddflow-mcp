@@ -23,7 +23,16 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .events import OLDER_MARK, SCHEMA_VERSION, Event, changelog_of, version_key
+from .events import (
+    OLDER_MARK,
+    SCHEMA_VERSION,
+    SEEN_KIND,
+    SKEW_OVERRIDDEN_KIND,
+    UPGRADE_APPLIED_KIND,
+    Event,
+    changelog_of,
+    version_key,
+)
 
 # Item states. These are DERIVED, never written: an item's state is a function of the
 # events about it. A state field that can be set directly is a field that can drift
@@ -2089,9 +2098,9 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "export.enabled": _h_export_enabled,
     "export.disabled": _h_export_disabled,
     "export.acknowledged": _h_export_acknowledged,
-    "ddflow.seen": _h_ddflow_seen,
-    "skew.overridden": _h_skew_overridden,
-    "upgrade.applied": _h_upgrade_applied,
+    SEEN_KIND: _h_ddflow_seen,
+    SKEW_OVERRIDDEN_KIND: _h_skew_overridden,
+    UPGRADE_APPLIED_KIND: _h_upgrade_applied,
 }
 
 

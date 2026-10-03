@@ -3099,7 +3099,8 @@ with a note by a ddflow that predates them:
 | `upgrade.applied` | when an upgrade is applied (the apply step is a later task) | from, to, categories, backup |
 
 The fold keeps the **highest** version stamped (`State.ddflow_versions`; `ddflow status
---json` and `ddflow doctor` show it); an older ddflow stamping later does not lower it.
+--json` shows it in its ddflow_version field, and `ddflow doctor` names it when there is
+a skew); an older ddflow stamping later does not lower it.
 A machine-local, git-ignored marker `.ddflow/local/seen.json` holds the last version *this
 machine* acted under. It works the same on a fresh `ddflow init` and on a project that
 predates the stamp: an old log with no stamp reads clean and is stamped on its next write.

@@ -63,8 +63,9 @@ def skipped_kinds_advice(st: State) -> str:
 
 
 def doctor_notes(st: State, running: str = "") -> list[str]:
-    """Lines for `ddflow doctor`: the version the project is at, a skew, the overrides and
-    the events an older ddflow wrote under them."""
+    """Lines for `ddflow doctor`: a skew (this ddflow is older than the log's highest stamp),
+    the overrides and the events an older ddflow wrote under them. Nothing on a healthy log:
+    the version itself is `ddflow status --json` (`ddflow_version`)."""
     rep = skew_report(st, running)
     notes: list[str] = []
     if rep["skew"]:

@@ -696,10 +696,6 @@ class EventLog:
         for p in self.shards():
             yield from self._read_shard(p)[0]
 
-    def skew_facts(self):
-        """`core.events.StampFacts` for this agent under the RUNNING version."""
-        return stamp_facts(self._all_events(), self.agent_id, running_version())
-
     def _stamp_and_guard(self) -> dict[str, Any]:
         """Refuse an older ddflow's write to a newer log, stamp this version on first use.
 
