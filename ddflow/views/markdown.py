@@ -606,6 +606,19 @@ def _brief_lessons(out: list[str], cfg: Config, lessons: list[dict], state: Stat
         )
 
 
+def _brief_skills(out: list[str], skills: list) -> None:
+    if not skills:
+        return
+    out += [
+        "",
+        "## Project skills and rules that bear on this task",
+        "",
+        "_The project's own; ranked against the task text. Read the file, do not rely on this line._",
+        "",
+    ]
+    out += [e.line() for e in skills]
+
+
 def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/suggested decide the heading
     state: State,
     cfg: Config,
@@ -614,6 +627,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     repo: Path | None = None,
     item: str = "",
     lessons: list[dict] | None = None,
+    skills: list | None = None,
     rules: str = "",
     recovery: list | None = None,
     decisions: list | None = None,
@@ -648,6 +662,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     if rules:
         out += ["", "## Project rules", "", rules.strip()]
     _brief_lessons(out, cfg, lessons or [], state)
+    _brief_skills(out, skills or [])
 
     if any(PV.TAG in line for line in out):
         out[1:1] = [f"_{PV.DATA_RULE}_", ""]
