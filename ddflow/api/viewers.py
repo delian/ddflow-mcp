@@ -56,6 +56,17 @@ def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
     return sum(1 for t in below if t.state == "done"), len(below)
 
 
+#: The selector arguments each kind takes, beyond the state/owner/since filters, which the
+#: engines check themselves; any other one that is set is refused.
+_TAKES: dict[str, frozenset[str]] = {
+    "task": frozenset({"phase", "tag"}),
+    "phase": frozenset({"tag"}),
+    "bug": frozenset({"phase", "all"}),
+    "research": frozenset({"phase", "tag"}),
+    "session": frozenset({"id"}),
+    "search": frozenset({"query", "mode", "sources", "phase"}),
+}
+
 #: What `view_read` answers: the list kinds, plus a text search.
 READ_KINDS = (*V.KINDS[:4], "session", "search")
 
@@ -83,17 +94,35 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         return O.refused(
             "view.read", f"unknown kind {kind!r}: one of {', '.join(READ_KINDS)}", record_kind=kind
         )
+    given = {
+        "id": id,
+        "query": query,
+        "tag": tag,
+        "all": all,
+        "mode": mode if mode != "ranked" else "",
+        "sources": sources,
+        "phase": phase,
+    }
+    stray = sorted(k for k, v in given.items() if v and k not in _TAKES[kind])
+    if stray:
+        # Refused, not ignored: `kind=session tag=x` returning every session would read as
+        # "these carry x", which the log does not say (the engine does the same per kind).
+        return O.refused(
+            "view.read",
+            f"kind={kind} has no {', '.join(stray)} (it takes: {', '.join(sorted(_TAKES[kind]))})",
+            record_kind=kind,
+        )
     if kind == "session":
         return _read_session(repo, id, state, owner, since, limit)
     if kind == "search":
         return _read_search(repo, query, mode, sources, state, phase, owner, since, limit)
-    if id:
-        return O.refused("view.read", f"id applies to kind=session, not {kind}", record_kind=kind)
     if kind == "bug" and not state and not all:
         state = "open"
     out = view_list(
         repo, kind, state=state, phase=phase, tag=tag, agent=owner, since=since, limit=limit
     )
+    if "filters" in out.data:
+        out.data["filters"] = _filters(out.data["filters"])
     if kind == "phase" and "rows" in out.data:
         _log, _cfg, st = _load(repo)
         for r in out.data["rows"]:

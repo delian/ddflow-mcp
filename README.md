@@ -3243,7 +3243,7 @@ as an unknown `--phase`. `research list` is the optional-verb form of `research`
 are the CLI's (`state`, `phase`, `tag`, `owner`, `since`, `all` for bugs); `id` with
 `kind=session` is `session show`, and `kind=search` takes `query`, `mode`
 (`ranked | exact | regex`) and `sources` (the CLI's `--kind`). The body is the CLI's `--json`.
-It is bounded: 25 rows unless `limit` says otherwise (`0` = all, at most 1000), a cut list
+It is bounded: 25 rows unless `limit` says otherwise (`0` = the most: 1000 for a list, 200 for a search), a cut list
 says how many matched and how to get the rest, and one session shown in full is cut to its
 newest 25 entries with long texts clipped (`limit=0` for all; `ddflow session show` has
 them whole). The event log's own timeline is `ddflow_history`.
