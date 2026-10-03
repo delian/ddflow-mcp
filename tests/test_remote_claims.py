@@ -135,3 +135,11 @@ def test_a_claim_the_local_checks_refuse_gives_the_remote_ref_back(clones):
     assert out.exit == 3, out.reason
     names = [line.split()[-1] for line in _refs(bare)]
     assert names == [CR.ref_name("T1")], names
+
+
+def test_reasserting_our_own_live_claim_survives_an_unreachable_remote(clones):
+    a, _b, bare = clones
+    assert A.claim(a, "T1", no_worktree=True, agent="agent-a").ok
+    _git(a, "remote", "set-url", "origin", str(bare) + "-gone")
+    again = A.claim(a, "T1", no_worktree=True, agent="agent-a")
+    assert again.ok, again.reason

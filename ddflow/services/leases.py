@@ -203,13 +203,33 @@ def acquire(
     holder = holder or log.agent_id
     took = ""
     if cfg.flow.claims == "remote":
-        took = _remote_take(log, cfg, item_id, holder, time.time())
+        if _holds_live(log, cfg, item_id, holder):
+            # Re-asserting a live claim of our own: renewing tolerates an unreachable
+            # remote (it lapses at its expiry and the next heartbeat re-takes it), as the
+            # heartbeat does; only a claim someone else took over is refused.
+            if lost := _remote_renew(log, cfg, item_id, holder, time.time()):
+                raise LeaseError(
+                    f"{item_id}: the remote claim is now {lost}'s -- this lease lapsed "
+                    f"there and was taken over.",
+                    holder=lost,
+                    item=item_id,
+                )
+        else:
+            took = _remote_take(log, cfg, item_id, holder, time.time())
     try:
         return _acquire_locked(log, cfg, item_id, holder=holder, **kwargs)
     except Exception:
         if took == "fresh":  # an own, already-live claim is not ours to give back here
             _remote_drop(log, item_id, holder)
         raise
+
+
+def _holds_live(log: EventLog, cfg: Config, item_id: str, holder: str) -> bool:
+    it = _decide_from(log)[0].items.get(item_id)
+    lease = it.lease if it else None
+    return bool(
+        lease and lease.holder == holder and not lease.expired(time.time(), cfg.lease.grace_s)
+    )
 
 
 def _acquire_locked(
