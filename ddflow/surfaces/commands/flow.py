@@ -44,6 +44,8 @@ def cmd_pr(a, c: Ctx) -> int:
         for r in out.data["back_merges"]:
             print(f"  back-merge {r['item']} -> {r['into']}: {r['state']} {r.get('url', '')}")
         return OK
+    if a.pr_cmd == "threads":
+        return _pr_threads(a, c)
     out = A.pr_sync(c.repo, item=a.item or "", agent=c.requested_agent)
     if c.json:
         return _emit_json(out)
@@ -61,6 +63,37 @@ def cmd_pr(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
     return out.exit
+
+
+def _pr_threads(a, c: Ctx) -> int:
+    out = A.pr_threads(
+        c.repo,
+        a.id,
+        thread=a.thread,
+        reply=a.reply,
+        resolve=a.resolve,
+        agent=c.requested_agent,
+    )
+    if c.json:
+        return _emit_json(out)
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    d = out.data
+    if d["replied"]:
+        print(f"replied on {a.thread}")
+    if d["resolved"]:
+        print(f"resolved {a.thread}")
+    if not d["threads"]:
+        print(f"{a.id} #{d['number']}: no review threads")
+        return OK
+    for t in d["threads"]:
+        mark = "resolved" if t["resolved"] else "OPEN    "
+        where = f"{t['path']}:{t['line']}" if t["path"] else "(general)"
+        more = f" (+{t['replies']})" if t["replies"] else ""
+        print(f"  {t['id']}  {mark}  {where}  {t['author']}: {t['body'][:100]!r}{more}")
+    print(f"{d['unresolved']} open of {len(d['threads'])}")
+    return OK
 
 
 def cmd_version(a, c: Ctx) -> int:
