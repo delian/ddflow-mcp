@@ -39,7 +39,7 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
     run_cli(repo, "init")
     (repo / ".ddflow" / "config.toml").write_text(
-        "[worktree]\nenabled = false\n"
+        "[worktree]\nenabled = false\n[review]\nmax_rounds = 0\n"
         f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
         'model = "gemini-2.5-pro"\ngates = ["critic"]\nhedge = 1\nmax_chunk_chars = 150\n'
     )

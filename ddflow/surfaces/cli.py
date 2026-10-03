@@ -1078,7 +1078,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         default="",
         help="edit one key in place, e.g. --set gate.unit_tests.command 'pytest -q'",
     )
-    cf.add_argument("value", nargs="?", default="", help="the value, when --set is used")
+    cf.add_argument(
+        "value",
+        nargs="*",
+        default=[],
+        help="the value, when --set is used; or `KEY VALUE` with no --set "
+        "(ddflow config review.max_rounds 0 --local)",
+    )
     cf.add_argument(
         "--append-toml",
         default="",
@@ -1190,7 +1196,8 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="run the configured reviewer(s) over an item's diff",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="two commands share this parser:\n"
-        "  ddflow review <id> --gate G [--chunk N]   run the reviewer(s) (slow, shared)\n"
+        "  ddflow review <id> --gate G [--chunk N | --delta]   run the reviewer(s) (slow, shared);\n"
+        "                  a gate gets [review].max_rounds (default 2) full rounds, then --delta/triage\n"
         "  ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...\n"
         "                                            record what became of one finding\n"
         "--finding/--refuted/--confirmed/--probe belong to the second form only. It REQUIRES the\n"
@@ -1224,6 +1231,18 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="re-review only chunk N (as the recorded review numbered it; repeatable, or "
         "'2,5') and merge it into that record -- same diff, chunk size and reviewer",
     )
+    rw.add_argument(
+        "--delta",
+        action="store_true",
+        help="recheck ONLY what changed since the head the gate's last review covered: "
+        "not a full round, never refused by [review].max_rounds",
+    )
+    rw.add_argument(
+        "--force",
+        action="store_true",
+        help="run a full round past [review].max_rounds; needs --reason, recorded in the evidence",
+    )
+    rw.add_argument("--reason", default="", help="why --force")
     rw.add_argument("--finding", type=int, default=None, help="triage: the finding's number (#N)")
     rw.add_argument(
         "--refuted", action="store_true", help="triage: --probe shows the finding is false"

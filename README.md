@@ -757,7 +757,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 147 knobs.
+cadences, and the rest of the 149 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -1134,6 +1134,46 @@ required: `--finding`/`--refuted`/`--confirmed`/`--probe` on a plain `review` ar
 Finding numbers are per gate, so `--gate` is never defaulted on `review triage`: omitted, it is
 refused (exit 1) naming the gates that have findings when several do, and resolved to that gate
 (the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
+
+**The review-round budget (`[review]`).** A shipped default in every project, with no
+configuration: a gate (`rubber_duck`, `critic`) gets **2 full review rounds** per item, then
+a third is refused (exit 3) with the way forward — later rounds each find fewer defects
+than the one before (measured: rounds 3 and later yielded about a quarter of the confirmed findings). What stays allowed after the cap, always:
+
+```sh
+ddflow review T1 --gate critic --delta      # recheck ONLY what changed since the head the last review covered
+ddflow review triage T1 --gate critic --finding 2 --refuted --probe "..."   # settle what is left
+ddflow review T1 --gate critic --force --reason "..."   # one more FULL round; the reason is recorded
+```
+
+A *full* round is any review that can cover the item's whole diff. What is not one is
+judged by what it covers, not by the flag: `--delta`, a `--commit <sha>` or `--base <ref>`
+at or after the head the gate's last review covered (so it can only be narrower), and a
+`--chunk` re-run of a recorded review. Those are never refused; a `--base` or `--commit`
+that reaches back past that head counts as a full round. Rounds are
+counted from the log's recorded reviews (`review_kind`, `round`, `rounds` and `reviewed_head`
+in the gate evidence), so a re-claim, a delta or a manual `gate skip` does not reset the
+count; a round that reached no reviewer is not counted. `--delta` reads the reviewed head
+from the log too, so it works after a re-claim or a `gate skip`; it is refused only when no
+review was ever recorded or nothing changed. Two knobs, changeable at every layer:
+
+| knob | default | meaning |
+|---|---|---|
+| `review.max_rounds` | `2` | full rounds per gate per item; `0` = unlimited |
+| `review.on_exceed` | `"refuse"` | `"warn"` runs the round and says the budget is spent |
+
+```sh
+ddflow config review.max_rounds 3                 # this project (committed .ddflow/config.toml)
+ddflow config review.max_rounds 0 --local         # this machine only (.ddflow/local/config.toml)
+                                                  # (`--set KEY VALUE` is the same)
+DDFLOW_REVIEW_MAX_ROUNDS=0 ddflow review ...      # one run
+```
+
+Over MCP, `ddflow_configure` accepts `review.max_rounds` and `review.on_exceed` on either
+layer (`local=true`), and tells the operator in its reply and in a session note — an agent
+does not lift the cap for itself; `--force --reason` is CLI-only and `ddflow_review` takes
+`delta=true`. `ddflow config --explain --filter review.` documents both knobs. A tool
+built before this knob skips an unknown `[review]` key with a note rather than failing.
 
 ### Companion tools
 
@@ -3368,7 +3408,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 147): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 149): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -3706,7 +3746,7 @@ declared once and persists — see
 
 ## Configuration
 
-147 knobs across 20 sections, every one documented in place:
+149 knobs across 21 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
