@@ -23,7 +23,9 @@ from ..core.events import Event
 from ..core.model import Item, fold
 
 MAX_FILES = 100
-_TEST = re.compile(r"(^|/)(tests?|spec)/|(^|/)test_[^/]*$|_test\.[a-z]+$|\.(test|spec)\.[a-z]+$")
+_TEST = re.compile(
+    r"(^|/)(tests?|spec)/|(^|/)test_[^/]*$|_test\.[a-z]+$|\.(test|spec)\.[cm]?[jt]sx?$"
+)
 
 
 def requirement_digest(title: str, body: str, globs: Sequence[str]) -> str:
@@ -122,7 +124,7 @@ def summary(ledger: dict[str, Any], files_shown: int = 8) -> dict[str, Any]:
         "completed_at": ledger["completed_at"],
         "sha": ledger["sha"],
         "requirement": ledger["requirement"]["digest"],
-        "files_known": d["files_known"],
+        "files_known": d.get("files_known", False),
         "files_total": d["files_total"],
         "files": d["files"][:files_shown],
         "tests": len(d["tests"]),
