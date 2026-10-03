@@ -97,6 +97,7 @@ from .commands.setup import (
     cmd_prompts,
     help_topics,
 )
+from .commands.viewers_lists import register as register_list_viewers
 from .commands.workflow import cmd_workflow
 from .context import (
     FAIL,
@@ -1432,6 +1433,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     s.add_parser("mcp", help="run the MCP stdio server over this repository").set_defaults(
         fn=cmd_mcp
     )
+    register_list_viewers(s)
     _accept_global_options_anywhere(p)
     return p
 
