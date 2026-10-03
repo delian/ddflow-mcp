@@ -105,3 +105,38 @@ def test_the_requirement_digest_ignores_glob_order_but_not_the_text():
     a = LG.requirement_digest("t", "b", ["x", "y"])
     assert a == LG.requirement_digest("t", "b", ["y", "x"])
     assert a != LG.requirement_digest("t", "b2", ["x", "y"])
+
+
+def test_a_non_ascii_file_name_is_recorded_as_the_file_is_named(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "*")
+    (repo / "café.txt").write_text("x\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "cafe")
+    run_cli(repo, "complete", "T1", "--sha", _git(repo, "rev-parse", "HEAD"), "--force")
+    assert "café.txt" in LG.build(EventLog(repo).read_all(), "T1")["done"]["files"]
+
+
+def test_js_style_test_files_are_counted_as_tests():
+    assert all(LG._TEST.search(f) for f in ("src/a.test.ts", "src/a.spec.js", "pkg/a_test.go"))
+    assert not LG._TEST.search("src/contest.py")
+
+
+def test_show_says_unknown_not_zero_when_files_were_not_recorded(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "w.py")
+    run_cli(repo, "complete", "T1", "--force")
+    assert "UNKNOWN" in run_cli(repo, "show", "T1")[1]
+    assert json.loads(run_cli(repo, "--json", "show", "T1")[1])["ledger"]["files_known"] is False
+
+
+def test_a_reconstructed_ledger_still_detects_a_later_requirement_edit(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "t", "--globs", "w.py")
+    log = EventLog(repo)
+    log.append(
+        "item.completed", "T1", {"sha": "", "kind": "task", "forced": False, "overridden": []}
+    )
+    run_cli(repo, "update", "T1", "--body", "rewritten later")
+    led = LG.build(log.read_all(), "T1")
+    assert led["reconstructed"] and led["requirement_changed_after"] is True
