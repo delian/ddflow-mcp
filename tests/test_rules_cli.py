@@ -51,4 +51,6 @@ def test_json_refusal_carries_the_candidates(repo):
         "--content", "write the failing test before the fix",
     )  # fmt: skip
     assert code == 3
-    assert [c["id"] for c in json.loads(out)["candidates"]] == ["r-a"]
+    body = json.loads(out)
+    assert next(iter(body)) == "refusal" and body["refusal"]["exit"] == 3
+    assert [c["id"] for c in body["candidates"]] == ["r-a"]
