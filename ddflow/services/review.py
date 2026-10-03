@@ -1483,7 +1483,7 @@ def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     progress = _Progress(files, started, rev.timeout_s, on_progress, on_tick)
 
     def _keep(n: int, got: tuple[str, str]) -> None:
-        if on_chunk and got[0] and not got[1]:
+        if on_chunk and got[0]:
             on_chunk(n, got[0])
 
     # `_race` and the retry index the SENT chunks (positions in `wanted`); progress and
