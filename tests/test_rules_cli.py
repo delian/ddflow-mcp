@@ -42,3 +42,13 @@ def test_a_duplicate_is_refused_until_answered(repo):
         repo, "r-b", "Tests first again", "write the failing test before the fix", "--new"
     )
     assert code == 0, out + err
+
+
+def test_json_refusal_carries_the_candidates(repo):
+    _add(repo, "r-a", "Tests first", "write the failing test before the fix")
+    code, out, _ = run_cli(
+        repo, "--json", "rule", "add", "--id", "r-b", "--title", "Again",
+        "--content", "write the failing test before the fix",
+    )  # fmt: skip
+    assert code == 3
+    assert [c["id"] for c in json.loads(out)["candidates"]] == ["r-a"]

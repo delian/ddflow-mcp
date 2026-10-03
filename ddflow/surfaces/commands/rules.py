@@ -121,5 +121,7 @@ def cmd_rule(a, c: Ctx) -> int:
     )
     if out.exit != 0 and out.data.get("candidates"):
         print(out.reason, file=sys.stderr)
+        if c.json:
+            print(json.dumps(out.body(_PAYLOADS["add"]), indent=2, default=str))
         return out.exit
     return _emit(c, out, verb, f"added rule {a.id}")
