@@ -58,7 +58,17 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # whose attribution depends on it.
     (
         "Setting up",
-        ("setup", "configure", "companions", "precommit", "hooks", "prompts", "adopt", "identify", "rule"),
+        (
+            "setup",
+            "configure",
+            "companions",
+            "precommit",
+            "hooks",
+            "prompts",
+            "adopt",
+            "identify",
+            "rule",
+        ),
     ),
     ("The rules this project runs by", ("workflow", "flow")),
     (
@@ -97,7 +107,18 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "Looking at it",
-        ("board", "show", "status", "brief", "progress", "render", "export", "history", "list"),
+        (
+            "board",
+            "show",
+            "status",
+            "brief",
+            "progress",
+            "render",
+            "export",
+            "history",
+            "list",
+            "verify",
+        ),
     ),
     ("When something is wrong", ("doctor", "recover", "loops", "rebuild", "replay", "cadence")),
     ("Help", ("help",)),

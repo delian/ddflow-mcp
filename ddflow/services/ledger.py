@@ -54,7 +54,10 @@ def git_facts(repo: Path, sha: str, it: Item) -> dict[str, Any]:
     listed = git_paths(repo, "show", "--name-only", "--format=", "-m", "--first-parent", sha)
     if listed is None:
         return facts
-    files = sorted({f for f in listed if f.strip()})
+    # `.ddflow/` is the queue's own bookkeeping (event shards, config): it rides along in
+    # almost every landing and is not the work, so it is neither a "changed file" nor
+    # evidence that the landing touched anything.
+    files = sorted({f for f in listed if f.strip() and not f.startswith(".ddflow/")})
     facts.update(
         files_known=True,
         files_total=len(files),
