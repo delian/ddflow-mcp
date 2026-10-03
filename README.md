@@ -181,6 +181,7 @@ the same implementation, so neither drifts from the other.
 | **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
+| **find which earlier test file makes a test fail only in full-suite order** | `ddflow bisect VICTIM --cmd 'pytest -q {tests}' [--candidates a,b] [--glob G] [--timeout S] [--repeat N] [--max-runs N]` -- delta-debugs the files before the victim, running your command many times (exit 0 = found, 2 = nothing to report); see [Finding a test polluter](#finding-a-test-polluter) | `ddflow_bisect` (`glob`, `repeat` and `max_runs` are CLI-only) |
 | **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
@@ -1337,6 +1338,43 @@ command = "my-linter"
 args    = ["mcp"]
 install = "cargo install my-linter"
 ```
+
+## Finding a test polluter
+
+A test that passes alone and fails only after others have run is being polluted: a leaked
+environment variable, a module-level cache, a file left behind. `ddflow bisect` finds which
+earlier file does it (illustrative output):
+
+```console
+$ ddflow bisect tests/test_report.py::test_totals --cmd 'pytest -q -p no:randomly {tests}'
+victim: tests/test_report.py::test_totals
+candidates before it: 212
+
+Run before the victim, these make it fail (remove any one and it passes):
+  tests/test_cache.py
+
+9 run(s)
+```
+
+It confirms the victim passes alone and fails after every candidate, then delta-debugs
+(Zeller's ddmin) the candidates to a **1-minimal** set -- usually one file, two when the
+pollution needs an interaction -- in about `2 * log2(n)` runs. Candidates are the files
+that sort before the victim's (`--glob`, default `tests/**/test_*.py`) or `--candidates a,b`
+in the order given.
+
+**It is driven by your command, not by ddflow running your tests.** The original idea
+assumed ddflow owned test execution; it does not, and building that means understanding every
+test framework. The only requirement is a command that runs a list of tests and exits
+non-zero on failure, with `{tests}` where the list goes (`pytest -q {tests}`,
+`go test {tests}`, `npm test -- {tests}`). Turn off test-order randomisation in it, or a
+shuffled victim will not reproduce. The search never looks inside a test.
+
+Probes are three-valued, like every check here: a run that could not be made (timeout, a
+command that will not spawn) is **unavailable** and ends the search with exit 2; it is never
+counted as a pass or a fail. Exit 2 also covers "the victim fails alone" (not an ordering
+problem), "it passes after every candidate" (flaky, or not about earlier files) and an
+exhausted `--max-runs` (the smallest set so far is printed). `--repeat N` runs each probe N
+times and counts any failure, for a pollution that shows one run in three.
 
 ## Wiring it into your agent
 

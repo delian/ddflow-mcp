@@ -345,6 +345,18 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
         )
         for flag in ("--new", "--extends", "--duplicate-of", "--related", "--check")
     },
+    ("ddflow_bisect", "--glob"): (
+        "where candidates come from stays the default tests/**/test_*.py over MCP; an agent "
+        "names `candidates` when the suite lives elsewhere (tools/list byte budget)"
+    ),
+    ("ddflow_bisect", "--repeat"): (
+        "re-running each probe is a terminal-side choice for a flaky pollution "
+        "(tools/list byte budget)"
+    ),
+    ("ddflow_bisect", "--max-runs"): (
+        "the run budget is the operator's, set at a terminal; the default 200 bounds an "
+        "agent's call (tools/list byte budget)"
+    ),
 }
 
 
