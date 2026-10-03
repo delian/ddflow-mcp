@@ -70,6 +70,8 @@ def test_versions_compare_as_numbers_not_text():
     assert not is_older("0.2", "0.2.0") and not is_older("0.2.0", "0.2")
     assert is_older("0.2.0rc1", "0.2.0") and not is_older("0.2.0", "0.2.0rc1")
     assert is_older("0.2.0rc1", "0.2.0rc2") and is_older("0.1.10", "0.2.0rc1")
+    assert is_older("0.2.0.dev3", "0.2.0a1") and is_older("0.2.0a5", "0.2.0b1")
+    assert is_older("0.2.0b2", "0.2.0rc1") and not is_older("0.2.0rc1", "0.2.0.dev3")
     assert version_key("v0.2.0") == version_key("0.2.0") and version_key("dev") == ()
 
 

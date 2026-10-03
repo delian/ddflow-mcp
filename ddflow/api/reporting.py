@@ -178,7 +178,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         # Which ddflow versions have worked on this log, and the highest (the version stamp).
         data["ddflow_version"] = {
             "highest": st.highest_version,
-            "seen": sorted(st.ddflow_versions, key=version_key),
+            "seen": sorted(st.ddflow_versions, key=lambda v: (version_key(v), v)),
         }
     if not full:
         _bound(data)
