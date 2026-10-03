@@ -350,3 +350,56 @@ def test_ddmin_complement_is_by_position_so_duplicates_stay_one_minimal():
 def test_bisect_treats_a_duplicated_candidate_as_one_file():
     r = B.bisect("V", ["a", "b", "a", "c"], _probe({"c"}))
     assert r.state == "found" and r.polluters == ["c"] and r.candidates == 3
+
+
+# -- the real CLI and the MCP tool ----------------------------------------------------------
+
+
+def _cli(repo, *argv):
+    from tests.conftest import run_cli
+
+    return run_cli(repo, *argv)
+
+
+def test_cli_bisect_end_to_end_with_real_pytest(project):
+    import json
+
+    code, out, err = _cli(
+        project, "--json", "bisect", "tests/test_zz_victim.py::test_victim", "--cmd", CMD
+    )
+    assert code == 0, out + err
+    body = json.loads(out)
+    assert body["state"] == "found" and body["polluters"] == ["tests/test_c.py"]
+    code, out, err = _cli(project, "bisect", "tests/test_zz_victim.py::test_pair", "--cmd", CMD)
+    assert code == 0, out + err
+    assert "tests/test_b.py" in out and "tests/test_d.py" in out and "make it fail" in out
+
+
+def test_cli_bisect_exit_codes(project):
+    victim = "tests/test_zz_victim.py::test_victim"
+    assert _cli(project, "bisect", victim, "--cmd", "pytest -q")[0] == 1  # no {tests}
+    code, out, _ = _cli(project, "bisect", victim, "--cmd", "no-such-runner-xyz {tests}")
+    assert code == 2 and "unavailable" in out
+    (project / "tests" / "test_zz_victim.py").write_text("def test_victim():\n    assert False\n")
+    code, out, _ = _cli(project, "bisect", victim, "--cmd", CMD)
+    assert code == 2 and "victim_fails_alone" in out
+
+
+def test_mcp_tool_bisects(project):
+    import json
+
+    from ddflow.surfaces.mcp import Server
+
+    reply = Server(project).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_bisect",
+                "arguments": {"victim": "tests/test_zz_victim.py::test_victim", "cmd": CMD},
+            },
+        }
+    )
+    body = json.loads(reply["result"]["content"][0]["text"])
+    assert body["state"] == "found" and body["polluters"] == ["tests/test_c.py"], body
