@@ -333,8 +333,8 @@ def report_budget_change(
 ) -> O.Outcome:
     """Tell the operator when an AGENT (the MCP surface) changed the review budget.
 
-    The cap is the operator's: `ddflow_configure` accepts `review.max_rounds` and
-    `review.on_exceed` on either layer, so an operator without a shell can tune it, but
+    The cap is the operator's: `ddflow_configure` accepts `review.max_rounds`,
+    `review.on_exceed` and `review.delta_default` on either layer, so an operator without a shell can tune it, but
     an agent raising or disabling it to get more review rounds must not do so silently.
     The change is returned as a NOTE and recorded as a session note the operator reads
     in `session show` and the brief; a per-item exception is `ddflow review --force
