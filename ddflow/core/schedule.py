@@ -138,15 +138,22 @@ class Plan:
     #: read; `cap_note` is the one sentence that says which cap.
     capped: list[str] = field(default_factory=list)
     cap_note: str = ""
+    #: Ids ready in every other sense that overlap an item offered in this same plan: each
+    #: is ALSO in `blocked` with reason "conflict", and its slot went to an independent
+    #: item. Not cap-held: raising the cap would not offer it, only the offered item
+    #: finishing would.
+    overlapped: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         parts = [
             f"{len(self.ready)} ready",
             f"{len(self.running)} running",
-            f"{len(self.blocked) - len(self.capped)} blocked",
+            f"{len(self.blocked) - len(self.capped) - len(self.overlapped)} blocked",
         ]
         if self.capped:
             parts.append(f"{len(self.capped)} held by {self.cap_note}")
+        if self.overlapped:
+            parts.append(f"{len(self.overlapped)} overlap an offered item")
         if self.cycles:
             parts.append(f"{len(self.cycles)} CYCLE(S)")
         if self.interrupted:
@@ -672,6 +679,79 @@ def bug_items(state: State, cfg: Config) -> set[str]:
     return ids
 
 
+def _offered_overlap(
+    state: State, cfg: Config, it: Item, taken: list[Item], shared: list[str]
+) -> tuple[str, tuple[str, str]] | None:
+    """The first already-offered item whose globs overlap ``it``'s, with the pair; None
+    when none does. Items on different release lines are different branches and never
+    collide (the same exemption `item_blocker` makes for a held lease)."""
+    mine = line_key(state, it, cfg)
+    for other in taken:
+        if line_key(state, other, cfg) != mine:
+            continue
+        pairs = conflicts(it.globs, other.globs, shared)
+        if pairs:
+            return other.id, pairs[0]
+    return None
+
+
+def _cut_ready(
+    state: State,
+    cfg: Config,
+    p: Plan,
+    slots: int,
+    live_items: list[str],
+    live_note: str,
+    reached: str,
+) -> None:
+    """Trim ``p.ready`` to the free slots, in place, never offering two overlapping items."""
+    # Cut the ready list conflict-aware: walk it in offer order and take an item only when
+    # it overlaps nothing already taken (two offered items that overlap make the second
+    # claim refuse). An overlapping item is not dropped -- it stays queued, blocked with
+    # the offered item it waits behind.
+    taken: list[Item] = []
+    cut: list[Item] = []
+    shared = shared_globs(cfg)
+    for it in p.ready:
+        clash = _offered_overlap(state, cfg, it, taken, shared)
+        if clash:
+            other, pair = clash
+            p.blocked.append(
+                Blocked(
+                    it.id,
+                    "conflict",
+                    f"globs overlap {other} ({pair[0]} vs {pair[1]}) offered in this plan",
+                    [other],
+                )
+            )
+            p.overlapped.append(it.id)
+        elif len(taken) < slots:
+            taken.append(it)
+        else:
+            cut.append(it)
+    if cut:
+        if slots:
+            # NOT "cap reached": a slot is free, and a higher-ranked item is offered it.
+            # Said as "reached", an agent waiting for the message to clear waited hours
+            # on an item `claim` would have granted at once (B40386f7a40).
+            names = ", ".join(i.id for i in taken)
+            why = (
+                f"held by {p.cap_note}: {live_note}; {slots} slot(s) free, offered to "
+                f"higher-ranked {names}"
+            )
+        else:
+            # `_blocking_leases` (api.lifecycle) keys on "cap reached".
+            why = f"{reached}; {live_note}"
+        # Any release frees a slot, so a cap-held item waits on every item in flight --
+        # named here, so that a waiter registers against all of them whatever the wording
+        # (the free-slot wording no longer says "cap reached").
+        holders = sorted(live_items)
+        for it in cut:
+            p.blocked.append(Blocked(it.id, "state", why, holders))
+            p.capped.append(it.id)
+    p.ready = taken
+
+
 def plan(
     state: State,
     cfg: Config,
@@ -783,27 +863,7 @@ def plan(
         live_note = f"{with_trees} worktrees live across the queue"
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
-    if len(p.ready) > slots:
-        if slots:
-            # NOT "cap reached": a slot is free, and a higher-ranked item is offered it.
-            # Said as "reached", an agent waiting for the message to clear waited hours
-            # on an item `claim` would have granted at once (B40386f7a40).
-            taken = ", ".join(i.id for i in p.ready[:slots])
-            why = (
-                f"held by {p.cap_note}: {live_note}; {slots} slot(s) free, offered to "
-                f"higher-ranked {taken}"
-            )
-        else:
-            # `_blocking_leases` (api.lifecycle) keys on "cap reached".
-            why = f"{reached}; {live_note}"
-        # Any release frees a slot, so a cap-held item waits on every item in flight --
-        # named here, so that a waiter registers against all of them whatever the wording
-        # (the free-slot wording no longer says "cap reached").
-        holders = sorted(live_items)
-        for it in p.ready[slots:]:
-            p.blocked.append(Blocked(it.id, "state", why, holders))
-            p.capped.append(it.id)
-        p.ready = p.ready[:slots]
+    _cut_ready(state, cfg, p, slots, live_items, live_note, reached)
     return p
 
 
