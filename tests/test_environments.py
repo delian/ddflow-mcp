@@ -198,3 +198,65 @@ def test_promotions_are_not_release_notes(envs):
     _land(repo, json.loads(out)["id"])
     _code, out, _ = run_cli(repo, "--json", "version", "show")
     assert not any(i.startswith("promote-") for i in json.loads(out)["items"])
+
+
+# -- what is live: the deploy hook records the deployed sha (B183) ------------------------
+
+
+def test_a_deploy_hook_records_the_sha_and_status_says_what_is_live(envs):
+    repo = envs
+    old = _git(repo, "rev-parse", "production")
+    code, out, err = run_cli(repo, "--json", "promote", "deployed", "production", "--sha", old)
+    assert code == 0, err
+    assert json.loads(out)["sha"] == old
+
+    code, out, _ = run_cli(repo, "--json", "promote", "status")
+    rows = {r["env"]: r for r in json.loads(out)["rows"]}
+    assert rows["production"]["deployed"] == old[:12]
+    assert rows["production"]["undeployed"] == 0 and rows["production"]["deployed_at"]
+    assert rows["pre-production"]["deployed"] == "", "no hook has reported for it"
+
+    # production's branch moves on (a promotion lands); what is LIVE has not.
+    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    _land(repo, "T1", edit=("a.py", "a\n"))
+    for env in ENVS:
+        code, out, err = run_cli(repo, "--json", "promote", "add", env)
+        assert code == 0, err
+        _land(repo, json.loads(out)["id"])
+    code, out, _ = run_cli(repo, "--json", "promote", "status")
+    prod = {r["env"]: r for r in json.loads(out)["rows"]}["production"]
+    assert prod["deployed"] == old[:12] and prod["undeployed"] >= 1, prod
+
+    code, out, err = run_cli(repo, "--json", "promote", "deployed", "production")
+    assert code == 0, err
+    assert json.loads(out)["sha"] == _git(repo, "rev-parse", "production"), "default: the head"
+    code, out, _ = run_cli(repo, "--json", "promote", "status")
+    prod = {r["env"]: r for r in json.loads(out)["rows"]}["production"]
+    assert prod["undeployed"] == 0
+
+
+def test_deployed_refuses_an_unknown_environment_and_a_sha_that_is_not_a_commit(envs):
+    repo = envs
+    code, _, err = run_cli(repo, "promote", "deployed", "staging")
+    assert code == 3 and "not an environment" in err, err
+    code, _, err = run_cli(repo, "promote", "deployed", "production", "--sha", "deadbeef" * 5)
+    assert code == 3 and "not a commit" in err, err
+
+
+def test_the_mcp_twin_records_the_same_deploy(envs):
+    from ddflow.surfaces.mcp import Server
+
+    repo = envs
+    head = _git(repo, "rev-parse", "production")
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "ddflow_promote_deployed", "arguments": {"env": "production"}},
+        }
+    )
+    assert not reply["result"].get("isError"), reply
+    _, out, _ = run_cli(repo, "--json", "promote", "status")
+    prod = {r["env"]: r for r in json.loads(out)["rows"]}["production"]
+    assert prod["deployed"] == head[:12]

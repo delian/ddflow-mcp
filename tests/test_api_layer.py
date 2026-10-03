@@ -350,6 +350,7 @@ TEXT_BODIED = {
 
 WRITES_NOT_COMPARABLE = {
     "ddflow_promote_add",
+    "ddflow_promote_deployed",  # appends a deploy record each call; pinned by tests/test_environments.py
     "ddflow_flow_choose",
     "ddflow_update",
     # Releases held work: a second call finds nothing blocked and exits 2. Its behaviour

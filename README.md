@@ -2747,7 +2747,10 @@ auto_promote = ["pre-production"]   # optional: continuous delivery to staging
 * **`auto_promote`** lists environments `ddflow next` promotes to by itself when the
   branch upstream moves. Empty by default: a deploy is the operator's call.
 * `ddflow promote status` shows each environment's head, how many commits it is behind
-  the branch upstream of it, and any open promotion.
+  the branch upstream of it, and any open promotion. The branch says what was *promoted*,
+  not what is *running*: have the deploy hook call `ddflow promote deployed production
+  --sha "$GIT_SHA"` (default: the branch head) and `status` adds `live <sha>` and how many
+  commits of the branch are not yet deployed — "what is live" answered exactly.
 
 ### Workflow choices: asked, recorded, defaulted on the record
 
@@ -3842,7 +3845,8 @@ ddflow version cut --changelog  also write the version's CHANGELOG.md section (-
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
 ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
 ddflow promote add <env>        file a promotion one step downstream (2 = nothing to carry)
-ddflow promote status           each environment: head, behind upstream, open promotion
+ddflow promote status           each environment: head, behind upstream, open promotion, live sha
+ddflow promote deployed <env>   record the sha a deploy put live (from the deploy hook; --sha, default the head)
 ddflow flow show                how this project works: model, lines, every choice + who made it
 ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)

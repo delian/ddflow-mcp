@@ -754,6 +754,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     pma.add_argument("env")
     pma.add_argument("--force", action="store_true", help="file it even with nothing to carry")
     pma.set_defaults(fn=cmd_promote)
+    pmd = pm_s.add_parser(
+        "deployed", help="record the sha a deploy put live in ENV (call it from the deploy hook)"
+    )
+    pmd.add_argument("env")
+    pmd.add_argument("--sha", default="", help="the deployed commit (default: ENV's branch head)")
+    pmd.set_defaults(fn=cmd_promote)
     pm_s.add_parser(
         "status", help="each environment: head, commits behind upstream, open promotion"
     ).set_defaults(fn=cmd_promote)
