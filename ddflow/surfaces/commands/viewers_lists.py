@@ -120,6 +120,7 @@ def register(s) -> None:
     required = [x for x in rs._actions if x.required and x.option_strings]
     for x in required:
         x.required = False
+        x.default = None  # so "not given" is None, and an empty value still counts as given
     add_fn = rs.get_default("fn")
 
     def research(a, c: Ctx) -> int:
@@ -127,7 +128,7 @@ def register(s) -> None:
             a.list_kind = "research"
             return cmd_list(a, c)
         for x in required:
-            if not getattr(a, x.dest):
+            if getattr(a, x.dest) is None:
                 rs.error(f"the following arguments are required: {x.option_strings[0]}")
         return add_fn(a, c)
 
