@@ -24,7 +24,7 @@ def add_verify_parser(sub) -> None:
     vf.add_argument("id", nargs="?", default="", help="one done task; omit with --all/--phase")
     vf.add_argument("--all", action="store_true", help="every done task, worst first")
     vf.add_argument("--phase", default="", help="every done task under this phase")
-    vf.add_argument("--limit", type=int, default=20, help="how many of the worst to list")
+    vf.add_argument("--limit", type=int, default=None, help="how many of the worst to list (20)")
     vf.add_argument(
         "--file-bugs", action="store_true", help="file a bug for each completion that does not hold"
     )
@@ -49,7 +49,9 @@ def _one(a, c: Ctx) -> int:
 
 
 def _sweep(a, c: Ctx) -> int:
-    out = verify_sweep(c.repo, phase=a.phase, limit=a.limit, file_bugs=a.file_bugs)
+    out = verify_sweep(
+        c.repo, phase=a.phase, limit=a.limit if a.limit is not None else 20, file_bugs=a.file_bugs
+    )
     if out.exit == FAIL and "checked" not in out.data:
         print(out.reason, file=sys.stderr)
         return FAIL
@@ -72,9 +74,10 @@ def _sweep(a, c: Ctx) -> int:
 
 def cmd_verify(a, c: Ctx) -> int:
     if a.id:
-        if a.file_bugs or a.all or a.phase:
+        if a.file_bugs or a.all or a.phase or a.limit is not None:
             print(
-                "--all, --phase and --file-bugs are for a sweep, not a single task", file=sys.stderr
+                "--all, --phase, --limit and --file-bugs are for a sweep, not a single task",
+                file=sys.stderr,
             )
             return FAIL
         return _one(a, c)

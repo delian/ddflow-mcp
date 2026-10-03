@@ -97,6 +97,8 @@ def test_the_cli_sweeps_with_all_and_phase_and_rejects_sweep_flags_on_one_task(r
     assert code == 1 and body["checked"] == 2 and len(body["worst"]) == 1
     code, _, err = run_cli(repo, "verify", "T-FALSE", "--file-bugs")
     assert code == 1 and "sweep" in err
+    code, _, err = run_cli(repo, "verify", "T-FALSE", "--limit", "1")
+    assert code == 1 and "sweep" in err
     code, _, err = run_cli(repo, "verify")
     assert code == 1 and "verify what" in err
     assert run_cli(repo, "verify", "--phase", "NOPE")[0] == 1
