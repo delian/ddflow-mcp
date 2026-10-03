@@ -150,7 +150,7 @@ def test_the_holder_line_wins_over_a_waiter_line(tmp_path, monkeypatch):
         "read_text",
         _lines_for(
             lock,
-            "2: -> FLOCK ADVISORY WRITE 777 {want} 0 EOF",
+            "2:-> FLOCK ADVISORY WRITE 777 {want} 0 EOF",  # first, and the old guard took it
             "1: FLOCK ADVISORY WRITE 4242 {want} 0 EOF",
         ),
     )
