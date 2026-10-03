@@ -92,3 +92,13 @@ def test_mcp_history_reaches_agent_and_tail(repo):
     _two_agents(repo)
     out = api.history(repo, by_agent="beta", tail=2)
     assert [e["data"]["reason"] for e in out.data["events"]] == ["beta reason 1", "beta reason 2"]
+
+
+def test_json_truncates_nested_payloads_too(repo):
+    run_cli(repo, "init")
+    _shard(repo, "alpha", [{"data": {"p": {"log": "y" * 5000}, "c": ["z" * 5000]}}])
+    code, out, _ = run_cli(repo, "--json", "history", "--agent", "alpha")
+    assert code == 0
+    ev = json.loads(out)["events"][0]
+    assert len(ev["data"]["p"]["log"]) < 1000 and len(ev["data"]["c"][0]) < 1000
+    assert ev["truncated"] is True

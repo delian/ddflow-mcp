@@ -481,20 +481,26 @@ def _history_line(ev) -> str:
 _JSON_FIELD_CAP = 500
 
 
+def _cap(v, hit: list[bool]):
+    """`v` with every string longer than the cap cut (recursing into dicts and lists)."""
+    if isinstance(v, str) and len(v) > _JSON_FIELD_CAP:
+        hit.append(True)
+        return f"{v[:_JSON_FIELD_CAP]}... [truncated {len(v) - _JSON_FIELD_CAP} chars]"
+    if isinstance(v, dict):
+        return {k: _cap(x, hit) for k, x in v.items()}
+    if isinstance(v, list):
+        return [_cap(x, hit) for x in v]
+    return v
+
+
 def _bounded_events(events: list[dict]) -> list[dict]:
-    """Copies of the events with any oversized string in `data` truncated, marked
-    `truncated: true` on the event so a reader knows the payload is not whole."""
+    """Copies of the events with any oversized string in `data` cut, however deeply nested,
+    and `truncated: true` on the event so a reader knows the payload is not whole."""
     out = []
     for e in events:
-        cut = False
-        data = {}
-        for k, v in (e.get("data") or {}).items():
-            if isinstance(v, str) and len(v) > _JSON_FIELD_CAP:
-                data[k] = f"{v[:_JSON_FIELD_CAP]}... [truncated {len(v) - _JSON_FIELD_CAP} chars]"
-                cut = True
-            else:
-                data[k] = v
-        out.append({**e, "data": data, **({"truncated": True} if cut else {})})
+        hit: list[bool] = []
+        data = _cap(e.get("data") or {}, hit)
+        out.append({**e, "data": data, **({"truncated": True} if hit else {})})
     return out
 
 
