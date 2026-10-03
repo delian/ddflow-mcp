@@ -206,117 +206,49 @@ def _workflow_drop(a, c: Ctx) -> int:
 
 
 def _workflow_state(a, c: Ctx) -> int:
-    """Report comprehensive workflow state."""
+    """The one-page overview: workflow, rules, decisions, queue, bugs."""
     from ...api.workflow_state import workflow_state
 
     out = workflow_state(c.repo)
     if c.json:
         print(json.dumps(out.data, indent=2, default=str))
         return out.exit
-
-    # Render comprehensive prose overview
-    overview = out.data.get("overview", {})
+    o = out.data
+    wf, q, proj = o["workflow"], o["task_queue"], o["project"]
     lines = [
-        "# Workflow State Overview",
+        "# Workflow state",
         "",
-        "## Configuration",
-        f"- Flow type: {overview.get('workflow', {}).get('type')}",
-        f"- Max parallel: {overview.get('workflow', {}).get('max_parallel_tasks')}",
+        f"- Flow: {wf['model']} / {wf['integration']}; max parallel tasks {wf['max_parallel_tasks']}",
+        f"- Task pipeline: {' -> '.join(wf['task_pipeline'])}",
+        f"- Rules: {o['rules']['total']} {o['rules']['by_scope'] or ''}".rstrip(),
+        f"- Decisions in force: {o['decisions']['active']}",
+        f"- Active leases: {o['active_work']['active_leases']}",
+        f"- Phases {proj['phases']}; tasks {proj['tasks']}; open bugs {proj['bugs_open']}",
         "",
-        "## Workflow State Machine",
-        overview.get('workflow_diagram', '(unavailable)'),
+        "```mermaid",
+        o["workflow_diagram"],
+        "```",
         "",
-        "## Rules",
-        f"- Total: {overview.get('rules', {}).get('total', 0)}",
-        f"- By scope: {overview.get('rules', {}).get('by_scope', {})}",
+        f"## Ready ({q['ready_total']})",
+        *[f"  - {t['id']}: {t['title']} [priority {t['priority']}]" for t in q["ready"]],
+        f"## In progress ({len(q['in_progress'])})",
+        *[f"  - {t['id']}: {t['title']}" for t in q["in_progress"]],
+        f"## Blocked ({q['blocked_total']})",
+        *[
+            f"  - {b['id']}: {b['reason']} {', '.join(b['waiting_on'])}".rstrip()
+            for b in q["blocked"]
+        ],
+        f"## Open bugs ({o['bugs']['total_open']})",
+        *[
+            f"  - {b['id']} [{b['severity']}] {b['title']}"
+            + (f" (fix: {b['fix_task']})" if b["fix_task"] else "")
+            for b in o["bugs"]["open"]
+        ],
         "",
-        "## Architecture Decisions",
-        f"- Active: {overview.get('decisions', {}).get('active', 0)}",
-        "",
-        "## Active Work",
-        f"- Leases: {overview.get('active_work', {}).get('active_leases', 0)}",
-        f"- In progress: {overview.get('active_work', {}).get('items_in_progress', 0)}",
-        "",
-        "## Project",
-        f"- Phases: {overview.get('project', {}).get('phases', 0)}",
-        f"- Tasks: {overview.get('project', {}).get('tasks', {})}",
-        f"- Open bugs: {overview.get('project', {}).get('bugs_open', 0)}",
-        "",
+        "Ask for more:",
+        *[f"  - {h}" for h in o["discovery_hints"]],
     ]
-
-    # Task queue with details
-    task_queue = overview.get("task_queue", {})
-    lines.extend([
-        "## Task Queue",
-        f"### Ready ({len(task_queue.get('ready', []))})",
-    ])
-    for task in task_queue.get("ready", []):
-        lines.append(
-            f"  - {task['id']}: {task['title']} "
-            f"[priority: {task['priority']}, phase: {task['phase']}]"
-        )
-    if not task_queue.get("ready"):
-        lines.append("  (no ready tasks)")
-
-    lines.append(f"### In Progress ({len(task_queue.get('in_progress', []))})")
-    for task in task_queue.get("in_progress", []):
-        lines.append(
-            f"  - {task['id']}: {task['title']} "
-            f"[priority: {task['priority']}, phase: {task['phase']}]"
-        )
-    if not task_queue.get("in_progress"):
-        lines.append("  (no tasks in progress)")
-
-    lines.append(f"### Blocked ({len(task_queue.get('blocked', []))})")
-    for task in task_queue.get("blocked", []):
-        blocked_by = task.get("blocked_by", "unknown")
-        lines.append(
-            f"  - {task['id']}: {task['title']} "
-            f"[blocked by: {blocked_by}, priority: {task['priority']}]"
-        )
-    if not task_queue.get("blocked"):
-        lines.append("  (no blocked tasks)")
-
-    lines.append("")
-
-    # Bugs with priorities
-    bugs = overview.get("bugs", {})
-    lines.extend([
-        "## Open Bugs",
-        f"Total open: {bugs.get('total_open', 0)}",
-        f"### Next to Fix ({len(bugs.get('open', []))})",
-    ])
-    for bug in bugs.get("open", []):
-        fix_info = f" [fix task: {bug['fix_task']}]" if bug.get("fix_task") else " [no fix task]"
-        lines.append(
-            f"  - {bug['id']}: {bug['subject']} "
-            f"[priority: {bug['priority']}]{fix_info}"
-        )
-    if not bugs.get("open"):
-        lines.append("  (no open bugs)")
-
-    lines.append(f"### In Progress ({len(bugs.get('in_progress', []))})")
-    for bug in bugs.get("in_progress", []):
-        lines.append(
-            f"  - {bug['id']}: {bug['subject']} "
-            f"[priority: {bug['priority']}, fix task: {bug.get('fix_task', 'N/A')}]"
-        )
-
-    lines.extend([
-        "",
-        "## Blockers",
-        f"- Count: {overview.get('blockers', {}).get('count', 0)}",
-    ])
-
-    lines.extend([
-        "",
-        "## Discovery",
-        "Ask for more details:",
-    ])
-    for hint in overview.get("discovery_hints", []):
-        lines.append(f"  - {hint}")
-
-    c.out("workflow state", "\n".join(lines))
+    print("\n".join(lines))
     return out.exit
 
 

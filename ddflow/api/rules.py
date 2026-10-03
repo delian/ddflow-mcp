@@ -73,14 +73,16 @@ def rule_dedup_check(
     for rule in existing_rules:
         score = rule.similarity_score(content)
         if score >= threshold:
-            candidates.append({
-                "id": rule.id,
-                "title": rule.title,
-                "score": score,
-                "scope": rule.scope,
-                "tags": rule.tags,
-                "overlap": _get_overlap_terms(content, rule.content),
-            })
+            candidates.append(
+                {
+                    "id": rule.id,
+                    "title": rule.title,
+                    "score": score,
+                    "scope": rule.scope,
+                    "tags": rule.tags,
+                    "overlap": _get_overlap_terms(content, rule.content),
+                }
+            )
 
     # Sort by score descending
     candidates.sort(key=lambda c: -c["score"])
@@ -288,14 +290,17 @@ def apply_rule_update(
 
         # Perform the storage operation
         if existing:
-            rule, event_fields = storage.update(rule.id, **{
-                "title": rule.title,
-                "content": rule.content,
-                "tags": rule.tags,
-                "scope": rule.scope,
-                "priority": rule.priority,
-                "globs": rule.globs,
-            })
+            rule, event_fields = storage.update(
+                rule.id,
+                **{
+                    "title": rule.title,
+                    "content": rule.content,
+                    "tags": rule.tags,
+                    "scope": rule.scope,
+                    "priority": rule.priority,
+                    "globs": rule.globs,
+                },
+            )
         else:
             rule, event_fields = storage.add(rule)
 
@@ -317,6 +322,23 @@ def apply_rule_update(
             f"Failed to {operation} rule: {exc}",
             id=rule.id,
         )
+
+
+def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
+    """Refuse a new rule that breaks the project's [rules] limits."""
+    cfg = _load(repo, agent)[1]
+    problem = ""
+    if len(rule.content.encode("utf-8")) > cfg.rules.max_size_bytes:
+        problem = f"content is over rules.max_size_bytes ({cfg.rules.max_size_bytes})"
+    elif rule.scope not in cfg.rules.scopes_allowed:
+        problem = f"scope {rule.scope!r} is not in rules.scopes_allowed {cfg.rules.scopes_allowed}"
+    elif cfg.rules.tags_allowed and (
+        bad := [t for t in rule.tags if t not in cfg.rules.tags_allowed]
+    ):
+        problem = f"tags {bad} are not in rules.tags_allowed {cfg.rules.tags_allowed}"
+    elif len(RulesStorage(repo).list()) >= cfg.rules.max_rules:
+        problem = f"the project already has rules.max_rules ({cfg.rules.max_rules}) rules"
+    return O.refused("rule.added", problem) if problem else None
 
 
 def rule_add(
@@ -341,6 +363,9 @@ def rule_add(
     Returns:
         Outcome with rule_id and other details, or refusal if duplicate found
     """
+    refusal = _over_limits(repo, rule, agent)
+    if refusal is not None:
+        return refusal
     if not check_dedup:
         return apply_rule_update(repo, rule, agent=agent, operation="created")
 
@@ -362,8 +387,7 @@ def rule_add(
             f"Possible duplicate rule. It reads like:\n"
             + "\n".join(
                 f"  {c['id']} ({c['scope']}, score {c['score']:.2f}): "
-                f"{c['title']}"
-                + (f" [{', '.join(c['overlap'])}]" if c['overlap'] else "")
+                f"{c['title']}" + (f" [{', '.join(c['overlap'])}]" if c["overlap"] else "")
                 for c in candidates
             )
             + f"\n\nAnswer: new (different rule), extends {candidates[0]['id']} "
@@ -479,14 +503,10 @@ def rule_get(repo: Path, rule_id: str) -> O.Outcome:
 
         # Handle timestamps that might be datetime or string
         created_str = (
-            rule.created.isoformat()
-            if hasattr(rule.created, "isoformat")
-            else str(rule.created)
+            rule.created.isoformat() if hasattr(rule.created, "isoformat") else str(rule.created)
         )
         updated_str = (
-            rule.updated.isoformat()
-            if hasattr(rule.updated, "isoformat")
-            else str(rule.updated)
+            rule.updated.isoformat() if hasattr(rule.updated, "isoformat") else str(rule.updated)
         )
 
         return O.ok(
