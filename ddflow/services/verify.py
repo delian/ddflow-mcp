@@ -28,12 +28,14 @@ from ..config import Config
 from ..core.events import Event
 from ..core.model import State
 from ..core.schedule import conflicts
+from . import gates as G
 from . import ledger as LG
 
 OK, WARN, FAIL, UNKNOWN = "ok", "warn", "fail", "unknown"
 _WILD = re.compile(r"[*?\[]")
 _DOCS = re.compile(r"\.(md|rst|txt|json|toml|ya?ml|lock|csv)$|(^|/)docs?/", re.I)
 SHOWN = 6
+_MIN_SUBJECT = 12  # shorter subjects ("fix", "wip") identify nothing
 
 
 @dataclass
@@ -106,6 +108,24 @@ def _trim(names: Sequence[str]) -> str:
     return shown + (f" (+{len(names) - SHOWN} more)" if len(names) > SHOWN else "")
 
 
+def _rewritten_twin(repo: Path, sha: str, branches: list[str]) -> str:
+    """A commit on one of `branches` with the recorded commit's subject, or "".
+
+    A rebase or history rewrite gives the same work a new hash; the recorded one then
+    survives only on an old branch. The subject is a weak identity, so this only softens a
+    failure to a warning, never to ok."""
+    from ..infra.worktree import git
+
+    subj = git(repo, "log", "-1", "--format=%s", sha, timeout=60)
+    if not subj.ok or len(subj.out) < _MIN_SUBJECT:
+        return ""
+    for br in branches:
+        r = git(repo, "log", "-1", "--format=%H", "-F", f"--grep={subj.out}", br, timeout=60)
+        if r.ok and r.out:
+            return r.out
+    return ""
+
+
 def _landed(repo: Path, cfg: Config, led: dict[str, Any]) -> Claim:
     from ..infra.worktree import default_branch
 
@@ -137,6 +157,14 @@ def _landed(repo: Path, cfg: Config, led: dict[str, Any]) -> Claim:
             )
     elif on[prod]:
         return Claim("landed", OK, f"{sha[:10]} is on {prod}")
+    twin = _rewritten_twin(repo, sha, list(on))
+    if twin:
+        return Claim(
+            "landed",
+            WARN,
+            f"{sha[:10]} is not on {', '.join(on)}, but a commit with the same subject is "
+            f"({twin[:10]}): history was rewritten since",
+        )
     return Claim("landed", FAIL, f"{sha[:10]} exists but is on none of {', '.join(on)}")
 
 
@@ -197,23 +225,32 @@ def _regression(st: State, item_id: str, tracked: set[str] | None) -> Claim | No
     return Claim("regression", OK, f"{len(bugs)} bug(s) closed with a regression test that exists")
 
 
-def _gates(cfg: Config, led: dict[str, Any]) -> Claim:
+def _gates(cfg: Config, led: dict[str, Any], pipeline: Sequence[str]) -> Claim:
+    """What `complete` itself enforces, asked again of the record: every pipeline gate
+    carries an outcome, every required gate PASSED, and a skip has a reason. A failed
+    gate that is not required (a review whose findings were triaged) does not block a
+    completion, so it is a note here, not a failure."""
     gates = led["gates"]
-    bad = [g for g, v in gates.items() if v["outcome"] == "failed"]
+    silent = [g for g in pipeline if g not in gates] if cfg.gates.require_outcome else []
+    required_bad = [
+        g
+        for g in cfg.gates.required
+        if g in pipeline and gates.get(g, {}).get("outcome") != "passed"
+    ]
     unreasoned = [g for g, v in gates.items() if v["outcome"] == "skipped" and not v.get("reason")]
-    missing = [g for g in cfg.gates.required if g not in gates]
-    if bad or unreasoned or missing:
+    if silent or required_bad or unreasoned:
         parts = []
-        if bad:
-            parts.append(f"failed: {_trim(bad)}")
+        if required_bad:
+            parts.append(f"required gate(s) not passed: {_trim(required_bad)}")
+        if silent:
+            parts.append(f"never run and never skipped: {_trim(silent)}")
         if unreasoned:
             parts.append(f"skipped with no reason: {_trim(unreasoned)}")
-        if missing:
-            parts.append(f"required but never recorded: {_trim(missing)}")
         return Claim("gates", FAIL, "; ".join(parts))
-    soft = [g for g, v in gates.items() if v["outcome"] in ("unavailable", "partial")]
     notes = []
-    if soft:
+    if failed := [g for g, v in gates.items() if v["outcome"] == "failed"]:
+        notes.append(f"failed but not required: {_trim(failed)}")
+    if soft := [g for g, v in gates.items() if v["outcome"] in ("unavailable", "partial")]:
         notes.append(f"unavailable/partial: {_trim(soft)}")
     if led["forced"]:
         notes.append(
@@ -221,7 +258,7 @@ def _gates(cfg: Config, led: dict[str, Any]) -> Claim:
         )
     if notes:
         return Claim("gates", WARN, "; ".join(notes))
-    return Claim("gates", OK, f"{len(gates)} gate(s) recorded, none failed")
+    return Claim("gates", OK, f"{len(gates)} gate(s) recorded, none blocking")
 
 
 def _survives(led: dict[str, Any], tracked: set[str] | None) -> Claim:
@@ -238,17 +275,45 @@ def _survives(led: dict[str, Any], tracked: set[str] | None) -> Claim:
     return Claim("survives", OK, f"all {len(files)} changed file(s) still exist")
 
 
-def check(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: str) -> Report:
-    """Verify one item's completion. A not-done item is reported as such, not as a failure."""
+def check(
+    repo: Path,
+    cfg: Config,
+    st: State,
+    events: Sequence[Event],
+    item_id: str,
+    *,
+    tracked: set[str] | str | None = "read",
+) -> Report:
+    """Verify one item's completion. A not-done item is reported as such, not as a failure.
+
+    `tracked` lets a sweep read `git ls-files` once for all its items."""
     led = LG.build(events, item_id)
     if led is None:
         return Report(item_id, completed=False)
-    tracked = _tracked(repo)
+    if tracked == "read":
+        tracked = _tracked(repo)
+    if led["imported"]:
+        # Closed in a document before ddflow existed: there is no landing, gate history or
+        # file list to check, and saying "no gates ran" would accuse work nobody recorded.
+        # What CAN still be checked is a declared file that never existed.
+        note = led["import_evidence"] or "no evidence recorded"
+        return Report(
+            item_id,
+            [
+                _declared(repo, led, tracked),
+                Claim(
+                    "ledger",
+                    UNKNOWN,
+                    f"imported as already closed ({note}); no gate or landing history",
+                ),
+            ],
+        )
+    pipeline = G.pipeline_for(st.items[item_id], cfg) if item_id in st.items else []
     claims = [
         _landed(repo, cfg, led),
         _declared(repo, led, tracked),
         _tests(led, tracked),
-        _gates(cfg, led),
+        _gates(cfg, led, pipeline),
         _survives(led, tracked),
     ]
     if reg := _regression(st, item_id, tracked):
@@ -262,3 +327,57 @@ def check(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: 
             Claim("ledger", UNKNOWN, "completed before ledgers existed; rebuilt from the log")
         )
     return Report(item_id, claims)
+
+
+#: How much each kind of finding weighs in a sweep's ranking: a failed claim dwarfs any
+#: number of notes, so the worst completions are listed first whatever the count of items.
+_WEIGHT = {FAIL: 100, UNKNOWN: 10, WARN: 3}
+
+
+def suspicion(rep: Report) -> int:
+    return sum(_WEIGHT.get(c.status, 0) for c in rep.claims)
+
+
+@dataclass
+class Sweep:
+    checked: int
+    counts: dict[str, int]
+    worst: list[tuple[int, Report]]
+
+    def as_data(self, limit: int) -> dict[str, Any]:
+        shown = self.worst[:limit]
+        return {
+            "checked": self.checked,
+            "counts": self.counts,
+            "shown": len(shown),
+            "worst": [
+                {
+                    "item": r.item,
+                    "verdict": r.verdict,
+                    "score": score,
+                    "problems": [
+                        {"id": c.id, "status": c.status, "detail": c.detail}
+                        for c in r.claims
+                        if c.status != OK
+                    ],
+                }
+                for score, r in shown
+            ],
+        }
+
+
+def sweep(
+    repo: Path, cfg: Config, st: State, events: Sequence[Event], items: Sequence[str]
+) -> Sweep:
+    """Check every item, most suspicious first. Git's file list is read once."""
+    tracked = _tracked(repo)
+    counts = {"holds": 0, "holds with notes": 0, "cannot tell": 0, "does not hold": 0}
+    ranked: list[tuple[int, Report]] = []
+    for item in items:
+        rep = check(repo, cfg, st, events, item, tracked=tracked)
+        if not rep.completed:
+            continue
+        counts[rep.verdict] += 1
+        ranked.append((suspicion(rep), rep))
+    ranked.sort(key=lambda t: (-t[0], t[1].item))
+    return Sweep(sum(counts.values()), counts, [t for t in ranked if t[0] > 0])

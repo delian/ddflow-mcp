@@ -98,6 +98,8 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
         "completed_by": done.agent,
         "sha": done.data.get("sha", ""),
         "forced": bool(done.data.get("forced")),
+        "imported": bool(done.data.get("imported")),
+        "import_evidence": str(done.data.get("evidence") or "")[:200],
         "overridden": list(done.data.get("overridden") or []),
         "requirement": {
             "title": it.title,
