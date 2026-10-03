@@ -609,6 +609,11 @@ def _apply(
         rep.changes.append(Change(it.id, "changes_requested", info.feedback[:200], info.url))
         return
     was_queued = bool(it.pr and it.pr.queue)
+    if not info.queue_known and it.pr is not None:
+        # The queue could not be asked this time: keep what was last seen rather than
+        # reading silence as "ejected" (and then merging a request that is still queued).
+        info.queue = it.pr.queue
+        info.queue_position, info.queue_state = it.pr.queue_position, it.pr.queue_state
     moved = _changed(it, info)
     if moved:
         log.append("pr.synced", it.id, data)

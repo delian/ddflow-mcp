@@ -89,7 +89,7 @@ def merge_on_remote(st: dict, pr: dict, how: str = "--merge") -> str:
     return sha
 
 
-def main(argv: list[str]) -> int:  # noqa: C901 -- one branch per faked verb
+def main(argv: list[str]) -> int:  # noqa: C901, PLR0911 -- one branch per faked verb
     path = Path(os.environ[STATE_ENV])
     st = _load(path)
     st.setdefault("calls", []).append(argv)
@@ -144,8 +144,8 @@ def main(argv: list[str]) -> int:  # noqa: C901 -- one branch per faked verb
             return done(1, err="head branch was modified")
         if st.get("merge_queue"):
             # A queue-protected branch: the merge ENQUEUES, and the request stays open.
-            waiting = [p for p in prs if p.get("queue")]
-            pr["queue"] = {"position": len(waiting) + 1, "state": "QUEUED"}
+            st["queue_seq"] = st.get("queue_seq", 0) + 1
+            pr["queue"] = {"seq": st["queue_seq"], "state": "QUEUED"}
             return done(out=f"Pull request #{pr['number']} will be added to the merge queue")
         how = next((f for f in ("--merge", "--squash", "--rebase") if f in argv), "--merge")
         merge_on_remote(st, pr, how)
@@ -158,6 +158,13 @@ def main(argv: list[str]) -> int:  # noqa: C901 -- one branch per faked verb
         number = int(next(a for a in argv if a.startswith("number=")).split("=", 1)[1])
         pr = next(p for p in prs if p["number"] == number)
         entry = pr.get("queue")
+        if st.get("graphql_down"):
+            return done(1, err="API rate limit exceeded")
+        if entry:
+            # Position is the entry's rank among those still queued, so it moves up as
+            # entries land or are ejected -- like the real queue's.
+            ahead = [p for p in prs if p.get("queue") and p["queue"]["seq"] < entry["seq"]]
+            entry = {"position": len(ahead) + 1, "state": entry["state"]}
         return done(
             out=json.dumps(
                 {
