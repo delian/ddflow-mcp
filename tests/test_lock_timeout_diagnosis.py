@@ -118,12 +118,20 @@ def test_the_note_is_one_fixed_size_write(tmp_path):
 
 
 def test_the_reader_never_shows_bytes_past_the_note(tmp_path):
-    """Between a writer's pwrite and its trim, the file holds a new note followed by the
-    tail of an older, longer one; the reader takes the note's bytes only."""
+    """The note is one line. Bytes after it (the tail of an older, longer note, seen in the
+    window between a writer's pwrite and its trim) are not part of it."""
     from ddflow.infra.log import _holder_note
 
     lock = tmp_path / "events.lock"
-    note = b"pid 1 1700000000.0 ddflow new".ljust(255) + b"\n"
-    lock.write_bytes(note + b"STALE-TAIL-OF-AN-OLDER-NOTE" * 5)
+    lock.write_bytes(b"pid 1 1700000000.0 ddflow new\n" + b"STALE-TAIL-OF-AN-OLDER-NOTE" * 5)
     out = _holder_note(lock)
     assert "ddflow new" in out and "STALE" not in out, out
+
+
+def test_the_reader_stops_at_the_note_size_when_there_is_no_newline(tmp_path):
+    from ddflow.infra.log import _holder_note
+
+    lock = tmp_path / "events.lock"
+    lock.write_bytes(b"pid 1 1700000000.0 " + b"Q" * 400)
+    out = _holder_note(lock)
+    assert out.count("Q") <= 200  # the command is cut, and never longer than the bound

@@ -612,7 +612,7 @@ def _holder_note(path: Path) -> str:
             "rb"
         ) as fh:  # bounded: bytes past the note are a stale tail, never part of it
             raw = fh.read(_NOTE_BYTES)
-        parts = raw.decode("utf-8", "replace").split(None, 3)
+        parts = raw.split(b"\n", 1)[0].decode("utf-8", "replace").split(None, 3)  # one line
         if (
             len(parts) < _NOTE_FIELDS
             or parts[0] != "pid"
