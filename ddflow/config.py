@@ -170,6 +170,7 @@ class FlowConfig:
     integration: str = "merge"  # merge | pr
     forge: str = "auto"  # auto | github | gitlab
     remote: str = "origin"
+    claims: str = "local"  # local | remote
     develop_branch: str = "develop"
     production_branch: str = ""  # "" = the repo's default branch
     feature_prefix: str = "feature/"
@@ -213,6 +214,11 @@ _doc(
     "flow",
     "remote",
     "The git remote branches are pushed to and tags are published on.",
+)
+_doc(
+    "flow",
+    "claims",
+    "'local' (default): a claim is an event in this clone's log, so two offline clones can both claim one item (detected afterwards as 'contested'). 'remote': a claim also creates refs/ddflow/claims/<id> on `remote` by compare-and-swap, so only one clone wins while online; release, complete and expiry delete it and a heartbeat extends it. A refused claim names the holder; an unreachable remote refuses the claim (never silently local).",
 )
 _doc(
     "flow",

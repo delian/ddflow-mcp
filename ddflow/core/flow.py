@@ -131,6 +131,7 @@ def problems(cfg: Config) -> list[str]:
         ("pr_merge", fc.pr_merge, PR_MERGE),
         ("on_changes_requested", fc.on_changes_requested, ON_CHANGES),
         ("forge", fc.forge, FORGES),
+        ("claims", fc.claims, ("local", "remote")),
     ):
         if value not in allowed:
             out.append(f"[flow].{knob} = {value!r} is not one of {', '.join(allowed)}")
