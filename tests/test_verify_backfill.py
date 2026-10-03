@@ -122,3 +122,28 @@ def test_a_contemporaneous_ledger_is_never_replaced_by_a_search(repo):
     )  # fmt: skip
     cl = _claims(verify(repo, "T1"))
     assert "ledger" not in cl  # a stored ledger needs no reconstruction note
+
+
+def test_only_the_way_merge_names_an_item_counts_as_its_landing(repo):
+    _setup(repo)
+    _commit(repo, {"x.py": "1\n"}, "T1 experiments")
+    _commit(repo, {"y.py": "1\n"}, "t1: lowercase is another id")
+    _old_completion(repo, imported=True, evidence="closed")
+    assert "landed" not in _claims(verify(repo, "T1"))
+    _commit(repo, {"w.py": "1\n"}, "T1: add the widget")
+    assert _claims(verify(repo, "T1"))["landed"]["status"] == "ok"
+
+
+def test_a_recorded_sha_that_is_not_a_commit_falls_back_to_the_search_and_pairs_consistently(repo):
+    _setup(repo)
+    found = _commit(
+        repo,
+        {"w.py": "1\n", "tests/test_w.py": "def test_w():\n    pass\n"},
+        "merge T1: add the widget",
+    )
+    _old_completion(
+        repo, sha="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", imported=True, evidence="closed"
+    )
+    cl = _claims(verify(repo, "T1"))
+    assert cl["landed"]["status"] == "ok" and found[:10] in cl["landed"]["detail"]
+    assert cl["survives"]["status"] == "ok"
