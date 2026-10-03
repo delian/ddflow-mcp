@@ -1448,7 +1448,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: (
             (
                 _api().refuse_sweep_args()
-                if (a.get("phase") or a.get("limit") or a.get("file_bugs"))
+                if (a.get("phase") or a.get("limit") is not None or a.get("file_bugs"))
                 else _api().verify_item(repo, a["id"], agent=agent)
             )
             if a.get("id")

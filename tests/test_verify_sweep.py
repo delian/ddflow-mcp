@@ -138,7 +138,19 @@ def test_default_valued_sweep_arguments_with_an_id_are_not_a_refusal(repo):
     reply = Server(repo).handle(
         {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
          "params": {"name": "ddflow_verify",
-                    "arguments": {"id": "T-GOOD", "phase": "", "limit": 0, "file_bugs": False}}}
+                    "arguments": {"id": "T-GOOD", "phase": "", "file_bugs": False}}}
     )  # fmt: skip
     text = reply["result"]["content"][0]["text"]
     assert "for a sweep" not in text and "T-GOOD" in text
+
+
+def test_an_explicit_limit_with_an_id_is_refused_on_both_surfaces_whatever_its_value(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _project(repo)
+    assert run_cli(repo, "verify", "T-GOOD", "--limit", "20")[0] == 1
+    reply = Server(repo).handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "ddflow_verify", "arguments": {"id": "T-GOOD", "limit": 0}}}
+    )  # fmt: skip
+    assert "for a sweep" in reply["result"]["content"][0]["text"]
