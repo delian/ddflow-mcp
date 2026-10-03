@@ -113,9 +113,19 @@ def status(repo: Path, cfg: Config, st: State) -> list[dict[str, Any]]:
             if i.promote_to == env and i.state == DONE and not i.removed
         ]
         last = max(done, key=lambda i: i.completed_at) if done else None
+        dep = st.deployments.get(env)
+        live = dep["sha"] if dep else ""
+        head = W.rev(repo, ref)
+        undeployed = -1
+        if live and head:
+            r = W.git(repo, "rev-list", "--count", f"{live}..{head}")
+            undeployed = int(r.out) if r.ok and r.out.isdigit() else -1
         rows.append(
             {
                 "env": env,
+                "deployed": live[:12],
+                "deployed_at": dep["at"] if dep else "",
+                "undeployed": undeployed,
                 "from": up,
                 "exists": bool(W.rev(repo, ref)),
                 "head": W.rev(repo, ref)[:12],
@@ -127,6 +137,25 @@ def status(repo: Path, cfg: Config, st: State) -> list[dict[str, Any]]:
             }
         )
     return rows
+
+
+def deployed(repo: Path, cfg: Config, log: EventLog, env: str, *, sha: str = "") -> dict[str, Any]:
+    """Record that ``sha`` is what is now RUNNING in ``env`` (a deploy hook calls this).
+
+    Defaults to the environment branch's head. Raises PromotionError for an environment
+    that is not in the chain or a ``sha`` that is not a commit here.
+    """
+    chain = F.env_chain(cfg, W.default_branch(repo))
+    if env not in chain[1:]:
+        raise PromotionError(
+            f"{env!r} is not an environment ({', '.join(chain[1:]) or 'none configured'})"
+        )
+    full = W.rev(repo, sha) if sha else W.rev(repo, FS._ref(repo, cfg, env))
+    if not full:
+        what = f"{sha!r} is not a commit in this repository" if sha else f"branch {env} is missing"
+        raise PromotionError(what)
+    log.append("deploy.recorded", env, {"env": env, "sha": full})
+    return {"env": env, "sha": full}
 
 
 def apply(repo: Path, cfg: Config, tree: Path, it: Item) -> dict[str, Any]:

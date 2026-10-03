@@ -160,6 +160,15 @@ def cmd_promote(a, c: Ctx) -> int:
             f"Claim it like any task; it lands on {d['env']} after the promotion gates."
         )
         return OK
+    if a.promote_cmd == "deployed":
+        out = A.promote_deployed(c.repo, a.env, sha=a.sha, agent=c.requested_agent)
+        if c.json:
+            return _emit_json(out)
+        if out.exit != OK:
+            print(out.reason, file=sys.stderr)
+            return out.exit
+        print(f"{out.data['env']}: live is now {out.data['sha'][:12]}")
+        return OK
     out = A.promote_status(c.repo, agent=c.requested_agent)
     if c.json:
         return _emit_json(out)
@@ -173,5 +182,11 @@ def cmd_promote(a, c: Ctx) -> int:
         behind = "up to date" if r["behind"] == 0 else f"{r['behind']} commit(s) behind {r['from']}"
         extra = f"; open: {', '.join(r['open'])}" if r["open"] else ""
         auto = " [auto]" if r["auto"] else ""
-        print(f"  {r['env']:<16} {r['head']}  {behind}{extra}{auto}")
+        if r["deployed"]:
+            n = r["undeployed"]
+            note = f" ({n} undeployed)" if n > 0 else " (undeployed count unknown)" if n < 0 else ""
+            live = f"  live {r['deployed']}{note}"
+        else:
+            live = ""
+        print(f"  {r['env']:<16} {r['head']}  {behind}{extra}{auto}{live}")
     return OK
