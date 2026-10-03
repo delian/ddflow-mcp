@@ -160,6 +160,7 @@ the same implementation, so neither drifts from the other.
 | I want to… | CLI | MCP tool |
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
+| **what a finished task required and changed** | `ddflow show <id>` on a done task prints its completion ledger: requirement digest, files and tests the landing changed, skipped gates, forced flag, later amendments | `ddflow_show` |
 | **one-page state of the project** | `ddflow workflow state` | `ddflow_workflow_state` |
 | **project rules** | `ddflow rule add\|edit\|list\|search\|show\|remove` | `ddflow_rule_add` · `_edit` · `_list` · `_search` · `_show` · `_remove` |
 | **change the workflow** | `ddflow workflow pipeline task …` · `workflow gate <id> …` · `workflow drop <id>` | `ddflow_workflow_pipeline` · `_gate` · `_drop` |
@@ -179,6 +180,7 @@ the same implementation, so neither drifts from the other.
 | **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
+| **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
@@ -1309,6 +1311,18 @@ launch command which fails mid-task, at the moment a gate told the agent to reac
 it. Detection is read-only and bounded — and when it has not run, the state is reported
 as **unknown**, not as absent. `ddflow companions` probes; the MCP handshake does not,
 because making an agent wait on `npx` before it can do anything is the wrong trade.
+
+**Verifying that a companion is a server.** Detection says a binary of that name exists;
+it cannot say the binary speaks MCP (B113 was a registry entry whose launch command was
+not a server at all). `ddflow companions --verify` (MCP: `ddflow_companions_verify`)
+spawns each MCP companion's `command args`, sends a JSON-RPC `initialize` on stdio and
+requires a response, then stops it. A response, even a JSON-RPC error, is `speaks_mcp`;
+a missing command, an early exit, or a binary that only echoes the request back (`cat`)
+is `not_mcp`, exit 1; no answer within 30 s is `unknown`, exit 2, because a cold `npx`
+cache is slow and silence is not proof. Without `--id` it launches only companions that
+are registered with an agent or detected as installed (launching a registry entry that is
+merely known would download it); `--id a,b` launches exactly those. It is opt-in and
+**never on the scan path**: `ddflow companions` and the MCP handshake still launch nothing.
 
 Adding a fifth is a TOML block in `.ddflow/companions.toml`, not a patch:
 
@@ -2724,6 +2738,10 @@ port_strategy = "cherry-pick"      # or "forward-merge" (the default)
   | `forward-merge` (default) | the **oldest** line | merges the previous line's branch into its own (and passes through every line in between — a merge cannot skip one) | one after another |
   | `cherry-pick` | the **newest** line | applies exactly what the fix landed (the target's before→after range, whatever the merge strategy) with a three-way apply | in parallel |
 
+  A port carries what its fix *landed*. A follow-up fix to the same bug is a new item:
+  `task add FIX2 --port-of FIX` gives it the lines FIX reached (naming one of FIX's ports
+  works too), so FIX2's own ports carry what FIX2 lands.
+
 * **A conflicting port is work, not a failure.** The claim leaves the conflict markers
   in the port's tree and names the files; the agent resolves, commits and carries on.
 * **Lines never collide.** The same file on 2.x and on 3.x is two branches, so two agents
@@ -2761,7 +2779,10 @@ auto_promote = ["pre-production"]   # optional: continuous delivery to staging
 * **`auto_promote`** lists environments `ddflow next` promotes to by itself when the
   branch upstream moves. Empty by default: a deploy is the operator's call.
 * `ddflow promote status` shows each environment's head, how many commits it is behind
-  the branch upstream of it, and any open promotion.
+  the branch upstream of it, and any open promotion. The branch says what was *promoted*,
+  not what is *running*: have the deploy hook call `ddflow promote deployed production
+  --sha "$GIT_SHA"` (default: the branch head) and `status` adds `live <sha>` and how many
+  commits of the branch are not yet deployed — "what is live" answered exactly.
 
 ### Workflow choices: asked, recorded, defaulted on the record
 
@@ -3053,6 +3074,31 @@ bytes it is re-using to prove they are still the same bytes:
 
 A command like `ddflow doctor` — which reads four times — pays the full cost once instead
 of four times.
+
+**The sort and the de-duplication are maintained too (B169).** `read_all` keeps the merged,
+Lamport-sorted, de-duplicated order between calls and folds each append into it by
+bisection, falling back to a full rebuild whenever the shortcut could not be proven
+identical (a shard whose bytes changed, a repeated event id, a batch of more than 64).
+Measured, one appended event, `tests/bench_log_read.py`: 20,000 events 14.8 ms to 3.8 ms;
+100,000 events 75.9 ms to 19.5 ms. What remains is reading and hashing the log's bytes,
+which is the price of verifying them and is linear in the log.
+
+**A one-shot CLI call no longer parses everything (B166).** Once a log has 5,000+ events,
+`read_all` writes a snapshot of the parsed events and their merged order to
+`.ddflow/local/read-snapshot.bin` (machine-local, git-ignored, never merged). A later
+process loads it instead of calling `Event.from_json` on every line: 100,000 events cold
+685 ms to about 400 ms (1.7x), 20,000 events 125 ms to 63 ms (2x), median of three runs
+on a loaded machine. It is a cache
+and is trusted only as far as it verifies: per shard, the SHA-256 of the bytes it
+describes must still match the shard on disk (so a rewritten, truncated or switched-branch
+shard is re-parsed, and an appended or torn tail is parsed as usual); the file's own
+checksum, format, ddflow version and Event fields must match; any doubt means the snapshot
+is ignored and the log parsed. `ddflow doctor`'s integrity check (`EventLog.verify`) never
+uses it, and a log opened only to read another repository (`external sync`, exports)
+neither reads nor writes one. It has the trust of the rest of `.ddflow/local/`: your own
+checkout's machine-local state, never fetched or merged. Deleting the file is always safe; `DDFLOW_SNAPSHOT=0` turns it off for a
+process. It covers up to `max_cached_events` (a larger log is parsed each time, as
+before). The table above is reproduced by `python tests/bench_log_read.py`.
 
 Two knobs, `[log]`:
 
@@ -3854,9 +3900,11 @@ ddflow version show            current and next version, why, release notes (2 =
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
 ddflow version cut --changelog  also write the version's CHANGELOG.md section (--force over a hand-edited file)
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
+ddflow task add <id> --port-of FIX  a follow-up to FIX: takes the lines FIX reached
 ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
 ddflow promote add <env>        file a promotion one step downstream (2 = nothing to carry)
-ddflow promote status           each environment: head, behind upstream, open promotion
+ddflow promote status           each environment: head, behind upstream, open promotion, live sha
+ddflow promote deployed <env>   record the sha a deploy put live (from the deploy hook; --sha, default the head)
 ddflow flow show                how this project works: model, lines, every choice + who made it
 ddflow flow choose <knob> <v>   record a workflow choice, with --reason
 ddflow complete <id>            finish        (3 = unmet conditions, all listed)

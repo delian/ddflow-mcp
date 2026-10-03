@@ -372,10 +372,17 @@ def show(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
                 "show", f"no such item {item!r} (it was removed from the queue)", id=item, item=None
             )
         return O.failed("show", f"no such item or bug {item!r}", id=item, item=None)
+    from ..services import ledger as LG
+
+    led = LG.build(_log.read_all(), item) if it.state == "done" else None
     return O.ok(
         "show",
         id=item,
-        item={**absolutise(repo, plain(it)), **addenda(st, item)},
+        item={
+            **absolutise(repo, plain(it)),
+            **addenda(st, item),
+            **({"ledger": LG.summary(led)} if led else {}),
+        },
         gates=plain(G.status(st, cfg, item)),
         _render={
             "item": it,

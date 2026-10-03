@@ -453,3 +453,67 @@ def test_completing_without_a_sha_keeps_the_sha_merge_recorded(repo):
     log.append("worktree.merged", "T", {"sha": "abc123", "branch": "b"})
     log.append("item.completed", "T", {"sha": "", "kind": "task"})
     assert _state(repo).items["T"].merged_sha == "abc123"
+
+
+def test_port_of_files_a_followup_fix_for_the_same_lines(lined):
+    """B180: a fix amended after its ports were generated is a NEW item; `--port-of FIX`
+    gives it the lines FIX reached, so its own ports carry what IT lands."""
+    repo = lined
+    run_cli(repo, "flow", "choose", "port_strategy", "cherry-pick")
+    run_cli(repo, "task", "add", "FIX", "--lines", "1,2,3", "--globs", "lib.py")
+    _land(repo, "FIX", edit=("lib.py", "def f():\n    return 2\n"))
+
+    code, out, err = run_cli(
+        repo, "--json", "task", "add", "FIX2", "--port-of", "FIX", "--globs", "extra.py"
+    )
+    assert code == 0, err
+    added = json.loads(out)
+    assert (added["line"], sorted(added["ports"])) == ("3", ["FIX2@1", "FIX2@2"]), added
+    _land(repo, "FIX2", edit=("extra.py", "AMENDED = True\n"))
+    code, out, err = run_cli(repo, "--json", "claim", "FIX2@1")
+    assert code == 0, err
+    body = json.loads(out)
+    assert body["port"]["status"] == "clean", body["port"]
+    assert "AMENDED" in (Path(body["worktree"]) / "extra.py").read_text()
+
+    # Naming a PORT resolves to the fix it came from: the same lines again.
+    code, out, err = run_cli(repo, "--json", "task", "add", "FIX3", "--port-of", "FIX@2")
+    assert code == 0, err
+    assert sorted(json.loads(out)["ports"]) == ["FIX3@1", "FIX3@2"]
+
+
+def test_port_of_refuses_an_unknown_item_and_a_clash_with_lines(lined):
+    repo = lined
+    code, _, err = run_cli(repo, "task", "add", "X", "--port-of", "NOPE")
+    assert code != 0 and "NOPE" in err, err
+    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    code, _, err = run_cli(repo, "task", "add", "Y", "--port-of", "FIX", "--lines", "2")
+    assert code != 0 and "--lines" in err, err
+
+
+def test_port_of_is_reachable_over_mcp(lined):
+    from ddflow.surfaces.mcp import Server
+
+    repo = lined
+    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_task_add",
+                "arguments": {"id": "FIX2", "port_of": "FIX", "globs": "extra.py"},
+            },
+        }
+    )
+    assert not reply["result"].get("isError"), reply
+    assert "FIX2@3" in reply["result"]["content"][0]["text"], reply
+
+
+def test_port_of_refuses_a_port_whose_fix_was_removed(lined):
+    repo = lined
+    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    run_cli(repo, "remove", "FIX", "--force")
+    code, _, err = run_cli(repo, "task", "add", "FIX2", "--port-of", "FIX@3")
+    assert code != 0 and "removed" in err, (code, err)

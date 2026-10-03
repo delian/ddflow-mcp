@@ -449,6 +449,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="a FIX for several release lines, e.g. 1,2,3: written where [flow].port_strategy "
         "says, with a port task <id>@<line> generated for each other line",
     )
+    tad.add_argument(
+        "--port-of",
+        default="",
+        help="a FOLLOW-UP to an earlier fix: takes the lines that fix reached, so its own "
+        "ports carry what this one lands",
+    )
 
     sp = s.add_parser(
         "split", help="split an item into sub-tasks in place, keeping its id and history"
@@ -754,6 +760,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     pma.add_argument("env")
     pma.add_argument("--force", action="store_true", help="file it even with nothing to carry")
     pma.set_defaults(fn=cmd_promote)
+    pmd = pm_s.add_parser(
+        "deployed", help="record the sha a deploy put live in ENV (call it from the deploy hook)"
+    )
+    pmd.add_argument("env")
+    pmd.add_argument("--sha", default="", help="the deployed commit (default: ENV's branch head)")
+    pmd.set_defaults(fn=cmd_promote)
     pm_s.add_parser(
         "status", help="each environment: head, commits behind upstream, open promotion"
     ).set_defaults(fn=cmd_promote)
@@ -1477,6 +1489,21 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     co_s = co.add_subparsers(dest="companions_cmd")
     co_list = co_s.add_parser("list", help="what is known, installed and registered")
     co_list.add_argument("--no-probe", action="store_true", help="skip the detection probes")
+    for _p, _dflt in ((co, False), (co_list, argparse.SUPPRESS)):
+        # On the bare `companions` AND on `list`, so `companions --verify` works. The
+        # subparser's default is SUPPRESS so it cannot overwrite a value the parent parsed.
+        _p.add_argument(
+            "--verify",
+            action="store_true",
+            default=_dflt,
+            help="launch each MCP companion and require an answer to `initialize` (spawns "
+            "processes; opt-in; exit 1 = one is not an MCP server, 2 = could not tell)",
+        )
+        _p.add_argument(
+            "--id",
+            default="" if _dflt is False else argparse.SUPPRESS,
+            help="with --verify: comma-separated ids to launch (even if not installed)",
+        )
     co_add = co_s.add_parser("add", help="register installed companions in an agent's MCP config")
     co_add.add_argument("--id", default="", help="comma-separated; default: every installed one")
     co_add.add_argument("--agents", default="", help="comma-separated (default: claude)")

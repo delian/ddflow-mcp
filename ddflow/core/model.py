@@ -683,6 +683,9 @@ class State:
     #: "reason"}. `by` is "explicit" or "default" -- a default applied at first use is
     #: recorded so the project keeps following it even if ddflow's default changes.
     flow_choices: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: environment -> the last DEPLOY a hook reported (`promote deployed`, B183):
+    #: {"sha", "at", "agent"}. A promotion records what the branch says; this is what runs.
+    deployments: dict[str, dict[str, Any]] = field(default_factory=dict)
     #: item id -> the add that currently DEFINES it, in the shape of an `Item.contested`
     #: entry. What a rival add is compared against, and what becomes the first side of
     #: the contest when one arrives.
@@ -1444,6 +1447,14 @@ def _h_port_applied(st: State, ev: Event) -> None:
     it.port = dict(ev.data)
 
 
+def _h_deploy_recorded(st: State, ev: Event) -> None:
+    st.deployments[ev.data.get("env", ev.subject)] = {
+        "sha": ev.data.get("sha", ""),
+        "at": ev.ts,
+        "agent": ev.agent,
+    }
+
+
 def _h_flow_chosen(st: State, ev: Event) -> None:
     d = ev.data
     st.flow_choices[d.get("knob", ev.subject)] = {
@@ -2095,6 +2106,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "port.applied": _h_port_applied,
     "flow.chosen": _h_flow_chosen,
     "backmerge.recorded": _h_back_merge_recorded,
+    "deploy.recorded": _h_deploy_recorded,
     "release.opened": _h_release_opened,
     "release.tagged": _h_release_tagged,
     "release.closed": _h_release_closed,
