@@ -51,6 +51,9 @@ def test_the_recorded_evidence_carries_the_finding_body_and_a_digest(repo, tmp_p
     api.review(repo, gate="critic", item="T1")
     ev = _gate(repo).evidence
     path = Path(ev["output_file"])
+    api.review(repo, gate="critic", item="T1")  # a second run does not overwrite the first
+    assert hashlib.sha256(path.read_bytes()).hexdigest()[:16] == ev["output_digest"]
+    assert Path(_gate(repo).evidence["output_file"]) != path
     assert path.is_relative_to(repo / ".ddflow" / "local" / "reviews")
     assert hashlib.sha256(path.read_bytes()).hexdigest()[:16] == ev["output_digest"]
     rows = [json.loads(line) for line in path.read_text().splitlines()]
@@ -62,7 +65,16 @@ def test_mcp_review_sends_progress_when_the_client_asks(repo, tmp_path):
     _setup(repo, tmp_path)
     srv = mcp.Server(repo, called_from=repo)
     sent: list[dict] = []
-    srv.notify = sent.append
+    first_seen: list[bool] = []
+
+    def notify(frame: dict) -> None:
+        if not sent:  # the gate is recorded only when the review ends
+            first_seen.append(
+                "critic" in fold(EventLog(repo).read_all(), strict=False).items["T1"].gates
+            )
+        sent.append(frame)
+
+    srv.notify = notify
     srv.handle(
         {
             "jsonrpc": "2.0",
@@ -76,6 +88,7 @@ def test_mcp_review_sends_progress_when_the_client_asks(repo, tmp_path):
         }
     )
     assert sent, "no notifications/progress was sent"
+    assert first_seen == [False], "progress must stream while the review runs, not after"
     assert all(f["method"] == "notifications/progress" for f in sent)
     assert all(f["params"]["progressToken"] == "tok" for f in sent)
     assert [f["params"]["progress"] for f in sent] == list(range(1, len(sent) + 1))
