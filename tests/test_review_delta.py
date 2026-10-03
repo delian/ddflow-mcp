@@ -455,3 +455,20 @@ def test_the_evidence_carries_the_resolved_round_kind_not_the_flag(repo, tmp_pat
     _review(repo, full=False)
     ev = _ev(repo)
     assert "full" not in ev and ev["review_kind"] == "delta"
+
+
+def test_a_clean_delta_does_not_clear_findings_nobody_triaged(repo, tmp_path):
+    """Probe for a review finding: the delta does not see an unfixed finding, so the
+    record's own untriaged findings hold the gate; once triaged, the next clean delta passes."""
+    _setup(repo, tmp_path)
+    _review(repo)  # finding #1
+    _fix(repo)
+    held = _review(repo)
+    assert held.data["outcome"] == "failed", held.data
+    assert "no triage verdict" in held.data["text"]
+    assert (
+        api.triage(repo, "T1", gate="critic", finding=1, verdict="confirmed", probe="p").exit == OK
+    )
+    _fix(repo, "h.py")
+    out = _review(repo)
+    assert out.data["outcome"] == "passed", out.data

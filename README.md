@@ -1164,9 +1164,10 @@ since a1b2c3d4e5`), is not a full round and is never refused by the cap. Its fin
 coverage are **merged into the gate's record**: earlier findings stay where they were
 (their `#N` and their triage, which is keyed by the finding's exact text, are unchanged),
 a byte-identical finding is not duplicated, the delta's new ones are appended and the
-output maps each to its place in the record; the gate's outcome is the delta's own, so a
-clean recheck of a fix passes while the earlier findings stay visible to `review triage`
-and `gate status`, which shows the rounds separately (`1 full round, 2 delta rounds`).
+output maps each to its place in the record; the gate's outcome is the delta's own, except
+that a clean delta does not pass while an earlier finding on the record has no triage
+verdict (it records `failed` and says so; `review triage` settles each, then the next clean
+delta passes). `gate status` shows the rounds separately (`1 full round, 2 delta rounds`).
 `--full` forces a full round (counted against `review.max_rounds`; combined with `--delta`
 it is an error). A delta falls back to a full round, and says why, when the reviewed head
 is no ancestor of the current head (the branch was rebased or amended) or, for the
