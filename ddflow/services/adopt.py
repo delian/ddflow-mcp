@@ -834,7 +834,12 @@ def _install_prompt_hooks(repo: Path, agents: list[str]) -> list[str]:
     ):
         if key not in agents:
             continue
-        cmd = command_line(CH.PROMPT_MARKER, extra=flag.strip()) + " || true"
+        cmd = (
+            command_line(
+                CH.PROMPT_MARKER, extra=flag.strip(), refresh=f"ddflow hooks install --{key}"
+            )
+            + " || true"
+        )
         try:
             out.append(
                 CH.install(repo, cmd, event=event, marker=CH.PROMPT_MARKER, matcher=None, rel=rel)
