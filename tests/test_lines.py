@@ -509,3 +509,11 @@ def test_port_of_is_reachable_over_mcp(lined):
     )
     assert not reply["result"].get("isError"), reply
     assert "FIX2@3" in reply["result"]["content"][0]["text"], reply
+
+
+def test_port_of_refuses_a_port_whose_fix_was_removed(lined):
+    repo = lined
+    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    run_cli(repo, "remove", "FIX", "--force")
+    code, _, err = run_cli(repo, "task", "add", "FIX2", "--port-of", "FIX@3")
+    assert code != 0 and "removed" in err, (code, err)
