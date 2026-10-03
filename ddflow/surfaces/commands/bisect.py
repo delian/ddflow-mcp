@@ -42,7 +42,6 @@ def cmd_bisect(a, c: Ctx) -> int:
         timeout_s=a.timeout,
         repeat=a.repeat,
         max_runs=a.max_runs,
-        agent=c.requested_agent,
     )
     if out.exit == FAIL:
         print(out.reason, file=sys.stderr)
