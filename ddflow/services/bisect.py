@@ -31,6 +31,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..infra import proc as P
+
 #: Outcome of one probe: True = the command passed, False = it failed, None = could not run.
 Probe = Callable[[list[str]], "bool | None"]
 
@@ -109,7 +111,7 @@ def command_probe(
         detail = ""
         for _ in range(max(1, repeat)):
             try:
-                p = subprocess.run(
+                p = P.run(
                     argv_for(tests),
                     cwd=cwd,
                     capture_output=True,
