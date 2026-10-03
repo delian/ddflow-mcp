@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..config import Config
+from ..core.flow import GITFLOW
 from ..core.model import DONE, State, fold
 from ..infra import worktree as W
 
@@ -144,11 +145,38 @@ def _protected(root: Path, cfg: Config, state: State, now: float | None = None) 
     return p
 
 
+def our_prefixes(cfg: Config) -> list[str]:
+    """Branch prefixes that mark a branch as ddflow's: ``worktree.branch_prefix``, plus
+    the feature/bugfix/hotfix prefixes when the project runs gitflow (B177), where
+    ``branch_name`` creates task branches under those instead.
+
+    ``release_prefix`` is deliberately NOT here: a release branch can be a long-lived
+    line, and one with nothing ahead of the base looks "merged" to git. An EMPTY gitflow
+    prefix is dropped, not read as "every branch is ours" (``branch_prefix`` keeps its
+    historical empty-means-all meaning)."""
+    out = [cfg.worktree.branch_prefix]
+    if cfg.flow.model == GITFLOW:
+        out += [
+            p
+            for p in (cfg.flow.feature_prefix, cfg.flow.bugfix_prefix, cfg.flow.hotfix_prefix)
+            if p
+        ]
+    return out
+
+
+def is_ours(branch: str, cfg: Config) -> bool:
+    return _ours(branch, our_prefixes(cfg))
+
+
+def _ours(branch: str, prefixes: list[str]) -> bool:
+    return any(not p or branch.startswith(p) for p in prefixes)
+
+
 def survey(repo: Path, cfg: Config, state: State) -> Plan:
     """Classify every ddflow worktree and branch. Reads only; changes nothing."""
     root = W.repo_root(repo)
     base = cfg.worktree.base_ref or W.default_branch(root)
-    prefix = cfg.worktree.branch_prefix
+    prefixes = our_prefixes(cfg)
     plan = Plan()
     guard = _protected(root, cfg, state)
 
@@ -163,7 +191,7 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         branch = entry.get("branch", "").replace("refs/heads/", "")
         if not path or Path(path).resolve() == root.resolve():
             continue
-        if prefix and not branch.startswith(prefix):
+        if not _ours(branch, prefixes):
             continue
         seen_branches.add(branch)
         t = TreeState(name=Path(path).name, path=path, branch=branch)
@@ -208,7 +236,9 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
             t.done = f"fully merged into {base} — safe to remove"
         plan.trees.append(t)
 
-    for branch in W.branches(root, prefix):
+    for branch in W.branches(root):
+        if not _ours(branch, prefixes):
+            continue
         # The base branch is never "stale": with an empty prefix it was offered for
         # deletion and survived only because the primary had it checked out.
         if branch in seen_branches or branch == base:
