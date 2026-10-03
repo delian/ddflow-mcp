@@ -260,3 +260,14 @@ def test_the_mcp_twin_records_the_same_deploy(envs):
     _, out, _ = run_cli(repo, "--json", "promote", "status")
     prod = {r["env"]: r for r in json.loads(out)["rows"]}["production"]
     assert prod["deployed"] == head[:12]
+
+
+def test_a_refused_deploy_record_leaves_what_is_live_untouched(envs):
+    repo = envs
+    good = _git(repo, "rev-parse", "production")
+    assert run_cli(repo, "promote", "deployed", "production", "--sha", good)[0] == 0
+    assert run_cli(repo, "promote", "deployed", "production", "--sha", "nothere" * 6)[0] == 3
+    assert run_cli(repo, "promote", "deployed", "staging")[0] == 3
+    code, out, _ = run_cli(repo, "--json", "promote", "status")
+    prod = {r["env"]: r for r in json.loads(out)["rows"]}["production"]
+    assert prod["deployed"] == good[:12], "a refusal must not overwrite the recorded sha"

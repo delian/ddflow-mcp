@@ -1844,7 +1844,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_configure": {
         "description": (
-            'Read or write .ddflow/config.toml (WRITES). No arguments: every knob with value, source and meaning. `set` edits one dotted key in place (preferred); `toml` APPENDS a fragment such as [gate.unit_tests] command = "pytest -q -n auto" (needs pytest-xdist). The committed file is generic project policy; anything of THIS machine or operator (a reviewer endpoint, a host, a key variable, worker counts) goes with local=true to the git-ignored .ddflow/local/config.toml, read last and never committed. A reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` write=true writes one.'
+            'Read or write .ddflow/config.toml (WRITES). No arguments: every knob with value, source and meaning. `set` edits one dotted key in place (preferred); `toml` APPENDS a fragment, e.g.\n[gate.unit_tests]\ncommand = "pytest -q -n auto"\n(needs pytest-xdist). The committed file is generic project policy; anything of THIS machine or operator (a reviewer endpoint, a host, a key variable, worker counts) goes with local=true to the git-ignored .ddflow/local/config.toml, read last and never committed. A reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` write=true writes one.'
         ),
         "properties": {
             "set": (
