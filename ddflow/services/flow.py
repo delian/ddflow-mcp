@@ -302,6 +302,63 @@ def _remove_tree(repo: Path, cfg: Config, log: EventLog, it: Item, info: FG.PRIn
     return f"kept {path}: {r.err or r.out}"
 
 
+def _diff_patch_id(repo: Path, a: str, b: str) -> str:
+    """The patch-id of the combined change ``a`` -> ``b``; "" when git cannot say."""
+    diff = P.run(["git", "-C", str(repo), "diff", "--no-ext-diff", a, b], capture_output=True)
+    if diff.returncode != 0 or not diff.stdout:
+        return ""
+    ids = P.run(
+        ["git", "-C", str(repo), "patch-id", "--stable"], input=diff.stdout, capture_output=True
+    )
+    out = ids.stdout.decode("utf-8", "replace").split() if ids.returncode == 0 else []
+    return out[0] if out else ""
+
+
+def _rebase_start(repo: Path, info: FG.PRInfo, base_before: str) -> str:
+    """Where a rebase-merge's N commits begin ("" when this is not one, or cannot be told).
+
+    Two proofs, strongest first. The base tip ddflow read BEFORE it merged, when the range
+    from it holds exactly the request's commits (a commit someone else landed in between
+    breaks the count, which is what the check is for). Otherwise the change itself: the
+    request's own diff has the same patch-id as the last N commits on the base and NOT as
+    the last one alone -- which also settles a merge a person did, and one a merge queue did.
+    """
+    sha, n = info.merge_sha, info.commits
+    if base_before and W.rev(repo, base_before):
+        counted = W.git(repo, "rev-list", "--count", f"{base_before}..{sha}")
+        if W.git(repo, "merge-base", "--is-ancestor", base_before, sha).ok and counted.out == str(
+            n
+        ):
+            return W.rev(repo, base_before)
+    fork = W.git(repo, "merge-base", info.head_sha, sha)
+    mine = _diff_patch_id(repo, fork.out, info.head_sha) if fork.ok and fork.out else ""
+    if not mine or _diff_patch_id(repo, f"{sha}^1", sha) == mine:
+        return ""  # unprovable, or a squash (its first parent is already exact)
+    start = W.rev(repo, f"{sha}~{n}")
+    return start if start and _diff_patch_id(repo, start, sha) == mine else ""
+
+
+#: `git rev-list --parents` prints the commit and its parents: two words = one parent.
+_SINGLE_PARENT = 2
+
+
+def _landing(repo: Path, info: FG.PRInfo, base_before: str = "") -> dict[str, str]:
+    """``{"landed_before", "landed_after"}``: what a cherry-pick port applies (B178).
+
+    A merge commit or a squash lands ONE commit on the target, so its first parent is the
+    old target. A rebase lands N, and the first parent is then the second-to-last of them:
+    a port of that range carried only the last commit.
+    """
+    sha = info.merge_sha
+    if not sha or not W.rev(repo, sha):
+        return {}
+    parents = W.git(repo, "rev-list", "--parents", "-n", "1", sha).out.split()
+    before = W.rev(repo, f"{sha}^1")
+    if len(parents) <= _SINGLE_PARENT and info.commits > 1:
+        before = _rebase_start(repo, info, base_before) or before
+    return {"landed_before": before, "landed_after": sha}
+
+
 def _settle_merged(
     repo: Path,
     cfg: Config,
@@ -310,6 +367,7 @@ def _settle_merged(
     it: Item,
     info: FG.PRInfo,
     rep: SyncReport,
+    base_before: str = "",
 ) -> None:
     data = info.event_data(forge.name)
     data["kind"] = it.kind
@@ -317,15 +375,10 @@ def _settle_merged(
     sha = info.merge_sha or info.head_sha
     # What landed, as a range on the target -- a cherry-pick port applies exactly this.
     # The forge merged remotely, so fetch first; a merge or squash commit's first parent
-    # is the target just before it. (A rebase-merge lands several commits and its first
-    # parent is not the old target: BACKLOG B178.)
+    # is the target just before it. A rebase-merge lands several commits and its first
+    # parent is not the old target: `_landing` finds the real start (B178).
     W.fetch(repo, cfg.flow.remote, info.base)
-    landed = {}
-    if info.merge_sha and W.rev(repo, info.merge_sha):
-        landed = {
-            "landed_before": W.rev(repo, f"{info.merge_sha}^1"),
-            "landed_after": info.merge_sha,
-        }
+    landed = _landing(repo, info, base_before)
     log.append("worktree.merged", it.id, {"sha": sha, "branch": it.branch, **landed})
     G.record(
         log,
@@ -658,6 +711,8 @@ def _apply(
         rep.waiting.append(_waiting(it.id, info))
         return
     try:
+        # The target's tip BEFORE the forge merges: where a rebase's commits will start.
+        base_before = _remote_tip(repo, cfg, info.base)
         forge.merge(
             info.number, strategy=cfg.worktree.merge_strategy, head_sha=info.head_sha, auto=False
         )
@@ -671,7 +726,7 @@ def _apply(
         return
     if after.state == "merged":
         rep.changes.append(Change(it.id, "merged_by_ddflow", "approved and green", after.url))
-        _settle_merged(repo, cfg, log, forge, _state(log).items[it.id], after, rep)
+        _settle_merged(repo, cfg, log, forge, _state(log).items[it.id], after, rep, base_before)
         return
     if after.queue:
         # `gh pr merge` on a queue-protected branch ENQUEUES: the request stays open while
@@ -681,6 +736,14 @@ def _apply(
         log.append("pr.synced", it.id, qdata)
         rep.changes.append(Change(it.id, "queued", _queue_detail(after), after.url))
     rep.waiting.append({**_waiting(it.id, after), "queued": True})
+
+
+def _remote_tip(repo: Path, cfg: Config, branch: str) -> str:
+    """The remote's current tip of ``branch`` ("" when it cannot be read)."""
+    remote = cfg.flow.remote
+    if not W.fetch(repo, remote, branch).ok:
+        return ""
+    return W.rev(repo, f"{remote}/{branch}")
 
 
 def _report_queue(
