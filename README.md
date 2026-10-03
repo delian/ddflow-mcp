@@ -2480,7 +2480,7 @@ floor — adding a fifth agent to a phase whose runtime is a four-deep chain buy
 It walks nested sub-tasks: an umbrella's open sub-tasks count as steps before it, and a
 phase another depends on contributes its chain. Items held back only by a cap
 (`schedule.max_parallel_tasks`, or a resource's capacity) are counted by `status` and `brief`, and the cap's message says when a slot
-is free. `ddflow wait` sleeps until something is ready, but when every blocker needs a
+is free. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a
 person — a dependency cycle, an expired lease under `reclaim_policy = "report"` — it
 refuses at once rather than sleeping to its timeout.
 
