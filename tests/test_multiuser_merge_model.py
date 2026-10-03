@@ -9,7 +9,6 @@ Whether GitHub or GitLab actually run it is UNVERIFIED (no forge is reachable he
 
 from __future__ import annotations
 
-import json
 import subprocess
 from pathlib import Path
 
