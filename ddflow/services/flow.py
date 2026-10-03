@@ -314,17 +314,18 @@ def _diff_patch_id(repo: Path, a: str, b: str) -> str:
     return out[0] if out else ""
 
 
-def _rebase_start(repo: Path, info: FG.PRInfo, base_before: str) -> str:
+def _rebase_start(repo: Path, info: FG.PRInfo, base_before: str, rebased: bool) -> str:
     """Where a rebase-merge's N commits begin ("" when this is not one, or cannot be told).
 
-    Two proofs, strongest first. The base tip ddflow read BEFORE it merged, when the range
-    from it holds exactly the request's commits (a commit someone else landed in between
-    breaks the count, which is what the check is for). Otherwise the change itself: the
+    Two proofs, strongest first. The base tip ddflow read BEFORE it merged -- only when
+    ddflow asked for a rebase, since a squash's range can match the count by coincidence --
+    when the range from it holds exactly the request's commits (a commit someone else
+    landed in between breaks the count, which is what the check is for). Otherwise the change itself: the
     request's own diff has the same patch-id as the last N commits on the base and NOT as
     the last one alone -- which also settles a merge a person did, and one a merge queue did.
     """
     sha, n = info.merge_sha, info.commits
-    if base_before and W.rev(repo, base_before):
+    if rebased and base_before and W.rev(repo, base_before):
         counted = W.git(repo, "rev-list", "--count", f"{base_before}..{sha}")
         if W.git(repo, "merge-base", "--is-ancestor", base_before, sha).ok and counted.out == str(
             n
@@ -342,7 +343,7 @@ def _rebase_start(repo: Path, info: FG.PRInfo, base_before: str) -> str:
 _SINGLE_PARENT = 2
 
 
-def _landing(repo: Path, info: FG.PRInfo, base_before: str = "") -> dict[str, str]:
+def _landing(repo: Path, cfg: Config, info: FG.PRInfo, base_before: str = "") -> dict[str, str]:
     """``{"landed_before", "landed_after"}``: what a cherry-pick port applies (B178).
 
     A merge commit or a squash lands ONE commit on the target, so its first parent is the
@@ -355,7 +356,8 @@ def _landing(repo: Path, info: FG.PRInfo, base_before: str = "") -> dict[str, st
     parents = W.git(repo, "rev-list", "--parents", "-n", "1", sha).out.split()
     before = W.rev(repo, f"{sha}^1")
     if len(parents) <= _SINGLE_PARENT and info.commits > 1:
-        before = _rebase_start(repo, info, base_before) or before
+        rebased = cfg.worktree.merge_strategy == "ff-only"
+        before = _rebase_start(repo, info, base_before, rebased) or before
     return {"landed_before": before, "landed_after": sha}
 
 
@@ -378,7 +380,7 @@ def _settle_merged(
     # is the target just before it. A rebase-merge lands several commits and its first
     # parent is not the old target: `_landing` finds the real start (B178).
     W.fetch(repo, cfg.flow.remote, info.base)
-    landed = _landing(repo, info, base_before)
+    landed = _landing(repo, cfg, info, base_before)
     log.append("worktree.merged", it.id, {"sha": sha, "branch": it.branch, **landed})
     G.record(
         log,

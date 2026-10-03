@@ -140,6 +140,14 @@ def _json(p, what: str) -> Any:
         raise ForgeUnavailable(f"{what}: unparseable output {out[:200]!r}") from exc
 
 
+def _count(commits: Any) -> int:
+    """How many commits `gh pr view --json commits` lists: it flattens the GraphQL
+    connection to an array, but a connection-shaped answer is read too."""
+    if isinstance(commits, dict):
+        return int(commits.get("totalCount") or len(commits.get("nodes") or []))
+    return len(commits or [])
+
+
 def _clip(parts: list[str]) -> str:
     text = "\n\n".join(p.strip() for p in parts if p and p.strip())
     if len(text) > FEEDBACK_MAX:
@@ -287,7 +295,7 @@ class GitHub(Forge):
             draft=bool(d.get("isDraft")),
             feedback=_clip(feedback),
             review_sha=review_sha,
-            commits=len(d.get("commits") or []),
+            commits=_count(d.get("commits")),
         )
 
     def find(self, head: str) -> PRInfo | None:
