@@ -68,15 +68,32 @@ def test_a_dead_holders_note_says_so(tmp_path):
         "pid 99999999999999999999999 1 cmd",  # too large for kill()
         "pid 123 not-a-number cmd",
         "pid " + "9" * 5000 + " 1 cmd",  # past int()'s digit limit
-        "\x00\xff pid",
+        b"\x00\xff\xfe pid",  # not valid UTF-8
     ],
 )
 def test_a_junk_lock_file_never_raises_out_of_the_timeout_path(tmp_path, junk):
     from ddflow.infra.log import _holder_note
 
     lock = tmp_path / "events.lock"
-    lock.write_bytes(junk.encode("utf-8", "surrogatepass"))
+    lock.write_bytes(junk if isinstance(junk, bytes) else junk.encode("utf-8"))
     assert isinstance(_holder_note(lock), str)
+
+
+@pytest.mark.parametrize("junk", ["pid -1 0 evil", "pid 0 0 evil", "pid 1_0 0 evil", "pid +12 0 x"])
+def test_a_pid_that_is_not_a_plain_positive_number_is_no_lead(tmp_path, junk):
+    from ddflow.infra.log import _holder_note
+
+    lock = tmp_path / "events.lock"
+    lock.write_text(junk)
+    assert _holder_note(lock) == ""
+
+
+def test_an_older_longer_note_is_trimmed_not_left_as_a_tail(tmp_path):
+    lock = tmp_path / "events.lock"
+    lock.write_text("pid 1 0 " + "x" * 900 + "\n")  # what the first version could leave
+    with _flock(lock, 1):
+        pass
+    assert lock.stat().st_size == 256 and "xxxx" not in lock.read_text()
 
 
 def test_a_non_utf8_command_line_does_not_stop_the_lock_being_taken(tmp_path, monkeypatch):

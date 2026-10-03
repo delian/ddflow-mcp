@@ -609,9 +609,15 @@ def _holder_note(path: Path) -> str:
     """
     try:
         parts = path.read_text(errors="replace").split(None, 3)
-        if len(parts) < _NOTE_FIELDS or parts[0] != "pid" or not parts[1].isascii():
+        if (
+            len(parts) < _NOTE_FIELDS
+            or parts[0] != "pid"
+            or not (parts[1].isascii() and parts[1].isdigit())
+        ):
             return ""
         pid = int(parts[1])
+        if pid <= 0:
+            return ""  # kill(0)/kill(-n) address groups, not a process
         try:
             os.kill(pid, 0)
             alive = "alive"
@@ -633,8 +639,9 @@ def _holder_note(path: Path) -> str:
 #: `pid`, the pid, the epoch it took the lock, and at least the start of its command line.
 _NOTE_FIELDS = 4
 
-#: The note is one fixed-size write at offset 0, so there is no truncate-then-write window in
-#: which a reader sees an empty file, and no tail of an older, longer note.
+#: The note is one fixed-size write at offset 0 followed by a trim to that size: a reader
+#: never sees an empty file (write-then-truncate, not truncate-then-write) or the tail of an
+#: older, longer note.
 _NOTE_BYTES = 256
 
 _ARGV: list[str] = []
@@ -678,9 +685,11 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
                     ) from None
                 time.sleep(0.02)
         with contextlib.suppress(OSError, ValueError):
-            os.pwrite(
-                fd, _my_note(), 0
-            )  # best effort, for the next waiter that times out; never fatal
+            # Best effort, for the next waiter that times out; never fatal. The write comes
+            # first and the truncate only trims an older, longer note (a previous version
+            # wrote up to ~800 bytes), so a reader never meets an empty file.
+            os.pwrite(fd, _my_note(), 0)
+            os.ftruncate(fd, _NOTE_BYTES)
         yield
     finally:
         with contextlib.suppress(OSError):
