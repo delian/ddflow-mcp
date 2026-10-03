@@ -1146,12 +1146,16 @@ ddflow review triage T1 --gate critic --finding 2 --refuted --probe "..."   # se
 ddflow review T1 --gate critic --force --reason "..."   # one more FULL round; the reason is recorded
 ```
 
-A *full* round is a review of the item's whole diff; a `--delta`, a `--commit` review,
-a `--base <ref>` review and a `--chunk` re-run are not, and are never refused. Rounds are
+A *full* round is any review that can cover the item's whole diff. What is not one is
+judged by what it covers, not by the flag: `--delta`, a `--commit <sha>` or `--base <ref>`
+at or after the head the gate's last review covered (so it can only be narrower), and a
+`--chunk` re-run of a recorded review. Those are never refused; a `--base` or `--commit`
+that reaches back past that head counts as a full round. Rounds are
 counted from the log's recorded reviews (`review_kind`, `round`, `rounds` and `reviewed_head`
 in the gate evidence), so a re-claim, a delta or a manual `gate skip` does not reset the
-count; a round that reached no reviewer is not counted. `--delta` is refused when no review
-is on record or nothing changed. Two knobs, changeable at every layer:
+count; a round that reached no reviewer is not counted. `--delta` reads the reviewed head
+from the log too, so it works after a re-claim or a `gate skip`; it is refused only when no
+review was ever recorded or nothing changed. Two knobs, changeable at every layer:
 
 | knob | default | meaning |
 |---|---|---|
@@ -1159,8 +1163,9 @@ is on record or nothing changed. Two knobs, changeable at every layer:
 | `review.on_exceed` | `"refuse"` | `"warn"` runs the round and says the budget is spent |
 
 ```sh
-ddflow config --set review.max_rounds 3           # this project (committed .ddflow/config.toml)
-ddflow config --set review.max_rounds 0 --local   # this machine only (.ddflow/local/config.toml)
+ddflow config review.max_rounds 3                 # this project (committed .ddflow/config.toml)
+ddflow config review.max_rounds 0 --local         # this machine only (.ddflow/local/config.toml)
+                                                  # (`--set KEY VALUE` is the same)
 DDFLOW_REVIEW_MAX_ROUNDS=0 ddflow review ...      # one run
 ```
 

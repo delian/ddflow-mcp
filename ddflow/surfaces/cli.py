@@ -1078,7 +1078,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         default="",
         help="edit one key in place, e.g. --set gate.unit_tests.command 'pytest -q'",
     )
-    cf.add_argument("value", nargs="?", default="", help="the value, when --set is used")
+    cf.add_argument(
+        "value",
+        nargs="*",
+        default=[],
+        help="the value, when --set is used; or `KEY VALUE` with no --set "
+        "(ddflow config review.max_rounds 0 --local)",
+    )
     cf.add_argument(
         "--append-toml",
         default="",
