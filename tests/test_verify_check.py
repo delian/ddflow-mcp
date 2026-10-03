@@ -329,3 +329,20 @@ def test_history_rewritten_since_is_a_warning_when_main_has_a_commit_with_the_sa
     run_cli(repo, "complete", "T1", "--sha", old, "--force")
     landed = _claims(verify(repo, "T1"))["landed"]
     assert landed["status"] == "warn" and "rewritten" in landed["detail"]
+
+
+def test_a_commit_that_merely_mentions_the_subject_in_its_body_is_not_a_twin(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, "w.py")
+    _git(repo, "checkout", "-q", "-b", "old")
+    (repo / "w.py").write_text("1\n")
+    _git(repo, "add", "w.py")
+    _git(repo, "commit", "-qm", "add the widget module for the queue")
+    old = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "-")
+    _commit(
+        repo, {"unrelated.py": "1\n"}, "tidy\n\nfollow-up to: add the widget module for the queue"
+    )
+    run_cli(repo, "complete", "T1", "--sha", old, "--force")
+    assert _claims(verify(repo, "T1"))["landed"]["status"] == "fail"

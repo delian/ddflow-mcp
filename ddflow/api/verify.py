@@ -42,9 +42,9 @@ def verify_sweep(
     Exit 1 when any completion's claim does not hold. With `file_bugs`, each such item
     gets a bug (the add-time duplicate check makes a re-run file nothing twice)."""
     log, cfg, st = _load(repo, agent)
-    scope = st.descendants(phase) if phase else None
     if phase and phase not in st.items:
         return O.failed("verify.sweep", f"no such phase {phase!r}", phase=phase)
+    scope = st.descendants(phase) if phase else None
     items = [
         i.id
         for i in st.items.values()

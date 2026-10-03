@@ -120,9 +120,14 @@ def _rewritten_twin(repo: Path, sha: str, branches: list[str]) -> str:
     if not subj.ok or len(subj.out) < _MIN_SUBJECT:
         return ""
     for br in branches:
-        r = git(repo, "log", "-1", "--format=%H", "-F", f"--grep={subj.out}", br, timeout=60)
-        if r.ok and r.out:
-            return r.out
+        # `--grep` is a substring match over the whole message; keep only a commit whose
+        # SUBJECT is exactly the recorded one.
+        r = git(repo, "log", "--format=%H%x09%s", "-F", f"--grep={subj.out}", br, timeout=60)
+        if r.ok:
+            for line in r.out.splitlines():
+                h, _, s_ = line.partition("\t")
+                if s_ == subj.out:
+                    return h
     return ""
 
 
