@@ -1,0 +1,131 @@
+"""``version cut`` bumps the project's own version files (B174).
+
+``[flow.version_files]`` maps a repo-relative path to a regex with exactly ONE capture
+group -- the version text -- and the cut replaces that group with the new version
+(``1.2.3``, without the tag prefix) and commits the result on the branch the tag names:
+the release branch under gitflow (so it travels in the release request in pr mode), the
+release source itself for a trunk or maintenance cut.
+
+Everything is checked against the release source BEFORE anything is written: a missing
+file, a pattern that matches nothing, or one that matches twice (which of two
+``version = ...`` lines is the project's?) refuses the whole cut. A half-bumped release
+is worse than none, and a guess about which line is the version is exactly the silent
+wrong answer this refuses to give. A file already at the new version is simply left alone.
+"""
+
+from __future__ import annotations
+
+import re
+import tempfile
+from dataclasses import dataclass
+from pathlib import Path
+
+from ..config import Config
+from ..core import flow as F
+from ..infra import proc as P
+from ..infra import worktree as W
+
+
+class VersionFileError(ValueError):
+    """The bump cannot be made as configured; the message says which file and why."""
+
+
+@dataclass
+class Prepared:
+    edits: dict[str, str]  # path -> new text (only files that change)
+    paths: list[str]  # every configured path, in order
+
+    def describe(self, version: str) -> str:
+        return (
+            f"bump {', '.join(self.paths)} to {version}"
+            if self.edits
+            else f"{', '.join(self.paths)} already at {version}"
+        )
+
+
+def _replace_group(rx: re.Pattern[str], text: str, version: str) -> str:
+    def swap(m: re.Match[str]) -> str:
+        lo = m.start(1) - m.start(0)
+        hi = m.end(1) - m.start(0)
+        return m.group(0)[:lo] + version + m.group(0)[hi:]
+
+    return rx.sub(swap, text)
+
+
+def prepare(repo: Path, cfg: Config, *, version: str, ref: str) -> Prepared:
+    """Read every configured file at ``ref`` and compute its new text. Raises
+    VersionFileError for the first thing that cannot be bumped."""
+    edits: dict[str, str] = {}
+    for path, pattern in cfg.flow.version_files.items():
+        bad = F.version_file_problem(path, pattern)
+        if bad:
+            raise VersionFileError(bad)
+        # Not `W.git`: it strips the output, and a file's own trailing newline is its content.
+        shown = P.run(["git", "-C", str(repo), "show", f"{ref}:{path}"], capture_output=True)
+        if shown.returncode != 0:
+            raise VersionFileError(
+                f"[flow.version_files] {path!r} does not exist on {ref}: "
+                f"{shown.stderr.decode('utf-8', 'replace').strip() or 'git show failed'}"
+            )
+        text = shown.stdout.decode("utf-8")
+        rx = re.compile(pattern, re.MULTILINE)
+        found = len(rx.findall(text))
+        if found != 1:
+            what = "matches nothing" if found == 0 else f"matches {found} times"
+            raise VersionFileError(
+                f"[flow.version_files] {path!r}: {pattern!r} {what} in {path} on {ref}; it "
+                f"must match exactly once (anchor it with ^ and $)"
+            )
+        new = _replace_group(rx, text, version)
+        if new != text:
+            edits[path] = new
+    return Prepared(edits, list(cfg.flow.version_files))
+
+
+def commit_on(repo: Path, cfg: Config, branch: str, prep: Prepared, *, message: str) -> list[str]:
+    """Write and commit the bump on local ``branch``. Returns the files changed.
+
+    Never into a tree somebody else has the branch checked out in: a throwaway worktree
+    holds it unless it is the primary checkout's own branch.
+    """
+    if not prep.edits:
+        return []
+    from . import changelog_cut as CC
+    from .export.query import ExportError
+
+    try:
+        root, throwaway = CC._tree_for(repo, cfg, branch)
+    except ExportError as exc:
+        raise VersionFileError(str(exc)) from exc
+    tmp: Path | None = None
+    tree = root
+    if throwaway:
+        base = (root / cfg.worktree.root).resolve()
+        base.mkdir(parents=True, exist_ok=True)
+        tmp = Path(tempfile.mkdtemp(prefix=f".version-{W.safe_name(branch)}-", dir=base))
+        tmp.rmdir()
+        add = W.git(root, "worktree", "add", str(tmp), branch)
+        if not add.ok:
+            raise VersionFileError(f"could not stage {branch} for the bump: {add.err}")
+        tree = tmp
+    try:
+        paths = list(prep.edits)
+        dirty = W.git(tree, "status", "--porcelain", "--", *paths)
+        if dirty.out.strip():
+            raise VersionFileError(
+                f"{', '.join(paths)} has uncommitted changes; refusing to commit them into "
+                f"the release (commit or discard them)"
+            )
+        for path, text in prep.edits.items():
+            (tree / path).write_text(text, encoding="utf-8")
+        for step in (("add", "--", *paths), ("commit", "-m", message, "--", *paths)):
+            r = W.git(tree, *step)
+            if not r.ok:
+                raise VersionFileError(
+                    f"git {step[0]} of the version files failed: {r.err or r.out}"
+                )
+        return paths
+    finally:
+        if tmp is not None:
+            W.git(root, "worktree", "remove", "--force", str(tmp))
+            W.git(root, "worktree", "prune")

@@ -116,6 +116,21 @@ def choice_value(knob: str, raw: str) -> Any:
     return str(raw)
 
 
+def version_file_problem(path: str, pattern: str) -> str:
+    """Why ``pattern`` cannot be a `[flow.version_files]` pattern ("" when it can): a regex
+    with exactly ONE capture group, the version text."""
+    try:
+        rx = re.compile(pattern, re.MULTILINE)
+    except re.error as exc:
+        return f"[flow.version_files] {path!r}: {pattern!r} is not a regex ({exc})"
+    if rx.groups != 1:
+        return (
+            f"[flow.version_files] {path!r}: the pattern needs exactly one capture group "
+            f"(the version text); {pattern!r} has {rx.groups}"
+        )
+    return ""
+
+
 def problems(cfg: Config) -> list[str]:
     """Enumerated `[flow]` knobs holding a value nothing understands.
 
@@ -144,6 +159,10 @@ def problems(cfg: Config) -> list[str]:
             f"[flow].current_line {fc.current_line!r} is also a maintenance line in "
             f"[flow.lines]; the current line is the newest and follows `model`"
         )
+    for path, pattern in fc.version_files.items():
+        bad = version_file_problem(path, str(pattern))
+        if bad:
+            out.append(bad)
     envs = list(fc.environments)
     dup = sorted({e for e in envs if envs.count(e) > 1})
     if dup:

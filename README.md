@@ -2710,6 +2710,16 @@ recorded (`pr status` lists it under `back_merges`) and every later `pr sync` re
 forge until it merges ("back_merge: merged into develop") or is closed without merging,
 which is refused loudly: develop would not have a fix production already ships.
 
+**Version files.** `[flow.version_files]` maps a path to a regex with exactly one capture
+group, the version text — `'pyproject.toml' = '^version = "([^"]*)"$'` — and `version cut`
+replaces that group with the new version (no tag prefix) and commits it as `chore: bump
+version to X`, so the tag's commit says what the tag says. The commit is on the branch the
+tag names: the release branch under gitflow (in pr mode it travels in the release request),
+the release source for a trunk or maintenance cut. Everything is checked against that
+source first and a missing file, a pattern matching nothing or matching twice refuses the
+whole cut (exit 3) rather than guessing which line is the version; a trunk cut with
+`integration = "pr"` is refused too, because the bump would have no request to travel in.
+
 **Changelog with the cut.** `version cut --changelog` also writes the new version's
 section into `CHANGELOG.md` (the path of `[export.changelog]`, default `CHANGELOG.md`)
 through [`ddflow export changelog`](#exporting-documents): the Unreleased entries
