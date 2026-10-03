@@ -87,7 +87,12 @@ def next_(
     if (
         cfg.flow.integration == "pr"
         and cfg.flow.sync_on_next
-        and any(i.state == REVIEW for i in st.items.values())
+        and (
+            any(i.state == REVIEW for i in st.items.values())
+            # A hotfix's back-merge request outlives its item (B171): the item completes
+            # the moment it is opened, so "something in review" alone never re-asks.
+            or any(r["state"] == "open" for r in st.back_merges.values())
+        )
     ):
         # Reviewers act between an agent's turns. Asking here is what lets a merged
         # request complete, and a requested change come back as work, without anyone
@@ -98,6 +103,9 @@ def next_(
         synced = {
             "changes": [f"{c.item}: {c.what}" for c in rep.changes],
             "unavailable": rep.unavailable,
+            # A closed-unmerged back-merge (or a merge the forge refused) is said ONCE:
+            # it is recorded as settled, so a `next` that dropped it never told anyone.
+            "refused": rep.refused,
         }
         if rep.changes:
             log, cfg, st = _load(repo, agent)

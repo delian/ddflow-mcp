@@ -2664,6 +2664,12 @@ develop, merges it into production, tags it and merges the tag back into develop
 mode it opens the release request instead, and `pr sync` tags the merge commit once a
 person merges it and opens the back-merge request.
 
+**A hotfix's back-merge is tracked.** Under gitflow + pull requests the hotfix item
+completes once production has the fix, but the production → develop request it opens is
+recorded (`pr status` lists it under `back_merges`) and every later `pr sync` re-asks the
+forge until it merges ("back_merge: merged into develop") or is closed without merging,
+which is refused loudly: develop would not have a fix production already ships.
+
 **Changelog with the cut.** `version cut --changelog` also writes the new version's
 section into `CHANGELOG.md` (the path of `[export.changelog]`, default `CHANGELOG.md`)
 through [`ddflow export changelog`](#exporting-documents): the Unreleased entries

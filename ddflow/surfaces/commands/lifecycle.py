@@ -54,6 +54,8 @@ def cmd_next(a, c: Ctx) -> int:
         print(f"auto_promote: filed {pid}", file=sys.stderr)
     for change in out.data["synced"].get("changes", []):
         print(f"pr sync: {change}", file=sys.stderr)
+    for refusal in out.data["synced"].get("refused", []):
+        print(f"pr sync REFUSED: {refusal}", file=sys.stderr)
     for gap in out.data["synced"].get("unavailable", []):
         print(f"pr sync UNAVAILABLE: {gap}", file=sys.stderr)
     if p.review:
