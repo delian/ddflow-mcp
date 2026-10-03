@@ -365,3 +365,26 @@ def test_cli_with_an_unloadable_registry_fails_like_the_plain_report(repo, tmp_p
     verify = _cli(repo, "companions", "--verify")
     assert plain[0] == 1 and verify[0] == 1
     assert "bogus" in plain[2] and "bogus" in verify[2]
+
+
+def test_a_probe_that_could_not_tell_is_not_reported_as_not_installed(repo, tmp_path):
+    """A probe that cannot be spawned (no interpreter line: exec format error) leaves the
+    install state unknown, and the skipped row must say so rather than "not installed"."""
+    probe = tmp_path / "probe"
+    probe.write_text("not a program\n")
+    probe.chmod(0o755)
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "companions.toml").write_text(
+        '[[companion]]\nid = "vague"\nkind = "mcp"\ncommand = "python3"\nargs = ["-c", "pass"]\n'
+        f'detect = ["{probe}"]\n'
+    )
+    out = S.companions_verify(repo)
+    reason = {s["id"]: s["reason"] for s in out.data["skipped"]}["vague"]
+    assert "unknown" in reason and "not detected as installed" not in reason, reason
+
+
+def test_the_new_tool_is_in_a_tier():
+    from ddflow.surfaces import mcp
+
+    placed = mcp.CORE_TOOLS | mcp.STANDARD_EXTRA_TOOLS | mcp.FULL_ONLY_TOOLS
+    assert "ddflow_companions_verify" in placed
