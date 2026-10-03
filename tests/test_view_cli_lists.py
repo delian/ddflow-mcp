@@ -114,11 +114,21 @@ def test_the_global_agent_is_identity_not_a_filter(proj):
     code, out, _ = run_cli(proj, "--json", "task", "list", agent="alice")
     assert code == 0 and len(_ids(out)) == 3
     code, out, _ = run_cli(proj, "--json", "task", "list", "--owner", "alice")
-    assert code == 2 and json.loads(out)["filters"] == {"agent": "alice"}
+    assert code == 2 and json.loads(out)["filters"] == {"owner": "alice"}
 
 
 def test_list_flags_on_the_add_form_are_refused_not_dropped(proj):
-    argv = ("research", "--question", "q9", "--verdict", "THEORETICAL", "--limit", "3")
+    argv = (
+        "research",
+        "--id",
+        "R9",
+        "--question",
+        "q9",
+        "--verdict",
+        "THEORETICAL",
+        "--limit",
+        "3",
+    )
     code, _, err = run_cli(proj, *argv)
     assert code != 0 and "--limit" in err and "research list" in err
     assert "R9" not in run_cli(proj, "research", "list")[1]
@@ -127,3 +137,8 @@ def test_list_flags_on_the_add_form_are_refused_not_dropped(proj):
 def test_json_carries_the_reason_when_nothing_matches(proj):
     code, out, _ = run_cli(proj, "--json", "task", "list", "--tag", "nope")
     assert code == 2 and "No task records" in json.loads(out)["reason"]
+
+
+def test_limit_zero_is_refused_not_defaulted(proj):
+    code, _, err = run_cli(proj, "task", "list", "--limit", "0")
+    assert code == 3 and "limit must be at least 1" in err

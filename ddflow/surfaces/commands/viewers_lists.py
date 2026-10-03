@@ -84,20 +84,25 @@ def cmd_list(a, c: Ctx) -> int:
         tag=getattr(a, "tag", "") or "",
         agent=getattr(a, "owner", "") or "",
         since=getattr(a, "since", "") or "",
-        limit=a.limit or V.DEFAULT_LIMIT,
+        limit=V.DEFAULT_LIMIT if a.limit is None else a.limit,
     )
     if "rows" in out.data and kind == "phase":
         st = c.store.ensure(c.log)
         for r in out.data["rows"]:
             r["done"], r["total"] = _progress(st, r["id"])
     if c.json:
-        body = {**out.data, "reason": out.reason} if out.exit != OK else out.data
+        body = {**out.data, "reason": out.reason} if out.exit != OK else dict(out.data)
+        # Echo the filter under the flag's own name: replaying `agent` would be identity.
+        if "agent" in body.get("filters", {}):
+            body["filters"] = {
+                ("owner" if k == "agent" else k): v for k, v in body["filters"].items()
+            }
         print(json.dumps(body, indent=2, default=str))
         if out.exit not in (OK, NOTHING):
             print(out.reason, file=sys.stderr)
         return out.exit
-    if out.exit not in (OK,):
-        print(out.reason)
+    if out.exit != OK:
+        print(out.reason, file=sys.stdout if out.exit == NOTHING else sys.stderr)
         return out.exit
     for r in out.data["rows"]:
         print(_line(kind, r))
