@@ -4,15 +4,14 @@
 was linear in the LOG (11.9 ms at 20k events, 62.8 ms at 100k) rather than in what was
 appended. These tests pin two things: the incremental order is IDENTICAL to the
 from-scratch one under every awkward shape of log (duplicates, out-of-order shards, torn
-tails, rewrites, deletions), and the warm read is measurably cheaper than re-sorting.
+tails, rewrites, deletions), and the warm read does work proportional to the append (counted, not timed: a wall-clock
+assertion is flaky under a loaded suite; the measured table is recorded on the item).
 """
 
 from __future__ import annotations
 
 import dataclasses
 import random
-import statistics
-import time
 
 import pytest
 
@@ -156,33 +155,6 @@ def test_a_cache_disabled_log_never_builds_a_merged_order(repo):
     _put(log, "a", [_ev("a", i) for i in range(1, 6)])
     log.read_all()
     assert not L._MERGED
-
-
-def _bench(repo, n: int) -> tuple[float, float]:
-    """(old-style sort+dedupe over n events, warm read after a 1-event append), ms."""
-    log = EventLog(repo, "x")
-    _put(log, "a", [_ev("a", i) for i in range(1, n // 2 + 1)])
-    _put(log, "b", [_ev("b", i) for i in range(1, n // 2 + 1)])
-    log.read_all()  # warm
-    # What the old read sorted: the raw per-shard concatenation, not the sorted output.
-    flat = [e for p in log.shards() for e in log._read_shard(p)[0]]
-    old, new = [], []
-    for _ in range(5):
-        t = time.perf_counter()
-        L._sorted_unique(list(flat))
-        old.append((time.perf_counter() - t) * 1000)
-    for k in range(5):
-        _put(log, "a", [_ev("a", n + k + 1)])
-        t = time.perf_counter()
-        log.read_all()
-        new.append((time.perf_counter() - t) * 1000)
-    return statistics.median(old), statistics.median(new)
-
-
-def test_the_warm_read_is_cheaper_than_re_sorting_and_does_not_scale_with_sort(repo):
-    old, new = _bench(repo, 20_000)
-    print(f"20k events: sort+dedupe {old:.1f} ms, warm read {new:.1f} ms")
-    assert new < old, (old, new)
 
 
 def test_distinct_events_never_tie_on_sort_key(repo):
