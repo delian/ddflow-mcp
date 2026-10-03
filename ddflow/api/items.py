@@ -420,6 +420,25 @@ def phase_add(  # noqa: PLR0913 -- BACKLOG B179: the same draft record as task_a
     return O.ok("phase.added", id=item, **chk.data())
 
 
+def _port_of_lines(st, cfg, port_of: str, wanted: list[str]) -> tuple[list[str], str]:
+    """The lines a follow-up to ``port_of`` must reach (B180), or the reason it cannot."""
+    from ..core import flow as F
+
+    if wanted:
+        return wanted, "--port-of takes its lines from that fix: drop --line/--lines"
+    origin = st.items.get(port_of)
+    if origin is None:
+        return [], f"--port-of: no such item {port_of!r}"
+    if origin.removed:
+        return [], f"--port-of: {origin.id!r} was removed"
+    origin = st.items.get(origin.port_of) or origin
+    if origin.removed:
+        return [], f"--port-of: {origin.id!r} was removed"
+    family = [origin, *(o for o in st.items.values() if o.port_of == origin.id and not o.removed)]
+    lines = (F.effective_line(st, o) or cfg.flow.current_line for o in family)
+    return list(dict.fromkeys(lines)), ""
+
+
 def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions have
     repo: Path,
     item: str,
@@ -473,27 +492,9 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         )
     wanted = csv_list(lines) or ([line] if line else [])
     if port_of:
-        if wanted:
-            return O.failed(
-                "task.added",
-                "--port-of takes its lines from that fix: drop --line/--lines",
-                id=item,
-            )
-        origin = st.items.get(port_of)
-        if origin is None:
-            return O.failed("task.added", f"--port-of: no such item {port_of!r}", id=item)
-        if origin.removed:
-            return O.failed("task.added", f"--port-of: {origin.id!r} was removed", id=item)
-        origin = st.items.get(origin.port_of) or origin
-        if origin.removed:
-            return O.failed("task.added", f"--port-of: {origin.id!r} was removed", id=item)
-        family = [
-            origin,
-            *(o for o in st.items.values() if o.port_of == origin.id and not o.removed),
-        ]
-        wanted = list(
-            dict.fromkeys(F.effective_line(st, o) or cfg.flow.current_line for o in family)
-        )
+        wanted, bad = _port_of_lines(st, cfg, port_of, wanted)
+        if bad:
+            return O.failed("task.added", bad, id=item)
     for ln in wanted:
         bad = _bad_line(cfg, ln)
         if bad:
