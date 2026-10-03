@@ -34,4 +34,7 @@ def test_the_docs_no_longer_say_dogfooding_is_undone():
     assert "CLOSED" in entry.split("\n\n")[0], entry
     handoff = (ROOT / "docs" / "HANDOFF.md").read_text()
     assert "needs operator approval" not in handoff
+    assert "no `AGENTS.md` or `CLAUDE.md`" not in handoff
+    assert "an operator decision" not in handoff
+    assert "since there is no `CLAUDE.md`" not in handoff
     assert "superseded: DONE 2026-09-28" in handoff
