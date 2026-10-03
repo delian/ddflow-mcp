@@ -106,3 +106,12 @@ def test_a_record_without_a_state_is_open(gitflow_pr):
     )
     rows = json.loads(run_cli(repo, "--json", "pr", "status")[1])["back_merges"]
     assert [(r["item"], r["state"]) for r in rows] == [("X1", "open")]
+    # `next` reads the same projection: it must not trip over the defaulted record.
+    assert run_cli(repo, "--json", "next")[0] in (0, 2)
+
+
+def test_next_tells_the_operator_when_a_back_merge_was_closed_unmerged(gitflow_pr):
+    repo, forge, _ = _to_back_merge(gitflow_pr)
+    forge.edit(2, state="CLOSED")
+    code, out, err = run_cli(repo, "next")
+    assert "pr sync REFUSED" in err and "develop" in err, (out, err)

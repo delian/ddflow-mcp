@@ -103,6 +103,9 @@ def next_(
         synced = {
             "changes": [f"{c.item}: {c.what}" for c in rep.changes],
             "unavailable": rep.unavailable,
+            # A closed-unmerged back-merge (or a merge the forge refused) is said ONCE:
+            # it is recorded as settled, so a `next` that dropped it never told anyone.
+            "refused": rep.refused,
         }
         if rep.changes:
             log, cfg, st = _load(repo, agent)
