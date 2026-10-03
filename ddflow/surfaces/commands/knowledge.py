@@ -309,6 +309,8 @@ def cmd_bug(a, c: Ctx) -> int:
                 title=a.title,
                 severity=a.severity,
                 scope=a.scope,
+                globs=a.globs,
+                no_task=a.no_task,
                 answer=answer,
                 agent=c.requested_agent,
             ),
@@ -322,10 +324,30 @@ def cmd_bug(a, c: Ctx) -> int:
         closed = out.data.get("resolution", "")
         note = f" -- already closed as {closed}; this report does not reopen it" if closed else ""
         offer = out.data.get("offer", "")
+        fix = out.data.get("fix_task", "")
+        task = ""
+        if fix and out.data.get("fix_task_filed"):
+            task = f"\nfix task {fix} filed in the queue (claim it to fix; `complete {fix} --regression-test <test>` closes the bug)"
+        elif fix:
+            task = f"\nfix task: {fix}"
         c.out(
-            f"bug {out.data['id']} recorded{note}" + (f"\n{offer}" if offer else ""),
-            out.body(("id", "offer")),
+            f"bug {out.data['id']} recorded{note}{task}" + (f"\n{offer}" if offer else ""),
+            out.body(("id", "offer", "fix_task", "fix_task_filed")),
         )
+        return OK
+    if a.bug_cmd == "file-tasks":
+        out = A.bug_file_tasks(c.repo, dry_run=a.dry_run, agent=c.requested_agent)
+        if out.exit not in (OK, NOTHING):
+            print(out.reason, file=sys.stderr)
+            return out.exit
+        if out.exit == NOTHING:
+            c.out(out.reason, out.body(("filed", "linked", "tasks", "dry_run")))
+            return NOTHING
+        would = "would file" if a.dry_run else "filed"
+        lines = [f"{would} {len(out.data['filed'])} fix task(s), linked {len(out.data['linked'])}"]
+        lines += [f"  {b} -> {t}" for b, t in out.data["tasks"].items()]
+        lines += [f"  {b} -> its open fix task" for b in out.data["linked"]]
+        c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "dry_run")))
         return OK
     if a.bug_cmd == "invalid":
         out = A.bug_invalid(
@@ -340,8 +362,19 @@ def cmd_bug(a, c: Ctx) -> int:
             return out.exit
         probe = f" (evidence: {a.evidence})" if a.evidence else ""
         c.out(
-            f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}",
-            out.body(("id", "invalid_reason", "evidence", "unchecked")),
+            f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}"
+            + _fix_task_tail(out.data),
+            out.body(
+                (
+                    "id",
+                    "invalid_reason",
+                    "evidence",
+                    "unchecked",
+                    "fix_task",
+                    "fix_task_removed",
+                    "fix_task_kept",
+                )
+            ),
         )
         return OK
     out = A.bug_fixed(
@@ -361,6 +394,24 @@ def cmd_bug(a, c: Ctx) -> int:
         return out.exit
     c.out(f"bug {a.id} closed (regression: {out.data['regression_test']})", out.body(("id",)))
     return OK
+
+
+def _fix_task_tail(data: dict) -> str:
+    """What `bug invalid` did about the bug's fix task, said only when true: removed, still
+    queued and why, or nothing to remove and why (roborev jobs 1299, 1300). The words are
+    the API's own (`STILL_QUEUED`, `NOTHING_TO_REMOVE`); an unknown reason is said as is,
+    never dressed as either."""
+    gone = data.get("fix_task_removed", "")
+    task, why = data.get("fix_task", ""), data.get("fix_task_kept", "")
+    if gone:
+        return f"\nfix task {gone} removed from the queue"
+    if not task or not why:
+        return ""
+    if why in A.STILL_QUEUED:
+        return f"\nfix task {task} stays in the queue: {A.STILL_QUEUED[why]}"
+    if why in A.NOTHING_TO_REMOVE:
+        return f"\nfix task {task} is {A.NOTHING_TO_REMOVE[why]}; nothing to remove"
+    return f"\nfix task {task} was not removed by this closure ({why})"
 
 
 def _misread_hint(a) -> str:

@@ -309,19 +309,13 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_gate_verify": {
         "description": (
-            "Break what a gate guards and require it to NOTICE. Applies each mutation "
-            "registered on the gate, runs it, requires a non-zero exit, and restores "
-            "the file.\n\n"
-            "This is the anti-vacuous-pass check turned on the checks themselves. A "
-            "gate that cannot fail is worse than no gate: it reports success on every "
-            "change and everyone downstream reads that as evidence. Exit 1 means the "
-            "gate did NOT catch its mutation — or that nobody has registered one, "
-            "which is the same problem earlier. Exit 3 on a HUMAN-approval gate: there "
-            "is no command to mutate and no test could show that a person's judgement "
-            "can go the other way, so nothing is broken and nothing is proven.\n\n"
-            "A mutation whose `old` text is absent or ambiguous is a FAILURE, not a "
-            "skip: the edit never happened, so the gate ran on pristine source and "
-            "passing proves the opposite of what it claims."
+            "Break what a gate guards and require it to NOTICE: applies each mutation "
+            "registered on the gate, runs it, requires a non-zero exit, restores the "
+            "file. A gate that cannot fail reports success on every change. Exit 1: "
+            "the gate did NOT catch its mutation, or none is registered. Exit 3 on a "
+            "HUMAN-approval gate (nothing to mutate). A mutation whose `old` text is "
+            "absent or ambiguous is a FAILURE, not a skip: the gate ran on pristine "
+            "source."
         ),
         "properties": {
             "id": ("string", "Item whose worktree to mutate in.", True),
@@ -370,12 +364,15 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "Optional 'Added|Changed|Deprecated|Removed|Fixed|Security: text', or skip.",
                 False,
             ),
+            "regression_test": (
+                "string",
+                "For a fix task: the test that now guards its bug(s); closes them.",
+                False,
+            ),
             "force": (
                 "boolean",
-                "Complete over unmet conditions. Every one is recorded in the event "
-                "log as overridden, so this is visible forever rather than being the "
-                "quiet way past a gate. Prefer `ddflow_gate_skip` with a reason: it "
-                "names the single step you are dropping instead of all of them.",
+                "Complete over unmet conditions; each is recorded as overridden, forever. "
+                "Prefer `ddflow_gate_skip` with a reason: it drops one named step.",
                 False,
             ),
         },
@@ -386,9 +383,19 @@ TOOLS: dict[str, dict[str, Any]] = {
             force=bool(a.get("force")),
             model=a.get("model", "") or "",
             changelog=a.get("changelog", "") or "",
+            regression_test=a.get("regression_test", "") or "",
             agent=agent,
         ),
-        "payload": ("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke"),
+        "payload": (
+            "id",
+            "sha",
+            "independence",
+            "forced",
+            "coverage_gaps",
+            "note",
+            "woke",
+            "bugs_closed",
+        ),
     },
     "ddflow_merge": {
         "description": (
@@ -951,7 +958,15 @@ TOOLS: dict[str, dict[str, Any]] = {
             evidence=a.get("evidence", "") or "",
             agent=agent,
         ),
-        "payload": ("id", "invalid_reason", "evidence", "unchecked"),
+        "payload": (
+            "id",
+            "invalid_reason",
+            "evidence",
+            "unchecked",
+            "fix_task",
+            "fix_task_removed",
+            "fix_task_kept",
+        ),
     },
     "ddflow_recover": {
         "description": (
@@ -1565,21 +1580,15 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_import_verify": {
         "description": (
             "Was this project's history imported, is that import still true, and did "
-            "anyone FINISH it? Read-only; writes nothing.\n\n"
-            "Three answers in one call. STATUS: how many phases, tasks, branches, "
-            "lessons, decisions, research notes, journal entries and memories carry "
-            "import provenance, and when. STILL TRUE: whether the source files have "
-            "moved on since (and what a re-run would add), and whether any imported "
-            "item names a source file that no longer exists. FINISHED: the half the "
-            "`import-existing-project` prompt asks a human for and nothing else "
-            "checks — imported tasks with no globs, which the conflict detector "
-            "cannot protect, and phases whose heading claims the work shipped while a "
-            "task under them is still open.\n\n"
-            "Call it after any import, and whenever you are about to hand out imported "
-            "work. Exit 1 means findings you should put to the operator; exit 2 means "
-            "nothing was ever imported, which is an answer, not a failure. It does not "
-            "repeat what `ddflow_doctor` covers — unresolved dependencies, duplicate "
-            "globs, cycles — so run that too."
+            "anyone FINISH it? Read-only. STATUS: what carries import provenance, and "
+            "when. STILL TRUE: whether the source files moved on since (what a re-run "
+            "would add) or an imported item names a file that no longer exists. "
+            "FINISHED: imported tasks with no globs (the conflict detector cannot "
+            "protect them) and phases whose heading claims the work shipped while a "
+            "task under them is open. Call it after any import and before handing out "
+            "imported work. Exit 1 = findings for the operator; exit 2 = nothing was "
+            "ever imported. `ddflow_doctor` covers the rest (dependencies, globs, "
+            "cycles)."
         ),
         "properties": {},
         "api": lambda repo, a, agent: _api().import_verify(repo, agent=agent),
@@ -1652,6 +1661,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "title": ("string", "Short headline.", False),
             "severity": ("string", "low|medium|high|critical.", False),
             "scope": ("string", "project (default) or ddflow.", False),
+            "globs": ("string", "The fix task's files; default: the item's globs.", False),
+            "no_task": ("boolean", "File no fix task (fixed in the same commit).", False),
         },
         "api": lambda repo, a, agent: _api().bug_found(
             repo,
@@ -1661,10 +1672,25 @@ TOOLS: dict[str, dict[str, Any]] = {
             title=a.get("title", "") or "",
             severity=a.get("severity", "") or "",
             scope=a.get("scope", "") or "",
+            globs=a.get("globs", "") or "",
+            no_task=bool(a.get("no_task")),
             answer=_answer(a),
             agent=agent,
         ),
-        "payload": ("id", "offer"),
+        "payload": ("id", "offer", "fix_task", "fix_task_filed"),
+    },
+    "ddflow_bug_file_tasks": {
+        "description": (
+            "File a fix task for every open bug that has none (one-shot after an upgrade; "
+            "`ddflow_bug_found` files one per bug by default)."
+        ),
+        "properties": {
+            "dry_run": ("boolean", "List what would be filed; write nothing.", False),
+        },
+        "api": lambda repo, a, agent: _api().bug_file_tasks(
+            repo, dry_run=bool(a.get("dry_run")), agent=agent
+        ),
+        "payload": ("filed", "linked", "tasks", "dry_run"),
     },
     "ddflow_session_note": {
         "description": (
@@ -3007,7 +3033,7 @@ FULL_ONLY_TOOLS = frozenset(
         "external_sync import import_verify job_add job_end job_list job_run promote_add "
         "promote_status workflow workflow_drop workflow_gate workflow_pipeline flow_choose "
         "version_cut rebuild replay hooks precommit companions_add prompts pins loops cadence "
-        "reviewers_detect memory_forget lesson_verify export"
+        "reviewers_detect memory_forget lesson_verify export bug_file_tasks"
     ).split()
 )
 

@@ -758,7 +758,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 151 knobs.
+cadences, and the rest of the 157 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3211,6 +3211,42 @@ the title, the severity and a scope other than `project`. A later `bug.reported_
 a skipped kind. Once a command to prepare that report exists, filing a `ddflow`-scoped bug ends with a
 one-line offer to run it.
 
+### Bugs are queue items
+
+A bug is not a side list that fills up while features ship: by default (`[bugs]
+file_task = true`) `bug found` files its **fix task** in the same transaction, so the
+bug is a node in the DAG and nothing else about the queue needs to know it is special:
+
+```console
+$ ddflow bug found --summary "parser drops the last line" --item T1 --id Bx
+bug Bx recorded
+fix task fix-Bx filed in the queue (claim it to fix; `complete fix-Bx --regression-test <test>` closes the bug)
+```
+
+The task is `fix-<bug id>`, titled `Fix bug <id>: <headline>`, tagged with the first of
+`[flow] bugfix_tags` (so `bugs_first` offers it ahead of every feature and gitflow gives
+it a `bugfix/` branch), filed under the nearest **open phase** of the item the bug names
+-- or under the standing `bugs` phase (`[bugs] phase`, made on first use) when the bug
+names no item or its phase is already done -- and it **carries that item's globs**
+unless `--globs` says otherwise. That last part is what stops bugs piling up under new
+work: a feature that touches the same files is passed over in `ddflow next` until the
+fix has landed, like any two items that overlap. The bug record carries the task
+(`fix_task`; `show <bug>` lists it) and the task carries the bug (`fixes`).
+
+Closing is the task's completion. `complete fix-Bx` **refuses while the bug is open**
+and names it; `complete fix-Bx --regression-test tests/test_parser.py::test_last_line`
+closes the bug through the same path as `bug fixed` (the test must be named and must
+exist; write it first and watch it FAIL on the unfixed code), then completes. Closing the
+bug first with `bug fixed` and completing afterwards is the same thing in two steps.
+
+Three cases file nothing or undo it: `--no-task` (MCP `no_task`), for a bug fixed in
+the commit that found it; `--item <an OPEN bug-fix task>`, which names the fix and links
+the bug to it instead of filing a twin; and `bug invalid`, which also removes the fix
+task when nobody holds it and no other open bug needs it. A log written before fix
+tasks existed is upgraded once with `ddflow bug file-tasks` (`--dry-run` lists; MCP
+`ddflow_bug_file_tasks`): every open bug without a fix task gets one, as `bug found`
+would have filed it. `[bugs] file_task = false` returns to flat bug records.
+
 ### Listing tasks, phases, bugs and research
 
 `ddflow task list`, `phase list`, `bug list` and `research list` print one line per
@@ -3829,7 +3865,9 @@ ddflow history [--item|--kind|--agent|--tail]  one timeline of everything that h
 
 ddflow lesson add|search        capture and retrieve lessons
 ddflow research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
-ddflow bug found|fixed          regression test required to close (--regression-test repeats)
+ddflow bug found|fixed          found files the fix task fix-<id> (--no-task, --globs); fixed needs --regression-test (repeats)
+ddflow bug file-tasks [--dry-run]  a fix task for every open bug that has none (one-shot; 2 = none)
+ddflow complete <fix task> --regression-test T  closes the bug(s) the task fixes and completes
 ddflow task|phase|bug|research list   one line per record, filters, --json (2 = none match)
 
 ddflow session start|prompt|note|end     provenance logging (prompt/note: id optional)
@@ -3876,7 +3914,7 @@ declared once and persists — see
 
 ## Configuration
 
-151 knobs across 22 sections, every one documented in place:
+157 knobs across 24 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -3922,6 +3960,11 @@ part that matters.
   feature in `ddflow next` and gets a free slot first, so a standing bug is fixed before
   more work is built on it. Priority orders each group; `[schedule] bugs_first = false`
   orders by priority alone.
+* **Bugs are queue items.** `bug found` files the fix task `fix-<bug>` by default -- in
+  the phase of the item the bug names, on that item's files -- so a feature touching the
+  same files waits behind it, and the bug closes when that task completes with a
+  regression test (`complete fix-<bug> --regression-test ...`). See [Bugs are queue
+  items](#bugs-are-queue-items).
 * **Gate evidence records which tree and how much** — a working-tree fingerprint plus
   files/lines changed — so a pass names what it passed on. If the tree moves afterwards,
   `complete` warns that the evidence describes source nobody is shipping.
