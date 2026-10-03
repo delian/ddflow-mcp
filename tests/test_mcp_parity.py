@@ -168,10 +168,17 @@ LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = {
 }
 
 
+def _tool_stem(path: tuple[str, ...]) -> str:
+    """A CLI path as a tool-name stem: `bug file-tasks` -> `bug_file_tasks`. ONE rule for
+    both detectors (roborev, job 1296: normalising one and not the other left the flag
+    check blind to the hyphenated command)."""
+    return "_".join(path).replace("-", "_")
+
+
 def leaf_covered(path: tuple[str, ...]) -> bool:
     if path in LEAF_NOT_EXPOSED or path in LEAF_VIA:
         return True
-    joined = "_".join(path).replace("-", "_")  # `bug file-tasks` -> ddflow_bug_file_tasks
+    joined = _tool_stem(path)
     return f"ddflow_{joined}" in TOOLS or any(t.startswith(f"ddflow_{joined}_") for t in TOOLS)
 
 
@@ -344,7 +351,7 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
 def _tool_for(path: tuple[str, ...]) -> str | None:
     if path in LEAF_VIA:
         return LEAF_VIA[path][0]
-    joined = "_".join(path)
+    joined = _tool_stem(path)
     return f"ddflow_{joined}" if f"ddflow_{joined}" in TOOLS else None
 
 

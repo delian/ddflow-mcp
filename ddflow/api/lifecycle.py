@@ -1372,9 +1372,10 @@ def complete(
 
     ``regression_test`` closes the open bugs this item is the fix task of (`bug found`
     files one per bug) through `bug_fixed` -- the same refusals: a test must be named and
-    must exist -- before the verdict, which otherwise blocks on them. The closures are
-    recorded even when the completion is then refused: the bug IS fixed and tested; the
-    item's pipeline is another matter.
+    must exist. The verdict is judged FIRST, with that one blocker lifted: a completion
+    refused for anything else closes no bug (the bug closes when the task completes, not
+    when the command is typed), and the flag on an item that fixes no open bug is refused
+    rather than dropped on the floor.
     """
     from ..services import completion as CM
 
@@ -1390,21 +1391,17 @@ def complete(
         return it
     closed: list[str] = []
     tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
-    if any(t.strip() for t in tests):
-        from .knowledge import bug_fixed
-
-        for bid in sorted(b.id for b in st.bugs.values() if b.open and b.fix_task == item):
-            out = bug_fixed(repo, bid, regression_test=tests, agent=agent)
-            if out.exit != O.OK:
-                return O.Outcome(
-                    kind="item.completed",
-                    data={"id": item, "bug": bid, "bugs_closed": closed},
-                    exit=out.exit,
-                    reason=f"--regression-test: bug {bid} not closed: {out.reason}",
-                )
-            closed.append(bid)
-        if closed:
-            log, cfg, st = _load(repo, agent)
+    closing = [t for t in tests if t.strip()]
+    pending = CM.open_bugs_of(st, item)
+    if closing and not pending:
+        return O.refused(
+            "item.completed",
+            f"--regression-test: {item} is not the fix task of any open bug, so there is "
+            f"nothing for it to close -- drop the flag, or close a bug with `ddflow bug "
+            f"fixed <bug> --regression-test ...`.",
+            id=item,
+            bugs_closed=[],
+        )
 
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
@@ -1414,6 +1411,9 @@ def complete(
     # way), so report it rather than an empty string (B9f8019c521).
     sha = sha or it.merged_sha
     v = CM.verdict(st, cfg, item, repo=repo, model=model)
+    if closing:
+        # The one blocker the flag is about to clear; every other one still stands.
+        v.blockers = [b for b in v.blockers if not b.startswith(CM.OPEN_BUG_BLOCKER)]
     base: dict[str, Any] = {
         "id": item,
         "sha": sha,
@@ -1439,6 +1439,21 @@ def complete(
             **base,
         )
     forced = bool(v.blockers and force)
+    if closing:
+        # Only now, with the completion going through: a refusal above closed nothing.
+        from .knowledge import bug_fixed
+
+        for bid in pending:
+            out = bug_fixed(repo, bid, regression_test=tests, agent=agent)
+            if out.exit != O.OK:
+                return O.Outcome(
+                    kind="item.completed",
+                    data={"id": item, "bug": bid, "bugs_closed": closed},
+                    exit=out.exit,
+                    reason=f"--regression-test: bug {bid} not closed: {out.reason}",
+                )
+            closed.append(bid)
+        base["bugs_closed"] = closed
     waiting = _waiters(repo, item)  # before the release: see `release`
     log.append(
         "item.completed",
