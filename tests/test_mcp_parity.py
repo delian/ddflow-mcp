@@ -282,6 +282,7 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     # `ddflow search` shares ddflow_list with the other viewers, whose `kind` selects the
     # viewer; the search's own `--kind` (which sources) is `sources`, and `--exact` /
     # `--regex` (a mutually exclusive pair) are `mode`.
+    ("ddflow_verify", "--all"): "a sweep is what omitting `id` means",
     ("ddflow_list", "--kind"): "carried by `sources`: `kind` selects the viewer",
     ("ddflow_list", "--exact"): "carried by `mode`=exact",
     ("ddflow_list", "--regex"): "carried by `mode`=regex",
