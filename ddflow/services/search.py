@@ -42,8 +42,7 @@ MAX_LIMIT = 200
 SNIPPET = 140
 MAX_SCAN = 2000  # characters of one record that a regex looks at
 MAX_PATTERN = 200
-MAX_OPEN_REPEATS = 3
-MAX_NESTED = 100  # a bounded repeat inside another may repeat at most this often
+MAX_OPEN_REPEATS = 2
 LOG_WEIGHT = 0.5
 BUDGET_S = 5.0  # wall-clock budget for the matching of one request
 
@@ -160,11 +159,11 @@ def _walk(sre_parse, nodes, in_repeat: bool, in_open: bool, stats: dict[str, int
     for op, av in nodes:
         name = str(op)
         if name in ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT"):
-            _lo, hi, sub = av
+            lo, hi, sub = av
             unbounded = hi >= c.MAXREPEAT
-            if in_repeat and hi > 1 and (unbounded or hi > MAX_NESTED):
+            if in_repeat and hi > 1 and (unbounded or lo != hi):
                 raise SearchError(
-                    "regex refused: a repeat inside another repeat can take exponential time"
+                    "regex refused: a repeat of variable length inside another repeat can take exponential time"
                 )
             if unbounded:
                 stats["open"] += 1
@@ -181,8 +180,10 @@ def _walk(sre_parse, nodes, in_repeat: bool, in_open: bool, stats: dict[str, int
             raise SearchError("regex refused: back-references can take exponential time")
         elif name == "SUBPATTERN":
             _walk(c, av[3], in_repeat, in_open, stats)
-        elif name in ("ASSERT", "ASSERT_NOT", "ATOMIC_GROUP"):
+        elif name in ("ASSERT", "ASSERT_NOT"):
             _walk(c, av[1], in_repeat, in_open, stats)
+        elif name == "ATOMIC_GROUP":
+            _walk(c, av, in_repeat, in_open, stats)
 
 
 def check_regex(pattern: str, *, ignore_case: bool = True) -> re.Pattern[str]:
