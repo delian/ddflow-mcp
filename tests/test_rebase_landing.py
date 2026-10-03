@@ -122,3 +122,45 @@ def test_the_commit_count_reads_gh_arrays_and_graphql_connections():
     assert _count({"totalCount": 5, "nodes": [{}]}) == 5  # a connection-shaped answer
     assert _count({"nodes": [{}, {}]}) == 2
     assert _count(None) == 0
+
+
+def test_the_pre_merge_tip_proves_a_range_the_patch_id_cannot(pr_repo, tmp_path):
+    """The base moved (an edit two lines from the request's hunk) before the rebase: the
+    replayed commits' context differs, so no patch-id matches the request's own diff --
+    only the tip ddflow read before merging, plus the commit count, proves the range."""
+    repo, forge, remote = pr_repo
+    run_cli(repo, "config", "--set", "worktree.merge_strategy", "ff-only")
+    (repo / "lib.txt").write_text("".join(f"l{i}\n" for i in range(1, 10)))
+    _git(repo, "add", "lib.txt")
+    _git(repo, "commit", "-qm", "lib")
+    _git(repo, "push", "-q", "origin", "main")
+
+    run_cli(repo, "task", "add", "T1", "--globs", "lib.txt,x.py")
+    code, out, err = run_cli(repo, "--json", "claim", "T1")
+    assert code == 0, err
+    tree = Path(json.loads(out)["worktree"])
+    text = (tree / "lib.txt").read_text()
+    (tree / "lib.txt").write_text(text.replace("l5\n", "pr5\n"))
+    _git(tree, "commit", "-qam", "feat: pr5")
+    (tree / "lib.txt").write_text((tree / "lib.txt").read_text().replace("l9\n", "pr9\n"))
+    _git(tree, "commit", "-qam", "feat: pr9")
+    _commit(tree, "x.py", "x\n", "feat: x")
+    pass_pipeline(repo, "T1", omit=("merge",))
+    assert run_cli(repo, "merge", "T1", "--model", AUTHOR)[0] == 0
+
+    other = tmp_path / "other"
+    subprocess.run(["git", "clone", "-q", str(remote), str(other)], check=True)
+    for k, v in (("user.email", "o@example.com"), ("user.name", "O")):
+        _git(other, "config", k, v)
+    (other / "lib.txt").write_text((other / "lib.txt").read_text().replace("l7\n", "foreign7\n"))
+    _git(other, "commit", "-qam", "foreign: l7")
+    _git(other, "push", "-q", "origin", "main")
+    moved = _git(other, "rev-parse", "HEAD")
+
+    forge.approve(1)
+    forge.edit(1, checks=GREEN)
+    run_cli(repo, "pr", "sync")
+    it = _state(repo).items["T1"]
+    assert it.landed_before == moved, (it.landed_before, moved)
+    assert _git(repo, "rev-list", "--count", f"{it.landed_before}..{it.landed_after}") == "3"
+    assert _range_files(repo, it.landed_before, it.landed_after) == ["lib.txt", "x.py"]
