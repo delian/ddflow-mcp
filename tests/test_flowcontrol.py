@@ -309,3 +309,20 @@ def test_admission_is_limit_in_flight_plus_independent_clamped():
     assert decide_admission(d, 0, 0) == 1
     assert decide_admission(d, 9, 9) == 4
     assert decide_admission(d, 9, 9, ceiling=3) == 3
+
+
+def test_need_bad_zero_cannot_make_decreases_vacuous():
+    # a healthy host must never lower the limit, whatever the evidence parameters say
+    run = series([GOOD] * 30)
+    assert fold(run, params(need_bad=0)).limit >= 4
+    assert fold(run, params(need_bad=-2, window=0)).limit >= 4
+    # and need_bad above the window is clamped so a decrease stays reachable
+    assert fold(series([BAD] * 6), params(window=2, need_bad=9)).limit == 3
+
+
+def test_limited_by_stops_naming_a_signal_that_recovered():
+    p = params(thresholds={LOAD: Threshold(0.15, 0.75), "q": Threshold(1, 3)})
+    run = [Sample(i * STEP, {LOAD: 0.05, "q": 5}) for i in range(3)]
+    run += [Sample((3 + i) * STEP, {LOAD: 0.1, "q": 0}) for i in range(40)]
+    d = fold(run, p)
+    assert d.mode == "increase" and d.limited_by == LOAD
