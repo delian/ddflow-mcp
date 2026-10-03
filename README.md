@@ -160,6 +160,7 @@ the same implementation, so neither drifts from the other.
 | I want to… | CLI | MCP tool |
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
+| **what a finished task required and changed** | `ddflow show <id>` on a done task prints its completion ledger: requirement digest, files and tests the landing changed, skipped gates, forced flag, later amendments | `ddflow_show` |
 | **one-page state of the project** | `ddflow workflow state` | `ddflow_workflow_state` |
 | **project rules** | `ddflow rule add\|edit\|list\|search\|show\|remove` | `ddflow_rule_add` · `_edit` · `_list` · `_search` · `_show` · `_remove` |
 | **change the workflow** | `ddflow workflow pipeline task …` · `workflow gate <id> …` · `workflow drop <id>` | `ddflow_workflow_pipeline` · `_gate` · `_drop` |
