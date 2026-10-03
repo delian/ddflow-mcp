@@ -124,7 +124,7 @@ def summary(ledger: dict[str, Any], files_shown: int = 8) -> dict[str, Any]:
         "completed_at": ledger["completed_at"],
         "sha": ledger["sha"],
         "requirement": ledger["requirement"]["digest"],
-        "files_known": d.get("files_known", False),
+        "files_known": d["files_known"],
         "files_total": d["files_total"],
         "files": d["files"][:files_shown],
         "tests": len(d["tests"]),

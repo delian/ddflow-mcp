@@ -195,7 +195,7 @@ def _ledger_lines(led: dict) -> str:
         (
             f"  files changed {led['files_total']}, tests among them {led['tests']}"
             + (f": {', '.join(led['files'])}" if led["files"] else "")
-            if led.get("files_known", False)
+            if led["files_known"]
             else "  files changed: UNKNOWN (no sha, or git could not list it)"
         ),
     ]
