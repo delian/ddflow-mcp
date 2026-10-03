@@ -63,13 +63,23 @@ class Verdict:
         return not self.blockers
 
 
+#: How the open-bug blocker begins; `api.complete` lifts exactly this one when
+#: `--regression-test` is about to close those bugs.
+OPEN_BUG_BLOCKER = "fixes open bug(s) "
+
+
+def open_bugs_of(state: State, item_id: str) -> list[str]:
+    """The open bugs ``item_id`` is the fix task of (`bug found` filed it), sorted."""
+    return sorted(b.id for b in state.bugs.values() if b.open and b.fix_task == item_id)
+
+
 def _open_bug_blockers(state: State, item_id: str) -> list[str]:
     """The bugs ``item_id`` is the fix task of that are still open, as one blocker."""
-    fixing = sorted(b.id for b in state.bugs.values() if b.open and b.fix_task == item_id)
+    fixing = open_bugs_of(state, item_id)
     if not fixing:
         return []
     return [
-        f"fixes open bug(s) {', '.join(fixing)}: close each with `ddflow bug fixed <bug> "
+        f"{OPEN_BUG_BLOCKER}{', '.join(fixing)}: close each with `ddflow bug fixed <bug> "
         f"--regression-test <test>` (a test that FAILS on the unfixed code), or pass "
         f"`--regression-test <test>` to complete, which closes them; a false finding is "
         f"`ddflow bug invalid <bug> --reason ...`."

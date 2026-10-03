@@ -958,7 +958,14 @@ TOOLS: dict[str, dict[str, Any]] = {
             evidence=a.get("evidence", "") or "",
             agent=agent,
         ),
-        "payload": ("id", "invalid_reason", "evidence", "unchecked", "fix_task_removed"),
+        "payload": (
+            "id",
+            "invalid_reason",
+            "evidence",
+            "unchecked",
+            "fix_task",
+            "fix_task_removed",
+        ),
     },
     "ddflow_recover": {
         "description": (

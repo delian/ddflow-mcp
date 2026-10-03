@@ -362,10 +362,18 @@ def cmd_bug(a, c: Ctx) -> int:
             return out.exit
         probe = f" (evidence: {a.evidence})" if a.evidence else ""
         gone = out.data.get("fix_task_removed", "")
-        tail = f"\nfix task {gone} removed from the queue" if gone else ""
+        kept = out.data.get("fix_task", "")
+        if gone:
+            tail = f"\nfix task {gone} removed from the queue"
+        elif kept:
+            tail = f"\nfix task {kept} stays in the queue (held, needed, or fixing another bug)"
+        else:
+            tail = ""
         c.out(
             f"bug {a.id} closed as invalid: {out.data['invalid_reason']}{probe}{tail}",
-            out.body(("id", "invalid_reason", "evidence", "unchecked", "fix_task_removed")),
+            out.body(
+                ("id", "invalid_reason", "evidence", "unchecked", "fix_task", "fix_task_removed")
+            ),
         )
         return OK
     out = A.bug_fixed(

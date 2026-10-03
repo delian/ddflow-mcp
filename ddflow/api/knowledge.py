@@ -27,6 +27,7 @@ from ..core import globspec as GS
 from ..core import outcome as O
 from ..core.events import parse_changelog
 from ..core.ids import auto_id
+from ..core.model import fold
 from ._base import _load
 
 VERDICTS = ("CONFIRMED", "REFUTED", "THEORETICAL")
@@ -535,24 +536,29 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
         offer = upstream_offer(scope or (held.scope if held else "project"), target)
         return O.ok("bug.found", **{**out.data, **({"offer": offer} if offer else {})})
     prior = st.bugs.get(bid)
-    # The fix task goes in the SAME transaction as the bug, and its id into the bug's own
-    # event, so a crash between the two cannot leave a bug that says it has a task it has
-    # not. A re-report (`prior`) files nothing: the record already has what it has. What
-    # the reply then SAYS about the task -- claim it now, it is queued, ask -- is the
-    # `[bugs].on_found` knob's business (B-bugs-fix-now), decided from `fix_task` here.
+    # The bug's own event names its fix task, and is written FIRST: the lock is no
+    # rollback (each append is durable on its own), so the order decides what a crash
+    # between the two leaves behind. A bug naming a task not yet filed is repaired by
+    # `bug file-tasks`, which walks open bugs; a task for a bug that was never recorded
+    # would be repaired by nothing. A re-report (`prior`) files nothing: the record
+    # already has what it has. What the reply then SAYS about the task -- claim it now,
+    # it is queued, ask -- is the `[bugs].on_found` knob's business (B-bugs-fix-now),
+    # decided from `fix_task` here.
     fix: dict[str, Any] = {"fix_task": "", "filed": False}
+    filing = cfg.bugs.file_task and not no_task and prior is None
     with log.transaction():
-        if cfg.bugs.file_task and not no_task and prior is None:
-            fix = _file_fix_task(
-                log, cfg, st, bid, title=title, summary=summary, item=item, globs=globs
-            )
-        linked = {"fix_task": fix["fix_task"]} if fix["fix_task"] else {}
+        fix_id = _fix_task_id(st, cfg, bid, item) if filing else ""
+        linked = {"fix_task": fix_id} if fix_id else {}
         log.append(
             "bug.found",
             bid,
             {"item": item, "summary": summary, **extra, **linked, **chk.fields},
         )
         DD.after_add(log, cfg, bid, chk)
+        if filing:
+            fix = _file_fix_task(
+                log, cfg, st, bid, title=title, summary=summary, item=item, globs=globs
+            )
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
     # out loud, because otherwise a real recurrence filed under an id already closed
     # vanishes without a word. Only an EXPLICIT `--id` can land on a closed record: an
@@ -604,6 +610,23 @@ def _open_phase_of(st, item: str) -> str:
     return ""
 
 
+def _fix_task_id(st, cfg, bug_id: str, item: str) -> str:
+    """The id `_file_fix_task` will bind ``bug_id`` to: the open bug-fix task ``item``
+    names, else `fix-<bug>` (whether or not it is already in the queue). One rule, so the
+    bug event written before the task names the task that then gets filed."""
+    named = _fix_task_of(st, cfg, item)
+    return named.id if named is not None else FIX_TASK_PREFIX + bug_id
+
+
+def _has_fix_task(st, cfg, bug_id: str, item: str) -> bool:
+    """Whether ``bug_id`` already has its fix in the queue, so `_file_fix_task` would file
+    nothing: the open bug-fix task ``item`` names, or a live `fix-<bug>`."""
+    if _fix_task_of(st, cfg, item) is not None:
+        return True
+    have = st.items.get(FIX_TASK_PREFIX + bug_id)
+    return have is not None and not have.removed
+
+
 def _file_fix_task(
     log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str
 ) -> dict[str, Any]:
@@ -620,12 +643,8 @@ def _file_fix_task(
     from ..api.items import DEFAULT_PRIORITY
     from ..core.model import Item
 
-    named = _fix_task_of(st, cfg, item)
-    if named is not None:
-        return {"fix_task": named.id, "filed": False, "phase_made": ""}
-    tid = FIX_TASK_PREFIX + bug_id
-    have = st.items.get(tid)
-    if have is not None and not have.removed:
+    tid = _fix_task_id(st, cfg, bug_id, item)
+    if _has_fix_task(st, cfg, bug_id, item):
         return {"fix_task": tid, "filed": False, "phase_made": ""}
     src = st.items.get(item) if item else None
     if src is not None and src.removed:
@@ -688,8 +707,6 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
     written before `bug found` filed them. A bug whose item is an open bug-fix task is
     linked to it (``linked``); any other gets `fix-<bug>` filed (``filed``), as `bug
     found` would have. Nothing to do is exit 2. ``dry_run`` reports and writes nothing."""
-    from ..core.model import fold
-
     log, cfg, st = _load(repo, agent)
     filed: list[str] = []
     linked: list[str] = []
@@ -701,7 +718,8 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
         )
         for b in todo:
             if dry_run:
-                (linked if _fix_task_of(st, cfg, b.item) else filed).append(b.id)
+                # The same test the write path applies, so the prediction is the outcome.
+                (linked if _has_fix_task(st, cfg, b.id, b.item) else filed).append(b.id)
                 continue
             fix = _file_fix_task(
                 log, cfg, st, b.id, title=b.title, summary=b.summary, item=b.item, globs=""
@@ -890,28 +908,37 @@ def bug_invalid(
     reason = reason.strip()
     with log.transaction():
         log.append("bug.invalid", bug, {"reason": reason, "evidence": evidence})
-        removed = _drop_fix_task(log, st, rec)
+        # Decided from the log as it is NOW, under the lock: a claim on the fix task made
+        # since `_load` must be seen, or the task is removed under its holder.
+        fresh = fold(log.read_all(), strict=False)
+        removed = _drop_fix_task(log, fresh, fresh.bugs.get(bug, rec))
     return O.ok(
         "bug.invalid",
         id=bug,
         invalid_reason=reason,
         evidence=evidence,
         unchecked=unchecked,
+        fix_task=rec.fix_task,
         fix_task_removed=removed,
     )
 
 
 def _drop_fix_task(log, st, rec) -> str:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
-    still OPEN, nobody holds it, and no other open bug names it. Returns the id removed or
-    "". A task somebody has claimed, or that fixes a real bug too, stays -- the reply names
-    it and the agent decides."""
+    still OPEN, nobody holds it, no other open bug names it, nothing is filed under it and
+    nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
+    one. Returns the id removed or "". A task somebody has claimed, or that fixes a real
+    bug too, stays -- the reply names it and the agent decides."""
     from ..core.model import OPEN
 
     t = st.items.get(rec.fix_task) if rec.fix_task else None
     if t is None or t.removed or t.state != OPEN or t.lease:
         return ""
     if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
+        return ""
+    if st.open_descendants(t.id) or any(
+        not o.removed and t.id in o.needs for o in st.items.values()
+    ):
         return ""
     log.append("task.removed", t.id, {"reason": f"bug {rec.id} closed as invalid"})
     return t.id

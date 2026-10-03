@@ -145,6 +145,18 @@ def test_an_open_bugfix_task_named_as_the_item_is_the_fix_and_nothing_new_is_fil
     assert st.bugs["Bx"].fix_task == "B-fix-it" and "fix-Bx" not in st.items
 
 
+def test_an_open_untagged_task_named_as_the_item_is_where_it_was_found_not_its_fix(repo):
+    """rubber_duck #1 (refuted by this probe): only a task `branch_kind` calls a bug fix
+    -- one of `[flow] bugfix_tags`/`hotfix_tags` -- is taken as the fix; an ordinary open
+    task named as the item is where the bug was found, and gets a fix task of its own."""
+    seed(repo)
+    out = K.bug_found(repo, summary="found while building", item="F1", id="Bx", agent="a")
+    assert out.exit == 0
+    assert out.data["fix_task"] == "fix-Bx" and out.data["fix_task_filed"] is True
+    st = state(repo)
+    assert st.items["fix-Bx"].parent == "P1" and st.items["fix-Bx"].globs == ["src/parser.py"]
+
+
 def test_cli_reply_names_the_fix_task(repo):
     seed(repo)
     code, out, err = run_cli(
@@ -225,6 +237,31 @@ def test_complete_with_a_regression_test_closes_the_bug_and_completes(repo):
     assert st.items["fix-Bx"].state == "done"
 
 
+def test_a_refused_completion_closes_no_bug(repo):
+    """critic #1 / rubber_duck #2: the bug closes when the task COMPLETES. A completion
+    refused for any other reason (here: a pipeline never run) leaves the bug open."""
+    seed(repo)
+    K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
+    node = _fixed(repo)
+    out = LC.complete(repo, "fix-Bx", model="claude-opus-5", regression_test=node, agent="a")
+    assert out.exit == 3, out.reason
+    assert not any("Bx" in b for b in out.data["blockers"]), "the open-bug blocker is lifted"
+    assert out.data["bugs_closed"] == []
+    st = state(repo)
+    assert st.bugs["Bx"].open and st.items["fix-Bx"].state != "done"
+
+
+def test_the_flag_on_an_item_that_fixes_no_open_bug_is_refused_not_dropped(repo):
+    """roborev job 1296 #6: a regression test nobody records must not look recorded."""
+    seed(repo)
+    pass_pipeline(repo, "F1")
+    out = LC.complete(
+        repo, "F1", model="claude-opus-5", regression_test="tests/x.py::test_y", agent="a"
+    )
+    assert out.exit == 3 and "not the fix task of any open bug" in out.reason
+    assert state(repo).items["F1"].state != "done"
+
+
 def test_complete_refuses_a_regression_test_that_exists_nowhere(repo):
     seed(repo)
     K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
@@ -256,11 +293,25 @@ def test_bug_invalid_removes_an_unclaimed_fix_task(repo):
     assert state(repo).items["fix-Bx"].removed
 
 
-def test_bug_invalid_keeps_a_fix_task_somebody_holds(repo):
+def test_bug_invalid_keeps_a_fix_task_somebody_holds_and_names_it(repo):
     seed(repo)
     K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
     code, _, err = run_cli(repo, "claim", "fix-Bx", "--no-worktree", agent="fixer")
     assert code == 0, err
+    out = K.bug_invalid(repo, "Bx", reason="by design", agent="a")
+    assert out.exit == 0 and out.data["fix_task_removed"] == ""
+    assert out.data["fix_task"] == "fix-Bx", "rubber_duck #3: the kept task is named"
+    assert not state(repo).items["fix-Bx"].removed
+
+
+def test_bug_invalid_keeps_a_fix_task_something_depends_on(repo):
+    """roborev job 1296 #2: the guards `remove` applies -- dependents, children -- hold
+    here too, or a false finding strands the work filed on its fix."""
+    seed(repo)
+    K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
+    EventLog(repo, "seed").append(
+        "task.added", "AFTER", {"parent": "P1", "title": "after the fix", "needs": ["fix-Bx"]}
+    )
     out = K.bug_invalid(repo, "Bx", reason="by design", agent="a")
     assert out.exit == 0 and out.data["fix_task_removed"] == ""
     assert not state(repo).items["fix-Bx"].removed
@@ -277,11 +328,17 @@ def test_file_tasks_gives_every_open_bug_without_one_a_fix_task_and_is_idempoten
     log.append("bug.fixed", "B-done", {"regression_test": "t::x"})
     log.append("task.added", "B-fix-x", {"parent": "P1", "title": "fix x", "tags": ["bug"]})
     log.append("bug.found", "B-linked", {"item": "B-fix-x", "summary": "has a fix task already"})
+    # roborev job 1296 #5: a live `fix-<bug>` filed by hand counts as linked in BOTH runs
+    log.append("bug.found", "B-hand", {"item": "", "summary": "has a hand-filed fix-B-hand"})
+    log.append("task.added", "fix-B-hand", {"parent": "P1", "title": "Fix bug B-hand: by hand"})
     dry = K.bug_file_tasks(repo, dry_run=True, agent="a")
-    assert dry.exit == 0 and dry.data["filed"] == ["B-old"] and dry.data["linked"] == ["B-linked"]
+    assert dry.exit == 0 and dry.data["filed"] == ["B-old"]
+    assert dry.data["linked"] == ["B-linked", "B-hand"]
     assert "fix-B-old" not in state(repo).items
     out = K.bug_file_tasks(repo, agent="a")
-    assert out.exit == 0 and out.data["filed"] == ["B-old"] and out.data["linked"] == ["B-linked"]
+    assert out.exit == 0 and out.data["filed"] == ["B-old"]
+    assert out.data["linked"] == ["B-linked", "B-hand"]
+    assert state(repo).bugs["B-hand"].fix_task == "fix-B-hand"
     st = state(repo)
     assert st.items["fix-B-old"].parent == "P1" and st.items["fix-B-old"].globs == ["src/parser.py"]
     assert st.bugs["B-old"].fix_task == "fix-B-old"
