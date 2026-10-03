@@ -22,7 +22,7 @@ def test_this_repository_runs_its_own_queue():
     code, out, err = run_cli(ROOT, "--json", "status")
     assert code == 0, out + err
     # a real queue: hundreds of items, not a toy
-    assert json.loads(out), out
+    assert json.loads(out)["tasks"]["total"] >= 100, out
 
 
 def test_the_docs_no_longer_say_dogfooding_is_undone():

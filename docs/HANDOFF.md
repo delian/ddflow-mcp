@@ -282,8 +282,9 @@ These three share a "what does this diff touch?" helper; build it once.
 
 ### Also open, outside B16–B26
 
-`B7` dogfooding (*done 2026-09-28, see the note in §0*; it needed operator approval — adopting ddflow into its own repo installs a
-commit hook and writes `AGENTS.md`/`CLAUDE.md`/`.mcp.json`), `B12` partial, `B13` Windows,
+(B7, dogfooding, is not in this list: it shipped 2026-09-28 and needed the operator's approval, since adopting ddflow into a repo installs a commit hook and writes `AGENTS.md`/`CLAUDE.md`/`.mcp.json`.)
+
+`B12` partial, `B13` Windows,
 `B52`, `B95`, `B109`–`B112` (deliberately deferred design thread), `B114`, `B148`, `B149`,
 `B166`–`B169`.
 
