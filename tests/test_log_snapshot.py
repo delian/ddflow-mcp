@@ -341,3 +341,14 @@ def test_a_valid_saved_order_is_adopted_so_the_cold_read_does_not_sort(repo, mon
     path.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
     _check(repo)
     assert sorts, "the control did not fall back to a sort"
+
+
+def test_a_read_only_log_does_not_read_a_snapshot_either(repo, parses):
+    _build(repo)  # leaves a valid snapshot in the repo
+    reader = EventLog(repo, "x", log_cfg=CFG, cache_writes=False)
+    assert _check(repo, reader).parsed == 2 * N
+
+
+def test_the_snapshot_layout_is_the_event_dataclass_itself():
+    e = _ev("a", 3)
+    assert Event(*L._event_tuple(e)) == e

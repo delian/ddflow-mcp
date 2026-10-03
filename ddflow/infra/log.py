@@ -23,6 +23,7 @@ import hashlib
 import itertools
 import json
 import marshal
+import operator
 import os
 import secrets
 import socket
@@ -79,6 +80,10 @@ SEEN_MARKER = Path(".ddflow") / "local" / "seen.json"
 #: and the log stays the only source of truth.
 SNAPSHOT_FILE = "read-snapshot.bin"
 SNAPSHOT_FORMAT = 1
+#: A snapshot stores each event as a tuple in `Event`'s own field order, derived from the
+#: dataclass so the writer, the reader and the header cannot disagree about the layout.
+_EVENT_FIELDS = tuple(f.name for f in fields(Event))
+_event_tuple = operator.attrgetter(*_EVENT_FIELDS)
 #: No snapshot below this many events: a cold parse is cheap there and a file is not free.
 #: A module constant rather than a `[log]` knob for now (follow-up B-log-snapshot-knobs,
 #: waiting on config.py); tests lower it.
@@ -1062,7 +1067,12 @@ class EventLog:
         return self.dir.parent / "local" / SNAPSHOT_FILE
 
     def _snapshot_enabled(self) -> bool:
-        return self.log_cfg.reuse_parsed and os.environ.get(SNAPSHOT_ENV) != "0"
+        # A log built only to read someone else's repository (`cache_writes=False`) neither
+        # writes NOR reads a snapshot there: what is in another checkout's `.ddflow/local/`
+        # is that checkout's own state, not something to decode into this process.
+        return (
+            self.log_cfg.reuse_parsed and self.cache_writes and os.environ.get(SNAPSHOT_ENV) != "0"
+        )
 
     def _load_snapshot(self) -> dict[str, tuple]:
         """The snapshot's per-shard entries, or `{}` -- never an exception, never a guess.
@@ -1073,12 +1083,22 @@ class EventLog:
         expected shape. Any doubt is "no snapshot", and the caller parses the log. Even a
         snapshot that passes is only a CLAIM about shard prefixes: `_seed_from_snapshot`
         re-hashes the real bytes before using any of it.
+
+        What that does NOT prove is that the decoded events are the ones those bytes
+        parse to: the shard hashes bind the snapshot to the log, and its own checksum
+        guards against rot and truncation, but a hand-crafted file with consistent
+        checksums is believed. That is the same trust as the rest of `.ddflow/local/`
+        (machine-local state in the operator's own checkout, never merged or fetched), which
+        is why a read-only log skips snapshots entirely and `verify()` never uses one.
+        `marshal` is used for speed and, like any file in your own checkout, is not a
+        place to put untrusted bytes.
         """
         memo = _SNAPSHOTS.get(self.dir)
         if memo is not None:
             return memo
         entries: dict[str, tuple] = {}
         _SNAPSHOTS[self.dir] = entries
+        _SNAP_COVERED[self.dir] = 0  # what is covered is what gets seeded from THIS file
         try:
             raw = self._snapshot_path().read_bytes()
             head, _, payload = raw.partition(b"\n")
@@ -1086,7 +1106,7 @@ class EventLog:
             if (
                 meta["format"] != SNAPSHOT_FORMAT
                 or meta["version"] != running_version()
-                or meta["fields"] != [f.name for f in fields(Event)]
+                or meta["fields"] != list(_EVENT_FIELDS)
                 or meta["parser"] != _parser_stamp()
                 or meta["size"] != len(payload)
                 or meta["sha256"] != hashlib.sha256(payload).hexdigest()
@@ -1161,10 +1181,7 @@ class EventLog:
                 d.parsed.consumed,
                 d.parsed.digest,
                 d.parsed.skipped,
-                [
-                    (e.kind, e.subject, e.data, e.agent, e.lamport, e.ts, e.id, e.schema)
-                    for e in d.whole
-                ],
+                [_event_tuple(e) for e in d.whole],
             )
             for p, d in deltas
             if d.parsed is not None
@@ -1183,7 +1200,7 @@ class EventLog:
             meta = {
                 "format": SNAPSHOT_FORMAT,
                 "version": running_version(),
-                "fields": [f.name for f in fields(Event)],
+                "fields": list(_EVENT_FIELDS),
                 "parser": _parser_stamp(),
                 "size": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
