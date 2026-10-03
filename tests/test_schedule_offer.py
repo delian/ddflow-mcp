@@ -102,3 +102,14 @@ def test_a_held_item_is_not_offered_and_does_not_shadow_the_items_it_overlaps(lo
     )
     assert [i.id for i in p.ready] == ["B", "C"]
     assert [b.item for b in p.blocked] == ["A"]
+
+
+def test_items_on_different_release_lines_do_not_shadow_each_other(log, cfg):
+    """The same exemption a held lease gets: `a.py` on 1.x and on the current line are
+    different branches, and claim would grant both, so both are offered."""
+    cfg.flow.lines = {"1": "maint/1.x"}
+    log.append("phase.added", "P", {"title": "phase"})
+    log.append("task.added", "A", {"parent": "P", "priority": 1, "globs": ["a.py"], "line": "1"})
+    log.append("task.added", "B", {"parent": "P", "priority": 2, "globs": ["a.py"]})
+    p = _plan(log, cfg, 2)
+    assert [i.id for i in p.ready] == ["A", "B"]
