@@ -260,3 +260,25 @@ def test_the_gemini_flag_reaches_ddflow_in_every_branch():
     line = E.command_line(CH.PROMPT_MARKER, extra="--gemini")
     assert line.count("hooks prompt --gemini") == 2, line
     assert not line.rstrip().endswith("fi --gemini")
+
+
+def test_a_legacy_line_never_claims_a_path_fallback(repo, tmp_path, bare_path):
+    """An older line execs its dead path; saying it falls back to PATH would be false."""
+    exe = bare_path / "ddflow"
+    exe.write_text("#!/bin/sh\nexit 0\n")
+    exe.chmod(0o755)
+    d = LA.check_command("x", f'exec "{GONE}" hooks check-commit "$@"', "ddflow hooks install")
+    assert d and d.fallback is False and "NOTHING runs it" in d.render()
+
+
+def test_one_good_pythonpath_entry_is_enough_for_an_mcp_entry(repo, tmp_path):
+    pkg = tmp_path / "src" / "ddflow"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").write_text("")
+    (repo / ".mcp.json").write_text(
+        json.dumps(
+            {"mcpServers": {"ddflow": {"command": sys.executable,
+                                       "env": {"PYTHONPATH": f"/opt/none{os.pathsep}{tmp_path / 'src'}"}}}}
+        )
+    )  # fmt: skip
+    assert LA.findings(repo) == []
