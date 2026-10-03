@@ -28,6 +28,7 @@ from ..config import Config
 from ..core.events import Event
 from ..core.model import State
 from ..core.schedule import conflicts
+from . import backfill as BF
 from . import gates as G
 from . import ledger as LG
 
@@ -303,6 +304,15 @@ def _survives(led: dict[str, Any], tracked: set[str] | None) -> Claim:
     return Claim("survives", OK, f"all {len(files)} changed file(s) still exist")
 
 
+def _rebuilt_claim(rebuilt: dict[str, str], why: str) -> Claim:
+    return Claim(
+        "ledger",
+        WARN,
+        f"{why}; the landing {rebuilt['sha'][:10]} was found afterwards by {rebuilt['how']} -- "
+        f"reconstructed, not what the completing agent recorded",
+    )
+
+
 def check(
     repo: Path,
     cfg: Config,
@@ -320,22 +330,27 @@ def check(
         return Report(item_id, completed=False)
     if tracked == "read":
         tracked = _tracked(repo)
+    led = BF.apply(repo, st, led, item_id)
+    rebuilt = led.get("backfill")
     if led["imported"]:
-        # Closed in a document before ddflow existed: there is no landing, gate history or
-        # file list to check, and saying "no gates ran" would accuse work nobody recorded.
-        # What CAN still be checked is a declared file that never existed.
+        # Closed in a document before ddflow existed: there is no gate history to check,
+        # and saying "no gates ran" would accuse work nobody recorded. What CAN still be
+        # checked is a declared file that never existed -- and, when git still shows the
+        # landing, that it landed and survived.
         note = led["import_evidence"] or "no evidence recorded"
-        return Report(
-            item_id,
-            [
-                _declared(repo, led, tracked),
+        claims = [_declared(repo, led, tracked)]
+        if rebuilt:
+            claims += [_landed(repo, cfg, led), _survives(led, tracked)]
+            claims.append(_rebuilt_claim(rebuilt, f"imported as already closed ({note})"))
+        else:
+            claims.append(
                 Claim(
                     "ledger",
                     UNKNOWN,
                     f"imported as already closed ({note}); no gate or landing history",
-                ),
-            ],
-        )
+                )
+            )
+        return Report(item_id, claims)
     pipeline = G.pipeline_for(st.items[item_id], cfg) if item_id in st.items else []
     claims = [
         _landed(repo, cfg, led),
