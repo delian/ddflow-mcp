@@ -12,8 +12,8 @@ form either: matching happens on the raw text only to pick candidates, and a can
 whose match disappears under redaction shows its start instead).
 
 `regex` runs Python's backtracking engine, which cannot be interrupted, so a pattern is
-checked before it runs (`check_regex`): too long, a back-reference, an unbounded repeat
-inside another repeat, an alternation inside a repeat that can run more than `MAX_BRANCH_REPS`
+checked before it runs (`check_regex`): too long, a back-reference, a variable-length repeat
+inside a repeat (unless together they run at most `MAX_BRANCH_REPS` times), an alternation inside a repeat that can run more than `MAX_BRANCH_REPS`
 times, or more than
 `MAX_OPEN_REPEATS` unbounded repeats are refused with the reason. What passes is run on
 at most `MAX_SCAN` characters per record under an overall time budget.
@@ -166,7 +166,7 @@ def _walk(sre_parse, nodes, reps: int, stats: dict[str, int]) -> None:
         if name in ("MAX_REPEAT", "MIN_REPEAT", "POSSESSIVE_REPEAT"):
             lo, hi, sub = av
             unbounded = hi >= c.MAXREPEAT
-            if reps > 1 and hi > 1 and (unbounded or lo != hi):
+            if reps > 1 and lo != hi and (unbounded or reps * hi > MAX_BRANCH_REPS):
                 raise SearchError(
                     "regex refused: a repeat of variable length inside another repeat "
                     "can take exponential time"
