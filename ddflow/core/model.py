@@ -1555,7 +1555,8 @@ def _h_back_merge_recorded(st: State, ev: Event) -> None:
     st.back_merges[f"{ev.subject}>{into}"] = {
         "item": ev.subject,
         "into": into,
-        **{k: d.get(k, "") for k in ("number", "url", "forge", "state")},
+        **{k: d.get(k, "") for k in ("number", "url", "forge")},
+        "state": d.get("state") or "open",
     }
 
 

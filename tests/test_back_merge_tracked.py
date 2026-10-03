@@ -69,3 +69,10 @@ def test_a_back_merge_closed_unmerged_is_refused_loudly(gitflow_pr):
     assert any("H1" in r and "develop" in r and "closed" in r for r in body["refused"]), body
     rows = json.loads(run_cli(repo, "--json", "pr", "status")[1])["back_merges"]
     assert rows[0]["state"] == "closed"
+
+
+def test_a_closed_back_merge_says_it_is_no_longer_rechecked(gitflow_pr):
+    repo, forge, _ = _to_back_merge(gitflow_pr)
+    forge.edit(2, state="CLOSED")
+    _, out, _ = run_cli(repo, "--json", "pr", "sync")
+    assert any("stops re-checking" in r for r in json.loads(out)["refused"]), out

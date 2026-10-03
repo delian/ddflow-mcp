@@ -437,8 +437,8 @@ def _sync_back_merges(log: EventLog, forge: FG.Forge, rep: SyncReport, *, only: 
         else:
             rep.refused.append(
                 f"{rec['item']}: back-merge request into {rec['into']} was closed without "
-                f"merging ({info.url}) -- {rec['into']} does not have the hotfix; re-open it "
-                f"or merge production into {rec['into']} yourself."
+                f"merging ({info.url}) -- {rec['into']} does not have the hotfix. Merge production "
+                f"into {rec['into']} yourself; ddflow stops re-checking a closed request."
             )
 
 
@@ -455,7 +455,11 @@ def sync(repo: Path, cfg: Config, log: EventLog, *, only: str = "") -> SyncRepor
         for it in sorted(st.items.values(), key=lambda i: i.id)
         if it.state == REVIEW and it.pr and it.pr.number and (not only or it.id == only)
     ]
-    open_back = [r for r in st.back_merges.values() if r["state"] == "open"]
+    open_back = [
+        r
+        for r in st.back_merges.values()
+        if r["state"] == "open" and (not only or r["item"] == only)
+    ]
     if not waiting and not st.pending_releases and not open_back:
         return rep
     try:
