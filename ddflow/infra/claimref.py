@@ -115,11 +115,12 @@ def take(root: Path, remote: str, item: str, holder: str, expires: float) -> Res
         return Result("unavailable", detail="the existing claim could not be read")
     owner, lapses = read
     if owner == holder or lapses <= time.time():
+        renewing = owner == holder
         swapped = _run(
             root, "push", "--quiet", f"--force-with-lease={ref}:{cur}", remote, f"{sha}:{ref}"
         )
         if swapped is not None and not isinstance(swapped, OSError) and swapped.ok:
-            return Result("ok", holder, expires)
+            return Result("ok", holder, expires, "renewed" if renewing else "")
         cur, why = _remote_sha(root, remote, ref)
         if cur is None:
             return Result("unavailable", detail=why)

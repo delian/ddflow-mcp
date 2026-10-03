@@ -192,6 +192,32 @@ def acquire(
     item_id: str,
     *,
     holder: str = "",
+    **kwargs: Any,
+) -> Lease:
+    """Claim an item; with `[flow].claims = "remote"`, win the remote claim ref first.
+
+    The remote round trips run BEFORE the log's append lock is taken -- up to six git
+    subprocesses at 30 s each held under it would starve every local writer -- and a claim
+    the local checks then refuse gives the ref back.
+    """
+    holder = holder or log.agent_id
+    took = ""
+    if cfg.flow.claims == "remote":
+        took = _remote_take(log, cfg, item_id, holder, time.time())
+    try:
+        return _acquire_locked(log, cfg, item_id, holder=holder, **kwargs)
+    except Exception:
+        if took == "fresh":  # an own, already-live claim is not ours to give back here
+            _remote_drop(log, item_id, holder)
+        raise
+
+
+def _acquire_locked(
+    log: EventLog,
+    cfg: Config,
+    item_id: str,
+    *,
+    holder: str = "",
     globs: list[str] | None = None,
     worktree: str = "",
     branch: str = "",
@@ -237,14 +263,6 @@ def acquire(
         existing = it.lease
         if existing and not existing.expired(now, cfg.lease.grace_s):
             if existing.holder == holder:
-                lost = _remote_renew(log, cfg, item_id, holder, now)
-                if lost:
-                    raise LeaseError(
-                        f"{item_id}: the remote claim is now {lost}'s -- this lease lapsed "
-                        f"there and was taken over.",
-                        holder=lost,
-                        item=item_id,
-                    )
                 _record_claimed_globs(log, it, globs, resources)
                 return _renew_in_place(
                     log, existing, item_id, holder, now, worktree, branch, globs, note, resources
@@ -325,7 +343,6 @@ def acquire(
                     alternatives=_alternatives(state, cfg, item_id, holder, now),
                 )
 
-        _remote_take(log, cfg, item_id, holder, now)
         _record_claimed_globs(log, it, globs, resources)
         log.append(
             "lease.acquired",
@@ -375,10 +392,9 @@ def _alternatives(state: State, cfg: Config, item_id: str, holder: str, now: flo
     )[:5]
 
 
-def _remote_take(log: EventLog, cfg: Config, item_id: str, holder: str, now: float) -> None:
-    """With `[flow].claims = "remote"`: win the remote claim ref or refuse the claim."""
-    if cfg.flow.claims != "remote":
-        return
+def _remote_take(log: EventLog, cfg: Config, item_id: str, holder: str, now: float) -> str:
+    """Win the remote claim ref or refuse the claim. Returns "fresh" for a new ref and
+    "renewed" when we already held it."""
     from ..infra import claimref as CR
 
     got = CR.take(log.root, cfg.flow.remote, item_id, holder, now + cfg.lease.ttl_s)
@@ -396,6 +412,7 @@ def _remote_take(log: EventLog, cfg: Config, item_id: str, holder: str, now: flo
             f"the silent split-brain this setting exists to prevent.",
             item=item_id,
         )
+    return "renewed" if got.detail == "renewed" else "fresh"
 
 
 def _remote_renew(log: EventLog, cfg: Config, item_id: str, holder: str, now: float) -> str:

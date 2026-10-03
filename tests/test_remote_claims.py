@@ -125,3 +125,13 @@ def test_an_unreadable_existing_claim_is_unavailable_not_lapsed(clones, monkeypa
     monkeypatch.setattr(CR, "_read", lambda *args: None)
     assert CR.take(b, remote, "T1", "agent-b", time.time() + 600).status == "unavailable"
     assert len(_refs(bare)) == 1
+
+
+def test_a_claim_the_local_checks_refuse_gives_the_remote_ref_back(clones):
+    a, _b, bare = clones
+    run_cli(a, "task", "add", "T3", "--title", "clash", "--globs", "a.py")  # overlaps T1
+    assert A.claim(a, "T1", no_worktree=True, agent="agent-a").ok
+    out = A.claim(a, "T3", no_worktree=True, agent="agent-a2")
+    assert out.exit == 3, out.reason
+    names = [line.split()[-1] for line in _refs(bare)]
+    assert names == [CR.ref_name("T1")], names
