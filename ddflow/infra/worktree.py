@@ -40,6 +40,10 @@ class GitResult:
     code: int
     out: str
     err: str
+    #: False when a precondition refused the merge before git tried to merge the branch
+    #: (the target is missing, checked out elsewhere, or another merge is in progress): the
+    #: item's own branch was not judged, so it is not a failed merge of that branch.
+    attempted: bool = True
 
     @property
     def ok(self) -> bool:
@@ -366,6 +370,7 @@ def merge_into(repo: Path, cfg: Config, target: str, source: str, *, message: st
             "",
             f"target branch {target!r} does not exist. Create it (for gitflow: "
             f"`git branch {target} <production>`), or set [flow] / [worktree].base_ref.",
+            attempted=False,
         )
     where = checked_out_at(root, target)
     if where is not None and where.resolve() != root.resolve():
@@ -377,6 +382,7 @@ def merge_into(repo: Path, cfg: Config, target: str, source: str, *, message: st
                 f"into a tree someone may be working in, and git allows a branch checked "
                 f"out in only one place. Finish or move that session, then re-run."
             ),
+            attempted=False,
         )
     if where is not None:
         return _merge_here(root, cfg, source, message)
@@ -386,7 +392,9 @@ def merge_into(repo: Path, cfg: Config, target: str, source: str, *, message: st
     tmp.rmdir()  # `worktree add` wants to create it
     add = git(root, "worktree", "add", str(tmp), target)
     if not add.ok:
-        return GitResult(add.code, add.out, f"could not stage a merge of {target}: {add.err}")
+        return GitResult(
+            add.code, add.out, f"could not stage a merge of {target}: {add.err}", attempted=False
+        )
     try:
         r = _merge_here(tmp, cfg, source, message)
         if not r.ok:
@@ -416,6 +424,8 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
     args += ["-m", message, source]
     was_merging = merging(tree)
     r = git(tree, *args)
+    if not r.ok and was_merging is True:
+        r = GitResult(r.code, r.out, r.err, attempted=False)  # someone else's merge is open
     # Not `not was_merging`: None ("could not tell" before) still gets the re-probe and
     # its warning, and only a merge that was not already in progress is ever aborted.
     if not r.ok and was_merging is not True:
