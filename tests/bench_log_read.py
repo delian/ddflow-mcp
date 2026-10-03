@@ -3,6 +3,7 @@ events. Not a test (no test_ prefix). Run: PYTHONPATH=. python tests/bench_log_r
 """
 
 import dataclasses
+import os
 import pathlib
 import statistics
 import subprocess
@@ -38,12 +39,22 @@ for n in (20000, 100000):
         with (log.dir / f"{a}.jsonl").open("wb") as f:
             for i in range(1, n // 2 + 1):
                 f.write((ev(a, i).to_json() + "\n").encode())
-    cold = []
-    for _ in range(3):
-        clear_parse_cache()
-        t = time.perf_counter()
-        log.read_all()
-        cold.append((time.perf_counter() - t) * 1000)
+
+    def cold_ms(cfg, d=d):
+        out = []
+        for _ in range(3):
+            clear_parse_cache()  # a fresh process: nothing parsed, nothing loaded
+            t = time.perf_counter()
+            EventLog(d, "x", log_cfg=cfg).read_all()
+            out.append((time.perf_counter() - t) * 1000)
+        return statistics.median(out)
+
+    os.environ["DDFLOW_SNAPSHOT"] = "0"  # ignored by a ddflow without the snapshot
+    nosnap = cold_ms(LogConfig(max_cached_events=1_000_000))
+    del os.environ["DDFLOW_SNAPSHOT"]
+    cold_ms(LogConfig(max_cached_events=1_000_000))  # the first read with the snapshot on writes it
+    snap = cold_ms(LogConfig(max_cached_events=1_000_000))
+    log = EventLog(d, "x", log_cfg=LogConfig(max_cached_events=1_000_000))
     log.read_all()
     warm = []
     for k in range(7):
@@ -53,5 +64,6 @@ for n in (20000, 100000):
         log.read_all()
         warm.append((time.perf_counter() - t) * 1000)
     print(
-        f"{n}: cold {statistics.median(cold):.1f} ms  warm(1 append) {statistics.median(warm):.1f} ms"
+        f"{n}: cold(no snapshot) {nosnap:.1f} ms  cold(snapshot) {snap:.1f} ms  "
+        f"warm(1 append) {statistics.median(warm):.1f} ms"
     )

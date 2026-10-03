@@ -240,6 +240,19 @@ def promote_add(repo: Path, env: str, *, force: bool = False, agent: str = "") -
     return O.ok("promote.added", **data)
 
 
+def promote_deployed(repo: Path, env: str, *, sha: str = "", agent: str = "") -> O.Outcome:
+    """Record the sha a deploy put live in ``env`` (default: the environment branch's head),
+    so `promote status` answers "what is live" exactly. Exit 3 = refused."""
+    from ..services import promotions as PM
+
+    log, cfg, _st = _load(repo, agent)
+    try:
+        out = PM.deployed(repo, cfg, log, env, sha=sha)
+    except PM.PromotionError as exc:
+        return O.refused("deploy.recorded", str(exc), env=env, sha="")
+    return O.ok("deploy.recorded", **out)
+
+
 def promote_status(repo: Path, *, agent: str = "") -> O.Outcome:
     """Each environment: where it stands, how far behind its upstream, what is open."""
     from ..services import promotions as PM
