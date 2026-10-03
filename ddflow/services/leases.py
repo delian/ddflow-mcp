@@ -581,7 +581,7 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
     """Give up a lease. Records WHOSE it was and WHO released it, which can differ —
     an operator releasing a crashed agent's lease is the normal case."""
     by = holder or log.agent_id
-    owner: list[str] = []
+    owner: dict[str, str] = {}
     done = _transition(
         log,
         item_id,
@@ -591,7 +591,7 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
         # `event` names WHICH claim ends: one holder can have held the item twice, and a
         # fold that merges clones must not end the wrong one (B191).
         payload=lambda lease: (
-            owner.append(lease.holder)
+            owner.update(holder=lease.holder)
             or {
                 "holder": lease.holder,
                 "event": lease.event,
@@ -601,7 +601,7 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
         ),
     )
     if done:
-        _remote_drop(log, item_id, owner[0])
+        _remote_drop(log, item_id, owner["holder"])
     return done
 
 
@@ -611,7 +611,7 @@ def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
     Carries the worktree forward, because expiry is exactly when someone needs to know
     where the crashed agent's uncommitted work is.
     """
-    owner: list[str] = []
+    owner: dict[str, str] = {}
     done = _transition(
         log,
         item_id,
@@ -619,7 +619,7 @@ def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
         mine=False,
         holder="",
         payload=lambda lease: (
-            owner.append(lease.holder)
+            owner.update(holder=lease.holder)
             or {
                 "holder": lease.holder,
                 "event": lease.event,
@@ -629,7 +629,7 @@ def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
         ),
     )
     if done:
-        _remote_drop(log, item_id, owner[0])
+        _remote_drop(log, item_id, owner["holder"])
     return done
 
 
