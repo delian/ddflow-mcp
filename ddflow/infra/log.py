@@ -28,6 +28,7 @@ import os
 import secrets
 import socket
 import subprocess
+import sys
 import time
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, fields
@@ -598,16 +599,52 @@ def _held_key(path: Path) -> tuple[int, str]:
     return (os.getpid(), str(path))
 
 
+def _holder_note(path: Path) -> str:
+    """Who holds `path`, from the note the holder left in the lock file; '' if none.
+
+    flock cannot say who owns a lock, so the holder writes `pid <n> <epoch> <command>`
+    into the (never replaced) lock file once it has it. Read without a lock: it is only
+    ever shown to a human after a timeout, and a stale or torn note is still a lead.
+    """
+    try:
+        parts = path.read_text(errors="replace").split(None, 3)
+    except OSError:
+        return ""
+    if len(parts) < _NOTE_FIELDS or parts[0] != "pid" or not parts[1].isdigit():
+        return ""
+    pid = int(parts[1])
+    try:
+        os.kill(pid, 0)
+        alive = "alive"
+    except ProcessLookupError:
+        alive = "NOT running -- a stale note: the lock is held by someone else, or by a child that inherited it"
+    except OSError:
+        alive = "alive (owned by another user)"
+    try:
+        held = f", held {max(0.0, time.time() - float(parts[2])):.1f}s"
+    except ValueError:
+        held = ""
+    return f" Last holder to leave a note: pid {pid} ({alive}{held}), command: {parts[3].strip()[:200]}."
+
+
+#: `pid`, the pid, the epoch it took the lock, and at least the start of its command line.
+_NOTE_FIELDS = 4
+
+
 @contextlib.contextmanager
 def _flock(path: Path, timeout_s: float) -> Iterator[None]:
     """Exclusive advisory lock, with a bounded wait and a real error on timeout.
 
     The lock file is created once and NEVER atomically replaced: renaming over a lock
     file puts two holders on two different inodes, each believing it is exclusive.
+
+    A timeout says how long this process waited and who last took the lock (B184: a
+    timeout under machine load was suspected and could not be told from a wedged agent).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
-    deadline = time.monotonic() + timeout_s
+    started = time.monotonic()
+    deadline = started + timeout_s
     try:
         while True:
             try:
@@ -616,10 +653,17 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
             except BlockingIOError:
                 if time.monotonic() >= deadline:
                     raise TimeoutError(
-                        f"could not acquire {path} within {timeout_s}s; "
-                        f"another agent may be wedged — check `ddflow doctor`"
+                        f"could not acquire {path} within {timeout_s}s "
+                        f"(waited {time.monotonic() - started:.1f}s, this is pid {os.getpid()})."
+                        f"{_holder_note(path)} Another agent may be wedged, or the machine is "
+                        f"overloaded -- check `ddflow doctor`"
                     ) from None
                 time.sleep(0.02)
+        with contextlib.suppress(OSError):
+            # Best effort: a note for the next waiter that times out. Never fatal.
+            note = f"pid {os.getpid()} {time.time():.3f} {' '.join(sys.argv)[:200]}\n"
+            os.ftruncate(fd, 0)
+            os.pwrite(fd, note.encode(), 0)
         yield
     finally:
         with contextlib.suppress(OSError):
