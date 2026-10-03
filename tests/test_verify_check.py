@@ -254,3 +254,78 @@ def test_a_file_that_only_a_sibling_branch_created_does_not_excuse_a_false_compl
     sha = _commit(repo, {"other.py": "1\n"})
     run_cli(repo, "complete", "T1", "--sha", sha, "--force")
     assert _claims(verify(repo, "T1"))["declared_files"]["status"] == "fail"
+
+
+def _complete_with(repo, outcomes: dict[str, tuple[str, str]], sha=""):
+    """Record every pipeline gate, then the completion event, as a real run would."""
+    from ddflow.core.model import fold
+    from ddflow.services import ledger as LG
+
+    for g in ("research", "rules", "implement", "rubber_duck", "critic", "standards"):
+        o, why = outcomes.get(g, ("passed", ""))
+        EventLog(repo).append(f"gate.{o}", "T1", {"gate": g, **({"reason": why} if why else {})})
+    for g in ("unit_tests", "bug_hunt", "dedupe", "merge"):
+        o, why = outcomes.get(g, ("passed", ""))
+        EventLog(repo).append(f"gate.{o}", "T1", {"gate": g, **({"reason": why} if why else {})})
+    it = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    EventLog(repo).append(
+        "item.completed",
+        "T1",
+        {
+            "sha": sha,
+            "kind": "task",
+            "forced": False,
+            "overridden": [],
+            "ledger": LG.git_facts(repo, sha, it),
+        },
+    )
+
+
+def test_a_failed_review_gate_that_is_not_required_is_a_note_but_a_required_skip_fails(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, "w.py,tests/test_w.py")
+    sha = _commit(repo, {"w.py": "1\n", "tests/test_w.py": "def test_w():\n    pass\n"})
+    _complete_with(repo, {"rubber_duck": ("failed", "")}, sha)
+    g = _claims(verify(repo, "T1"))["gates"]
+    assert g["status"] == "warn" and "rubber_duck" in g["detail"]
+
+
+def test_a_required_gate_that_was_skipped_fails_even_with_a_reason(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, "w.py")
+    sha = _commit(repo, {"w.py": "1\n"})
+    _complete_with(repo, {"unit_tests": ("skipped", "too slow")}, sha)
+    g = _claims(verify(repo, "T1"))["gates"]
+    assert g["status"] == "fail" and "unit_tests" in g["detail"]
+
+
+def test_a_task_imported_as_already_closed_is_cannot_tell_not_an_accusation(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"w.py": "1\n"}, "w exists")
+    _task(repo, "w.py")
+    EventLog(repo).append(
+        "item.completed",
+        "T1",
+        {"imported": True, "kind": "task", "evidence": "closed in docs/BACKLOG.md:1"},
+    )
+    out = verify(repo, "T1")
+    assert out.exit == O.OK and out.data["verdict"] == "cannot tell"
+    assert {c["id"] for c in out.data["claims"]} == {"declared_files", "ledger"}
+
+
+def test_history_rewritten_since_is_a_warning_when_main_has_a_commit_with_the_same_subject(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, "w.py")
+    _git(repo, "checkout", "-q", "-b", "old")
+    (repo / "w.py").write_text("1\n")
+    _git(repo, "add", "w.py")  # not -A: the queue's own files must stay on the main line
+    _git(repo, "commit", "-qm", "add the widget module for the queue")
+    old = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "-")
+    _commit(repo, {"w.py": "1\n"}, "add the widget module for the queue")  # rewritten twin
+    run_cli(repo, "complete", "T1", "--sha", old, "--force")
+    landed = _claims(verify(repo, "T1"))["landed"]
+    assert landed["status"] == "warn" and "rewritten" in landed["detail"]

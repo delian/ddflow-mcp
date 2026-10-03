@@ -1,7 +1,8 @@
-"""`ddflow verify <id>` -- the human surface for `api.verify`.
+"""`ddflow verify` -- the human surface for `api.verify` / `api.verify_sweep`.
 
-Same call, same wire body as the `ddflow_verify` MCP tool; exit 1 when a claim does not
-hold, 2 when the item is not done (nothing to verify), 0 otherwise.
+One item (`verify <id>`) or a sweep over every done task (`--all`, or `--phase P`). Same
+calls and wire bodies as the `ddflow_verify` MCP tool; exit 1 when a claim does not hold,
+2 when there is nothing to verify, 0 otherwise.
 """
 
 from __future__ import annotations
@@ -9,13 +10,28 @@ from __future__ import annotations
 import json
 import sys
 
-from ...api.verify import verify
+from ...api.verify import verify, verify_sweep
 from ..context import FAIL, NOTHING, Ctx
 
 _MARK = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "unknown": "??  "}
 
 
-def cmd_verify(a, c: Ctx) -> int:
+def add_verify_parser(sub) -> None:
+    vf = sub.add_parser(
+        "verify",
+        help="re-derive the claims behind a done task, or sweep them all (exit 1 = one fails)",
+    )
+    vf.add_argument("id", nargs="?", default="", help="one done task; omit with --all/--phase")
+    vf.add_argument("--all", action="store_true", help="every done task, worst first")
+    vf.add_argument("--phase", default="", help="every done task under this phase")
+    vf.add_argument("--limit", type=int, default=20, help="how many of the worst to list")
+    vf.add_argument(
+        "--file-bugs", action="store_true", help="file a bug for each completion that does not hold"
+    )
+    vf.set_defaults(fn=cmd_verify)
+
+
+def _one(a, c: Ctx) -> int:
     out = verify(c.repo, a.id)
     if out.exit == FAIL and not out.data.get("claims"):
         print(out.reason, file=sys.stderr)
@@ -30,3 +46,34 @@ def cmd_verify(a, c: Ctx) -> int:
     for cl in out.data["claims"]:
         print(f"  [{_MARK[cl['status']]}] {cl['id']:<15} {cl['detail']}")
     return out.exit
+
+
+def _sweep(a, c: Ctx) -> int:
+    out = verify_sweep(c.repo, phase=a.phase, limit=a.limit, file_bugs=a.file_bugs)
+    if out.exit == FAIL and "checked" not in out.data:
+        print(out.reason, file=sys.stderr)
+        return FAIL
+    if c.json:
+        print(json.dumps(out.body(""), indent=2, default=str))
+        return out.exit
+    d = out.data
+    print(
+        f"checked {d['checked']} completed task(s): "
+        + ", ".join(f"{n} {k}" for k, n in d["counts"].items() if n)
+    )
+    for w in d["worst"]:
+        print(f"\n{w['item']}: {w['verdict']} (suspicion {w['score']})")
+        for p in w["problems"]:
+            print(f"  [{_MARK[p['status']]}] {p['id']:<15} {p['detail']}")
+    if d["bugs_filed"]:
+        print(f"\nfiled bugs for: {', '.join(d['bugs_filed'])}")
+    return out.exit
+
+
+def cmd_verify(a, c: Ctx) -> int:
+    if a.id:
+        return _one(a, c)
+    if a.all or a.phase:
+        return _sweep(a, c)
+    print("verify what? give a task id, or --all / --phase P for a sweep", file=sys.stderr)
+    return FAIL
