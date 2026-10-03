@@ -48,6 +48,38 @@ def pr_sync(repo: Path, *, item: str = "", agent: str = "") -> O.Outcome:
     return O.ok("pr.sync", **data)
 
 
+def pr_threads(
+    repo: Path,
+    item: str,
+    *,
+    thread: str = "",
+    reply: str = "",
+    resolve: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """An item's review threads from the forge; with ``thread``, ``reply`` on it and/or
+    ``resolve`` it. Exit 2 = the forge could not be asked; exit 3 = refused (no request,
+    unknown thread, a write the forge declined)."""
+    from ..services import flow as FS
+
+    _log, cfg, st = _load(repo, agent)
+    rep = FS.review_threads(repo, cfg, st, item, thread=thread, reply=reply, resolve=resolve)
+    data = {
+        "item": item,
+        "number": rep.number,
+        "url": rep.url,
+        "threads": rep.threads,
+        "unresolved": sum(1 for t in rep.threads if not t["resolved"]),
+        "replied": rep.replied,
+        "resolved": rep.resolved,
+    }
+    if rep.refused:
+        return O.refused("pr.threads", rep.refused, **data)
+    if rep.unavailable:
+        return O.nothing("pr.threads", rep.unavailable, **data)
+    return O.ok("pr.threads", **data)
+
+
 def pr_status(repo: Path, *, agent: str = "") -> O.Outcome:
     """Every item with a request, from the LOG -- no forge call. `synced_at` says how old."""
     _log, _cfg, st = _load(repo, agent)
