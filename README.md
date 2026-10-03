@@ -3837,7 +3837,7 @@ part that matters.
   when the framework already runs ddflow's check, and `--force` replaces the generated hook.
 * **Hooks find ddflow when they run, and fail open.** The git hooks and the Claude/Gemini
   hook commands record the launcher that installed them, but try it only first: if that
-  script or interpreter no longer exists (a deleted venv, an uninstalled tool, a removed
+  script or interpreter no longer exists or is no longer executable (a deleted venv, an uninstalled tool, a removed
   worktree) they run `ddflow` from `PATH`, and when there is none they print one line
   (`ddflow: not found ... run: ddflow hooks install`) and let the commit or turn go on.
   A missing tool never blocks a commit, but a check that silently stopped is reported:

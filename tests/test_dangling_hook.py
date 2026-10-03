@@ -303,3 +303,15 @@ def test_a_launcher_that_is_no_longer_executable_is_reported(repo, tmp_path):
     exe.chmod(0o644)
     d = LA.check_command("x", line, "fix")
     assert d and d.missing == (str(exe),)
+
+
+def test_a_probe_line_reports_a_launcher_that_lost_its_execute_bit(repo, tmp_path):
+    """The same through the line `command_line` writes: its `[ -x ]` probe."""
+    exe = tmp_path / "ddflow"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    line = f'if [ -x "{exe}" ]; then exec "{exe}" hooks check-commit "$@"; fi'
+    assert LA.check_command("x", line, "fix") is None
+    exe.chmod(0o644)
+    d = LA.check_command("x", line, "fix")
+    assert d and d.missing == (str(exe),) and "not executable" in d.render()
