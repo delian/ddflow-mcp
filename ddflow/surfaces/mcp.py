@@ -1040,7 +1040,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_similar": {
         "description": (
-            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson or other record. Read-only. Candidates cross kinds and include closed records (a bug that repeats a fixed one is caught); each carries id, kind, title, state (open, claimed by whom, done, fixed, invalid, removed...), score (0-1), the words shared and flags (identical text; the text names its id), per [dedupe] show_floor, max_candidates and kinds. A score is a prompt to LOOK, not a verdict. Nothing close: exit 2 / an empty list."
+            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson or other record. Read-only. Candidates cross kinds and include closed records (a bug that repeats a fixed one is caught); each carries id, kind, title, state, score (0-1), the words shared and flags, per [dedupe] show_floor, max_candidates and kinds. A score is a prompt to LOOK, not a verdict. Nothing close: exit 2 / an empty list."
         ),
         "properties": {
             "text": (
@@ -1075,7 +1075,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_identify": {
         "description": (
-            "Declare WHO you are on this connection before anything that writes. Call it first when more than one agent or subagent works this repository at once: identity is what attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role or assignment), distinct from the other agents'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (every OTHER tool takes it; same name rules; the CLI's `--agent`): that one call is attributed to that name and conflict-checked against its siblings, and the connection's identity is untouched."
+            "Declare WHO you are on this connection before anything that writes. Call it first when more than one agent or subagent works this repository at once: identity is what attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role), distinct from the other agents'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (the CLI's `--agent`)."
         ),
         "properties": {
             "agent": (
@@ -1314,7 +1314,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_import": {
         "description": (
-            "For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons corpus, ADR files and unmerged branches and proposes them as queue items. Reports by default; writes NOTHING until `apply` is true. Call it right after `ddflow_setup` on any repository that is not brand new: an empty queue says nothing is in flight about a project that may have three branches in flight. The proposal is a GUESS about structure (headings as phases, checkboxes as tasks, almost no globs): the `import-existing-project` prompt walks through fixing that with the operator. Exit 2: nothing found."
+            "For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons corpus, ADR files and unmerged branches and proposes them as queue items. Reports by default; writes NOTHING until `apply` is true. Call it right after `ddflow_setup` on any repository that is not brand new: an empty queue says nothing is in flight about a project that may have three branches in flight. The proposal is a GUESS about structure: the `import-existing-project` prompt walks through fixing it. Exit 2: nothing found."
         ),
         "properties": {
             "apply": ("boolean", "Write the proposal. Default false: look first.", False),
@@ -1437,6 +1437,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "blockers",
             "discovery_hints",
         ),
+    },
+    "ddflow_verify": {
+        "description": "Re-check a done task's claims: landed, files, tests, gates. Fails if one does not hold.",
+        "properties": {"id": ("string", "Item id.", True)},
+        "api": lambda repo, a, agent: _api().verify_item(repo, a["id"], agent=agent),
+        "payload": ("item", "verdict", "claims"),
     },
     "ddflow_help": {
         "description": (
@@ -1777,7 +1783,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_tests": {
         "description": (
-            "AFTER EACH CHANGE, while you work: the tests your change reaches (changed test files, tests importing a changed module directly or one step removed, tests named after a changed file, everything under a changed conftest.py), each with why, and a command that runs them IN PARALLEL: the project's own test command with its runner and worker flags, the files swapped in. Run it; do not reason about which tests matter. Fast feedback, never a pass: the unit_tests gate still runs the WHOLE suite. `item`: diff that item's worktree against its base. Exit 2: no test reaches the change."
+            "AFTER EACH CHANGE, while you work: the tests your change reaches (changed test files, tests importing a changed module directly or one step removed, tests named after a changed file, everything under a changed conftest.py), each with why, and a command that runs them IN PARALLEL: the project's own test command with its runner and worker flags, the files swapped in. Run it; do not reason about which tests matter. Never a pass: the unit_tests gate runs the WHOLE suite. `item`: diff that item's worktree against its base. Exit 2: no test reaches the change."
         ),
         "properties": {
             "item": ("string", "The item whose worktree and base to use.", False),
@@ -2388,7 +2394,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_resolve": {
         "description": (
-            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rival definitions and claims, `ddflow_next` withholds them). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost`: re-add it under a new id with `refile_as`, or it exists only in the log. Refused (exit 3) when not contested. Settle what the operator decides, not by guess."
+            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rival definitions and claims, `ddflow_next` withholds them). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost`: re-add it under a new id with `refile_as`, or it exists only in the log. Refused (exit 3) when not contested."
         ),
         "properties": {
             "id": ("string", "The contested item.", True),
@@ -2780,7 +2786,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
-        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state"
+        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify"
     ).split()
 )
 
