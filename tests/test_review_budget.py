@@ -420,6 +420,14 @@ def test_a_ref_inside_the_items_range_is_a_delta_one_before_it_is_full(repo, tmp
     assert inside.exit == OK, inside.reason  # strictly inside the item's range: narrower
     wide = api.review(repo, gate="critic", item="T1", base=base)
     assert wide.exit == REFUSED, "the branch point reaches the whole diff"
+    # the base branch moved on after the item branched: still the whole diff (roborev)
+    _git(repo, "checkout", "-q", "main")
+    (repo / "g.txt").write_text("g\n")
+    _git(repo, "add", "g.txt")
+    _git(repo, "commit", "-qm", "main moved")
+    _git(repo, "checkout", "-q", "feat")
+    moved = api.review(repo, gate="critic", item="T1", base="main")
+    assert moved.exit == REFUSED, "an advanced base branch is not inside the item's line"
 
 
 def test_config_with_a_lone_value_is_refused_not_ignored(repo, tmp_path):
