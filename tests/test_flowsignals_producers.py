@@ -61,3 +61,24 @@ def test_a_conflicting_merge_is_a_failed_merge_gate_outcome(repo, monkeypatch):
         if e.kind.startswith("gate.") and e.data.get("gate") == "merge"
     ]
     assert merge == ["gate.failed", "gate.passed"]
+
+
+def test_a_refused_precondition_is_not_a_failed_merge(repo, monkeypatch, tmp_path):
+    """The target branch is checked out in another worktree: git never judged the item's
+    branch, so the merge gate must not read as failed (it would inflate the rate)."""
+    monkeypatch.delenv("DDFLOW_AGENT", raising=False)
+    run_cli(repo, "init")
+    run_cli(repo, "task", "add", "T1", "--title", "edit c", "--globs", "c.txt")
+    code, out, err = run_cli(repo, "--json", "claim", "T1", agent="alpha")
+    assert code == 0, out + err
+    tree = Path(json.loads(out)["worktree"])
+    (tree / "c.txt").write_text("branch\n")
+    _git(tree, "add", "-A")
+    _git(tree, "commit", "-qm", "branch edit")
+    _git(repo, "checkout", "-q", "-b", "elsewhere")
+    _git(repo, "worktree", "add", str(tmp_path / "other"), "main")
+
+    code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
+    assert code != 0 and "checked out in the worktree" in err, out + err
+    events = EventLog(repo).read_all()
+    assert not [e for e in events if e.kind.startswith("gate.") and e.data.get("gate") == "merge"]

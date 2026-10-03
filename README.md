@@ -2528,8 +2528,9 @@ refuses at once rather than sleeping to its timeout.
 
 ### Log-derived flow signals
 
-Besides the host, the adaptive parallelism controller is fed what the project's own event
-log shows. `ddflow/core/flowsignals.py` computes each as a pure function of the log and an
+Besides the host, the adaptive parallelism controller takes what the project's own event
+log shows as input signals (the module computes them; the controller's sampling path that
+consumes them is a separate piece of the adaptive-flow work). `ddflow/core/flowsignals.py` computes each as a pure function of the log and an
 injected clock, against baselines taken from the same project's history, so no number is
 specific to a machine or a repository. Each ends at "now"; a signal with too little history
 is unavailable (`None`), which is neutral: it never lowers the limit and never justifies
@@ -2544,8 +2545,9 @@ raising it.
 | `independent_ready` | ready items overlapping neither anything in flight nor each other, by the same selection `ddflow next` offers (parallelism caps lifted) | now | never (0 when none) |
 
 A fresh project simply reports the first three as unavailable until it has history; nothing
-needs configuring. A merge that git refuses (a conflict) is recorded as a failed `merge` gate
-outcome, which is what `merge_failure_rate` counts. Reviewer latency needs the review's start:
+needs configuring. A merge git tried and failed (a conflict) is recorded as a failed `merge` gate
+outcome, which is what `merge_failure_rate` counts; a merge refused before git tried (target
+checked out elsewhere, another merge in progress) is not. Reviewer latency needs the review's start:
 `gate.started` is written for command gates today, so until `ddflow review` writes it too the
 ratio stays unavailable on a real log (filed as a follow-up).
 

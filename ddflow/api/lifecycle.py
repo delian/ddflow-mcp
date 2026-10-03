@@ -1707,15 +1707,16 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
     if not r.ok:
         # A merge that was tried and failed is a merge-gate outcome: the log-derived
         # `merge_failure_rate` flow signal counts it, and without this it saw successes only.
-        G.record(
-            log,
-            cfg,
-            item,
-            "merge",
-            "failed",
-            reason=(r.err or r.out or "merge failed")[:500],
-            evidence={"branch": wt.branch, "git_exit": r.code},
-        )
+        if r.attempted:  # a refused precondition says nothing about this branch
+            G.record(
+                log,
+                cfg,
+                item,
+                "merge",
+                "failed",
+                reason=(r.err or r.out or "merge failed")[:500],
+                evidence={"branch": wt.branch, "git_exit": r.code},
+            )
         out = O.Outcome(
             kind="worktree.merged",
             data={"id": item, "sha": "", "dirty": []},
