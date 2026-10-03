@@ -970,8 +970,13 @@ def history(
     since: str = "",
     limit: int = 40,
     agent: str = "",
+    by_agent: str = "",
+    tail: int = 0,
 ) -> O.Outcome:
     """One reverse-chronological timeline of everything that happened.
+
+    `by_agent` keeps one agent's shard only (`agent` is the CALLER's identity, not a
+    filter). `tail=N` is the last N events oldest-first, like `tail`, and overrides `limit`.
 
     Ordered by `(lamport, agent, id)` like everything else — NOT by wall-clock timestamp.
     Two agents on two machines have two clocks, and sorting a merged history by `ts` would
@@ -986,8 +991,10 @@ def history(
         events = [e for e in events if e.kind in wanted or e.kind.split(".")[0] in wanted]
     if since:
         events = [e for e in events if e.ts >= since]
+    if by_agent:
+        events = [e for e in events if e.agent == by_agent]
     events = sorted(events, key=lambda e: (e.lamport, e.agent, e.id), reverse=True)
-    shown = events[:limit]
+    shown = events[:tail][::-1] if tail and tail > 0 else events[:limit]
     data: dict[str, Any] = {
         "total": len(events),
         "shown": len(shown),

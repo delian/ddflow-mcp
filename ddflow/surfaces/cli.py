@@ -356,6 +356,13 @@ def _accept_global_options_anywhere(root: argparse.ArgumentParser) -> None:
     walk(root)
 
 
+def _positive_int(v: str) -> int:
+    n = int(v)
+    if n < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return n
+
+
 def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     # PLR0915 (statement count), suppressed HERE rather than for the whole file. argparse
     # construction is inherently one long sequence of near-identical statements, and
@@ -1266,6 +1273,8 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     )
     hi.add_argument("--since", default="", help="ISO timestamp lower bound")
     hi.add_argument("--limit", type=int, default=40)
+    hi.add_argument("--agent", dest="log_agent", default="", help="only this agent's shard")
+    hi.add_argument("--tail", type=_positive_int, default=0, help="the last N events, oldest first")
     hi.set_defaults(fn=cmd_history)
 
     wf = s.add_parser(
