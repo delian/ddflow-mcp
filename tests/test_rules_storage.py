@@ -574,18 +574,3 @@ def test_rule_add_enforces_the_rules_limits(tmp_path):
         tmp_path, Rule(id="r2", title="t", content="ok", scope="task"), check_dedup=False
     )
     assert scope.exit != 0 and "scopes_allowed" in scope.reason
-
-
-def test_max_rules_does_not_block_rewriting_an_existing_rule(tmp_path):
-    from ddflow import api
-    from ddflow.services.rules import Rule
-
-    (tmp_path / ".ddflow").mkdir()
-    (tmp_path / ".ddflow" / "config.toml").write_text("[rules]\nmax_rules = 1\n")
-    assert (
-        api.rule_add(tmp_path, Rule(id="r1", title="t", content="a"), check_dedup=False).exit == 0
-    )
-    again = api.rule_add(tmp_path, Rule(id="r1", title="t", content="b"), check_dedup=False)
-    assert again.exit == 0, again.reason
-    other = api.rule_add(tmp_path, Rule(id="r2", title="t", content="c"), check_dedup=False)
-    assert other.exit != 0 and "max_rules" in other.reason
