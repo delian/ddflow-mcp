@@ -171,7 +171,7 @@ LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = {
 def leaf_covered(path: tuple[str, ...]) -> bool:
     if path in LEAF_NOT_EXPOSED or path in LEAF_VIA:
         return True
-    joined = "_".join(path)
+    joined = "_".join(path).replace("-", "_")  # `bug file-tasks` -> ddflow_bug_file_tasks
     return f"ddflow_{joined}" in TOOLS or any(t.startswith(f"ddflow_{joined}_") for t in TOOLS)
 
 

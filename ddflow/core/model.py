@@ -235,6 +235,9 @@ class Item:
     #: port applies elsewhere.
     landed_before: str = ""
     landed_after: str = ""
+    #: The bugs this task was filed to fix (`task.added` `fixes`, by `bug found`). The bug
+    #: record's `fix_task` is the binding side: `complete` asks the bugs, not this list.
+    fixes: list[str] = field(default_factory=list)
     blocked_reason: str = ""
     created_at: str = ""
     completed_at: str = ""
@@ -378,6 +381,10 @@ class Bug:
     title: str = ""
     severity: str = ""
     scope: str = "project"
+    #: The queue item that fixes this bug (`bug.found` `fix_task`: the task `bug found`
+    #: filed, or the open bug-fix task the report named). Its completion requires the
+    #: bug closed; "" for a bug with no task (`--no-task`, or filed before fix tasks were).
+    fix_task: str = ""
     #: `bug.reported_upstream`: where the report about this bug went (a ddflow bug filed
     #: against ddflow itself).
     upstream_url: str = ""
@@ -906,6 +913,7 @@ def _apply_definition(st: State, it: Item, d: dict[str, Any], kind: str) -> None
     it.tags = list(d.get("tags", it.tags))
     it.priority = int(d.get("priority", it.priority))
     it.source = d.get("source", it.source)
+    it.fixes = list(d.get("fixes", it.fixes))
     for f in ("line", "port_of", "port_from", "port_strategy", "promote_from", "promote_to"):
         setattr(it, f, d.get(f, getattr(it, f)))
     it.removed = False
@@ -1566,6 +1574,7 @@ def _h_bug_found(st: State, ev: Event) -> None:
     bug.title = ev.data.get("title", "") or bug.title
     bug.severity = ev.data.get("severity", "") or bug.severity
     bug.scope = ev.data.get("scope", "") or bug.scope  # absent: the default, `project`
+    bug.fix_task = ev.data.get("fix_task", "") or bug.fix_task
     bug.found_at = bug.found_at or ev.ts
 
 

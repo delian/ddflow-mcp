@@ -29,7 +29,8 @@ def proj(repo: Path) -> Path:
     assert run_cli(repo, "init")[0] == 0
     assert run_cli(repo, "phase", "add", "P1", "--title", "Billing", "--globs", "src/**")[0] == 0
     assert run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--title", "Tax rules")[0] == 0
-    assert run_cli(repo, "bug", "found", "--summary", "tax rounds wrong", "--item", "P1.T1")[0] == 0
+    bug = ("bug", "found", "--summary", "tax rounds wrong", "--item", "P1.T1", "--no-task")
+    assert run_cli(repo, *bug)[0] == 0  # --no-task: `open_tasks` below counts the hand-filed ones
     return repo
 
 

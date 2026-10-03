@@ -23,6 +23,7 @@ from typing import Any
 import ddflow.api._dedupe as DD
 
 from ..config import csv_list
+from ..core import globspec as GS
 from ..core import outcome as O
 from ..core.events import parse_changelog
 from ..core.ids import auto_id
@@ -474,7 +475,7 @@ def upstream_offer(scope: str, bid: str) -> str:
     )
 
 
-def bug_found(
+def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add's TaskDraft
     repo: Path,
     *,
     summary: str,
@@ -483,6 +484,8 @@ def bug_found(
     title: str = "",
     severity: str = "",
     scope: str = "",
+    globs: str = "",
+    no_task: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
 ) -> O.Outcome:
@@ -490,16 +493,19 @@ def bug_found(
     says what it is; a bug a task will fix is filed against it (``item``), which answers
     that candidate. ``answer`` extending an OPEN bug appends to it and files nothing.
     ``title``, ``severity`` (low|medium|high|critical) and ``scope`` (``project``, or
-    ``ddflow`` for a bug in ddflow itself) are optional event fields."""
+    ``ddflow`` for a bug in ddflow itself) are optional event fields.
+
+    A bug is an item in the queue (B-bugs-as-items): unless ``no_task`` (a bug fixed in
+    the commit that found it) or ``[bugs].file_task`` is off, the same transaction files
+    its fix task -- `_file_fix_task` -- and the reply carries ``fix_task``. ``globs`` are
+    the fix task's files; absent, the item's. An OPEN bug-fix task named as ``item`` is
+    the fix itself and nothing new is filed."""
     scope = (scope or "").strip().lower()
     severity = (severity or "").strip().lower()
     title = " ".join((title or "").split())
-    if scope and scope not in BUG_SCOPES:
-        return O.failed("bug.found", f"unknown scope {scope!r}: one of {', '.join(BUG_SCOPES)}")
-    if severity and severity not in BUG_SEVERITIES:
-        return O.failed(
-            "bug.found", f"unknown severity {severity!r}: one of {', '.join(BUG_SEVERITIES)}"
-        )
+    bad = _bug_fields_problem(scope, severity, globs)
+    if bad:
+        return O.failed("bug.found", bad)
     log, cfg, st = _load(repo, agent)
     bid = id or auto_id("B", summary, item)
     chk = DD.check_add(
@@ -528,20 +534,202 @@ def bug_found(
             out = DD.extend(log, cfg, chk, "bug.found")
         offer = upstream_offer(scope or (held.scope if held else "project"), target)
         return O.ok("bug.found", **{**out.data, **({"offer": offer} if offer else {})})
+    prior = st.bugs.get(bid)
+    # The fix task goes in the SAME transaction as the bug, and its id into the bug's own
+    # event, so a crash between the two cannot leave a bug that says it has a task it has
+    # not. A re-report (`prior`) files nothing: the record already has what it has. What
+    # the reply then SAYS about the task -- claim it now, it is queued, ask -- is the
+    # `[bugs].on_found` knob's business (B-bugs-fix-now), decided from `fix_task` here.
+    fix: dict[str, Any] = {"fix_task": "", "filed": False}
     with log.transaction():
-        log.append("bug.found", bid, {"item": item, "summary": summary, **extra, **chk.fields})
+        if cfg.bugs.file_task and not no_task and prior is None:
+            fix = _file_fix_task(
+                log, cfg, st, bid, title=title, summary=summary, item=item, globs=globs
+            )
+        linked = {"fix_task": fix["fix_task"]} if fix["fix_task"] else {}
+        log.append(
+            "bug.found",
+            bid,
+            {"item": item, "summary": summary, **extra, **linked, **chk.fields},
+        )
         DD.after_add(log, cfg, bid, chk)
     # A re-report merges into the record and never reopens it (see `_h_bug_found`). Said
     # out loud, because otherwise a real recurrence filed under an id already closed
     # vanishes without a word. Only an EXPLICIT `--id` can land on a closed record: an
     # auto id is time-salted (core/ids.py), so the same text without an id is a new id,
     # and the duplicate check above is what catches it.
-    prior = st.bugs.get(bid)
     offer = upstream_offer(scope or (prior.scope if prior else "project"), bid)
-    more = {"offer": offer} if offer else {}
+    more: dict[str, Any] = {"offer": offer} if offer else {}
+    more["fix_task"] = fix["fix_task"] or (prior.fix_task if prior else "")
+    more["fix_task_filed"] = fix["filed"]
     if prior is not None and prior.resolution:
         return O.ok("bug.found", id=bid, resolution=prior.resolution, **more, **chk.data())
     return O.ok("bug.found", id=bid, **more, **chk.data())
+
+
+#: Fix tasks are filed as `fix-<bug id>`: one obvious name per bug, so a second report
+#: of the same id finds the task already there instead of filing a twin.
+FIX_TASK_PREFIX = "fix-"
+#: A fix task's title is the bug's headline behind "Fix bug X:" -- the words `show <bug>`
+#: already recognises as a fix's own claim (`api.reporting._show_bug`). Cut, not wrapped:
+#: the whole summary is in the body.
+_FIX_TITLE_MAX = 120
+
+
+def _fix_task_of(st, cfg, item: str):
+    """The OPEN bug-fix task ``item`` names, or None. A report filed against the task that
+    is fixing it (`bug found --item <fix task>`, the dedupe's `filed_against`) names its
+    fix; one filed against the item it was FOUND in -- a feature, a finished task, a
+    phase -- names where to look, and gets a task of its own."""
+    from ..core.flow import FEATURE, branch_kind
+    from ..core.model import ABANDONED, DONE
+
+    it = st.items.get(item) if item else None
+    if it is None or it.removed or it.kind != "task" or it.state in (DONE, ABANDONED):
+        return None
+    return it if branch_kind(it, cfg) != FEATURE else None
+
+
+def _open_phase_of(st, item: str) -> str:
+    """The nearest OPEN phase at or above ``item``, or "". A finished phase does not take
+    new work: a task filed under it would sit open beneath a phase that says done."""
+    from ..core.model import ABANDONED, DONE
+
+    it = st.items.get(item) if item else None
+    if it is None or it.removed:
+        return ""
+    for node in (it, *st.ancestors(item)):
+        if node.kind == "phase" and node.state not in (DONE, ABANDONED) and not node.removed:
+            return node.id
+    return ""
+
+
+def _file_fix_task(
+    log, cfg, st, bug_id: str, *, title: str, summary: str, item: str, globs: str
+) -> dict[str, Any]:
+    """File the task that fixes ``bug_id`` and return ``{fix_task, filed, phase_made}``.
+
+    The task: `fix-<bug>`, tagged a bug fix (the first of `[flow] bugfix_tags`, so
+    `bugs_first` and gitflow both see it), under the item's open phase -- else the standing
+    `[bugs] phase`, made on first use -- carrying ``globs`` or the item's, the item's
+    priority and release line, and `fixes = [bug]`. Appends inside the caller's
+    transaction; ``st`` is updated in place so a loop (`bug_file_tasks`) sees what it made.
+    ``filed`` is False when the bug already has its fix: the open bug-fix task ``item``
+    names, or a `fix-<bug>` already in the queue.
+    """
+    from ..api.items import DEFAULT_PRIORITY
+    from ..core.model import Item
+
+    named = _fix_task_of(st, cfg, item)
+    if named is not None:
+        return {"fix_task": named.id, "filed": False, "phase_made": ""}
+    tid = FIX_TASK_PREFIX + bug_id
+    have = st.items.get(tid)
+    if have is not None and not have.removed:
+        return {"fix_task": tid, "filed": False, "phase_made": ""}
+    src = st.items.get(item) if item else None
+    if src is not None and src.removed:
+        src = None
+    parent = _open_phase_of(st, item)
+    phase_made = ""
+    if not parent:
+        standing = st.items.get(cfg.bugs.phase)
+        if standing is None or standing.removed:
+            phase_made = cfg.bugs.phase
+            log.append(
+                "phase.added",
+                phase_made,
+                {
+                    "title": "Bugs",
+                    "needs": [],
+                    "globs": [],
+                    "body": "Fix tasks for bugs found outside any open phase (`bug found`).",
+                    "tags": [],
+                    "priority": DEFAULT_PRIORITY,
+                    "line": "",
+                },
+            )
+            st.items[phase_made] = Item(id=phase_made, kind="phase", title="Bugs")
+            parent = phase_made
+        else:
+            parent = _open_phase_of(st, standing.id)  # "" when the standing phase is done
+    tags = list(cfg.flow.bugfix_tags)
+    tag = "bugfix" if "bugfix" in tags else (tags[0] if tags else "bugfix")
+    first = summary.strip().splitlines()[0] if summary.strip() else ""
+    headline = " ".join((title or first).split())
+    full_title = f"Fix bug {bug_id}: {headline}" if headline else f"Fix bug {bug_id}"
+    if len(full_title) > _FIX_TITLE_MAX:
+        full_title = full_title[: _FIX_TITLE_MAX - 3].rstrip() + "..."
+    where = f" Found on {item}." if item else ""
+    body = (
+        f"Fixes bug {bug_id}: {summary.strip()}{where}\n\n"
+        f"Write the regression test first and watch it FAIL on the unfixed code; then "
+        f"`ddflow complete {tid} --regression-test <test>` closes the bug with the task "
+        f"(or `ddflow bug fixed {bug_id} --regression-test <test>` first)."
+    )
+    data = {
+        "parent": parent,
+        "title": full_title,
+        "needs": [],
+        "globs": GS.parse(globs) if globs else list(src.globs if src else []),
+        "body": body,
+        "tags": [tag],
+        "priority": src.priority if src else DEFAULT_PRIORITY,
+        "line": src.line if src else "",
+        "fixes": [bug_id],
+    }
+    log.append("task.added", tid, data)
+    st.items[tid] = Item(id=tid, kind="task", title=full_title, parent=parent, fixes=[bug_id])
+    return {"fix_task": tid, "filed": True, "phase_made": phase_made}
+
+
+def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
+    """Give every OPEN bug that has no fix task one -- the one-shot upgrade for a log
+    written before `bug found` filed them. A bug whose item is an open bug-fix task is
+    linked to it (``linked``); any other gets `fix-<bug>` filed (``filed``), as `bug
+    found` would have. Nothing to do is exit 2. ``dry_run`` reports and writes nothing."""
+    from ..core.model import fold
+
+    log, cfg, st = _load(repo, agent)
+    filed: list[str] = []
+    linked: list[str] = []
+    with log.transaction():
+        st = fold(log.read_all(), strict=False)
+        todo = sorted(
+            (b for b in st.bugs.values() if b.open and not b.fix_task),
+            key=lambda b: (b.found_at, b.id),
+        )
+        for b in todo:
+            if dry_run:
+                (linked if _fix_task_of(st, cfg, b.item) else filed).append(b.id)
+                continue
+            fix = _file_fix_task(
+                log, cfg, st, b.id, title=b.title, summary=b.summary, item=b.item, globs=""
+            )
+            # A partial `bug.found` carries the link: the fold merges and never blanks
+            # (`_h_bug_found`), and an older ddflow folds it as the record it already has.
+            log.append("bug.found", b.id, {"fix_task": fix["fix_task"]})
+            (filed if fix["filed"] else linked).append(b.id)
+    tasks = {b: FIX_TASK_PREFIX + b for b in filed}
+    if not filed and not linked:
+        return O.nothing(
+            "bug.file_tasks",
+            "every open bug already has a fix task",
+            filed=[],
+            linked=[],
+            tasks={},
+            dry_run=dry_run,
+        )
+    return O.ok("bug.file_tasks", filed=filed, linked=linked, tasks=tasks, dry_run=dry_run)
+
+
+def _bug_fields_problem(scope: str, severity: str, globs: str) -> str:
+    """Why `bug found`'s optional fields cannot be recorded, or ""."""
+    if scope and scope not in BUG_SCOPES:
+        return f"unknown scope {scope!r}: one of {', '.join(BUG_SCOPES)}"
+    if severity and severity not in BUG_SEVERITIES:
+        return f"unknown severity {severity!r}: one of {', '.join(BUG_SEVERITIES)}"
+    return GS.problem(GS.parse(globs))
 
 
 def _unknown_bug(kind: str, bid: str, st) -> O.Outcome:
@@ -700,10 +888,33 @@ def bug_invalid(
             id=bug,
         )
     reason = reason.strip()
-    log.append("bug.invalid", bug, {"reason": reason, "evidence": evidence})
+    with log.transaction():
+        log.append("bug.invalid", bug, {"reason": reason, "evidence": evidence})
+        removed = _drop_fix_task(log, st, rec)
     return O.ok(
-        "bug.invalid", id=bug, invalid_reason=reason, evidence=evidence, unchecked=unchecked
+        "bug.invalid",
+        id=bug,
+        invalid_reason=reason,
+        evidence=evidence,
+        unchecked=unchecked,
+        fix_task_removed=removed,
     )
+
+
+def _drop_fix_task(log, st, rec) -> str:
+    """Take a false finding's fix task out of the queue, when nothing else wants it: it is
+    still OPEN, nobody holds it, and no other open bug names it. Returns the id removed or
+    "". A task somebody has claimed, or that fixes a real bug too, stays -- the reply names
+    it and the agent decides."""
+    from ..core.model import OPEN
+
+    t = st.items.get(rec.fix_task) if rec.fix_task else None
+    if t is None or t.removed or t.state != OPEN or t.lease:
+        return ""
+    if any(b.open and b.id != rec.id and b.fix_task == t.id for b in st.bugs.values()):
+        return ""
+    log.append("task.removed", t.id, {"reason": f"bug {rec.id} closed as invalid"})
+    return t.id
 
 
 def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:

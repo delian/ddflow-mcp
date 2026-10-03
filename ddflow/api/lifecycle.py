@@ -1362,12 +1362,19 @@ def complete(
     model: str = "",
     agent: str = "",
     changelog: str = "",
+    regression_test: str | list[str] = "",
 ) -> O.Outcome:
     """Finish an item, refusing on an incomplete pipeline unless forced.
 
     The rule-set lives in `services.completion`. This decides only what to DO with the
     verdict, and records the override when one is taken — an unrecorded `--force` is a
     pipeline that was never really enforced.
+
+    ``regression_test`` closes the open bugs this item is the fix task of (`bug found`
+    files one per bug) through `bug_fixed` -- the same refusals: a test must be named and
+    must exist -- before the verdict, which otherwise blocks on them. The closures are
+    recorded even when the completion is then refused: the bug IS fixed and tested; the
+    item's pipeline is another matter.
     """
     from ..services import completion as CM
 
@@ -1381,6 +1388,23 @@ def complete(
     it = _require(st, item, "item.completed")
     if isinstance(it, O.Outcome):
         return it
+    closed: list[str] = []
+    tests = [regression_test] if isinstance(regression_test, str) else list(regression_test)
+    if any(t.strip() for t in tests):
+        from .knowledge import bug_fixed
+
+        for bid in sorted(b.id for b in st.bugs.values() if b.open and b.fix_task == item):
+            out = bug_fixed(repo, bid, regression_test=tests, agent=agent)
+            if out.exit != O.OK:
+                return O.Outcome(
+                    kind="item.completed",
+                    data={"id": item, "bug": bid, "bugs_closed": closed},
+                    exit=out.exit,
+                    reason=f"--regression-test: bug {bid} not closed: {out.reason}",
+                )
+            closed.append(bid)
+        if closed:
+            log, cfg, st = _load(repo, agent)
 
     # The author is whoever completes; the model it declared at `session start` is its
     # model unless it says otherwise here (B7a5c63e3d2). Both surfaces arrive here, so
@@ -1402,6 +1426,7 @@ def complete(
         "note": v.coverage_note,
         "warnings": v.warnings,
         "blockers": v.blockers,
+        "bugs_closed": closed,
     }
     if not v.may_complete and not force:
         return O.refused(
