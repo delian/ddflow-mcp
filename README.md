@@ -760,7 +760,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 157 knobs.
+cadences, and the rest of the 158 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -2555,7 +2555,7 @@ floor — adding a fifth agent to a phase whose runtime is a four-deep chain buy
 It walks nested sub-tasks: an umbrella's open sub-tasks count as steps before it, and a
 phase another depends on contributes its chain. Items held back only by a cap
 (`schedule.max_parallel_tasks`, or a resource's capacity) are counted by `status` and `brief`, and the cap's message says when a slot
-is free. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree.
+is free. What `next` offers is conflict-aware: the free slots are filled in priority order, but an item whose globs overlap one already offered in the same answer is held back as a `conflict` naming that item ("globs overlap X ... offered in this plan"), and the next independent item takes its slot; `status` counts these apart from the cap-held ones ("N overlap an offered item" vs "N held by the parallelism cap"). `ddflow wait` sleeps until something is ready, but when every blocker needs a An item tagged `no-worktree` (a review, a research task) is not held by `worktree.max_parallel` and is claimed without a tree. With `[flow].claims = "remote"` a claim also takes `refs/ddflow/claims/<id>` on the remote by compare-and-swap, so two clones that cannot see each other cannot both claim an item while online: the second is refused naming the holder, release and completion delete the ref, a heartbeat extends it, a lapsed one is replaced, and an unreachable remote refuses the claim rather than claiming locally.
 person — a dependency cycle, an expired lease under `reclaim_policy = "report"` — it
 refuses at once rather than sleeping to its timeout.
 
@@ -3923,7 +3923,7 @@ declared once and persists — see
 
 ## Configuration
 
-157 knobs across 24 sections, every one documented in place:
+158 knobs across 24 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
