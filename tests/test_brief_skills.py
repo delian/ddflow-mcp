@@ -66,3 +66,10 @@ def test_brief_section_appears_for_matching_task_only(repo):
     assert ".claude/skills/db-migrations/SKILL.md" in out and "poetry-style" not in out
     code, out, _ = run_cli(repo, "brief", "--item", "T2")
     assert "Project skills and rules" not in out
+
+
+def test_multiline_frontmatter_gives_name_and_description(tmp_path):
+    e = SK.inventory(_repo(tmp_path))
+    mig = next(x for x in e if x.name == "db-migrations")
+    assert mig.description == "Write and review database schema migrations"
+    assert "---" not in mig.line()
