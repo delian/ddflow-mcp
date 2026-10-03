@@ -516,12 +516,10 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_promote_add": {
         "description": (
-            "File a PROMOTION to an environment branch ([flow].environments, e.g. "
-            "pre-production, production): a task that merges the branch immediately "
-            "upstream into it, runs the promotion pipeline, and lands by merge or merge "
-            "request. Always one step downstream -- production receives only what the "
-            "environment before it has. Exit 2 = nothing to promote; exit 3 = refused "
-            "(unknown environment, one already open, a branch missing)."
+            "File a PROMOTION to an environment branch ([flow].environments): a task that "
+            "merges the branch immediately upstream into it, runs the promotion pipeline "
+            "and lands by merge or request -- always one step downstream. Exit 2 = nothing "
+            "to promote; exit 3 = refused (unknown environment, one open, branch missing)."
         ),
         "properties": {
             "env": ("string", "The environment to promote TO.", True),
@@ -532,11 +530,28 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
+    "ddflow_promote_deployed": {
+        "description": (
+            "Record the sha a deploy put LIVE in an environment (from the deploy hook); "
+            "promote_status then shows what runs there. Exit 3 = refused."
+        ),
+        "properties": {
+            "env": ("string", "Environment.", True),
+            "sha": (
+                "string",
+                "Deployed commit (default: branch head).",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().promote_deployed(
+            repo, a["env"], sha=a.get("sha", "") or "", agent=agent
+        ),
+        "payload": "",
+    },
     "ddflow_promote_status": {
         "description": (
-            "Each environment branch: its head, how many commits it is behind the branch "
-            "upstream of it, any open promotion, and whether ddflow promotes to it by "
-            "itself (auto_promote). Reads only."
+            "Each environment: head, commits behind its upstream, open promotion, "
+            "auto_promote, and the live (deployed) sha. Reads only."
         ),
         "properties": {},
         "api": lambda repo, a, agent: _api().promote_status(repo, agent=agent),
@@ -1067,7 +1082,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_decision_add": {
         "description": (
-            "Record an architectural decision so the project stays consistent and the reasoning survives: a question about HOW the software is built (a representation, a boundary, a library, an invariant) settled by you or the operator. ALWAYS set `globs` to the code it governs, so it reaches whoever works those files later; record `alternatives` too, or the next agent re-proposes what was rejected."
+            "Record an architectural decision so the project stays consistent and the reasoning survives: HOW the software is built (a representation, boundary, library, invariant), settled by you or the operator. ALWAYS set `globs` to the code it governs, so it reaches whoever works those files; record `alternatives` too, or they get re-proposed."
         ),
         "properties": {
             "id": (
@@ -1345,7 +1360,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow_gate": {
         "description": (
-            "Define or change one gate, optionally placing it in a pipeline. WRITES this project's config. `command` makes a COMMAND gate (ddflow runs it; the exit code is the evidence); `prompt` makes an AGENT gate (you perform it and record what you did); one of the two is required. `into` adds it to a pipeline (`after` places it, default last); `required` blocks completion without it. Ask the operator first, and prefer dry_run to show them the change."
+            "Define or change one gate, optionally in a pipeline. WRITES the project config. `command` makes a COMMAND gate (ddflow runs it; its exit code is the evidence); `prompt` makes an AGENT gate (you perform and record it); one is required. `into` adds it to a pipeline (`after` places it, default last); `required` blocks completion without it. Ask the operator first; prefer dry_run."
         ),
         "properties": {
             "id": ("string", "The gate id, e.g. 'lint' or 'security_scan'.", True),
@@ -1492,10 +1507,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_bug_found": {
         "description": (
             "Report a bug the moment you find it, BEFORE fixing it. Recording it first "
-            "is what makes the fix accountable: `ddflow_bug_fixed` refuses to close "
-            "one without naming the regression test, so a bug that was never opened is "
-            "a fix that never had to prove itself. Bug hunts that record nothing look "
-            "identical to bug hunts that found nothing."
+            "makes the fix accountable: `ddflow_bug_fixed` refuses to close one without "
+            "a regression test. A hunt that records nothing looks like one that found nothing."
         ),
         "properties": {
             "id": ("string", "Stable id, e.g. 'B1'. You will cite it when closing.", False),
@@ -1831,7 +1844,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_configure": {
         "description": (
-            'Read or write .ddflow/config.toml (WRITES). No arguments: every knob with value, source and meaning. `set` edits one dotted key in place (preferred); `toml` APPENDS a fragment, e.g.\n  [gate.unit_tests]\n  command = "pytest -q -n auto"\n(needs pytest-xdist; drop -n auto without it). The committed file is generic project policy; anything of THIS machine or operator (a reviewer endpoint, a host, a key variable, worker counts) goes with local=true to the git-ignored .ddflow/local/config.toml, read last and never committed. A reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` write=true writes one.'
+            'Read or write .ddflow/config.toml (WRITES). No arguments: every knob with value, source and meaning. `set` edits one dotted key in place (preferred); `toml` APPENDS a fragment such as [gate.unit_tests] command = "pytest -q -n auto" (needs pytest-xdist). The committed file is generic project policy; anything of THIS machine or operator (a reviewer endpoint, a host, a key variable, worker counts) goes with local=true to the git-ignored .ddflow/local/config.toml, read last and never committed. A reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` write=true writes one.'
         ),
         "properties": {
             "set": (
@@ -1899,9 +1912,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_review": {
         "description": (
             "Run the configured cross-family reviewer over an item's diff and record the "
-            "result: the critic gate performed by ddflow rather than claimed by you. "
-            "No reviewer, an unreachable endpoint or no verdict records UNAVAILABLE, "
-            "never a pass. A gate gets [review].max_rounds (default 2) full rounds, then "
+            "result: the critic gate, performed by ddflow. "
+            "No reviewer, endpoint or verdict records UNAVAILABLE, never a pass. A gate gets [review].max_rounds (default 2) full rounds, then "
             "delta=true and ddflow_review_triage."
         ),
         "properties": {
@@ -2016,9 +2028,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         "description": (
             "Change an item's fields. MOST IMPORTANT USE: widening `globs` when your "
             "work turns out to touch files outside what you claimed. Do that BEFORE "
-            "writing them — the conflict detector and the commit hook both work from "
-            "the declared globs, so an undeclared file is a file no one is protecting "
-            "and the commit will be refused."
+            "writing them: the conflict detector and commit hook work from the declared "
+            "globs, so an undeclared file is unprotected and the commit is refused."
         ),
         "properties": {
             "id": ("string", "Item id.", True),
@@ -2760,7 +2771,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
 FULL_ONLY_TOOLS = frozenset(
     "ddflow_" + n
     for n in (
-        "external_sync import import_verify job_add job_end job_list job_run promote_add "
+        "external_sync import import_verify job_add job_end job_list job_run promote_add promote_deployed "
         "promote_status workflow workflow_drop workflow_gate workflow_pipeline flow_choose "
         "version_cut rebuild replay hooks precommit companions_add prompts pins loops cadence "
         "reviewers_detect memory_forget lesson_verify export bug_file_tasks"
