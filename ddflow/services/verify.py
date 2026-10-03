@@ -81,6 +81,16 @@ def _git_ok(repo: Path, *args: str) -> bool | None:
         return None
 
 
+def _ever_existed(repo: Path, path: str) -> bool:
+    from ..infra.worktree import git
+
+    try:
+        r = git(repo, "log", "--all", "--oneline", "-1", "--", path, timeout=60)
+    except Exception:  # git missing or hung: assume it existed rather than accuse
+        return True
+    return r.ok and bool(r.out)
+
+
 def _tracked(repo: Path) -> set[str] | None:
     from ..infra.worktree import git_paths
 
@@ -127,19 +137,23 @@ def _landed(repo: Path, cfg: Config, led: dict[str, Any]) -> Claim:
     return Claim("landed", FAIL, f"{sha[:10]} exists but is on none of {', '.join(on)}")
 
 
-def _declared(led: dict[str, Any], tracked: set[str] | None) -> Claim:
+def _declared(repo: Path, led: dict[str, Any], tracked: set[str] | None) -> Claim:
     globs = led["requirement"]["globs"]
     landed = set(led["done"]["files"])
     if tracked is None:
         return Claim("declared_files", UNKNOWN, "the tracked file list could not be read")
     exact = [g for g in globs if not _WILD.search(g)]
-    never = [g for g in exact if g not in tracked and g not in landed]
-    gone = [g for g in exact if g not in tracked and g in landed]
+    absent = [g for g in exact if g not in tracked and g not in landed]
+    # Absent now and not in the landing: either it never existed (the false positive) or
+    # it existed and was removed or renamed later -- history tells the two apart.
+    removed_later = [g for g in absent if _ever_existed(repo, g)]
+    never = [g for g in absent if g not in removed_later]
+    gone = [g for g in exact if g not in tracked and g in landed] + removed_later
     if never:
         return Claim("declared_files", FAIL, f"declared but never created: {_trim(never)}")
     notes = []
     if gone:
-        notes.append(f"touched by the landing but absent now: {_trim(gone)}")
+        notes.append(f"existed once but absent now: {_trim(gone)}")
     if led["done"]["files_known"] and globs and not conflicts(sorted(landed), globs):
         notes.append("the landing touched nothing inside its declared globs")
     if notes:
@@ -228,7 +242,7 @@ def check(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: 
     tracked = _tracked(repo)
     claims = [
         _landed(repo, cfg, led),
-        _declared(led, tracked),
+        _declared(repo, led, tracked),
         _tests(led, tracked),
         _gates(cfg, led),
         _survives(led, tracked),
