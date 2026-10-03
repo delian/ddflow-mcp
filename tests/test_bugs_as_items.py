@@ -388,16 +388,29 @@ def test_a_re_report_files_the_task_the_record_names_and_lacks(repo):
     assert again.exit == 0 and again.data["fix_task_filed"] is False
 
 
-def test_a_bug_on_a_removed_item_still_gets_its_fix_task(repo):
-    """critic delta #1 (refuted by this probe): a removed source item only stops the
-    inheritance (globs, priority); the task is filed and the bug's link is live."""
+def test_a_bug_on_a_removed_item_still_gets_its_fix_task_with_the_items_files(repo):
+    """critic delta #1 (refuted by this probe) and rubber_duck delta #8: a removed source
+    item is no parent, but the task is filed, linked, and still guards the item's files."""
     seed(repo)
     EventLog(repo, "seed").append("task.removed", "F1", {"reason": "dropped"})
     out = K.bug_found(repo, summary="left behind", item="F1", id="Bx", agent="a")
     assert out.exit == 0 and out.data["fix_task_filed"] is True
     st = state(repo)
     assert st.bugs["Bx"].fix_task == "fix-Bx" and not st.items["fix-Bx"].removed
-    assert st.items["fix-Bx"].globs == [] and st.items["fix-Bx"].parent == "bugs"
+    assert st.items["fix-Bx"].globs == ["src/parser.py"] and st.items["fix-Bx"].parent == "bugs"
+
+
+def test_file_tasks_brings_back_a_fix_task_that_was_removed_while_its_bug_stayed_open(repo):
+    """roborev job 1300 #1: the other way a bug's task goes missing -- `remove fix-<bug>`
+    with the bug open -- is repaired by re-adding the id, which the fold resurrects."""
+    seed(repo)
+    K.bug_found(repo, summary="parser drops the last line", item="T1", id="Bx", agent="a")
+    EventLog(repo, "op").append("task.removed", "fix-Bx", {"reason": "by mistake"})
+    assert state(repo).items["fix-Bx"].removed
+    out = K.bug_file_tasks(repo, agent="a")
+    assert out.exit == 0 and out.data["filed"] == ["Bx"], out.data
+    fix = state(repo).items["fix-Bx"]
+    assert not fix.removed and fix.state == "open" and fix.globs == ["src/parser.py"]
 
 
 def test_the_lifted_blocker_is_only_the_one_about_the_bugs_being_closed(repo):

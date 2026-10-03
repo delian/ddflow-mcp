@@ -396,25 +396,22 @@ def cmd_bug(a, c: Ctx) -> int:
     return OK
 
 
-_KEPT_WHY = {
-    "held": "somebody holds it",
-    "needed": "an item is filed under it or needs it",
-    "shared": "it fixes another open bug too",
-}
-
-
 def _fix_task_tail(data: dict) -> str:
     """What `bug invalid` did about the bug's fix task, said only when true: removed, still
-    queued and why, or already finished/removed/missing (roborev job 1299)."""
+    queued and why, or nothing to remove and why (roborev jobs 1299, 1300). The words are
+    the API's own (`STILL_QUEUED`, `NOTHING_TO_REMOVE`); an unknown reason is said as is,
+    never dressed as either."""
     gone = data.get("fix_task_removed", "")
     task, why = data.get("fix_task", ""), data.get("fix_task_kept", "")
     if gone:
         return f"\nfix task {gone} removed from the queue"
     if not task or not why:
         return ""
-    if why in _KEPT_WHY:
-        return f"\nfix task {task} stays in the queue: {_KEPT_WHY[why]}"
-    return f"\nfix task {task} is already {why}; nothing to remove"
+    if why in A.STILL_QUEUED:
+        return f"\nfix task {task} stays in the queue: {A.STILL_QUEUED[why]}"
+    if why in A.NOTHING_TO_REMOVE:
+        return f"\nfix task {task} is {A.NOTHING_TO_REMOVE[why]}; nothing to remove"
+    return f"\nfix task {task} was not removed by this closure ({why})"
 
 
 def _misread_hint(a) -> str:

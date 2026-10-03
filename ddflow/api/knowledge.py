@@ -546,10 +546,15 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
     # What the reply then SAYS about the task -- claim it now, it is queued, ask -- is the
     # `[bugs].on_found` knob's business (B-bugs-fix-now), decided from `fix_task` here.
     fix: dict[str, Any] = {"fix_task": "", "filed": False}
-    dangling = prior is not None and prior.open and bool(prior.fix_task)
-    dangling = dangling and not _live(st, prior.fix_task)  # type: ignore[union-attr]
-    filing = cfg.bugs.file_task and not no_task and (prior is None or dangling)
     with log.transaction():
+        # Decided from the log as it is NOW, under the lock: a task another process filed
+        # (or claimed) since `_load` must be seen, or it is filed twice -- a second
+        # definition of a live id, over its holder.
+        st = fold(log.read_all(), strict=False)
+        prior = st.bugs.get(bid)
+        dangling = prior is not None and prior.open and bool(prior.fix_task)
+        dangling = dangling and not _live(st, prior.fix_task)  # type: ignore[union-attr]
+        filing = cfg.bugs.file_task and not no_task and (prior is None or dangling)
         fix_id = _fix_task_id(st, cfg, bid, item) if filing else ""
         linked = {"fix_task": fix_id} if fix_id else {}
         log.append(
@@ -649,9 +654,10 @@ def _file_fix_task(
     tid = _fix_task_id(st, cfg, bug_id, item)
     if _has_fix_task(st, cfg, bug_id, item):
         return {"fix_task": tid, "filed": False, "phase_made": ""}
+    # A removed source still lends its files, priority and line: the bug is in those files
+    # whether or not the item that touched them is still in the queue, and the fix task's
+    # globs are what makes a feature on them wait. Only the parent needs an OPEN phase.
     src = st.items.get(item) if item else None
-    if src is not None and src.removed:
-        src = None
     parent = _open_phase_of(st, item)
     phase_made = ""
     if not parent:
@@ -936,10 +942,21 @@ def bug_invalid(
     )
 
 
-#: Why `bug invalid` left a fix task alone (`fix_task_kept`): the queue still wants it
-#: (`held`, `needed`, `shared`), or there is nothing to remove (`finished`, `removed`,
-#: `missing`). "" when the bug has no fix task or it was removed.
-FIX_TASK_KEPT = ("held", "needed", "shared", "finished", "removed", "missing")
+#: Why `bug invalid` left a fix task alone (`fix_task_kept`), with the words the surfaces
+#: say: the queue still wants it (`STILL_QUEUED`), or there is nothing to remove. "" when
+#: the bug has no fix task or it was removed. ONE vocabulary, read by the CLI, so a
+#: reason added here cannot fall through to the wrong sentence there (roborev, job 1300).
+STILL_QUEUED: dict[str, str] = {
+    "held": "somebody holds it",
+    "needed": "an item is filed under it or needs it",
+    "shared": "it fixes another open bug too",
+}
+NOTHING_TO_REMOVE: dict[str, str] = {
+    "finished": "already finished",
+    "removed": "already removed from the queue",
+    "missing": "not in the queue at all",
+}
+FIX_TASK_KEPT = (*STILL_QUEUED, *NOTHING_TO_REMOVE)
 
 
 def _drop_fix_task(log, st, rec) -> tuple[str, str]:
