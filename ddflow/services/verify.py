@@ -151,6 +151,8 @@ def _tests(led: dict[str, Any], tracked: set[str] | None) -> Claim:
     d = led["done"]
     if not d["files_known"]:
         return Claim("tests", UNKNOWN, "the files the landing changed were not recorded")
+    if not d["files"]:
+        return Claim("tests", WARN, "the landing changed no files, so there is nothing it tested")
     code = [f for f in d["files"] if f not in d["tests"] and not _DOCS.search(f)]
     if tracked is not None and (missing := [t for t in d["tests"] if t not in tracked]):
         return Claim("tests", WARN, f"tests it added are gone: {_trim(missing)}")
@@ -208,8 +210,10 @@ def _survives(led: dict[str, Any], tracked: set[str] | None) -> Claim:
     files = led["done"]["files"]
     if not led["done"]["files_known"] or tracked is None:
         return Claim("survives", UNKNOWN, "no recorded file list to compare with")
+    if not files:
+        return Claim("survives", WARN, "the landing changed no files, so nothing can survive")
     gone = [f for f in files if f not in tracked]
-    if files and len(gone) == len(files):
+    if len(gone) == len(files):
         return Claim("survives", FAIL, "every file the landing changed is gone")
     if gone:
         return Claim("survives", WARN, f"later removed or renamed: {_trim(gone)}")

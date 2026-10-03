@@ -217,3 +217,13 @@ def test_on_gitflow_a_commit_only_on_production_is_a_warning_not_ok(repo):
     sha = _commit(repo, {"w.py": "1\n"})  # on the default branch only
     run_cli(repo, "complete", "T1", "--sha", sha, "--force")
     assert _claims(verify(repo, "T1"))["landed"]["status"] == "warn"
+
+
+def test_a_landing_that_changed_no_files_is_not_reported_as_ok(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, "w.py")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "empty")
+    run_cli(repo, "complete", "T1", "--sha", _git(repo, "rev-parse", "HEAD"), "--force")
+    cl = _claims(verify(repo, "T1"))
+    assert cl["tests"]["status"] == "warn" and cl["survives"]["status"] == "warn"
