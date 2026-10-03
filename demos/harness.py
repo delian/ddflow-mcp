@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -33,6 +34,13 @@ _C = {
 }
 if not sys.stdout.isatty() or os.environ.get("NO_COLOR"):
     _C = dict.fromkeys(_C, "")
+
+
+def _load() -> str:
+    try:
+        return "/".join(f"{x:.0f}" for x in os.getloadavg())
+    except OSError:
+        return "?"
 
 
 class Fail(AssertionError):
@@ -83,16 +91,22 @@ class Scenario:
             cmd += ["--agent", agent]
         cmd += list(argv)
         env = {**os.environ, "PYTHONPATH": str(ROOT)}
+        t0 = time.monotonic()
         p = subprocess.run(cmd, capture_output=True, text=True, env=env, timeout=600)
+        took = time.monotonic() - t0
         if not quiet:
             shown = " ".join(argv[:4])
+            # A command that took >5 s says so: under machine load a scenario slows down
+            # silently, and B184's 225 s step could not be attributed to any one command.
+            slow = f" [{took:.1f}s]" if took > 5 else ""
             print(
                 f"  {_C['dim']}$ ddflow {shown}"
-                f"{' (as ' + agent + ')' if agent else ''} → exit {p.returncode}{_C['end']}"
+                f"{' (as ' + agent + ')' if agent else ''} → exit {p.returncode}{slow}{_C['end']}"
             )
         if expect is not None and p.returncode != expect:
             raise Fail(
-                f"`ddflow {' '.join(argv)}` exit {p.returncode}, expected {expect}\n"
+                f"`ddflow {' '.join(argv)}` exit {p.returncode}, expected {expect} "
+                f"(took {took:.1f}s, load average {_load()})\n"
                 f"STDOUT:\n{p.stdout}\nSTDERR:\n{p.stderr}"
             )
         return p.returncode, p.stdout, p.stderr
