@@ -3052,7 +3052,8 @@ which is the price of verifying them and is linear in the log.
 `read_all` writes a snapshot of the parsed events and their merged order to
 `.ddflow/local/read-snapshot.bin` (machine-local, git-ignored, never merged). A later
 process loads it instead of calling `Event.from_json` on every line: 100,000 events cold
-650-710 ms to 280-400 ms (about 2x), 20,000 events 118-129 ms to 54-59 ms. It is a cache
+685 ms to about 400 ms (1.7x), 20,000 events 125 ms to 63 ms (2x), median of three runs
+on a loaded machine. It is a cache
 and is trusted only as far as it verifies: per shard, the SHA-256 of the bytes it
 describes must still match the shard on disk (so a rewritten, truncated or switched-branch
 shard is re-parsed, and an appended or torn tail is parsed as usual); the file's own
