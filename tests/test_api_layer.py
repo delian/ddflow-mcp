@@ -315,6 +315,9 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_version_cut": (["version", "cut", "--dry-run"], {"dry_run": True}),
     "ddflow_flow_show": (["flow", "show"], {}),
     "ddflow_promote_status": (["promote", "status"], {}),
+    "ddflow_rule_list": (["rule", "list"], {}),
+    "ddflow_rule_search": (["rule", "search", "test"], {"query": "test"}),
+    "ddflow_rule_show": (["rule", "show", "r-test"], {"id": "r-test"}),
 }
 
 #: Migrated tools whose body CANNOT be compared by invoking both surfaces, because
@@ -398,6 +401,9 @@ WRITES_NOT_COMPARABLE = {
     "ddflow_reviewers_detect",
     "ddflow_import",
     "ddflow_companions_add",
+    "ddflow_rule_add",
+    "ddflow_rule_edit",
+    "ddflow_rule_remove",
 }
 
 
