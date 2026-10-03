@@ -1455,7 +1455,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             else _api().verify_sweep(
                 repo,
                 phase=a.get("phase", "") or "",
-                limit=int(a.get("limit") or 20),
+                limit=int(a["limit"]) if a.get("limit") is not None else 20,
                 file_bugs=bool(a.get("file_bugs")),
                 agent=agent,
             )
