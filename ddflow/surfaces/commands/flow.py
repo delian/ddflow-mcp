@@ -31,6 +31,7 @@ def cmd_pr(a, c: Ctx) -> int:
                 f"  {r['id']:<14} {r['state']:<8} #{r['number']} {r['pr_state']:<7} "
                 f"review={r['review'] or '-'} checks={r['checks'] or '-'} "
                 f"-> {r['base']}  (as of {r['synced_at'] or 'never'})"
+                + (f"  [merge queue #{r['queue_position']}]" if r.get("queue") else "")
             )
         for r in out.data["releases"]:
             print(

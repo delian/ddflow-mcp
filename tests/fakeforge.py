@@ -142,6 +142,11 @@ def main(argv: list[str]) -> int:  # noqa: C901 -- one branch per faked verb
         want = _arg(argv, "--match-head-commit")
         if want and want != _sha(st["remote"], pr["head"]):
             return done(1, err="head branch was modified")
+        if st.get("merge_queue"):
+            # A queue-protected branch: the merge ENQUEUES, and the request stays open.
+            waiting = [p for p in prs if p.get("queue")]
+            pr["queue"] = {"position": len(waiting) + 1, "state": "QUEUED"}
+            return done(out=f"Pull request #{pr['number']} will be added to the merge queue")
         how = next((f for f in ("--merge", "--squash", "--rebase") if f in argv), "--merge")
         merge_on_remote(st, pr, how)
         return done()
@@ -149,6 +154,21 @@ def main(argv: list[str]) -> int:  # noqa: C901 -- one branch per faked verb
         pr = next(p for p in prs if p["number"] == int(argv[2]))
         pr["base"] = _arg(argv, "--base", pr["base"])
         return done()
+    if argv[:2] == ["api", "graphql"]:
+        number = int(next(a for a in argv if a.startswith("number=")).split("=", 1)[1])
+        pr = next(p for p in prs if p["number"] == number)
+        entry = pr.get("queue")
+        return done(
+            out=json.dumps(
+                {
+                    "data": {
+                        "repository": {
+                            "pullRequest": {"isInMergeQueue": bool(entry), "mergeQueueEntry": entry}
+                        }
+                    }
+                }
+            )
+        )
     if argv[0] == "api" and argv[1].endswith("/comments"):
         number = int(argv[1].split("/")[-2])
         pr = next(p for p in prs if p["number"] == number)
@@ -238,6 +258,23 @@ class Forge:
         sha = merge_on_remote(st, pr, how)
         _save(self.path, st)
         return sha
+
+    def queue_land(self, number: int) -> str:
+        """The queue got to it: the merge happens now, and the entry goes away."""
+        st = self.st
+        pr = next(p for p in st["prs"] if p["number"] == number)
+        sha = merge_on_remote(st, pr, "--merge")
+        pr.pop("queue", None)
+        _save(self.path, st)
+        return sha
+
+    def queue_eject(self, number: int) -> None:
+        """The queue's own build failed: the entry is dropped, the request stays open."""
+        st = self.st
+        pr = next(p for p in st["prs"] if p["number"] == number)
+        pr.pop("queue", None)
+        pr["checks"] = [{"conclusion": "FAILURE", "status": "COMPLETED"}]
+        _save(self.path, st)
 
     def calls(self, *prefix: str) -> list[list[str]]:
         return [c for c in self.st["calls"] if c[: len(prefix)] == list(prefix)]

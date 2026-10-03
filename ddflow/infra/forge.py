@@ -62,6 +62,14 @@ class PRInfo:
     #: "" when the forge does not say. An approval of an older head is not an approval of
     #: this one, and a change request on an older head was answered by the push since.
     review_sha: str = ""
+    #: Merge queue (B172). `gh pr merge` on a queue-protected branch ENQUEUES instead of
+    #: merging: the request stays open while the queue builds it. "queued" while it has an
+    #: entry, "" otherwise; the position is 1 for the next to merge; the state is the
+    #: queue's own word for the entry (QUEUED, AWAITING_CHECKS, MERGEABLE, UNMERGEABLE,
+    #: LOCKED). An open request that WAS queued and no longer is, was ejected.
+    queue: str = ""
+    queue_position: int = 0
+    queue_state: str = ""
 
     def event_data(self, forge: str) -> dict[str, Any]:
         return {
@@ -76,6 +84,9 @@ class PRInfo:
             "head_sha": self.head_sha,
             "merge_sha": self.merge_sha,
             "feedback": self.feedback,
+            "queue": self.queue,
+            "queue_position": self.queue_position,
+            "queue_state": self.queue_state,
         }
 
 
@@ -193,8 +204,37 @@ def _gh_checks(rollup: list[dict[str, Any]] | None) -> str:
     return "pending" if pending else "passing"
 
 
+#: The merge queue is not in `gh pr view --json`'s documented fields; it is GraphQL's
+#: `PullRequest.isInMergeQueue` / `mergeQueueEntry`, asked through `gh api graphql` (whose
+#: `{owner}`/`{repo}` placeholders gh fills in from the repository it runs in).
+_GH_QUEUE_QUERY = (
+    "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)"
+    "{pullRequest(number:$number){isInMergeQueue mergeQueueEntry{position state}}}}"
+)
+
+
 class GitHub(Forge):
     name = GITHUB
+
+    def _queue(self, number: int) -> tuple[str, int, str]:
+        """(``queued`` | ``""``, position, state). Best effort: a GitHub without merge
+        queues (older Enterprise, no GraphQL field) answers "not queued", which is what
+        it is -- unlike a view, nothing here may turn into ``unavailable``."""
+        p = _run(
+            self.repo,
+            ["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}"]
+            + ["-F", f"number={number}", "-f", f"query={_GH_QUEUE_QUERY}"],
+        )
+        if p.returncode != 0:
+            return "", 0, ""
+        try:
+            pr = json.loads(p.stdout or "{}")["data"]["repository"]["pullRequest"] or {}
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return "", 0, ""
+        entry = pr.get("mergeQueueEntry") or {}
+        if not (pr.get("isInMergeQueue") or entry):
+            return "", 0, ""
+        return "queued", int(entry.get("position") or 0), str(entry.get("state") or "")
 
     def _info(self, d: dict[str, Any]) -> PRInfo:
         review = {
@@ -257,6 +297,8 @@ class GitHub(Forge):
             f"gh pr view {number}",
         )
         info = self._info(d)
+        if info.state == "open":
+            info.queue, info.queue_position, info.queue_state = self._queue(number)
         if info.review == "changes_requested":
             info.feedback = _clip([info.feedback, self._inline(number)])
         return info

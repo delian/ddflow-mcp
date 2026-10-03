@@ -70,6 +70,9 @@ def pr_status(repo: Path, *, agent: str = "") -> O.Outcome:
                 "rounds": pr.rounds,
                 "synced_at": pr.synced_at,
                 "feedback": pr.feedback,
+                "queue": pr.queue,
+                "queue_position": pr.queue_position,
+                "queue_state": pr.queue_state,
             }
         )
     releases = [{"version": v, **p} for v, p in sorted(st.pending_releases.items())]
