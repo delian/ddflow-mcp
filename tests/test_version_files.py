@@ -187,3 +187,15 @@ def test_a_failing_commit_leaves_the_working_tree_as_it_was(repo):
     assert not _git(repo, "status", "--porcelain", "--untracked-files=no"), "a half-bumped tree"
     assert 'version = "0.0.1"' in (repo / "pyproject.toml").read_text()
     assert _git(repo, "tag", "-l") == ""
+
+
+def test_git_that_cannot_run_is_unavailable_not_a_refusal(repo):
+    import pytest
+
+    from ddflow.config import Config
+    from ddflow.services import version_files as VF
+
+    prep = VF.Prepared({"pyproject.toml": "x\n"}, ["pyproject.toml"])
+    with pytest.raises(VF.VersionFileError) as err:
+        VF.commit_on(repo, Config.load(repo), "no-such-branch", prep, message="m")
+    assert err.value.unavailable is True

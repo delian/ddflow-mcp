@@ -1200,7 +1200,8 @@ def _write_version_files(
     try:
         changed = VF.commit_on(repo, cfg, branch, prep, message=f"chore: bump version to {version}")
     except VF.VersionFileError as exc:
-        out.refused, out.reason = True, str(exc)
+        out.reason = str(exc)
+        out.unavailable, out.refused = exc.unavailable, not exc.unavailable
         return False
     out.version_files = changed
     out.steps.append(
