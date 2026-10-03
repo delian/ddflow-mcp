@@ -295,6 +295,82 @@ def _chunk_numbers(value) -> list[int] | str:
     return sorted(out) or "--chunk names no chunk"
 
 
+def _announce_rerun(rerun, revs, item: str, gate: str, say):
+    """(reviewers, the record to merge into, the chunks) -- `--chunk`'s plan, said aloud;
+    for any other review, (all of them, nothing, every chunk)."""
+    if not rerun:
+        return revs, {}, None
+    revs, prior, only = rerun
+    say(f"→ re-reviewing chunk(s) {only} of {item}.{gate} (recorded: {prior['coverage']})")
+    return revs, prior, only
+
+
+def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> int:
+    """Fold a delta's findings and coverage into the evidence of the review it follows.
+
+    The record keeps the earlier findings in place (so their numbers, and the triage
+    keyed by the digest of their exact text, stay as they were) and appends the delta's
+    new ones; a finding byte-identical to an earlier one is that finding, not a second
+    copy. `coverage` stays the delta's (a partial one must not read as a full pass); the
+    last full round's is kept as `full_coverage`. A no-op for anything but a delta that
+    reached a reviewer.
+
+    Returns how many findings of the merged record have no triage verdict yet: a clean
+    delta does not clear a gate whose earlier findings nobody has settled (`_hold`).
+    """
+    from ..services import review as R
+
+    if kind != "delta" or status not in (R.REVIEWED, R.PARTIAL):
+        return 0
+    ev["delta_from"] = _last_head(log, it.id, gate)
+    rec = it.gates.get(gate) if it else None
+    prior = dict(rec.evidence) if rec and rec.evidence else {}
+    kept = list(prior.get("chunk_findings") or [])
+    mine = list(ev.get("chunk_findings") or [])
+    ev["delta_findings"] = len(mine)
+    if prior.get("full_coverage") or prior.get("review_kind") in ("full", "full_unavailable"):
+        ev["full_coverage"] = prior.get("full_coverage") or prior.get("coverage", "")
+    if not kept:
+        return 0
+    have = {f.get("digest"): n for n, f in enumerate(kept, 1)}
+    for f in mine:
+        if f.get("digest") not in have:
+            kept.append(f)
+            have[f.get("digest")] = len(kept)
+    ev["chunk_findings"] = kept
+    ev["findings"] = len(kept)
+    ev["titles"] = [f.get("title", "") for f in kept[:10]]
+    if mine:
+        where = ", ".join(f"#{n} -> #{have[f.get('digest')]}" for n, f in enumerate(mine, 1))
+        say(
+            f"merged into the record of {it.id}.{gate} ({len(kept)} finding(s) in all): this "
+            f"delta's numbers above are its own; to triage use the record's -- {where}."
+        )
+    verdicts = it.triage.get(gate, {})
+    return sum(1 for f in kept if verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED)
+
+
+_SETTLED = ("refuted", "confirmed")
+
+
+def _hold(outcome: str, reason: str, untriaged: int, say) -> tuple[str, str]:
+    """A clean delta passes only when every earlier finding on the record has a verdict.
+
+    Before deltas were the default a re-review read the whole diff and reported an
+    unfixed finding again, so the gate stayed `failed` until it was dealt with; a delta
+    does not see it, so the record's own findings are what keeps the gate honest.
+    `review triage` (refuted, or confirmed with the fix as the probe) releases it.
+    """
+    if outcome != "passed" or not untriaged:
+        return outcome, reason
+    why = (
+        f"the delta is clean, but {untriaged} earlier finding(s) on the record have no "
+        "triage verdict: `ddflow review triage` settles each (the next clean delta then passes)"
+    )
+    say(f"NOTE: {why}.")
+    return "failed", why
+
+
 def _say_triage_scope(say: Callable[[str], None], results: list, best) -> None:
     """With several reviewers each one's findings were numbered from #1, but only the
     recorded reviewer's can be triaged: say whose (critic: another's #1 is not it)."""
@@ -476,18 +552,26 @@ class _ReplyFile:
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
 
 
-def _round_evidence(repo, it, branch, commit, kind, done, status, forced) -> dict[str, Any]:
+def _round_evidence(
+    repo, it, branch, commit, kind, done, status, forced, deltas=0
+) -> dict[str, Any]:
     """The round bookkeeping a recorded review carries: kind, the running count of full
-    rounds, the head it covered (what `--delta` diffs from), and a forced round's reason.
-    A full round counts only when a reviewer actually reviewed something."""
+    rounds and of delta rounds (kept apart: `gate status` shows both), the head it
+    covered (what a delta diffs from), and a forced round's reason. A round counts only
+    when a reviewer actually reviewed something."""
     from ..services import review as R
 
-    counted = kind == "full" and status in (R.REVIEWED, R.PARTIAL)
+    reviewed = status in (R.REVIEWED, R.PARTIAL)
+    counted = kind == "full" and reviewed
     ev: dict[str, Any] = {
         "review_kind": kind if counted or kind != "full" else "full_unavailable",
         "rounds": done + (1 if counted else 0),
-        "reviewed_head": _head_of(repo, it, branch, commit),
+        "delta_rounds": deltas + (1 if kind == "delta" and reviewed else 0),
     }
+    if reviewed:
+        # Only a review that reached a reviewer covered this head: recording it for one
+        # that did not would let the next delta start past commits nobody reviewed.
+        ev["reviewed_head"] = _head_of(repo, it, branch, commit)
     if counted:
         ev["round"] = done + 1
     if forced:
@@ -510,6 +594,20 @@ def _full_rounds(log, item: str, gate: str) -> int:
         and e.kind.startswith("gate.")
         and e.data.get("gate") == gate
         and (e.data.get("evidence") or {}).get("review_kind") == "full"
+    )
+
+
+def _delta_rounds(log, item: str, gate: str) -> int:
+    """Delta rechecks already recorded for `item`'s `gate` (counted from the log, like
+    `_full_rounds`): only ones that reached a reviewer."""
+    return sum(
+        1
+        for e in log.read_all()
+        if e.subject == item
+        and e.kind.startswith("gate.")
+        and e.data.get("gate") == gate
+        and (e.data.get("evidence") or {}).get("review_kind") == "delta"
+        and (e.data.get("evidence") or {}).get("status") in ("REVIEWED", "PARTIAL")
     )
 
 
@@ -548,14 +646,15 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
-    kind = _kind(repo, cfg, log, item, gate, a["chunks"], a["delta"], a["commit"], a["base"])
+    delta = _wants_delta(repo, cfg, log, it, a, say)
+    kind = _kind(repo, cfg, log, item, gate, a["chunks"], delta, a["commit"], a["base"])
     done = _full_rounds(log, item, gate) if item else 0
     forced, diff, how, why = "", "", "", ""
     if kind == "full" and item:
         why, forced = _budget(cfg, item, gate, done, a["force"], a["reason"], say)
     if why:
         return kind, done, forced, diff, how, why, None
-    if a["delta"]:
+    if delta:
         diff, how, why = _delta_scope(repo, it, log, gate, a["branch"])
     elif a["commit"]:
         diff, how = commit_diff(repo, a["commit"])
@@ -568,6 +667,60 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
         rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
         why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
     return kind, done, forced, diff, how, why, rerun
+
+
+def _wants_delta(repo, cfg, log, it, a, say) -> bool:
+    """Is this call a delta recheck? `--delta` says so; with `[review].delta_default` (on
+    in every project) so does a plain review of a gate that already has a recorded one.
+
+    `--full`, `--force` (a forced FULL round), `--chunk`, `--commit` and `--base` are left
+    as they are asked for. A delta is only sound from a head the branch still contains: one
+    that is no ancestor of the tip (rebased, amended) would diff the rebase's own changes,
+    so it falls back to a full round and says why -- as does, for the automatic delta only,
+    a prior review that did not cover the whole diff (an explicit `--delta` is the author's
+    own choice; the recorded `coverage` is kept beside the delta's).
+    """
+    explicit = bool(a["delta"])
+    plain = not (a["chunks"] or a["commit"] or a["base"] or a["full"] or a["force"])
+    if not it or not (explicit or (plain and cfg.review.delta_default)):
+        return False
+    item, gate = a["item"], a["gate"]
+    last = _last_review(log, item, gate)
+    head = str(last.get("reviewed_head") or "")
+    if not head:
+        return explicit  # --delta says "run the full review first"; a plain review just is one
+    if str(last.get("status")) != "REVIEWED":
+        if not explicit:
+            say(
+                f"full round: the last {gate} review of {item} was {str(last.get('status')).lower()}"
+                ", so a delta from it would leave part of the diff unreviewed."
+            )
+            return False
+    tip = _head_of(repo, it, a["branch"], "")
+    if not tip or not W.git(repo, "merge-base", "--is-ancestor", head, tip).ok:
+        say(
+            f"full round: the reviewed head {head[:10]} is not an ancestor of the current "
+            f"head {tip[:10] or '(unknown)'} (the branch was rebased or amended), so a delta "
+            "from it would not be what changed."
+        )
+        return False
+    if not explicit:
+        say(
+            f"[review].delta_default: {item}.{gate} has a recorded review, so only what "
+            f"changed since {head[:10]} is reviewed (`--full` forces a full round)."
+        )
+    return True
+
+
+def _last_review(log, item: str, gate: str) -> dict:
+    """The evidence of the gate's latest `ddflow review`, read from the LOG (the head and
+    its status): a re-claim or `gate skip` replaces the gate's current record."""
+    for e in reversed(log.read_all()):
+        if e.subject == item and e.kind.startswith("gate.") and e.data.get("gate") == gate:
+            ev = e.data.get("evidence") or {}
+            if ev.get("reviewed_head"):
+                return ev
+    return {}
 
 
 def _last_head(log, item: str, gate: str) -> str:
@@ -643,8 +796,22 @@ def _delta_scope(repo, it, log, gate, branch) -> tuple[str, str, str]:
         )
     diff = _delta_diff(repo, it, branch, head)
     if not diff.strip():
-        return "", "", f"nothing changed since the reviewed head {head[:10]}."
-    return diff, f"delta since {head[:10]}", ""
+        return (
+            "",
+            "",
+            f"nothing changed since the reviewed head {head[:10]}. `--full` reviews the "
+            "whole diff again (a full round).",
+        )
+    n = _commits_since(repo, it, branch, head)
+    what = f"{n} commit{'' if n == 1 else 's'}" if n else "uncommitted changes"
+    return diff, f"delta review of {what} since {head[:10]}", ""
+
+
+def _commits_since(repo: Path, it, branch: str, head: str) -> int:
+    """How many commits the item's tip has past `head` (0: only working-tree edits)."""
+    tip = _head_of(repo, it, branch, "")
+    r = W.git(repo, "rev-list", "--count", f"{head}..{tip}") if tip else None
+    return int(r.out) if r is not None and r.ok and r.out.strip().isdigit() else 0
 
 
 def _head_of(repo: Path, it, branch: str, commit: str) -> str:
@@ -697,6 +864,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     delta: bool = False,
     force: bool = False,
     reason: str = "",
+    full: bool = False,
 ) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
 
@@ -705,6 +873,10 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     last review covered (as does a `commit`/`base` at or after that head), and neither
     it nor triage is ever refused.
     `force` with a `reason` runs a full round past the cap, recorded in the evidence.
+
+    With `[review].delta_default` (on unless a project turns it off) a plain review of a
+    gate that already has a recorded review is a `delta` too; `full` forces a full round.
+    A delta's findings are merged into the gate's record (`_merge_delta`).
 
     `chunks` re-reviews only those chunks (numbered as the recorded review printed
     them) and merges the result into that record -- see `_rerun_scope`.
@@ -732,6 +904,18 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
 
     log, cfg, st = _load(repo, agent)
     gates = G.load_gates(repo, cfg)
+    if (full or force) and delta:
+        return O.failed(
+            "review",
+            f"{'--full' if full else '--force'} and --delta contradict each other: "
+            f"{'--full' if full else '--force'} is a full round, --delta reviews only what "
+            "changed since the reviewed head.",
+            id=item,
+            gate=gate,
+            outcome="",
+            findings=[],
+            text="",
+        )
 
     def unavailable(reason: str, **extra) -> O.Outcome:
         """Record it, then report it. An unrecorded UNAVAILABLE is indistinguishable
@@ -778,6 +962,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             "called_from": called_from,
             "force": force,
             "reason": reason,
+            "full": full,
         },
     )
     if why:
@@ -806,11 +991,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             text="",
         )
 
-    if rerun:
-        revs, prior, only = rerun
-        say(f"→ re-reviewing chunk(s) {only} of {item}.{gate} (recorded: {prior['coverage']})")
-    else:
-        prior, only = {}, None
+    revs, prior, only = _announce_rerun(rerun, revs, item, gate, say)
 
     keeps: dict[str, _ReplyFile] = {}
     overrides = P.overrides_from(cfg)
@@ -856,20 +1037,33 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         R.ERROR: "unavailable",
     }[best.status]
     if item:
+        evidence = {
+            **best.evidence(),
+            "diff_source": how,
+            "diff_chars": len(diff),
+            **_round_evidence(
+                repo,
+                it,
+                branch,
+                commit,
+                kind,
+                done,
+                best.status,
+                forced,
+                _delta_rounds(log, item, gate),
+            ),
+            **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
+        }
+        held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
+        outcome, reason = _hold(outcome, _reason_of(best), held, say)
         G.record(
             log,
             cfg,
             item,
             gate,
             outcome,
-            reason=_reason_of(best),
-            evidence={
-                **best.evidence(),
-                "diff_source": how,
-                "diff_chars": len(diff),
-                **_round_evidence(repo, it, branch, commit, kind, done, best.status, forced),
-                **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
-            },
+            reason=reason,
+            evidence=evidence,
             gates=gates,
             by=best.model,
         )

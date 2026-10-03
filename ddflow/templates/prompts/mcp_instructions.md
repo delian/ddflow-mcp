@@ -116,6 +116,9 @@ from a session that did nothing, and the log is what lets this project be rebuil
 A tool or reviewer that could not run is recorded `unavailable`, **never** `passed`.
 A gate gets `[review].max_rounds` (default 2) full `ddflow_review` rounds per item; then
 use `delta=true` (only what changed since the reviewed head) and `ddflow_review_triage`.
+Once a gate has a recorded review a plain `ddflow_review` already is that delta
+(`[review].delta_default`, default on); `full=true` forces a full round. Turning
+`review.delta_default` off is reported to the operator like the cap.
 Do not raise the cap yourself: a `ddflow_configure` change to `review.*` is reported to
 the operator.
 Exit code 2 means "could not run / nothing to do" — it is a result, not an error, and

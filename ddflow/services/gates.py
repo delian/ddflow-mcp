@@ -387,6 +387,8 @@ class GateStatus:
     #: gate -> "3 finding(s): 2 refuted, 1 confirmed, 0 untriaged" for a recorded review
     #: that reported findings (`triage_counts`). The gate's outcome is NOT changed by it.
     triage: dict[str, str] = field(default_factory=dict)
+    #: gate -> "1 full round, 2 delta rounds" for a gate `ddflow review` has reviewed.
+    rounds: dict[str, str] = field(default_factory=dict)
 
     def render(self) -> str:
         marks = {
@@ -398,7 +400,9 @@ class GateStatus:
             "": "[ ]",
         }
         return "\n".join(
-            f"  {marks.get(o, '[ ]')} {g}" + (f"  -- {self.triage[g]}" if g in self.triage else "")
+            f"  {marks.get(o, '[ ]')} {g}"
+            + (f"  -- {self.triage[g]}" if g in self.triage else "")
+            + (f"  -- {self.rounds[g]}" if g in self.rounds else "")
             for g, o in self.rows
         )
 
@@ -425,6 +429,22 @@ def triage_counts(it, gate: str) -> dict[str, int] | None:
         "confirmed": verdicts.count("confirmed"),
         "untriaged": sum(1 for v in verdicts if v not in ("refuted", "confirmed")),
     }
+
+
+def rounds_line(it, gate: str) -> str:
+    """ "1 full round, 2 delta rounds" from the gate's recorded `ddflow review`, or ""."""
+    rec = it.gates.get(gate)
+    ev = (rec.evidence or {}) if rec else {}
+    if "review_kind" not in ev:
+        return ""
+    full, delta = int(ev.get("rounds") or 0), int(ev.get("delta_rounds") or 0)
+    if not full and not delta:
+        return ""
+
+    def n(k: int, what: str) -> str:
+        return f"{k} {what} round{'' if k == 1 else 's'}"
+
+    return f"{n(full, 'full')}, {n(delta, 'delta')}"
 
 
 def triage_line(counts: dict[str, int]) -> str:
@@ -467,6 +487,7 @@ def status(state: State, cfg: Config, item_id: str) -> GateStatus:
         rows=rows,
         silent=[g for g, o in rows if not o],
         triage={g: triage_line(c) for g, _o in rows if (c := triage_counts(it, g))},
+        rounds={g: line for g, _o in rows if (line := rounds_line(it, g))},
     )
 
 

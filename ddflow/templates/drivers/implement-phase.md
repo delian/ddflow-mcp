@@ -177,7 +177,12 @@ A third full round is refused (exit 3). Recheck a fix with `ddflow review <ID> -
 --delta` (only what changed since the reviewed head) and settle the rest with `ddflow
 review triage` — both are always allowed. `--force --reason "..."` is the operator's
 recorded exception; `ddflow config review.max_rounds N [--local]` (0 = unlimited,
-`review.on_exceed = "warn"` to warn only) changes the cap.
+`review.on_exceed = "warn"` to warn only) changes the cap. Once a gate has a recorded
+review, a plain `ddflow review <ID> --gate G` IS that delta by default (`[review].delta_default`,
+on; the output says "delta review of N commits since <sha>", the findings merge into the
+gate's record and earlier triage stays); `--full` forces a full round, and a rebased branch
+falls back to a full round and says why. `ddflow config review.delta_default false [--local]`
+makes every review a full round again.
 
 **Tests: the relevant ones while you work, all of them at the gate, always in parallel.**
 

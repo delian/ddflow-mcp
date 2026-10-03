@@ -54,7 +54,9 @@ def test_the_recorded_evidence_carries_the_finding_body_and_a_digest(repo, tmp_p
     path = repo / ev["output_file"]
     assert path.is_relative_to(repo / ".ddflow" / "local" / "reviews")
     assert hashlib.sha256(path.read_bytes()).hexdigest()[:16] == ev["output_digest"]
-    api.review(repo, gate="critic", item="T1")  # a second run does not overwrite the first
+    api.review(
+        repo, gate="critic", item="T1", full=True
+    )  # a second run does not overwrite the first
     assert hashlib.sha256(path.read_bytes()).hexdigest()[:16] == ev["output_digest"]
     assert repo / _gate(repo).evidence["output_file"] != path
     rows = [json.loads(line) for line in path.read_text().splitlines()]
