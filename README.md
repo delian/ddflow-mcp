@@ -2526,6 +2526,31 @@ refuses at once rather than sleeping to its timeout.
 
 ---
 
+### Log-derived flow signals
+
+Besides the host, the adaptive parallelism controller takes what the project's own event
+log shows as input signals (the module computes them; the controller's sampling path that
+consumes them is a separate piece of the adaptive-flow work). `ddflow/core/flowsignals.py` computes each as a pure function of the log and an
+injected clock, against baselines taken from the same project's history, so no number is
+specific to a machine or a repository. Each ends at "now"; a signal with too little history
+is unavailable (`None`), which is neutral: it never lowers the limit and never justifies
+raising it.
+
+| Signal | Definition | Window | Unavailable when |
+|---|---|---|---|
+| `reviewer_latency_ratio` | median seconds from `gate.started` to a review gate's outcome, over the project's median for the 7 days before the window | last 30 minutes | under 5 recent or under 20 baseline reviews |
+| `gate_failure_rate` | `gate.failed / (passed + failed)` | last 60 minutes | under 10 outcomes |
+| `merge_failure_rate` | failed merge-gate outcomes over merge attempts | last 2 hours | no merge attempt |
+| `loop_findings` | findings of `ddflow loops` | now | never (0 when none) |
+| `independent_ready` | ready items overlapping neither anything in flight nor each other, by the same selection `ddflow next` offers (parallelism caps lifted) | now | never (0 when none) |
+
+A fresh project simply reports the first three as unavailable until it has history; nothing
+needs configuring. A merge git tried and failed (a conflict) is recorded as a failed `merge` gate
+outcome, which is what `merge_failure_rate` counts; a merge refused before git tried (target
+checked out elsewhere, another merge in progress) is not. Reviewer latency needs the review's start:
+`gate.started` is written for command gates today, so until `ddflow review` writes it too the
+ratio stays unavailable on a real log (filed as a follow-up).
+
 ## Gitflow, pull requests and version tags
 
 Two independent axes in `[flow]`, because teams combine them freely:
