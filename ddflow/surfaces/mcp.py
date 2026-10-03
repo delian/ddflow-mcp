@@ -1075,7 +1075,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_identify": {
         "description": (
-            "Declare WHO you are on this connection before anything that writes. Call it first when more than one agent or subagent works this repository at once: identity is what attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role), distinct from the other agents'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (the CLI's `--agent})."
+            "Declare WHO you are on this connection before anything that writes. Call it first when more than one agent or subagent works this repository at once: identity is what attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role), distinct from the other agents'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (the CLI's `--agent`)."
         ),
         "properties": {
             "agent": (

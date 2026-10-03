@@ -104,13 +104,27 @@ def _landed(repo: Path, cfg: Config, led: dict[str, Any]) -> Claim:
         return Claim("landed", UNKNOWN, "git could not be asked")
     if not exists:
         return Claim("landed", FAIL, f"commit {sha[:10]} is not in this repository")
-    branches = [default_branch(repo)]
-    if cfg.flow.model == "gitflow":
-        branches.append(cfg.flow.develop_branch)
-    for b in branches:
-        if _git_ok(repo, "merge-base", "--is-ancestor", sha, b):
-            return Claim("landed", OK, f"{sha[:10]} is on {b}")
-    return Claim("landed", FAIL, f"{sha[:10]} exists but is on none of {', '.join(branches)}")
+    prod = default_branch(repo)
+    gitflow = cfg.flow.model == "gitflow"
+    on: dict[str, bool | None] = {
+        br: _git_ok(repo, "merge-base", "--is-ancestor", sha, br)
+        for br in ([prod, cfg.flow.develop_branch] if gitflow else [prod])
+    }
+    if None in on.values():
+        return Claim("landed", UNKNOWN, "git could not be asked whether it is on the branch")
+    if gitflow:
+        if on[cfg.flow.develop_branch]:
+            return Claim("landed", OK, f"{sha[:10]} is on {cfg.flow.develop_branch}")
+        if on[prod]:
+            return Claim(
+                "landed",
+                WARN,
+                f"{sha[:10]} is on {prod} but not on {cfg.flow.develop_branch} "
+                f"(a hotfix awaiting its back-merge?)",
+            )
+    elif on[prod]:
+        return Claim("landed", OK, f"{sha[:10]} is on {prod}")
+    return Claim("landed", FAIL, f"{sha[:10]} exists but is on none of {', '.join(on)}")
 
 
 def _declared(led: dict[str, Any], tracked: set[str] | None) -> Claim:

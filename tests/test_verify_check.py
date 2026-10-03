@@ -191,3 +191,29 @@ def test_the_cli_exits_1_on_a_failed_claim_and_2_on_an_open_task(repo):
     body = json.loads(out)
     assert code == 1 and body["verdict"] == "does not hold"
     assert any(c["id"] == "declared_files" and c["status"] == "fail" for c in body["claims"])
+
+
+def test_ddflow_config_and_rules_changes_stay_in_the_ledger_but_event_shards_do_not(repo):
+    from ddflow.core.model import fold
+    from ddflow.services import ledger as LG
+
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, ".ddflow/rules/r-x.toml")
+    sha = _commit(repo, {".ddflow/rules/r-x.toml": 'id = "r-x"\n', "w.py": "1\n"})
+    it = fold(EventLog(repo).read_all(), strict=False).items["T1"]
+    files = LG.git_facts(repo, sha, it)["files"]
+    assert ".ddflow/rules/r-x.toml" in files and not any(
+        f.startswith(".ddflow/events/") for f in files
+    )
+
+
+def test_on_gitflow_a_commit_only_on_production_is_a_warning_not_ok(repo):
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text('[flow]\nmodel = "gitflow"\n')
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _git(repo, "branch", "develop")
+    _task(repo, "w.py")
+    sha = _commit(repo, {"w.py": "1\n"})  # on the default branch only
+    run_cli(repo, "complete", "T1", "--sha", sha, "--force")
+    assert _claims(verify(repo, "T1"))["landed"]["status"] == "warn"
