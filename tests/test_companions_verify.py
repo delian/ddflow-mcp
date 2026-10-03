@@ -66,6 +66,20 @@ def _script(tmp_path: Path, name: str, body: str) -> list[str]:
     return [str(p)]
 
 
+def _alive(pid: int) -> bool:
+    """Running, not merely present: a killed orphan is a zombie until PID 1 reaps it, and a
+    container whose PID 1 never does would otherwise read as alive."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    try:
+        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
+    except (OSError, IndexError):
+        return True
+    return state not in ("Z", "X")
+
+
 def test_a_real_mcp_server_is_verified(tmp_path):
     v = CO.verify_one(_companion("fake", sys.executable, _script(tmp_path, "s.py", FAKE_SERVER)))
     assert v.speaks_mcp is True, v.detail
@@ -126,7 +140,9 @@ def test_an_answering_server_and_a_sigterm_proof_grandchild_do_not_outlive_the_c
         import json, os, signal, sys, time
         if os.fork() == 0:
             signal.signal(signal.SIGTERM, signal.SIG_IGN)
-            open({str(pidfile)!r}, "w").write(str(os.getpid()))
+            tmp = {str(pidfile) + ".tmp"!r}
+            open(tmp, "w").write(str(os.getpid()))
+            os.replace(tmp, {str(pidfile)!r})
             time.sleep(120)
             sys.exit(0)
         for line in sys.stdin:
@@ -141,17 +157,22 @@ def test_an_answering_server_and_a_sigterm_proof_grandchild_do_not_outlive_the_c
     while not pidfile.exists() and time.monotonic() < deadline:
         time.sleep(0.05)
     pid = int(pidfile.read_text())
-    for _ in range(100):  # SIGKILL is async: wait for the reap
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
+    for _ in range(100):  # SIGKILL is async
+        if not _alive(pid):
             break
         time.sleep(0.05)
-    with pytest.raises(ProcessLookupError):
-        os.kill(pid, 0)
+    assert not _alive(pid)
 
 
-def test_a_newline_free_flood_neither_grows_unbounded_nor_defeats_the_timeout(tmp_path):
+def test_the_read_buffer_is_capped():
+    buf = b""
+    for _ in range(200):
+        buf = CO._keep(buf, b"x" * 65536)
+    assert len(buf) == CO._MAX_BUF
+    assert CO._keep(b"abc", b"def") == b"abcdef"
+
+
+def test_a_newline_free_flood_does_not_defeat_the_timeout(tmp_path):
     body = (
         "import sys\nwhile True:\n    sys.stdout.buffer.write(b'x' * 65536); sys.stdout.flush()\n"
     )

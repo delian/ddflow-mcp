@@ -363,25 +363,41 @@ def _describe_answer(msg: dict) -> tuple[str, dict]:
     return f"answered initialize ({who or 'no serverInfo'})", server
 
 
+def _exited(proc: subprocess.Popen) -> bool:
+    """Has the direct child exited? WITHOUT reaping it (`poll`/`wait` would).
+
+    An unreaped leader keeps its pid -- and so the process group's id -- reserved, which is
+    what makes the final group-wide SIGKILL safe: once reaped, the pid may be recycled
+    and `killpg` would hit whatever got it.
+    """
+    try:
+        return os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None
+    except ChildProcessError:
+        return True
+
+
 def _stop(proc: subprocess.Popen) -> None:
     """End the launched server and EVERYTHING it started (an `npx` wrapper has children).
 
     SIGTERM to the process group, a short grace for the direct child, then SIGKILL to the
-    group unconditionally: the direct child exiting says nothing about a grandchild that
-    ignores SIGTERM (a wrapper that forks the real server and exits).
+    group unconditionally -- the direct child exiting says nothing about a grandchild that
+    ignores SIGTERM -- and only then reap the leader.
     """
-    for sig, grace in ((signal.SIGTERM, 3), (signal.SIGKILL, 0)):
-        try:
-            os.killpg(proc.pid, sig)
-        except (ProcessLookupError, PermissionError):
-            continue
-        if grace:
-            try:
-                proc.wait(timeout=grace)
-            except subprocess.TimeoutExpired:
-                pass
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(proc.pid, signal.SIGTERM)
+    deadline = time.monotonic() + 3
+    while not _exited(proc) and time.monotonic() < deadline:
+        time.sleep(0.02)
+    with contextlib.suppress(ProcessLookupError, PermissionError):
+        os.killpg(proc.pid, signal.SIGKILL)
     with contextlib.suppress(subprocess.TimeoutExpired):
-        proc.wait(timeout=3)
+        proc.wait(timeout=5)
+
+
+def _keep(buf: bytes, chunk: bytes) -> bytes:
+    """`buf` plus `chunk`, truncated to the last `_MAX_BUF` bytes (a newline-free flood must
+    not grow the buffer, or make each read copy all of it)."""
+    return (buf + chunk)[-_MAX_BUF:]
 
 
 def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verification:
@@ -459,7 +475,7 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                 chunk = os.read(fd, 65536)
                 if not chunk:
                     break
-                buf = (buf + chunk)[-_MAX_BUF:]  # bounded: a newline-free flood must not grow it
+                buf = _keep(buf, chunk)
                 if _ECHO_MARK in buf:
                     return done(False, f"`{c.command}` echoed the request back: it is not a server")
                 msg, buf = _reply_to(buf, 1)
