@@ -67,3 +67,24 @@ def test_trunk_model_does_not_claim_gitflow_prefixes(repo):
     _git(repo, "branch", "feature/mine")
     out = api.cleanup(repo, apply=False, agent="sweeper")
     assert "feature/mine" not in _names(out)
+
+
+def test_empty_gitflow_prefix_is_not_read_as_every_branch(repo):
+    """An empty `feature_prefix` must not make develop/topic branches 'ours'."""
+    _git(repo, "branch", "develop")
+    run_cli(repo, "init")
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write('\n[flow]\nmodel = "gitflow"\nfeature_prefix = ""\n')
+    _git(repo, "branch", "topic/x")
+    out = api.cleanup(repo, apply=False, agent="sweeper")
+    assert "topic/x" not in _names(out) and "develop" not in _names(out)
+
+
+def test_doctor_reports_an_unclaimed_gitflow_worktree(repo):
+    _git(repo, "branch", "develop")
+    _gitflow(repo)
+    tree = repo.parent / "gf-orphan"
+    _git(repo, "worktree", "add", "-q", str(tree), "-b", "bugfix/orphan")
+    out = api.doctor(repo, agent="x")
+    notes = " ".join(out.data["notes"] + out.data["problems"])
+    assert "gf-orphan" in notes, notes

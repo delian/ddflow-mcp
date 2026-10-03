@@ -148,11 +148,24 @@ def _protected(root: Path, cfg: Config, state: State, now: float | None = None) 
 def our_prefixes(cfg: Config) -> list[str]:
     """Branch prefixes that mark a branch as ddflow's: ``worktree.branch_prefix``, plus
     the feature/bugfix/hotfix prefixes when the project runs gitflow (B177), where
-    ``branch_name`` creates task branches under those instead."""
+    ``branch_name`` creates task branches under those instead.
+
+    ``release_prefix`` is deliberately NOT here: a release branch can be a long-lived
+    line, and one with nothing ahead of the base looks "merged" to git. An EMPTY gitflow
+    prefix is dropped, not read as "every branch is ours" (``branch_prefix`` keeps its
+    historical empty-means-all meaning)."""
     out = [cfg.worktree.branch_prefix]
     if cfg.flow.model == GITFLOW:
-        out += [cfg.flow.feature_prefix, cfg.flow.bugfix_prefix, cfg.flow.hotfix_prefix]
+        out += [
+            p
+            for p in (cfg.flow.feature_prefix, cfg.flow.bugfix_prefix, cfg.flow.hotfix_prefix)
+            if p
+        ]
     return out
+
+
+def is_ours(branch: str, cfg: Config) -> bool:
+    return _ours(branch, our_prefixes(cfg))
 
 
 def _ours(branch: str, prefixes: list[str]) -> bool:
