@@ -45,7 +45,7 @@ def test_both_spellings_record_a_finding_that_recall_finds(repo, head):
 
 def test_help_shows_the_add_spelling(repo):
     code, out, _ = run_cli(repo, "research", "--help")
-    assert code == 0 and "{add}" in out
+    assert code == 0 and "{add,list}" in out
 
 
 def test_the_research_gate_instruction_names_a_command_that_parses():
