@@ -2463,6 +2463,14 @@ holder's own lapsed claim, every displaced claim (no cap), and a contestant's la
 are all kept in the record. `--keep` may also name the current holder when it met no part
 of the contest. An item that is not contested is refused.
 
+**More than one person or clone: [the multi-user model](docs/ddflow/MULTI-USER.md).** The log
+is committed with the code, one shard per writer, so distinct writers merge without a
+conflict; a forge's merge button may not honour `merge=union` (unverified; it only matters
+when two branches append to one shard, and a local `git pull --no-rebase` clears it);
+offline divergence is *detected* (`contested`), not prevented, unless the opt-in remote
+claim lock (`[flow].claims = "remote"`, B192) is on; and committed session prompts, notes
+and evidence are readable by everyone with access to the repository.
+
 **A wrong worktree binding can be corrected.** `ddflow update <id> --worktree PATH` rebinds
 the item, and your live lease on it, to that linked worktree and the branch checked out
 there. The field edit lands first and the rebind under the same lock, from a fresh read; an
