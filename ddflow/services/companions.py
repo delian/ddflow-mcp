@@ -32,10 +32,14 @@ Two rules shape this file:
 from __future__ import annotations
 
 import json
+import os
 import re
+import select
 import shlex
 import shutil
+import signal
 import subprocess
+import tempfile
 import time
 import tomllib
 from dataclasses import dataclass, field
@@ -287,6 +291,191 @@ def is_installed(c: Companion) -> tuple[bool | None, str]:
         return False, f"`{' '.join(c.detect)}` exited {p.returncode}"
     said = [*_said(p.stdout or ""), *_said(p.stderr or "")]
     return True, (said[0][:80] if said else f"`{' '.join(c.detect)}` exited 0")
+
+
+#: How long `verify` waits for an `initialize` answer. Longer than a detection probe: the
+#: launch command is the real server, and an `npx` one downloads itself on a cold cache.
+VERIFY_TIMEOUT_S = 30
+
+#: The protocol revision `verify` offers. A server that wants another answers with its own,
+#: and that still proves it speaks MCP, so the exact value is not what is being tested.
+_VERIFY_PROTOCOL = "2025-03-26"
+
+#: What an echoing binary (`cat`) sends back: our own request, recognisable by its method.
+_ECHO_MARK = b'"method": "initialize"'
+
+
+@dataclass
+class Verification:
+    """The result of launching one companion and speaking MCP to it.
+
+    ``speaks_mcp`` is three-valued for the reason `is_installed` is: ``True`` (it answered
+    `initialize`), ``False`` (a FACT: the command is absent, exited, or answered something
+    that is not a JSON-RPC response -- `cat` echoes the request back, which is not an
+    answer), ``None`` (could not tell: no answer in time, e.g. a cold `npx` cache).
+    """
+
+    companion: Companion
+    speaks_mcp: bool | None
+    detail: str
+    server: dict = field(default_factory=dict)
+    elapsed_s: float = 0.0
+
+
+def _reply_to(buf: bytes, want_id: int) -> tuple[dict | None, bytes]:
+    """The first complete JSON-RPC *response* to `want_id` in `buf`, and the rest.
+
+    A response has `result` or `error` and no `method`: a request echoed back (`cat`) or a
+    server's own notification is not one. Lines that are not JSON are skipped -- a server
+    may log to stdout before it speaks.
+    """
+    while b"\n" in buf:
+        line, buf = buf.split(b"\n", 1)
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            continue
+        if (
+            isinstance(msg, dict)
+            and msg.get("jsonrpc") == "2.0"
+            and msg.get("id") == want_id
+            and "method" not in msg
+            and ("result" in msg or "error" in msg)
+        ):
+            return msg, buf
+    return None, buf
+
+
+def _describe_answer(msg: dict) -> tuple[str, dict]:
+    """(detail, server facts) for a JSON-RPC response to `initialize`."""
+    result = msg.get("result")
+    if not isinstance(result, dict):
+        return "answered initialize with a JSON-RPC error (it speaks the protocol)", {}
+    info = result.get("serverInfo")
+    server = dict(info) if isinstance(info, dict) else {}
+    if result.get("protocolVersion"):
+        server["protocolVersion"] = result["protocolVersion"]
+    who = " ".join(str(server[k]) for k in ("name", "version") if server.get(k))
+    return f"answered initialize ({who or 'no serverInfo'})", server
+
+
+def _stop(proc: subprocess.Popen) -> None:
+    """End the launched server and anything it started (an `npx` wrapper has children)."""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(proc.pid, sig)
+        except (ProcessLookupError, PermissionError):
+            return
+        try:
+            proc.wait(timeout=3)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
+def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verification:
+    """Launch `command args` and require a JSON-RPC answer to `initialize`.
+
+    The only check that tells a server from a binary with a plausible name (B113 was a
+    companion whose launch command was not an MCP server at all). It SPAWNS a process, so
+    it is opt-in and is never called by `scan`: the MCP handshake calls `scan`.
+    """
+    t0 = time.monotonic()
+
+    def done(ok: bool | None, detail: str, server: dict | None = None) -> Verification:
+        return Verification(c, ok, detail, server or {}, round(time.monotonic() - t0, 2))
+
+    if not c.is_mcp:
+        return done(None, f"{c.id} is a {c.kind} companion: there is no MCP server to launch")
+    if not c.command:
+        return done(False, "no launch command declared")
+    exe = shutil.which(c.command)
+    if not exe:
+        return done(False, f"`{c.command}` is not on PATH")
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": _VERIFY_PROTOCOL,
+            "capabilities": {},
+            "clientInfo": {"name": "ddflow-verify", "version": "0"},
+        },
+    }
+    with tempfile.TemporaryFile() as err:
+        try:
+            proc = P.popen(
+                [exe, *c.args],
+                stdin=P.PIPE,
+                stdout=P.PIPE,
+                stderr=err,
+                env={**os.environ, **c.env},
+                start_new_session=True,
+            )
+        except OSError as exc:
+            return done(False, f"could not launch `{c.command}`: {exc}")
+
+        def stderr_tail() -> str:
+            err.seek(0)
+            lines = [x.strip() for x in err.read().decode("utf-8", "replace").splitlines()]
+            lines = [x for x in (_ANSI.sub("", x) for x in lines) if x]
+            return f" stderr: {lines[-1][:160]}" if lines else ""
+
+        try:
+            try:
+                assert proc.stdin is not None and proc.stdout is not None
+                proc.stdin.write((json.dumps(request) + "\n").encode())
+                proc.stdin.flush()
+            except OSError:
+                return done(False, f"`{c.command}` exited before reading a request.{stderr_tail()}")
+            fd = proc.stdout.fileno()
+            buf, deadline = b"", t0 + timeout_s
+            while True:
+                left = deadline - time.monotonic()
+                if left <= 0:
+                    return done(
+                        None,
+                        f"no answer to `initialize` within {timeout_s:g}s -- could not tell "
+                        f"(a cold `npx` cache is slow; a binary that is not a server never answers)."
+                        + stderr_tail(),
+                    )
+                ready, _, _ = select.select([fd], [], [], min(left, 0.5))
+                if not ready:
+                    if proc.poll() is not None:
+                        break
+                    continue
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                buf += chunk
+                if _ECHO_MARK in buf:
+                    return done(False, f"`{c.command}` echoed the request back: it is not a server")
+                msg, buf = _reply_to(buf, 1)
+                if msg is not None:
+                    return done(True, *_describe_answer(msg))
+            return done(
+                False,
+                f"`{c.command}` exited ({proc.poll()}) without answering `initialize`."
+                + stderr_tail(),
+            )
+        finally:
+            _stop(proc)
+
+
+def verify(
+    repo: Path, ids: list[str] | None = None, *, timeout_s: float = VERIFY_TIMEOUT_S
+) -> list[Verification]:
+    """Launch every MCP companion (or just `ids`) and check it speaks MCP, concurrently.
+
+    NEVER called from `scan`. Concurrent because each launch may be an `npx` cold start.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    comps = [c for c in load(repo) if c.is_mcp and (ids is None or c.id in ids)]
+    if not comps:
+        return []
+    with ThreadPoolExecutor(max_workers=min(8, len(comps))) as ex:
+        return list(ex.map(lambda c: verify_one(c, timeout_s=timeout_s), comps))
 
 
 #: The package manager's own diagnostics: `npx` prints npm's config warnings to stderr

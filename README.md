@@ -179,6 +179,7 @@ the same implementation, so neither drifts from the other.
 | **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
+| **check a companion really is an MCP server** | `ddflow companions --verify [--id X]` -- launches each registered or installed MCP companion and requires a JSON-RPC answer to `initialize` (spawns processes; opt-in; exit 1 = not a server, 2 = could not tell) | `ddflow_companions_verify` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
 | **rebuild everything from the log** | `ddflow replay --verify` | `ddflow_replay` |
@@ -1309,6 +1310,18 @@ launch command which fails mid-task, at the moment a gate told the agent to reac
 it. Detection is read-only and bounded — and when it has not run, the state is reported
 as **unknown**, not as absent. `ddflow companions` probes; the MCP handshake does not,
 because making an agent wait on `npx` before it can do anything is the wrong trade.
+
+**Verifying that a companion is a server.** Detection says a binary of that name exists;
+it cannot say the binary speaks MCP (B113 was a registry entry whose launch command was
+not a server at all). `ddflow companions --verify` (MCP: `ddflow_companions_verify`)
+spawns each MCP companion's `command args`, sends a JSON-RPC `initialize` on stdio and
+requires a response, then stops it. A response, even a JSON-RPC error, is `speaks_mcp`;
+a missing command, an early exit, or a binary that only echoes the request back (`cat`)
+is `not_mcp`, exit 1; no answer within 30 s is `unknown`, exit 2, because a cold `npx`
+cache is slow and silence is not proof. Without `--id` it launches only companions that
+are registered with an agent or detected as installed (launching a registry entry that is
+merely known would download it); `--id a,b` launches exactly those. It is opt-in and
+**never on the scan path**: `ddflow companions` and the MCP handshake still launch nothing.
 
 Adding a fifth is a TOML block in `.ddflow/companions.toml`, not a patch:
 

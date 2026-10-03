@@ -1453,7 +1453,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_companions": {
         "description": (
-            "Which companion MCP servers serve this project's gates, which are installed on this machine, and which are wired into an agent's config. ddflow imposes the pipeline but does not perform the judgement inside most gates (`standards` wants an automated review, `research` documentation, `rules` memory); with none of them, agent gates pass on assertion alone. Exit 2: a default companion is missing or unregistered. Read-only; never installs."
+            "Which companion MCP servers serve this project's gates, which are installed, which an agent launches. Without them, agent gates pass on assertion. Exit 2: a default one is missing or unregistered. Read-only; never installs or launches."
         ),
         "properties": {
             "no_probe": ("boolean", "Skip the detection probes (faster, less certain).", False),
@@ -1463,17 +1463,28 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": ("companions", "gate_coverage", "uncovered_gates"),
     },
+    "ddflow_companions_verify": {
+        "description": (
+            "Launch MCP companions and require a JSON-RPC answer to `initialize`. SPAWNS processes (opt-in). Default: registered or installed ones. Exit 1: not an MCP server; 2: unsure."
+        ),
+        "properties": {
+            "id": ("string", "Comma-separated ids, installed or not.", False),
+        },
+        "api": lambda repo, a, agent: _api().companions_verify(
+            repo, a.get("id", "") or "", agent=agent
+        ),
+        "payload": ("verified", "skipped"),
+    },
     "ddflow_companions_add": {
         "description": (
-            "WRITES this repository's agent config: registers companion MCP servers that are ALREADY installed, merging with what is there. Refuses (exit 3) one that is not installed -- its launch command would fail mid-task, when a gate tells the agent to reach for it. Call it with dry_run=true FIRST, show the operator the exact entry, and write only once they agree: which servers an agent launches is the operator's decision."
+            "WRITES the agent config: registers companion MCP servers that are ALREADY installed (exit 3 for one that is not). dry_run=true FIRST; show the operator the entry: which servers an agent launches is their decision."
         ),
         "properties": {
             "id": ("string", "Comma-separated ids; default: every installed one.", False),
             "agents": ("string", "Comma-separated agent keys (default: claude).", False),
             "dry_run": (
                 "boolean",
-                "Report the exact config entry that would be written, and write "
-                "nothing. Use this first, and show the operator the result.",
+                "Report the exact entry that would be written; write nothing.",
                 False,
             ),
         },
