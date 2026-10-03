@@ -338,3 +338,7 @@ def test_a_blind_sample_breaks_the_healthy_streak():
 def test_one_sample_never_moves_the_limit_whatever_the_evidence_params():
     for kw in ({"window": 1, "need_bad": 3}, {"need_bad": 1}, {"window": 0, "need_bad": 0}):
         assert fold([Sample(0.0, dict(BAD))], params(**kw)).limit == 4
+
+
+def test_zero_adapt_up_still_needs_elapsed_healthy_time():
+    assert fold(series([GOOD]), params(adapt_up_after_s=0)).limit == 4

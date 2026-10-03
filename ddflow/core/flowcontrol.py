@@ -199,7 +199,12 @@ class _Replay:
         self.prev_ok = ok
         if sum(1 for b, _ in self.window if b) >= need_bad:
             self._maybe_decrease(s.at, bad_signal)
-        elif ok and self.accum >= p.adapt_up_after_s and self.limit < p.bounds()[2]:
+        elif (
+            ok
+            and self.accum > 0
+            and self.accum >= p.adapt_up_after_s
+            and self.limit < p.bounds()[2]
+        ):
             self.limit += 1
             self.mode, self.accum, self.dec_signal = "increase", 0.0, None
             self.last_change = (
