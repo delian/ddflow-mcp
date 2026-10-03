@@ -1107,6 +1107,13 @@ so a finding cannot cite a function the diff does not touch. Progress is printed
 the caller's lease is renewed while the review runs, and `extra_rules` on a `[[reviewer]]`
 reaches its prompt. Findings are numbered `#1..#N`.
 
+**A review that outlives its caller keeps its findings.** Each chunk's whole reply is
+appended to `.ddflow/local/reviews/<item>.<gate>.<reviewer>.<run>.jsonl` (git-ignored; one file per reviewer and run, so a re-review never overwrites an earlier one) the moment it arrives,
+and the gate evidence records `output_file` (repo-relative) and `output_digest` beside the per-finding
+text, so a call that is cut off (a long critic over MCP) loses nothing. Over MCP,
+`ddflow_review` sends `notifications/progress` for each progress line when the client
+passed a `progressToken`, which resets a client's idle timer.
+
 ```sh
 ddflow review T1 --gate critic --chunk 2,5      # re-review only chunks 2 and 5 of that review
 ddflow review triage T1 --gate critic --finding 3 --refuted --probe "tests/test_x.py::t shows..."

@@ -1401,7 +1401,7 @@ def _url_ok(url: str, timeout_s: float = 3.0) -> bool:
         return False
 
 
-def review(
+def review(  # noqa: PLR0913 -- one reviewer run: what, how, and four callbacks
     rev: Reviewer,
     diff: str,
     intent: str,
@@ -1413,12 +1413,15 @@ def review(
     on_progress: Callable[[str], None] | None = None,
     on_tick: Callable[[], None] | None = None,
     tick_s: float = 60,
+    on_chunk: Callable[[int, str], None] | None = None,
 ) -> ReviewResult:
     """Run one reviewer over one diff. Never raises; encodes everything in the status.
 
     ``on_progress`` gets a line as each chunk settles and, every ``tick_s`` while chunks
     are in flight, one naming what is still awaited; ``on_tick`` is called at the same
     cadence, on the caller's thread (the api renews the caller's lease there).
+    ``on_chunk(n, reply)`` gets each chunk's whole reply the moment it arrives, so a
+    caller can keep the finding bodies even if the run is cut short (bug B206).
     ``only`` names the chunks (1-based, as a full run numbers them) to send; the rest
     are neither sent nor counted as lost -- `merge_rerun` folds such a run into the
     record of the full one.
@@ -1478,6 +1481,11 @@ def review(
         return res
 
     progress = _Progress(files, started, rev.timeout_s, on_progress, on_tick)
+
+    def _keep(n: int, got: tuple[str, str]) -> None:
+        if on_chunk and got[0]:
+            on_chunk(n, got[0])
+
     # `_race` and the retry index the SENT chunks (positions in `wanted`); progress and
     # absorption speak chunk numbers.
     first = _race(
@@ -1485,7 +1493,7 @@ def review(
         system,
         users,
         started,
-        on_settled=lambda k, got: progress.settled(wanted[k] - 1, got),
+        on_settled=lambda k, got: (_keep(wanted[k], got), progress.settled(wanted[k] - 1, got)),
         on_tick=lambda waiting: progress.tick([wanted[k] - 1 for k in waiting]),
         tick_s=tick_s,
     )
@@ -1504,6 +1512,7 @@ def review(
     )
     for k, (before, after) in enumerate(zip(first, results, strict=True)):
         if before != after:
+            _keep(wanted[k], after)
             progress.settled(wanted[k] - 1, after, " on retry")
 
     all_raw: list[str] = []

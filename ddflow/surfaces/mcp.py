@@ -33,6 +33,7 @@ import re
 import sys
 import time
 import traceback
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -2086,8 +2087,9 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "api": lambda repo, a, agent, called_from=None: _api().run_review(
+        "api": lambda repo, a, agent, called_from=None, on_progress=None: _api().run_review(
             repo,
+            on_progress=on_progress,
             gate=a.get("gate") or "critic",
             item=a.get("id", "") or "",
             intent=a.get("intent", "") or "",
@@ -2100,6 +2102,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             chunks=a.get("chunk") or None,
         ),
         "wants_called_from": True,
+        "wants_progress": True,
         # The TRANSCRIPT the run produced — findings already formatted with their
         # severities, which is what this tool has always returned.
         "payload": "text",
@@ -3100,6 +3103,40 @@ class Server:
         #: lifetime of the context it is compensating for.
         self._calls_since_footer = 0
         self._last_footer_at = 0.0
+        #: Writes one JSON-RPC frame to the client; `serve` sets it. Without it (a bare
+        #: `handle` call) a long tool simply sends no progress.
+        self.notify: Callable[[dict[str, Any]], None] | None = None
+
+    def _progress(self, params: dict[str, Any]) -> Callable[[str], None] | None:
+        """A per-line `notifications/progress` sender for this call, or None.
+
+        A client that sent `_meta.progressToken` resets its idle timer on each one; a
+        review of 2055 s was aborted at 1800 s with none (bug B206)."""
+        meta = params.get("_meta")
+        token = meta.get("progressToken") if isinstance(meta, dict) else None
+        send = self.notify
+        if token is None or send is None:
+            return None
+        count = [0]
+
+        def say(line: str) -> None:
+            count[0] += 1
+            try:
+                send(
+                    {
+                        "jsonrpc": "2.0",
+                        "method": "notifications/progress",
+                        "params": {
+                            "progressToken": token,
+                            "progress": count[0],
+                            "message": line.strip()[:500],
+                        },
+                    }
+                )
+            except Exception:  # a closed pipe must not fail the review
+                pass
+
+        return say
 
     def _someone_else(self, per_call: str) -> bool:
         """Does a per-call `as_agent` name an agent OTHER than this connection's own?
@@ -3277,7 +3314,10 @@ class Server:
                             # the primary, the ITEM decides -- its own tree and branch,
                             # else the "name the branch" answers -- as from the CLI.
                             where = self.repo
-                        result = spec["api"](self.repo, args, agent, called_from=where)
+                        extra = {}
+                        if spec.get("wants_progress") and (say := self._progress(params)):
+                            extra["on_progress"] = say
+                        result = spec["api"](self.repo, args, agent, called_from=where, **extra)
                     else:
                         result = spec["api"](self.repo, args, agent)
                 except (KeyError, TypeError, ValueError) as exc:
@@ -3867,6 +3907,16 @@ def serve(repo: Path, stdin=None, stdout=None, *, called_from: Path | None = Non
     srv = Server(repo, called_from=called_from)
     inp = stdin or sys.stdin
     outp = stdout or sys.stdout
+    import threading
+
+    out_lock = threading.Lock()
+
+    def notify(frame: dict[str, Any]) -> None:
+        with out_lock:
+            outp.write(json.dumps(frame) + "\n")
+            outp.flush()
+
+    srv.notify = notify
     for raw in inp:
         line = raw.strip()
         if not line:
