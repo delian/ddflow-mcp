@@ -84,3 +84,21 @@ def test_shared_globs_overlap_nothing(log, cfg):
     p = _plan(log, cfg, 2)
     assert [i.id for i in p.ready] == ["A", "B"]
     assert not p.blocked
+
+
+def test_a_held_item_is_not_offered_and_does_not_shadow_the_items_it_overlaps(log, cfg):
+    """`hold` (a waiter's reservation) is applied before the overlap check: B overlaps A, A
+    is withheld, so B is offered rather than blocked behind an item nobody is offered."""
+    from ddflow.core.schedule import Blocked
+
+    _queue(log, [("A", 1, ["a.py"]), ("B", 2, ["a.py"]), ("C", 3, ["c.py"])])
+    cfg.schedule.max_parallel_tasks = 2
+    cfg.worktree.max_parallel = 99
+    p = plan(
+        fold(log.read_all()),
+        cfg,
+        agent="me",
+        hold=lambda it: Blocked(it.id, "conflict", "reserved", []) if it.id == "A" else None,
+    )
+    assert [i.id for i in p.ready] == ["B", "C"]
+    assert [b.item for b in p.blocked] == ["A"]

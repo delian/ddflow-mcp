@@ -703,6 +703,7 @@ def _cut_ready(
     live_items: list[str],
     live_note: str,
     reached: str,
+    hold: Callable[[Item], Blocked | None] | None,
 ) -> None:
     """Trim ``p.ready`` to the free slots, in place, never offering two overlapping items."""
     # Cut the ready list conflict-aware: walk it in offer order and take an item only when
@@ -713,6 +714,10 @@ def _cut_ready(
     cut: list[Item] = []
     shared = shared_globs(cfg)
     for it in p.ready:
+        held = hold(it) if hold else None
+        if held is not None:
+            p.blocked.append(held)
+            continue
         clash = _offered_overlap(state, cfg, it, taken, shared)
         if clash:
             other, pair = clash
@@ -760,8 +765,13 @@ def plan(
     phase: str = "",
     now: float | None = None,
     agent: str = "",
+    hold: Callable[[Item], Blocked | None] | None = None,
 ) -> Plan:
     """Compute the ready set.
+
+    ``hold`` lets a caller withhold an item the pure state cannot see is spoken for (a
+    waiter in line, `claim` would refuse it): a Blocked it returns goes to ``blocked`` and
+    the item neither takes a slot nor counts against the offered items' overlap check.
 
     ``phase`` restricts to one phase's tasks -- the "implement phase X" entry point.
     ``agent`` is the caller's identity: an item this agent already holds counts as
@@ -863,7 +873,7 @@ def plan(
         live_note = f"{with_trees} worktrees live across the queue"
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
-    _cut_ready(state, cfg, p, slots, live_items, live_note, reached)
+    _cut_ready(state, cfg, p, slots, live_items, live_note, reached, hold)
     return p
 
 
