@@ -76,3 +76,33 @@ def test_a_closed_back_merge_says_it_is_no_longer_rechecked(gitflow_pr):
     forge.edit(2, state="CLOSED")
     _, out, _ = run_cli(repo, "--json", "pr", "sync")
     assert any("stops re-checking" in r for r in json.loads(out)["refused"]), out
+
+
+def test_a_still_open_back_merge_is_a_waiting_row_not_an_empty_answer(gitflow_pr):
+    repo, _forge, _ = _to_back_merge(gitflow_pr)
+    code, out, err = run_cli(repo, "--json", "pr", "sync")
+    assert code == 0, (out, err)
+    waiting = json.loads(out)["waiting"]
+    assert [(w["id"], w["back_merge"]) for w in waiting] == [("H1", "develop")], waiting
+
+
+def test_next_keeps_syncing_while_a_back_merge_is_open(gitflow_pr):
+    """The hotfix completed when its back-merge opened, so nothing is `in review`: `next`
+    must still ask, or the loop never notices develop got (or missed) the fix."""
+    repo, forge, _ = _to_back_merge(gitflow_pr)
+    forge.merge_as_human(2)
+    _, out, _ = run_cli(repo, "--json", "next")
+    assert any("back_merge" in c for c in json.loads(out)["synced"]["changes"]), out
+    rows = json.loads(run_cli(repo, "--json", "pr", "status")[1])["back_merges"]
+    assert rows[0]["state"] == "merged"
+
+
+def test_a_record_without_a_state_is_open(gitflow_pr):
+    from ddflow.infra.log import EventLog
+
+    repo, _forge, _ = gitflow_pr
+    EventLog(repo, "t").append(
+        "backmerge.recorded", "X1", {"into": "develop", "number": 9, "url": "u", "forge": "github"}
+    )
+    rows = json.loads(run_cli(repo, "--json", "pr", "status")[1])["back_merges"]
+    assert [(r["item"], r["state"]) for r in rows] == [("X1", "open")]
