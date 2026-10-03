@@ -168,6 +168,7 @@ from .setup import (
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
+from .verify import verify as verify_item
 from .viewers import phase_progress, view_list, view_read
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
@@ -292,6 +293,7 @@ __all__ = [
     "task_add",
     "unblock",
     "update",
+    "verify_item",
     "version_cut",
     "version_show",
     "view_list",
