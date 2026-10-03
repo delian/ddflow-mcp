@@ -1326,7 +1326,20 @@ are registered with an agent or detected as installed (launching a registry entr
 merely known would download it); `--id a,b` launches exactly those. It is opt-in and
 **never on the scan path**: `ddflow companions` and the MCP handshake still launch nothing.
 
-### Finding a test polluter
+Adding a fifth is a TOML block in `.ddflow/companions.toml`, not a patch:
+
+```toml
+[[companion]]
+id      = "my-linter"
+title   = "House linter"
+gates   = ["standards"]
+detect  = ["my-linter", "--version"]
+command = "my-linter"
+args    = ["mcp"]
+install = "cargo install my-linter"
+```
+
+## Finding a test polluter
 
 A test that passes alone and fails only after others have run is being polluted: a leaked
 environment variable, a module-level cache, a file left behind. `ddflow bisect` finds which
@@ -1362,19 +1375,6 @@ counted as a pass or a fail. Exit 2 also covers "the victim fails alone" (not an
 problem), "it passes after every candidate" (flaky, or not about earlier files) and an
 exhausted `--max-runs` (the smallest set so far is printed). `--repeat N` runs each probe N
 times and counts any failure, for a pollution that shows one run in three.
-
-Adding a fifth is a TOML block in `.ddflow/companions.toml`, not a patch:
-
-```toml
-[[companion]]
-id      = "my-linter"
-title   = "House linter"
-gates   = ["standards"]
-detect  = ["my-linter", "--version"]
-command = "my-linter"
-args    = ["mcp"]
-install = "cargo install my-linter"
-```
 
 ## Wiring it into your agent
 
