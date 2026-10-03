@@ -101,15 +101,25 @@ UPGRADE_APPLIED_KIND = "upgrade.applied"
 #: the version of the (older) ddflow that wrote it. Shown by history, replay and doctor.
 OLDER_MARK = "older_ddflow"
 
-_VERSION_HEAD = re.compile(r"^\s*v?(\d+(?:\.\d+)*)")
+_VERSION_PARTS = re.compile(r"^\s*v?(\d+(?:\.\d+)*)(.*)$", re.DOTALL)
 
 
-def version_key(version: str) -> tuple[int, ...]:
-    """A release version as comparable integers: `0.1.10` -> (0, 1, 10), so 0.1.10 > 0.1.9.
-    A suffix (`rc1`, `.dev3`) is ignored and a version that is not numeric is `()`, which
-    sorts lowest and is never treated as "older" (see `is_older`)."""
-    m = _VERSION_HEAD.match(version or "")
-    return tuple(int(p) for p in m.group(1).split(".")) if m else ()
+def version_key(version: str) -> tuple:
+    """A release version as something comparable: `0.1.10` sorts above `0.1.9`, `0.2` equals
+    `0.2.0`, and a pre-release (`0.2.0rc1`, `0.2.0.dev3`) sorts below its release. A version
+    that does not start with digits is `()`, which sorts lowest and is never "older" (see
+    `is_older`)."""
+    m = _VERSION_PARTS.match(version if isinstance(version, str) else "")
+    if not m:
+        return ()
+    nums = [int(p) for p in m.group(1).split(".")]
+    while len(nums) > 1 and nums[-1] == 0:
+        nums.pop()
+    rest = m.group(2).strip()
+    if not rest:
+        return (tuple(nums), (1,))
+    pre = re.search(r"\d+", rest)
+    return (tuple(nums), (0, int(pre.group()) if pre else 0))
 
 
 def is_older(version: str, than: str) -> bool:
@@ -163,8 +173,11 @@ def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts
         if e.agent == agent and k in ("session.started", "session.ended"):
             last_session_event = max(last_session_event, e.lamport)
         if k == SEEN_KIND:
-            v = str(e.data.get("version", ""))
-            if version_key(v) > version_key(highest):
+            v = e.data.get("version")
+            if not isinstance(v, str) or not version_key(v):
+                continue  # a stamp that names no version says nothing about skew
+            # (key, text): two spellings of one version resolve the same way in any order.
+            if (version_key(v), v) > (version_key(highest), highest):
                 highest, highest_by = v, e.agent
             if e.agent == agent and v == version:
                 seen_by_me = True

@@ -8,6 +8,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import outcome as O
+from ..core.events import version_key
 from ..core.model import fold
 from ..core.plain import plain
 from ..core.tier import unknown_tier_notes
@@ -175,7 +176,10 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         data["skipped_kinds"] = dict(st.skipped_kinds)
     if st.highest_version:
         # Which ddflow versions have worked on this log, and the highest (the version stamp).
-        data["ddflow_version"] = {"highest": st.highest_version, "seen": sorted(st.ddflow_versions)}
+        data["ddflow_version"] = {
+            "highest": st.highest_version,
+            "seen": sorted(st.ddflow_versions, key=version_key),
+        }
     if not full:
         _bound(data)
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
