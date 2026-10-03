@@ -156,3 +156,14 @@ def test_an_explicit_limit_with_an_id_is_refused_on_both_surfaces_whatever_its_v
          "params": {"name": "ddflow_verify", "arguments": {"id": "T-GOOD", "limit": 0}}}
     )  # fmt: skip
     assert "for a sweep" in reply["result"]["content"][0]["text"]
+
+
+def test_an_unknown_phase_is_refused_before_its_descendants_are_looked_up(repo, monkeypatch):
+    from ddflow.core.model import State
+
+    def boom(self, item_id):
+        raise AssertionError("descendants() was asked about an unvalidated phase")
+
+    monkeypatch.setattr(State, "descendants", boom)
+    _project(repo)
+    assert verify_sweep(repo, phase="NOPE").exit == O.FAIL
