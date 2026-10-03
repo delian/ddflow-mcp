@@ -904,11 +904,12 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
 
     log, cfg, st = _load(repo, agent)
     gates = G.load_gates(repo, cfg)
-    if full and delta:
+    if (full or force) and delta:
         return O.failed(
             "review",
-            "--full and --delta contradict each other: --full is a full round, --delta "
-            "reviews only what changed since the reviewed head.",
+            f"{'--full' if full else '--force'} and --delta contradict each other: "
+            f"{'--full' if full else '--force'} is a full round, --delta reviews only what "
+            "changed since the reviewed head.",
             id=item,
             gate=gate,
             outcome="",
