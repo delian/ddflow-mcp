@@ -165,7 +165,7 @@ from .setup import (
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
-from .viewers import view_list
+from .viewers import phase_progress, view_list, view_read
 from .workflow import GateEdit as WorkflowGateEdit
 from .workflow import drop as workflow_drop
 from .workflow import gate as workflow_gate
@@ -243,6 +243,7 @@ __all__ = [
     "merge_item",
     "next_item",
     "phase_add",
+    "phase_progress",
     "pins",
     "pr_status",
     "pr_sync",
@@ -287,6 +288,7 @@ __all__ = [
     "version_cut",
     "version_show",
     "view_list",
+    "view_read",
     "wait_item",
     "workflow_drop",
     "workflow_gate",

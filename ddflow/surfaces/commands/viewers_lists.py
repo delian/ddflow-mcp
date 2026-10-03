@@ -13,7 +13,7 @@ import json
 import sys
 from typing import Any
 
-from ...api import view_list
+from ...api import phase_progress, view_list
 from ...services import viewers as V
 from ..context import NOTHING, OK, Ctx
 
@@ -50,15 +50,6 @@ def _add_filters(p: argparse.ArgumentParser, kind: str) -> None:
         p.add_argument("--all", action="store_true", help="include fixed and invalid bugs")
 
 
-def _progress(st, phase_id: str) -> tuple[int, int]:
-    below = [
-        st.items[i]
-        for i in st.descendants(phase_id)
-        if i in st.items and st.items[i].kind == "task" and not st.items[i].removed
-    ]
-    return sum(1 for t in below if t.state == "done"), len(below)
-
-
 def _line(kind: str, r: dict[str, Any]) -> str:
     parts = [f"  {r['id']:<18} {r['state']:<10}"]
     if kind == "phase":
@@ -89,7 +80,7 @@ def cmd_list(a, c: Ctx) -> int:
     if "rows" in out.data and kind == "phase":
         st = c.store.ensure(c.log)
         for r in out.data["rows"]:
-            r["done"], r["total"] = _progress(st, r["id"])
+            r["done"], r["total"] = phase_progress(st, r["id"])
     if c.json:
         body = {**out.data, "reason": out.reason} if out.exit != OK else dict(out.data)
         # Echo the filter under the flag's own name: replaying `agent` would be identity.

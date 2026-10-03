@@ -279,6 +279,8 @@ MIGRATED_WIRE_SHAPES: dict[str, tuple[list[str], dict[str, object]]] = {
     "ddflow_wait": (["wait", "--timeout", "0"], {"timeout": 0}),
     "ddflow_brief": (["brief"], {}),
     "ddflow_history": (["history"], {}),
+    # limit 50: the CLI default; over MCP the default is the bounded 25.
+    "ddflow_list": (["task", "list"], {"kind": "task", "limit": 50}),
     "ddflow_lesson_search": (["lesson", "search", "x"], {"query": "x"}),
     "ddflow_lesson_verify": (["lesson", "verify"], {}),
     "ddflow_memory_list": (["memory", "list"], {}),
