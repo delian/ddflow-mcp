@@ -173,7 +173,7 @@ the same implementation, so neither drifts from the other.
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
-| **read the engineering log** | `ddflow history` | `ddflow_history` |
+| **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
 | **check the project's integrity** | `ddflow doctor` | `ddflow_doctor` |
@@ -3621,7 +3621,7 @@ ddflow workflow gate ...        define or change one gate
 ddflow workflow drop <id>       take a gate out of the pipelines
 ddflow import [--apply]         propose an existing project's work  (2 = nothing)
 ddflow import --verify          is the import still true, and did anyone finish it?
-ddflow history [--item|--kind]  one timeline of everything that happened (2 = nothing)
+ddflow history [--item|--kind|--agent|--tail]  one timeline of everything that happened (2 = nothing)
 
 ddflow lesson add|search        capture and retrieve lessons
 ddflow research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
