@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 from conftest import run_cli
 
 import ddflow.api.review as api
@@ -22,6 +23,14 @@ from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
+
+
+@pytest.fixture(autouse=True)
+def _every_review_is_a_full_round(monkeypatch):
+    """These tests count FULL rounds by repeating a plain review. With the shipped
+    `[review].delta_default` the second plain review would be a delta (that is
+    tests/test_review_delta.py), so this file runs the pre-delta behaviour."""
+    monkeypatch.setenv("DDFLOW_REVIEW_DELTA_DEFAULT", "0")
 
 
 def _git(repo: Path, *args: str) -> str:

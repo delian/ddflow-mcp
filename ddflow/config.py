@@ -1095,6 +1095,7 @@ class ReviewConfig:
 
     max_rounds: int = 2
     on_exceed: str = "refuse"  # refuse | warn
+    delta_default: bool = True
 
 
 _doc(
@@ -1106,6 +1107,11 @@ _doc(
     "review",
     "on_exceed",
     "What a full round beyond [review].max_rounds does: 'refuse' (default; exit 3, naming --delta, `review triage`, --force --reason and how to change the cap) or 'warn' (run it and say the budget is spent). A delta recheck and triage are never refused either way.",
+)
+_doc(
+    "review",
+    "delta_default",
+    "Whether `ddflow review <id> --gate G` on a gate that already has a recorded review rechecks ONLY the commits since the head that review covered (default true) instead of the whole diff again. The delta's findings and coverage are merged into the gate's record (earlier findings keep their triage when byte-identical), it is not a full round, and the output says 'delta review of N commits since <sha>' so it is never mistaken for a full pass. `--full` forces a full round (counted against review.max_rounds); a branch that was rebased since (the reviewed head is no ancestor) and a prior review that was partial or never reached a reviewer fall back to a full round and say why. false = every review is a full round, the behaviour before this knob. Change it for the project (`ddflow config review.delta_default false`), for this machine (add --local), per run (DDFLOW_REVIEW_DELTA_DEFAULT=0), or over MCP with `ddflow_configure` (the operator is told when an agent does).",
 )
 
 

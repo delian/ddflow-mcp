@@ -58,7 +58,7 @@ def _triage(repo: Path, n: int, verdict: str = "refuted", probe: str = "ran it: 
 
 
 def _full_review(repo: Path):
-    out = api.review(repo, gate="critic", item="T1")
+    out = api.review(repo, gate="critic", item="T1", full=True)
     assert out.data["outcome"] == "failed", out.reason
     return out
 
