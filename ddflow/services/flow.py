@@ -600,7 +600,7 @@ def _apply(
 ) -> None:
     if _stale_review(it, info):
         info.review = "pending"
-    if not info.queue_known and it.pr is not None:
+    if not info.queue_known and it.pr is not None and info.state == "open":
         # The queue could not be asked this time: keep what was last seen rather than
         # reading silence as "ejected" (and then merging a request that is still queued).
         info.queue = it.pr.queue
@@ -646,6 +646,9 @@ def _apply(
         # Already in the merge queue: asking the forge to merge it again is not a retry,
         # it is noise (and on some forges a second enqueue).
         and not info.queue
+        # ...and not while the queue could not be asked: "unknown" is "maybe queued", and a
+        # second `gh pr merge` on a queued request is a second enqueue.
+        and info.queue_known
         # A stacked request merges into its dependency's branch, not into the target;
         # merging it there first would land it on the target UNREVIEWED as part of the
         # dependency's merge. It waits to be retargeted.

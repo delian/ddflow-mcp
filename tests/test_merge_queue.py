@@ -132,3 +132,24 @@ def test_a_queue_state_change_without_a_move_is_seen(pr_repo):
     forge.edit(1, queue={"seq": 1, "state": "UNMERGEABLE"})
     _sync(repo)
     assert _row(repo)["queue_state"] == "UNMERGEABLE"
+
+
+def test_an_unaskable_queue_never_triggers_a_merge(pr_repo, monkeypatch):
+    """Approved and green, but the queue call hangs (ForgeUnavailable): the request may
+    already be queued, so ddflow must not ask the forge to merge it."""
+    from ddflow.infra import forge as FG
+
+    repo, _forge = _approved_and_green(pr_repo)
+    real = FG._run
+
+    def hang_on_graphql(repo_, argv, **kw):
+        if argv[:3] == ["gh", "api", "graphql"]:
+            raise FG.ForgeUnavailable("gh api graphql timed out")
+        return real(repo_, argv, **kw)
+
+    monkeypatch.setattr(FG, "_run", hang_on_graphql)
+    from ddflow import api
+
+    out = api.pr_sync(repo)
+    assert out.data["waiting"], out.data
+    assert not _forge.calls("pr", "merge"), "merged a request whose queue state is unknown"
