@@ -36,10 +36,10 @@ structure and neither notices the other. Here the markdown is generated and stam
 
 ## Ordering
 
-Events carry a **Lamport counter**; the total order is `(lamport, agent_id, event_id)`.
+Events carry a **Lamport counter**; the total order is `(lamport, agent, id)` (`Event.sort_key` in `ddflow/core/events.py`).
 
 - Lamport gives causality: an event written after observing yours sorts after yours.
-- `agent_id` then `event_id` break ties deterministically, so two machines folding the
+- `agent` then `id` break ties deterministically, so two machines folding the
   same set of events get the same answer.
 - Wall-clock `ts` is recorded for humans and is **explicitly not the sort key** — clock
   skew between machines sharing one NFS checkout would otherwise reorder history.
