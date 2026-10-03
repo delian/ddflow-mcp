@@ -92,7 +92,7 @@ It is a queue, a set of rules the tools enforce, and a log of everything that ha
 | Parallel agents step on each other. | `ddflow claim` gives each task a lease and its own git worktree; tasks that declare overlapping files are refused, not merged over. |
 | "Done" means the agent said so. | Every task passes a gate pipeline you configure. A gate that could not run is recorded **unavailable, never passed**; at least one reviewer must come from a **different model family** than the author; a bug cannot be closed without a regression test that failed first. |
 | A crash loses work. | `ddflow recover` finds orphaned worktrees and reports what each holds. It never deletes work. |
-| Every session starts from zero. | Lessons, decisions, research verdicts, bugs and your own prompts are recorded as you go. `ddflow brief` hands the agent the ones relevant to *this* task in a bounded amount of context, and `ddflow recall` searches all of it. |
+| Every session starts from zero. | Lessons, decisions, research verdicts, bugs and your own prompts are recorded as you go. `ddflow brief` hands the agent the ones relevant to *this* task in a bounded amount of context, and `ddflow recall` searches all of it. The same brief also names the project's own skills, commands and rules files (`.claude/skills`, `.claude/commands`, `.cursor/rules`, `.clinerules`, AGENTS.md/CLAUDE.md) that bear on the task, by name and path only. |
 | History is a transcript. | An append-only event log, committed in git. The board, the index and the reports are rebuilt from it; `ddflow replay` reconstructs the project's decisions from the log alone. |
 
 ### Who it is for
