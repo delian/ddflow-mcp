@@ -278,6 +278,13 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
         ): "belongs to `review triage`, which is ddflow_review_triage (plain `review` refuses them)"
         for f in ("--finding", "--refuted", "--confirmed", "--probe")
     },
+    # The round budget is the operator's (D-review-budget): an agent may not lift it for
+    # an item. `--force --reason` is the recorded per-item exception, CLI only;
+    # `ddflow_configure` (reported to the operator) is the MCP route to change the knob.
+    **{
+        ("ddflow_review", f): "lifting the review-round budget belongs to the operator"
+        for f in ("--force", "--reason")
+    },
     # `gate skip` shares its argparse parent with `gate record`, so `--help` lists
     # record's evidence flags. They are meaningless for a skip: a skipped gate produced
     # no command, no exit code and no reviewer, which is the whole point of calling it

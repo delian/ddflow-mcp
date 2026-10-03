@@ -1989,18 +1989,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "api": lambda repo, a, agent: _api().configure(
-            repo,
-            _api().ConfigEdit(
-                set=a.get("set", "") or "",
-                value=a.get("value", "") or "",
-                append_toml=a.get("toml", "") or "",
-                filter=a.get("filter", "") or "",
-                explain=True,
-                local=bool(a.get("local")),
-            ),
-            agent=agent,
-        ),
+        "api": lambda repo, a, agent: _configure_reported(repo, a, agent),  # noqa: PLW0108 -- defined below the table
         # PROSE, and `explain=True`: the string path was `config --explain`, which is
         # every knob with its documentation AND its source. The source is the half an
         # operator debugging a setting cannot do without.
@@ -2048,10 +2037,10 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_review": {
         "description": (
             "Run the configured cross-family reviewer over an item's diff and record the "
-            "result. This is the critic gate performed by ddflow rather than claimed by "
-            "you — it calls a real endpoint, parses the verdict, and records the evidence. "
-            "If no reviewer is configured, or the endpoint is unreachable, or the model "
-            "returns no verdict, it records UNAVAILABLE and never a pass."
+            "result: the critic gate performed by ddflow rather than claimed by you. "
+            "No reviewer, an unreachable endpoint or no verdict records UNAVAILABLE, "
+            "never a pass. A gate gets [review].max_rounds (default 2) full rounds, then "
+            "delta=true and ddflow_review_triage."
         ),
         "properties": {
             "id": ("string", "Item whose diff to review.", True),
@@ -2068,8 +2057,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "commit": (
                 "string",
                 "Review this ONE landed commit (against its first parent) instead of the "
-                "item's branch: the after-merge review, when the branch is gone. Never "
-                "pass a merge's own sha expecting its branch's changes AND more.",
+                "item's branch: the after-merge review, when the branch is gone.",
                 False,
             ),
             "branch": (
@@ -2077,6 +2065,11 @@ TOOLS: dict[str, dict[str, Any]] = {
                 "Review this branch against base -- for an item claimed with no_worktree. "
                 "Default for such an item: the branch checked out in the worktree this "
                 "connection runs in. With neither, the review is recorded unavailable.",
+                False,
+            ),
+            "delta": (
+                "boolean",
+                "Recheck only what changed since the reviewed head (not a full round).",
                 False,
             ),
             "chunk": (
@@ -2100,6 +2093,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             called_from=called_from,
             agent=agent,
             chunks=a.get("chunk") or None,
+            delta=bool(a.get("delta")),
         ),
         "wants_called_from": True,
         "wants_progress": True,
@@ -2793,6 +2787,21 @@ def _answer(a: dict[str, Any]):
 
     given = Answer.parse(str(a.get("relation", "") or ""))
     return Answer(given.relation, given.target, bool(a.get("check_only")))
+
+
+def _configure_reported(repo, a, agent):
+    """`ddflow_configure`, telling the operator when it changed the review budget."""
+    from ..api.setup import report_budget_change
+
+    edit = _api().ConfigEdit(
+        set=a.get("set", "") or "",
+        value=a.get("value", "") or "",
+        append_toml=a.get("toml", "") or "",
+        filter=a.get("filter", "") or "",
+        explain=True,
+        local=bool(a.get("local")),
+    )
+    return report_budget_change(repo, edit, _api().configure(repo, edit, agent=agent), agent=agent)
 
 
 def _api():
