@@ -1169,10 +1169,11 @@ clean recheck of a fix passes while the earlier findings stay visible to `review
 and `gate status`, which shows the rounds separately (`1 full round, 2 delta rounds`).
 `--full` forces a full round (counted against `review.max_rounds`; combined with `--delta`
 it is an error). A delta falls back to a full round, and says why, when the reviewed head
-is no ancestor of the current head (the branch was rebased or amended) or the earlier
-review was partial or never reached a reviewer; with nothing changed since the reviewed
-head the review is refused and names `--full`. A `--chunk`, `--commit` or `--base` review
-is not second-guessed. `review.delta_default = false` is the behaviour before this knob:
+is no ancestor of the current head (the branch was rebased or amended) or, for the
+automatic delta, the earlier review was partial; a review that never reached a reviewer
+records no reviewed head at all, so the next delta starts from the last real one; with nothing changed since the reviewed
+head the review is refused and names `--full`. A `--force --reason` review is a full round, like `--full`; a `--chunk`, `--commit` or
+`--base` review is not second-guessed. `review.delta_default = false` is the behaviour before this knob:
 every review a full round. Knobs, changeable at every layer:
 
 | knob | default | meaning |
