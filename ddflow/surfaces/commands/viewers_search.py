@@ -77,7 +77,8 @@ def cmd_search(a, c: Ctx) -> int:
         return OK if res.rows else NOTHING
     if not res.rows:
         which = f" under {res.filters}" if res.filters else ""
-        print(f"No matches for {res.query!r} ({res.mode}){which}; searched {res.searched} records.")
+        what = "No matches" if not res.note else "No matches yet"
+        print(f"{what} for {res.query!r} ({res.mode}){which}; searched {res.searched} records.")
         if res.note:
             print(res.note)
         return NOTHING

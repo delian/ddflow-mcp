@@ -306,10 +306,13 @@ def _scan(
     deadline = time.monotonic() + BUDGET_S
     needle = query.lower()
     hits = []
+    scanned = 0
     for d in docs:
         if time.monotonic() > deadline:
             res.note = f"stopped after {BUDGET_S:g}s; the results are partial"
+            res.searched = scanned
             break
+        scanned += 1
         found = rx.search(d.text[:MAX_SCAN]) is not None if rx else needle in d.text.lower()
         if found:
             hits.append((0.0, d))

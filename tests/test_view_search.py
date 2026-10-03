@@ -177,3 +177,19 @@ def test_safe_regexes_still_run_and_odd_syntax_never_crashes(repo):
     for odd in ("(?>zirc)onium", "(?<=a)b", "a{2}{3}", "(?i:ZIRC)onium", "[[:alpha:]]"):
         code, _, err = run_cli(repo, "search", odd, "--regex")
         assert code in (0, 2, 3) and "Traceback" not in err, (odd, err)
+
+
+def test_a_spent_budget_is_reported_not_passed_off_as_no_match(repo, monkeypatch, capsys):
+    _fixture(repo)
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import search as S
+
+    log = EventLog(repo, "t")
+    res = None
+    monkeypatch.setattr(S, "BUDGET_S", -1.0)
+    res = S.search(
+        fold(log.read_all(), strict=False), log.read_all(), Config.load(repo), "zirc", mode="exact"
+    )
+    assert res.rows == [] and "partial" in res.note and res.searched == 0
