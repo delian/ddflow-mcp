@@ -31,6 +31,7 @@ Two rules shape this file:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -301,6 +302,9 @@ VERIFY_TIMEOUT_S = 30
 #: and that still proves it speaks MCP, so the exact value is not what is being tested.
 _VERIFY_PROTOCOL = "2025-03-26"
 
+#: Most of a server's output kept while waiting for its answer.
+_MAX_BUF = 1 << 20
+
 #: What an echoing binary (`cat`) sends back: our own request, recognisable by its method.
 _ECHO_MARK = b'"method": "initialize"'
 
@@ -360,17 +364,24 @@ def _describe_answer(msg: dict) -> tuple[str, dict]:
 
 
 def _stop(proc: subprocess.Popen) -> None:
-    """End the launched server and anything it started (an `npx` wrapper has children)."""
-    for sig in (signal.SIGTERM, signal.SIGKILL):
+    """End the launched server and EVERYTHING it started (an `npx` wrapper has children).
+
+    SIGTERM to the process group, a short grace for the direct child, then SIGKILL to the
+    group unconditionally: the direct child exiting says nothing about a grandchild that
+    ignores SIGTERM (a wrapper that forks the real server and exits).
+    """
+    for sig, grace in ((signal.SIGTERM, 3), (signal.SIGKILL, 0)):
         try:
             os.killpg(proc.pid, sig)
         except (ProcessLookupError, PermissionError):
-            return
-        try:
-            proc.wait(timeout=3)
-            return
-        except subprocess.TimeoutExpired:
             continue
+        if grace:
+            try:
+                proc.wait(timeout=grace)
+            except subprocess.TimeoutExpired:
+                pass
+    with contextlib.suppress(subprocess.TimeoutExpired):
+        proc.wait(timeout=3)
 
 
 def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verification:
@@ -416,7 +427,8 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
             return done(False, f"could not launch `{c.command}`: {exc}")
 
         def stderr_tail() -> str:
-            err.seek(0)
+            err.seek(0, os.SEEK_END)
+            err.seek(max(0, err.tell() - 8192))  # the tail only: a chatty server's log is big
             lines = [x.strip() for x in err.read().decode("utf-8", "replace").splitlines()]
             lines = [x for x in (_ANSI.sub("", x) for x in lines) if x]
             return f" stderr: {lines[-1][:160]}" if lines else ""
@@ -447,7 +459,7 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                 chunk = os.read(fd, 65536)
                 if not chunk:
                     break
-                buf += chunk
+                buf = (buf + chunk)[-_MAX_BUF:]  # bounded: a newline-free flood must not grow it
                 if _ECHO_MARK in buf:
                     return done(False, f"`{c.command}` echoed the request back: it is not a server")
                 msg, buf = _reply_to(buf, 1)

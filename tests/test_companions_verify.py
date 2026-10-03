@@ -12,6 +12,7 @@ import os
 import stat
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -114,6 +115,56 @@ def test_the_launched_server_does_not_outlive_the_check(tmp_path):
     pid = int(pidfile.read_text())
     with pytest.raises(ProcessLookupError):
         os.kill(pid, 0)
+
+
+def test_an_answering_server_and_a_sigterm_proof_grandchild_do_not_outlive_the_check(tmp_path):
+    """The success path tears down too, and a grandchild that ignores SIGTERM (a wrapper
+    that forked the real server) is killed rather than leaked."""
+    pidfile = tmp_path / "grandchild.pid"
+    body = textwrap.dedent(
+        f"""
+        import json, os, signal, sys, time
+        if os.fork() == 0:
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            open({str(pidfile)!r}, "w").write(str(os.getpid()))
+            time.sleep(120)
+            sys.exit(0)
+        for line in sys.stdin:
+            msg = json.loads(line)
+            print(json.dumps({{"jsonrpc": "2.0", "id": msg["id"], "result": {{}}}}), flush=True)
+            time.sleep(120)
+        """
+    )
+    v = CO.verify_one(_companion("wrap", sys.executable, _script(tmp_path, "w.py", body)))
+    assert v.speaks_mcp is True, v.detail
+    deadline = time.monotonic() + 5
+    while not pidfile.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    pid = int(pidfile.read_text())
+    for _ in range(100):  # SIGKILL is async: wait for the reap
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            break
+        time.sleep(0.05)
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+def test_a_newline_free_flood_neither_grows_unbounded_nor_defeats_the_timeout(tmp_path):
+    body = (
+        "import sys\nwhile True:\n    sys.stdout.buffer.write(b'x' * 65536); sys.stdout.flush()\n"
+    )
+    v = CO.verify_one(
+        _companion("flood", sys.executable, _script(tmp_path, "f.py", body)), timeout_s=2
+    )
+    assert v.speaks_mcp is None and v.elapsed_s < 15, v.detail
+
+
+def test_chatty_stderr_is_summarised_by_its_last_line(tmp_path):
+    body = "import sys\nfor i in range(50000):\n    sys.stderr.write(f'log line {i}\\n')\nsys.exit(4)\n"
+    v = CO.verify_one(_companion("chatty", sys.executable, _script(tmp_path, "c2.py", body)))
+    assert v.speaks_mcp is False and "exited (4)" in v.detail and "log line 49999" in v.detail
 
 
 def test_the_companions_env_reaches_the_launched_server(tmp_path):
@@ -303,3 +354,14 @@ def test_mcp_tool_verifies_and_the_handshake_does_not_launch(repo, tmp_path):
     text = reply["result"]["content"][0]["text"]
     assert json.loads(text)["verified"][0]["state"] == "speaks_mcp", text
     assert not marker.exists()
+
+
+def test_cli_with_an_unloadable_registry_fails_like_the_plain_report(repo, tmp_path):
+    """No per-companion result exists, so there is nothing to call a non-server: it is the
+    same failure (exit 1, the reason on stderr) `ddflow companions` gives for that file."""
+    (repo / ".ddflow").mkdir(exist_ok=True)
+    (repo / ".ddflow" / "companions.toml").write_text('[[companion]]\nid = "x"\nbogus = 1\n')
+    plain = _cli(repo, "companions")
+    verify = _cli(repo, "companions", "--verify")
+    assert plain[0] == 1 and verify[0] == 1
+    assert "bogus" in plain[2] and "bogus" in verify[2]
