@@ -175,7 +175,34 @@ def cmd_show(a, c: Ctx) -> int:
     contest = contest_block(it)
     if contest:
         print(contest)
+    led = out.data["item"].get("ledger")
+    if led:
+        print(_ledger_lines(led))
     return OK
+
+
+def _ledger_lines(led: dict) -> str:
+    """The completion ledger, compact: what landed, what was skipped, what changed after."""
+    lines = [
+        "\n## Completion ledger"
+        + (
+            " (reconstructed from the log: no git facts were recorded)"
+            if led["reconstructed"]
+            else ""
+        ),
+        f"  completed {led['completed_at']} as {led['sha'] or '-'}; requirement {led['requirement']}"
+        + ("; FORCED" if led["forced"] else ""),
+        f"  files changed {led['files_total']}, tests among them {led['tests']}"
+        + (f": {', '.join(led['files'])}" if led["files"] else ""),
+    ]
+    if led["skipped_gates"]:
+        lines.append(f"  gates skipped: {', '.join(led['skipped_gates'])}")
+    if led["amendments"]:
+        lines.append(
+            f"  amended {led['amendments']} time(s) after completion"
+            + ("; the requirement text CHANGED" if led["requirement_changed_after"] else "")
+        )
+    return "\n".join(lines)
 
 
 def _bug_lines(b: dict) -> str:
