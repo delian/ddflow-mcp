@@ -6,16 +6,142 @@ including manifest generation and integration with the event log.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..config import Config
-from ..core import outcome as O
-from ..core.ids import auto_id
-from ..core.model import State
-from ..infra.log import EventLog
 from ..services.rules import Rule, RulesStorage
+from ..core import outcome as O
 from ._base import _load
+
+
+@dataclass(frozen=True)
+class RuleDedupAnswer:
+    """Response to a rule dedup check: new, extends, or duplicate_of."""
+
+    relation: str = ""  # "new", "extends", "duplicate_of"
+    target: str = ""  # The rule ID to point at
+
+    @classmethod
+    def parse(cls, spec: str) -> "RuleDedupAnswer":
+        """Parse 'new', 'extends ID', 'duplicate_of ID', or 'duplicate ID'."""
+        words = (spec or "").replace(":", " ").replace("=", " ").split()
+        if not words:
+            return cls()
+        rel = {"duplicate": "duplicate_of", "dup": "duplicate_of"}.get(words[0], words[0])
+        return cls(rel, " ".join(words[1:]))
+
+    def __bool__(self) -> bool:
+        return bool(self.relation)
+
+    @property
+    def problem(self) -> str:
+        """Validate the answer."""
+        if not self.relation:
+            return ""
+        if self.relation not in ("new", "extends", "duplicate_of", "related"):
+            return f"unknown answer {self.relation!r}: one of new, extends, duplicate_of, related"
+        if self.relation == "new" and self.target:
+            return "'new' names no record"
+        if self.relation != "new" and not self.target:
+            return f"{self.relation!r} needs the id of the rule it points at"
+        return ""
+
+
+def rule_dedup_check(
+    content: str,
+    existing_rules: list[Rule],
+    threshold: float = 0.55,
+) -> tuple[bool, list[dict[str, Any]]]:
+    """Check if a rule's content is similar to existing rules.
+
+    Uses the same similarity engine as the Rule class.
+
+    Args:
+        content: The rule content to check
+        existing_rules: List of existing Rule objects
+        threshold: Score threshold for considering a match (default 0.55)
+
+    Returns:
+        Tuple of (is_duplicate, candidates) where:
+        - is_duplicate: True if any score >= threshold
+        - candidates: List of similar rules with scores and details,
+          sorted by score descending
+    """
+    candidates: list[dict[str, Any]] = []
+
+    for rule in existing_rules:
+        score = rule.similarity_score(content)
+        if score >= threshold:
+            candidates.append({
+                "id": rule.id,
+                "title": rule.title,
+                "score": score,
+                "scope": rule.scope,
+                "tags": rule.tags,
+                "overlap": _get_overlap_terms(content, rule.content),
+            })
+
+    # Sort by score descending
+    candidates.sort(key=lambda c: -c["score"])
+    is_duplicate = len(candidates) > 0
+    return is_duplicate, candidates
+
+
+def rule_dedup_check_dry_run(
+    repo: Path,
+    content: str,
+    threshold: float = 0.55,
+) -> O.Outcome:
+    """Dry-run check: show what dedup would do without writing anything.
+
+    Args:
+        repo: Path to the repository root
+        content: The rule content to check
+        threshold: Score threshold for considering a match
+
+    Returns:
+        Outcome showing candidates and whether the add would be refused
+    """
+    storage = RulesStorage(repo)
+    existing_rules = storage.list()
+
+    is_duplicate, candidates = rule_dedup_check(content, existing_rules, threshold)
+
+    if not candidates:
+        return O.nothing(
+            "rule.check",
+            "No similar rules found",
+            candidates=[],
+            would_ask=False,
+        )
+
+    return O.ok(
+        "rule.check",
+        candidates=candidates,
+        would_ask=is_duplicate,
+    )
+
+
+def _get_overlap_terms(content1: str, content2: str, max_terms: int = 5) -> list[str]:
+    """Extract the most significant overlapping terms between two contents.
+
+    Uses the tokenization from Rule._tokenize for consistency.
+
+    Args:
+        content1: First content string
+        content2: Second content string
+        max_terms: Maximum number of terms to return
+
+    Returns:
+        List of overlapping terms
+    """
+    from ..services.rules import _tokenize
+
+    tokens1 = set(_tokenize(content1))
+    tokens2 = set(_tokenize(content2))
+    overlap = sorted(tokens1 & tokens2)
+    return overlap[:max_terms]
 
 
 def rules_manifest(storage: RulesStorage) -> str:
@@ -89,23 +215,60 @@ No project rules are currently defined.
     return "\n".join(lines)
 
 
+def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") -> O.Outcome:
+    """Extend an existing rule by appending new content to it.
+
+    Args:
+        repo: Path to the repository root
+        rule_id: The rule ID to extend
+        new_content: The new content to append
+        agent: Agent ID for event logging
+
+    Returns:
+        Outcome indicating the rule was extended
+    """
+    storage = RulesStorage(repo)
+
+    try:
+        rule = storage.get(rule_id)
+        # Append new content to existing content with separator
+        extended_content = f"{rule.content}\n\n---\n\n{new_content}"
+        rule, event_fields = storage.update(rule_id, content=extended_content)
+
+        # Update the manifest
+        manifest_content = rules_manifest(storage)
+        manifest_path = repo / "DDFLOW.md"
+        manifest_path.write_text(manifest_content)
+
+        return O.ok(
+            "rule.added",
+            id=rule_id,
+            extended=rule_id,
+        )
+
+    except FileNotFoundError:
+        return O.failed("rule.added", f"Rule {rule_id} not found", id=rule_id)
+    except Exception as exc:
+        return O.failed("rule.added", f"Failed to extend rule: {exc}", id=rule_id)
+
+
 def apply_rule_update(
     repo: Path, rule: Rule, *, agent: str = "", operation: str = "created"
 ) -> O.Outcome:
     """Add or update a rule and write the manifest.
 
-    Orchestrates RulesStorage operations with event logging.
+    Stores rules in the filesystem and updates the manifest.
+    Rules are not logged to the event log (they're filesystem-backed configuration).
 
     Args:
         repo: Path to the repository root
         rule: The Rule to add or update
-        agent: Agent ID for event logging
-        operation: Event kind: "created", "updated"
+        agent: Agent ID for event logging (not currently used for rules)
+        operation: Operation kind: "created", "updated"
 
     Returns:
         Outcome with rule_id and other details
     """
-    log, cfg, st = _load(repo, agent)
     storage = RulesStorage(repo)
 
     try:
@@ -136,17 +299,13 @@ def apply_rule_update(
         else:
             rule, event_fields = storage.add(rule)
 
-        # Record the event
-        event_kind = f"rule.{operation}"
-        with log.transaction():
-            log.append(event_kind, rule.id, event_fields)
-            # Update the manifest
-            manifest_content = rules_manifest(storage)
-            manifest_path = repo / "DDFLOW.md"
-            manifest_path.write_text(manifest_content)
+        # Update the manifest
+        manifest_content = rules_manifest(storage)
+        manifest_path = repo / "DDFLOW.md"
+        manifest_path.write_text(manifest_content)
 
         return O.ok(
-            event_kind,
+            f"rule.{operation}",
             id=rule.id,
             title=rule.title,
             scope=rule.scope,
@@ -160,18 +319,86 @@ def apply_rule_update(
         )
 
 
-def rule_add(repo: Path, rule: Rule, *, agent: str = "") -> O.Outcome:
-    """Add a new rule to the project.
+def rule_add(
+    repo: Path,
+    rule: Rule,
+    *,
+    agent: str = "",
+    check_dedup: bool = True,
+    dedup_answer: RuleDedupAnswer | None = None,
+    dedup_threshold: float = 0.55,
+) -> O.Outcome:
+    """Add a new rule to the project with dedup checking.
 
     Args:
         repo: Path to the repository root
         rule: The Rule to add
         agent: Agent ID for event logging
+        check_dedup: Whether to check for duplicates (default True)
+        dedup_answer: Answer to any dedup candidates ("new", "extends ID", "duplicate_of ID")
+        dedup_threshold: Score threshold for considering a match (default 0.55)
 
     Returns:
-        Outcome with rule_id and other details
+        Outcome with rule_id and other details, or refusal if duplicate found
     """
-    return apply_rule_update(repo, rule, agent=agent, operation="created")
+    if not check_dedup:
+        return apply_rule_update(repo, rule, agent=agent, operation="created")
+
+    # Check for duplicates
+    storage = RulesStorage(repo)
+    existing_rules = storage.list()
+
+    is_duplicate, candidates = rule_dedup_check(rule.content, existing_rules, dedup_threshold)
+
+    # If no duplicates found, proceed with add
+    if not is_duplicate:
+        return apply_rule_update(repo, rule, agent=agent, operation="created")
+
+    # Duplicates found - handle based on answer
+    if dedup_answer is None:
+        # No answer provided - refuse and list candidates
+        return O.refused(
+            "rule.added",
+            f"Possible duplicate rule. It reads like:\n"
+            + "\n".join(
+                f"  {c['id']} ({c['scope']}, score {c['score']:.2f}): "
+                f"{c['title']}"
+                + (f" [{', '.join(c['overlap'])}]" if c['overlap'] else "")
+                for c in candidates
+            )
+            + f"\n\nAnswer: new (different rule), extends {candidates[0]['id']} "
+            f"(add to existing), or duplicate_of {candidates[0]['id']} (same rule)",
+            id=rule.id,
+            candidates=candidates,
+        )
+
+    # Validate the answer
+    bad = dedup_answer.problem
+    if bad:
+        return O.failed("rule.added", bad, id=rule.id)
+
+    if dedup_answer.target and dedup_answer.target == rule.id:
+        return O.failed("rule.added", "a rule cannot point at itself", id=rule.id)
+
+    # If answer is "new", add anyway
+    if dedup_answer.relation == "new":
+        return apply_rule_update(repo, rule, agent=agent, operation="created")
+
+    # If "extends" or "duplicate_of", handle based on whether target is open
+    if dedup_answer.relation in ("extends", "duplicate_of"):
+        try:
+            target_rule = storage.get(dedup_answer.target)
+        except FileNotFoundError:
+            return O.failed(
+                "rule.added",
+                f"Target rule {dedup_answer.target} not found",
+                id=rule.id,
+            )
+
+        # For now, always extend the existing rule (merge new content)
+        return _extend_rule(repo, dedup_answer.target, rule.content, agent=agent)
+
+    return O.failed("rule.added", f"Unknown relation: {dedup_answer.relation}", id=rule.id)
 
 
 def rule_update(repo: Path, rule_id: str, **fields: Any) -> O.Outcome:
@@ -185,19 +412,15 @@ def rule_update(repo: Path, rule_id: str, **fields: Any) -> O.Outcome:
     Returns:
         Outcome indicating success or failure
     """
-    log, cfg, st = _load(repo)
     storage = RulesStorage(repo)
 
     try:
         rule, event_fields = storage.update(rule_id, **fields)
 
-        # Record the event
-        with log.transaction():
-            log.append("rule.updated", rule_id, event_fields)
-            # Update the manifest
-            manifest_content = rules_manifest(storage)
-            manifest_path = repo / "DDFLOW.md"
-            manifest_path.write_text(manifest_content)
+        # Update the manifest
+        manifest_content = rules_manifest(storage)
+        manifest_path = repo / "DDFLOW.md"
+        manifest_path.write_text(manifest_content)
 
         return O.ok(
             "rule.updated",
@@ -221,19 +444,15 @@ def rule_remove(repo: Path, rule_id: str) -> O.Outcome:
     Returns:
         Outcome indicating success or failure
     """
-    log, cfg, st = _load(repo)
     storage = RulesStorage(repo)
 
     try:
         event_fields = storage.remove(rule_id)
 
-        # Record the event
-        with log.transaction():
-            log.append("rule.deleted", rule_id, event_fields)
-            # Update the manifest
-            manifest_content = rules_manifest(storage)
-            manifest_path = repo / "DDFLOW.md"
-            manifest_path.write_text(manifest_content)
+        # Update the manifest
+        manifest_content = rules_manifest(storage)
+        manifest_path = repo / "DDFLOW.md"
+        manifest_path.write_text(manifest_content)
 
         return O.ok("rule.deleted", id=rule_id)
 
@@ -257,6 +476,19 @@ def rule_get(repo: Path, rule_id: str) -> O.Outcome:
 
     try:
         rule = storage.get(rule_id)
+
+        # Handle timestamps that might be datetime or string
+        created_str = (
+            rule.created.isoformat()
+            if hasattr(rule.created, "isoformat")
+            else str(rule.created)
+        )
+        updated_str = (
+            rule.updated.isoformat()
+            if hasattr(rule.updated, "isoformat")
+            else str(rule.updated)
+        )
+
         return O.ok(
             "rule.show",
             id=rule.id,
@@ -266,8 +498,8 @@ def rule_get(repo: Path, rule_id: str) -> O.Outcome:
             scope=rule.scope,
             priority=rule.priority,
             globs=rule.globs,
-            created=rule.created.isoformat(),
-            updated=rule.updated.isoformat(),
+            created=created_str,
+            updated=updated_str,
         )
 
     except FileNotFoundError:
@@ -324,3 +556,107 @@ def rule_list(repo: Path, tag: str | None = None, scope: str | None = None) -> O
 
     except Exception as exc:
         return O.failed("rule.list", f"Failed to list rules: {exc}")
+
+
+def rule_search(
+    repo: Path,
+    query: str,
+    *,
+    limit: int = 10,
+    exact: bool = False,
+    regex: bool = False,
+    tag: str | None = None,
+    scope: str | None = None,
+) -> O.Outcome:
+    """Search for rules by content or title.
+
+    Uses substring and TF-IDF-like similarity scoring to rank results.
+    Higher scores for substring matches, lower for token-based similarity.
+
+    Args:
+        repo: Path to the repository root
+        query: Search query text
+        limit: Maximum number of results to return
+        exact: If True, search for exact phrase match
+        regex: If True, treat query as a regular expression
+        tag: Optional tag to filter by
+        scope: Optional scope to filter by
+
+    Returns:
+        Outcome with ranked list of matching rules
+    """
+    import re
+
+    storage = RulesStorage(repo)
+
+    try:
+        rules = storage.list(tag=tag, scope=scope)
+
+        # Score each rule
+        scored_rules = []
+        query_lower = query.lower()
+
+        for rule in rules:
+            # Combine title and content for scoring
+            combined = f"{rule.title} {rule.content}".lower()
+
+            score = 0.0
+            if exact:
+                # Exact phrase match
+                if query_lower in combined:
+                    score = 1.0
+            elif regex:
+                # Regex match
+                try:
+                    if re.search(query, combined, re.IGNORECASE):
+                        score = 0.8
+                except re.error:
+                    continue
+            else:
+                # Default: substring match with fallback to similarity scoring
+                # First check for substring match (higher score)
+                if query_lower in combined:
+                    score = 1.0
+                else:
+                    # Fallback: TF-IDF-like similarity scoring
+                    score = rule.similarity_score(query)
+
+            if score > 0:
+                scored_rules.append((rule, score))
+
+        # Sort by score descending, then by id for stability
+        scored_rules.sort(key=lambda x: (-x[1], x[0].id))
+
+        # Limit results
+        scored_rules = scored_rules[:limit]
+
+        if not scored_rules:
+            return O.nothing(
+                "rule.search",
+                f"No rules found matching '{query}'",
+                query=query,
+                rows=[],
+                count=0,
+            )
+
+        rows = [
+            {
+                "id": r.id,
+                "title": r.title,
+                "scope": r.scope,
+                "tags": r.tags,
+                "priority": r.priority,
+                "score": score,
+            }
+            for r, score in scored_rules
+        ]
+
+        return O.ok(
+            "rule.search",
+            rows=rows,
+            count=len(rows),
+            query=query,
+        )
+
+    except Exception as exc:
+        return O.failed("rule.search", f"Failed to search rules: {exc}")
