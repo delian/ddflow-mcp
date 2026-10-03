@@ -23,7 +23,16 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from .events import Event, changelog_of
+from .events import (
+    OLDER_MARK,
+    SCHEMA_VERSION,
+    SEEN_KIND,
+    SKEW_OVERRIDDEN_KIND,
+    UPGRADE_APPLIED_KIND,
+    Event,
+    changelog_of,
+    version_key,
+)
 
 # Item states. These are DERIVED, never written: an item's state is a function of the
 # events about it. A state field that can be set directly is a field that can drift
@@ -685,6 +694,25 @@ class State:
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
     #: than ignored so a caller can refuse to act on a partially-understood log.
     skipped_kinds: dict[str, int] = field(default_factory=dict)
+    #: ddflow version -> who has worked on this log under it: {"agents", "at", "install"}
+    #: (`ddflow.seen`, decision D-upgrade-event-kinds). The project's version is the highest
+    #: key under `events.version_key`, not the latest write -- an older ddflow stamping after
+    #: a newer one does not lower it.
+    ddflow_versions: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: Session-scoped skew overrides (`skew.overridden`), oldest first: {"agent", "session",
+    #: "running", "log_version", "reason", "at"}.
+    skew_overrides: list[dict[str, Any]] = field(default_factory=list)
+    #: Upgrades applied (`upgrade.applied`), oldest first: {"from", "to", "categories",
+    #: "backup", "agent", "at"}.
+    upgrades: list[dict[str, Any]] = field(default_factory=list)
+    #: version -> how many events were written by that OLDER ddflow under a skew override
+    #: (the `older_ddflow` mark on their data).
+    older_version_events: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def highest_version(self) -> str:
+        """The highest ddflow version that has stamped this log, "" when none has."""
+        return max(self.ddflow_versions, key=lambda v: (version_key(v), v), default="")
 
     # -- convenience views ----------------------------------------------------------
     def phases(self) -> list[Item]:
@@ -1801,6 +1829,46 @@ def _h_session_note(st: State, ev: Event) -> None:
     sess.notes.append(note)
 
 
+def _h_ddflow_seen(st: State, ev: Event) -> None:
+    v = ev.data.get("version")
+    if not isinstance(v, str) or not version_key(v):
+        return
+    rec = st.ddflow_versions.setdefault(
+        v, {"agents": [], "at": ev.ts, "install": str(ev.data.get("install", ""))}
+    )
+    if ev.agent not in rec["agents"]:
+        rec["agents"].append(ev.agent)
+    rec["at"] = min(rec["at"], ev.ts)
+
+
+def _h_skew_overridden(st: State, ev: Event) -> None:
+    d = ev.data
+    st.skew_overrides.append(
+        {
+            "agent": ev.agent,
+            "session": d.get("session", ""),
+            "running": d.get("running", ""),
+            "log_version": d.get("log_version", ""),
+            "reason": d.get("reason", ""),
+            "at": ev.ts,
+        }
+    )
+
+
+def _h_upgrade_applied(st: State, ev: Event) -> None:
+    d = ev.data
+    st.upgrades.append(
+        {
+            "from": d.get("from", ""),
+            "to": d.get("to", ""),
+            "categories": list(d.get("categories") or []),
+            "backup": d.get("backup", ""),
+            "agent": ev.agent,
+            "at": ev.ts,
+        }
+    )
+
+
 def _h_session_ended(st: State, ev: Event) -> None:
     _session(st, ev).ended_at = ev.ts
 
@@ -2030,6 +2098,9 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "export.enabled": _h_export_enabled,
     "export.disabled": _h_export_disabled,
     "export.acknowledged": _h_export_acknowledged,
+    SEEN_KIND: _h_ddflow_seen,
+    SKEW_OVERRIDDEN_KIND: _h_skew_overridden,
+    UPGRADE_APPLIED_KIND: _h_upgrade_applied,
 }
 
 
@@ -2074,6 +2145,21 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
         st.last_lamport = max(st.last_lamport, ev.lamport)
         if ev.kind in _SESSION_TEXT and ev.id in adopted:
             continue
+        if ev.schema > SCHEMA_VERSION:
+            # Written by a ddflow whose event shape this code does not know: refused when
+            # strict, like an unknown kind, else counted like a skipped kind so the same
+            # "run the newer ddflow" advice applies. Never guessed at.
+            if strict:
+                raise ValueError(
+                    f"event {ev.kind!r} at lamport {ev.lamport} has schema {ev.schema}; "
+                    f"this code knows {SCHEMA_VERSION}"
+                )
+            key = f"{ev.kind} (schema {ev.schema})"
+            st.skipped_kinds[key] = st.skipped_kinds.get(key, 0) + 1
+            continue
+        older = ev.data.get(OLDER_MARK)
+        if older:
+            st.older_version_events[str(older)] = st.older_version_events.get(str(older), 0) + 1
         handler = HANDLERS.get(ev.kind)
         if handler is None:
             if strict:

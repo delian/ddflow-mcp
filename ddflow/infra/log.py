@@ -32,12 +32,17 @@ from typing import Any
 
 from ..config import LogConfig
 from ..core.events import (
+    OLDER_MARK,
     PROVENANCE_KINDS,
     SCHEMA_VERSION,
+    SEEN_KIND,
+    SKEW_OVERRIDDEN_KIND,
     TAIL_MAX_BYTES,
     TAIL_WINDOW_BYTES,
     Event,
+    SkewRefused,
     canonical,
+    stamp_facts,
     utcnow,
 )
 from ..core.model import known_kinds
@@ -48,6 +53,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "Event",
     "EventLog",
+    "SkewRefused",
     "canonical",
     "clear_parse_cache",
     "default_agent_id",
@@ -57,6 +63,85 @@ __all__ = [
 ]
 
 _AGENT_ID_CACHE: dict[str, str] = {}
+
+#: Kinds an append writes WITHOUT the stamp-and-guard step: the stamp itself, and the
+#: override that exists to be written while the guard would refuse everything else.
+_STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND})
+
+#: The local, git-ignored marker: the last ddflow version THIS machine acted under.
+SEEN_MARKER = Path(".ddflow") / "local" / "seen.json"
+
+
+def running_version() -> str:
+    """The version of the code that is running (read at call time, so a test can set it)."""
+    import ddflow
+
+    return str(getattr(ddflow, "__version__", "") or "")
+
+
+def version_known(version: str) -> bool:
+    """A version worth stamping: one that parses. A source tree reporting "unknown" must not
+    stamp a log with a version that compares as nothing."""
+    from ..core.events import version_key
+
+    return bool(version_key(version))
+
+
+def install_kind() -> str:
+    """How this ddflow is installed, cheaply: `source-tree` when the package lives in a
+    checkout, else `installed`. (`services.install_info` is richer and runs git; a stamp
+    written on every first write must not.)"""
+    here = Path(__file__).resolve()
+    return (
+        "installed"
+        if any(p in ("site-packages", "dist-packages") for p in here.parts)
+        else ("source-tree")
+    )
+
+
+def skew_message(version: str, highest: str, by: str = "") -> str:
+    who = f" (stamped by {by})" if by else ""
+    return (
+        f"REFUSED: this project's log has been worked on by ddflow {highest}{who}, and this "
+        f"ddflow is {version}, which is older: writing now could drop or misread what the "
+        f"newer one recorded. Upgrade ddflow-mcp to >= {highest} and retry (for example "
+        f"`uvx --refresh --from ddflow-mcp ddflow ...`, or restart the MCP server after "
+        f"upgrading). Reads still work. If you cannot upgrade, ask the user; only if the "
+        f'user insists, rerun with --allow-older-version --reason "<why>" (MCP: the '
+        f"allow_older_version argument carrying the reason). That override is recorded "
+        f"(skew.overridden), marks this session's events as written by an older ddflow, and "
+        f"covers this session only. [upgrade].skew = warn or off turns the guard down."
+    )
+
+
+_SKEW_WARNED: set[tuple[str, str]] = set()
+
+
+def _warn_skew_once(version: str, highest: str) -> None:
+    if (version, highest) in _SKEW_WARNED:
+        return
+    _SKEW_WARNED.add((version, highest))
+    import sys
+
+    print(
+        f"ddflow: this log has been worked on by ddflow {highest}; this ddflow is {version}. "
+        f"Writing anyway ([upgrade].skew = warn).",
+        file=sys.stderr,
+    )
+
+
+def _write_seen_marker(root: Path, version: str) -> None:
+    """Record, machine-locally, the version this machine last acted under. Best effort: a
+    marker that cannot be written costs only the once-per-version upgrade notice."""
+    path = Path(root) / SEEN_MARKER
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        ignore = path.parent / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("*\n", "utf-8")
+        path.write_text(json.dumps({"version": version, "at": utcnow()}) + "\n", "utf-8")
+    except OSError:
+        pass
 
 
 @dataclass(slots=True)
@@ -469,6 +554,11 @@ class EventLog:
             self._agent_id = default_agent_id(self.root)
         return self._agent_id
 
+    #: Stamp this version into the log and apply the skew guard on append. Class-level and
+    #: on by default; only the storage-mechanics tests (event counts, byte offsets) turn it
+    #: off, so a stamp does not have to be threaded through every assertion about the log.
+    stamp: bool = True
+
     # -- shard paths ---------------------------------------------------------------
     @property
     def shard(self) -> Path:
@@ -562,29 +652,114 @@ class EventLog:
             else _flock(self.lock_path, self.lock_timeout_s)
         )
         with ctx:
-            # Re-read inside the lock: another agent may have advanced the clock.
-            high = self._highest_lamport()
-            for e in observed:
-                high = max(high, e.lamport)
-            self.dir.mkdir(parents=True, exist_ok=True)
-            self._lamport = max(self._lamport, high) + 1
-            ev = Event(
-                kind=kind,
-                subject=subject,
-                data=dict(data or {}),
-                agent=self.agent_id,
-                lamport=self._lamport,
-                ts=utcnow(),
-            )
-            ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
-            line = ev.to_json() + "\n"
-            fd = os.open(self.shard, os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o644)
-            try:
-                os.write(fd, line.encode("utf-8"))
-                os.fsync(fd)
-            finally:
-                os.close(fd)
+            payload = dict(data or {})
+            if kind not in _STAMP_EXEMPT and self.stamp:
+                # The version stamp and the skew guard, in the same lock as the write: a
+                # refusal must not be raced past, and the stamp must precede the event
+                # that caused it (decisions D-upgrade-event-kinds, D-upgrade-skew-guard).
+                payload.update(self._stamp_and_guard())
+            return self._write(kind, subject, payload, observed)
+
+    def _write(
+        self, kind: str, subject: str, data: dict[str, Any], observed: Iterable[Event] = ()
+    ) -> Event:
+        """Write one event. The caller holds the lock."""
+        # Re-read inside the lock: another agent may have advanced the clock.
+        high = self._highest_lamport()
+        for e in observed:
+            high = max(high, e.lamport)
+        self.dir.mkdir(parents=True, exist_ok=True)
+        self._lamport = max(self._lamport, high) + 1
+        ev = Event(
+            kind=kind,
+            subject=subject,
+            data=data,
+            agent=self.agent_id,
+            lamport=self._lamport,
+            ts=utcnow(),
+        )
+        ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
+        line = ev.to_json() + "\n"
+        fd = os.open(self.shard, os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o644)
+        try:
+            os.write(fd, line.encode("utf-8"))
+            os.fsync(fd)
+        finally:
+            os.close(fd)
         return ev
+
+    # -- the version stamp and the skew guard -----------------------------------------
+    def _all_events(self) -> Iterator[Event]:
+        """Every parsed event, unsorted and not de-duplicated: the stamp facts do not need
+        order, and sorting the whole log on each append would cost more than the append."""
+        for p in self.shards():
+            yield from self._read_shard(p)[0]
+
+    def _stamp_and_guard(self) -> dict[str, Any]:
+        """Refuse an older ddflow's write to a newer log, stamp this version on first use.
+
+        Returns extra `data` for the event about to be written: the older-version mark when
+        a session-scoped override is what lets it through. Raises `SkewRefused` otherwise.
+        Caller holds the lock."""
+        version = running_version()
+        facts = stamp_facts(self._all_events(), self.agent_id, version)
+        extra: dict[str, Any] = {}
+        if facts.skewed:
+            policy = self._skew_policy()
+            if policy == "refuse":
+                if facts.override is None:
+                    raise SkewRefused(skew_message(version, facts.highest, facts.highest_by))
+                extra[OLDER_MARK] = version
+            elif policy == "warn":
+                _warn_skew_once(version, facts.highest)
+        if not facts.seen_by_me and version_known(version):
+            self._write(SEEN_KIND, "ddflow", {"version": version, "install": install_kind()})
+            _write_seen_marker(self.root, version)
+        return extra
+
+    def _skew_policy(self) -> str:
+        """`[upgrade].skew`: refuse (default) | warn | off. Read only when a skew is actually
+        found, so the common append never loads the config for it."""
+        try:
+            from ..config import Config
+
+            return str(Config.load(self.root).upgrade.skew)
+        except Exception:
+            return "refuse"
+
+    def override_skew(self, reason: str) -> Event | None:
+        """Record a session-scoped override: let this agent's open session write although
+        the running ddflow is OLDER than the log's highest stamp (`skew.overridden`).
+
+        Returns the event, or None when there is nothing to override: no skew, or a policy
+        (`warn`, `off`) that never refuses. A reason is required otherwise: refusing once and
+        then overriding silently would only be a slower way of not asking."""
+        reason = (reason or "").strip()
+        with self.transaction():
+            version = running_version()
+            facts = stamp_facts(self._all_events(), self.agent_id, version)
+            if not facts.skewed:
+                return None
+            if facts.override is not None:
+                return facts.override
+            if self._skew_policy() != "refuse":
+                return None  # warn/off never refuse, so there is nothing to override
+            if not reason:
+                raise SkewRefused(
+                    f"--allow-older-version needs --reason: say why this session may write "
+                    f"with ddflow {version} to a log ddflow {facts.highest} has worked on "
+                    f"(ask the operator first)."
+                )
+            return self._write(
+                SKEW_OVERRIDDEN_KIND,
+                facts.session or "ddflow",
+                {
+                    "running": version,
+                    "log_version": facts.highest,
+                    "session": facts.session,
+                    "reason": reason,
+                },
+            )
 
     def _highest_lamport(self) -> int:
         """The highest clock value in ANY event of any shard.

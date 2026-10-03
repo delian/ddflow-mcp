@@ -915,6 +915,24 @@ _doc(
 )
 
 
+#: What `[upgrade].skew` accepts (decision D-upgrade-skew-guard).
+UPGRADE_SKEW_POLICIES = ("refuse", "warn", "off")
+
+
+@dataclass
+class UpgradeConfig:
+    """Upgrading ddflow in an onboarded project: the version stamp's skew guard."""
+
+    skew: str = "refuse"
+
+
+_doc(
+    "upgrade",
+    "skew",
+    'What happens when a ddflow OLDER than the one that last worked on this project\'s log (the highest `ddflow.seen` stamp) is asked to WRITE. `refuse` (default): the write is refused with exit 3 and the message `Upgrade ddflow-mcp to >= X`; reads always work; an agent that cannot upgrade asks the user and, only if the user insists, reruns with `--allow-older-version --reason "..."` (CLI) or the `allow_older_version` argument (MCP), which records a `skew.overridden` event for THAT session and marks its events as written by an older version. `warn`: write anyway and say so on stderr. `off`: no check. The older version still stamps itself, so the log records that it wrote. Only a ddflow that ships this guard can refuse: releases before it cannot.',
+)
+
+
 #: The tool tiers `[mcp].tools` accepts. Kept here, not imported from the MCP surface, so
 #: config validation does not depend on the surface above it; `tests/test_mcp_tool_tiers.py`
 #: asserts the two lists agree.
@@ -1360,6 +1378,7 @@ class Config:
     loops: LoopsConfig = field(default_factory=LoopsConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)
+    upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
@@ -1661,6 +1680,9 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
     ),
     "export.documents": lambda v: (
         "" if isinstance(v, list) and all(isinstance(x, str) for x in v) else "must be a list of document names"
+    ),
+    "upgrade.skew": lambda v: (
+        "" if v in UPGRADE_SKEW_POLICIES else f"must be one of {', '.join(UPGRADE_SKEW_POLICIES)}"
     ),
     "mcp.tools": lambda v: (
         "" if v in MCP_TOOL_TIERS else f"must be one of {', '.join(MCP_TOOL_TIERS)}"
