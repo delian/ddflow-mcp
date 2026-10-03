@@ -43,7 +43,9 @@ def demo_base() -> pathlib.Path:
     machine (two sessions, or a run beside CI) deleted each other's repositories
     mid-scenario: `no such item 'P1.T1'` after a successful `task add`. Reproduced by
     starting two `run_all.py parallel-phase` 20 s apart. `DDFLOW_DEMOS_DIR` pins a path
-    when you want to inspect one; otherwise each run gets a fresh mkdtemp.
+    when you want to inspect one (use a dedicated directory; two runs of the SAME
+    scenario into one pinned directory still collide); otherwise each run gets a fresh
+    mkdtemp.
     """
     pinned = os.environ.get("DDFLOW_DEMOS_DIR")
     if pinned:
@@ -58,10 +60,11 @@ def main(argv: list[str]) -> int:
         return 2
     base = demo_base()
     print(f"demo workspace: {base}")
-    if base.exists():
-        shutil.rmtree(base)
     results = []
     for name, fn in wanted:
+        # Only this scenario's own subdirectory is ever cleared: a pinned DDFLOW_DEMOS_DIR
+        # may hold other things (and another run's scenarios), and is never wiped whole.
+        shutil.rmtree(base / name, ignore_errors=True)
         sc = Scenario(name, base / name)
         t0 = time.time()
         try:
