@@ -81,9 +81,10 @@ class Params:
     host_signals: tuple[str, ...] = HOST_SIGNALS
 
     def evidence(self) -> tuple[int, int]:
-        """(window, need_bad) made consistent: window >= 1 and 1 <= need_bad <= window."""
-        window = max(1, int(self.window))
-        return window, min(max(1, int(self.need_bad)), window)
+        """(window, need_bad) made consistent: one sample must never move the limit, so
+        window >= 2 and 2 <= need_bad <= window."""
+        window = max(2, int(self.window))
+        return window, min(max(2, int(self.need_bad)), window)
 
     def bounds(self) -> tuple[int, int, int]:
         """(floor, start, ceiling) made consistent: 1 <= floor <= start <= ceiling."""

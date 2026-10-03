@@ -333,3 +333,8 @@ def test_a_blind_sample_breaks_the_healthy_streak():
     run.append(Sample(600.0, {}))
     run += [Sample(660.0 + i * STEP, dict(GOOD)) for i in range(2)]
     assert fold(run).limit == 4
+
+
+def test_one_sample_never_moves_the_limit_whatever_the_evidence_params():
+    for kw in ({"window": 1, "need_bad": 3}, {"need_bad": 1}, {"window": 0, "need_bad": 0}):
+        assert fold([Sample(0.0, dict(BAD))], params(**kw)).limit == 4
