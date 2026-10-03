@@ -144,8 +144,9 @@ def test_one_tool_not_six():
     assert len(TOOLS["ddflow_list"]["description"]) < 700
 
 
-def test_the_owner_filter_is_echoed_under_its_own_name_for_every_kind(proj):
-    for kind in ("task", "session"):
+def test_the_owner_filter_is_echoed_under_its_own_name_where_a_kind_has_one(proj):
+    # bug and research have no owner to filter by (the engine refuses it).
+    for kind in ("task", "phase", "session"):
         assert _body(_call(proj, kind=kind, owner="alice", limit=5))["filters"] == {
             "owner": "alice"
         }, kind
