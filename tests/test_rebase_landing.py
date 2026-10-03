@@ -113,3 +113,12 @@ def test_a_squash_whose_range_matches_the_commit_count_by_coincidence_is_still_a
         "a squash's range must start at its first parent, not at the pre-merge tip"
     )
     assert _range_files(repo, it.landed_before, it.landed_after) == ["a.py", "b.py"]
+
+
+def test_the_commit_count_reads_gh_arrays_and_graphql_connections():
+    from ddflow.infra.forge import _count
+
+    assert _count([{"oid": "a"}, {"oid": "b"}, {"oid": "c"}]) == 3  # `gh pr view --json commits`
+    assert _count({"totalCount": 5, "nodes": [{}]}) == 5  # a connection-shaped answer
+    assert _count({"nodes": [{}, {}]}) == 2
+    assert _count(None) == 0
