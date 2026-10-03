@@ -159,6 +159,6 @@ def test_an_unaskable_queue_never_triggers_a_merge(pr_repo, monkeypatch):
 def test_pr_sync_text_says_why_an_unreadable_queue_holds_the_merge(pr_repo):
     repo, forge = _approved_and_green(pr_repo)
     forge.set(graphql_down=True)
-    code, out, err = run_cli(repo, "pr", "sync")
+    _, out, err = run_cli(repo, "pr", "sync")
     assert "merge queue could not be read" in out, (out, err)
     assert not forge.calls("pr", "merge")
