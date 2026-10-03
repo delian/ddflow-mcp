@@ -324,6 +324,11 @@ def apply_rule_update(
         )
 
 
+def _is_new_and_full(repo: Path, rule_id: str, max_rules: int) -> bool:
+    existing = RulesStorage(repo).list()
+    return rule_id not in {r.id for r in existing} and len(existing) >= max_rules
+
+
 def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
     """Refuse a new rule that breaks the project's [rules] limits."""
     cfg = _load(repo, agent)[1]
@@ -336,7 +341,7 @@ def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
         bad := [t for t in rule.tags if t not in cfg.rules.tags_allowed]
     ):
         problem = f"tags {bad} are not in rules.tags_allowed {cfg.rules.tags_allowed}"
-    elif len(RulesStorage(repo).list()) >= cfg.rules.max_rules:
+    elif _is_new_and_full(repo, rule.id, cfg.rules.max_rules):
         problem = f"the project already has rules.max_rules ({cfg.rules.max_rules}) rules"
     return O.refused("rule.added", problem) if problem else None
 
