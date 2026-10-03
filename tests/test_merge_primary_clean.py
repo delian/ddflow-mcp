@@ -37,6 +37,14 @@ def _git(where: Path, *args: str, check: bool = True) -> subprocess.CompletedPro
     )
 
 
+def _dirty(repo: Path) -> str:
+    """Tracked changes in the primary, not counting the event log: a refused merge now
+    records a failed merge-gate outcome there (the `merge_failure_rate` flow signal reads
+    it), which is ddflow's own append and not a half-finished merge."""
+    lines = _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.splitlines()
+    return "\n".join(ln for ln in lines if ".ddflow/events/" not in ln)
+
+
 def _mid_merge(repo: Path) -> bool:
     return _git(repo, "rev-parse", "-q", "--verify", "MERGE_HEAD", check=False).returncode == 0
 
@@ -65,7 +73,7 @@ def test_a_conflicting_merge_leaves_the_primary_clean(repo, item):
     code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
     assert code == REFUSED, out + err
     assert not _mid_merge(repo), "the primary was left mid-merge"
-    assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
+    assert _dirty(repo) == ""
     assert _git(repo, "rev-parse", "HEAD").stdout == head
     # The remedy is the agent's to apply, in its own tree.
     assert "c.txt" in err and "into your branch" in err
@@ -141,7 +149,7 @@ def test_a_conflicting_squash_merge_leaves_the_primary_clean(repo, item):
 
     code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
     assert code == REFUSED, out + err
-    assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
+    assert _dirty(repo) == ""
 
 
 def _squash(repo: Path) -> None:
@@ -173,7 +181,7 @@ def test_a_refused_squash_commit_is_unstaged(repo, item):
     code, out, err = run_cli(repo, "merge", "T1", agent="alpha")
     assert code == REFUSED, out + err
     assert "refused-by-test" in err
-    assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
+    assert _dirty(repo) == ""
 
 
 def test_a_hook_refusing_the_merge_commit_leaves_the_primary_clean(repo, item):
@@ -188,7 +196,7 @@ def test_a_hook_refusing_the_merge_commit_leaves_the_primary_clean(repo, item):
     assert code == REFUSED, out + err
     assert "refused-by-test" in err
     assert not _mid_merge(repo)
-    assert _git(repo, "status", "--porcelain", "--untracked-files=no").stdout.strip() == ""
+    assert _dirty(repo) == ""
 
 
 def test_a_merge_already_in_progress_is_never_aborted(repo, item):
@@ -205,3 +213,11 @@ def test_a_merge_already_in_progress_is_never_aborted(repo, item):
     assert code != OK, out + err
     assert _git(repo, "rev-parse", "MERGE_HEAD").stdout == before
     assert (repo / "c.txt").read_text() == "resolved by hand\n"
+    # That refusal is not a failure of THIS item's branch: no merge gate outcome is logged.
+    from ddflow.infra.log import EventLog
+
+    assert not [
+        e
+        for e in EventLog(repo).read_all()
+        if e.kind.startswith("gate.") and e.data.get("gate") == "merge"
+    ]
