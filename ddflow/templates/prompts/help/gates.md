@@ -37,3 +37,9 @@ because a same-family reviewer shares the author's blind spots and its agreement
 independent evidence. `ddflow reviewers detect` finds one; `ddflow review <id> --gate
 critic` runs it and records the result. An unavailable reviewer is recorded as
 unavailable — never as a pass.
+
+A gate gets `[review].max_rounds` (default 2) FULL review rounds per item; a third is
+refused. After that, `ddflow review <id> --gate G --delta` rechecks only what changed since
+the reviewed head and `ddflow review triage` settles each remaining finding (both are
+always allowed). Change the cap with `ddflow config review.max_rounds N` (0 =
+unlimited; add `--local` for this machine) or `review.on_exceed = "warn"`.

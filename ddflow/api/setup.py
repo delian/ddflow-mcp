@@ -304,6 +304,69 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     return out
 
 
+_BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed")
+
+
+def _budget_keys(edit: ConfigEdit) -> list[str]:
+    """The `review.*` knobs this edit sets, parsed (not substring-matched): quoting,
+    spacing and a commented-out header do not change what TOML says."""
+    import tomllib
+
+    def norm(k: str) -> str:
+        return ".".join(seg.strip().strip("\"'") for seg in k.split("."))
+
+    # `configure` applies `set` and returns; an `append_toml` beside it is never written
+    # (the probe is in tests/test_review_budget.py), so only the one that IS applied counts.
+    if edit.set:
+        return [k for k in _BUDGET_KNOBS if norm(edit.set) == k]
+    try:
+        table = tomllib.loads(edit.append_toml).get("review")
+    except tomllib.TOMLDecodeError:
+        return []
+    if not isinstance(table, dict):
+        return []
+    return [f"review.{k}" for k in table if f"review.{k}" in _BUDGET_KNOBS]
+
+
+def report_budget_change(
+    repo: Path, edit: ConfigEdit, out: O.Outcome, *, agent: str = ""
+) -> O.Outcome:
+    """Tell the operator when an AGENT (the MCP surface) changed the review budget.
+
+    The cap is the operator's: `ddflow_configure` accepts `review.max_rounds` and
+    `review.on_exceed` on either layer, so an operator without a shell can tune it, but
+    an agent raising or disabling it to get more review rounds must not do so silently.
+    The change is returned as a NOTE and recorded as a session note the operator reads
+    in `session show` and the brief; a per-item exception is `ddflow review --force
+    --reason`, which is recorded on the gate instead.
+    """
+    if out.exit != O.OK:
+        return out
+    touched = _budget_keys(edit)
+    if not touched:
+        return out
+    from ..config import ReviewConfig
+
+    default = ReviewConfig()
+    layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
+    revert = "; ".join(
+        f"`ddflow config --set {k} {getattr(default, k.split('.')[1])}"
+        f"{' --local' if edit.local else ''}`"
+        for k in touched
+    )
+    note = (
+        f"NOTE FOR THE OPERATOR: the review budget was changed over MCP "
+        f"({', '.join(touched)}; {layer} layer). Shipped default: {default.max_rounds} full "
+        f"rounds per gate, on_exceed = {default.on_exceed!r}. If you did not ask for this, "
+        f"revert it with {revert}. Recorded as a session note."
+    )
+    from .knowledge import session_note
+
+    session_note(repo, "", note, agent=agent)
+    out.data["text"] = (out.data.get("text") or "") + "\n" + note
+    return out
+
+
 def _worktree_drift(repo: Path, here: Path) -> str:
     """A warning when `here` is a worktree behind the base branch, else "".
 
