@@ -15,6 +15,7 @@ domain layer needs it without needing this.
 
 from __future__ import annotations
 
+import bisect
 import contextlib
 import fcntl
 import getpass
@@ -178,8 +179,39 @@ class _Parsed:
 
     consumed: int
     digest: str
-    events: tuple[Event, ...]
+    #: Extended IN PLACE as the shard grows (never copied per read), so a caller must
+    #: not hand this list out: `_read_shard` and `read_all` return copies.
+    events: list[Event]
     skipped: int
+    #: Identity of one unbroken lineage of this shard's bytes. Minted on a full parse and
+    #: kept across every extension (which is only taken after the prefix digest verified),
+    #: so "same `gen`" means "the events up to any earlier count are still the same
+    #: events". `read_all`'s merged order keys on it.
+    gen: object = None
+
+
+@dataclass(slots=True)
+class _Delta:
+    """One shard read, in the form `read_all` can merge incrementally."""
+
+    parsed: _Parsed | None  # the cache entry holding `whole`; None when not cached
+    whole: list[Event]  # every whole-line event of the shard (the entry's own list)
+    torn: list[Event]  # events parsed from an unterminated trailing fragment
+    skipped: int  # unparseable lines, torn fragment included
+
+
+@dataclass(slots=True)
+class _Merged:
+    """The de-duplicated, Lamport-sorted union of one events directory (B169).
+
+    `read_all` used to sort every event and re-hash every id on EVERY call, which kept the
+    warm read linear in the log even though the parse was already incremental. This holds
+    the result and folds only what was appended since into it.
+    """
+
+    marks: dict[Path, tuple[object, int]]  # shard -> (lineage, whole events accounted for)
+    uniq: list[Event]
+    seen: set[str]
 
 
 #: Absolute shard path -> what has been parsed from it. Process-lifetime and keyed by
@@ -201,6 +233,14 @@ class _Parsed:
 #: project with enough shards to notice has a bigger problem (B166).
 _PARSE_CACHE: dict[Path, _Parsed] = {}
 
+#: Events directory -> its merged, sorted, de-duplicated order. Derived entirely from
+#: `_PARSE_CACHE` (and re-validated against it on every read), so it can be dropped at any
+#: moment at the cost of one full sort.
+_MERGED: dict[Path, _Merged] = {}
+
+#: Appends no larger than this are placed by bisection; a bigger batch rebuilds.
+_MAX_INCREMENTAL = 64
+
 
 def clear_parse_cache() -> None:
     """Drop every parsed shard.
@@ -210,6 +250,7 @@ def clear_parse_cache() -> None:
     calls this, and that is the correct amount.
     """
     _PARSE_CACHE.clear()
+    _MERGED.clear()
 
 
 def _cached_events() -> int:
@@ -244,6 +285,23 @@ def _parse_lines(chunk: bytes) -> tuple[list[Event], int]:
         except (json.JSONDecodeError, KeyError):
             skipped += 1
     return out, skipped
+
+
+def _sorted_unique(events: list[Event]) -> list[Event]:
+    """Lamport-sorted and de-duplicated by content address -- the reference definition.
+
+    Merging two branches can bring the same event in twice via two shard copies, and a
+    union must be idempotent.
+    """
+    seen: set[str] = set()
+    uniq: list[Event] = []
+    for e in sorted(events, key=Event.sort_key):
+        eid = e.id or e.compute_id()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        uniq.append(e)
+    return uniq
 
 
 def _toplevel(path: str) -> str:
@@ -850,16 +908,22 @@ class EventLog:
 
     # -- reading -------------------------------------------------------------------
     def _read_shard(self, path: Path) -> tuple[list[Event], int]:
-        """One shard's events, re-parsing only what has been APPENDED since last time.
+        """One shard's events (a fresh list) and its unparseable-line count."""
+        d = self._read_delta(path)
+        if d is None:
+            return [], 0
+        return d.whole + d.torn, d.skipped
+
+    def _read_delta(self, path: Path) -> _Delta | None:
+        """One shard, re-parsing only what has been APPENDED since last time.
 
         Parsing dominates a read — 97 ms of 115 ms at 20,000 events — and an
         append-only file guarantees the bytes already parsed have not changed, so the
         tail is the only new work. The guarantee is CHECKED rather than assumed: the
-        consumed prefix is re-hashed on every read (measured: a 20,000-event warm read
-        costs 11.9 ms against 121.1 ms uncached, ~10x) and any mismatch falls back to a
-        full parse. A
-        rewrite, a truncation, a `git checkout`, a `git merge` and a delete-and-recreate
-        all land in that one case, so there is no list of mechanisms to keep current.
+        consumed prefix is re-hashed on every read and any mismatch falls back to a
+        full parse. A rewrite, a truncation, a `git checkout`, a `git merge` and a
+        delete-and-recreate all land in that one case, so there is no list of mechanisms
+        to keep current.
 
         A trailing fragment with no newline is parsed (so `doctor` keeps reporting a
         torn append) but never marked consumed, so the next call re-reads it and sees
@@ -875,73 +939,148 @@ class EventLog:
             # whole agent's events from the queue while reporting success. Caught by the
             # cross-family critic: the pre-cache code caught `FileNotFoundError` only,
             # and widening it to `OSError` turned a loud failure into a silent one.
-            return [], 0
+            return None
         cached = _PARSE_CACHE.get(path) if self.log_cfg.reuse_parsed else None
-        start, base, skipped = 0, [], 0
+        start, skipped = 0, 0
         hasher = None
+        base: _Parsed | None = None
         if cached is not None and len(data) >= cached.consumed:
             # The ONLY thing that licenses re-using a parse: those exact bytes are still
             # there. Not the inode, not the size, not the mtime -- all three are proxies,
             # and the inode proxy was wrong about the case it was written for.
-            h = hashlib.sha256(data[: cached.consumed])
+            view = memoryview(data)  # slicing bytes would COPY the whole prefix
+            h = hashlib.sha256(view[: cached.consumed])
             if h.hexdigest() == cached.digest:
-                start, base, skipped = cached.consumed, list(cached.events), cached.skipped
+                start, skipped = cached.consumed, cached.skipped
+                base = cached
                 # Kept so the digest STORED below continues this one rather than making a
                 # second pass over the same prefix. `hexdigest()` does not finalise a
-                # hashlib object, so it can still be updated with the appended bytes --
-                # which makes the store side O(appended) like the parse beside it.
+                # hashlib object, so it can still be updated with the appended bytes.
                 hasher = h
         chunk = data[start:]
         cut = chunk.rfind(b"\n") + 1  # 0 when the tail holds no newline at all
         whole, fragment = chunk[:cut], chunk[cut:]
         fresh, fresh_skipped = _parse_lines(whole)
-        events = base + fresh
         skipped += fresh_skipped
+        prior = len(base.events) if base is not None else 0
         # The ceiling is GLOBAL -- every shard of every repo this process has read. It is
         # documented as a memory ceiling, and a per-shard limit is not one: a repo with
         # eight agents would hold eight times the promised bound.
-        held = _cached_events() - len(_PARSE_CACHE.get(path, _Parsed(0, "", (), 0)).events)
-        if self.log_cfg.reuse_parsed and held + len(events) <= self.log_cfg.max_cached_events:
+        held = _cached_events() - len(cached.events if cached is not None else ())
+        parsed: _Parsed | None = None
+        if (
+            self.log_cfg.reuse_parsed
+            and held + prior + len(fresh) <= self.log_cfg.max_cached_events
+        ):
             if hasher is None:
                 digest = _digest(data[: start + cut])
             else:
                 hasher.update(whole)
                 digest = hasher.hexdigest()
-            _PARSE_CACHE[path] = _Parsed(start + cut, digest, tuple(events), skipped)
+            if base is not None:
+                base.events.extend(fresh)
+                base.consumed, base.digest, base.skipped = start + cut, digest, skipped
+                parsed = base
+            else:
+                parsed = _Parsed(start + cut, digest, fresh, skipped, gen=object())
+            _PARSE_CACHE[path] = parsed
+            events = parsed.events
         else:
             # Over the ceiling (or disabled): do not hold it, and do not leave a STALE
             # entry behind either -- an entry left behind would be served forever.
             _PARSE_CACHE.pop(path, None)
+            events = (base.events + fresh) if base is not None else fresh
         torn, torn_skipped = _parse_lines(fragment)
-        return events + torn, skipped + torn_skipped
+        return _Delta(parsed, events, torn, skipped + torn_skipped)
 
     def read_all(self) -> list[Event]:
-        out: list[Event] = []
         self.skipped_lines = 0
         live = self.shards()
         # A deleted shard's entry would otherwise live for the process lifetime: nothing
-        # visits a path `shards()` no longer returns, so `_read_shard` never sees it. That
+        # visits a path `shards()` no longer returns, so `_read_delta` never sees it. That
         # is a slow leak, and it is also a trap -- `rm -rf .ddflow && ddflow init` under a
         # running server can land a NEW shard on the SAME path, and the digest check would
         # then be the only thing standing between it and the old events.
         if self.log_cfg.reuse_parsed:
             for gone in [p for p in _PARSE_CACHE if p.parent == self.dir and p not in live]:
                 del _PARSE_CACHE[gone]
+        deltas: list[tuple[Path, _Delta]] = []
         for p in live:
-            events, skipped = self._read_shard(p)
-            out.extend(events)
-            self.skipped_lines += skipped
-        # De-duplicate by content address: merging two branches can bring the same
-        # event in twice via two shard copies, and a union must be idempotent.
-        seen: set[str] = set()
-        uniq: list[Event] = []
-        for e in sorted(out, key=lambda e: e.sort_key()):
-            eid = e.id or e.compute_id()
-            if eid in seen:
+            d = self._read_delta(p)
+            if d is None:
                 continue
-            seen.add(eid)
-            uniq.append(e)
-        return uniq
+            deltas.append((p, d))
+            self.skipped_lines += d.skipped
+        torn = [e for _, d in deltas for e in d.torn]
+        if not self.log_cfg.reuse_parsed or any(d.parsed is None for _, d in deltas):
+            if self.log_cfg.reuse_parsed:
+                # Over the memory ceiling: the maintained order would outlive its parse.
+                # (A cache-disabled reader leaves it alone: it is validated against the
+                # parse cache by lineage, so another reader's copy cannot go stale.)
+                _MERGED.pop(self.dir, None)
+            return _sorted_unique([e for _, d in deltas for e in d.whole] + torn)
+        merged = self._merge(deltas)
+        if not torn:
+            return list(merged.uniq)
+        # A torn fragment is transient and never part of the maintained order.
+        return _sorted_unique(merged.uniq + torn)
+
+    def _merge(self, deltas: list[tuple[Path, _Delta]]) -> _Merged:
+        """Bring this directory's maintained order up to date with `deltas`.
+
+        Incremental only when PROVABLY equivalent to a from-scratch sort and de-dupe:
+        every shard already folded must still be the same byte lineage (`gen`), and no
+        appended event may repeat an id already held (a duplicate shard copy, which the
+        from-scratch pass resolves by sort order). Anything else rebuilds, which is the
+        old behaviour exactly.
+        """
+        m = _MERGED.get(self.dir)
+        fresh: list[Event] = []
+        ok = m is not None
+        if m is not None:
+            paths = {p for p, _ in deltas}
+            ok = set(m.marks) <= paths
+            for p, d in deltas:
+                mark = m.marks.get(p)
+                if mark is None:
+                    fresh.extend(d.whole)
+                elif d.parsed is None or mark[0] is not d.parsed.gen or mark[1] > len(d.whole):
+                    ok = False
+                    break
+                else:
+                    fresh.extend(d.whole[mark[1] :])
+        if ok and m is not None and len(fresh) <= _MAX_INCREMENTAL:
+            fresh.sort(key=Event.sort_key)
+            add: list[Event] = []
+            ids: set[str] = set()
+            for e in fresh:
+                eid = e.id or e.compute_id()
+                if eid in m.seen:
+                    ok = False
+                    break
+                if eid in ids:
+                    continue
+                ids.add(eid)
+                add.append(e)
+            if ok:
+                uniq = m.uniq
+                for e in add:
+                    if not uniq or uniq[-1].sort_key() < e.sort_key():
+                        uniq.append(e)
+                    else:
+                        bisect.insort(uniq, e, key=Event.sort_key)
+                m.seen |= ids
+                m.marks = {p: (d.parsed.gen, len(d.whole)) for p, d in deltas if d.parsed}
+                return m
+        whole = [e for _, d in deltas for e in d.whole]
+        uniq = _sorted_unique(whole)
+        m = _Merged(
+            {p: (d.parsed.gen, len(d.whole)) for p, d in deltas if d.parsed},
+            uniq,
+            {e.id or e.compute_id() for e in uniq},
+        )
+        _MERGED[self.dir] = m
+        return m
 
     def verify(self) -> list[str]:
         """Integrity check: every event's id must equal the hash of its body."""

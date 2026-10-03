@@ -377,7 +377,7 @@ def test_reuse_parsed_false_does_not_read_a_cache_another_reader_filled(repo):
 
     entry = L._PARSE_CACHE[on.shard]
     # Keeps the DIGEST, so the validity check passes and the (empty) events are trusted.
-    L._PARSE_CACHE[on.shard] = L._Parsed(entry.consumed, entry.digest, (), 0)
+    L._PARSE_CACHE[on.shard] = L._Parsed(entry.consumed, entry.digest, [], 0)
     assert on.read_all() == [], "the poison did not bite, so this test proves nothing"
 
     off = _uncached(repo)
