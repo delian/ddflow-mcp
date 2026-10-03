@@ -119,7 +119,7 @@ def test_out_of_order_tails_and_duplicates_match_the_reference(repo):
 
 @pytest.mark.parametrize(
     "damage",
-    ["flip", "truncate", "garbage", "empty", "version", "fields", "format", "size"],
+    ["flip", "truncate", "garbage", "empty", "version", "fields", "format", "size", "parser"],
 )
 def test_a_damaged_snapshot_is_ignored_not_trusted(repo, parses, damage):
     log = _build(repo)
@@ -137,9 +137,7 @@ def test_a_damaged_snapshot_is_ignored_not_trusted(repo, parses, damage):
     elif damage == "empty":
         raw = b""
     else:
-        meta[
-            {"version": "version", "fields": "fields", "format": "format", "size": "size"}[damage]
-        ] = [] if damage == "fields" else 0 if damage == "size" else "other"
+        meta[damage] = [] if damage == "fields" else 0 if damage == "size" else "other"
         raw = json.dumps(meta).encode() + b"\n" + payload
     path.write_bytes(raw)
     assert _check(repo).parsed == 2 * N, "a damaged snapshot must fall back to a full parse"
