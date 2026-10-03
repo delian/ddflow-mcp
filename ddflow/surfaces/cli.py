@@ -1235,7 +1235,14 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--delta",
         action="store_true",
         help="recheck ONLY what changed since the head the gate's last review covered: "
-        "not a full round, never refused by [review].max_rounds",
+        "not a full round, never refused by [review].max_rounds (this is the default once "
+        "the gate has a recorded review; [review].delta_default = false turns that off)",
+    )
+    rw.add_argument(
+        "--full",
+        action="store_true",
+        help="review the item's WHOLE diff even though the gate has a recorded review: a "
+        "full round, counted against [review].max_rounds",
     )
     rw.add_argument(
         "--force",

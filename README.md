@@ -757,7 +757,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 149 knobs.
+cadences, and the rest of the 150 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -1155,24 +1155,46 @@ counted from the log's recorded reviews (`review_kind`, `round`, `rounds` and `r
 in the gate evidence), so a re-claim, a delta or a manual `gate skip` does not reset the
 count; a round that reached no reviewer is not counted. `--delta` reads the reviewed head
 from the log too, so it works after a re-claim or a `gate skip`; it is refused only when no
-review was ever recorded or nothing changed. Two knobs, changeable at every layer:
+review was ever recorded or nothing changed.
+
+**Delta re-reviews are the default.** Once a gate has a recorded review that reviewed the
+whole diff, a plain `ddflow review T1 --gate critic` is a delta: it reviews only the commits
+since the head that review covered (`reviewed_head`), says so (`delta review of 1 commit
+since a1b2c3d4e5`), is not a full round and is never refused by the cap. Its findings and
+coverage are **merged into the gate's record**: earlier findings stay where they were
+(their `#N` and their triage, which is keyed by the finding's exact text, are unchanged),
+a byte-identical finding is not duplicated, the delta's new ones are appended and the
+output maps each to its place in the record; the gate's outcome is the delta's own, so a
+clean recheck of a fix passes while the earlier findings stay visible to `review triage`
+and `gate status`, which shows the rounds separately (`1 full round, 2 delta rounds`).
+`--full` forces a full round (counted against `review.max_rounds`; combined with `--delta`
+it is an error). A delta falls back to a full round, and says why, when the reviewed head
+is no ancestor of the current head (the branch was rebased or amended) or the earlier
+review was partial or never reached a reviewer; with nothing changed since the reviewed
+head the review is refused and names `--full`. A `--chunk`, `--commit` or `--base` review
+is not second-guessed. `review.delta_default = false` is the behaviour before this knob:
+every review a full round. Knobs, changeable at every layer:
 
 | knob | default | meaning |
 |---|---|---|
 | `review.max_rounds` | `2` | full rounds per gate per item; `0` = unlimited |
 | `review.on_exceed` | `"refuse"` | `"warn"` runs the round and says the budget is spent |
+| `review.delta_default` | `true` | a review of a gate with a recorded review is a delta; `false` = always a full round |
 
 ```sh
 ddflow config review.max_rounds 3                 # this project (committed .ddflow/config.toml)
 ddflow config review.max_rounds 0 --local         # this machine only (.ddflow/local/config.toml)
+ddflow config review.delta_default false          # every review a full round again (add --local for this machine)
+ddflow review T1 --gate critic --full             # one full round, whatever the default
                                                   # (`--set KEY VALUE` is the same)
 DDFLOW_REVIEW_MAX_ROUNDS=0 ddflow review ...      # one run
 ```
 
-Over MCP, `ddflow_configure` accepts `review.max_rounds` and `review.on_exceed` on either
-layer (`local=true`), and tells the operator in its reply and in a session note — an agent
-does not lift the cap for itself; `--force --reason` is CLI-only and `ddflow_review` takes
-`delta=true`. `ddflow config --explain --filter review.` documents both knobs. A tool
+Over MCP, `ddflow_configure` accepts `review.max_rounds`, `review.on_exceed` and
+`review.delta_default` on either layer (`local=true`), and tells the operator in its reply
+and in a session note — an agent does not lift the cap for itself; `--force --reason` is
+CLI-only and `ddflow_review` takes `delta=true` and `full=true`. `ddflow config --explain
+--filter review.` documents the knobs. A tool
 built before this knob skips an unknown `[review]` key with a note rather than failing.
 
 ### Companion tools
@@ -3408,7 +3430,7 @@ renderer at an arbitrary file. `action` = `list`, `enable`, `disable` (with `doc
 MCP is always an agent's (it names the agent and the stop command), and MCP cannot lock,
 acknowledge, eject or edit a template. It is in the `all` tool tier only.
 
-**The `[export]` knobs** (5 of the 149): `documents` (the selection, default `[]`), `redact`
+**The `[export]` knobs** (5 of the 150): `documents` (the selection, default `[]`), `redact`
 (default `true`), `max_bytes` (the stdout / MCP cap, default 60000; a written file is never
 capped), `refresh` (`off` | `merge` | `phase_close` | `docs_gate`, default `off`) and `tables`
 (the per-document tables below). Each document may have a table:
@@ -3746,7 +3768,7 @@ declared once and persists — see
 
 ## Configuration
 
-149 knobs across 21 sections, every one documented in place:
+150 knobs across 21 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
