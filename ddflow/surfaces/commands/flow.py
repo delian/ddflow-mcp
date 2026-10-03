@@ -184,7 +184,8 @@ def cmd_promote(a, c: Ctx) -> int:
         auto = " [auto]" if r["auto"] else ""
         if r["deployed"]:
             n = r["undeployed"]
-            live = f"  live {r['deployed']}" + (f" ({n} undeployed)" if n > 0 else "")
+            note = f" ({n} undeployed)" if n > 0 else " (undeployed count unknown)" if n < 0 else ""
+            live = f"  live {r['deployed']}{note}"
         else:
             live = ""
         print(f"  {r['env']:<16} {r['head']}  {behind}{extra}{auto}{live}")

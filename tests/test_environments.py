@@ -271,3 +271,16 @@ def test_a_refused_deploy_record_leaves_what_is_live_untouched(envs):
     code, out, _ = run_cli(repo, "--json", "promote", "status")
     prod = {r["env"]: r for r in json.loads(out)["rows"]}["production"]
     assert prod["deployed"] == good[:12], "a refusal must not overwrite the recorded sha"
+
+
+def test_status_says_so_when_the_undeployed_count_cannot_be_computed(envs):
+    """-1 is 'could not tell', not 'up to date': the text must not render them alike."""
+    from ddflow.infra.log import EventLog as _Log
+
+    repo = envs
+    _Log(repo, "hook").append(
+        "deploy.recorded", "production", {"env": "production", "sha": "f" * 40}
+    )
+    code, out, _ = run_cli(repo, "promote", "status")
+    line = next(ln for ln in out.splitlines() if ln.strip().startswith("production"))
+    assert "live ffffffffffff" in line and "unknown" in line, line
