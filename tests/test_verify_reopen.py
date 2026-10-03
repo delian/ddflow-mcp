@@ -56,11 +56,10 @@ def test_the_brief_puts_the_failed_claims_at_the_top_of_the_reopened_task(repo):
     _false_completion(repo)
     verify(repo, "T1", reopen=True)
     out = run_cli(repo, "brief", "--item", "T1")[1]
-    assert (
-        "REOPENED by verification" in out
-        and "declared_files" in out
-        and "gates were cleared" in out
-    )
+    head, _, rest = out.partition("## Current: T1")
+    current = rest.split("\n## ", 1)[0]  # the section about this task, not a later one
+    assert "REOPENED by verification" in current
+    assert "declared_files" in current and "gates were cleared" in current
 
 
 def test_a_completion_that_holds_is_not_reopened_without_force_and_a_reason(repo):
@@ -145,3 +144,15 @@ def test_the_mcp_tool_reopens_and_refuses_reopen_arguments_without_an_id(repo):
     assert "need an id" in call({"reopen": True})
     assert '"reopened":true' in call({"id": "T1", "reopen": True})
     assert _item(repo).state == "open"
+
+
+def test_reopening_one_task_does_not_hide_another_tasks_completion(repo):
+    from ddflow.services import ledger as LG
+
+    _false_completion(repo)  # T1 done
+    run_cli(repo, "task", "add", "T2", "--title", "other", "--globs", "elsewhere.py")
+    run_cli(repo, "complete", "T2", "--force")
+    verify(repo, "T2", reopen=True)  # a later reopen of T2
+    assert _item(repo, "T2").state == "open"
+    assert LG.build(EventLog(repo).read_all(), "T1") is not None
+    assert verify(repo, "T1").data["verdict"] == "does not hold"
