@@ -997,6 +997,8 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     overrides = P.overrides_from(cfg)
     tick_s = min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s))
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
+    if it is not None:
+        log.append("gate.started", item, {"gate": gate})
     results = []
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
