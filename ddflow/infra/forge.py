@@ -73,6 +73,9 @@ class PRInfo:
     #: False when the queue could not be ASKED (rate limit, network, auth): "not queued"
     #: would then be a guess, and a guess that reads as an ejection is worse than none.
     queue_known: bool = True
+    #: How many commits the request carries (0 when the forge does not say). A rebase-merge
+    #: lands exactly this many on the base; a squash or a merge commit lands one (B178).
+    commits: int = 0
 
     def event_data(self, forge: str) -> dict[str, Any]:
         return {
@@ -180,7 +183,7 @@ class Forge:
 
 _GH_FIELDS = (
     "number,url,state,isDraft,reviewDecision,statusCheckRollup,baseRefName,"
-    "headRefName,headRefOid,mergeCommit,latestReviews"
+    "headRefName,headRefOid,mergeCommit,latestReviews,commits"
 )
 _GH_FAILED = {"FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
 _GH_OK = {"SUCCESS", "NEUTRAL", "SKIPPED"}
@@ -284,6 +287,7 @@ class GitHub(Forge):
             draft=bool(d.get("isDraft")),
             feedback=_clip(feedback),
             review_sha=review_sha,
+            commits=len(d.get("commits") or []),
         )
 
     def find(self, head: str) -> PRInfo | None:
