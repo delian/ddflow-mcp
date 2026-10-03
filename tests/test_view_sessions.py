@@ -167,6 +167,14 @@ def test_show_unknown_id_refused_with_near_matches(repo):
 
 def test_works_with_export_sessions_disabled(repo):
     _fixture(repo)
+    # Nothing enabled the sessions export: no export event, no generated document.
+    kinds = {
+        json.loads(ln)["kind"]
+        for shard in (repo / ".ddflow" / "events").glob("*.jsonl")
+        for ln in shard.read_text().splitlines()
+    }
+    assert not any(k.startswith("export.") for k in kinds)
+    assert not list(repo.rglob("SESSIONS.md"))
     code, out, _ = run_cli(repo, "session", "show", "S-old")
     assert code == 0 and "first ask" in out
 
@@ -177,3 +185,26 @@ def test_unattached_orphans_are_not_a_session(repo):
     code, out, _ = run_cli(repo, "session", "list")
     assert code == 2
     assert "adopt-orphans" in out
+
+
+def test_an_event_with_null_data_does_not_break_the_viewer(repo):
+    _fixture(repo)
+    with _shard(repo, "alice").open("a") as f:
+        f.write(
+            json.dumps(
+                {
+                    "agent": "alice",
+                    "data": None,
+                    "id": "evnull",
+                    "kind": "lease.released",
+                    "lamport": 9999,
+                    "schema": 1,
+                    "subject": "T1",
+                    "ts": "2026-10-02T12:00:00Z",
+                }
+            )
+            + "\n"
+        )
+    code, out, err = run_cli(repo, "--json", "session", "list")
+    assert code == 0, err
+    assert len(json.loads(out)) == 2
