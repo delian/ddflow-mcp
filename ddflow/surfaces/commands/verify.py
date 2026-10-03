@@ -72,6 +72,11 @@ def _sweep(a, c: Ctx) -> int:
 
 def cmd_verify(a, c: Ctx) -> int:
     if a.id:
+        if a.file_bugs or a.all or a.phase:
+            print(
+                "--all, --phase and --file-bugs are for a sweep, not a single task", file=sys.stderr
+            )
+            return FAIL
         return _one(a, c)
     if a.all or a.phase:
         return _sweep(a, c)
