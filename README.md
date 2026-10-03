@@ -2710,6 +2710,10 @@ port_strategy = "cherry-pick"      # or "forward-merge" (the default)
   | `forward-merge` (default) | the **oldest** line | merges the previous line's branch into its own (and passes through every line in between — a merge cannot skip one) | one after another |
   | `cherry-pick` | the **newest** line | applies exactly what the fix landed (the target's before→after range, whatever the merge strategy) with a three-way apply | in parallel |
 
+  A port carries what its fix *landed*. A follow-up fix to the same bug is a new item:
+  `task add FIX2 --port-of FIX` gives it the lines FIX reached (naming one of FIX's ports
+  works too), so FIX2's own ports carry what FIX2 lands.
+
 * **A conflicting port is work, not a failure.** The claim leaves the conflict markers
   in the port's tree and names the files; the agent resolves, commits and carries on.
 * **Lines never collide.** The same file on 2.x and on 3.x is two branches, so two agents
@@ -3840,6 +3844,7 @@ ddflow version show            current and next version, why, release notes (2 =
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
 ddflow version cut --changelog  also write the version's CHANGELOG.md section (--force over a hand-edited file)
 ddflow version show|cut --line L    the same, for a maintenance line (keeps its major)
+ddflow task add <id> --port-of FIX  a follow-up to FIX: takes the lines FIX reached
 ddflow task add <id> --lines 1,2,3  a fix for several release lines: ports generated
 ddflow promote add <env>        file a promotion one step downstream (2 = nothing to carry)
 ddflow promote status           each environment: head, behind upstream, open promotion
