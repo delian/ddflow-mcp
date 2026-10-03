@@ -29,19 +29,26 @@ def workflow_state(repo: Path, agent: str = "") -> O.Outcome:
     project_summary = _gather_project_summary(st)
     queue_state = _gather_queue_state(st, log)
     blockers = _gather_blockers(st)
+    task_queue_detail = _gather_task_queue_detail(st)
+    bugs_detail = _gather_bugs_detail(st)
+    workflow_diagram = _generate_workflow_diagram(cfg, st)
 
     overview = {
         "workflow": workflow_config,
+        "workflow_diagram": workflow_diagram,
         "rules": rules_summary,
         "decisions": decisions,
         "active_work": active_work,
         "project": project_summary,
         "queue": queue_state,
+        "task_queue": task_queue_detail,
+        "bugs": bugs_detail,
         "blockers": blockers,
         "discovery_hints": [
             "Ask: 'show rules affecting task X'",
             "Ask: 'list decisions about Y'",
             "Ask: 'what's blocking phase Z'",
+            "Ask: 'show workflow diagram'",
             "Command: `ddflow brief` for current queue",
             "Command: `ddflow workflow` to manage flows",
         ],
@@ -178,3 +185,107 @@ def _gather_blockers(st) -> dict:
         "count": len(blockers_list),
         "list": blockers_list[:3],
     }
+
+
+def _gather_task_queue_detail(st) -> dict:
+    """Gather detailed task queue with names, priorities, and dependencies."""
+    ready_tasks = []
+    blocked_tasks = []
+    in_progress_tasks = []
+
+    if hasattr(st, "items"):
+        for item in st.items.values():
+            if not hasattr(item, "kind") or item.kind != "task":
+                continue
+
+            task_info = {
+                "id": getattr(item, "id", ""),
+                "title": getattr(item, "title", ""),
+                "phase": getattr(item, "phase", ""),
+                "priority": getattr(item, "priority", 50),
+                "state": getattr(item, "state", "unknown"),
+            }
+
+            state = getattr(item, "state", "unknown")
+            if state == "in_progress":
+                in_progress_tasks.append(task_info)
+            elif state == "open" and not hasattr(item, "needs"):
+                ready_tasks.append(task_info)
+            elif state == "open" and hasattr(item, "needs"):
+                task_info["blocked_by"] = item.needs
+                blocked_tasks.append(task_info)
+
+    # Sort by priority (higher first)
+    ready_tasks.sort(key=lambda t: -t["priority"])
+    blocked_tasks.sort(key=lambda t: -t["priority"])
+    in_progress_tasks.sort(key=lambda t: -t["priority"])
+
+    return {
+        "ready": ready_tasks[:10],
+        "in_progress": in_progress_tasks[:10],
+        "blocked": blocked_tasks[:5],
+    }
+
+
+def _gather_bugs_detail(st) -> dict:
+    """Gather detailed bug list with priorities and status."""
+    open_bugs = []
+    in_progress_bugs = []
+
+    if hasattr(st, "items"):
+        for item in st.items.values():
+            if not hasattr(item, "kind") or item.kind != "bug":
+                continue
+
+            bug_info = {
+                "id": getattr(item, "id", ""),
+                "subject": getattr(item, "subject", ""),
+                "priority": getattr(item, "priority", 50),
+                "state": getattr(item, "state", "unknown"),
+                "fix_task": getattr(item, "fix_task", None),
+            }
+
+            state = getattr(item, "state", "unknown")
+            if state == "in_progress":
+                in_progress_bugs.append(bug_info)
+            elif state == "open":
+                open_bugs.append(bug_info)
+
+    # Sort by priority (higher first)
+    open_bugs.sort(key=lambda b: -b["priority"])
+    in_progress_bugs.sort(key=lambda b: -b["priority"])
+
+    return {
+        "open": open_bugs[:5],
+        "in_progress": in_progress_bugs[:3],
+        "total_open": len(open_bugs),
+    }
+
+
+def _generate_workflow_diagram(cfg, st) -> str:
+    """Generate Mermaid state machine diagram of workflow configuration."""
+    diagram_lines = [
+        "graph LR",
+        "    Start([Start Task]) --> Validate{Ready?}",
+        "    Validate -->|No| Waiting[Waiting for deps]",
+        "    Waiting -->|Yes| Validate",
+    ]
+
+    # Add gates from workflow config
+    if hasattr(cfg, "flow") and hasattr(cfg.flow, "task_pipeline"):
+        pipeline = getattr(cfg.flow, "task_pipeline", [])
+        prev_state = "Validate"
+        for i, gate in enumerate(pipeline if isinstance(pipeline, list) else []):
+            gate_id = str(gate) if gate else f"Gate{i}"
+            gate_state = gate_id.replace("-", "_").replace(" ", "_")
+            diagram_lines.append(f"    {prev_state} --> {gate_state}[{gate_id}]")
+            prev_state = gate_state
+
+    diagram_lines.append(f"    {prev_state} --> Done([Complete])")
+
+    # Add completion rules
+    diagram_lines.append("    Done --> Release[Release item]")
+    diagram_lines.append("    Release --> Archive([Archived])")
+
+    return "\n".join(diagram_lines)
+

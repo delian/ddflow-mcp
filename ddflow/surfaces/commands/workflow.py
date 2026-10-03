@@ -214,7 +214,7 @@ def _workflow_state(a, c: Ctx) -> int:
         print(json.dumps(out.data, indent=2, default=str))
         return out.exit
 
-    # Render prose overview
+    # Render comprehensive prose overview
     overview = out.data.get("overview", {})
     lines = [
         "# Workflow State Overview",
@@ -222,6 +222,9 @@ def _workflow_state(a, c: Ctx) -> int:
         "## Configuration",
         f"- Flow type: {overview.get('workflow', {}).get('type')}",
         f"- Max parallel: {overview.get('workflow', {}).get('max_parallel_tasks')}",
+        "",
+        "## Workflow State Machine",
+        overview.get('workflow_diagram', '(unavailable)'),
         "",
         "## Rules",
         f"- Total: {overview.get('rules', {}).get('total', 0)}",
@@ -239,14 +242,77 @@ def _workflow_state(a, c: Ctx) -> int:
         f"- Tasks: {overview.get('project', {}).get('tasks', {})}",
         f"- Open bugs: {overview.get('project', {}).get('bugs_open', 0)}",
         "",
-        "## Queue",
-        f"- Ready: {overview.get('queue', {}).get('ready_count', 0)}",
-        f"- Blocked: {overview.get('queue', {}).get('blocked_count', 0)}",
+    ]
+
+    # Task queue with details
+    task_queue = overview.get("task_queue", {})
+    lines.extend([
+        "## Task Queue",
+        f"### Ready ({len(task_queue.get('ready', []))})",
+    ])
+    for task in task_queue.get("ready", []):
+        lines.append(
+            f"  - {task['id']}: {task['title']} "
+            f"[priority: {task['priority']}, phase: {task['phase']}]"
+        )
+    if not task_queue.get("ready"):
+        lines.append("  (no ready tasks)")
+
+    lines.append(f"### In Progress ({len(task_queue.get('in_progress', []))})")
+    for task in task_queue.get("in_progress", []):
+        lines.append(
+            f"  - {task['id']}: {task['title']} "
+            f"[priority: {task['priority']}, phase: {task['phase']}]"
+        )
+    if not task_queue.get("in_progress"):
+        lines.append("  (no tasks in progress)")
+
+    lines.append(f"### Blocked ({len(task_queue.get('blocked', []))})")
+    for task in task_queue.get("blocked", []):
+        blocked_by = task.get("blocked_by", "unknown")
+        lines.append(
+            f"  - {task['id']}: {task['title']} "
+            f"[blocked by: {blocked_by}, priority: {task['priority']}]"
+        )
+    if not task_queue.get("blocked"):
+        lines.append("  (no blocked tasks)")
+
+    lines.append("")
+
+    # Bugs with priorities
+    bugs = overview.get("bugs", {})
+    lines.extend([
+        "## Open Bugs",
+        f"Total open: {bugs.get('total_open', 0)}",
+        f"### Next to Fix ({len(bugs.get('open', []))})",
+    ])
+    for bug in bugs.get("open", []):
+        fix_info = f" [fix task: {bug['fix_task']}]" if bug.get("fix_task") else " [no fix task]"
+        lines.append(
+            f"  - {bug['id']}: {bug['subject']} "
+            f"[priority: {bug['priority']}]{fix_info}"
+        )
+    if not bugs.get("open"):
+        lines.append("  (no open bugs)")
+
+    lines.append(f"### In Progress ({len(bugs.get('in_progress', []))})")
+    for bug in bugs.get("in_progress", []):
+        lines.append(
+            f"  - {bug['id']}: {bug['subject']} "
+            f"[priority: {bug['priority']}, fix task: {bug.get('fix_task', 'N/A')}]"
+        )
+
+    lines.extend([
+        "",
+        "## Blockers",
+        f"- Count: {overview.get('blockers', {}).get('count', 0)}",
+    ])
+
+    lines.extend([
         "",
         "## Discovery",
         "Ask for more details:",
-    ]
-
+    ])
     for hint in overview.get("discovery_hints", []):
         lines.append(f"  - {hint}")
 
