@@ -236,4 +236,4 @@ def test_reading_another_repositorys_log_writes_nothing_there(repo: Path, monkey
     L.EventLog(repo, "someone").append("task.added", "X1", {"title": "t"})
     L._AGENT_ID_CACHE.clear()
     L.EventLog(repo).read_all()
-    assert not (repo / ".ddflow" / "local" / "clone-id").exists()
+    assert not (repo / ".ddflow" / "local").exists()
