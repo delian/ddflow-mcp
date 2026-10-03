@@ -39,6 +39,7 @@ from .commands.config import (  # noqa: F401  -- moved out of this module
     _write_config,
 )
 from .commands.decisions import cmd_decision
+from .commands.bisect import add_bisect_parser
 from .commands.export import add_export_parser
 from .commands.flow import cmd_flow, cmd_pr, cmd_promote, cmd_version
 from .commands.gates import cmd_gate
@@ -1198,6 +1199,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     cf.set_defaults(fn=cmd_config)
 
     add_export_parser(s)
+    add_bisect_parser(s)
 
     cd = s.add_parser("cadence", help="which periodic passes are due (exit 2 = none)")
     cd.add_argument("--ran", default="")

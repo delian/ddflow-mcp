@@ -120,7 +120,10 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "verify",
         ),
     ),
-    ("When something is wrong", ("doctor", "recover", "loops", "rebuild", "replay", "cadence")),
+    (
+        "When something is wrong",
+        ("doctor", "recover", "loops", "rebuild", "replay", "cadence", "bisect"),
+    ),
     ("Help", ("help",)),
 )
 
