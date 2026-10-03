@@ -160,6 +160,8 @@ the same implementation, so neither drifts from the other.
 | I want to… | CLI | MCP tool |
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
+| **one-page state of the project** | `ddflow workflow state` | `ddflow_workflow_state` |
+| **project rules** | `ddflow rule add\|edit\|list\|search\|show\|remove` | `ddflow_rule_add` · `_edit` · `_list` · `_search` · `_show` · `_remove` |
 | **change the workflow** | `ddflow workflow pipeline task …` · `workflow gate <id> …` · `workflow drop <id>` | `ddflow_workflow_pipeline` · `_gate` · `_drop` |
 | **change any setting** | `ddflow config --explain` · `--set <key> <value>` | `ddflow_configure` |
 | **add a phase / a task** | `ddflow phase add P1 --title …` · `ddflow task add P1.T1 --phase P1 --globs 'src/**'` | `ddflow_phase_add` · `ddflow_task_add` |

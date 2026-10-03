@@ -442,6 +442,10 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
         "--globs",
         "a.py",
     )
+    # A rule with an explicit id, so the rule tools have a row to compare, not two empties.
+    run_cli(
+        repo, "rule", "add", "--id", "r-test", "--title", "Test rule", "--content", "test content"
+    )
     # A fixed probe result for every companion, so neither surface shells out to detect
     # one. Each probe runs the real tool (npx, docker, ...) with a timeout, and two live
     # probes need not agree: under load one times out (`unknown`) while the other
