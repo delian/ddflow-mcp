@@ -489,3 +489,23 @@ def test_port_of_refuses_an_unknown_item_and_a_clash_with_lines(lined):
     run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
     code, _, err = run_cli(repo, "task", "add", "Y", "--port-of", "FIX", "--lines", "2")
     assert code != 0 and "--lines" in err, err
+
+
+def test_port_of_is_reachable_over_mcp(lined):
+    from ddflow.surfaces.mcp import Server
+
+    repo = lined
+    run_cli(repo, "task", "add", "FIX", "--lines", "1,3", "--globs", "lib.py")
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_task_add",
+                "arguments": {"id": "FIX2", "port_of": "FIX", "globs": "extra.py"},
+            },
+        }
+    )
+    assert not reply["result"].get("isError"), reply
+    assert "FIX2@3" in reply["result"]["content"][0]["text"], reply
