@@ -171,6 +171,7 @@ the same implementation, so neither drifts from the other.
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
+| **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | (not yet) |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
 | **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | not yet exposed |
@@ -3169,6 +3170,31 @@ as an unknown `--phase`. `research list` is the optional-verb form of `research`
 `research add`. These commands have no MCP tool yet: the one consolidated read tool
 for them is the next task of the viewers phase.
 
+### Searching everything
+
+`ddflow search "<text>"` looks across tasks, phases, bugs, research, decisions, lessons,
+sessions (notes and end summaries), prompts (what the operator said) and the log (the
+payload text of the events no record source already holds). Read-only; it writes nothing.
+
+```sh
+ddflow search "worktree cleanup"                 # ranked: the same TF-IDF engine `similar` uses
+ddflow search "B-mcp" --exact                    # case-insensitive substring
+ddflow search 'lease\.(expired|released)' --regex --kind log --since 2026-10-01
+ddflow search retry --kind bug,research --state open --phase P2 --owner alice --limit 10 --json
+```
+
+One line per hit: source, id, state, date, and a snippet around the match. A prompt, note
+or summary hit carries its session id. Filters are `--kind` (comma list of the sources
+above), `--state`, `--phase` (tasks, bugs and research under it), `--owner` (the
+leaseholder, session agent or event agent; not `--agent`, which is who you are), `--since`
+and `--limit` (default 20, at most 200). Snippets are cut from text already redacted like
+the exports, so a secret in a prompt is never printed and cannot be searched for. `--regex`
+refuses patterns that can take exponential time (a variable-length repeat inside a repeat (unless the two together run at most 8 times), an
+alternation inside a repeat that can run over 8 times, back-references, more than two unbounded repeats, over 200
+characters) and looks at the first 2000 characters of each record under a 5 second budget.
+Exit codes: 0 hits, 2 none ("No matches ..."), 3 a refused request. No MCP tool yet: it joins
+the consolidated read tool of the viewers phase; agents use `ddflow_recall` meanwhile.
+
 ---
 
 ## Cadences
@@ -3731,6 +3757,7 @@ ddflow task|phase|bug|research list   one line per record, filters, --json (2 = 
 ddflow session start|prompt|note|end     provenance logging (prompt/note: id optional)
 ddflow session adopt-orphans             attach id-less prompts/notes to a session
 ddflow session list|show <id>            read sessions back (newest first; --state --owner --since --limit)
+ddflow search "<text>" [--exact|--regex]  search every record, session, prompt and the log (2 = no match)
 ddflow replay [--out DIR] [--verify]     reconstruct from the log
 
 ddflow recover [--apply]        find crashed agents' work   (2 = nothing)
