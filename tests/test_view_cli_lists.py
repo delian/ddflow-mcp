@@ -94,3 +94,12 @@ def test_a_filter_the_kind_cannot_honour_is_not_offered(proj):
 def test_help_names_the_filters(proj, kind):
     code, out, _ = run_cli(proj, kind, "list", "--help")
     assert code == 0 and "--limit" in out and "--since" in out
+
+
+def test_research_add_verb_form_records_and_an_empty_value_counts_as_given(proj):
+    argv = ("research", "add", "--id", "R3", "--question", "q3", "--verdict", "THEORETICAL")
+    assert run_cli(proj, *argv)[0] == 0
+    assert "R3" in run_cli(proj, "research", "list")[1]
+    # `--question ""` was GIVEN: whatever refuses it, it is not "required arguments".
+    _, _, err = run_cli(proj, "research", "--question", "", "--verdict", "THEORETICAL")
+    assert "required" not in err
