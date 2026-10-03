@@ -968,7 +968,10 @@ class EventLog:
         # eight agents would hold eight times the promised bound.
         held = _cached_events() - len(cached.events if cached is not None else ())
         parsed: _Parsed | None = None
-        if self.log_cfg.reuse_parsed and held + prior + len(fresh) <= self.log_cfg.max_cached_events:
+        if (
+            self.log_cfg.reuse_parsed
+            and held + prior + len(fresh) <= self.log_cfg.max_cached_events
+        ):
             if hasher is None:
                 digest = _digest(data[: start + cut])
             else:
