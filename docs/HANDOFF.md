@@ -74,7 +74,7 @@ git hooks: add `ddflow hooks check-commit` / `check-msg "$1"` as local hooks the
 **Dogfooding (B7) was evaluated, not done** *(superseded: DONE 2026-09-28, commits 6be308a7 and fec4106c; this paragraph is the state when this file was written)*: in a throwaway copy, `adopt` + the MCP
 surface work; `docs/BACKLOG.md` has no checkboxes, so it imports nothing until converted
 (~30 lines of conversion gave 23 open tasks, matching its audit). Seven defects that run
-found are fixed on this branch (`afd9755`). Still B7's operator decision (§8).
+found are fixed on this branch (`afd9755`). (That was B7's operator decision; it was then taken and carried out.)
 
 ---
 
@@ -82,13 +82,13 @@ found are fixed on this branch (`afd9755`). Still B7's operator decision (§8).
 
 | # | File | Why |
 |---|---|---|
-| 1 | *(none yet)* | **This repo has no `AGENTS.md` or `CLAUDE.md`** — adopting ddflow into itself is B7, an operator decision (§8). Earlier versions of this file said to read them |
+| 1 | `CLAUDE.md` / `AGENTS.md` | Added 2026-09-28 when ddflow was adopted into itself (B7): they carry ddflow's managed driver block, not the house rules below. Start with `ddflow brief` |
 | 2 | `docs/BACKLOG.md` | 170 entries, with `✅ CLOSED` markers. The **top** section is a 2026-09-27 audit |
 | 3 | `docs/RESEARCH.md` | R15 is the agent-config research; §R-log covers the event log |
 | 4 | `docs/ARCHITECTURE.md` | the layering the AST test enforces |
 | 5 | `README.md` | the user-facing surface. It has ratchets pointing at it — see §4 |
 
-**The house rules that are not negotiable** (they live HERE, since there is no `CLAUDE.md`;
+**The house rules that are not negotiable** (they live HERE; `CLAUDE.md` holds only ddflow's managed block;
 every one of them caught a real defect — see §6):
 
 * **No source change without a runnable probe that fails before the fix and passes after.**
