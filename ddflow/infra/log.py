@@ -20,6 +20,7 @@ import contextlib
 import fcntl
 import getpass
 import hashlib
+import itertools
 import json
 import marshal
 import os
@@ -1252,10 +1253,21 @@ class EventLog:
                     return None
                 base.extend(d.whole[:count])
                 marks[p] = (d.parsed.gen, count)
-            if order and (min(order) < 0 or max(order) >= len(base)):
+            if len(set(order)) != len(order) or (
+                order and (min(order) < 0 or max(order) >= len(base))
+            ):
                 return None
             uniq = [base[i] for i in order]
-            return _Merged(marks, uniq, {e.id or e.compute_id() for e in uniq})
+            seen = {e.id or e.compute_id() for e in uniq}
+            # The order is the one datum the shard hashes do not cover, so check it is what
+            # a sort + de-dupe would have made: it holds exactly the distinct events of
+            # these shards, and it is in key order.
+            if seen != {e.id or e.compute_id() for e in base}:
+                return None
+            keys = [e.sort_key() for e in uniq]
+            if any(a >= b for a, b in itertools.pairwise(keys)):
+                return None
+            return _Merged(marks, uniq, seen)
         except Exception:
             return None
 
@@ -1269,6 +1281,8 @@ class EventLog:
         old behaviour exactly.
         """
         m = _MERGED.get(self.dir)
+        if m is not None:
+            _SNAP_ORDER.pop(self.dir, None)  # superseded: never adopt it later
         if m is None:
             m = self._merged_from_snapshot(deltas)
             if m is not None:
