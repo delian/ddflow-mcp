@@ -73,3 +73,9 @@ def test_multiline_frontmatter_gives_name_and_description(tmp_path):
     mig = next(x for x in e if x.name == "db-migrations")
     assert mig.description == "Write and review database schema migrations"
     assert "---" not in mig.line()
+
+
+def test_agents_md_frontmatter_is_not_the_description(tmp_path):
+    (tmp_path / "AGENTS.md").write_text("---\ndescription: project conventions\n---\n# Agents\nx\n")
+    (e,) = SK.inventory(tmp_path)
+    assert e.description == "project conventions"
