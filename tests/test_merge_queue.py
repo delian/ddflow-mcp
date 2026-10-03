@@ -152,4 +152,5 @@ def test_an_unaskable_queue_never_triggers_a_merge(pr_repo, monkeypatch):
 
     out = api.pr_sync(repo)
     assert out.data["waiting"], out.data
+    assert "merge queue could not be read" in out.data["waiting"][0]["note"], out.data["waiting"]
     assert not _forge.calls("pr", "merge"), "merged a request whose queue state is unknown"

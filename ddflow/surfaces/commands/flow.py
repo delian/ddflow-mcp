@@ -52,6 +52,7 @@ def cmd_pr(a, c: Ctx) -> int:
     for w in out.data["waiting"]:
         print(
             f"  {w['id']}: waiting (review={w['review'] or '-'}, checks={w['checks'] or '-'}) {w['url']}"
+            + (f"  -- {w['note']}" if w.get("note") else "")
         )
     for u in out.data["unavailable"]:
         print(f"UNAVAILABLE: {u}", file=sys.stderr)
