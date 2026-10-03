@@ -127,3 +127,16 @@ def test_the_mcp_tool_refuses_sweep_arguments_given_with_an_id(repo):
     )  # fmt: skip
     text = reply["result"]["content"][0]["text"]
     assert "for a sweep" in text and "T-GOOD: " not in text
+
+
+def test_default_valued_sweep_arguments_with_an_id_are_not_a_refusal(repo):
+    from ddflow.surfaces.mcp import Server
+
+    _project(repo)
+    reply = Server(repo).handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "ddflow_verify",
+                    "arguments": {"id": "T-GOOD", "phase": "", "limit": 0, "file_bugs": False}}}
+    )  # fmt: skip
+    text = reply["result"]["content"][0]["text"]
+    assert "for a sweep" not in text and "T-GOOD" in text
