@@ -14,6 +14,7 @@ import sys
 
 from ...api import knowledge as A
 from ...core import provenance as PV
+from ...core.events import OLDER_MARK
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 
@@ -470,7 +471,15 @@ def _history_line(ev) -> str:
         detail = f"by {d.get('holder', '?')}"
     elif ev.kind == "item.completed" and d.get("sha"):
         detail = f"as {d['sha'][:8]}"
+    elif ev.kind == "ddflow.seen":
+        detail = f"{d.get('version', '?')} ({d.get('install', '?')})"
+    elif ev.kind == "skew.overridden":
+        detail = (
+            f"{d.get('running', '?')} on a {d.get('log_version', '?')} log: {d.get('reason', '')}"
+        )
     detail = " ".join(str(detail).split())[:88]
+    if d.get(OLDER_MARK):  # after the cut: the mark is the part that must never be lost
+        detail = f"{detail} [older ddflow {d[OLDER_MARK]}]"
     return (
         f"  {ev.ts[:16].replace('T', ' ')}  {ev.agent:<14.14s} "
         f"{ev.subject:<22.22s} {verb:<22s} {detail}"

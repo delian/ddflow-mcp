@@ -8,6 +8,7 @@ from typing import Any
 
 from ..config import Config
 from ..core import outcome as O
+from ..core.events import version_key
 from ..core.model import fold
 from ..core.plain import plain
 from ..core.tier import unknown_tier_notes
@@ -173,6 +174,12 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
     }
     if st.skipped_kinds:
         data["skipped_kinds"] = dict(st.skipped_kinds)
+    if st.highest_version:
+        # Which ddflow versions have worked on this log, and the highest (the version stamp).
+        data["ddflow_version"] = {
+            "highest": st.highest_version,
+            "seen": sorted(st.ddflow_versions, key=lambda v: (version_key(v), v)),
+        }
     if not full:
         _bound(data)
     # Carried for the prose view, which needs the OBJECTS (`completed_at` to sort by, the
@@ -650,11 +657,12 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     # below is computed WITHOUT them. A note, as an unknown config knob is named but the
     # old code keeps working -- the remedy is the same: bring in the newer ddflow.
     if st.skipped_kinds:
-        kinds = ", ".join(f"{k} x{n}" for k, n in sorted(st.skipped_kinds.items()))
-        notes.append(
-            f"this log has events from a newer ddflow than this checkout runs, skipped: "
-            f"{kinds} (merge main, or run the newer ddflow)"
-        )
+        from ..services import upgrade as UP
+
+        notes.append(UP.skipped_kinds_advice(st))
+    from ..services import upgrade as UP
+
+    notes.extend(UP.doctor_notes(st))
 
     p = plan(st, cfg, agent=log.agent_id)
     problems += ["dependency cycle: " + " -> ".join(cyc) for cyc in p.cycles]

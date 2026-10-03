@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
+from ..core.events import OLDER_MARK
 from ..core.model import ADD_RELATIONS, State, link_targets
 from ..infra.log import PROVENANCE_KINDS, Event, EventLog
 
@@ -310,6 +311,9 @@ class ReplayStep:
     item: str = ""
     verdict: str = ""
     sha: str = ""
+    #: The version of the OLDER ddflow that wrote this event under a skew override ("" when
+    #: it was not), so a reconstruction says which steps came from a stale tool.
+    older: str = ""
 
 
 def replay(events: list[Event], *, include_outcomes: bool = True) -> list[ReplayStep]:
@@ -335,8 +339,20 @@ def replay(events: list[Event], *, include_outcomes: bool = True) -> list[Replay
         n += 1
         step = _REPLAY_RENDERERS.get(ev.kind, lambda _n, _e: None)(n, ev)
         if step is not None:
+            step.older = str(ev.data.get(OLDER_MARK, ""))
             steps.append(step)
     return steps
+
+
+def _rs_skew_overridden(n, ev):
+    d = ev.data
+    return ReplayStep(
+        n,
+        ev.ts,
+        "session",
+        f"The operator let ddflow {d.get('running', '?')} write to a log ddflow "
+        f"{d.get('log_version', '?')} has worked on (skew override): {d.get('reason', '')}",
+    )
 
 
 def _rs_prompt(n, ev):
@@ -490,6 +506,7 @@ _REPLAY_RENDERERS = {
     "item.resolved": _rs_resolved,
     "record.extended": _rs_extended,
     "link.recorded": _rs_link,
+    "skew.overridden": _rs_skew_overridden,
 }
 
 
@@ -546,6 +563,8 @@ def render_reconstruction(state: State, steps: list[ReplayStep], *, project: str
         A(head)
         if s.verdict:
             A(f"**Verdict: {s.verdict}**")
+        if s.older:
+            A(f"_written by an older ddflow ({s.older}) under a skew override_")
         if s.sha:
             A(f"_original commit `{s.sha}` (verification anchor; a rebuild will differ)_")
         A("")

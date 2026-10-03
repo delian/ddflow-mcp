@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -81,8 +83,138 @@ PROVENANCE_KINDS: frozenset[str] = frozenset(
         "export.enabled",
         "export.disabled",
         "export.acknowledged",
+        # D-upgrade-skew-guard: the operator let an OLDER ddflow write to a newer log, and
+        # why. An override a compaction dropped would leave the marked events unexplained.
+        "skew.overridden",
     }
 )
+
+
+#: The version stamp (decisions D-upgrade-event-kinds, D-upgrade-skew-guard). `ddflow.seen`
+#: says which ddflow version has worked on this log; `skew.overridden` records that an OLDER
+#: one was let write anyway; `upgrade.applied` records an applied upgrade. An older ddflow
+#: skips all three with a note (the fold is non-strict), so they never break a reader.
+SEEN_KIND = "ddflow.seen"
+SKEW_OVERRIDDEN_KIND = "skew.overridden"
+UPGRADE_APPLIED_KIND = "upgrade.applied"
+#: The key a session-scoped skew override adds to the `data` of every event written under it:
+#: the version of the (older) ddflow that wrote it. Shown by history, replay and doctor.
+OLDER_MARK = "older_ddflow"
+
+_PRE_RANK = {"dev": 0, "a": 1, "alpha": 1, "b": 2, "beta": 2, "c": 3, "rc": 3, "pre": 3}
+_VERSION_PARTS = re.compile(r"^\s*v?(\d+(?:\.\d+)*)(.*)$", re.DOTALL)
+
+
+def version_key(version: str) -> tuple:
+    """A release version as something comparable: `0.1.10` sorts above `0.1.9`, `0.2` equals
+    `0.2.0`, and a pre-release (`0.2.0rc1`, `0.2.0.dev3`) sorts below its release. A version
+    that does not start with digits is `()`, which sorts lowest and is never "older" (see
+    `is_older`)."""
+    m = _VERSION_PARTS.match(version if isinstance(version, str) else "")
+    if not m:
+        return ()
+    nums = [int(p) for p in m.group(1).split(".")]
+    while len(nums) > 1 and nums[-1] == 0:
+        nums.pop()
+    rest = m.group(2).strip()
+    if not rest:
+        return (tuple(nums), (1,))
+    # dev < alpha < beta < rc, then the number after the tag: `0.2.0.dev3` < `0.2.0a1` < `0.2.0rc1`.
+    tag = re.match(r"[.\-_]*([A-Za-z]*)[.\-_]*(\d*)", rest)
+    assert tag is not None  # every group is optional: it matches the empty string
+    rank = _PRE_RANK.get(tag.group(1).lower(), 0)
+    return (tuple(nums), (0, rank, int(tag.group(2) or 0)))
+
+
+def is_older(version: str, than: str) -> bool:
+    """True when `version` is a strictly older release than `than`. False when either is
+    not a parsable version: an unknown version is never a reason to refuse a write."""
+    a, b = version_key(version), version_key(than)
+    return bool(a and b and a < b)
+
+
+class SkewRefused(Exception):
+    """An OLDER ddflow was asked to write to a log a newer one has worked on (exit 3).
+    Carries the remedy in its message; not an error in the caller's arguments."""
+
+
+@dataclass(frozen=True)
+class StampFacts:
+    """What the log says about version skew, for one (agent, running version)."""
+
+    #: The highest version any `ddflow.seen` stamp carries, "" when the log has none.
+    highest: str = ""
+    #: Who stamped it.
+    highest_by: str = ""
+    #: This agent has already stamped THIS running version.
+    seen_by_me: bool = False
+    #: An override of this agent's open session that covers this running version and the
+    #: log's current highest stamp, or None.
+    override: Event | None = None
+    #: The agent's open session ("" when it has none).
+    session: str = ""
+    #: The running version is OLDER than the log's highest stamp.
+    skewed: bool = False
+
+
+def _open_session(started: dict[str, tuple[int, str]], ended: set[str]) -> str:
+    live = [(pos, sid) for sid, pos in started.items() if sid not in ended]
+    return max(live)[1] if live else ""
+
+
+def stamp_facts(events: Iterable[Event], agent: str, version: str) -> StampFacts:
+    """Fold the stamp kinds out of `events` (any order). One pass, pure.
+
+    A session-scoped override is one this agent wrote for the session it currently has OPEN
+    (the latest `session.started` of its own with no later `session.ended`; "" when it has
+    none, in which case it lasts until the agent next opens or ends one), for this running
+    version, against the log's current highest stamp. A new session
+    -- or a newer stamp -- is therefore refused again, which is the point of "session-scoped,
+    not per command"."""
+    highest, highest_by, seen_by_me = "", "", False
+    started: dict[str, tuple[int, str]] = {}
+    ended: set[str] = set()
+    overrides: list[Event] = []
+    last_session_event = 0
+    for e in events:
+        k = e.kind
+        if e.agent == agent and k in ("session.started", "session.ended"):
+            last_session_event = max(last_session_event, e.lamport)
+        if k == SEEN_KIND:
+            v = e.data.get("version")
+            if not isinstance(v, str) or not version_key(v):
+                continue  # a stamp that names no version says nothing about skew
+            # (key, text): two spellings of one version resolve the same way in any order.
+            if (version_key(v), v) > (version_key(highest), highest):
+                highest, highest_by = v, e.agent
+            if e.agent == agent and v == version:
+                seen_by_me = True
+        elif k == "session.started" and e.agent == agent:
+            started[e.subject] = max(started.get(e.subject, (0, "")), (e.lamport, e.id))
+        elif k == "session.ended":
+            ended.add(e.subject)
+        elif k == SKEW_OVERRIDDEN_KIND and e.agent == agent:
+            overrides.append(e)
+    session = _open_session(started, ended)
+    override = None
+    for e in sorted(overrides, key=Event.sort_key):
+        d = e.data
+        if (
+            d.get("session", "") == session
+            and d.get("running") == version
+            and d.get("log_version") == highest
+            # An override made with no session open ends when the agent opens or ends one.
+            and (session or e.lamport > last_session_event)
+        ):
+            override = e
+    return StampFacts(
+        highest,
+        highest_by,
+        seen_by_me,
+        override,
+        session=session,
+        skewed=bool(highest) and is_older(version, highest),
+    )
 
 
 def utcnow() -> str:
