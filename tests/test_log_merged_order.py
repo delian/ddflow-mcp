@@ -137,7 +137,8 @@ def _bench(repo, n: int) -> tuple[float, float]:
     _put(log, "a", [_ev("a", i) for i in range(1, n // 2 + 1)])
     _put(log, "b", [_ev("b", i) for i in range(1, n // 2 + 1)])
     log.read_all()  # warm
-    flat = log.read_all()
+    # What the old read sorted: the raw per-shard concatenation, not the sorted output.
+    flat = [e for p in log.shards() for e in log._read_shard(p)[0]]
     old, new = [], []
     for k in range(5):
         t = time.perf_counter()
@@ -155,6 +156,21 @@ def test_the_warm_read_is_cheaper_than_re_sorting_and_does_not_scale_with_sort(r
     old, new = _bench(repo, 20_000)
     print(f"20k events: sort+dedupe {old:.1f} ms, warm read {new:.1f} ms")
     assert new < old, (old, new)
+
+
+def test_distinct_events_never_tie_on_sort_key(repo):
+    """Reviewer claim refuted: the key ends in the content id, so two DISTINCT events can
+    never tie, and an equal key means a duplicate (which forces a rebuild). Incremental
+    placement therefore cannot disagree with a stable sort on ties."""
+    log = EventLog(repo, "x")
+    _put(log, "a", [_ev("a", 7, "1")])
+    _put(log, "b", [_ev("b", 7, "1")])
+    _same(repo, log)
+    _put(log, "a", [_ev("a", 7, "2")])  # same Lamport value, earlier shard
+    _same(repo, log)
+    _put(log, "a", [_ev("b", 7, "1")])  # an event identical to b's, appended to a
+    _same(repo, log)
+    assert len(log.read_all()) == 3
 
 
 def test_a_warm_read_after_one_append_does_not_re_key_the_log(repo, monkeypatch):
