@@ -17,7 +17,8 @@ from ddflow.config import LogConfig
 from ddflow.core.events import Event
 from ddflow.infra import log as L
 from ddflow.infra.log import EventLog, clear_parse_cache
-from tests.test_log_merged_order import _ev, _put, _reference
+from tests.test_log_merged_order import _ev, _put
+from tests.test_log_merged_order import _reference as _reference_ids
 
 CFG = LogConfig()
 N = 1600  # events per shard; the rewrite floor is 1000 events
@@ -53,19 +54,34 @@ def _build(repo, n=N):
 
 
 def _check(repo, log: EventLog | None = None) -> EventLog:
-    """A cold read, compared with the independent reference. `log.parsed` is how many
-    lines the READ parsed (the reference's own parsing is not counted)."""
+    """A cold read, compared with the independent reference: the whole EVENTS, not just
+    their ids. `log.parsed` is how many lines the READ parsed (the reference's own parsing
+    is not counted)."""
     log = log or _log(repo)
     before = len(_PARSES)
     got = log.read_all()
     log.parsed = len(_PARSES) - before
     want, want_skipped = _reference(log)
-    assert [e.id for e in got] == want
+    assert got == want
     assert log.skipped_lines == want_skipped
     return log
 
 
 _PARSES: list[int] = []
+
+
+def _reference(log: EventLog):
+    """(events, skipped) by parsing every shard line independently of the code under test."""
+    ids, skipped = _reference_ids(log)
+    by_id = {}
+    for path in sorted(log.dir.glob("*.jsonl")):
+        for line in path.read_bytes().decode().splitlines():
+            try:
+                e = Event.from_json(line)
+            except ValueError:
+                continue
+            by_id.setdefault(e.id, e)
+    return [by_id[i] for i in ids], skipped
 
 
 @pytest.fixture
@@ -264,3 +280,32 @@ def test_a_snapshot_is_per_clone_state_and_two_clones_agree(repo, tmp_path):
     clear_parse_cache()
     snap = _log(repo)
     assert [e.id for e in snap.read_all()] == [e.id for e in plain.read_all()]
+
+
+@pytest.mark.parametrize("tamper", ["repeat", "drop", "reorder", "empty", "range", "stale_shard"])
+def test_a_bad_saved_order_is_rejected_even_with_valid_checksums(repo, tamper):
+    """The order is not covered by the shard hashes, so it is checked on adoption."""
+    log = _build(repo)
+    path = _snap(log)
+    head, _, payload = path.read_bytes().partition(b"\n")
+    body = marshal.loads(payload)
+    names, order = body["\0order"]
+    order = list(order)
+    if tamper == "repeat":
+        order[5] = order[4]
+    elif tamper == "drop":
+        order.pop(7)
+    elif tamper == "reorder":
+        order[3], order[4] = order[4], order[3]
+    elif tamper == "empty":
+        order = []
+    elif tamper == "range":
+        order[0] = 10**9
+    elif tamper == "stale_shard":
+        names = [(n, c + 1) for n, c in names]
+    body["\0order"] = (names, order)
+    payload = marshal.dumps(body)
+    meta = json.loads(head)
+    meta["size"], meta["sha256"] = len(payload), hashlib.sha256(payload).hexdigest()
+    path.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
+    _check(repo)
