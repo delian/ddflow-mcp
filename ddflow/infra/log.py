@@ -307,6 +307,23 @@ def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _parser_stamp() -> str:
+    """A fingerprint of the code that turns a line into an Event.
+
+    A snapshot holds PARSED events, so it must die when the parser changes even if the
+    version string does not (a development checkout, a patched install): hashing the
+    bytecode and constants of `Event.from_json` and `Event.compute_id` is cheap and needs
+    no list of "things that affect parsing" to keep current.
+    """
+    h = hashlib.sha256()
+    for fn in (Event.from_json, Event.compute_id, Event.body):
+        code = fn.__code__
+        h.update(code.co_code)
+        h.update(repr(code.co_consts).encode())
+        h.update(repr(code.co_names).encode())
+    return h.hexdigest()[:16]
+
+
 def _parse_lines(chunk: bytes) -> tuple[list[Event], int]:
     """`(events, unparseable-line-count)` for a run of whole lines."""
     out: list[Event] = []
@@ -1065,6 +1082,7 @@ class EventLog:
                 meta["format"] != SNAPSHOT_FORMAT
                 or meta["version"] != running_version()
                 or meta["fields"] != [f.name for f in fields(Event)]
+                or meta["parser"] != _parser_stamp()
                 or meta["size"] != len(payload)
                 or meta["sha256"] != hashlib.sha256(payload).hexdigest()
             ):
@@ -1157,6 +1175,7 @@ class EventLog:
                 "format": SNAPSHOT_FORMAT,
                 "version": running_version(),
                 "fields": [f.name for f in fields(Event)],
+                "parser": _parser_stamp(),
                 "size": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
             }
