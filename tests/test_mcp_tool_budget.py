@@ -14,7 +14,9 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 #: Compact `tools/list` bytes. Raise only with a reason in the commit; lowering is welcome.
 # 93_500: ddflow_export (B-export-surfaces) is ~1.4 KB, 15 arguments because the CLI/MCP flag
 # parity ratchet needs every `ddflow export` filter flag reachable; main sat at 91,958.
-TOOLS_LIST_BUDGET = 93_500
+# 91_500: ddflow_list (B-view-mcp-list) is ONE tool for the six viewers (~1.3 KB); the
+# shared `as_agent` description, repeated on every tool, went from 113 to 66 characters (-4 KB).
+TOOLS_LIST_BUDGET = 91_500
 SHARED_DESCRIPTION_MAX = 200
 
 

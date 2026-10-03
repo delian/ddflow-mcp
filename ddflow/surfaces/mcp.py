@@ -1307,6 +1307,43 @@ TOOLS: dict[str, dict[str, Any]] = {
         "text": lambda a: bool(a.get("show")),
         "kind": "render",
     },
+    "ddflow_list": {
+        "description": (
+            "Read-only lists, newest first, 25 rows unless `limit` (0 = all); a cut says so. "
+            "`kind`: task|phase|bug|research|session|search. Bugs: open unless `all`/`state`. "
+            "History: ddflow_history."
+        ),
+        "properties": {
+            "kind": ("string", "task|phase|bug|research|session|search", True),
+            "id": ("string", "kind=session: one session in full.", False),
+            "query": ("string", "kind=search: text to find.", False),
+            "state": ("string", "Only this state.", False),
+            "phase": ("string", "Only under this phase id.", False),
+            "tag": ("string", "Only this tag.", False),
+            "owner": ("string", "Only this agent's rows.", False),
+            "since": ("string", "Changed at/after this ISO date.", False),
+            "limit": ("integer", "Rows (default 25; 0 = all).", False),
+            "all": ("boolean", "kind=bug: include fixed/invalid.", False),
+            "mode": ("string", "search: ranked|exact|regex.", False),
+            "sources": ("string", "search: comma-separated record kinds.", False),
+        },
+        "api": lambda repo, a, agent: _api().view_read(
+            repo,
+            a["kind"],
+            id=a.get("id", "") or "",
+            query=a.get("query", "") or "",
+            state=a.get("state", "") or "",
+            phase=a.get("phase", "") or "",
+            tag=a.get("tag", "") or "",
+            owner=a.get("owner", "") or "",
+            since=a.get("since", "") or "",
+            limit=1000 if a.get("limit") == 0 else int(a.get("limit") or 25),
+            all=bool(a.get("all")),
+            mode=a.get("mode", "") or "ranked",
+            sources=a.get("sources", "") or "",
+        ),
+        "payload": "",
+    },
     "ddflow_rebuild": {
         "description": (
             "Re-derive the search index from the event log. The index is a "
@@ -2629,8 +2666,7 @@ ALLOW_OLDER = "allow_older_version"
 AS_AGENT = "as_agent"
 _AS_AGENT_SPEC = (
     "string",
-    "Subagent sharing the parent's connection: your own stable name, for this call only "
-    "(see ddflow_identify).",
+    "A subagent's own stable name, this call only (see ddflow_identify).",
     False,
 )
 
@@ -2728,7 +2764,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "abandon block unblock release board progress doctor recover configure companions "
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status reviewers_list version_show research_add phase_add split resolve "
-        "remove tests review_triage memory_add memory_list history cleanup render"
+        "remove tests review_triage memory_add memory_list history cleanup render list"
     ).split()
 )
 

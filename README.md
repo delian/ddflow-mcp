@@ -171,10 +171,10 @@ the same implementation, so neither drifts from the other.
 | **find out if we're going in circles** | `ddflow loops` | `ddflow_loops` |
 | **record a lesson / decision / research / bug** | `ddflow lesson add` · `decision add` · `research` · `bug found\|fixed` | `ddflow_lesson_add` · `ddflow_decision_add` · `ddflow_research_add` · `ddflow_bug_*` |
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
-| **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | (not yet) |
+| **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`) |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
-| **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | not yet exposed |
+| **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
 | **check the tooling around the gates** | `ddflow companions` | `ddflow_companions` |
 | **find work a crashed agent left** | `ddflow recover` | `ddflow_recover` |
@@ -3235,8 +3235,18 @@ bugs have no tag or owner, so `bug list --tag x` is an unknown option rather tha
 silent "everything" (and the list flags are refused on `research` when recording a finding). Titles and tags are redacted as the export documents are. Exit
 codes: 0 rows, 2 none matched (the message, and `reason` in `--json`, name the filters), 3 a refused value such
 as an unknown `--phase`. `research list` is the optional-verb form of `research`, like
-`research add`. These commands have no MCP tool yet: the one consolidated read tool
-for them is the next task of the viewers phase.
+`research add`.
+
+**Over MCP** these readers, `ddflow session list|show` and `ddflow search` are ONE tool,
+`ddflow_list` (a tool each would cost `tools/list` bytes for no capability; it is in the
+`standard` tier). `kind` is `task | phase | bug | research | session | search`; the filters
+are the CLI's (`state`, `phase`, `tag`, `owner`, `since`, `all` for bugs); `id` with
+`kind=session` is `session show`, and `kind=search` takes `query`, `mode`
+(`ranked | exact | regex`) and `sources` (the CLI's `--kind`). The body is the CLI's `--json`.
+It is bounded: 25 rows unless `limit` says otherwise (`0` = all, at most 1000), a cut list
+says how many matched and how to get the rest, and one session shown in full is cut to its
+newest 25 entries with long texts clipped (`limit=0` for all; `ddflow session show` has
+them whole). The event log's own timeline is `ddflow_history`.
 
 ### Searching everything
 
@@ -3724,16 +3734,16 @@ previous one turned out to be too shallow:
 
 A fourth ratchet bounds the cost of that surface: the whole tool list is sent to the model
 on every session, so `tests/test_mcp_tool_budget.py` fails if the compact `tools/list`
-exceeds its byte budget (about 93 KB for 91 tools, down from 119 KB) or if the shared
+exceeds its byte budget (about 91 KB for 92 tools, down from 119 KB) or if the shared
 `as_agent` / `relation` / `check_only` descriptions are repeated at length on any tool.
 Their full text lives once, in `ddflow_identify` and the handshake instructions.
 
-**Tool tiers.** A client that loads every tool schema up front still pays that ~93 KB, so
+**Tool tiers.** A client that loads every tool schema up front still pays that ~91 KB, so
 `[mcp].tools = "core" | "standard" | "all"` (env `DDFLOW_MCP_TOOLS`; default `all`) chooses
-which tools `tools/list` advertises: `core` is 32 tools, 39 KB (the daily loop: brief, next,
+which tools `tools/list` advertises: `core` is 32 tools, 38 KB (the daily loop: brief, next,
 claim, heartbeat, gates, complete, merge, status, show, recall, bugs, lessons, decisions,
 sessions, identify, task add/update, wait, review, help, pr sync, similar, setup), `standard`
-is 63 tools, 67 KB (core plus the commonly used rest), `all` is every tool, byte-identical to
+is 64 tools, 66 KB (core plus the commonly used rest), `all` is every tool, byte-identical to
 before. It is a start-time choice and only about what is listed: a tool outside the tier is
 **still callable by name**, `ddflow_help` and the connection instructions say what the tier
 hides and how to widen it, and `listChanged` stays false, so change the knob and restart the
