@@ -23,7 +23,7 @@ def cmd_pr(a, c: Ctx) -> int:
         out = A.pr_status(c.repo, agent=c.requested_agent)
         if c.json:
             return _emit_json(out)
-        if not out.data["rows"] and not out.data["releases"]:
+        if not out.data["rows"] and not out.data["releases"] and not out.data["back_merges"]:
             print("no pull requests recorded")
             return OK
         for r in out.data["rows"]:
@@ -37,6 +37,8 @@ def cmd_pr(a, c: Ctx) -> int:
             print(
                 f"  release {r['version']}: {r.get('url', '')} awaiting merge into {r.get('base', '')}"
             )
+        for r in out.data["back_merges"]:
+            print(f"  back-merge {r['item']} -> {r['into']}: {r['state']} {r.get('url', '')}")
         return OK
     out = A.pr_sync(c.repo, item=a.item or "", agent=c.requested_agent)
     if c.json:
