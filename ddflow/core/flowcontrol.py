@@ -80,6 +80,11 @@ class Params:
     thresholds: Mapping[str, Threshold] = field(default_factory=_default_thresholds)
     host_signals: tuple[str, ...] = HOST_SIGNALS
 
+    def evidence(self) -> tuple[int, int]:
+        """(window, need_bad) made consistent: window >= 1 and 1 <= need_bad <= window."""
+        window = max(1, int(self.window))
+        return window, min(max(1, int(self.need_bad)), window)
+
     def bounds(self) -> tuple[int, int, int]:
         """(floor, start, ceiling) made consistent: 1 <= floor <= start <= ceiling."""
         ceiling = max(1, int(self.ceiling))
@@ -182,7 +187,8 @@ class _Replay:
             return  # blind sample: neutral for everything
         self.saw_host = True
         self.window.append((bad_signal is not None, bad_signal))
-        del self.window[: -max(1, p.window)]
+        window, need_bad = p.evidence()
+        del self.window[:-window]
         quiet = self.quiet(s.at)
         ok = healthy and not quiet
         if not ok:
@@ -190,11 +196,11 @@ class _Replay:
         elif self.prev_ok and _in_flight_at(self.history, self.times, s.at) >= self.limit:
             self.accum += dt
         self.prev_ok = ok
-        if sum(1 for b, _ in self.window if b) >= p.need_bad:
+        if sum(1 for b, _ in self.window if b) >= need_bad:
             self._maybe_decrease(s.at, bad_signal)
         elif ok and self.accum >= p.adapt_up_after_s and self.limit < p.bounds()[2]:
             self.limit += 1
-            self.mode, self.accum = "increase", 0.0
+            self.mode, self.accum, self.dec_signal = "increase", 0.0, None
             self.last_change = (
                 f"raised to {self.limit}: healthy for {int(p.adapt_up_after_s)}s "
                 "with the limit binding"
@@ -210,8 +216,8 @@ class _Replay:
         signal = bad_signal or (names[-1] if names else None)
         self.limit, self.mode, self.last_dec, self.dec_signal = new, "decrease", at, signal
         self.last_change = (
-            f"lowered to {new}: {signal} over its high mark in {p.need_bad} of the "
-            f"last {p.window} samples"
+            f"lowered to {new}: {signal} over its high mark in {p.evidence()[1]} of "
+            f"the last {p.evidence()[0]} samples"
         )
         self.window, self.accum, self.prev_ok = [], 0.0, False
 
