@@ -460,3 +460,13 @@ def test_status_lists_seen_versions_in_version_order(repo: Path, monkeypatch):
     assert run_cli(repo, "init")[0] == 0
     _code, out, _err = run_cli(repo, "--json", "status")
     assert json.loads(out)["ddflow_version"]["seen"][:2] == ["0.1.9", "0.1.10"]
+
+
+def test_seen_versions_with_equal_keys_keep_a_stable_order(repo: Path, monkeypatch):
+    monkeypatch.setenv("DDFLOW_UPGRADE_SKEW", "off")
+    for v in ("0.2.0", "0.2"):
+        monkeypatch.setattr(ddflow, "__version__", v)
+        EventLog(repo, f"a{v}").append("phase.added", f"P{v}", {"title": "p"})
+    assert run_cli(repo, "init")[0] == 0
+    _code, out, _err = run_cli(repo, "--json", "status")
+    assert json.loads(out)["ddflow_version"]["seen"] == ["0.2", "0.2.0"]
