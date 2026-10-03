@@ -305,22 +305,23 @@ def _announce_rerun(rerun, revs, item: str, gate: str, say):
     return revs, prior, only
 
 
-def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> None:
+def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> int:
     """Fold a delta's findings and coverage into the evidence of the review it follows.
 
     The record keeps the earlier findings in place (so their numbers, and the triage
     keyed by the digest of their exact text, stay as they were) and appends the delta's
     new ones; a finding byte-identical to an earlier one is that finding, not a second
-    copy. The gate's outcome is the delta's own -- a clean recheck of the fix passes --
-    while the earlier findings stay on the record for triage and the convergence line.
-    `coverage` stays the delta's (a partial one must not read as a full pass); the last
-    full round's is kept as `full_coverage`. A no-op for anything but a delta that
+    copy. `coverage` stays the delta's (a partial one must not read as a full pass); the
+    last full round's is kept as `full_coverage`. A no-op for anything but a delta that
     reached a reviewer.
+
+    Returns how many findings of the merged record have no triage verdict yet: a clean
+    delta does not clear a gate whose earlier findings nobody has settled (`_hold`).
     """
     from ..services import review as R
 
     if kind != "delta" or status not in (R.REVIEWED, R.PARTIAL):
-        return
+        return 0
     ev["delta_from"] = _last_head(log, it.id, gate)
     rec = it.gates.get(gate) if it else None
     prior = dict(rec.evidence) if rec and rec.evidence else {}
@@ -330,7 +331,7 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> N
     if prior.get("full_coverage") or prior.get("review_kind") in ("full", "full_unavailable"):
         ev["full_coverage"] = prior.get("full_coverage") or prior.get("coverage", "")
     if not kept:
-        return
+        return 0
     have = {f.get("digest"): n for n, f in enumerate(kept, 1)}
     for f in mine:
         if f.get("digest") not in have:
@@ -345,6 +346,29 @@ def _merge_delta(log, it, gate: str, kind, status, ev: dict[str, Any], say) -> N
             f"merged into the record of {it.id}.{gate} ({len(kept)} finding(s) in all): this "
             f"delta's numbers above are its own; to triage use the record's -- {where}."
         )
+    verdicts = it.triage.get(gate, {})
+    return sum(1 for f in kept if verdicts.get(f.get("digest"), {}).get("verdict") not in _SETTLED)
+
+
+_SETTLED = ("refuted", "confirmed")
+
+
+def _hold(outcome: str, reason: str, untriaged: int, say) -> tuple[str, str]:
+    """A clean delta passes only when every earlier finding on the record has a verdict.
+
+    Before deltas were the default a re-review read the whole diff and reported an
+    unfixed finding again, so the gate stayed `failed` until it was dealt with; a delta
+    does not see it, so the record's own findings are what keeps the gate honest.
+    `review triage` (refuted, or confirmed with the fix as the probe) releases it.
+    """
+    if outcome != "passed" or not untriaged:
+        return outcome, reason
+    why = (
+        f"the delta is clean, but {untriaged} earlier finding(s) on the record have no "
+        "triage verdict: `ddflow review triage` settles each (the next clean delta then passes)"
+    )
+    say(f"NOTE: {why}.")
+    return "failed", why
 
 
 def _say_triage_scope(say: Callable[[str], None], results: list, best) -> None:
@@ -1029,14 +1053,15 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             ),
             **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
         }
-        _merge_delta(log, it, gate, kind, best.status, evidence, say)
+        held = _merge_delta(log, it, gate, kind, best.status, evidence, say)
+        outcome, reason = _hold(outcome, _reason_of(best), held, say)
         G.record(
             log,
             cfg,
             item,
             gate,
             outcome,
-            reason=_reason_of(best),
+            reason=reason,
             evidence=evidence,
             gates=gates,
             by=best.model,
