@@ -82,10 +82,11 @@ def _agent_file(repo: Path, rel: str) -> Entry | None:
     path = repo / rel
     if not path.is_file():
         return None
-    text = _DDFLOW_BLOCK.sub("", _read(path))
-    if not text.strip():
+    meta, body = _frontmatter(_DDFLOW_BLOCK.sub("", _read(path)))
+    if not body.strip():
         return None
-    return Entry("rule", rel, _first_line(text), rel, f"{rel} {text[:BODY_HEAD_CHARS]}")
+    desc = (meta.get("description") or _first_line(body))[:200]
+    return Entry("rule", rel, desc, rel, f"{rel} {desc} {body[:BODY_HEAD_CHARS]}")
 
 
 def inventory(repo: Path) -> list[Entry]:
