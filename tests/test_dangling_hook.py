@@ -290,3 +290,16 @@ def test_the_notice_names_the_refresh_that_fits_the_hook(repo, bare_path):
         line = line.replace(p, "/nonexistent-ddflow-venv" + p)
     r = subprocess.run(["sh", "-c", line], capture_output=True, text=True, cwd=repo)
     assert "run: ddflow hooks install --claude" in r.stderr, r.stderr
+
+
+def test_a_launcher_that_is_no_longer_executable_is_reported(repo, tmp_path):
+    """The hook's probe is `[ -x ]`, so a script that lost its execute bit takes the
+    fallback exactly as a deleted one does -- and must be reported the same way."""
+    exe = tmp_path / "ddflow"
+    exe.write_text("#!/bin/sh\n")
+    exe.chmod(0o755)
+    line = f'exec "{exe}" hooks check-commit "$@"'
+    assert LA.check_command("x", line, "fix") is None
+    exe.chmod(0o644)
+    d = LA.check_command("x", line, "fix")
+    assert d and d.missing == (str(exe),)
