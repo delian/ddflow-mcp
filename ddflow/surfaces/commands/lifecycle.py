@@ -241,10 +241,13 @@ def cmd_complete(a, c: Ctx) -> int:
         force=a.force,
         model=a.model or "",
         changelog=getattr(a, "changelog", "") or "",
+        regression_test=getattr(a, "regression_test", None) or [],
         agent=c.requested_agent,
     )
     for warning in out.data.get("warnings", []):
         print(f"NOTE: {warning}", file=sys.stderr)
+    for bid in out.data.get("bugs_closed", []):
+        print(f"bug {bid} closed", file=sys.stderr)
     if out.exit != OK:
         return _refused(out)
     if out.data["note"] and not c.json:
@@ -258,7 +261,7 @@ def cmd_complete(a, c: Ctx) -> int:
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
         + _waiting(out.data.get("woke", []), "woke:"),
         out.body(
-            ("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke")
+            ("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke", "bugs_closed")
             + (("export_refresh",) if "export_refresh" in out.data else ())
         ),
     )

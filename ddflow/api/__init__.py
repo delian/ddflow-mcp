@@ -76,6 +76,7 @@ from .knowledge import (
 )
 from .knowledge import (
     LessonDraft,
+    bug_file_tasks,
     bug_fixed,
     bug_found,
     bug_invalid,
@@ -194,6 +195,7 @@ __all__ = [
     "block",
     "board",
     "brief",
+    "bug_file_tasks",
     "bug_fixed",
     "bug_found",
     "bug_invalid",

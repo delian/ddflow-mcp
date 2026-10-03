@@ -63,6 +63,29 @@ class Verdict:
         return not self.blockers
 
 
+#: How the open-bug blocker begins; `api.complete` lifts exactly this one when
+#: `--regression-test` is about to close those bugs.
+OPEN_BUG_BLOCKER = "fixes open bug(s) "
+
+
+def open_bugs_of(state: State, item_id: str) -> list[str]:
+    """The open bugs ``item_id`` is the fix task of (`bug found` filed it), sorted."""
+    return sorted(b.id for b in state.bugs.values() if b.open and b.fix_task == item_id)
+
+
+def _open_bug_blockers(state: State, item_id: str) -> list[str]:
+    """The bugs ``item_id`` is the fix task of that are still open, as one blocker."""
+    fixing = open_bugs_of(state, item_id)
+    if not fixing:
+        return []
+    return [
+        f"{OPEN_BUG_BLOCKER}{', '.join(fixing)}: close each with `ddflow bug fixed <bug> "
+        f"--regression-test <test>` (a test that FAILS on the unfixed code), or pass "
+        f"`--regression-test <test>` to complete, which closes them; a false finding is "
+        f"`ddflow bug invalid <bug> --reason ...`."
+    ]
+
+
 def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str = "") -> Verdict:
     """Why this item may or may not complete. Reads only; writes nothing."""
     it = state.items.get(item_id)
@@ -118,6 +141,12 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
                 f"You cannot record this one — `gate record` and `gate skip` both "
                 f"refuse it, and there is no MCP tool for it."
             )
+
+    # A fix task closes its bug or does not complete (B-bugs-as-items): the bug record is
+    # what carries the regression test, and `bug fixed` is what refuses to close without
+    # one. Asked of the BUGS (`fix_task`), not the task's `fixes` list: a bug linked to an
+    # existing task after the fact has no entry there.
+    v.blockers += _open_bug_blockers(state, item_id)
 
     if it.kind == "phase":
         # Periodic passes counted in phases (architecture review, mutation tests, lessons)

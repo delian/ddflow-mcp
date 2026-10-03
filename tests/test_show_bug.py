@@ -23,7 +23,9 @@ def _bug(repo, summary: str, *extra: str) -> str:
 def test_show_resolves_an_open_bug_and_the_items_that_fix_it(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
-    bid = _bug(repo, "the widget drops its last row", "--item", "T1")
+    # --no-task: this test is about the hand-written fix tasks `show` recognises, not the
+    # one `bug found` files (tests/test_bugs_as_items.py).
+    bid = _bug(repo, "the widget drops its last row", "--item", "T1", "--no-task")
     run_cli(repo, "task", "add", "FIX", "--title", f"Keep the last row (fixes bug {bid})")
     run_cli(repo, "task", "add", "OTHER", "--title", "unrelated", "--body", f"see {bid}x")
     run_cli(repo, "task", "add", "TALK", "--title", f"Investigate {bid}")

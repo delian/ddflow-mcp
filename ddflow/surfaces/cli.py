@@ -640,6 +640,13 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="'Added: text' (Added|Changed|Deprecated|Removed|Fixed|Security), or "
         "skip / internal to keep it out of the changelog; optional",
     )
+    cp.add_argument(
+        "--regression-test",
+        action="append",
+        default=[],
+        help="for a fix task: the test that now guards the bug(s) it fixes; closes them "
+        "(as `bug fixed` would) and completes. Repeat for several.",
+    )
     cp.set_defaults(fn=cmd_complete)
 
     ab = s.add_parser("abandon", help="stop work on an item without completing it")
@@ -978,8 +985,24 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         default="",
         help="project (default), or ddflow for a bug in ddflow itself",
     )
+    bf.add_argument(
+        "--globs",
+        default="",
+        help="the fix task's files (comma-separated); default: the item's own globs",
+    )
+    bf.add_argument(
+        "--no-task",
+        action="store_true",
+        help="file no fix task: the bug is fixed in the commit that found it",
+    )
     dedupe_flags.add_flags(bf)
     bf.set_defaults(fn=cmd_bug)
+    bft = bg_s.add_parser(
+        "file-tasks",
+        help="file a fix task for every open bug that has none (one-shot, after an upgrade)",
+    )
+    bft.add_argument("--dry-run", action="store_true", help="list what would be filed")
+    bft.set_defaults(fn=cmd_bug)
     bx = bg_s.add_parser("fixed")
     bx.add_argument("id")
     bx.add_argument(
