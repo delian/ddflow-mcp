@@ -1313,7 +1313,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_import": {
         "description": (
-            "For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons corpus, ADR files and unmerged branches and proposes them as queue items. Reports by default; writes NOTHING until `apply` is true. Call it right after `ddflow_setup` on any repository that is not brand new: an empty queue says nothing is in flight about a project that may have three branches in flight. The proposal is a GUESS about structure: the `import-existing-project` prompt walks through fixing it. Exit 2: nothing found."
+            "For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons corpus, ADR files and unmerged branches and proposes them as queue items. Reports by default; writes NOTHING until `apply` is true. Call it right after `ddflow_setup` on any repository that is not brand new. The proposal is a GUESS: the `import-existing-project` prompt walks through fixing it. Exit 2: nothing found."
         ),
         "properties": {
             "apply": ("boolean", "Write the proposal. Default false: look first.", False),
@@ -1341,7 +1341,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow": {
         "description": (
-            "The rules THIS project runs by, in one answer: the gates every task and phase passes in order (command vs performed by you, required, evidence, different-family reviewer, PROVEN able to fail), the completion rules, the parallelism caps, the reviewers, and where each value came from (default, project config, environment). Call it before your first `ddflow_claim` and after any workflow change: the connection instructions are computed once at server start. Exit 1: the workflow does not hang together (e.g. a pipeline names a gate with no definition). Read-only."
+            "The rules THIS project runs by, in one answer: the gates every task and phase passes in order, the completion rules, parallelism caps, reviewers, and where each value came from. Call it before your first `ddflow_claim` and after any workflow change: instructions are computed once at start. Exit 1: the workflow does not hang together (e.g. a pipeline names a gate with no definition). Read-only."
         ),
         "properties": {},
         "api": lambda repo, a, agent: _api().workflow_show(repo),
@@ -1438,10 +1438,25 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
     },
     "ddflow_verify": {
-        "description": "Re-check a done task's claims: landed, files, tests, gates. Fails if one does not hold.",
-        "properties": {"id": ("string", "Item id.", True)},
-        "api": lambda repo, a, agent: _api().verify_item(repo, a["id"], agent=agent),
-        "payload": ("item", "verdict", "claims"),
+        "description": "Re-check a done task's claims (landed, files, tests, gates); fails if one does not hold. No id: sweep all done tasks, worst first.",
+        "properties": {
+            "id": ("string", "Task id; omit to sweep.", False),
+            "phase": ("string", "Sweep only this phase.", False),
+            "limit": ("integer", "How many of the worst to list (20).", False),
+            "file_bugs": ("boolean", "File a bug per failing completion.", False),
+        },
+        "api": lambda repo, a, agent: (
+            _api().verify_item(repo, a["id"], agent=agent)
+            if a.get("id")
+            else _api().verify_sweep(
+                repo,
+                phase=a.get("phase", "") or "",
+                limit=int(a.get("limit") or 20),
+                file_bugs=bool(a.get("file_bugs")),
+                agent=agent,
+            )
+        ),
+        "payload": "",
     },
     "ddflow_help": {
         "description": (

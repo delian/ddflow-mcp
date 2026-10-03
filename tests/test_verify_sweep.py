@@ -84,3 +84,34 @@ def test_nothing_done_is_nothing_to_verify(repo):
     run_cli(repo, "init")
     run_cli(repo, "task", "add", "T1", "--globs", "a.py")
     assert verify_sweep(repo).exit == O.NOTHING
+
+
+def test_the_cli_sweeps_with_all_and_phase_and_rejects_sweep_flags_on_one_task(repo):
+    import json
+
+    _project(repo)
+    code, out, _ = run_cli(repo, "verify", "--all")
+    assert code == 1 and "T-FALSE" in out and "declared_files" in out and "checked 2" in out
+    code, out, _ = run_cli(repo, "--json", "verify", "--phase", "P1", "--limit", "1")
+    body = json.loads(out)
+    assert code == 1 and body["checked"] == 2 and len(body["worst"]) == 1
+    code, _, err = run_cli(repo, "verify", "T-FALSE", "--file-bugs")
+    assert code == 1 and "sweep" in err
+    code, _, err = run_cli(repo, "verify")
+    assert code == 1 and "verify what" in err
+    assert run_cli(repo, "verify", "--phase", "NOPE")[0] == 1
+
+
+def test_the_mcp_tool_sweeps_when_no_id_is_given(repo):
+    import json
+
+    from ddflow.surfaces.mcp import Server
+
+    _project(repo)
+    reply = Server(repo).handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+         "params": {"name": "ddflow_verify", "arguments": {"limit": 1}}}
+    )  # fmt: skip
+    text = reply["result"]["content"][0]["text"]
+    body = json.loads(text[text.index("{") :])
+    assert body["checked"] == 2 and body["worst"][0]["item"] == "T-FALSE"
