@@ -13,14 +13,14 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from ..core import textsim
+
 MAX_FILES = 200
 BODY_HEAD_CHARS = 1500
-_WORD = re.compile(r"[a-z0-9]{3,}")
 _FRONT = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n?", re.S)
 _DDFLOW_BLOCK = re.compile(
     r"<!--\s*ddflow[^>]*?(?:begin|start)[^>]*-->.*?<!--\s*ddflow[^>]*?end[^>]*-->", re.S | re.I
 )
-_STOP = frozenset("the and for with that this from into when use using are not all any".split())
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class Entry:
 
 
 def _tokens(text: str) -> list[str]:
-    return [w for w in _WORD.findall(text.lower()) if w not in _STOP]
+    return textsim.tokens(text)
 
 
 def _frontmatter(text: str) -> tuple[dict[str, str], str]:
