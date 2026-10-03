@@ -173,7 +173,11 @@ def test_one_refused_claim_holds_nothing_for_anyone(proj):
     not hide the item from `next` or block the owner re-claiming it (the slow scenarios)."""
     assert _claim(proj, "TC", C).exit == O.REFUSED
     assert A.release(proj, "HOT", agent=HOLDER).ok
-    assert "TC" in [i["id"] for i in A.next_(proj, agent="anonymous").data["ready"]]
+    # HOT, TB and TC share a file, so one of them is offered and the others wait behind it
+    # ("offered in this plan"): what must NOT appear is a reservation for the refused agent.
+    out = A.next_(proj, agent="anonymous")
+    why = {b["item"]: b["detail"] for b in out.data["blocked"]}
+    assert "TC" in why and "offered in this plan" in why["TC"] and "reserved" not in why["TC"]
     assert _claim(proj, "TB", B).ok
     assert A.release(proj, "TB", agent=B).ok
     assert _claim(proj, "TC", "agent-owner").ok
