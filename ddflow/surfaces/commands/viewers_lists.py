@@ -21,7 +21,7 @@ _HELP = {
     "state": "only rows in this state",
     "phase": "only rows under this phase id",
     "tag": "only rows carrying this tag",
-    "agent": "only rows owned (leased) by this agent",
+    "owner": "only rows leased by this agent (not --agent, which is who YOU are)",
     "since": "only rows last changed at or after this ISO date or timestamp",
 }
 _LISTS = {
@@ -32,15 +32,19 @@ _LISTS = {
 }
 #: `research` has no subcommands (`research add` is the verb form), so its list lives
 #: behind `research list` as the optional verb.
-_SHARED_FLAGS = ("state", "phase", "tag", "agent", "since")
+_SHARED_FLAGS = ("state", "phase", "tag", "owner", "since")
 
 
 def _add_filters(p: argparse.ArgumentParser, kind: str) -> None:
+    # `None` defaults, so `research add --state x` (a list flag on the add form) is
+    # detectable and refused instead of silently dropped.
     for flag in _SHARED_FLAGS:
-        if flag in V._FILTERS[kind]:
-            p.add_argument(f"--{flag}", default="", help=_HELP[flag])
+        # The engine calls the leaseholder filter `agent`; the CLI cannot, because the
+        # global `--agent` (identity) is mirrored onto every subparser under that name.
+        if ("agent" if flag == "owner" else flag) in V._FILTERS[kind]:
+            p.add_argument(f"--{flag}", default=None, help=_HELP[flag])
     p.add_argument(
-        "--limit", type=int, default=V.DEFAULT_LIMIT, help="most rows to show (default %(default)s)"
+        "--limit", type=int, default=None, help=f"most rows to show (default {V.DEFAULT_LIMIT})"
     )
     if kind == "bug":
         p.add_argument("--all", action="store_true", help="include fixed and invalid bugs")
@@ -78,16 +82,17 @@ def cmd_list(a, c: Ctx) -> int:
         state=state,
         phase=getattr(a, "phase", "") or "",
         tag=getattr(a, "tag", "") or "",
-        agent=getattr(a, "agent", "") or "",
+        agent=getattr(a, "owner", "") or "",
         since=getattr(a, "since", "") or "",
-        limit=a.limit,
+        limit=a.limit or V.DEFAULT_LIMIT,
     )
     if "rows" in out.data and kind == "phase":
         st = c.store.ensure(c.log)
         for r in out.data["rows"]:
             r["done"], r["total"] = _progress(st, r["id"])
     if c.json:
-        print(json.dumps(out.data, indent=2, default=str))
+        body = {**out.data, "reason": out.reason} if out.exit != OK else out.data
+        print(json.dumps(body, indent=2, default=str))
         if out.exit not in (OK, NOTHING):
             print(out.reason, file=sys.stderr)
         return out.exit
@@ -127,6 +132,9 @@ def register(s) -> None:
         if a.verb == "list":
             a.list_kind = "research"
             return cmd_list(a, c)
+        stray = [f"--{f}" for f in (*_SHARED_FLAGS, "limit") if getattr(a, f, None) is not None]
+        if stray:
+            rs.error(f"{', '.join(stray)} apply to `research list`, not to recording a finding")
         for x in required:
             if getattr(a, x.dest) is None:
                 rs.error(f"the following arguments are required: {x.option_strings[0]}")
