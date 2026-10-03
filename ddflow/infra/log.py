@@ -21,13 +21,14 @@ import fcntl
 import getpass
 import hashlib
 import json
+import marshal
 import os
 import secrets
 import socket
 import subprocess
 import time
 from collections.abc import Iterable, Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
 
@@ -71,6 +72,18 @@ _STAMP_EXEMPT = frozenset({SEEN_KIND, SKEW_OVERRIDDEN_KIND})
 
 #: The local, git-ignored marker: the last ddflow version THIS machine acted under.
 SEEN_MARKER = Path(".ddflow") / "local" / "seen.json"
+
+#: The on-disk read snapshot (B166), beside the seen marker in the machine-local,
+#: git-ignored directory. Never merged and never committed: it is a CACHE of the log,
+#: and the log stays the only source of truth.
+SNAPSHOT_FILE = "read-snapshot.bin"
+SNAPSHOT_FORMAT = 1
+#: No snapshot below this many events: a cold parse is cheap there and a file is not free.
+#: A module constant rather than a `[log]` knob for now (follow-up B-log-snapshot-knobs,
+#: waiting on config.py); tests lower it.
+SNAPSHOT_MIN_EVENTS = 5000
+#: `DDFLOW_SNAPSHOT=0` turns the snapshot off (neither read nor written) for a process.
+SNAPSHOT_ENV = "DDFLOW_SNAPSHOT"
 
 
 def running_version() -> str:
@@ -188,6 +201,11 @@ class _Parsed:
     #: so "same `gen`" means "the events up to any earlier count are still the same
     #: events". `read_all`'s merged order keys on it.
     gen: object = None
+    #: True when the events came (in whole or in part) from the on-disk snapshot rather
+    #: than from parsing this process's own read of the bytes. `verify()` refuses those.
+    seeded: bool = False
+    #: How many leading events came from the snapshot (the rest were parsed here).
+    snap_n: int = 0
 
 
 @dataclass(slots=True)
@@ -238,6 +256,20 @@ _PARSE_CACHE: dict[Path, _Parsed] = {}
 #: moment at the cost of one full sort.
 _MERGED: dict[Path, _Merged] = {}
 
+#: Events directory -> snapshot entries not yet consumed by a shard read in this process
+#: (shard file name -> (consumed, digest, skipped, event tuples)). Presence of the key
+#: means "already tried to load"; the dict is emptied as shards are seeded.
+_SNAPSHOTS: dict[Path, dict[str, tuple]] = {}
+
+#: Events directory -> how many events the on-disk snapshot is known to cover, to decide
+#: when the tail since then is worth a rewrite.
+_SNAP_COVERED: dict[Path, int] = {}
+
+#: Events directory -> the snapshot's saved merged order, for `_merge` to adopt once:
+#: ([(shard name, events snapshotted)], flat indices into the concatenation of those
+#: shards' snapshotted events, in sorted de-duplicated order).
+_SNAP_ORDER: dict[Path, tuple[list[tuple[str, int]], list[int]]] = {}
+
 #: Appends no larger than this are placed by bisection; a bigger batch rebuilds.
 _MAX_INCREMENTAL = 64
 
@@ -251,6 +283,9 @@ def clear_parse_cache() -> None:
     """
     _PARSE_CACHE.clear()
     _MERGED.clear()
+    _SNAPSHOTS.clear()
+    _SNAP_COVERED.clear()
+    _SNAP_ORDER.clear()
 
 
 def _cached_events() -> int:
@@ -914,7 +949,7 @@ class EventLog:
             return [], 0
         return d.whole + d.torn, d.skipped
 
-    def _read_delta(self, path: Path) -> _Delta | None:
+    def _read_delta(self, path: Path, trust_snapshot: bool = True) -> _Delta | None:
         """One shard, re-parsing only what has been APPENDED since last time.
 
         Parsing dominates a read — 97 ms of 115 ms at 20,000 events — and an
@@ -941,10 +976,17 @@ class EventLog:
             # and widening it to `OSError` turned a loud failure into a silent one.
             return None
         cached = _PARSE_CACHE.get(path) if self.log_cfg.reuse_parsed else None
+        if cached is not None and cached.seeded and not trust_snapshot:
+            cached = None  # `verify` re-parses from the bytes: it must not trust a cache
         start, skipped = 0, 0
         hasher = None
         base: _Parsed | None = None
-        if cached is not None and len(data) >= cached.consumed:
+        if cached is None and trust_snapshot and self.log_cfg.reuse_parsed:
+            seeded = self._seed_from_snapshot(path, data)
+            if seeded is not None:
+                base, hasher = seeded
+                start, skipped = base.consumed, base.skipped
+        elif cached is not None and len(data) >= cached.consumed:
             # The ONLY thing that licenses re-using a parse: those exact bytes are still
             # there. Not the inode, not the size, not the mtime -- all three are proxies,
             # and the inode proxy was wrong about the case it was written for.
@@ -993,7 +1035,149 @@ class EventLog:
         torn, torn_skipped = _parse_lines(fragment)
         return _Delta(parsed, events, torn, skipped + torn_skipped)
 
-    def read_all(self) -> list[Event]:
+    # -- on-disk snapshot (B166) ----------------------------------------------------
+    def _snapshot_path(self) -> Path:
+        return self.dir.parent / "local" / SNAPSHOT_FILE
+
+    def _snapshot_enabled(self) -> bool:
+        return self.log_cfg.reuse_parsed and os.environ.get(SNAPSHOT_ENV) != "0"
+
+    def _load_snapshot(self) -> dict[str, tuple]:
+        """The snapshot's per-shard entries, or `{}` -- never an exception, never a guess.
+
+        Trusted only when ALL of: the header parses; its format, ddflow version and Event
+        field list are the ones running; the payload's length and sha256 match the header
+        (bit rot, truncation, a half-written file); and the payload unmarshals into the
+        expected shape. Any doubt is "no snapshot", and the caller parses the log. Even a
+        snapshot that passes is only a CLAIM about shard prefixes: `_seed_from_snapshot`
+        re-hashes the real bytes before using any of it.
+        """
+        memo = _SNAPSHOTS.get(self.dir)
+        if memo is not None:
+            return memo
+        entries: dict[str, tuple] = {}
+        _SNAPSHOTS[self.dir] = entries
+        try:
+            raw = self._snapshot_path().read_bytes()
+            head, _, payload = raw.partition(b"\n")
+            meta = json.loads(head)
+            if (
+                meta["format"] != SNAPSHOT_FORMAT
+                or meta["version"] != running_version()
+                or meta["fields"] != [f.name for f in fields(Event)]
+                or meta["size"] != len(payload)
+                or meta["sha256"] != hashlib.sha256(payload).hexdigest()
+            ):
+                return entries
+            body = marshal.loads(payload)
+            order = body.pop("\0order", None)
+            for name, (consumed, digest, skipped, tuples) in body.items():
+                if (
+                    isinstance(name, str)
+                    and isinstance(consumed, int)
+                    and isinstance(digest, str)
+                    and isinstance(skipped, int)
+                    and isinstance(tuples, list)
+                ):
+                    entries[name] = (consumed, digest, skipped, tuples)
+            if order is not None:
+                names, idxs = order  # a malformed order poisons the whole snapshot
+                _SNAP_ORDER[self.dir] = (list(names), list(idxs))
+        except Exception:
+            entries.clear()
+            _SNAP_ORDER.pop(self.dir, None)
+        return entries
+
+    def _seed_from_snapshot(self, path: Path, data: bytes) -> tuple[_Parsed, Any] | None:
+        """A `_Parsed` for this shard built from the snapshot, iff its bytes still match.
+
+        Returns `(parsed, hasher)` with the hasher already holding the prefix, so the
+        caller continues the digest over the appended tail instead of hashing twice.
+        """
+        if not self._snapshot_enabled():
+            return None
+        entry = self._load_snapshot().pop(path.name, None)
+        if entry is None:
+            return None
+        consumed, digest, skipped, tuples = entry
+        if not 0 <= consumed <= len(data):
+            return None
+        h = hashlib.sha256(memoryview(data)[:consumed])
+        if h.hexdigest() != digest:
+            return None  # the shard is not the one the snapshot describes
+        try:
+            events = [Event(*t) for t in tuples]
+        except Exception:
+            return None
+        _SNAP_COVERED[self.dir] = _SNAP_COVERED.get(self.dir, 0) + len(events)
+        parsed = _Parsed(consumed, digest, events, skipped, object(), True, len(events))
+        return parsed, h
+
+    def _maybe_write_snapshot(
+        self, deltas: list[tuple[Path, _Delta]], merged: _Merged | None
+    ) -> None:
+        """Persist the parse when enough has accumulated since the last snapshot.
+
+        Best effort: a snapshot that cannot be written costs only the next cold read.
+        Written atomically (temp file + rename) so a concurrent reader sees the old file
+        or the new one, never half of either, and never from a read that left some shard
+        uncached (a partial snapshot would simply be re-derived, but there is no point).
+        """
+        if not self._snapshot_enabled() or any(d.parsed is None for _, d in deltas):
+            return
+        total = sum(len(d.whole) for _, d in deltas)
+        covered = _SNAP_COVERED.get(self.dir, 0)
+        if total < SNAPSHOT_MIN_EVENTS or total - covered < max(1000, covered // 10):
+            return
+        body = {
+            p.name: (
+                d.parsed.consumed,
+                d.parsed.digest,
+                d.parsed.skipped,
+                [
+                    (e.kind, e.subject, e.data, e.agent, e.lamport, e.ts, e.id, e.schema)
+                    for e in d.whole
+                ],
+            )
+            for p, d in deltas
+            if d.parsed is not None
+        }
+        if merged is not None and {p: n for p, (_, n) in merged.marks.items()} == {
+            p: len(d.whole) for p, d in deltas
+        }:
+            # The sorted, de-duplicated order is derived data too, and sorting 100k events
+            # is as costly as unmarshalling them: save it as indices into the shards'
+            # concatenated events so a cold read can skip the sort.
+            names = [(p.name, len(d.whole)) for p, d in deltas]
+            where = {id(e): i for i, e in enumerate(e for _, d in deltas for e in d.whole)}
+            body["\0order"] = (names, [where[id(e)] for e in merged.uniq])
+        try:
+            payload = marshal.dumps(body)
+            meta = {
+                "format": SNAPSHOT_FORMAT,
+                "version": running_version(),
+                "fields": [f.name for f in fields(Event)],
+                "size": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+            target = self._snapshot_path()
+            target.parent.mkdir(parents=True, exist_ok=True)
+            ignore = target.parent / ".gitignore"
+            if not ignore.exists():
+                ignore.write_text("*\n", "utf-8")
+            tmp = target.with_name(f"{target.name}.{os.getpid()}.tmp")
+            tmp.write_bytes(json.dumps(meta).encode() + b"\n" + payload)
+            os.replace(tmp, target)
+            _SNAP_COVERED[self.dir] = total
+        except (OSError, ValueError):
+            pass
+
+    def read_all(self, *, snapshot: bool = True) -> list[Event]:
+        """Every event, Lamport-sorted and de-duplicated.
+
+        `snapshot=False` re-derives everything from the log's bytes (what `verify` uses):
+        the on-disk snapshot is neither read nor trusted for that call.
+        """
         self.skipped_lines = 0
         live = self.shards()
         # A deleted shard's entry would otherwise live for the process lifetime: nothing
@@ -1006,7 +1190,7 @@ class EventLog:
                 del _PARSE_CACHE[gone]
         deltas: list[tuple[Path, _Delta]] = []
         for p in live:
-            d = self._read_delta(p)
+            d = self._read_delta(p, snapshot)
             if d is None:
                 continue
             deltas.append((p, d))
@@ -1020,10 +1204,41 @@ class EventLog:
                 _MERGED.pop(self.dir, None)
             return _sorted_unique([e for _, d in deltas for e in d.whole] + torn)
         merged = self._merge(deltas)
+        if snapshot:
+            self._maybe_write_snapshot(deltas, merged)
         if not torn:
             return list(merged.uniq)
         # A torn fragment is transient and never part of the maintained order.
         return _sorted_unique(merged.uniq + torn)
+
+    def _merged_from_snapshot(self, deltas: list[tuple[Path, _Delta]]) -> _Merged | None:
+        """The snapshot's saved order, adopted only if it still describes these events.
+
+        Every shard it names must have been seeded from THIS snapshot with exactly the
+        count it was saved with; anything else (a shard rewritten, a shard gone) and the
+        order is discarded and rebuilt from the events, the old way. Events appended since
+        are not in the order: `_merge` folds them in as it would any append.
+        """
+        saved = _SNAP_ORDER.pop(self.dir, None)
+        if saved is None or not self._snapshot_enabled():
+            return None
+        try:
+            names, order = saved
+            by_name = {p.name: (p, d) for p, d in deltas}
+            base: list[Event] = []
+            marks: dict[Path, tuple[object, int]] = {}
+            for name, count in names:
+                p, d = by_name[name]
+                if d.parsed is None or not d.parsed.seeded or d.parsed.snap_n != count:
+                    return None
+                base.extend(d.whole[:count])
+                marks[p] = (d.parsed.gen, count)
+            if order and (min(order) < 0 or max(order) >= len(base)):
+                return None
+            uniq = [base[i] for i in order]
+            return _Merged(marks, uniq, {e.id or e.compute_id() for e in uniq})
+        except Exception:
+            return None
 
     def _merge(self, deltas: list[tuple[Path, _Delta]]) -> _Merged:
         """Bring this directory's maintained order up to date with `deltas`.
@@ -1035,6 +1250,10 @@ class EventLog:
         old behaviour exactly.
         """
         m = _MERGED.get(self.dir)
+        if m is None:
+            m = self._merged_from_snapshot(deltas)
+            if m is not None:
+                _MERGED[self.dir] = m
         fresh: list[Event] = []
         ok = m is not None
         if m is not None:
@@ -1085,7 +1304,7 @@ class EventLog:
     def verify(self) -> list[str]:
         """Integrity check: every event's id must equal the hash of its body."""
         problems = []
-        for e in self.read_all():
+        for e in self.read_all(snapshot=False):
             if e.id and e.id != e.compute_id():
                 problems.append(
                     f"{e.id}: content does not match its address (edited after the fact?)"
