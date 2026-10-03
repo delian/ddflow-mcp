@@ -449,6 +449,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="a FIX for several release lines, e.g. 1,2,3: written where [flow].port_strategy "
         "says, with a port task <id>@<line> generated for each other line",
     )
+    tad.add_argument(
+        "--port-of",
+        default="",
+        help="a FOLLOW-UP to an earlier fix: takes the lines that fix reached, so its own "
+        "ports carry what this one lands",
+    )
 
     sp = s.add_parser(
         "split", help="split an item into sub-tasks in place, keeping its id and history"

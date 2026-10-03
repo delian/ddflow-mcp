@@ -433,6 +433,7 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     priority: int = DEFAULT_PRIORITY,
     line: str = "",
     lines: str = "",
+    port_of: str = "",
     readd: bool = False,
     answer: DD.Answer | None = None,
     agent: str = "",
@@ -443,6 +444,9 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
     must reach SEVERAL: the task is written on the line `port_strategy` dictates and a
     port item is generated for each other line -- `<id>@<line>`, an ordinary task with
     its own branch, gates and merge, which starts once what it carries has landed.
+    ``port_of`` names an earlier fix: this is a FOLLOW-UP to it and takes the lines that
+    fix reached (B180), so its ports carry what THIS one lands. Naming one of the earlier
+    fix's ports resolves to the fix. It cannot be combined with ``line``/``lines``.
 
     Tasks can be added at ANY time, including while their parent is being worked: a task
     that turns out to contain two things is the normal case, not an exception, and a
@@ -468,6 +472,24 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
             "task.added", f"no such parent {parent!r}. Add the phase or task first.", id=item
         )
     wanted = csv_list(lines) or ([line] if line else [])
+    if port_of:
+        if wanted:
+            return O.failed(
+                "task.added",
+                "--port-of takes its lines from that fix: drop --line/--lines",
+                id=item,
+            )
+        origin = st.items.get(port_of)
+        if origin is None or origin.removed:
+            return O.failed("task.added", f"--port-of: no such item {port_of!r}", id=item)
+        origin = st.items.get(origin.port_of) or origin
+        family = [
+            origin,
+            *(o for o in st.items.values() if o.port_of == origin.id and not o.removed),
+        ]
+        wanted = list(
+            dict.fromkeys(F.effective_line(st, o) or cfg.flow.current_line for o in family)
+        )
     for ln in wanted:
         bad = _bad_line(cfg, ln)
         if bad:
