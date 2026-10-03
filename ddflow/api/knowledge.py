@@ -956,14 +956,21 @@ NOTHING_TO_REMOVE: dict[str, str] = {
     "removed": "already removed from the queue",
     "missing": "not in the queue at all",
 }
-FIX_TASK_KEPT = (*STILL_QUEUED, *NOTHING_TO_REMOVE)
 
 
 def _drop_fix_task(log, st, rec) -> tuple[str, str]:
+    removed, why = _drop_fix_task_unchecked(log, st, rec)
+    assert not why or why in STILL_QUEUED or why in NOTHING_TO_REMOVE, why
+    return removed, why
+
+
+def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
     """Take a false finding's fix task out of the queue, when nothing else wants it: it is
     still OPEN, nobody holds it, no other open bug names it, nothing is filed under it and
     nothing `needs` it -- the guards `api.remove` applies, so a removal here strands no
-    one. Returns ``(removed id, "")`` or ``("", why kept)`` with one of `FIX_TASK_KEPT`,
+    one. Returns ``(removed id, "")`` or ``("", why kept)``, the reason a key of
+    `STILL_QUEUED` or `NOTHING_TO_REMOVE` (asserted, so a new reason cannot reach the
+    surfaces without its sentence),
     so the reply can say what is true: a task somebody has claimed, or that fixes a real
     bug too, stays and the agent decides; a finished or removed one is not "still queued"."""
     from ..core.model import OPEN
