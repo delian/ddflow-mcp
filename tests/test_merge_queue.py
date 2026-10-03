@@ -111,3 +111,24 @@ def test_pr_status_text_shows_the_queue(pr_repo):
     _sync(repo)
     _, out, _ = run_cli(repo, "pr", "status")
     assert "[merge queue #1]" in out, out
+
+
+def test_a_queue_that_could_not_be_asked_keeps_its_state_when_something_else_changes(pr_repo):
+    """The restored queue state must be what the `pr.synced` event records too, or the
+    projection reads the next fold as an ejection (the event is built from the same info)."""
+    repo, forge = _approved_and_green(pr_repo)
+    _sync(repo)
+    forge.set(graphql_down=True)
+    forge.edit(1, checks=[{"status": "IN_PROGRESS", "conclusion": ""}])  # something else moved
+    _sync(repo)
+    row = _row(repo)
+    assert (row["queue"], row["queue_position"]) == ("queued", 1), row
+    assert row["checks"] == "pending", "the other change must still be recorded"
+
+
+def test_a_queue_state_change_without_a_move_is_seen(pr_repo):
+    repo, forge = _approved_and_green(pr_repo)
+    _sync(repo)
+    forge.edit(1, queue={"seq": 1, "state": "UNMERGEABLE"})
+    _sync(repo)
+    assert _row(repo)["queue_state"] == "UNMERGEABLE"

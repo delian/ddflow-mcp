@@ -227,7 +227,10 @@ class GitHub(Forge):
         ejection."""
         argv = ["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}"]
         argv += ["-F", f"number={number}", "-f", f"query={_GH_QUEUE_QUERY}"]
-        p = _run(self.repo, argv)
+        try:
+            p = _run(self.repo, argv)
+        except ForgeUnavailable:
+            return None  # a hung or failing call: the view itself already worked
         text = (p.stdout or "") + (p.stderr or "")
         if "mergeQueueEntry" in text and "doesn't exist" in text:
             return "", 0, ""  # a schema with no merge queues: definitely not queued
