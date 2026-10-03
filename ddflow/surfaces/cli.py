@@ -98,6 +98,7 @@ from .commands.setup import (
     help_topics,
 )
 from .commands.viewers_lists import register as register_list_viewers
+from .commands.viewers_sessions import add_session_view_parsers
 from .commands.workflow import cmd_workflow
 from .context import (
     FAIL,
@@ -1026,6 +1027,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     sd.add_argument("session")
     sd.add_argument("--summary", default="")
     sd.set_defaults(fn=cmd_session)
+    add_session_view_parsers(se_s)
 
     rp = s.add_parser("replay", help="reconstruct the decision history from the log")
     rp.add_argument("--out", default="")
