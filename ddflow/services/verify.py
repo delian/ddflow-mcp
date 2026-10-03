@@ -202,6 +202,19 @@ def _declared(repo: Path, led: dict[str, Any], tracked: set[str] | None) -> Clai
     notes = []
     if gone:
         notes.append(f"existed once but absent now: {_trim(gone)}")
+    # On this machine but unknown to git: real here, absent from any other checkout.
+    local_only = [
+        g
+        for g in exact
+        if g not in tracked
+        and _present(repo, g, tracked)
+        and g not in landed
+        and not any(t.startswith(g.rstrip("/") + "/") for t in tracked)
+    ]
+    if local_only:
+        notes.append(
+            f"exists here but is untracked, so no other checkout has it: {_trim(local_only)}"
+        )
     if led["done"]["files_known"] and globs and not conflicts(sorted(landed), globs):
         notes.append("the landing touched nothing inside its declared globs")
     if notes:
