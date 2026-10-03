@@ -1,6 +1,5 @@
 """B184: concurrent demo runs must not share (and rmtree) one workspace."""
 
-import subprocess
 import sys
 from pathlib import Path
 
