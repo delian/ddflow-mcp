@@ -439,6 +439,9 @@ def _merge_here(tree: Path, cfg: Config, source: str, message: str) -> GitResult
                 f"{r.err or r.out}\n\n{tree} may be left mid-merge, and git could not say "
                 f"whether by this merge, so it was not aborted: check `git -C {tree} status`, "
                 f"and `git -C {tree} merge --abort` if it is this one.",
+                # Indeterminate before the attempt: a merge found open now may be someone
+                # else's, so this branch was not demonstrably judged.
+                attempted=was_merging is not None,
             )
     if r.ok and cfg.worktree.merge_strategy == "squash":
         # `git merge --squash` STAGES the result and commits nothing -- `-m` is accepted
