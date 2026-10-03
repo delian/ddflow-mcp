@@ -114,9 +114,11 @@ def verify_sweep(
     return O.ok("verify.sweep", **data)
 
 
-def refuse_sweep_args() -> O.Outcome:
-    """`phase`, `limit` and `file_bugs` are sweep arguments; they cannot ride on one id."""
-    return O.refused("verify", "phase, limit and file_bugs are for a sweep: omit id")
+def refuse_sweep_args(
+    reason: str = "phase, limit and file_bugs are for a sweep: omit id",
+) -> O.Outcome:
+    """Arguments that belong to the other mode (sweep vs one task) are refused, not dropped."""
+    return O.refused("verify", reason)
 
 
 def _reopen(log, rep, data: dict, *, reason: str, force: bool) -> O.Outcome:
