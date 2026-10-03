@@ -615,8 +615,9 @@ def _holder_note(path: Path) -> str:
         want = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
         for line in Path("/proc/locks").read_text().splitlines():
             f = line.split()
-            # `1: FLOCK ADVISORY WRITE 4242 fd:00:131077 0 EOF`; a waiter's own blocked
-            # request is prefixed `->` and is not the holder.
+            # `1: FLOCK ADVISORY WRITE 4242 fd:00:131077 0 EOF`.
+            if any("->" in tok for tok in f[:2]):
+                continue  # a blocked waiter (the kernel prefixes it), never the holder
             if len(f) >= _LOCK_FIELDS and f[1] == "FLOCK" and f[5] == want:
                 pid = int(f[4])
                 if pid > 0:

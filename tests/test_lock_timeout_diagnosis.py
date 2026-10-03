@@ -96,15 +96,62 @@ def test_holder_lookup_never_raises_and_degrades_to_nothing(tmp_path, monkeypatc
     assert L._holder_note(tmp_path / "missing.lock") == ""
 
 
-def test_a_malformed_proc_locks_line_is_skipped(tmp_path, monkeypatch):
-    lock = tmp_path / "events.lock"
-    lock.write_text("")
+def _lines_for(lock: Path, *lines: str):
+    """/proc/locks contents whose `{want}` is this lock file's real dev:inode."""
+    import os
+
+    st = os.stat(lock)
+    want = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
     real_read = Path.read_text
 
-    def junk(self, *a, **k):
+    def fake(self, *a, **k):
         if str(self) == "/proc/locks":
-            return "garbage\n1: FLOCK ADVISORY WRITE notapid 00:00:1 0 EOF\n"
+            return "\n".join(x.format(want=want) for x in lines) + "\n"
         return real_read(self, *a, **k)
 
-    monkeypatch.setattr(Path, "read_text", junk)
+    return fake
+
+
+def test_a_malformed_line_for_this_very_file_is_skipped(tmp_path, monkeypatch):
+    lock = tmp_path / "events.lock"
+    lock.write_text("")
+    monkeypatch.setattr(
+        Path, "read_text", _lines_for(lock, "1: FLOCK ADVISORY WRITE notapid {want} 0 EOF")
+    )
+    assert L._holder_note(lock) == ""  # reached int(f[4]), caught the ValueError
+
+
+@pytest.mark.parametrize(
+    "blocked",
+    [
+        "2: -> FLOCK ADVISORY WRITE 777 {want} 0 EOF",
+        "2:-> FLOCK ADVISORY WRITE 777 {want} 0 EOF",
+        "2: ->FLOCK ADVISORY WRITE 777 {want} 0 EOF",
+    ],
+)
+def test_a_blocked_waiter_is_never_named_as_the_holder(tmp_path, monkeypatch, blocked):
+    """The holder's pid can be unreadable (another pid namespace shows -1); the next match
+    must not be the waiter that is itself blocked."""
+    lock = tmp_path / "events.lock"
+    lock.write_text("")
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        _lines_for(lock, "1: FLOCK ADVISORY WRITE -1 {want} 0 EOF", blocked),
+    )
     assert L._holder_note(lock) == ""
+
+
+def test_the_holder_line_wins_over_a_waiter_line(tmp_path, monkeypatch):
+    lock = tmp_path / "events.lock"
+    lock.write_text("")
+    monkeypatch.setattr(
+        Path,
+        "read_text",
+        _lines_for(
+            lock,
+            "2: -> FLOCK ADVISORY WRITE 777 {want} 0 EOF",
+            "1: FLOCK ADVISORY WRITE 4242 {want} 0 EOF",
+        ),
+    )
+    assert "pid 4242" in L._holder_note(lock) and "777" not in L._holder_note(lock)
