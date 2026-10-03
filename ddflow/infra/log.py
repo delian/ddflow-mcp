@@ -317,7 +317,7 @@ def _parser_stamp() -> str:
     no list of "things that affect parsing" to keep current.
     """
     h = hashlib.sha256()
-    for fn in (Event.from_json, Event.compute_id, Event.body):
+    for fn in (Event.from_json, Event.compute_id, Event.body, canonical):
         code = fn.__code__
         h.update(code.co_code)
         h.update(repr(code.co_consts).encode())
@@ -638,10 +638,14 @@ class EventLog:
         *,
         lock_timeout_s: float = 30.0,
         log_cfg: LogConfig | None = None,
+        cache_writes: bool = True,
     ) -> None:
         # Defaults come FROM the dataclass rather than being repeated here, so the
         # documented default and the effective one cannot drift.
         self.log_cfg = log_cfg or LogConfig()
+        #: False for a log built only to READ someone else's repository (a sibling project
+        #: in `external.sync`, an export): reading it must not leave a snapshot in it.
+        self.cache_writes = cache_writes
         self.root = Path(root)
         self.dir = self.root / ".ddflow" / "events"
         # Derived on first USE, not here (bug B244aeaad5c): deriving can create this
@@ -1142,7 +1146,11 @@ class EventLog:
         or the new one, never half of either, and never from a read that left some shard
         uncached (a partial snapshot would simply be re-derived, but there is no point).
         """
-        if not self._snapshot_enabled() or any(d.parsed is None for _, d in deltas):
+        if (
+            not self.cache_writes
+            or not self._snapshot_enabled()
+            or any(d.parsed is None for _, d in deltas)
+        ):
             return
         total = sum(len(d.whole) for _, d in deltas)
         covered = _SNAP_COVERED.get(self.dir, 0)
