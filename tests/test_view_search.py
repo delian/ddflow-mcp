@@ -179,7 +179,7 @@ def test_safe_regexes_still_run_and_odd_syntax_never_crashes(repo):
     ):
         code, _, err = run_cli(repo, "search", ok, "--regex")
         assert code == 0 and "Traceback" not in err, (ok, err)
-    for fine in (r"(zir|quar){2}", r"(a|b){2,3}", r"(zir|quar){1,8}"):
+    for fine in (r"(colou?r){2}", r"(zir|quar){2}", r"(a|b){2,3}", r"(zir|quar){1,8}"):
         assert run_cli(repo, "search", fine, "--regex")[0] in (0, 2), fine  # accepted, not refused
     for odd in ("(?>zirc)onium", "(?<=a)b", "a{2}{3}", "(?i:ZIRC)onium", "[[:alpha:]]"):
         code, _, err = run_cli(repo, "search", odd, "--regex")
