@@ -588,8 +588,8 @@ def _kind(repo, cfg, log, item, gate, chunks, delta, commit, base) -> str:
     Judged by what a review COVERS, not by the flag that asked for it: `--delta` always
     is one; a `--commit` or `--base` review is one only when that ref can only be
     narrower than the item's whole diff -- at or after the head the gate's last review
-    covered, or strictly inside the item's own range (after its merge-base with the base
-    branch). A ref that reaches back to the base branch or before can cover it all, and
+    covered, or strictly inside the item's own line (after its merge-base with the base
+    branch, up to the reviewed head). A ref that reaches back to the base branch or before can cover it all, and
     counts as a full round.
     """
     if chunks:
@@ -606,6 +606,7 @@ def _kind(repo, cfg, log, item, gate, chunks, delta, commit, base) -> str:
     inside = (
         start.ok
         and W.git(repo, "merge-base", "--is-ancestor", start.out, ref).ok
+        and W.git(repo, "merge-base", "--is-ancestor", ref, head).ok
         and W.git(repo, "rev-parse", ref).out != W.git(repo, "rev-parse", start.out).out
     )
     return "delta" if inside else "full"
