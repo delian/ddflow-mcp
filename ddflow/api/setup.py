@@ -304,7 +304,7 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     return out
 
 
-_BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed")
+_BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed", "review.delta_default")
 
 
 def _budget_keys(edit: ConfigEdit) -> list[str]:
@@ -350,14 +350,15 @@ def report_budget_change(
     default = ReviewConfig()
     layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
     revert = "; ".join(
-        f"`ddflow config --set {k} {getattr(default, k.split('.')[1])}"
+        f"`ddflow config --set {k} {str(getattr(default, k.split('.')[1])).lower()}"
         f"{' --local' if edit.local else ''}`"
         for k in touched
     )
     note = (
         f"NOTE FOR THE OPERATOR: the review budget was changed over MCP "
         f"({', '.join(touched)}; {layer} layer). Shipped default: {default.max_rounds} full "
-        f"rounds per gate, on_exceed = {default.on_exceed!r}. If you did not ask for this, "
+        f"rounds per gate, on_exceed = {default.on_exceed!r}, delta_default = "
+        f"{str(default.delta_default).lower()}. If you did not ask for this, "
         f"revert it with {revert}. Recorded as a session note."
     )
     from .knowledge import session_note
