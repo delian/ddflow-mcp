@@ -1477,6 +1477,21 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     co_s = co.add_subparsers(dest="companions_cmd")
     co_list = co_s.add_parser("list", help="what is known, installed and registered")
     co_list.add_argument("--no-probe", action="store_true", help="skip the detection probes")
+    for _p, _dflt in ((co, False), (co_list, argparse.SUPPRESS)):
+        # On the bare `companions` AND on `list`, so `companions --verify` works. The
+        # subparser's default is SUPPRESS so it cannot overwrite a value the parent parsed.
+        _p.add_argument(
+            "--verify",
+            action="store_true",
+            default=_dflt,
+            help="launch each MCP companion and require an answer to `initialize` (spawns "
+            "processes; opt-in; exit 1 = one is not an MCP server, 2 = could not tell)",
+        )
+        _p.add_argument(
+            "--id",
+            default="" if _dflt is False else argparse.SUPPRESS,
+            help="with --verify: comma-separated ids to launch (even if not installed)",
+        )
     co_add = co_s.add_parser("add", help="register installed companions in an agent's MCP config")
     co_add.add_argument("--id", default="", help="comma-separated; default: every installed one")
     co_add.add_argument("--agents", default="", help="comma-separated (default: claude)")
