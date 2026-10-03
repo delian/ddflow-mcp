@@ -130,7 +130,7 @@ def test_snippet_contains_the_match(repo):
 def test_pathological_regex_is_refused(repo):
     _fixture(repo)
     for bad in (
-        "(a+)+$", "(a|aa)+$", r"(a*)*b", r"(\w+)\1", "x" * 300, "(a{1,2})+b", "(?>a+)+b",
+        "(a+)+$", "(a|aa)+$", r"(a*)*b", r"(\w+)\1", "x" * 300, "(a{1,2})+b", "(?>a+)+b", "(a|aa){1,1000}b",
         ".*a.*b.*c",
     ):  # fmt: skip
         t0 = time.monotonic()

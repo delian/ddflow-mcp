@@ -3164,8 +3164,8 @@ above), `--state`, `--phase` (tasks, bugs and research under it), `--owner` (the
 leaseholder, session agent or event agent; not `--agent`, which is who you are), `--since`
 and `--limit` (default 20, at most 200). Snippets are cut from text already redacted like
 the exports, so a secret in a prompt is never printed and cannot be searched for. `--regex`
-refuses patterns that can take exponential time (a repeat inside a repeat, an alternation
-inside an unbounded repeat, back-references, more than three unbounded repeats, over 200
+refuses patterns that can take exponential time (a variable-length repeat inside a repeat, an
+alternation inside a repeat, back-references, more than two unbounded repeats, over 200
 characters) and looks at the first 2000 characters of each record under a 5 second budget.
 Exit codes: 0 hits, 2 none ("No matches ..."), 3 a refused request. No MCP tool yet: it joins
 the consolidated read tool of the viewers phase; agents use `ddflow_recall` meanwhile.
