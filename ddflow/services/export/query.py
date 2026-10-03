@@ -217,7 +217,9 @@ def load(root: Path | str, log_cfg: Any = None) -> Query:
         raise ExportError(
             f"no event log at {root / '.ddflow' / 'events'}; is this project adopted?"
         )
-    log = EventLog(root, log_cfg=log_cfg)  # the caller's `cfg.log`, so [log] knobs apply
+    log = EventLog(
+        root, log_cfg=log_cfg, cache_writes=False
+    )  # the caller's `cfg.log`, so [log] knobs apply
     try:
         events = log.read_all()
     except (OSError, ValueError) as exc:
