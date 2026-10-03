@@ -1150,9 +1150,11 @@ def cut(
     if direct:
         # A maintenance line is tagged where it stands: it has no develop/production
         # pair of its own, so there is no release branch to route through.
-        if vfiles and not _write_version_files(repo, cfg, out, vp.ref, vfiles, vp.next):
-            return out
+        # The changelog first, the bump last: the bump rolls its own working tree back when
+        # its commit fails, so a refusal here leaves nothing half-done behind it.
         if prep and not _write_changelog(repo, cfg, out, vp.ref, prep, vp.next, force=force):
+            return out
+        if vfiles and not _write_version_files(repo, cfg, out, vp.ref, vfiles, vp.next):
             return out
         out.sha = W.rev(repo, vp.ref)
         return _tag_and_push(repo, cfg, log, out, vp, branch=vp.ref, push=push)

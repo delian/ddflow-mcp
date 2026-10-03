@@ -165,3 +165,25 @@ def test_without_the_knob_nothing_is_touched(repo):
     code, _out, err = run_cli(repo, "--json", "version", "cut", "--version", "1.0.0")
     assert code == 0, err
     assert 'version = "0.0.1"' in _git(repo, "show", "v1.0.0:pyproject.toml")
+
+
+def test_a_group_that_took_no_part_in_the_match_is_refused(repo):
+    _trunk(repo, py=r'^version = "([^"]*)"$|^name = "demo"$')
+    # the file's only match is the `name` line: group 1 is absent
+    (repo / "pyproject.toml").write_text('[project]\nname = "demo"\n')
+    _git(repo, "commit", "-qam", "chore: no version line")
+    code, out, err = run_cli(repo, "--json", "version", "cut", "--version", "1.2.3")
+    assert code == 3 and "took no part" in json.loads(out)["warning"] + err, (out, err)
+    assert _git(repo, "tag", "-l") == ""
+
+
+def test_a_failing_commit_leaves_the_working_tree_as_it_was(repo):
+    _trunk(repo)
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text("#!/bin/sh\nexit 1\n")
+    hook.chmod(0o755)
+    code, out, err = run_cli(repo, "--json", "version", "cut", "--version", "1.2.3")
+    assert code == 3, (out, err)
+    assert not _git(repo, "status", "--porcelain", "--untracked-files=no"), "a half-bumped tree"
+    assert 'version = "0.0.1"' in (repo / "pyproject.toml").read_text()
+    assert _git(repo, "tag", "-l") == ""

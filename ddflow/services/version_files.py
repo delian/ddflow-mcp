@@ -69,7 +69,14 @@ def prepare(repo: Path, cfg: Config, *, version: str, ref: str) -> Prepared:
             )
         text = shown.stdout.decode("utf-8")
         rx = re.compile(pattern, re.MULTILINE)
-        found = len(rx.findall(text))
+        hits = list(rx.finditer(text))
+        found = len(hits)
+        if found == 1 and hits[0].start(1) == -1:
+            raise VersionFileError(
+                f"[flow.version_files] {path!r}: {pattern!r} matched but its capture group took "
+                f"no part in the match (an optional or alternative group), so there is no "
+                f"version text to replace"
+            )
         if found != 1:
             what = "matches nothing" if found == 0 else f"matches {found} times"
             raise VersionFileError(
@@ -118,12 +125,18 @@ def commit_on(repo: Path, cfg: Config, branch: str, prep: Prepared, *, message: 
             )
         for path, text in prep.edits.items():
             (tree / path).write_text(text, encoding="utf-8")
-        for step in (("add", "--", *paths), ("commit", "-m", message, "--", *paths)):
-            r = W.git(tree, *step)
-            if not r.ok:
-                raise VersionFileError(
-                    f"git {step[0]} of the version files failed: {r.err or r.out}"
-                )
+        try:
+            for step in (("add", "--", *paths), ("commit", "-m", message, "--", *paths)):
+                r = W.git(tree, *step)
+                if not r.ok:
+                    raise VersionFileError(
+                        f"git {step[0]} of the version files failed: {r.err or r.out}"
+                    )
+        except VersionFileError:
+            # Never leave a half-bumped working tree behind (a failing hook, a signing error).
+            W.git(tree, "reset", "-q", "--", *paths)
+            W.git(tree, "checkout", "-q", "--", *paths)
+            raise
         return paths
     finally:
         if tmp is not None:
