@@ -192,6 +192,52 @@ def acquire(
     item_id: str,
     *,
     holder: str = "",
+    **kwargs: Any,
+) -> Lease:
+    """Claim an item; with `[flow].claims = "remote"`, win the remote claim ref first.
+
+    The remote round trips run BEFORE the log's append lock is taken -- up to six git
+    subprocesses at 30 s each held under it would starve every local writer -- and a claim
+    the local checks then refuse gives the ref back.
+    """
+    holder = holder or log.agent_id
+    took = ""
+    if cfg.flow.claims == "remote":
+        if _holds_live(log, cfg, item_id, holder):
+            # Re-asserting a live claim of our own: renewing tolerates an unreachable
+            # remote (it lapses at its expiry and the next heartbeat re-takes it), as the
+            # heartbeat does; only a claim someone else took over is refused.
+            if lost := _remote_renew(log, cfg, item_id, holder, time.time()):
+                raise LeaseError(
+                    f"{item_id}: the remote claim is now {lost}'s -- this lease lapsed "
+                    f"there and was taken over.",
+                    holder=lost,
+                    item=item_id,
+                )
+        else:
+            took = _remote_take(log, cfg, item_id, holder, time.time())
+    try:
+        return _acquire_locked(log, cfg, item_id, holder=holder, **kwargs)
+    except Exception:
+        if took == "fresh":  # an own, already-live claim is not ours to give back here
+            _remote_drop(log, item_id, holder)
+        raise
+
+
+def _holds_live(log: EventLog, cfg: Config, item_id: str, holder: str) -> bool:
+    it = _decide_from(log)[0].items.get(item_id)
+    lease = it.lease if it else None
+    return bool(
+        lease and lease.holder == holder and not lease.expired(time.time(), cfg.lease.grace_s)
+    )
+
+
+def _acquire_locked(
+    log: EventLog,
+    cfg: Config,
+    item_id: str,
+    *,
+    holder: str = "",
     globs: list[str] | None = None,
     worktree: str = "",
     branch: str = "",
@@ -366,6 +412,52 @@ def _alternatives(state: State, cfg: Config, item_id: str, holder: str, now: flo
     )[:5]
 
 
+def _remote_take(log: EventLog, cfg: Config, item_id: str, holder: str, now: float) -> str:
+    """Win the remote claim ref or refuse the claim. Returns "fresh" for a new ref and
+    "renewed" when we already held it."""
+    from ..infra import claimref as CR
+
+    got = CR.take(log.root, cfg.flow.remote, item_id, holder, now + cfg.lease.ttl_s)
+    if got.status == "held":
+        raise LeaseError(
+            f"{item_id} is claimed on the remote {cfg.flow.remote!r} by {got.holder or 'another clone'}"
+            + (f" for another {max(0, got.expires - now):.0f}s" if got.expires else ""),
+            holder=got.holder,
+            item=item_id,
+        )
+    if got.status != "ok":
+        raise LeaseError(
+            f"{item_id}: [flow].claims = 'remote' but the remote claim could not be made "
+            f"({got.detail or 'remote unavailable'}). Not claiming locally instead: that is "
+            f"the silent split-brain this setting exists to prevent.",
+            item=item_id,
+        )
+    return "renewed" if got.detail == "renewed" else "fresh"
+
+
+def _remote_renew(log: EventLog, cfg: Config, item_id: str, holder: str, now: float) -> str:
+    """Extend our remote claim. Returns the holder who has it instead of us ("" when ours,
+    or when the remote could not be asked: it then lapses at its expiry and the next
+    successful renew re-takes it)."""
+    if cfg.flow.claims != "remote":
+        return ""
+    from ..infra import claimref as CR
+
+    got = CR.renew(log.root, cfg.flow.remote, item_id, holder, now + cfg.lease.ttl_s)
+    return (got.holder or "another clone") if got.status == "held" else ""
+
+
+def _remote_drop(log: EventLog, item_id: str, holder: str) -> None:
+    """Best effort: a ref we fail to delete lapses with its expiry and is replaced then."""
+    from ..config import Config
+
+    cfg = Config.load(log.root)
+    if cfg.flow.claims == "remote":
+        from ..infra import claimref as CR
+
+        CR.drop(log.root, cfg.flow.remote, item_id, holder)
+
+
 def _transition(
     log: EventLog,
     item_id: str,
@@ -404,7 +496,7 @@ def _transition(
 def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
     """Extend MY lease. Refuses on someone else's: a renewal is a claim of possession."""
     holder = holder or log.agent_id
-    return _transition(
+    ok = _transition(
         log,
         item_id,
         "lease.renewed",
@@ -412,6 +504,13 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         holder=holder,
         payload=lambda _lease: {"at": time.time(), "holder": holder},
     )
+    if ok:
+        from ..config import Config
+
+        # A claim someone else took over on the remote is not renewed: False, as for any
+        # lease we no longer hold.
+        return not _remote_renew(log, Config.load(log.root), item_id, holder, time.time())
+    return ok
 
 
 def plan_retarget(
@@ -502,7 +601,8 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
     """Give up a lease. Records WHOSE it was and WHO released it, which can differ —
     an operator releasing a crashed agent's lease is the normal case."""
     by = holder or log.agent_id
-    return _transition(
+    owner: dict[str, str] = {}
+    done = _transition(
         log,
         item_id,
         "lease.released",
@@ -510,13 +610,19 @@ def release(log: EventLog, item_id: str, holder: str = "", note: str = "") -> bo
         holder=by,
         # `event` names WHICH claim ends: one holder can have held the item twice, and a
         # fold that merges clones must not end the wrong one (B191).
-        payload=lambda lease: {
-            "holder": lease.holder,
-            "event": lease.event,
-            "by": by,
-            "note": note,
-        },
+        payload=lambda lease: (
+            owner.update(holder=lease.holder)
+            or {
+                "holder": lease.holder,
+                "event": lease.event,
+                "by": by,
+                "note": note,
+            }
+        ),
     )
+    if done:
+        _remote_drop(log, item_id, owner["holder"])
+    return done
 
 
 def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
@@ -525,19 +631,26 @@ def expire(log: EventLog, item_id: str, reason: str = "") -> bool:
     Carries the worktree forward, because expiry is exactly when someone needs to know
     where the crashed agent's uncommitted work is.
     """
-    return _transition(
+    owner: dict[str, str] = {}
+    done = _transition(
         log,
         item_id,
         "lease.expired",
         mine=False,
         holder="",
-        payload=lambda lease: {
-            "holder": lease.holder,
-            "event": lease.event,
-            "reason": reason,
-            "worktree": lease.worktree,
-        },
+        payload=lambda lease: (
+            owner.update(holder=lease.holder)
+            or {
+                "holder": lease.holder,
+                "event": lease.event,
+                "reason": reason,
+                "worktree": lease.worktree,
+            }
+        ),
     )
+    if done:
+        _remote_drop(log, item_id, owner["holder"])
+    return done
 
 
 # -- recovery ------------------------------------------------------------------------
