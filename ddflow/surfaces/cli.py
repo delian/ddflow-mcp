@@ -79,7 +79,7 @@ from .commands.operations import (
 )
 from .commands.queue import cmd_phase_add, cmd_resolve, cmd_split, cmd_task_add
 from .commands.rules import cmd_rule
-from .commands.verify import cmd_verify
+from .commands.verify import add_verify_parser
 from .commands.reporting import (
     cmd_board,
     cmd_doctor,
@@ -1005,9 +1005,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     rur.set_defaults(fn=cmd_rule)
     ru.set_defaults(fn=cmd_rule, rule_cmd="list", tag="", scope="")
 
-    vf = s.add_parser("verify", help="re-derive the claims behind a done task (exit 1 = one fails)")
-    vf.add_argument("id")
-    vf.set_defaults(fn=cmd_verify)
+    add_verify_parser(s)
 
     stt = s.add_parser("status", help="one answer to 'what is the state of this project?'")
     stt.set_defaults(fn=cmd_status)
