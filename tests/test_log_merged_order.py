@@ -61,7 +61,7 @@ def test_random_workload_matches_the_unoptimised_path_after_every_step(repo):
     rng = random.Random(7)
     log = EventLog(repo, "x")
     clocks = {"a": 0, "b": 0, "c": 0}
-    for step in range(120):
+    for _ in range(120):
         agent = rng.choice(list(clocks))
         n = rng.choice([1, 1, 2, 5, 70])  # 70 exceeds the incremental batch limit
         if rng.random() < 0.3:
@@ -140,7 +140,7 @@ def _bench(repo, n: int) -> tuple[float, float]:
     # What the old read sorted: the raw per-shard concatenation, not the sorted output.
     flat = [e for p in log.shards() for e in log._read_shard(p)[0]]
     old, new = [], []
-    for k in range(5):
+    for _ in range(5):
         t = time.perf_counter()
         L._sorted_unique(list(flat))
         old.append((time.perf_counter() - t) * 1000)
