@@ -385,3 +385,44 @@ def test_config_takes_key_and_value_without_set(repo, tmp_path):
     code, _out, err = run_cli(repo, "config", "--set", "review.max_rounds", "1")
     assert code == OK, err
     assert Config.load(repo, env={}).review.max_rounds == 4, "local still wins"
+
+
+def test_set_beside_append_applies_only_the_set_so_only_it_is_reported(repo, tmp_path):
+    """Probe for a review finding: `configure` returns after `set`, the append is never
+    written, so reporting it would be a false alarm and ignoring it is correct."""
+    _setup(repo, tmp_path)
+    reply = _configure(repo, set="lease.ttl_s", value="1800", toml="[review]\nmax_rounds = 0")
+    assert Config.load(repo, env={}).review.max_rounds == 2, "the append was written"
+    assert "operator" not in reply.lower()
+
+
+def test_a_non_table_review_value_does_not_crash_the_report(repo, tmp_path):
+    from ddflow.api.setup import ConfigEdit, report_budget_change
+    from ddflow.core import outcome as O
+
+    out = O.ok("config", text="")
+    assert report_budget_change(repo, ConfigEdit(append_toml="review = 1"), out) is out
+
+
+def test_a_ref_inside_the_items_range_is_a_delta_one_before_it_is_full(repo, tmp_path):
+    _setup(repo, tmp_path)
+    base = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "-b", "feat")
+    mid = ""
+    for n in (1, 2):
+        (repo / f"f{n}.txt").write_text(f"{n}\n")
+        _git(repo, "add", f"f{n}.txt")
+        _git(repo, "commit", "-qm", f"f{n}")
+        mid = mid or _git(repo, "rev-parse", "HEAD")
+    api.review(repo, gate="critic", item="T1")
+    api.review(repo, gate="critic", item="T1")
+    inside = api.review(repo, gate="critic", item="T1", base=mid)
+    assert inside.exit == OK, inside.reason  # strictly inside the item's range: narrower
+    wide = api.review(repo, gate="critic", item="T1", base=base)
+    assert wide.exit == REFUSED, "the branch point reaches the whole diff"
+
+
+def test_config_with_a_lone_value_is_refused_not_ignored(repo, tmp_path):
+    _setup(repo, tmp_path)
+    code, _out, err = run_cli(repo, "config", "review.max_rounds")
+    assert code == FAIL and "KEY VALUE" in err

@@ -548,7 +548,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     and whether the round budget lets it. `locals_` is review()'s own arguments."""
     a = locals_
     item, gate = a["item"], a["gate"]
-    kind = _kind(repo, log, item, gate, a["chunks"], a["delta"], a["commit"], a["base"])
+    kind = _kind(repo, cfg, log, item, gate, a["chunks"], a["delta"], a["commit"], a["base"])
     done = _full_rounds(log, item, gate) if item else 0
     forced, diff, how, why = "", "", "", ""
     if kind == "full" and item:
@@ -582,13 +582,15 @@ def _last_head(log, item: str, gate: str) -> str:
     return ""
 
 
-def _kind(repo, log, item, gate, chunks, delta, commit, base) -> str:
+def _kind(repo, cfg, log, item, gate, chunks, delta, commit, base) -> str:
     """full | delta | chunk: only a `full` round counts against `[review].max_rounds`.
 
     Judged by what a review COVERS, not by the flag that asked for it: `--delta` always
-    is one; a `--commit` or `--base` review is one only when that ref is at or after the
-    head the last review of this gate covered (so it can only be narrower). Any other ref
-    can reach the whole diff, and counts.
+    is one; a `--commit` or `--base` review is one only when that ref can only be
+    narrower than the item's whole diff -- at or after the head the gate's last review
+    covered, or strictly inside the item's own range (after its merge-base with the base
+    branch). A ref that reaches back to the base branch or before can cover it all, and
+    counts as a full round.
     """
     if chunks:
         return "chunk"
@@ -596,9 +598,17 @@ def _kind(repo, log, item, gate, chunks, delta, commit, base) -> str:
         return "delta"
     ref = commit or base
     head = _last_head(log, item, gate) if ref and item else ""
-    if head and W.git(repo, "merge-base", "--is-ancestor", head, ref).ok:
+    if not head:
+        return "full"
+    if W.git(repo, "merge-base", "--is-ancestor", head, ref).ok:
         return "delta"
-    return "full"
+    start = W.git(repo, "merge-base", cfg.worktree.base_ref or W.default_branch(repo), head)
+    inside = (
+        start.ok
+        and W.git(repo, "merge-base", "--is-ancestor", start.out, ref).ok
+        and W.git(repo, "rev-parse", ref).out != W.git(repo, "rev-parse", start.out).out
+    )
+    return "delta" if inside else "full"
 
 
 def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:

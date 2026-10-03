@@ -315,13 +315,17 @@ def _budget_keys(edit: ConfigEdit) -> list[str]:
     def norm(k: str) -> str:
         return ".".join(seg.strip().strip("\"'") for seg in k.split("."))
 
+    # `configure` applies `set` and returns; an `append_toml` beside it is never written
+    # (the probe is in tests/test_review_budget.py), so only the one that IS applied counts.
     if edit.set:
         return [k for k in _BUDGET_KNOBS if norm(edit.set) == k]
     try:
         table = tomllib.loads(edit.append_toml).get("review")
     except tomllib.TOMLDecodeError:
         return []
-    return [f"review.{k}" for k in table if f"review.{k}" in _BUDGET_KNOBS] if table else []
+    if not isinstance(table, dict):
+        return []
+    return [f"review.{k}" for k in table if f"review.{k}" in _BUDGET_KNOBS]
 
 
 def report_budget_change(
