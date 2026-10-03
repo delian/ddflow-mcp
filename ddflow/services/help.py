@@ -97,7 +97,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "Looking at it",
-        ("board", "show", "status", "brief", "progress", "render", "export", "history"),
+        ("board", "show", "status", "brief", "progress", "render", "export", "history", "list"),
     ),
     ("When something is wrong", ("doctor", "recover", "loops", "rebuild", "replay", "cadence")),
     ("Help", ("help",)),

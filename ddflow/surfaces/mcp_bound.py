@@ -246,6 +246,29 @@ def bound_recall(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
     return out, note
 
 
+def bound_list(body: Any, args: dict[str, Any]) -> tuple[Any, str | None]:
+    """`ddflow_list`: rows arrive already cut by `limit` (default 25) and carry their own
+    `total`/`truncated`, so a cut list gets the way to the rest as a note. One session
+    shown in full is cut to its newest `limit` (default 25) entries, each text clipped."""
+    if not isinstance(body, dict):
+        return body, None
+    entries = body.get("entries")
+    if isinstance(entries, list):
+        kept, note = _cut_rows(entries, _limit(args), True, "session entries")
+        cut = [0]
+        out = {**body, "entries": _clip(kept, cut)}
+        if cut[0]:
+            more = f"{cut[0]} long entry text(s) end in [...]: `ddflow session show <id>` has them whole."
+            note = f"{note} {more}" if note else more
+        return out, note
+    if body.get("truncated") is True and isinstance(body.get("rows"), list):
+        return body, (
+            f"truncated: showing {body.get('shown')} of {body.get('total')}; "
+            "raise limit (0 = all, at most 1000)."
+        )
+    return body, None
+
+
 #: tool name -> the projection its MCP body goes through.
 BOUNDS = {
     "ddflow_next": bound_next,
@@ -253,4 +276,5 @@ BOUNDS = {
     "ddflow_recall": bound_recall,
     "ddflow_decision_list": bound_decisions,
     "ddflow_progress": bound_progress,
+    "ddflow_list": bound_list,
 }
