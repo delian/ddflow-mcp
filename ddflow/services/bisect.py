@@ -114,6 +114,8 @@ def command_probe(
                     cwd=cwd,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",  # a stray byte in a test's output is not a failed run
                     timeout=timeout_s,
                     check=False,
                 )
@@ -121,7 +123,7 @@ def command_probe(
                 verdicts.append(None)
                 detail = f"timed out after {timeout_s:g}s"
                 continue
-            except (OSError, subprocess.SubprocessError) as exc:
+            except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
                 verdicts.append(None)
                 detail = f"could not run: {exc}"
                 continue
