@@ -345,13 +345,17 @@ class TestRulesManifest:
         # Debug info
         if storage_rules_dir != rules_dir:
             # Paths might differ, so just check that files exist somewhere
-            assert storage_rules_dir.exists(), f"Storage rules_dir doesn't exist: {storage_rules_dir}"
+            assert storage_rules_dir.exists(), (
+                f"Storage rules_dir doesn't exist: {storage_rules_dir}"
+            )
             toml_files = list(storage_rules_dir.glob("*.toml"))
         else:
             assert rules_dir.exists(), f"Rules directory doesn't exist"
             toml_files = list(rules_dir.glob("*.toml"))
 
-        assert len(toml_files) == 3, f"Expected 3 TOML files, found {len(toml_files)} at {storage_rules_dir}"
+        assert len(toml_files) == 3, (
+            f"Expected 3 TOML files, found {len(toml_files)} at {storage_rules_dir}"
+        )
 
         listed = storage.list()
         assert len(listed) == 3, f"Expected 3 rules, got {len(listed)}"
@@ -388,15 +392,9 @@ class TestRulesManifest:
 
     def test_manifest_idempotency(self, temp_repo, storage):
         """Test that regenerating manifest gives identical bytes."""
-        storage.add(
-            Rule(id="r-1", title="First", content="", tags=["a"])
-        )
-        storage.add(
-            Rule(id="r-2", title="Second", content="", tags=["b"])
-        )
-        storage.add(
-            Rule(id="r-3", title="Third", content="", tags=["c"])
-        )
+        storage.add(Rule(id="r-1", title="First", content="", tags=["a"]))
+        storage.add(Rule(id="r-2", title="Second", content="", tags=["b"]))
+        storage.add(Rule(id="r-3", title="Third", content="", tags=["c"]))
 
         manifest1 = rules_manifest(storage)
         manifest2 = rules_manifest(storage)
@@ -559,3 +557,20 @@ class TestRulesIntegration:
         # Manifest updated
         manifest = rules_manifest(storage)
         assert "Cycle test" not in manifest
+
+
+def test_rule_add_enforces_the_rules_limits(tmp_path):
+    from ddflow import api
+    from ddflow.services.rules import Rule
+    from tests.conftest import run_cli  # noqa: F401
+
+    (tmp_path / ".ddflow").mkdir()
+    (tmp_path / ".ddflow" / "config.toml").write_text(
+        '[rules]\nmax_size_bytes = 10\nscopes_allowed = ["project"]\n'
+    )
+    big = api.rule_add(tmp_path, Rule(id="r1", title="t", content="x" * 11), check_dedup=False)
+    assert big.exit != 0 and "max_size_bytes" in big.reason
+    scope = api.rule_add(
+        tmp_path, Rule(id="r2", title="t", content="ok", scope="task"), check_dedup=False
+    )
+    assert scope.exit != 0 and "scopes_allowed" in scope.reason

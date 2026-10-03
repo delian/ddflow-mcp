@@ -1351,6 +1351,8 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     wfs = wf.add_subparsers(dest="workflow_cmd")
     wf.set_defaults(fn=cmd_workflow, dry_run=False)
 
+    wfs.add_parser("state", help="one-page overview: workflow, rules, queue, bugs, diagram")
+
     wfp = wfs.add_parser("pipeline", help="set the gates a task or phase passes through")
     wfp.add_argument("which", choices=["task", "phase"])
     wfp.add_argument("gates", help="comma-separated gate ids, in order")

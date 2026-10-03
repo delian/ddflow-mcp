@@ -1400,11 +1400,22 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow_state": {
         "description": (
-            "Comprehensive workflow state snapshot: configured workflow, active rules, architecture decisions, active work, project structure, queue status, and blockers. One call to understand the whole project: its configuration, what rules govern it, what work is active, what's next, and what's blocked. Includes hints on how to ask for more details. Read-only."
+            "One-call project overview: workflow, rules, decisions, active work, queue and bugs with names and priorities, blockers, and a Mermaid gate diagram. Read-only."
         ),
         "properties": {},
-        "api": lambda repo, a, agent: _api().workflow_state(repo, agent),
-        "payload": "overview",
+        "api": lambda repo, a, agent: _api().workflow_overview(repo, agent),
+        "payload": (
+            "workflow",
+            "workflow_diagram",
+            "rules",
+            "decisions",
+            "active_work",
+            "project",
+            "task_queue",
+            "bugs",
+            "blockers",
+            "discovery_hints",
+        ),
     },
     "ddflow_help": {
         "description": (
@@ -2404,24 +2415,24 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Add a project rule; duplicate-checked like every add (answer new | extends:ID | duplicate_of:ID | related:ID)."
         ),
         "properties": {
-            "id": ("string", "Rule id, kebab-case with the 'r-' prefix, e.g. 'r-naming'.", True),
+            "id": ("string", "Rule id, e.g. r-naming.", True),
             "title": ("string", "One-line rule statement.", True),
             "content": ("string", "Rule text (may be empty for check_only).", False),
-            "tags": ("string", "Comma-separated tags for categorization.", False),
+            "tags": ("string", "Comma-separated tags.", False),
             "scope": ("string", "project (default) | phase | task | global.", False),
             "priority": ("integer", "Priority 0-100 (default 50).", False),
-            "globs": ("string", "Comma-separated path globs this rule governs.", False),
+            "globs": ("string", "Comma-separated globs it governs.", False),
             "new": ("boolean", "Dedup answer: a different record.", False),
             "extends": ("string", "Dedup answer: extends record ID.", False),
             "duplicate_of": (
                 "string",
-                "Dedup answer: the same as record ID (handled as extends).",
+                "Dedup answer: same as record ID.",
                 False,
             ),
-            "related": ("string", "Dedup answer: related to record ID (linked both ways).", False),
+            "related": ("string", "Dedup answer: related to ID.", False),
             "check": (
                 "boolean",
-                "Dry run: list duplicates, add nothing (exit 2 none, 3 found).",
+                "Dry run: list duplicates only.",
                 False,
             ),
         },
@@ -2473,7 +2484,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "tag": ("string", "Filter by this tag.", False),
             "scope": ("string", "Filter by this scope.", False),
             "limit": ("integer", "Maximum results (default 100).", False),
-            "json": ("boolean", "Return as JSON array.", False),
+            "json": ("boolean", "JSON array.", False),
         },
         "api": lambda repo, a, agent: _api().rule_list(
             repo,
@@ -2488,8 +2499,8 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "query": ("string", "Search query (keywords or regex).", True),
-            "exact": ("boolean", "Exact phrase match (default false).", False),
-            "regex": ("boolean", "Treat the query as a regular expression (default false).", False),
+            "exact": ("boolean", "Exact phrase.", False),
+            "regex": ("boolean", "Query is a regex.", False),
             "tag": ("string", "Filter results by this tag.", False),
             "scope": ("string", "Filter results by this scope.", False),
             "limit": ("integer", "Maximum results to return (default 10).", False),
@@ -2511,12 +2522,12 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "id": ("string", "Rule id to edit.", True),
-            "title": ("string", "New title (unchanged if omitted).", False),
-            "content": ("string", "New content (unchanged if omitted).", False),
-            "tags": ("string", "Comma-separated tags (unchanged if omitted).", False),
-            "scope": ("string", "New scope (unchanged if omitted).", False),
-            "priority": ("integer", "New priority (unchanged if omitted).", False),
-            "globs": ("string", "Comma-separated globs (unchanged if omitted).", False),
+            "title": ("string", "New title.", False),
+            "content": ("string", "New content.", False),
+            "tags": ("string", "Comma-separated tags.", False),
+            "scope": ("string", "New scope.", False),
+            "priority": ("integer", "New priority.", False),
+            "globs": ("string", "Comma-separated globs.", False),
         },
         "api": lambda repo, a, agent: _api().rule_update(
             repo,
@@ -2741,7 +2752,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
-        "rule_add rule_list rule_search rule_edit rule_remove rule_show"
+        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state"
     ).split()
 )
 
