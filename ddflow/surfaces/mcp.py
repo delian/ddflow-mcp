@@ -93,9 +93,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "phase": ("string", "Restrict the ready set to this phase (optional).", False),
             "check_recovery": (
                 "boolean",
-                "Also scan for crashed agents' worktrees and lead with them. Worth it "
-                "at session start: unclaimed work left by a dead process is the one "
-                "thing to know BEFORE picking up something new.",
+                "Also scan for crashed agents' worktrees and lead with them: unclaimed work left by a dead process is the one thing to know BEFORE picking up something new.",
                 False,
             ),
         },
@@ -153,17 +151,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "resources": (
                 "string",
-                "Physical resources this claim holds, e.g. 'gpu:2'. They REPLACE the "
-                "item's declared resources (recorded on the item, as globs are). Refused (exit 3) when live claims already use the "
-                "capacity ([schedule] resources) -- every holder counts, you included.",
+                "Physical resources this claim holds, e.g. 'gpu:2'; they REPLACE the item's declared ones. Refused (exit 3) when live claims already use the capacity ([schedule] resources), every holder counted.",
                 False,
             ),
             "force": (
                 "boolean",
-                "Override a refusal. Legitimate for exactly one thing: retrying after "
-                "`ddflow_recover` has told you a crashed agent's worktree holds "
-                "nothing. Forcing past a dependency or a live lease is how two agents "
-                "end up writing the same file, and the override is recorded either way.",
+                "Override a refusal. Legitimate for one thing: retrying after `ddflow_recover` said a crashed agent's worktree holds nothing. Forcing past a dependency or a live lease is how two agents write the same file; the override is recorded either way.",
                 False,
             ),
         },
@@ -326,13 +319,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_gate_skip": {
         "description": (
-            "Skip a gate ON THE RECORD, with a mandatory reason. This is the auditable "
-            "escape hatch, and it is the one to reach for: `gates.require_outcome` "
-            "means a gate left silent BLOCKS completion, so the alternative to skipping "
-            "is forcing past everything at once. A skip names the single step you are "
-            "dropping and why, and that reason is in the event log permanently. "
-            "Skipping a gate listed in `gates.required` still blocks — those are not "
-            "optional."
+            "Skip a gate ON THE RECORD, with a mandatory reason: the auditable escape hatch. `gates.require_outcome` means a silent gate BLOCKS completion, so the alternative to a skip is forcing past everything at once; a skip names the single step dropped and why, permanently in the log. A gate in `gates.required` still blocks when skipped."
         ),
         "properties": {
             "id": ("string", "Item id.", True),
@@ -416,23 +403,17 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "allow_dirty": (
                 "boolean",
-                "Merge although the worktree has uncommitted changes. They are NOT "
-                "included — that is the point of the refusal. Only pass this once you "
-                "have looked at what is dirty and decided it is build output.",
+                "Merge although the worktree has uncommitted changes; they are NOT included. Pass it only once you have looked at what is dirty and decided it is build output.",
                 False,
             ),
             "allow_empty": (
                 "boolean",
-                "Land a branch with no commits ahead of its target. Refused by default: "
-                "it would record the item merged with nothing landed -- usually the item "
-                "is bound to the wrong tree (rebind with ddflow_update worktree).",
+                "Land a branch with no commits ahead of its target. Refused by default: usually the item is bound to the wrong tree (rebind with ddflow_update worktree).",
                 False,
             ),
             "branch": (
                 "string",
-                "For an item claimed with no_worktree: the branch to land. Default: the "
-                "branch checked out in the worktree this connection runs in. Paths the "
-                "landing changes outside the item's globs come back as outside_globs.",
+                "For an item claimed with no_worktree: the branch to land (default: the branch checked out where this connection runs). Changes outside the item's globs come back as outside_globs.",
                 False,
             ),
         },
@@ -463,13 +444,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_pr_sync": {
         "description": (
-            "Ask the forge (GitHub/GitLab) what reviewers did with every request in "
-            "REVIEW, and record it: a merged request completes its item (and retargets "
-            "anything stacked on it), requested changes send the item back to the queue "
-            "WITH the review text, a closed one is parked for a person, an approved and "
-            "green one is merged when [flow].pr_merge = 'on_approval'. `ddflow_next` does "
-            "this itself when [flow].sync_on_next is on. Exit 2 = the forge could not be "
-            "asked, which is NOT 'nothing changed'."
+            "Ask the forge (GitHub/GitLab) what reviewers did with every request in REVIEW and record it: a merged request completes its item (and retargets what is stacked on it), requested changes return the item to the queue WITH the review text, a closed one is parked for a person, an approved green one is merged when [flow].pr_merge = 'on_approval'. `ddflow_next` does this itself with [flow].sync_on_next. Exit 2: the forge could not be asked -- NOT 'nothing changed'."
         ),
         "properties": {"item": ("string", "Only this item (optional).", False)},
         "api": lambda repo, a, agent: _api().pr_sync(
@@ -610,9 +585,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "needs": ("string", "Comma-separated ids this phase depends on.", False),
             "globs": (
                 "string",
-                "Comma-separated path globs this phase writes. Set them: they are what "
-                "lets two agents work different phases in parallel safely, and the "
-                "phase's own dependencies are INHERITED by every task inside it.",
+                "Comma-separated path globs this phase writes: what lets two agents work different phases in parallel; the phase's dependencies are INHERITED by every task in it.",
                 False,
             ),
             "body": ("string", "Detail, acceptance criteria, context.", False),
@@ -649,14 +622,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_split": {
         "description": (
-            "Split an item into sub-tasks IN PLACE when the work turns out to be two "
-            "things. Use this the moment you discover it — mid-task discovery is the "
-            "normal case, not an exception.\n\n"
-            "The original keeps its id and history and becomes an umbrella that "
-            "completes when its children do; closing it and opening two new ones "
-            "instead would lose the thread between what was planned and what happened. "
-            "Children inherit the parent's globs, so give each its own afterwards if "
-            "they write different files — until then they cannot run in parallel."
+            "Split an item into sub-tasks IN PLACE when the work turns out to be two things -- the moment you discover it; mid-task discovery is normal. The original keeps its id and history and becomes an umbrella that completes when its children do. Children inherit the parent's globs: give each its own afterwards if they write different files, or they cannot run in parallel."
         ),
         "properties": {
             "id": ("string", "The item to split.", True),
@@ -693,11 +659,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "phase": ("string", "Owning phase id. Give this OR `parent`.", False),
             "parent": (
                 "string",
-                "Owning phase id OR another TASK's id — a task parent makes this a "
-                "SUB-TASK, which carries its own globs and dependencies and runs in "
-                "parallel with its siblings like any other task. Same field as "
-                "`phase`; both names exist because the CLI has both, and an argument "
-                "that exists in one surface and not the other is a trap.",
+                "Owning phase id, OR another TASK's id, which makes this a SUB-TASK with its own globs and dependencies, run in parallel with its siblings. Same field as `phase` (the CLI has both names).",
                 False,
             ),
             "title": ("string", "One-line description.", False),
@@ -714,10 +676,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "lines": (
                 "string",
-                "Comma-separated release lines a FIX must reach, e.g. '1,2,3'. The task is "
-                "written on the line [flow].port_strategy dictates and a port task "
-                "`<id>@<line>` is generated for each other line; each starts once what it "
-                "carries has landed.",
+                "Comma-separated release lines a FIX must reach, e.g. '1,2,3': the task is written on the line [flow].port_strategy dictates and a port task `<id>@<line>` is generated per other line, each starting once what it carries has landed.",
                 False,
             ),
             "readd": (
@@ -775,9 +734,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "how": ("string", "How to apply or detect it.", False),
             "summary": (
                 "string",
-                "The lesson in ONE paragraph -- what a reader who will not open the full "
-                "rule needs. Rendered into docs/ddflow/LESSONS-SUMMARY.md, the project's "
-                "distilled rulebook.",
+                "The lesson in ONE paragraph, for a reader who will not open the full rule. Rendered into docs/ddflow/LESSONS-SUMMARY.md.",
                 False,
             ),
             "tags": ("string", "Comma-separated tags.", False),
@@ -789,19 +746,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "supersedes": (
                 "string",
-                "Comma-separated lesson ids this replaces. The old one is retired, not "
-                "deleted — retiring is how the corpus stops growing without losing the "
-                "record of what was once believed.",
+                "Comma-separated lesson ids this replaces. The old one is retired, not deleted: the corpus stops growing without losing what was once believed.",
                 False,
             ),
             "pattern": (
                 "string",
-                "A regex naming the mistake in CODE. Supplying it scans the repository now "
-                "and stores WHICH sites match, so `ddflow_lesson_verify` can later name "
-                "the ones that reappeared. Prefer this to a remembered rule whenever the "
-                "pattern is mechanical: a count says 'worse' and never 'which', so nobody "
-                "can act on it or review it. Refused if the regex does not compile — an "
-                "empty inventory reads as 'the code is clean'.",
+                "A regex naming the mistake in CODE. Scans the repository now and stores WHICH sites match, so `ddflow_lesson_verify` can later name the ones that reappeared (a count says 'worse', never 'which'). Refused if it does not compile.",
                 False,
             ),
             "globs": (
@@ -979,10 +929,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "item": ("string", "Restrict to one item.", False),
             "apply": (
                 "boolean",
-                "Act on the advice: release the leases and remove the worktrees this "
-                "reports as holding nothing. It only ever touches a tree MEASURED as "
-                "having no uncommitted and no unmerged work — one that could not be "
-                "measured is never removed, because 'could not tell' is not 'empty'.",
+                "Act on the advice: release the leases and remove the worktrees reported as holding nothing. Only a tree MEASURED as having no uncommitted and no unmerged work is touched; 'could not tell' is not 'empty'.",
                 False,
             ),
         },
@@ -1033,13 +980,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_cleanup": {
         "description": (
-            "Classify every ddflow worktree and branch: merged (safe to remove), "
-            "unmerged (carries commits nobody landed), dirty (uncommitted edits — a "
-            "human looks), orphan, or stale branch. Reports by default; with "
-            "apply=true it removes merged worktrees and branches and lands commits for "
-            "items the queue already considers done. A dirty tree is NEVER touched "
-            "automatically, whatever you pass — it is the only thing here that exists "
-            "nowhere else."
+            "Classify every ddflow worktree and branch: merged (safe to remove), unmerged (carries commits nobody landed), dirty (uncommitted edits: a human looks), orphan, or stale branch. Reports by default; apply=true removes merged worktrees and branches and lands commits for items the queue considers done. A dirty tree is NEVER touched automatically: it exists nowhere else."
         ),
         "properties": {"apply": ("boolean", "Perform the safe actions.", False)},
         "api": lambda repo, a, agent: _api().cleanup(repo, apply=bool(a.get("apply")), agent=agent),
@@ -1047,16 +988,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_recall": {
         "description": (
-            "'HAVE WE BEEN HERE BEFORE?' — one search across everything this project "
-            "remembers: architectural decisions, lessons learned, research verdicts, "
-            "operational memories, past bugs, similar tasks, and the operator's own "
-            "earlier prompts.\n\n"
-            "CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK. It exists so the operator "
-            "does not have to say the same thing twice and you do not have to learn "
-            "the same thing twice. Results are labelled by kind, because a binding "
-            "decision, a transferable lesson and a prompt from three weeks ago should "
-            "change what you do in different ways. A decision marked superseded names "
-            "its replacement — follow the replacement."
+            "'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons, research verdicts, operational memories, past bugs, similar tasks and the operator's earlier prompts. CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK, so nothing is said or learned twice. Results are labelled by kind (a binding decision, a transferable lesson and an old prompt change what you do differently); a superseded decision names its replacement -- follow that."
         ),
         "properties": {
             "query": ("string", "What you are about to do, in plain words.", True),
@@ -1087,16 +1019,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_similar": {
         "description": (
-            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE "
-            "you file it as a bug, task, lesson or other record. Read-only. Candidates "
-            "cross kinds (a bug sees the open task that fixes it, a task the bug it "
-            "would fix) and include closed ones, so a bug that repeats a fixed one is "
-            "caught. Each carries id, kind, title, state (open, claimed by whom, done, "
-            "fixed, invalid, removed...), score (0-1), the words it shares with your "
-            "text, and flags (identical text; the text names its id). Which are shown "
-            "follows [dedupe] show_floor, max_candidates and kinds. A score is a "
-            "prompt to LOOK, not a verdict: two bugs in one function score high and "
-            "are different. Nothing close answers exit 2 / an empty list."
+            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson or other record. Read-only. Candidates cross kinds and include closed records (a bug that repeats a fixed one is caught); each carries id, kind, title, state, score (0-1), the words shared and flags, per [dedupe] show_floor, max_candidates and kinds. A score is a prompt to LOOK, not a verdict. Nothing close: exit 2 / an empty list."
         ),
         "properties": {
             "text": (
@@ -1131,32 +1054,12 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_identify": {
         "description": (
-            "Declare WHO you are on this connection, before doing anything that writes. "
-            "Call this first if more than one agent or subagent is working this "
-            "repository at the same time. Every attribution in the queue depends on it: "
-            "who holds a claim, who ran a gate, and whether a review was done by an "
-            "agent other than the author. By default ddflow derives an identity from "
-            "the working tree, which is correct for one agent per tree and WRONG, with "
-            "no error, for several in the same tree — their work merges into one "
-            "identity, 'what was I doing' answers with someone else's task, and a "
-            "review passes independence against itself. There is no way to detect this "
-            "from the outside, so it has to be declared. Pick a name that is stable for "
-            "your whole session and distinct from the other agents': your role or "
-            "assignment, not a random string. Idempotent; call it again to correct it. "
-            "A SUBAGENT sharing its parent's connection must NOT call this -- it would "
-            "rename the parent -- and passes `as_agent` on each call instead (every other "
-            "tool takes it; same name rules as here, equivalent to the CLI's `--agent`: "
-            "claims, gate outcomes and reviews are attributed to that name for that one "
-            "call and conflict-checked against its siblings', and the connection's "
-            "identity is untouched)."
+            "Declare WHO you are on this connection before anything that writes. Call it first when more than one agent or subagent works this repository at once: identity is what attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role or assignment), distinct from the other agents'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (every tool takes it; same name rules; the CLI's `--agent`): that one call is attributed to that name and conflict-checked against its siblings, and the connection's identity is untouched."
         ),
         "properties": {
             "agent": (
                 "string",
-                "A short stable name for you on this connection, e.g. 'reviewer-2' "
-                "or 'importer'. Letters, digits, '.', '_' and '-' only, up to 64 "
-                "characters — it becomes a log filename. OMIT it to reset to the "
-                "tree-derived default and be told what that is.",
+                "A short stable name for you on this connection, e.g. 'reviewer-2'. Letters, digits, '.', '_', '-', up to 64 characters (it becomes a log filename). OMIT it to reset to the tree-derived default and be told what that is.",
                 False,
             ),
         },
@@ -1164,15 +1067,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_decision_add": {
         "description": (
-            "Record an architectural decision so the project stays consistent and the "
-            "reasoning survives. Use when you or the operator settle a question about "
-            "HOW the software is built — a data representation, a boundary, a library "
-            "choice, an invariant.\n\n"
-            "ALWAYS set `globs` to the code it governs: that is what lets the decision "
-            "be surfaced automatically to whoever works those files later, instead of "
-            "only being findable by someone who already suspects it exists. Record "
-            "`alternatives` too — without it the next agent re-proposes what was "
-            "rejected."
+            "Record an architectural decision so the project stays consistent and the reasoning survives: a question about HOW the software is built (a representation, a boundary, a library, an invariant) settled by you or the operator. ALWAYS set `globs` to the code it governs, so it reaches whoever works those files later; record `alternatives` too, or the next agent re-proposes what was rejected."
         ),
         "properties": {
             "id": (
@@ -1193,16 +1088,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "tags": ("string", "Comma-separated tags.", False),
             "status": (
                 "string",
-                "proposed | accepted (default) | superseded. 'proposed' records a "
-                "decision the operator has not ratified, which is honest about its "
-                "standing rather than presenting it as settled.",
+                "proposed | accepted (default) | superseded. 'proposed' is honest about a decision the operator has not ratified.",
                 False,
             ),
             "sources": (
                 "string",
-                "Where this came from: an ADR path, a URL, a commit sha. "
-                "Comma-separated. Structured, so a later audit can check the source "
-                "still exists rather than parsing it out of the prose.",
+                "Where this came from, comma-separated: an ADR path, a URL, a commit sha. Structured, so an audit can check the source still exists.",
                 False,
             ),
         },
@@ -1281,9 +1172,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "out": ("string", "Write a recovery kit to this directory.", False),
             "verify": (
                 "boolean",
-                "Re-resolve every recorded commit sha against this repository and "
-                "report the ones that are gone. A reconstruction citing shas nobody "
-                "can resolve is a narrative, not a record.",
+                "Re-resolve every recorded commit sha against this repository and report the ones that are gone: a reconstruction citing unresolvable shas is a narrative, not a record.",
                 False,
             ),
         },
@@ -1404,17 +1293,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_import": {
         "description": (
-            "For a project that ALREADY HAS HISTORY and is adopting ddflow now: read "
-            "its todo checklists, lessons corpus, ADR files and unmerged branches, and "
-            "propose them as queue items. Reports by default and writes NOTHING until "
-            "`apply` is true.\n\n"
-            "Call this right after `ddflow_setup` on any repository that is not brand "
-            "new. A queue that starts empty tells you nothing is in flight about a "
-            "project that may have three branches in flight.\n\n"
-            "The proposal is a GUESS about structure — headings became phases, "
-            "checkboxes became tasks, and almost nothing has globs. Use the "
-            "`import-existing-project` prompt, which walks through fixing that with the "
-            "operator. Exit 2 means nothing was found."
+            "For a project that ALREADY HAS HISTORY and is adopting ddflow now: reads its todo checklists, lessons corpus, ADR files and unmerged branches and proposes them as queue items. Reports by default; writes NOTHING until `apply` is true. Call it right after `ddflow_setup` on any repository that is not brand new. The proposal is a GUESS about structure (headings as phases, checkboxes as tasks, almost no globs): the `import-existing-project` prompt walks through fixing that with the operator. Exit 2: nothing found."
         ),
         "properties": {
             "apply": ("boolean", "Write the proposal. Default false: look first.", False),
@@ -1442,18 +1321,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow": {
         "description": (
-            "The rules THIS project runs by, in one answer: the gates every task and "
-            "phase passes through in order, which are commands and which you perform "
-            "yourself, which are required, which need evidence, which need a "
-            "different-family reviewer, which have been PROVEN able to fail — plus "
-            "the completion rules, the parallelism caps, the reviewers, and where each "
-            "value came from (a default, this project's config, or the environment).\n\n"
-            "Call it before your first `ddflow_claim` in a session, and after any "
-            "workflow change: the connection instructions are computed once when the "
-            "server starts, so a pipeline edited mid-session is not reflected there.\n\n"
-            "Exit 1 means the workflow does not hang together — most importantly a "
-            "pipeline naming a gate that has no definition, which blocks every item "
-            "that reaches it forever. Read-only."
+            "The rules THIS project runs by, in one answer: the gates every task and phase passes in order (command vs performed by you, required, evidence, different-family reviewer, PROVEN able to fail), the completion rules, the parallelism caps, the reviewers, and where each value came from (default, project config, environment). Call it before your first `ddflow_claim` and after any workflow change: the connection instructions are computed once at server start. Exit 1: the workflow does not hang together (e.g. a pipeline names a gate with no definition). Read-only."
         ),
         "properties": {},
         "api": lambda repo, a, agent: _api().workflow_show(repo),
@@ -1463,15 +1331,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow_pipeline": {
         "description": (
-            "Set the ordered list of gates a task or a phase must pass. WRITES to "
-            "this project's config.\n\n"
-            "Validated before anything is written: a gate id with no definition is "
-            "REFUSED and the error names the near miss, because an undefined gate in a "
-            "pipeline blocks every item that reaches it and cannot be recorded or "
-            "skipped. Define the gate first with `ddflow_workflow_gate`.\n\n"
-            "Ask the operator before changing a pipeline. It governs every future item, "
-            "not the one you are working on, and removing a gate removes a check "
-            "somebody added deliberately. Use dry_run to show them what it would do."
+            "Set the ordered list of gates a task or a phase must pass. WRITES this project's config. Validated first: a gate id with no definition is REFUSED (it would block every item that reaches it); define it with `ddflow_workflow_gate`. Ask the operator before changing a pipeline -- it governs every future item, and removing a gate removes a check somebody added on purpose. dry_run shows what it would do."
         ),
         "properties": {
             "which": ("string", "'task' or 'phase'.", True),
@@ -1485,15 +1345,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow_gate": {
         "description": (
-            "Define or change one gate, and optionally put it in a pipeline. WRITES to "
-            "this project's config.\n\n"
-            "`command` makes it a COMMAND gate: ddflow runs it and the exit code is "
-            "the evidence. `prompt` makes it an AGENT gate: you perform it and record "
-            "what you did. A gate needs one of the two — one with neither tells an "
-            "agent nothing and gives a reviewer no contract, so it is refused.\n\n"
-            "`into` adds it to a pipeline (`after` places it; default is last). "
-            "`required` means an item cannot complete without it.\n\n"
-            "Ask the operator first, and prefer dry_run to show them the change."
+            "Define or change one gate, optionally placing it in a pipeline. WRITES this project's config. `command` makes a COMMAND gate (ddflow runs it; the exit code is the evidence); `prompt` makes an AGENT gate (you perform it and record what you did); one of the two is required. `into` adds it to a pipeline (`after` places it, default last); `required` blocks completion without it. Ask the operator first, and prefer dry_run to show them the change."
         ),
         "properties": {
             "id": ("string", "The gate id, e.g. 'lint' or 'security_scan'.", True),
@@ -1535,12 +1387,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow_drop": {
         "description": (
-            "Take a gate out of both pipelines, and out of `required` so it does not "
-            "become a requirement that quietly requires nothing. WRITES to config.\n\n"
-            "The gate's DEFINITION is left in place, so putting it back is one call. "
-            "Exit 2 means it was in neither pipeline.\n\n"
-            "Ask the operator first: a gate in a pipeline is a check somebody added on "
-            "purpose, and removing it weakens every future item."
+            "Take a gate out of both pipelines, and out of `required`, so it does not become a requirement that requires nothing. WRITES config. The gate's DEFINITION stays, so putting it back is one call. Exit 2: it was in neither pipeline. Ask the operator first: a gate in a pipeline is a check somebody added on purpose."
         ),
         "properties": {
             "id": ("string", "The gate id to remove from the pipelines.", True),
@@ -1553,16 +1400,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_help": {
         "description": (
-            "What ddflow IS, what it can do, and what the workflow is. Call this "
-            "first if you have not used it before — the other tool descriptions "
-            "explain one tool each to someone who already knows which to pick, and "
-            "the connection instructions describe THIS repository right now. Neither "
-            "answers 'how am I meant to work here'.\n\n"
-            "With no argument: the loop from picking work to landing it, what the exit "
-            "codes mean, and every capability grouped by what it is for. With a "
-            "`topic`: workflow, import, gates, parallel, memory, recovery, config.\n\n"
-            "Read-only. The pages are templates a project can override, so what this "
-            "returns may be this project's own instructions rather than the defaults."
+            "What ddflow IS, what it can do, and what the workflow is. Call this first if you have not used it before: the other descriptions explain one tool each and the connection instructions describe THIS repository; neither answers 'how am I meant to work here'. No argument: the loop from picking work to landing it, the exit codes, and every capability grouped by purpose. `topic`: workflow, import, gates, parallel, memory, recovery, config. Read-only; the pages are templates a project may override."
         ),
         "properties": {
             "topic": (
@@ -1596,14 +1434,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_companions": {
         "description": (
-            "Which companion MCP servers serve this project's gates, which are "
-            "installed on this machine, and which are wired into an agent's config. "
-            "ddflow imposes the pipeline; it does not perform the judgement inside "
-            "most gates — `standards` wants an automated standards review, `research` "
-            "wants documentation to check a claim against, `rules` wants memory. A "
-            "project with none of them has agent gates passing on assertion alone. "
-            "Exit 2 means a default companion is missing or unregistered. Read-only: "
-            "it detects and advises, it never installs anything."
+            "Which companion MCP servers serve this project's gates, which are installed on this machine, and which are wired into an agent's config. ddflow imposes the pipeline but does not perform the judgement inside most gates (`standards` wants an automated review, `research` documentation, `rules` memory); with none of them, agent gates pass on assertion alone. Exit 2: a default companion is missing or unregistered. Read-only; never installs."
         ),
         "properties": {
             "no_probe": ("boolean", "Skip the detection probes (faster, less certain).", False),
@@ -1615,14 +1446,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_companions_add": {
         "description": (
-            "WRITES to this repository's agent config. Registers companion MCP "
-            "servers that are ALREADY installed, merging rather than overwriting what "
-            "is there. Refuses (exit 3) to register one that is not installed, because "
-            "that writes a launch command which fails mid-task, at the moment a gate "
-            "told the agent to reach for it. "
-            "Call it with dry_run=true FIRST, show the operator the exact entry it "
-            "reports, and write only once they agree: which servers an agent launches "
-            "is the operator's decision, not yours."
+            "WRITES this repository's agent config: registers companion MCP servers that are ALREADY installed, merging with what is there. Refuses (exit 3) one that is not installed -- its launch command would fail mid-task, when a gate tells the agent to reach for it. Call it with dry_run=true FIRST, show the operator the exact entry, and write only once they agree: which servers an agent launches is the operator's decision."
         ),
         "properties": {
             "id": ("string", "Comma-separated ids; default: every installed one.", False),
@@ -1779,11 +1603,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "action": ("string", "status (default), install, uninstall.", False),
             "claude": (
                 "boolean",
-                "Install/uninstall the Claude Code SessionStart hook in "
-                ".claude/settings.json instead of the git hook: every session, including "
-                "after a context compaction, then starts with the ddflow brief and the "
-                "operational memory whether or not the agent remembers to ask. Other "
-                "hooks in that file are left exactly as they are.",
+                "Install/uninstall the Claude Code SessionStart hook in .claude/settings.json instead of the git hook: every session, including after a context compaction, starts with the ddflow brief and the operational memory. Other hooks in that file are left as they are.",
                 False,
             ),
         },
@@ -1860,12 +1680,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_pins": {
         "description": (
-            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, "
-            "AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, "
-            "which suites to re-run afterwards, and the longest stretches no test holds. "
-            "A sentence that reads like rationale is often a rule some test asserts. "
-            "Exit 2 when there is no Python suite to read pins from: then treat ALL of "
-            "it as pinned. Free text is a lower bound, not permission -- read it first."
+            "BEFORE compressing or rewording an instruction file (a rulebook, a driver, AGENTS.md, CLAUDE.md, a prompt template): which of its text a test pins, which suites to re-run afterwards, and the longest stretches no test holds. A sentence that reads like rationale is often a rule a test asserts. Exit 2: no Python suite to read pins from -- then treat ALL of it as pinned. Free text is a lower bound, not permission."
         ),
         "properties": {
             "document": ("string", "Path of the instruction file, relative to the repo.", True),
@@ -1888,15 +1703,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_precommit": {
         "description": (
-            "A .pre-commit-config.yaml proposed for THIS repository: the stacks it "
-            "actually has (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON files add "
-            "their checks) mapped to pinned hooks, plus ddflow's own check-commit and check-msg as local "
-            "hooks, so the pre-commit framework, not ddflow, owns .git/hooks/ (ddflow's "
-            "own hooks, if installed, are named: remove them before `pre-commit "
-            "install`, which would keep them as duplicates). Proposes; installs nothing. `write` creates the file and is "
-            "REFUSED (exit 3) when one exists -- merge by hand. The body names programs "
-            "the hooks need that this machine lacks (missing) and whether the hooks can "
-            "reach ddflow (ddflow_cmd_found). Installing pre-commit itself is the operator's call."
+            "A .pre-commit-config.yaml proposed for THIS repository: its stacks (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON checks) mapped to pinned hooks, plus ddflow's check-commit and check-msg as local hooks, so the pre-commit framework owns .git/hooks/ (remove ddflow's own hooks first; the body names them). Proposes; installs nothing. `write` creates the file and is REFUSED (exit 3) when one exists. The body names missing programs and whether the hooks can reach ddflow. Installing pre-commit itself is the operator's call."
         ),
         "properties": {
             "ddflow_cmd": (
@@ -1921,15 +1728,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_tests": {
         "description": (
-            "AFTER EACH CHANGE, while you work: the tests your change reaches (changed "
-            "test files, tests importing a changed module directly or one step removed, "
-            "tests named after a changed file, everything under a changed conftest.py), "
-            "each with why, and a command that runs them IN PARALLEL -- the project's own "
-            "test command with its runner and worker flags, the files swapped in. Run it; "
-            "do not reason about which tests matter. It is fast feedback, never a pass: "
-            "the unit_tests gate still runs the WHOLE suite, in parallel. Pass `item` so "
-            "the diff is taken in that item's worktree against its base. Exit 2 when no "
-            "test reaches the change."
+            "AFTER EACH CHANGE, while you work: the tests your change reaches (changed test files, tests importing a changed module directly or one step removed, tests named after a changed file, everything under a changed conftest.py), each with why, and a command that runs them IN PARALLEL with the project's own runner flags. Run it; do not reason about which tests matter. Fast feedback, never a pass: the unit_tests gate still runs the WHOLE suite. `item`: diff that item's worktree against its base. Exit 2: no test reaches the change."
         ),
         "properties": {
             "item": ("string", "The item whose worktree and base to use.", False),
@@ -1989,11 +1788,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "refresh_docs": (
                 "boolean",
-                "Rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the "
-                "adopted agents' native rules from this ddflow's templates -- no MCP "
-                "launch, hook or command-file changes. Use it when ddflow_doctor notes "
-                "that driver docs differ from the templates. Refused on a project that "
-                "was never adopted.",
+                "Rewrite ONLY the driver docs, the AGENTS.md/CLAUDE.md blocks and the adopted agents' native rules from this ddflow's templates (no MCP, hook or command-file changes), e.g. when ddflow_doctor notes drifted driver docs. Refused on a project never adopted.",
                 False,
             ),
         },
@@ -2017,18 +1812,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_configure": {
         "description": (
-            "Read or write .ddflow/config.toml. With no arguments it prints every "
-            "knob, its value, its source and what it does. With `toml`, it APPENDS that "
-            "TOML to the config — the usual use is setting your project's test command:\n"
-            '  [gate.unit_tests]\n  command = "pytest -q -n auto"\n'
-            "(-n auto runs the suite in parallel and needs pytest-xdist; drop it without.) "
-            "This is how a project is configured without a shell. The committed file is "
-            "generic project policy. Anything that belongs to THIS machine or operator — "
-            "a reviewer endpoint, a host, an API-key variable, a worker count sized to "
-            "this box — pass local=true: it goes to the git-ignored "
-            ".ddflow/local/config.toml, which is read last and never committed. A "
-            "reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` with "
-            "write=true writes one for a server it finds."
+            'Read or write .ddflow/config.toml (WRITES). No arguments: every knob with value, source and meaning. `set` edits one dotted key in place (preferred); `toml` APPENDS a fragment, e.g. [gate.unit_tests] command = "pytest -q -n auto" (needs pytest-xdist; drop -n auto without it). The committed file is generic project policy; anything of THIS machine or operator (a reviewer endpoint, a host, a key variable, worker counts) goes with local=true to the git-ignored .ddflow/local/config.toml, read last and never committed. A reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` write=true writes one.'
         ),
         "properties": {
             "set": (
@@ -2063,12 +1847,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_reviewers_detect": {
         "description": (
-            "Probe well-known local ports for an OpenAI-compatible model server (ollama, "
-            "vLLM, LM Studio, llama.cpp, sglang) and report what is serving, with each "
-            "model's pretraining family. Use this to find a reviewer from a DIFFERENT "
-            "family than yourself — which the critic gate requires. Pass write=true to "
-            "record what it finds in the git-ignored .ddflow/local/reviewers.toml: an "
-            "endpoint on this machine is this machine's, never committed."
+            "Probe well-known local ports for an OpenAI-compatible model server (ollama, vLLM, LM Studio, llama.cpp, sglang) and report what serves, with each model's pretraining family: how to find a reviewer from a DIFFERENT family than yourself, which the critic gate requires. write=true records it in the git-ignored .ddflow/local/reviewers.toml (this machine's, never committed)."
         ),
         "properties": {
             "write": (
@@ -2126,9 +1905,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "branch": (
                 "string",
-                "Review this branch against base -- for an item claimed with no_worktree. "
-                "Default for such an item: the branch checked out in the worktree this "
-                "connection runs in. With neither, the review is recorded unavailable.",
+                "Review this branch against base, for an item claimed with no_worktree (default: the branch checked out where this connection runs). With neither, the review is recorded unavailable.",
                 False,
             ),
             "delta": (
@@ -2245,19 +2022,12 @@ TOOLS: dict[str, dict[str, Any]] = {
             "line": ("string", "Move it to another release line.", False),
             "resources": (
                 "string",
-                "Physical resources the work RUNS on, beside the files it writes: "
-                "'gpu:4,vllm-fleet'. `next` withholds the item and `claim` refuses it "
-                "while live claims use up the capacity ([schedule] resources). Declare it "
-                "for anything that starts a GPU job, a model server or a long run. Empty "
-                "string clears.",
+                "Physical resources the work RUNS on, beside its files: 'gpu:4,vllm-fleet'. `next` withholds and `claim` refuses the item while live claims use up the capacity ([schedule] resources). Empty string clears.",
                 False,
             ),
             "worktree": (
                 "string",
-                "Rebind the item -- and your live lease on it -- to this linked worktree "
-                "(absolute, or relative to the repository root) and the branch checked out "
-                "there. The way out of a binding to the wrong tree: re-claiming keeps the "
-                "item's recorded tree, and merge lands that tree's branch.",
+                "Rebind the item and your live lease to this linked worktree (absolute, or relative to the repository root) and its checked-out branch: the way out of a binding to the wrong tree; merge then lands that tree's branch.",
                 False,
             ),
         },
@@ -2308,9 +2078,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "reason": ("string", "Why it is being dropped.", True),
             "force": (
                 "boolean",
-                "Abandon although a sub-task is still open. Those sub-tasks do NOT "
-                "become abandoned with it — decide about each, or they sit in the "
-                "queue under a parent nobody will finish.",
+                "Abandon although a sub-task is still open. Those sub-tasks are NOT abandoned with it: decide about each, or they sit under a parent nobody will finish.",
                 False,
             ),
         },
@@ -2331,9 +2099,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             "reason": ("string", "Why.", False),
             "force": (
                 "boolean",
-                "Remove although it still has open children, or although other items "
-                "depend on it. Both leave the queue inconsistent in a way the "
-                "scheduler then reports, so read the refusal before overriding it.",
+                "Remove although it still has open children or dependents. Both leave the queue inconsistent in a way the scheduler reports; read the refusal before overriding.",
                 False,
             ),
         },
@@ -2360,13 +2126,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_wait": {
         "description": (
-            "Sleep until an item can be claimed -- or, with no item, until anything is "
-            "ready -- and return the moment it can. Use it instead of polling or asking "
-            "the operator when a claim was refused because another agent holds the item "
-            "or overlapping files, or a dependency someone is working on is unfinished. "
-            "Exit 0: claim now (it says what freed it). Exit 2: the deadline passed, or "
-            "waiting cannot help (done, cycle, operator hold, a dependency nobody works "
-            "on) and it says what to do instead. The holder is told you are waiting."
+            "Sleep until an item can be claimed (or, with no item, until anything is ready) and return the moment it can. Use it instead of polling when a claim was refused for another agent's lease or overlapping files, or an unfinished dependency someone is working on. Exit 0: claim now (it says what freed it). Exit 2: deadline passed, or waiting cannot help (done, cycle, operator hold, a dependency nobody works on) and it says what to do. The holder is told you wait."
         ),
         "properties": {
             "item": ("string", "The item to wait for (default: anything ready).", False),
@@ -2438,13 +2198,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_job_run": {
         "description": (
-            "Launch a LONG-RUNNING command for an item -- a training run, a data "
-            "generation, a model server -- detached into its own session so it outlives "
-            "you, this server and a restarted remote-control service, and record it. Runs "
-            "in the item's worktree. Returns the job id, pid and log path. Then WAIT with "
-            "ddflow_job_list rather than polling the process yourself; `ddflow_brief` "
-            "shows running jobs to whoever starts the next session. Declare the item's "
-            "`resources` (ddflow_update) so nobody else starts a run on the same GPUs."
+            "Launch a LONG-RUNNING command for an item (a training run, a data generation, a model server) detached into its own session, so it outlives you and this server, and record it. Runs in the item's worktree; returns the job id, pid and log path. Then WAIT with ddflow_job_list rather than polling; `ddflow_brief` shows running jobs to the next session. Declare the item's `resources` (ddflow_update) so nobody else starts a run on the same GPUs."
         ),
         "properties": {
             "item": ("string", "Item the job is for.", True),
@@ -2528,13 +2282,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_memory_add": {
         "description": (
-            "Remember ONE operational fact about this machine, repository or working "
-            "state -- 'this box has 8 H200s, usually idle', 'use -n 16, never -n auto', "
-            "'the critic can exit 0 having degenerated; grep for STATUS:'. Shown at the "
-            "top of every ddflow_brief and searchable by ddflow_recall, in every worktree "
-            "at once. Not for rules (ddflow_lesson_add), what happened (ddflow_session_note) "
-            "or how the software is built (ddflow_decision_add). Never put a secret here: "
-            "the log is committed. Refused over [memory] max_chars (default 280)."
+            "Remember ONE operational fact about this machine, repository or working state ('this box has 8 H200s', 'use -n 16, never -n auto'). Shown at the top of every ddflow_brief and found by ddflow_recall, in every worktree at once. Not for rules (ddflow_lesson_add), events (ddflow_session_note) or how the software is built (ddflow_decision_add). Never a secret: the log is committed. Refused over [memory] max_chars (default 280)."
         ),
         "properties": {
             "text": ("string", "The fact, in one or two sentences.", True),
@@ -2593,15 +2341,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_resolve": {
         "description": (
-            "Settle a CONTESTED item: two clones each added the same id with different "
-            "content, or each claimed it, and a merge brought both in. `ddflow_doctor` "
-            "names every contested item, `ddflow_show` lists the rival definitions (event "
-            "id, agent, title, body) and claims, and `ddflow_next` will not offer one "
-            "until it is settled. `keep` names the definition (event id or agent) and/or "
-            "the lease holder to keep; the losing claim is released in the same "
-            "transaction. A losing DEFINITION is returned in `lost` -- re-add it under a "
-            "new id with `refile_as`, or it exists only in the log. Refused (exit 3) on "
-            "an item that is not contested. Settle what the operator decides, not by guess."
+            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rival definitions and claims, `ddflow_next` withholds them). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost` (re-add it with `refile_as`). Refused (exit 3) when not contested. Settle what the operator decides, not by guess."
         ),
         "properties": {
             "id": ("string", "The contested item.", True),
@@ -2653,9 +2393,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_add": {
         "description": (
-            "Add a new rule to the project. Checks for similar rules and offers to extend "
-            "or mark as duplicate. Answer: 'new', 'extends:ID', 'duplicate_of:ID', or "
-            "'related:ID' to resolve dedup refusal."
+            "Add a project rule. Checked for duplicates like every add: on a refusal answer new | extends:ID | duplicate_of:ID | related:ID."
         ),
         "properties": {
             "id": ("string", "Rule id (kebab-case with 'r-' prefix, e.g. 'r-naming').", True),
@@ -2737,8 +2475,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_list": {
         "description": (
-            "List all project rules, optionally filtered by tag or scope. Use this to see "
-            "what rules apply to the current work."
+            "List the project's rules, optionally filtered by tag or scope: what governs the current work, one line per rule."
         ),
         "properties": {
             "tag": ("string", "Filter by this tag.", False),
@@ -2755,8 +2492,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_search": {
         "description": (
-            "Search rules by content or title, ranked by relevance. Use this to find rules "
-            "that govern a specific area or topic."
+            "Search rules by title or content, ranked by relevance: find the rules that govern a specific area or topic."
         ),
         "properties": {
             "query": ("string", "Search query (keywords or regex).", True),
@@ -2779,8 +2515,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_edit": {
         "description": (
-            "Update fields of an existing rule. Omitted fields remain unchanged. "
-            "Changes are recorded in the project manifest."
+            "Change fields of an existing rule; omitted fields stay as they are. The change is recorded in the project manifest."
         ),
         "properties": {
             "id": ("string", "Rule id to edit.", True),
@@ -2841,8 +2576,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_remove": {
         "description": (
-            "Delete a rule from the project. The rule is removed from the manifest and "
-            "the deletion is logged as an event."
+            "Delete a rule from the project manifest; the removal is logged as an event so the history keeps what was once a rule."
         ),
         "properties": {
             "id": ("string", "Rule id to remove.", True),
@@ -2860,8 +2594,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_show": {
         "description": (
-            "Retrieve a single rule with all its metadata: title, content, tags, scope, "
-            "priority, globs, and creation/update timestamps."
+            "One rule with all its metadata: title, content, tags, scope, priority, globs, and its creation and update timestamps."
         ),
         "properties": {
             "id": ("string", "Rule id to retrieve.", True),
