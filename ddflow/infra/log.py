@@ -598,16 +598,65 @@ def _held_key(path: Path) -> tuple[int, str]:
     return (os.getpid(), str(path))
 
 
+def _holder_note(path: Path) -> str:
+    """Who holds the flock on `path` right now, from the kernel; '' when it cannot say.
+
+    flock cannot say who owns a lock, but Linux lists every flock in /proc/locks with the
+    holder's pid and the file's device and inode. Asking the kernel costs the hot path
+    nothing and writes nothing: an earlier design had each holder write a note INTO the
+    lock file, which put per-writer bytes into a file that an un-adopted project commits
+    (no `.ddflow/.gitignore` yet), where two clones' notes conflict on merge.
+
+    Best effort and never raises: this runs while a TimeoutError is being built. Other
+    platforms (no /proc/locks) and a pid from another namespace give ''.
+    """
+    try:
+        st = os.stat(path)
+        want = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
+        for line in Path("/proc/locks").read_text().splitlines():
+            f = line.split()
+            # `1: FLOCK ADVISORY WRITE 4242 fd:00:131077 0 EOF`.
+            if any("->" in tok for tok in f[:2]):
+                continue  # a blocked waiter (the kernel prefixes it), never the holder
+            if len(f) >= _LOCK_FIELDS and f[1] == "FLOCK" and f[5] == want:
+                pid = int(f[4])
+                if pid > 0:
+                    return f" Held by {_describe_pid(pid)}."
+    except (OSError, ValueError):
+        return ""
+    return ""
+
+
+#: Fields on a /proc/locks line up to and including the `major:minor:inode` column.
+_LOCK_FIELDS = 6
+
+
+def _describe_pid(pid: int) -> str:
+    """`pid N (command line)` -- the command from /proc, or just the pid."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+        cmd = raw.replace(b"\0", b" ").decode("utf-8", "replace").strip()[:200]
+    except OSError:
+        cmd = ""
+    return f"pid {pid} ({cmd})" if cmd else f"pid {pid}"
+
+
 @contextlib.contextmanager
 def _flock(path: Path, timeout_s: float) -> Iterator[None]:
     """Exclusive advisory lock, with a bounded wait and a real error on timeout.
 
     The lock file is created once and NEVER atomically replaced: renaming over a lock
-    file puts two holders on two different inodes, each believing it is exclusive.
+    file puts two holders on two different inodes, each believing it is exclusive. It is
+    also never WRITTEN: its content is empty, so a project that commits it (before
+    `.ddflow/.gitignore` exists) cannot get a merge conflict from it.
+
+    A timeout says how long this process waited and, on Linux, who holds the lock (B184:
+    a timeout under machine load was suspected and could not be told from a wedged agent).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_CREAT | os.O_RDWR, 0o644)
-    deadline = time.monotonic() + timeout_s
+    started = time.monotonic()
+    deadline = started + timeout_s
     try:
         while True:
             try:
@@ -616,8 +665,10 @@ def _flock(path: Path, timeout_s: float) -> Iterator[None]:
             except BlockingIOError:
                 if time.monotonic() >= deadline:
                     raise TimeoutError(
-                        f"could not acquire {path} within {timeout_s}s; "
-                        f"another agent may be wedged — check `ddflow doctor`"
+                        f"could not acquire {path} within {timeout_s}s "
+                        f"(waited {time.monotonic() - started:.1f}s, this is pid {os.getpid()})."
+                        f"{_holder_note(path)} Another agent may be wedged, or the machine is "
+                        f"overloaded -- check `ddflow doctor`"
                     ) from None
                 time.sleep(0.02)
         yield
