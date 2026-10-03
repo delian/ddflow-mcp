@@ -434,12 +434,17 @@ class _ReplyFile:
     """Every chunk's whole reply, appended to ``.ddflow/local/reviews/<item>.<gate>.jsonl``
     as it ARRIVES (bug B206): a review can outlive its caller (the MCP client gave up at
     1800 s on a 2055 s critic), and a finding body that lives only in the tool response
-    is then lost. The gate evidence names the file and its digest."""
+    is then lost. The gate evidence names the file and its digest. The name is scoped to
+    THIS run (time and pid): a re-review, or a retry of an aborted call running at the
+    same time, must not truncate the file an earlier record's digest refers to."""
 
     def __init__(self, repo: Path, item: str, gate: str) -> None:
+        import os
         import threading
+        import time
 
-        self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.jsonl"
+        run = f"{time.strftime('%Y%m%dT%H%M%S')}-{os.getpid()}"
+        self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{run}.jsonl"
         self._lock = threading.Lock()
         self._started = False
 
