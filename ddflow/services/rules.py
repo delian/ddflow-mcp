@@ -89,7 +89,11 @@ class Rule:
             raise ValueError("Rule must have an 'id' field")
         if "title" not in data:
             raise ValueError("Rule must have a 'title' field")
-        if "content" not in data and not content:
+        # Content can be empty, but must be present either in data dict or as a content block
+        # If the text has a \n\n separator, there's a content block (even if empty)
+        has_content_in_data = "content" in data
+        has_content_block = len(parts) == 2  # There was a \n\n separator
+        if not has_content_in_data and not has_content_block:
             raise ValueError("Rule must have a 'content' field or content block")
 
         rule_id = data.get("id", "")
@@ -266,3 +270,167 @@ def _globs_match(pattern1: str, pattern2: str) -> bool:
         return True
 
     return False
+
+
+# -- Rules Storage --------------------------------------------------------
+
+
+class RulesStorage:
+    """Persist and retrieve rules from .ddflow/rules/ directory.
+
+    All operations record events to the event log.
+    """
+
+    def __init__(self, repo: Path):
+        """Initialize storage for the given repository.
+
+        Args:
+            repo: Path to the repository root (where .ddflow/ exists)
+        """
+        self.repo = Path(repo)
+        self.rules_dir = self.repo / ".ddflow" / "rules"
+
+    def _ensure_dir(self) -> None:
+        """Create the .ddflow/rules directory if it doesn't exist."""
+        self.rules_dir.mkdir(parents=True, exist_ok=True)
+
+    def _rule_path(self, rule_id: str) -> Path:
+        """Get the path for a rule's TOML file.
+
+        Args:
+            rule_id: The rule ID (e.g., "r-naming")
+
+        Returns:
+            Path to the rule's TOML file
+        """
+        return self.rules_dir / f"{rule_id}.toml"
+
+    def add(self, rule: Rule) -> tuple[Rule, dict[str, Any]]:
+        """Add a new rule to storage.
+
+        Args:
+            rule: The Rule to add
+
+        Returns:
+            Tuple of (rule, event_fields) where event_fields contains
+            the data to append to the event log
+        """
+        self._ensure_dir()
+        rule_path = self._rule_path(rule.id)
+
+        if rule_path.exists():
+            raise ValueError(f"Rule {rule.id} already exists at {rule_path}")
+
+        # Write the rule to disk
+        rule_path.write_text(rule.to_toml())
+
+        # Return the rule and event fields
+        return rule, {
+            "rule_id": rule.id,
+            "title": rule.title,
+            "scope": rule.scope,
+            "tags": rule.tags,
+            "priority": rule.priority,
+        }
+
+    def remove(self, rule_id: str) -> dict[str, Any]:
+        """Remove a rule from storage.
+
+        Args:
+            rule_id: The rule ID to remove
+
+        Returns:
+            Event fields for the deletion event
+        """
+        rule_path = self._rule_path(rule_id)
+
+        if not rule_path.exists():
+            raise ValueError(f"Rule {rule_id} not found at {rule_path}")
+
+        # Delete the file
+        rule_path.unlink()
+
+        return {"rule_id": rule_id}
+
+    def get(self, rule_id: str) -> Rule:
+        """Get a rule from storage.
+
+        Args:
+            rule_id: The rule ID to retrieve
+
+        Returns:
+            The Rule
+
+        Raises:
+            FileNotFoundError if the rule doesn't exist
+        """
+        rule_path = self._rule_path(rule_id)
+
+        if not rule_path.exists():
+            raise FileNotFoundError(f"Rule {rule_id} not found at {rule_path}")
+
+        toml_text = rule_path.read_text()
+        return Rule.from_toml(toml_text)
+
+    def list(self, tag: str | None = None, scope: str | None = None) -> list[Rule]:
+        """List all rules, optionally filtered by tag or scope.
+
+        Args:
+            tag: Optional tag to filter by
+            scope: Optional scope to filter by
+
+        Returns:
+            List of matching Rule objects
+        """
+        self._ensure_dir()
+        rules = []
+
+        for toml_file in sorted(self.rules_dir.glob("*.toml")):
+            try:
+                rule = self.get(toml_file.stem)
+                # Apply filters
+                if tag and tag not in rule.tags:
+                    continue
+                if scope and rule.scope != scope:
+                    continue
+                rules.append(rule)
+            except Exception:
+                # Skip invalid rules
+                continue
+
+        return rules
+
+    def update(self, rule_id: str, **fields: Any) -> tuple[Rule, dict[str, Any]]:
+        """Update an existing rule in storage.
+
+        Only the specified fields are updated; other fields retain their values.
+
+        Args:
+            rule_id: The rule ID to update
+            **fields: Fields to update (e.g., priority=75, tags=["naming"])
+
+        Returns:
+            Tuple of (updated_rule, event_fields)
+
+        Raises:
+            FileNotFoundError if the rule doesn't exist
+        """
+        rule = self.get(rule_id)
+
+        # Update the rule with new values
+        for key, value in fields.items():
+            if hasattr(rule, key):
+                setattr(rule, key, value)
+
+        # Update the timestamp
+        rule.updated = _now()
+
+        # Write back to disk
+        rule_path = self._rule_path(rule_id)
+        rule_path.write_text(rule.to_toml())
+
+        # Return the updated rule and event fields (only changed fields)
+        event_fields = {"rule_id": rule_id}
+        event_fields.update(fields)
+
+        return rule, event_fields
