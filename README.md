@@ -1135,6 +1135,41 @@ Finding numbers are per gate, so `--gate` is never defaulted on `review triage`:
 refused (exit 1) naming the gates that have findings when several do, and resolved to that gate
 (the output names it) when exactly one does. `ddflow_review_triage`'s `gate` works the same.
 
+**The review-round budget (`[review]`).** A shipped default in every project, with no
+configuration: a gate (`rubber_duck`, `critic`) gets **2 full review rounds** per item, then
+a third is refused (exit 3) with the way forward — later rounds each find fewer defects
+than the one before (measured: rounds 3 and later yielded about a quarter of the confirmed findings). What stays allowed after the cap, always:
+
+```sh
+ddflow review T1 --gate critic --delta      # recheck ONLY what changed since the head the last review covered
+ddflow review triage T1 --gate critic --finding 2 --refuted --probe "..."   # settle what is left
+ddflow review T1 --gate critic --force --reason "..."   # one more FULL round; the reason is recorded
+```
+
+A *full* round is a review of the item's whole diff; a `--delta`, a `--commit` review,
+a `--base <ref>` review and a `--chunk` re-run are not, and are never refused. Rounds are
+counted from the log's recorded reviews (`review_kind`, `round`, `rounds` and `reviewed_head`
+in the gate evidence), so a re-claim, a delta or a manual `gate skip` does not reset the
+count; a round that reached no reviewer is not counted. `--delta` is refused when no review
+is on record or nothing changed. Two knobs, changeable at every layer:
+
+| knob | default | meaning |
+|---|---|---|
+| `review.max_rounds` | `2` | full rounds per gate per item; `0` = unlimited |
+| `review.on_exceed` | `"refuse"` | `"warn"` runs the round and says the budget is spent |
+
+```sh
+ddflow config --set review.max_rounds 3           # this project (committed .ddflow/config.toml)
+ddflow config --set review.max_rounds 0 --local   # this machine only (.ddflow/local/config.toml)
+DDFLOW_REVIEW_MAX_ROUNDS=0 ddflow review ...      # one run
+```
+
+Over MCP, `ddflow_configure` accepts `review.max_rounds` and `review.on_exceed` on either
+layer (`local=true`), and tells the operator in its reply and in a session note — an agent
+does not lift the cap for itself; `--force --reason` is CLI-only and `ddflow_review` takes
+`delta=true`. `ddflow config --explain --filter review.` documents both knobs. A tool
+built before this knob skips an unknown `[review]` key with a note rather than failing.
+
 ### Companion tools
 
 ddflow imposes the order and demands the evidence. It does not *perform* the judgement

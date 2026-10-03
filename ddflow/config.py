@@ -1089,6 +1089,27 @@ _doc(
 
 
 @dataclass
+class ReviewConfig:
+    """The review-round budget (decision D-review-budget): a shipped default for every
+    project, so a review loop is bounded without anyone writing a config line."""
+
+    max_rounds: int = 2
+    on_exceed: str = "refuse"  # refuse | warn
+
+
+_doc(
+    "review",
+    "max_rounds",
+    'How many FULL cross-family review rounds one gate (rubber_duck, critic) may have on one item (default 2; 0 = unlimited). A round is a review of the item\'s whole diff; later rounds each find fewer defects than the one before, so after the cap the way forward is `ddflow review <id> --gate G --delta` (a recheck of ONLY what changed since the reviewed head) and `ddflow review triage` (refute or confirm each remaining finding with a probe) -- both are always allowed, as is a re-review of named chunks (--chunk). `--force --reason "..."` runs one more full round and records why. Change it for the project (`ddflow config --set review.max_rounds 3`), for this machine (add --local), per run (DDFLOW_REVIEW_MAX_ROUNDS), or over MCP with `ddflow_configure` (the operator is told when an agent does).',
+)
+_doc(
+    "review",
+    "on_exceed",
+    "What a full round beyond [review].max_rounds does: 'refuse' (default; exit 3, naming --delta, `review triage`, --force --reason and how to change the cap) or 'warn' (run it and say the budget is spent). A delta recheck and triage are never refused either way.",
+)
+
+
+@dataclass
 class EnforceConfig:
     """Mechanical enforcement — the layer that does not rely on the agent agreeing."""
 
@@ -1331,6 +1352,7 @@ class Config:
     reinstruct: ReinstructConfig = field(default_factory=ReinstructConfig)
     enforce: EnforceConfig = field(default_factory=EnforceConfig)
     loops: LoopsConfig = field(default_factory=LoopsConfig)
+    review: ReviewConfig = field(default_factory=ReviewConfig)
     log: LogConfig = field(default_factory=LogConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)

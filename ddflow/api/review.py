@@ -476,6 +476,177 @@ class _ReplyFile:
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
 
 
+def _round_evidence(repo, it, branch, commit, kind, done, status, forced) -> dict[str, Any]:
+    """The round bookkeeping a recorded review carries: kind, the running count of full
+    rounds, the head it covered (what `--delta` diffs from), and a forced round's reason.
+    A full round counts only when a reviewer actually reviewed something."""
+    from ..services import review as R
+
+    counted = kind == "full" and status in (R.REVIEWED, R.PARTIAL)
+    ev: dict[str, Any] = {
+        "review_kind": kind if counted or kind != "full" else "full_unavailable",
+        "rounds": done + (1 if counted else 0),
+        "reviewed_head": _head_of(repo, it, branch, commit),
+    }
+    if counted:
+        ev["round"] = done + 1
+    if forced:
+        ev["budget_forced"] = forced
+    return ev
+
+
+def _full_rounds(log, item: str, gate: str) -> int:
+    """Full review rounds already recorded for `item`'s `gate`, counted from the log.
+
+    Counted from the EVENTS, not the gate's current record: a later delta, a manual
+    `gate skip`/`record` or a re-claim replaces that record's evidence, and the budget
+    must not reset with it. Only rounds `ddflow review` tagged `review_kind = "full"`
+    count: a refused round, an errored one, a delta and a `--chunk` re-run are not.
+    """
+    return sum(
+        1
+        for e in log.read_all()
+        if e.subject == item
+        and e.kind.startswith("gate.")
+        and e.data.get("gate") == gate
+        and (e.data.get("evidence") or {}).get("review_kind") == "full"
+    )
+
+
+def _budget_refusal(item: str, gate: str, done: int, cap: int) -> str:
+    return (
+        f"{item}.{gate} has had {done} full review rounds ([review].max_rounds = {cap}). "
+        "Each round after the second finds fewer defects than the one before, so instead:\n"
+        f"  ddflow review {item} --gate {gate} --delta    recheck ONLY what changed since the "
+        "reviewed head (always allowed)\n"
+        f"  ddflow review triage {item} --gate {gate} --finding N --refuted|--confirmed "
+        '--probe "..."    settle each remaining finding (always allowed)\n'
+        f'  ddflow review {item} --gate {gate} --force --reason "..."    one more full round, '
+        "recorded\n"
+        "To change the budget: ddflow config --set review.max_rounds N [--local] "
+        '(0 = unlimited), or [review].on_exceed = "warn".'
+    )
+
+
+def _reason_of(best) -> str:
+    return best.reason or (f"{len(best.findings)} finding(s)" if best.findings else "")
+
+
+def _finding_rows(best) -> list[dict[str, str]]:
+    return [
+        {"severity": f.severity, "title": f.title, "location": f.location, "detail": f.detail}
+        for f in best.findings
+    ]
+
+
+def _item_intent(it) -> str:
+    return f"{it.title}. {it.body}".strip() if it else ""
+
+
+def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
+    """(kind, rounds done, forced reason, diff, how, why refused): what this call reviews
+    and whether the round budget lets it. `locals_` is review()'s own arguments."""
+    a = locals_
+    item, gate = a["item"], a["gate"]
+    kind = _kind(cfg, repo, a["chunks"], a["delta"], a["commit"], a["base"])
+    done = _full_rounds(log, item, gate) if item else 0
+    forced, diff, how, why = "", "", "", ""
+    if kind == "full" and item:
+        why, forced = _budget(cfg, item, gate, done, a["force"], a["reason"], say)
+    if why:
+        return kind, done, forced, diff, how, why, None
+    if a["delta"]:
+        diff, how, why = _delta_scope(repo, it, gate, a["branch"])
+    elif a["commit"]:
+        diff, how = commit_diff(repo, a["commit"])
+    else:
+        diff, how = diff_for(
+            repo, cfg, st, item, a["base"], branch=a["branch"], called_from=a["called_from"]
+        )
+    rerun = None
+    if a["chunks"] and diff.strip():
+        rerun = _rerun_scope(it, gate, revs, diff, a["chunks"])
+        why, rerun = (rerun, None) if isinstance(rerun, str) else ("", rerun)
+    return kind, done, forced, diff, how, why, rerun
+
+
+def _kind(cfg, repo, chunks, delta, commit, base) -> str:
+    """full | delta | chunk: only a `full` round counts against `[review].max_rounds`."""
+    if chunks:
+        return "chunk"
+    default_base = cfg.worktree.base_ref or W.default_branch(repo)
+    return "delta" if delta or commit or (base and base != default_base) else "full"
+
+
+def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
+    """(why this full round is refused, "") or ("", the reason it was forced past the cap)."""
+    cap = cfg.review.max_rounds
+    if cap <= 0 or done < cap:
+        return "", ""
+    if cfg.review.on_exceed == "warn":
+        say(
+            f"WARNING: {item}.{gate} has had {done} full review rounds, past "
+            f"[review].max_rounds = {cap}: prefer --delta and `review triage`."
+        )
+        return "", ""
+    if force and reason.strip():
+        say(f"--force: round {done + 1} of {item}.{gate} runs past max_rounds = {cap}.")
+        return "", reason.strip()
+    if force:
+        return '--force needs --reason "...": the exception is recorded.', ""
+    return _budget_refusal(item, gate, done, cap), ""
+
+
+def _delta_scope(repo, it, gate, branch) -> tuple[str, str, str]:
+    """(diff, how, why not) for `--delta`: the changes since the recorded review's head."""
+    rec = it.gates.get(gate) if it else None
+    head = str(((rec.evidence if rec else None) or {}).get("reviewed_head", ""))
+    if not head:
+        return (
+            "",
+            "",
+            f"--delta rechecks what changed since the head of the item's recorded {gate} "
+            "review, and none is on record: run the full review first.",
+        )
+    diff = _delta_diff(repo, it, branch, head)
+    if not diff.strip():
+        return "", "", f"nothing changed since the reviewed head {head[:10]}."
+    return diff, f"delta since {head[:10]}", ""
+
+
+def _head_of(repo: Path, it, branch: str, commit: str) -> str:
+    """The commit a review covered: what `--delta` later diffs from. "" when unknown."""
+    from ..infra import worktree as W
+
+    wt = W.load_path(repo, it.worktree) if it and it.worktree else None
+    where, ref = (
+        (repo, commit)
+        if commit
+        else (repo, branch)
+        if branch
+        else (wt, "HEAD")
+        if wt and wt.exists()
+        else (repo, it.branch if it and it.branch else "HEAD")
+    )
+    r = W.git(where, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}")
+    return r.out.strip() if r.ok else ""
+
+
+def _delta_diff(repo: Path, it, branch: str, head: str) -> str:
+    """What changed since `head`: the item's branch or tree against that commit."""
+    from ..infra import worktree as W
+    from ..services.enforce import SELF_MANAGED
+
+    wt = W.load_path(repo, it.worktree) if it and it.worktree else None
+    if not branch and wt and wt.exists():
+        return W.capture_diff(wt, head, include_untracked=False)
+    tip = branch or (it.branch if it and it.branch else "")
+    if tip:
+        d = W.git(repo, "diff", "--no-color", f"{head}...{tip}")
+        return (d.out + "\n") if d.ok and d.out else ""
+    return W.capture_diff(repo, head, include_untracked=False, exclude=SELF_MANAGED)
+
+
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -490,8 +661,16 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     called_from: Path | None = None,
     agent: str = "",
     chunks: list[int] | list[str] | str | None = None,
+    delta: bool = False,
+    force: bool = False,
+    reason: str = "",
 ) -> O.Outcome:
     """Run every reviewer configured for `gate`, and record the outcome against `item`.
+
+    A FULL round (no `chunks`, `delta`, `commit` or a `base` other than the default) is
+    counted against `[review].max_rounds`; `delta` reviews only what changed since the
+    head the gate's last review covered, and neither it nor triage is ever refused.
+    `force` with a `reason` runs a full round past the cap, recorded in the evidence.
 
     `chunks` re-reviews only those chunks (numbered as the recorded review printed
     them) and merges the result into that record -- see `_rerun_scope`.
@@ -545,18 +724,41 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             how="",
         )
 
-    diff, how = (
-        commit_diff(repo, commit)
-        if commit
-        else diff_for(repo, cfg, st, item, base, branch=branch, called_from=called_from)
+    it = st.items.get(item)
+    kind, done, forced, diff, how, why, rerun = _scope(
+        repo,
+        cfg,
+        st,
+        log,
+        it,
+        say,
+        revs,
+        locals_={
+            "item": item,
+            "gate": gate,
+            "chunks": chunks,
+            "delta": delta,
+            "commit": commit,
+            "base": base,
+            "branch": branch,
+            "called_from": called_from,
+            "force": force,
+            "reason": reason,
+        },
     )
+    if why:
+        return O.Outcome(
+            kind="review",
+            data={"id": item, "gate": gate, "outcome": "", "findings": [], "text": why},
+            exit=O.REFUSED,
+            reason=why,
+        )
     if not diff.strip():
         return unavailable(
             f"Empty diff ({how}) — nothing to review. Recording UNAVAILABLE.", how=how
         )
 
-    it = st.items.get(item)
-    intent = intent or (f"{it.title}. {it.body}".strip() if it else "")
+    intent = intent or _item_intent(it)
     if not intent:
         return O.failed(
             "review",
@@ -570,26 +772,11 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             text="",
         )
 
-    prior: dict[str, Any] = {}
-    only: list[int] | None = None
-    if chunks:
-        scoped = _rerun_scope(it, gate, revs, diff, chunks)
-        if isinstance(scoped, str):
-            return O.Outcome(
-                kind="review",
-                data={
-                    "id": item,
-                    "gate": gate,
-                    "outcome": "",
-                    "findings": [],
-                    "how": how,
-                    "text": scoped,
-                },
-                exit=O.REFUSED,
-                reason=scoped,
-            )
-        revs, prior, only = scoped
+    if rerun:
+        revs, prior, only = rerun
         say(f"→ re-reviewing chunk(s) {only} of {item}.{gate} (recorded: {prior['coverage']})")
+    else:
+        prior, only = {}, None
 
     keeps: dict[str, _ReplyFile] = {}
     overrides = P.overrides_from(cfg)
@@ -641,11 +828,12 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             item,
             gate,
             outcome,
-            reason=best.reason or (f"{len(best.findings)} finding(s)" if best.findings else ""),
+            reason=_reason_of(best),
             evidence={
                 **best.evidence(),
                 "diff_source": how,
                 "diff_chars": len(diff),
+                **_round_evidence(repo, it, branch, commit, kind, done, best.status, forced),
                 **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
             },
             gates=gates,
@@ -663,10 +851,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         "how": how,
         "reviewer": best.reviewer,
         "family": best.family,
-        "findings": [
-            {"severity": f.severity, "title": f.title, "location": f.location, "detail": f.detail}
-            for f in best.findings
-        ],
+        "findings": _finding_rows(best),
         "text": "\n".join(transcript),
     }
     exit_code = {R.REVIEWED: O.OK, R.PARTIAL: O.REFUSED, R.UNAVAILABLE: O.NOTHING, R.ERROR: O.FAIL}[

@@ -304,6 +304,45 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     return out
 
 
+_BUDGET_KNOBS = ("review.max_rounds", "review.on_exceed")
+
+
+def report_budget_change(
+    repo: Path, edit: ConfigEdit, out: O.Outcome, *, agent: str = ""
+) -> O.Outcome:
+    """Tell the operator when an AGENT (the MCP surface) changed the review budget.
+
+    The cap is the operator's: `ddflow_configure` accepts `review.max_rounds` and
+    `review.on_exceed` on either layer, so an operator without a shell can tune it, but
+    an agent raising or disabling it to get more review rounds must not do so silently.
+    The change is returned as a NOTE and recorded as a session note the operator reads
+    in `session show` and the brief; a per-item exception is `ddflow review --force
+    --reason`, which is recorded on the gate instead.
+    """
+    if out.exit != O.OK:
+        return out
+    if edit.set.strip() not in _BUDGET_KNOBS and "[review]" not in edit.append_toml.replace(
+        " ", ""
+    ):
+        return out
+    from ..config import ReviewConfig
+
+    layer = "machine-local (.ddflow/local)" if edit.local else "shared (.ddflow/config.toml)"
+    what = f"{edit.set} = {edit.value}" if edit.set else "the [review] table (appended TOML)"
+    note = (
+        f"NOTE FOR THE OPERATOR: the review budget was changed over MCP: {what}, {layer} "
+        f"layer. This is recorded as a session note. The shipped default is "
+        f"{ReviewConfig().max_rounds} full rounds per gate; if you did not ask for this "
+        "change, revert it with `ddflow config --set review.max_rounds "
+        f"{ReviewConfig().max_rounds}` (add --local for the machine layer)."
+    )
+    from .knowledge import session_note
+
+    session_note(repo, "", note, agent=agent)
+    out.data["text"] = (out.data.get("text") or "") + "\n" + note
+    return out
+
+
 def _worktree_drift(repo: Path, here: Path) -> str:
     """A warning when `here` is a worktree behind the base branch, else "".
 

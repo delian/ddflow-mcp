@@ -93,6 +93,9 @@ def cmd_review(a, c: Ctx) -> int:
         on_progress=lambda line: print(line, flush=True),
         agent=c.requested_agent,
         chunks=a.chunk or None,
+        delta=bool(a.delta),
+        force=bool(a.force),
+        reason=a.reason or "",
     )
     # A refusal (exit 3) with no reviewer behind it -- a `--chunk` re-review that
     # cannot merge -- has printed nothing else (roborev 991).
