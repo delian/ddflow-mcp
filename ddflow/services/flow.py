@@ -745,13 +745,17 @@ def _remote_tip(repo: Path, cfg: Config, branch: str) -> str:
 
     Asked of the remote itself (`ls-remote`): it needs no remote-tracking ref (a
     single-branch clone or an odd refspec has none) and no shared FETCH_HEAD (parallel
-    worktrees fetch concurrently). The fetch is only to have the objects. A tip that moved
-    between the two, or whose objects are missing, is safe: `_rebase_start` proves the range
-    by count and by the change itself, and falls back to the old first parent when neither
-    holds.
+    worktrees fetch concurrently). The fetch is only to have the objects. This is a snapshot
+    taken BEFORE the forge merges, which is all `_rebase_start` asks of it: it checks the
+    range by count and by the change itself, so a tip that moved (or an unreadable one)
+    makes that proof decline (the change-itself proof may still hold); only when both
+    decline does the old first parent stand, as before B178.
     """
     remote = cfg.flow.remote
-    asked = W.git(repo, "ls-remote", remote, f"refs/heads/{branch}")
+    try:
+        asked = W.git(repo, "ls-remote", remote, f"refs/heads/{branch}", timeout=60)
+    except P.TimeoutExpired:
+        return ""
     tip = asked.out.split()[0] if asked.ok and asked.out else ""
     if not tip or not W.fetch(repo, remote, branch).ok:
         return ""
