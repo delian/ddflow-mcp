@@ -282,3 +282,11 @@ def test_one_good_pythonpath_entry_is_enough_for_an_mcp_entry(repo, tmp_path):
         )
     )  # fmt: skip
     assert LA.findings(repo) == []
+
+
+def test_the_notice_names_the_refresh_that_fits_the_hook(repo, bare_path):
+    line = E.command_line(CH.MARKER, refresh="ddflow hooks install --claude")
+    for p in LA.recorded_paths(line):
+        line = line.replace(p, "/nonexistent-ddflow-venv" + p)
+    r = subprocess.run(["sh", "-c", line], capture_output=True, text=True, cwd=repo)
+    assert "run: ddflow hooks install --claude" in r.stderr, r.stderr

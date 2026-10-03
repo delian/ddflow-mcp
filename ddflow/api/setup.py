@@ -563,7 +563,7 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
     msgs: list[str] = []
     if claude:
         if action == "install":
-            line = E.command_line(CH.MARKER)
+            line = E.command_line(CH.MARKER, refresh="ddflow hooks install --claude")
             msgs.append(CH.install(repo, line))
             if note := E.redirect_note(line):
                 msgs.append(note)
@@ -575,7 +575,10 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
         if action == "install":
             cmd = (
                 E.command_line(
-                    CH.PROMPT_MARKER, extra="--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else ""
+                    CH.PROMPT_MARKER,
+                    extra="--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "",
+                    refresh="ddflow hooks install "
+                    + ("--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "--claude"),
                 )
                 + " || true"
             )

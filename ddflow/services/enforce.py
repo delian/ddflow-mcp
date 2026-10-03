@@ -80,7 +80,9 @@ def _invocation() -> str:
     return command_line("hooks check-commit", exec_=True, extra='"$@"')
 
 
-def command_line(args: str, *, exec_: bool = False, extra: str = "", fail_open: bool = True) -> str:
+def command_line(
+    args: str, *, exec_: bool = False, extra: str = "", refresh: str = "ddflow hooks install"
+) -> str:
     """A shell line running `ddflow <args>` from an environment that has none of ours.
 
     Shared by the git hook and the Claude Code SessionStart hook: both run with the
@@ -93,7 +95,8 @@ def command_line(args: str, *, exec_: bool = False, extra: str = "", fail_open: 
     used to `exec` a dead absolute path, so every `git commit` failed with "not found"
     and nothing noticed (bug B-dangling-precommit-hook). `services.launchers` reads the
     recorded paths back out of the line, for `doctor` and `hooks status`.
-    ``extra`` is appended to the arguments in every branch (`"$@"` for a git hook).
+    ``extra`` is appended to the arguments in every branch (`"$@"` for a git hook);
+    ``refresh`` is the command the one-line notice names.
     """
     import shutil
 
@@ -114,11 +117,9 @@ def command_line(args: str, *, exec_: bool = False, extra: str = "", fail_open: 
             f'PYTHONPATH="{pkg_parent}${{PYTHONPATH:+:$PYTHONPATH}}" '
             f'{run}"{launch_python()}" -m ddflow {args}{tail}'
         )
-    if not fail_open:
-        return recorded
     note = shlex.quote(
         "ddflow: not found (the launcher recorded in this hook no longer exists and none "
-        "is on PATH), so this check was skipped. Install ddflow, then run: ddflow hooks install"
+        f"is on PATH), so this check was skipped. Install ddflow, then run: {refresh}"
     )
     miss = f"echo {note} >&2" + ("; exit 0" if exec_ else "")
     return (
