@@ -67,7 +67,12 @@ def _on_path() -> bool:
 def check_command(where: str, command: str, fix: str) -> Dangling | None:
     """A hook command line whose recorded launcher is gone, or None."""
     missing = _gone(recorded_paths(command))
-    return Dangling(where, missing, _on_path(), fix) if missing else None
+    # Only a line written WITH the fallback has one; an older line execs its dead path.
+    return (
+        Dangling(where, missing, _on_path() and bool(_PROBE.search(command)), fix)
+        if missing
+        else None
+    )
 
 
 def check_hook_file(path: Path, fix: str = "ddflow hooks install") -> Dangling | None:
@@ -149,12 +154,12 @@ def check_mcp(repo: Path) -> list[Dangling]:
         elif shutil.which(cmd) is None:
             missing.append(cmd)
         root = env.get("PYTHONPATH")
-        if (
-            isinstance(root, str)
-            and root
-            and not os.path.isfile(os.path.join(root.split(os.pathsep)[0], "ddflow", "__init__.py"))
-        ):
-            missing.append(f"{root.split(os.pathsep)[0]}/ddflow")
+        if isinstance(root, str) and root:
+            dirs = [d for d in root.split(os.pathsep) if d]
+            if dirs and not any(
+                os.path.isfile(os.path.join(d, "ddflow", "__init__.py")) for d in dirs
+            ):
+                missing.append(f"{dirs[0]}/ddflow")
         if missing:
             out.append(
                 Dangling(f"the ddflow MCP entry in {rel}", tuple(missing), False, "ddflow adopt")
