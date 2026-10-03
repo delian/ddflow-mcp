@@ -20,6 +20,7 @@ from ...api import (
     rule_search,
     rule_update,
 )
+from ...core.outcome import EXIT_NAMES, REFUSED
 from ..context import FAIL, Ctx
 
 _PAYLOADS = {
@@ -50,7 +51,12 @@ def _emit(c: Ctx, out, verb: str, human: str) -> int:
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body(_PAYLOADS[verb]), indent=2, default=str))
+        body = out.body(_PAYLOADS[verb])
+        if out.exit == REFUSED and isinstance(body, dict):
+            # The same lead the MCP tool puts first on a refusal: the reason, then the body.
+            lead = {"reason": out.reason, "outcome": EXIT_NAMES[REFUSED], "exit": REFUSED}
+            body = {"refusal": lead, **body}
+        print(json.dumps(body, indent=2, default=str))
     else:
         print(human or out.reason)
     return out.exit
@@ -122,6 +128,6 @@ def cmd_rule(a, c: Ctx) -> int:
     if out.exit != 0 and out.data.get("candidates"):
         print(out.reason, file=sys.stderr)
         if c.json:
-            print(json.dumps(out.body(_PAYLOADS["add"]), indent=2, default=str))
+            return _emit(c, out, "add", "")
         return out.exit
     return _emit(c, out, verb, f"added rule {a.id}")
