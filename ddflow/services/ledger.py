@@ -70,8 +70,12 @@ def git_facts(repo: Path, sha: str, it: Item) -> dict[str, Any]:
 
 def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
     """The ledger of one completed item, or None when it was never completed."""
+    # Only this item's own events: its state at completion depends on nothing else, another
+    # item's reopen or completion must not move this one's, and a sweep over hundreds of
+    # items must not fold the whole log twice for each of them.
+    events = [ev for ev in events if ev.subject == item_id]
     idx = max(
-        (i for i, ev in enumerate(events) if ev.subject == item_id and ev.kind == "item.completed"),
+        (i for i, ev in enumerate(events) if ev.kind == "item.completed"),
         default=-1,
     )
     if idx < 0:
