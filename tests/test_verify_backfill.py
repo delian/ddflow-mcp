@@ -147,3 +147,24 @@ def test_a_recorded_sha_that_is_not_a_commit_falls_back_to_the_search_and_pairs_
     cl = _claims(verify(repo, "T1"))
     assert cl["landed"]["status"] == "ok" and found[:10] in cl["landed"]["detail"]
     assert cl["survives"]["status"] == "ok"
+
+
+def test_a_valid_recorded_sha_is_the_landing_even_when_a_merge_commit_also_names_the_item(repo):
+    _setup(repo, globs="a.py")
+    recorded = _commit(repo, {"a.py": "1\n"}, "work without the id in its subject")
+    _commit(repo, {"b.py": "1\n"}, "merge T1: a later unrelated mention")
+    _old_completion(repo, sha=recorded, imported=True, evidence="closed")
+    out = verify(repo, "T1")
+    cl = _claims(out)
+    assert cl["landed"]["status"] == "ok" and recorded[:10] in cl["landed"]["detail"]
+    assert "recorded landing" in cl["ledger"]["detail"]
+    assert (
+        cl["declared_files"]["status"] == "ok"
+    )  # a.py is in the recorded commit, not the merge commit
+
+
+def test_a_capitalised_merge_keyword_still_matches(repo):
+    _setup(repo)
+    _commit(repo, {"w.py": "1\n"}, "Merge T1: add the widget")
+    _old_completion(repo, imported=True, evidence="closed")
+    assert _claims(verify(repo, "T1"))["landed"]["status"] == "ok"
