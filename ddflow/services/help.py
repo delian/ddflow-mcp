@@ -58,7 +58,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     # whose attribution depends on it.
     (
         "Setting up",
-        ("setup", "configure", "companions", "precommit", "hooks", "prompts", "adopt", "identify"),
+        ("setup", "configure", "companions", "precommit", "hooks", "prompts", "adopt", "identify", "rule"),
     ),
     ("The rules this project runs by", ("workflow", "flow")),
     (
