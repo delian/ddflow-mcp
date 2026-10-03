@@ -474,22 +474,9 @@ def _transition(
 
 
 def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
-    ok = _renew_local(log, item_id, holder)
-    if ok:
-        from ..config import Config
-
-        # A claim someone else took over on the remote is not renewed: False, as for any
-        # lease we no longer hold.
-        return not _remote_renew(
-            log, Config.load(log.root), item_id, holder or log.agent_id, time.time()
-        )
-    return ok
-
-
-def _renew_local(log: EventLog, item_id: str, holder: str = "") -> bool:
     """Extend MY lease. Refuses on someone else's: a renewal is a claim of possession."""
     holder = holder or log.agent_id
-    return _transition(
+    ok = _transition(
         log,
         item_id,
         "lease.renewed",
@@ -497,6 +484,13 @@ def _renew_local(log: EventLog, item_id: str, holder: str = "") -> bool:
         holder=holder,
         payload=lambda _lease: {"at": time.time(), "holder": holder},
     )
+    if ok:
+        from ..config import Config
+
+        # A claim someone else took over on the remote is not renewed: False, as for any
+        # lease we no longer hold.
+        return not _remote_renew(log, Config.load(log.root), item_id, holder, time.time())
+    return ok
 
 
 def plan_retarget(
