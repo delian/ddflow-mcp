@@ -483,6 +483,8 @@ def task_add(  # noqa: PLR0913 -- BACKLOG B179: a TaskDraft record, as decisions
         if origin is None or origin.removed:
             return O.failed("task.added", f"--port-of: no such item {port_of!r}", id=item)
         origin = st.items.get(origin.port_of) or origin
+        if origin.removed:
+            return O.failed("task.added", f"--port-of: {origin.id!r} was removed", id=item)
         family = [
             origin,
             *(o for o in st.items.values() if o.port_of == origin.id and not o.removed),
