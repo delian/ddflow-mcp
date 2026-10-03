@@ -104,6 +104,7 @@ def test_list_human_marks_implicit_and_open(repo):
 
 def test_list_filters_since_limit_agent_state(repo):
     _fixture(repo)
+
     def ids(*a):
         return [r["id"] for r in json.loads(run_cli(repo, "--json", "session", "list", *a)[1])]
 
