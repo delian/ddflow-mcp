@@ -424,6 +424,16 @@ def _sync_back_merges(log: EventLog, forge: FG.Forge, rep: SyncReport, *, only: 
             rep.refused.append(f"{rec['item']}: back-merge #{rec['number']}: {exc}")
             continue
         if info.state == "open":
+            rep.waiting.append(
+                {
+                    "id": rec["item"],
+                    "url": info.url,
+                    "back_merge": rec["into"],
+                    "review": "",
+                    "checks": "",
+                    "base": rec["into"],
+                }
+            )
             continue
         log.append(
             "backmerge.recorded",

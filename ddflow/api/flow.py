@@ -43,7 +43,7 @@ def pr_sync(repo: Path, *, item: str = "", agent: str = "") -> O.Outcome:
         return O.refused("pr.sync", "; ".join(rep.refused), **data)
     if rep.unavailable and not rep.changes and not rep.waiting:
         return O.nothing("pr.sync", "; ".join(rep.unavailable), **data)
-    if not rep.checked and not rep.changes:
+    if not rep.checked and not rep.changes and not rep.waiting:
         return O.nothing("pr.sync", "nothing is in review", **data)
     return O.ok("pr.sync", **data)
 
