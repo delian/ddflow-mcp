@@ -34,7 +34,7 @@ _LEGACY_PYPATH = re.compile(r'PYTHONPATH="([^"$]+)')
 @dataclass(frozen=True)
 class Dangling:
     where: str  #: what holds the record: a hook file, a settings file, an MCP config
-    missing: tuple[str, ...]  #: the recorded paths that no longer exist
+    missing: tuple[str, ...]  #: the recorded paths that no longer exist or are not executable
     fallback: bool  #: True when `ddflow` on PATH still runs it
     fix: str  #: the command that refreshes it
 
@@ -44,7 +44,7 @@ class Dangling:
             tail = "it falls back to `ddflow` on PATH for now"
         else:
             tail = "NOTHING runs it: the hook fails open and the check is skipped"
-        return f"{self.where} records {gone}, which no longer exists; {tail} -- run `{self.fix}`"
+        return f"{self.where} records {gone}, which no longer exists or is not executable; {tail} -- run `{self.fix}`"
 
 
 def _needs(command: str) -> list[tuple[str, bool]]:
