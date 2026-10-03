@@ -116,6 +116,21 @@ def test_a_wrapper_that_forks_the_real_server_and_exits_is_still_verified(tmp_pa
     assert v.speaks_mcp is True, v.detail
 
 
+def test_a_slow_server_that_logs_the_request_and_answers_later_is_verified(tmp_path):
+    body = textwrap.dedent(
+        """
+        import json, sys, time
+        for line in sys.stdin:
+            sys.stdout.write(line); sys.stdout.flush()
+            time.sleep(2.5)  # a cold start, longer than any 'grace'
+            msg = json.loads(line)
+            print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
+        """
+    )
+    v = CO.verify_one(_companion("slowlog", sys.executable, _script(tmp_path, "sl.py", body)))
+    assert v.speaks_mcp is True, v.detail
+
+
 def test_a_server_that_logs_the_request_line_and_then_answers_is_verified(tmp_path):
     body = textwrap.dedent(
         """
@@ -132,7 +147,7 @@ def test_a_server_that_logs_the_request_line_and_then_answers_is_verified(tmp_pa
 
 def test_a_binary_that_echoes_its_input_is_not_a_server():
     """`cat` hands the request straight back: it has id 1 and a method, and no result."""
-    v = CO.verify_one(_companion("cat", "cat", []))
+    v = CO.verify_one(_companion("cat", "cat", []), timeout_s=3)
     assert v.speaks_mcp is False, v.detail
     assert "echoed the request back" in v.detail and v.elapsed_s < 10
 
