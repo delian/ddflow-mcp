@@ -2741,11 +2741,11 @@ port_strategy = "cherry-pick"      # or "forward-merge" (the default)
   | `cherry-pick` | the **newest** line | applies exactly what the fix landed (the target's before→after range, whatever the merge strategy) with a three-way apply | in parallel |
 
   What a fix *landed* is a range on the target, exact for a merge commit and a squash
-  (`merge_sha^1` is the old target). A **rebase-merge** lands N commits, so ddflow reads
+  (`merge_sha^1` is the old target). On GitHub a **rebase-merge** lands N commits, so ddflow reads
   the target's tip before it merges and checks the range against the request's commit
   count; a merge a person (or a queue) did is recognised from the change itself — the
   request's own diff has the same patch-id as the last N commits. If neither can be
-  proven the old `merge_sha^1` stays.
+  proven the old `merge_sha^1` stays (GitLab reports no commit count, so it always does).
 
   A port carries what its fix *landed*. A follow-up fix to the same bug is a new item:
   `task add FIX2 --port-of FIX` gives it the lines FIX reached (naming one of FIX's ports

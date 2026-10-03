@@ -745,7 +745,9 @@ def _remote_tip(repo: Path, cfg: Config, branch: str) -> str:
     remote = cfg.flow.remote
     if not W.fetch(repo, remote, branch).ok:
         return ""
-    return W.rev(repo, f"{remote}/{branch}")
+    # A fetch of one branch need not update refs/remotes/<remote>/<branch> (single-branch
+    # or odd refspecs); what it fetched is always FETCH_HEAD.
+    return W.rev(repo, f"{remote}/{branch}") or W.rev(repo, "FETCH_HEAD")
 
 
 def _report_queue(
