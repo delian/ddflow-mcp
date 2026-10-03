@@ -472,3 +472,10 @@ def test_a_clean_delta_does_not_clear_findings_nobody_triaged(repo, tmp_path):
     _fix(repo, "h.py")
     out = _review(repo)
     assert out.data["outcome"] == "passed", out.data
+
+
+def test_force_with_delta_is_refused_not_silently_a_delta(repo, tmp_path):
+    _setup(repo, tmp_path)
+    _review(repo)
+    out = _review(repo, force=True, reason="why", delta=True)
+    assert out.exit == FAIL and "--force" in out.reason and "--delta" in out.reason
