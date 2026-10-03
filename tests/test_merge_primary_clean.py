@@ -213,3 +213,11 @@ def test_a_merge_already_in_progress_is_never_aborted(repo, item):
     assert code != OK, out + err
     assert _git(repo, "rev-parse", "MERGE_HEAD").stdout == before
     assert (repo / "c.txt").read_text() == "resolved by hand\n"
+    # That refusal is not a failure of THIS item's branch: no merge gate outcome is logged.
+    from ddflow.infra.log import EventLog
+
+    assert not [
+        e
+        for e in EventLog(repo).read_all()
+        if e.kind.startswith("gate.") and e.data.get("gate") == "merge"
+    ]
