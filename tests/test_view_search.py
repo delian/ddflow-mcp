@@ -129,7 +129,10 @@ def test_snippet_contains_the_match(repo):
 
 def test_pathological_regex_is_refused(repo):
     _fixture(repo)
-    for bad in ("(a+)+$", "(a|aa)+$", r"(a*)*b", r"(\w+)\1", "x" * 300):
+    for bad in (
+        "(a+)+$", "(a|aa)+$", r"(a*)*b", r"(\w+)\1", "x" * 300, "(a{1,2})+b", "(?>a+)+b",
+        ".*a.*b.*c",
+    ):  # fmt: skip
         t0 = time.monotonic()
         code, out, err = run_cli(repo, "search", bad, "--regex")
         assert code == 3, (bad, out, err)
@@ -164,3 +167,13 @@ def test_bad_input_is_refused(repo):
     assert run_cli(repo, "search", "zirconium", "--since", "garbage")[0] == 3
     assert run_cli(repo, "search", "   ")[0] == 3
     assert run_cli(repo, "search", "the of and")[0] == 3  # only stop words in ranked mode
+
+
+def test_safe_regexes_still_run_and_odd_syntax_never_crashes(repo):
+    _fixture(repo)
+    for ok in (r"(zir){1}conium", r"(?:grind|edges)", r"(\d{3})+|zirconium", r"(?=zirc)zirconium"):
+        code, _, err = run_cli(repo, "search", ok, "--regex")
+        assert code == 0 and "Traceback" not in err, (ok, err)
+    for odd in ("(?>zirc)onium", "(?<=a)b", "a{2}{3}", "(?i:ZIRC)onium", "[[:alpha:]]"):
+        code, _, err = run_cli(repo, "search", odd, "--regex")
+        assert code in (0, 2, 3) and "Traceback" not in err, (odd, err)
