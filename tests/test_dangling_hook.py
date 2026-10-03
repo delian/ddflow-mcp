@@ -253,3 +253,10 @@ def test_doctor_reports_a_dangling_mcp_entry(repo):
     )
     code, out, err = run_cli(repo, "doctor")
     assert code == 1 and re.search(r"\.mcp\.json.*no longer exists", out + err, re.S)
+
+
+def test_the_gemini_flag_reaches_ddflow_in_every_branch():
+    """The flag is an argument of ddflow, not of the `if` the fallback wraps it in."""
+    line = E.command_line(CH.PROMPT_MARKER, extra="--gemini")
+    assert line.count("hooks prompt --gemini") == 2, line
+    assert not line.rstrip().endswith("fi --gemini")

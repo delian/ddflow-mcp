@@ -574,8 +574,9 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
             continue
         if action == "install":
             cmd = (
-                E.command_line(CH.PROMPT_MARKER)
-                + (" --gemini" if kw["rel"] == CH.GEMINI_SETTINGS else "")
+                E.command_line(
+                    CH.PROMPT_MARKER, extra="--gemini" if kw["rel"] == CH.GEMINI_SETTINGS else ""
+                )
                 + " || true"
             )
             msgs.append(CH.install(repo, cmd, matcher=None, **kw))
