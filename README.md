@@ -3058,7 +3058,9 @@ describes must still match the shard on disk (so a rewritten, truncated or switc
 shard is re-parsed, and an appended or torn tail is parsed as usual); the file's own
 checksum, format, ddflow version and Event fields must match; any doubt means the snapshot
 is ignored and the log parsed. `ddflow doctor`'s integrity check (`EventLog.verify`) never
-uses it. Deleting the file is always safe; `DDFLOW_SNAPSHOT=0` turns it off for a
+uses it, and a log opened only to read another repository (`external sync`, exports)
+neither reads nor writes one. It has the trust of the rest of `.ddflow/local/`: your own
+checkout's machine-local state, never fetched or merged. Deleting the file is always safe; `DDFLOW_SNAPSHOT=0` turns it off for a
 process. It covers up to `max_cached_events` (a larger log is parsed each time, as
 before). The table above is reproduced by `python tests/bench_log_read.py`.
 
