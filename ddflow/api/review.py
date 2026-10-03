@@ -430,6 +430,52 @@ def reviewers_detect(
     return out
 
 
+class _ReplyFile:
+    """Every chunk's whole reply, appended to ``.ddflow/local/reviews/<item>.<gate>.jsonl``
+    as it ARRIVES (bug B206): a review can outlive its caller (the MCP client gave up at
+    1800 s on a 2055 s critic), and a finding body that lives only in the tool response
+    is then lost. The gate evidence names the file and its digest. The name is scoped to
+    THIS run and reviewer (time and a random token): a re-review, or a retry of an aborted call running at the
+    same time, must not truncate the file an earlier record's digest refers to."""
+
+    def __init__(self, repo: Path, item: str, gate: str, reviewer: str) -> None:
+        import re
+        import threading
+        import time
+        import uuid
+
+        run = f"{time.strftime('%Y%m%dT%H%M%S')}-{uuid.uuid4().hex[:8]}"
+        who = re.sub(r"[^A-Za-z0-9._-]", "_", reviewer)
+        self.repo = repo
+        self.path = repo / ".ddflow" / "local" / "reviews" / f"{item}.{gate}.{who}.{run}.jsonl"
+        self._lock = threading.Lock()
+        self._started = False
+
+    def add(self, chunk: int, reply: str) -> None:
+        import json
+
+        with self._lock:
+            try:
+                self.path.parent.mkdir(parents=True, exist_ok=True)
+                with self.path.open("a", encoding="utf-8") as fh:
+                    fh.write(json.dumps({"chunk": chunk, "reply": reply}) + "\n")
+                self._started = True
+            except OSError:
+                pass  # the evidence still carries the bodies; this is the belt
+
+    def evidence(self) -> dict[str, Any]:
+        import hashlib
+
+        if not self._started:
+            return {}
+        try:
+            digest = hashlib.sha256(self.path.read_bytes()).hexdigest()[:16]
+        except OSError:
+            return {}
+        # Repo-relative: the event log is committed, an absolute path is one machine's.
+        return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
+
+
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -545,11 +591,13 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         revs, prior, only = scoped
         say(f"→ re-reviewing chunk(s) {only} of {item}.{gate} (recorded: {prior['coverage']})")
 
+    keeps: dict[str, _ReplyFile] = {}
     overrides = P.overrides_from(cfg)
     tick_s = min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s))
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
     results = []
     for r in revs:
+        keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)
         say(f"→ {r.name} ({r.resolved_family()}) reviewing {len(diff)} chars from {how}")
         res = R.review(
             r,
@@ -562,6 +610,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             on_tick=keep_lease,
             tick_s=tick_s,
             only=only,
+            on_chunk=keep.add if item else None,
         )
         if prior:
             # An ERROR, or a cut that does not match, is refused WITHOUT recording: the
@@ -593,7 +642,12 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             gate,
             outcome,
             reason=best.reason or (f"{len(best.findings)} finding(s)" if best.findings else ""),
-            evidence={**best.evidence(), "diff_source": how, "diff_chars": len(diff)},
+            evidence={
+                **best.evidence(),
+                "diff_source": how,
+                "diff_chars": len(diff),
+                **(keeps[best.reviewer].evidence() if best.reviewer in keeps else {}),
+            },
             gates=gates,
             by=best.model,
         )
