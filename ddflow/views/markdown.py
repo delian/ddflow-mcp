@@ -398,11 +398,14 @@ _HOLDING, _UNMEASURED, _UNHELD = (
 )
 
 
-def _recovery_band(r) -> str | None:
+def recovery_band(r) -> str | None:
     """Which band of the brief a recovery entry is named in, in this order: a tree
     holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
     nobody on it; None for a leftover with nothing to salvage, which is counted rather
-    than listed (B20e103326b)."""
+    than listed (B20e103326b). `recover` and `status` count all three bands as "may
+    contain work" (B3f8c406fea): a truthy `salvageable` dropped the unmeasured and the
+    unheld. `doctor` makes the two TREE bands a problem and leaves a RUNNING item nobody
+    holds a note, since `next` offers it to resume."""
     if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
         return _UNHELD
     if r.salvageable:
@@ -410,11 +413,20 @@ def _recovery_band(r) -> str | None:
     return _UNMEASURED if r.salvageable is None else None
 
 
+#: The name tests/test_brief_recovery_all.py imports; one function, not a copy.
+_recovery_band = recovery_band
+
+
+def may_hold_work(r) -> bool:
+    """A recovery entry that may hold work nobody else has: every band but the quiet one."""
+    return recovery_band(r) is not None
+
+
 def _brief_recovery(out: list[str], recovery: list) -> None:
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
-        band = _recovery_band(r)
+        band = recovery_band(r)
         if band is not None:
             bands[band].append(r)
         else:
