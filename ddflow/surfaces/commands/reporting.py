@@ -14,7 +14,7 @@ import time
 
 from ...api import reporting as A
 from ...infra import worktree as W
-from ...views.markdown import addenda_lines, cap_held
+from ...views.markdown import addenda_lines, cap_held, may_hold_work
 from ..context import FAIL, NOTHING, OK, Ctx
 
 
@@ -77,7 +77,7 @@ def _warning_lines(r) -> list[str]:
         return ["", "Nothing looping, nothing to recover."]
     out: list[str] = []
     if rec:
-        salv = [x for x in rec if x.salvageable]
+        salv = [x for x in rec if may_hold_work(x)]
         out.append("")
         out.append(
             f"⚠ {len(rec)} recoverable situation(s)"
@@ -259,13 +259,16 @@ def cmd_recover(a, c: Ctx) -> int:
     salv = out.data["_render"]["salvageable"]
     print(f"{len(found)} recoverable situation(s); {len(salv)} may contain work:\n")
     for r in found:
-        flag = "!! " if r.salvageable else "   "
+        flag = "!! " if may_hold_work(r) else "   "
         print(f"{flag}{r.item}  [{r.kind}]  was: {r.holder}")
         if r.worktree:
             print(f"     worktree {r.worktree}")
         print(f"     {r.advice}\n")
     if salv:
-        print("Worktrees marked !! are NOT touched automatically. Inspect, salvage, then release.")
+        print(
+            "Entries marked !! are NOT touched automatically. Inspect, salvage (or resume), "
+            "then release."
+        )
     return OK
 
 

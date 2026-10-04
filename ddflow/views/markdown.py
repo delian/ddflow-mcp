@@ -398,16 +398,25 @@ _HOLDING, _UNMEASURED, _UNHELD = (
 )
 
 
-def _recovery_band(r) -> str | None:
+def recovery_band(r) -> str | None:
     """Which band of the brief a recovery entry is named in, in this order: a tree
     holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
     nobody on it; None for a leftover with nothing to salvage, which is counted rather
-    than listed (B20e103326b)."""
+    than listed (B20e103326b). `recover`, `status` and `doctor` count by the same bands
+    (B3f8c406fea): a truthy `salvageable` drops the unmeasured and the unheld."""
     if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
         return _UNHELD
     if r.salvageable:
         return _HOLDING
     return _UNMEASURED if r.salvageable is None else None
+
+
+_recovery_band = recovery_band
+
+
+def may_hold_work(r) -> bool:
+    """A recovery entry that may hold work nobody else has: every band but the quiet one."""
+    return recovery_band(r) is not None
 
 
 def _brief_recovery(out: list[str], recovery: list) -> None:
