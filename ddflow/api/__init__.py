@@ -58,8 +58,8 @@ from .flow import (
     flow_choose,
     flow_show,
     pr_status,
-    pr_threads,
     pr_sync,
+    pr_threads,
     promote_add,
     promote_deployed,
     promote_status,
@@ -169,7 +169,7 @@ from .setup import (
 )
 from .setup import companions as companions_list
 from .setup import setup as adopt_project
-from .verify import refuse_sweep_args, verify_sweep
+from .verify import refuse_sweep_args, verify_sweep, verify_tool
 from .verify import verify as verify_item
 from .viewers import phase_progress, view_list, view_read
 from .workflow import GateEdit as WorkflowGateEdit
@@ -255,8 +255,8 @@ __all__ = [
     "phase_progress",
     "pins",
     "pr_status",
-    "pr_threads",
     "pr_sync",
+    "pr_threads",
     "precommit",
     "progress",
     "promote_add",
@@ -299,6 +299,7 @@ __all__ = [
     "update",
     "verify_item",
     "verify_sweep",
+    "verify_tool",
     "version_cut",
     "version_show",
     "view_list",
