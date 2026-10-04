@@ -1466,7 +1466,11 @@ def complete(
                 )
             closed.append(bid)
         base["bugs_closed"] = closed
-    reported = CM.reported_against(st, item)  # left open: refiled once this is DONE
+    # BEFORE the completion event: a crash between the two leaves the reports with tasks
+    # of their own and the item still completable, never stranded on a done task.
+    from .bug_reopen import refile_reported
+
+    refiled = refile_reported(log, cfg, item, CM.reported_against(st, item))
     waiting = _waiters(repo, item)  # before the release: see `release`
     from ..services import ledger as LG
 
@@ -1485,9 +1489,7 @@ def complete(
         },
     )
     L.release(log, item, note="completed")
-    from .bug_reopen import refile_reported
-
-    extra: dict[str, Any] = {"bugs_refiled": refile_reported(log, cfg, item, reported)}
+    extra: dict[str, Any] = {"bugs_refiled": refiled}
     if it.kind == "phase":  # [export].refresh = phase_close
         from ..services.export import refresh as RF
 

@@ -113,16 +113,20 @@ def _open_bug_blockers(state: State, item_id: str) -> list[str]:
     ]
 
 
-def _reported_bug_warnings(state: State, item_id: str) -> list[str]:
+def _reported_bug_warnings(state: State, cfg: Config, item_id: str) -> list[str]:
     """The bugs reported against ``item_id`` that its completion leaves open, as one
     warning (`reported_against`)."""
     left = reported_against(state, item_id)
     if not left:
         return []
+    then = (
+        "files each a fix task of its own"
+        if cfg.bugs.file_task
+        else "files no fix task for them (`[bugs] file_task = false`): each needs one"
+    )
     return [
         f"open bug(s) {', '.join(left)} were reported against {item_id} but are not what "
-        f"it was filed to fix: completing it leaves them open and files each a fix task "
-        f"of its own (`[bugs] file_task`)."
+        f"it was filed to fix: completing it leaves them open and {then}."
     ]
 
 
@@ -188,7 +192,7 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     # names it: a report filed against the task is not what the task fixes, so it neither
     # blocks the completion nor is closed by it -- it is named as left open.
     v.blockers += _open_bug_blockers(state, item_id)
-    v.warnings += _reported_bug_warnings(state, item_id)
+    v.warnings += _reported_bug_warnings(state, cfg, item_id)
 
     if it.kind == "phase":
         # Periodic passes counted in phases (architecture review, mutation tests, lessons)

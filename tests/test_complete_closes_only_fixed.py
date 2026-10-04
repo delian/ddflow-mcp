@@ -217,3 +217,29 @@ def test_reopening_a_bug_whose_own_fix_did_not_hold_keeps_its_task_for_verify(re
     assert code == 0, err
     st = state(repo)
     assert st.items["fix-Bx"].state == "open" and st.bugs["Bx"].fix_task == "fix-Bx"
+
+
+def test_with_file_task_off_the_reports_stay_open_and_the_warning_says_no_task(repo):
+    """roborev job 1428 #2: `[bugs] file_task = false` files nothing, and says so."""
+    node = seed(repo)
+    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text() + "\n[bugs]\nfile_task = false\n")
+    pass_pipeline(repo, "fix-Bx")
+    out = LC.complete(repo, "fix-Bx", model="claude-opus-5", regression_test=node, agent="a")
+    assert out.exit == 0 and out.data["bugs_refiled"] == {}, out.data
+    assert any("Bflake" in w and "files no fix task" in w for w in out.data["warnings"])
+    assert state(repo).bugs["Bflake"].open and "fix-Bflake" not in state(repo).items
+
+
+def test_the_reports_get_their_tasks_before_the_completion_is_written(repo):
+    """roborev job 1428 #1: a crash after the refile and before `item.completed` must not
+    strand the reports on a done task -- so the refile is written first."""
+    node = seed(repo)
+    K.bug_found(repo, summary="kill-wait test flakes", item="fix-Bx", id="Bflake", agent="a")
+    pass_pipeline(repo, "fix-Bx")
+    assert LC.complete(repo, "fix-Bx", model="claude-opus-5", regression_test=node,
+                       agent="a").exit == 0  # fmt: skip
+    kinds = [(e.kind, e.subject) for e in EventLog(repo, "r").read_all()]
+    refile = kinds.index(("task.added", "fix-Bflake"))
+    assert refile < kinds.index(("item.completed", "fix-Bx")), kinds[refile - 3 :]
