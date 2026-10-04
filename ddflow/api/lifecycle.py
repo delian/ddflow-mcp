@@ -1382,8 +1382,8 @@ def complete(
     verdict, and records the override when one is taken — an unrecorded `--force` is a
     pipeline that was never really enforced.
 
-    ``regression_test`` closes the open bugs this item is the fix task of (`bug found`
-    files one per bug) through `bug_fixed` -- the same refusals: a test must be named and
+    ``regression_test`` closes the open bugs this item was filed to fix (its `fixes`,
+    `CM.open_bugs_of`; never a bug merely reported against it, B7bdcc6b212) through `bug_fixed` -- the same refusals: a test must be named and
     must exist. The verdict is judged FIRST, with that one blocker lifted: a completion
     refused for anything else closes no bug (the bug closes when the task completes, not
     when the command is typed), and the flag on an item that fixes no open bug is refused
@@ -1466,6 +1466,11 @@ def complete(
                 )
             closed.append(bid)
         base["bugs_closed"] = closed
+    # BEFORE the completion event: a crash between the two leaves the reports with tasks
+    # of their own and the item still completable, never stranded on a done task.
+    from .bug_reopen import refile_reported
+
+    refiled = refile_reported(log, cfg, item, CM.reported_against(st, item))
     waiting = _waiters(repo, item)  # before the release: see `release`
     from ..services import ledger as LG
 
@@ -1484,7 +1489,7 @@ def complete(
         },
     )
     L.release(log, item, note="completed")
-    extra: dict[str, Any] = {}
+    extra: dict[str, Any] = {"bugs_refiled": refiled}
     if it.kind == "phase":  # [export].refresh = phase_close
         from ..services.export import refresh as RF
 
