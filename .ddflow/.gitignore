@@ -17,5 +17,5 @@ local/
 .*.lock
 # Every agent's task worktrees (decision D-worktree-home) and per-run logs: git
 # worktrees and scratch, never committed.
-worktrees/
-runs/
+/worktrees/
+/runs/

@@ -118,7 +118,7 @@ _doc(
 _doc(
     "worktree",
     "root",
-    "Where worktrees are created, relative to the repo root. Default `.ddflow/worktrees`: inside the project for every agent and harness, so the trees are found, kept and shared in one place (decision D-worktree-home), and git-ignored through `.ddflow/.gitignore`, a dot-directory that pytest, ruff and ripgrep already skip. The former default, `../.ddflow-worktrees`, still works when set; trees created there keep their recorded paths.",
+    "Where worktrees are created, relative to the repo root. Default `.ddflow/worktrees`: inside the project for every agent and harness, so the trees are found, kept and shared in one place (decision D-worktree-home), and git-ignored (`.ddflow/.gitignore`, and a `.gitignore` the root writes into itself), a dot-directory that the default settings of pytest, ruff and ripgrep skip; a tool configured to walk dot-directories or ignore `.gitignore` needs `.ddflow/worktrees` excluded. The former default, `../.ddflow-worktrees`, still works when set; trees created there keep their recorded paths.",
 )
 _doc(
     "worktree",
