@@ -4110,6 +4110,10 @@ OFFLOADED = frozenset(
     }
 )
 
+#: Workers running at once. A burst beyond it is answered "busy" (exit 2) rather than
+#: started: each is a whole interpreter, and memory is how B55e649ca6e began.
+MAX_WORKERS = 4
+
 
 def _offloaded(msg: dict[str, Any]) -> bool:
     params = msg.get("params")
@@ -4121,8 +4125,31 @@ def _offloaded(msg: dict[str, Any]) -> bool:
     )
 
 
-def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], None]):
-    """Run one call in a worker process; a thread relays its frames. Returns the thread."""
+def _worker_stderr(repo: Path):
+    """Where a worker's diagnostics go: a log of its own, never the client's stderr pipe.
+
+    Inherited, a client that disconnected left the worker writing to a broken pipe, and
+    a gate or reviewer child got SIGPIPE before the run could record its outcome."""
+    import subprocess
+
+    local = repo / ".ddflow" / "local"
+    try:
+        if (repo / ".ddflow").is_dir():
+            local.mkdir(exist_ok=True)
+            return open(local / "mcp-workers.log", "a")  # the worker owns it
+    except OSError:
+        pass
+    return subprocess.DEVNULL
+
+
+def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], None], busy: int):
+    """Run one call in a worker process; a thread relays its frames. Returns the thread.
+
+    The worker is given the connection's identity and location -- the only per-connection
+    state a tool reads (`client_info` is a label, the footer counters a courtesy). A
+    `notifications/cancelled` is deliberately NOT passed on: a review or gate a client
+    stopped waiting for still finishes and records, which is the point (B9abc247444).
+    """
     import subprocess
     import threading
 
@@ -4130,6 +4157,18 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
 
     mid = msg.get("id")
     name = (msg.get("params") or {}).get("name", "")
+    if busy >= MAX_WORKERS:
+        send(
+            _ok(
+                mid,
+                _text(
+                    f"{name}: {busy} long calls are already running on this connection "
+                    f"(at most {MAX_WORKERS}). Call again when one has answered.",
+                    meta={"exit": 2},
+                ),
+            )
+        )
+        return None
     job = {
         "repo": str(srv.repo),
         "called_from": str(srv.called_from),
@@ -4142,11 +4181,13 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
         **os.environ,
         "PYTHONPATH": os.pathsep.join(filter(None, [root, os.environ.get("PYTHONPATH", "")])),
     }
+    err = _worker_stderr(srv.repo)
     try:
         p = P.popen(
             [sys.executable, "-c", "from ddflow.surfaces.mcp import _worker_main as m; m()"],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
+            stderr=err,
             text=True,
             env=env,
             start_new_session=True,
@@ -4157,6 +4198,9 @@ def _offload(srv: Server, msg: dict[str, Any], send: Callable[[dict[str, Any]], 
     except (OSError, ValueError) as exc:
         send(_ok(mid, _text(f"{name}: could not start its worker: {exc}", error=True)))
         return None
+    finally:
+        if err is not subprocess.DEVNULL:
+            err.close()  # the worker holds its own copy
 
     def relay() -> None:
         answered = False
@@ -4271,7 +4315,8 @@ def serve(
             notify(_err(None, -32700, f"parse error: {exc}"))
             continue
         if offload and _offloaded(msg):
-            if (relay := _offload(srv, msg, notify)) is not None:
+            relays = [r for r in relays if r.is_alive()]
+            if (relay := _offload(srv, msg, notify, len(relays))) is not None:
                 relays.append(relay)
             continue
         try:

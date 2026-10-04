@@ -23,20 +23,25 @@ import sys
 import time
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
 ROOT = Path(__file__).resolve().parents[1]
 DEADLINE_S = 30
+pytestmark = pytest.mark.skipif(
+    not Path("/proc/self/task").is_dir(), reason="finds the worker through /proc"
+)
 
 
-def _server(repo: Path) -> subprocess.Popen:
+def _server(repo: Path, stderr=subprocess.DEVNULL) -> subprocess.Popen:
     env = {**os.environ, "PYTHONPATH": str(ROOT), "DDFLOW_AGENT": "offload-test"}
     return subprocess.Popen(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
+        stderr=stderr,
         text=True,
         bufsize=1,
         env=env,
@@ -100,11 +105,16 @@ def _stop(proc) -> None:
         proc.wait()
 
 
-def _children(pid: int) -> list[int]:
+def _workers(pid: int) -> list[int]:
+    """The server's worker processes: its children running `_worker_main`."""
     kids: list[int] = []
     for task in Path(f"/proc/{pid}/task").iterdir():
-        text = (task / "children").read_text().split()
-        kids += [int(k) for k in text]
+        for k in (task / "children").read_text().split():
+            try:
+                if b"_worker_main" in Path(f"/proc/{k}/cmdline").read_bytes():
+                    kids.append(int(k))
+            except OSError:
+                pass
     return kids
 
 
@@ -148,7 +158,7 @@ def test_a_long_call_whose_process_dies_leaves_the_server_serving(repo):
         _start(proc)
         _send(proc, "tools/call", _call("ddflow_wait", item="P1.T1", timeout=20, poll=0.2), 2)
         end = time.monotonic() + DEADLINE_S
-        while not (kids := _children(proc.pid)) and time.monotonic() < end:
+        while not (kids := _workers(proc.pid)) and time.monotonic() < end:
             time.sleep(0.05)
         assert kids, "the long call is running inside the server: nothing else can die for it"
         for k in kids:
@@ -177,11 +187,14 @@ def test_a_client_that_goes_away_does_not_lose_the_run(repo):
     run_cli(repo, "phase", "add", "P1", "--globs", "src/**")
     run_cli(repo, "task", "add", "P1.T1", "--phase", "P1", "--globs", "src/a.py")
     run_cli(repo, "--agent", "offload-test", "claim", "P1.T1", "--no-worktree")
-    proc = _server(repo)
+    # The client's stderr pipe goes with the client: a worker that inherited it would be
+    # writing into a broken pipe for the rest of the run.
+    proc = _server(repo, stderr=subprocess.PIPE)
     try:
         _start(proc)
         _send(proc, "tools/call", _call("ddflow_gate_run", id="P1.T1", gate="unit_tests"), 2)
         time.sleep(1.0)
+        proc.stderr.close()
         proc.kill()
         proc.wait()
         end = time.monotonic() + DEADLINE_S
@@ -195,5 +208,26 @@ def test_a_client_that_goes_away_does_not_lose_the_run(repo):
         assert isinstance(outcome, dict) and outcome.get("outcome") == "passed", (
             f"the run was lost with its client: unit_tests = {outcome!r}"
         )
+    finally:
+        _stop(proc)
+
+
+def test_a_burst_of_long_calls_is_capped_not_all_started(repo):
+    """Each worker is a whole interpreter: past `MAX_WORKERS` a call is answered busy."""
+    from ddflow.surfaces.mcp import MAX_WORKERS
+
+    _held(repo)
+    proc = _server(repo)
+    try:
+        _start(proc)
+        ids = list(range(2, 3 + MAX_WORKERS))
+        for rid in ids:
+            _send(proc, "tools/call", _call("ddflow_wait", item="P1.T1", timeout=20, poll=0.2), rid)
+        busy = _frames(proc, {ids[-1]}, timeout_s=15)
+        assert [f["id"] for f in busy] == [ids[-1]], busy
+        assert busy[0]["result"]["_meta"]["exit"] == 2
+        assert len(_workers(proc.pid)) == MAX_WORKERS
+        run_cli(repo, "--agent", "holder", "release", "P1.T1")
+        assert {f["id"] for f in _frames(proc, set(ids[:-1]))} == set(ids[:-1])
     finally:
         _stop(proc)
