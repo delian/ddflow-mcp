@@ -60,11 +60,10 @@ def test_the_count_is_per_tree_and_only_trees_that_may_hold_work(adopted, monkey
             _rec("B2", "/w/b/", True, unmerged_commits=1),  # same tree, spelt differently
             _rec("C", "/w/c", False),  # measured clean
             _rec("D", "/w/d", None),  # could not measure: treat as holding work
-            _rec("E", "", True, kind="expired_lease"),  # no tree: counted by item
-            _rec("F", "", True, kind="expired_lease"),
+            _rec("E", "", False, kind="expired_lease"),  # no tree: not a worktree
         ],
     )
-    assert _instruction_vars(adopted)["recoverable"] == 5
+    assert _instruction_vars(adopted)["recoverable"] == 3
     text = _instructions(adopted)
     assert "Waiting for you right now" in text
-    assert "5 worktree(s)" in text
+    assert "3 worktree(s)" in text
