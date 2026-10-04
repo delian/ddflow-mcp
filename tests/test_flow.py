@@ -729,12 +729,26 @@ def test_queue_ejection_not_reported_when_queue_unknown():
     it.pr.queue_position = 1
 
     # Queue info couldn't be read (transient failure)
-    info = FG.PRInfo(number=1, state="open", queue="", queue_known=False, url="http://example.com/pr/1")
+    info = FG.PRInfo(
+        number=1, state="open", queue="", queue_known=False, url="http://example.com/pr/1"
+    )
 
     # Report queue status - should NOT report ejection
     rep = SyncReport()
     _report_queue(it, info, moved=False, was_queued=True, rep=rep)
 
     # Bug: this incorrectly reports queue_ejected when queue_known=False
-    assert not any(c.what == "queue_ejected" for c in rep.changes), \
+    assert not any(c.what == "queue_ejected" for c in rep.changes), (
         "Should not report ejection when queue info couldn't be read (queue_known=False)"
+    )
+
+
+def test_pr_event_data_carries_queue_known():
+    """B79402e967e: the synced event must record that the queue could not be read.
+
+    Without queue_known in the event the projection defaults it to True, so the next
+    sync reads the empty queue as an ejection.
+    """
+    unread = FG.PRInfo(number=1, state="open", queue="", queue_known=False)
+    assert unread.event_data("github")["queue_known"] is False
+    assert FG.PRInfo(number=1, state="open").event_data("github")["queue_known"] is True
