@@ -78,3 +78,28 @@ def test_a_heartbeat_still_revives_a_lapsed_lease_nobody_overlaps(repo):
     assert run_cli(repo, "--agent", "second", "release", "T2")[0] == 0
     out = LC.heartbeat(repo, "T1", agent="first")
     assert out.data.get("renewed"), out.reason
+
+
+def test_a_heartbeat_judges_the_items_widened_globs_too(repo):
+    """roborev 1477 #2: the item's globs widened onto the other claim's file after the
+    lease lapsed; the catch-up would point the revived lease at them."""
+    _lapsed_then_taken(repo)
+    assert run_cli(repo, "--agent", "second", "release", "T2")[0] == 0
+    log = EventLog(repo, "seed")
+    log.append("task.added", "T3", {"parent": "P1", "title": "t3", "globs": ["src/b.py"]})
+    assert LC.claim(repo, "T3", agent="second", no_worktree=True).exit == 0
+    log.append("task.updated", "T1", {"globs": ["src/a.py", "src/b.py"]})
+    out = LC.heartbeat(repo, "T1", agent="first")
+    assert not out.data.get("renewed"), "revived onto T3's live src/b.py"
+
+
+def test_a_forced_fresh_claim_still_waives_the_overlap(repo):
+    """roborev 1477 #1: the asymmetry is deliberate. --force on an item nobody held is an
+    explicit override of the overlap; on a lapsed lease it was demanded for the expiry
+    alone, and an agent following that advice must not override a check it never saw."""
+    _lapsed_then_taken(repo)
+    EventLog(repo, "seed").append(
+        "task.added", "T4", {"parent": "P1", "title": "t4", "globs": ["src/a.py"]}
+    )
+    assert LC.claim(repo, "T4", agent="third", no_worktree=True).exit == 3
+    assert LC.claim(repo, "T4", agent="third", force=True, no_worktree=True).exit == 0

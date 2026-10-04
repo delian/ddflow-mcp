@@ -338,7 +338,8 @@ def _acquire_locked(
                 f"held by {lease.holder} on {other_id}"
                 + (
                     f". {item_id}'s lease lapsed and those files were claimed since: "
-                    f"--force takes over the expired lease, not another live one."
+                    f"--force takes over the expired lease, not another live one: "
+                    f"{lease.holder} releases {other_id}, or you wait for it."
                     if existing is not None
                     else ""
                 ),
@@ -508,16 +509,21 @@ def _transition(
 def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
     """Extend MY lease. Refuses on someone else's: a renewal is a claim of possession."""
     holder = holder or log.agent_id
-    cfg = Config.load(log.root)
 
     def lapsed_onto_a_live_claim(state: State, it: Item) -> bool:
         # Reviving a LAPSED lease is a re-claim: expiry freed its files, and a live lease
-        # granted on them since stands, as it does against `claim` (B0cb404c94e).
+        # granted on them since stands, as it does against `claim` (B0cb404c94e). Judged
+        # on the lease's globs and the item's, which the heartbeat's catch-up then
+        # points the lease at.
         now = time.time()
         lease = it.lease
-        if lease is None or not (lease.expired_at or lease.expired(now, cfg.lease.grace_s)):
+        if lease is None:
             return False
-        return glob_clash(state, cfg, it, holder, list(lease.globs), now) is not None
+        cfg = Config.load(log.root)
+        if not (lease.expired_at or lease.expired(now, cfg.lease.grace_s)):
+            return False
+        want = list(dict.fromkeys([*lease.globs, *it.globs]))
+        return glob_clash(state, cfg, it, holder, want, now) is not None
 
     ok = _transition(
         log,
@@ -531,7 +537,7 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
     if ok:
         # A claim someone else took over on the remote is not renewed: False, as for any
         # lease we no longer hold.
-        return not _remote_renew(log, cfg, item_id, holder, time.time())
+        return not _remote_renew(log, Config.load(log.root), item_id, holder, time.time())
     return ok
 
 
