@@ -424,12 +424,34 @@ def test_a_projection_error_is_not_swallowed_by_the_fallback(repo, log, cfg, mon
     log.append("task.added", "T1", {"title": "one thing", "body": "x"})
     st = Store(repo, cfg)
 
-    def boom(*a, **k):
-        raise sqlite3.IntegrityError("a projection bug")
+    for bug in (
+        sqlite3.IntegrityError("a projection bug"),
+        sqlite3.OperationalError("no such column: x"),
+        FileNotFoundError(2, "No such file or directory"),
+    ):
 
-    monkeypatch.setattr(st, "_build_into", boom)
-    with pytest.raises(sqlite3.IntegrityError):
-        st.ensure(log)
+        def boom(*a, _bug=bug, **k):
+            raise _bug
+
+        monkeypatch.setattr(st, "_build_into", boom)
+        with pytest.raises(type(bug)):
+            st.ensure(log)
+
+
+def test_a_full_disk_is_answered_from_the_log(repo, log, cfg, monkeypatch, capsys):
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    for env in (
+        sqlite3.OperationalError("database or disk is full"),
+        OSError(28, "No space left on device"),
+    ):
+
+        def boom(*a, _env=env, **k):
+            raise _env
+
+        monkeypatch.setattr(st, "_build_into", boom)
+        assert "T1" in st.ensure(log).items
+    assert capsys.readouterr().err.count("could not be rebuilt") == 2
 
 
 @pytest.mark.parametrize("junk", ["schema-less", "garbage"])
