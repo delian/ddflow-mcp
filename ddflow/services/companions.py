@@ -423,6 +423,16 @@ def _await_exit(proc: subprocess.Popen, grace_s: float) -> os.waitid_result | No
     return info
 
 
+def _exit_how(info: os.waitid_result | None) -> str:
+    """How the child ended, for the failure detail: an exit code, the signal that killed
+    it (si_status is then the signal, not a code), or that it merely closed its output."""
+    if info is None:
+        return "closed its output"
+    if info.si_code in (os.CLD_KILLED, os.CLD_DUMPED):
+        return f"killed by signal {info.si_status}"
+    return f"exited ({info.si_status})"
+
+
 def _stop(proc: subprocess.Popen) -> None:
     """End the launched server and EVERYTHING it started (an `npx` wrapper has children).
 
@@ -533,13 +543,7 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                 if msg is not None:
                     return done(True, *_describe_answer(msg))
             grace = min(_EXIT_GRACE_S, max(0.0, deadline - time.monotonic()))
-            info = _await_exit(proc, grace)
-            if info is None:
-                how = "closed its output"
-            elif info.si_code in (os.CLD_KILLED, os.CLD_DUMPED):
-                how = f"killed by signal {info.si_status}"
-            else:
-                how = f"exited ({info.si_status})"
+            how = _exit_how(_await_exit(proc, grace))
             return done(
                 False, f"`{c.command}` {how} without answering `initialize`." + stderr_tail()
             )
