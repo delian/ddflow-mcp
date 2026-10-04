@@ -932,6 +932,32 @@ _doc(
 
 
 @dataclass
+class CiConfig:
+    """The CI gate: the checks that must pass on the merge result before a task is done."""
+
+    command: str = ""
+    base: str = ""
+    timeout_s: int = 3600
+
+
+_doc(
+    "ci",
+    "command",
+    "The command the `ci` gate and `ddflow ci run` execute in a scratch worktree of the branch merged with the base. Empty (default): the project's own pre-push stage, `pre-commit run --hook-stage pre-push --all-files`, when .pre-commit-config.yaml exists; with neither, the gate is UNAVAILABLE (never a pass). Set it to run something else, e.g. `uv run ruff check . && uv run pytest -q`.",
+)
+_doc(
+    "ci",
+    "base",
+    "The branch merged into the task's branch before the checks run, so an interaction with what the base has become is tested (a parallel merge's effect). Empty (default): the repository's default branch.",
+)
+_doc(
+    "ci",
+    "timeout_s",
+    "Seconds the CI command may run before the gate records UNAVAILABLE. Default 3600: the pre-push set includes the whole test suite.",
+)
+
+
+@dataclass
 class PromptsConfig:
     """Paths to prompt templates that replace the shipped ones.
 
@@ -1462,6 +1488,7 @@ class Config:
     log: LogConfig = field(default_factory=LogConfig)
     upgrade: UpgradeConfig = field(default_factory=UpgradeConfig)
     mcp: McpConfig = field(default_factory=McpConfig)
+    ci: CiConfig = field(default_factory=CiConfig)
     prompts: PromptsConfig = field(default_factory=PromptsConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
     rules: RulesConfig = field(default_factory=RulesConfig)
