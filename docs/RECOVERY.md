@@ -31,7 +31,7 @@ $ ddflow recover
 1 recoverable situation(s); 1 may contain work:
 
 !! P2.T3  [expired_lease]  was: agent-hostname-41823
-     worktree /srv/proj/../.ddflow-worktrees/P2.T3
+     worktree /srv/proj/.ddflow/worktrees/P2.T3
      INSPECT FIRST — 3 uncommitted file(s), 2 unmerged commit(s).
      `git -C .../P2.T3 diff main` then salvage,
      then `ddflow release P2.T3 --note salvaged`.
@@ -210,7 +210,7 @@ loses shas legitimately — so it reports rather than fails.
 
 ```console
 $ ddflow doctor
-  note: worktree /srv/.ddflow-worktrees/P1.T9 exists but no item claims it
+  note: worktree /srv/proj/.ddflow/worktrees/P1.T9 exists but no item claims it
 ```
 
 Usually left by a removed item or a `--force` release. Inspect as in §1, then:
