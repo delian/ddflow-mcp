@@ -744,10 +744,10 @@ def test_queue_ejection_not_reported_when_queue_unknown():
 
 
 def test_pr_event_data_carries_queue_known():
-    """B79402e967e: the synced event must record that the queue could not be read.
+    """B79402e967e: the logged pr.synced event records that the queue could not be read.
 
-    Without queue_known in the event the projection defaults it to True, so the next
-    sync reads the empty queue as an ejection.
+    The projection does not fold the field (the sync decides from the live PRInfo); this
+    only pins that the event log says an empty queue was unread, not empty.
     """
     unread = FG.PRInfo(number=1, state="open", queue="", queue_known=False)
     assert unread.event_data("github")["queue_known"] is False
