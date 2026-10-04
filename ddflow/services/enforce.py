@@ -1180,7 +1180,11 @@ def environment_branch_commit(repo: Path, cfg: Config) -> str:
     mode = cfg.enforce.environment_commits
     return "\n".join(
         [
-            f"ddflow: refusing a commit made directly on {branch!r}, an environment branch.",
+            (
+                f"ddflow: refusing a commit made directly on {branch!r}, an environment branch."
+                if mode == "block"
+                else f"ddflow: warning: a commit made directly on {branch!r}, an environment branch."
+            ),
             "",
             f"An environment only receives work by promotion ({chain}), upstream first; a",
             "commit made here exists nowhere upstream and the next promotion conflicts.",
