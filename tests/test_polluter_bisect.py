@@ -352,6 +352,34 @@ def test_bisect_treats_a_duplicated_candidate_as_one_file():
     assert r.state == "found" and r.polluters == ["c"] and r.candidates == 3
 
 
+def test_budget_exhaustion_does_not_return_unverified_candidates():
+    """Bug Beca0feba54: budget exhaustion should not return all candidates as polluters.
+
+    When bisect exhausts its budget, it should return only verified minimal polluters,
+    not all candidates (which is just the initial value of `best`).
+    """
+    # Use same pattern as existing tests: probe that fails only with specific set
+    candidates = list("abcdef")
+
+    # Probe that requires "c" to fail; victim passes alone
+    def needs_c(subset):
+        assert subset[-1] == "V"  # victim is always last
+        return "c" in subset[:-1]
+
+    # Run with extremely tight budget that exhausts during ddmin search
+    # (after initial checks but before finding the 1-minimal set)
+    r = B.bisect("V", candidates, needs_c, max_runs=4)
+
+    # The bug is that when budget exhausts, `best` still holds all initial candidates
+    # instead of the smaller verified set {"c"} that was likely found earlier in ddmin
+    if r.state == "budget_exhausted":
+        # Bug: returns all candidates instead of just "c"
+        assert r.polluters != candidates, (
+            f"Bug: returned all {len(candidates)} unverified candidates. "
+            f"Should have smaller set, got {r.polluters}"
+        )
+
+
 # -- the real CLI and the MCP tool ----------------------------------------------------------
 
 
