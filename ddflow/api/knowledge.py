@@ -668,20 +668,36 @@ def _open_phase_of(st, item: str) -> str:
     return ""
 
 
+def _own_fix_id(st, bug_id: str) -> str:
+    """The bug's own fix task id: `fix-<bug>`, or -- when that one was ABANDONED, which
+    nothing revives -- the first of `fix-<bug>-2`, `-3`, ... that is not abandoned too
+    (B974e34fa83). Decided from the fold the caller holds inside its transaction, so the
+    id is free when it is filed (L-free-id-before-add)."""
+    from ..core.model import ABANDONED
+
+    base = tid = FIX_TASK_PREFIX + bug_id
+    n = 1
+    while (it := st.items.get(tid)) is not None and not it.removed and it.state == ABANDONED:
+        n += 1
+        tid = f"{base}-{n}"
+    return tid
+
+
 def _fix_task_id(st, cfg, bug_id: str, item: str) -> str:
     """The id `_file_fix_task` will bind ``bug_id`` to: the open bug-fix task ``item``
-    names, else `fix-<bug>` (whether or not it is already in the queue). One rule, so the
-    bug event written before the task names the task that then gets filed."""
+    names, else its own fix task (`_own_fix_id`, whether or not it is already in the
+    queue). One rule, so the bug event written before the task names the task that then
+    gets filed."""
     named = _fix_task_of(st, cfg, item)
-    return named.id if named is not None else FIX_TASK_PREFIX + bug_id
+    return named.id if named is not None else _own_fix_id(st, bug_id)
 
 
 def _has_fix_task(st, cfg, bug_id: str, item: str) -> bool:
     """Whether ``bug_id`` already has its fix in the queue, so `_file_fix_task` would file
-    nothing: the open bug-fix task ``item`` names, or a live `fix-<bug>`."""
+    nothing: the open bug-fix task ``item`` names, or its own fix task, not abandoned."""
     if _fix_task_of(st, cfg, item) is not None:
         return True
-    have = st.items.get(FIX_TASK_PREFIX + bug_id)
+    have = st.items.get(_own_fix_id(st, bug_id))
     return have is not None and not have.removed
 
 
@@ -771,10 +787,9 @@ def _needs_fix_task(st, b) -> bool:
     """Whether open bug ``b`` has no fix task that will ever fix it: none in the queue; a
     DONE task it was merely reported against -- `bug found --item <open fix task>` links
     a report to that task, and the task's completion does not fix it (B8dcbf2f8da); or an
-    ABANDONED task, which nothing sends back (rubber_duck, roborev 1475). Left alone: a
-    done task's OWN bug (`verify --reopen` sends that task back), and an abandoned
-    `fix-<bug>` of the bug itself, which a refile could only link again (`bug reopen`
-    names it, and `bug fixed` is the way out)."""
+    ABANDONED task, which nothing sends back -- its own `fix-<bug>` included, refiled as
+    `fix-<bug>-2` (`_own_fix_id`, B974e34fa83). Left alone: a done task's OWN bug
+    (`verify --reopen` sends that task back)."""
     from ..core.model import ABANDONED, DONE
     from ..services.completion import fixes_of
 
@@ -782,7 +797,7 @@ def _needs_fix_task(st, b) -> bool:
         return True
     state = st.items[b.fix_task].state
     if state == ABANDONED:
-        return b.fix_task != FIX_TASK_PREFIX + b.id
+        return True
     return state == DONE and b.id not in fixes_of(st, b.fix_task)
 
 
@@ -797,6 +812,7 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
     log, cfg, st = _load(repo, agent)
     filed: list[str] = []
     linked: list[str] = []
+    tasks: dict[str, str] = {}
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         todo = sorted(
@@ -806,7 +822,11 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
         for b in todo:
             if dry_run:
                 # The same test the write path applies, so the prediction is the outcome.
-                (linked if _has_fix_task(st, cfg, b.id, b.item) else filed).append(b.id)
+                if _has_fix_task(st, cfg, b.id, b.item):
+                    linked.append(b.id)
+                else:
+                    filed.append(b.id)
+                    tasks[b.id] = _fix_task_id(st, cfg, b.id, b.item)
                 continue
             fix = _file_fix_task(
                 log, cfg, st, b.id, title=b.title, summary=b.summary, item=b.item, globs=""
@@ -815,7 +835,9 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
             # (`_h_bug_found`), and an older ddflow folds it as the record it already has.
             log.append("bug.found", b.id, {"fix_task": fix["fix_task"]})
             (filed if fix["filed"] else linked).append(b.id)
-    tasks = {b: FIX_TASK_PREFIX + b for b in filed}
+            if fix["filed"]:
+                # The id filed, not `fix-<bug>` assumed: an abandoned one gets a successor.
+                tasks[b.id] = fix["fix_task"]
     if not filed and not linked:
         return O.nothing(
             "bug.file_tasks",
