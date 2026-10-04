@@ -441,15 +441,14 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
     with log.transaction():
         # Asked again under the log's lock: another agent may have filed this id since
         # `st` was read, and the check above is only advisory across agents.
-        # Only a NAMED id can collide (`auto_id` is time-salted), and the fold is paid
-        # only when an event about this id has landed since: a scan, not a fold, holds
-        # the lock otherwise.
+        # Asked again under the log's lock: another agent may have filed this id (as
+        # research or as anything else) since `st` was read. Only a NAMED id can collide
+        # (`auto_id` is time-salted), so only an explicit --id pays for this re-read and
+        # re-fold while the lock is held.
         if finding.id:
-            events = log.read_all()
-            if any(e.subject == rid for e in events):
-                raced = _research_id_taken(fold(events, strict=False), rid, finding)
-                if raced is not None:
-                    return raced
+            raced = _research_id_taken(fold(log.read_all(), strict=False), rid, finding)
+            if raced is not None:
+                return raced
         log.append(
             "research.recorded",
             rid,
