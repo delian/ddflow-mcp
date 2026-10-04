@@ -228,10 +228,13 @@ def test_a_failure_after_the_reply_says_the_reply_was_posted(pr_repo, monkeypatc
 
 
 def test_the_github_graphql_documents_are_brace_balanced():
-    import ast
-
     from ddflow.infra import forge as FG
 
-    docs = [FG._GH_THREADS_QUERY, FG._GH_REPLY_MUTATION, FG._GH_RESOLVE_MUTATION]
+    docs = [
+        FG._GH_THREADS_QUERY,
+        FG._GH_REPLY_MUTATION,
+        FG._GH_RESOLVE_MUTATION,
+        FG._GH_QUEUE_QUERY,
+    ]
     for d in docs:
         assert d.count("{") == d.count("}") and "{" in d, d

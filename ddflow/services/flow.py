@@ -1240,17 +1240,23 @@ def cut(
         if prep and not _write_changelog(repo, cfg, out, vp.ref, prep, vp.next, force=force):
             return out
         if vfiles and not _write_version_files(repo, cfg, out, vp.ref, vfiles, vp.next):
-            landed = W.rev(repo, vp.ref)
-            if landed and landed != before:
-                out.steps.append(
-                    f"NOTE: the changelog commit {landed[:10]} was already made on {vp.ref} and "
-                    f"stays: `git revert {landed[:10]}` removes it, or fix the bump and run "
-                    f"`ddflow version cut` again (the changelog section is then already there)"
-                )
+            _note_changelog_commit_stays(repo, out, vp.ref, before)
             return out
         out.sha = W.rev(repo, vp.ref)
         return _tag_and_push(repo, cfg, log, out, vp, branch=vp.ref, push=push)
     return _cut_gitflow(repo, cfg, log, out, vp, push=push, prep=prep, force=force, vfiles=vfiles)
+
+
+def _note_changelog_commit_stays(repo: Path, out: Cut, ref: str, before: str) -> None:
+    """A failed bump rolls its own tree back, but a changelog commit already made on the
+    branch stays: say which commit, and how to remove it."""
+    landed = W.rev(repo, ref)
+    if landed and landed != before:
+        out.steps.append(
+            f"NOTE: the changelog commit {landed[:10]} was already made on {ref} and "
+            f"stays: `git revert {landed[:10]}` removes it, or fix the bump and run "
+            f"`ddflow version cut` again (the changelog section is then already there)"
+        )
 
 
 def _plan_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan, *, direct: bool):
