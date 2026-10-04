@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import tempfile
 import time
@@ -151,22 +152,51 @@ def baseline(repo: Path, command: str, *, timeout: int = 900) -> Baseline:
         )
     started = time.monotonic()
     try:
-        done = P.run(command, cwd=tmp, capture_output=True, text=True, timeout=timeout, shell=True)
+        code, out = _run_bounded(command, tmp, timeout)
         seconds = time.monotonic() - started
-        out = (done.stdout or "") + (done.stderr or "")
+        if code is None:
+            return Baseline(command, False, -1, f"the command did not finish within {timeout}s")
         counts: dict[str, int] = {}
         for match in _COUNT.finditer(out):
             counts[match.group(2).rstrip("s")] = int(match.group(1))
         failing = [m.group(2) for line in out.splitlines() if (m := _FAILING.match(line))]
-        detail = _summary(out) or f"exit {done.returncode}"
-        return Baseline(
-            command, True, done.returncode, detail, counts, failing, seconds, out[-_TAIL:]
-        )
-    except subprocess.TimeoutExpired:
-        return Baseline(command, False, -1, f"the command did not finish within {timeout}s")
+        detail = _summary(out) or f"exit {code}"
+        return Baseline(command, True, code, detail, counts, failing, seconds, out[-_TAIL:])
     finally:
         W.git(repo, "worktree", "remove", "--force", str(tmp))
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _run_bounded(command: str, cwd: Path, timeout: int) -> tuple[int | None, str]:
+    """(exit code, or None when it did not finish, merged output).
+
+    The command is a shell line, so the process that must die on timeout is the whole
+    GROUP: `subprocess.run` kills only the shell, and a grandchild (the runner and its
+    workers) keeps the pipes open -- the bound is not enforced and orphans keep running
+    against a tree that is about to be deleted (rubber_duck on 4e5160bb).
+    """
+    proc = P.popen(
+        command,
+        cwd=cwd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        out, _ = proc.communicate(timeout=timeout)
+        return proc.returncode, out or ""
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            proc.kill()
+        try:
+            out, _ = proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            out = ""
+        return None, out or ""
 
 
 def _summary(out: str) -> str:
