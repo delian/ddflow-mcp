@@ -84,7 +84,9 @@ def test_the_side_effecting_reviewer_runs_once_per_review(repo, tmp_path):
     assert [r.hedge for r in R.reviewers_for(R.load_reviewers(repo), "critic")] == [1]
     arm.write_text("1")
     assert _review(repo).exit == OK
+    # The diff is one small chunk, so one request: any second call is a hedged copy.
     assert (tmp_path / "calls").read_text().count("x") == 1
+    assert _git(repo, "ls-files", "late1.py") == "late1.py", "its commit landed, uncancelled"
 
 
 def test_a_commit_made_while_a_full_review_runs_shows_up_in_the_next_delta(repo, tmp_path):
