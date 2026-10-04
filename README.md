@@ -3410,7 +3410,7 @@ bug a hand-filed `fix-<bug>` names) -- never a bug merely reported against it wi
 open and are not completion blockers: `complete` names them in a warning and, once the
 task is done, files each its own `fix-<bug>` (or links the one it has). A bug closed
 by mistake (fixed or invalid) is reopened with `ddflow bug reopen <bug> --reason "..."`
-(event `bug.reopened`): the closure stays in the history, the record reads open, and it
+(over MCP: `ddflow_bug_invalid` with `reopen=true`; event `bug.reopened`): the closure stays in the history, the record reads open, and it
 points at the task filed to fix it -- when that task is done, `ddflow verify <task>
 --reopen` sends it back to the queue -- or at none, so `bug file-tasks` files one.
 

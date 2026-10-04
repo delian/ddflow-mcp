@@ -933,32 +933,42 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Close a bug as a FALSE finding -- nothing was broken, so nothing was fixed. "
             "Never counts as a fix. Requires the reason; give the probe or test that "
             "showed it false as evidence. Refused (exit 3) for an unknown id or a bug "
-            "already closed; a real bug is closed with `ddflow_bug_fixed` instead."
+            "already closed; a real bug is closed with `ddflow_bug_fixed` instead. "
+            "`reopen`: instead UNDO a closure (fixed or invalid) made by mistake."
         ),
         "properties": {
             "id": ("string", "Bug id.", True),
-            "reason": ("string", "Why the finding is false.", True),
+            "reason": ("string", "Why the finding is false (with reopen: why reopen).", True),
             "evidence": (
                 "string",
                 "The probe command or test node id that showed it false.",
                 False,
             ),
+            "reopen": ("boolean", "Reopen the closed bug instead.", False),
         },
-        "api": lambda repo, a, agent: _api().bug_invalid(
-            repo,
-            a["id"],
-            reason=a.get("reason", "") or "",
-            evidence=a.get("evidence", "") or "",
-            agent=agent,
+        "api": lambda repo, a, agent: (
+            _bug_reopen(repo, a["id"], reason=a.get("reason", "") or "", agent=agent)
+            if a.get("reopen")
+            else _api().bug_invalid(
+                repo,
+                a["id"],
+                reason=a.get("reason", "") or "",
+                evidence=a.get("evidence", "") or "",
+                agent=agent,
+            )
         ),
-        "payload": (
-            "id",
-            "invalid_reason",
-            "evidence",
-            "unchecked",
-            "fix_task",
-            "fix_task_removed",
-            "fix_task_kept",
+        "payload": lambda a: (
+            ("id", "was", "reason_given", "fix_task", "fix_task_state", "previous_fix_task", "next")
+            if a.get("reopen")
+            else (
+                "id",
+                "invalid_reason",
+                "evidence",
+                "unchecked",
+                "fix_task",
+                "fix_task_removed",
+                "fix_task_kept",
+            )
         ),
     },
     "ddflow_recover": {
@@ -2955,6 +2965,13 @@ def _bisect(repo, a):
         candidates=a.get("candidates", "") or "",
         timeout_s=float(a.get("timeout") or 600),
     )
+
+
+def _bug_reopen(repo, bug, *, reason, agent):
+    """`bug reopen` (B7bdcc6b212), served by `ddflow_bug_invalid` with `reopen`."""
+    from ..api.bug_reopen import bug_reopen
+
+    return bug_reopen(repo, bug, reason=reason, agent=agent)
 
 
 def _api():
