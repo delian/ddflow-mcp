@@ -14,7 +14,6 @@ import stat
 import subprocess
 import sys
 import textwrap
-import threading
 import time
 from pathlib import Path
 
@@ -215,8 +214,8 @@ def test_a_killed_process_is_waited_for_not_sampled_once():
         assert _wait_dead(proc.pid)  # killed: a zombie now, or gone
         os.kill(proc.pid, 0)  # unreaped: the pid is still there, no ProcessLookupError
         assert not _wait_dead(proc.pid, reaped=True, timeout_s=0.3)
-        threading.Timer(0.3, proc.wait).start()
-        assert _wait_dead(proc.pid, reaped=True)
+        proc.wait()
+        assert _wait_dead(proc.pid, reaped=True, timeout_s=0)
     finally:
         proc.kill()
         proc.wait()
