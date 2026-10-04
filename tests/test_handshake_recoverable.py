@@ -1,0 +1,69 @@
+"""The handshake's "Waiting for you right now" count (B904edd649c).
+
+It counted every situation `leases.scan` returned -- one per ITEM, including trees
+`recover` itself measured clean -- and the template called each one "work that exists
+nowhere else". One harness tree adopted by 64 finished items read as 64 crashed agents to
+salvage, every session. The count is now trees that may hold work -- dirty, unmerged, or
+unmeasurable -- once each.
+"""
+
+from __future__ import annotations
+
+import pytest
+from conftest import run_cli
+
+from ddflow.services import leases as L
+from ddflow.surfaces.mcp import _instruction_vars, _instructions
+
+HARNESS = "/x/.claude/worktrees/bridge-cse_1"
+
+
+def _rec(
+    item: str, worktree: str, salvageable: bool | None, kind: str = "orphan_worktree", **kw
+) -> L.Recovery:
+    return L.Recovery(
+        item=item,
+        holder="a",
+        kind=kind,
+        worktree=worktree,
+        salvageable=salvageable,
+        **kw,
+    )
+
+
+@pytest.fixture
+def adopted(repo):
+    run_cli(repo, "init")
+    return repo
+
+
+def _scan_returns(monkeypatch, recs):
+    monkeypatch.setattr(L, "scan", lambda *a, **k: list(recs))
+
+
+def test_clean_trees_are_not_announced_as_work_to_salvage(adopted, monkeypatch):
+    _scan_returns(
+        monkeypatch,
+        [_rec(f"T{i}", HARNESS, False, adopted=True) for i in range(64)],
+    )
+    assert _instruction_vars(adopted)["recoverable"] == 0
+    assert "Waiting for you right now" not in _instructions(adopted)
+
+
+def test_the_count_is_per_tree_and_only_trees_that_may_hold_work(adopted, monkeypatch):
+    _scan_returns(
+        monkeypatch,
+        [
+            _rec("A", "/w/a", True, dirty_files=2),
+            _rec("A2", "/w/a", True, dirty_files=2),  # same tree, a second item
+            _rec("B", "/w/b", True, unmerged_commits=1),
+            _rec("B2", "/w/b/", True, unmerged_commits=1),  # same tree, spelt differently
+            _rec("C", "/w/c", False),  # measured clean
+            _rec("D", "/w/d", None),  # could not measure: treat as holding work
+            _rec("E", "", None, kind="expired_lease"),  # no tree: not a worktree
+        ],
+    )
+    assert _instruction_vars(adopted)["recoverable"] == 3
+    text = _instructions(adopted)
+    assert "Waiting for you right now" in text
+    assert "3 worktree(s)" in text
