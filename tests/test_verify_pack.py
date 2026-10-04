@@ -142,7 +142,7 @@ def test_judge_unavailable_when_no_reviewer_is_configured(repo):
 
 def test_judge_needs_a_recorded_commit(repo):
     run_cli(repo, "init")
-    run_cli(repo, "task", "add", "T1", "--globs", "a.py")
+    run_cli(repo, "task", "add", "T1", "--title", "do the thing", "--globs", "a.py")
     run_cli(repo, "complete", "T1", "--force")
     out = judge(repo, "T1")
     assert out.exit == O.NOTHING and "no recorded commit" in out.reason
@@ -181,3 +181,20 @@ def test_the_cli_rejects_pack_with_judge_and_with_limit(repo):
     _done(repo)
     assert run_cli(repo, "verify", "T1", "--pack", "--judge")[0] == 1
     assert run_cli(repo, "verify", "T1", "--pack", "--limit", "5")[0] == 1
+
+
+def test_judge_refuses_a_task_with_no_requirement_text_instead_of_passing_it(repo, tmp_path):
+    seen = tmp_path / "seen.txt"
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "config.toml").write_text(
+        "[worktree]\nenabled = false\n"
+        f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{_fake_verifier(tmp_path, finds=False, log=seen)}"\n'
+        'model = "gemini-2.5-pro"\ngates = ["verify"]\n'
+    )
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    run_cli(repo, "task", "add", "T1", "--globs", "w.py")  # no title, no body
+    sha = _commit(repo, {"w.py": "1\n"}, "merge T1: w")
+    run_cli(repo, "complete", "T1", "--sha", sha, "--force")
+    out = judge(repo, "T1")
+    assert out.exit == O.NOTHING and "no requirement text" in out.reason
+    assert not seen.exists()  # the reviewer was never called

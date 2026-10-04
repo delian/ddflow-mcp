@@ -178,6 +178,13 @@ def judge(repo: Path, item: str, *, agent: str = "", on_progress=None) -> O.Outc
     text = VP.pack(repo, cfg, st, events, item)
     if text is None:
         return O.nothing("verify.judge", f"{item} is not done: there is nothing to judge", id=item)
+    req = VP.requirement(events, item)
+    if not (req or "").strip():
+        return O.nothing(
+            "verify.judge",
+            f"{item} has no requirement text: a judge with nothing to judge against would pass it",
+            id=item,
+        )
     sha = ((LG.build(events, item) or {}).get("sha")) or st.items[item].merged_sha
     if not sha:
         return O.nothing(
@@ -189,7 +196,7 @@ def judge(repo: Path, item: str, *, agent: str = "", on_progress=None) -> O.Outc
         repo,
         gate="verify",
         item=item,
-        intent=VP.requirement(events, item) or "",
+        intent=req,
         context=text,
         commit=sha,
         agent=agent,
