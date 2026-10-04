@@ -8,6 +8,7 @@ import dataclasses
 import sqlite3
 import sys
 import threading
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -429,3 +430,20 @@ def test_a_projection_error_is_not_swallowed_by_the_fallback(repo, log, cfg, mon
     monkeypatch.setattr(st, "_build_into", boom)
     with pytest.raises(sqlite3.IntegrityError):
         st.ensure(log)
+
+
+@pytest.mark.parametrize("junk", ["schema-less", "garbage"])
+def test_ensure_rebuilds_over_an_unreadable_index(repo, log, cfg, junk):
+    """Reviewer finding, refuted: `stale()` treats an index it cannot read as stale, so
+    the read path rebuilds over it instead of raising."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    st.path.parent.mkdir(parents=True, exist_ok=True)
+    if junk == "garbage":
+        st.path.write_bytes(b"not a database " * 100)
+    else:
+        with closing(sqlite3.connect(st.path)) as con:
+            con.execute("create table other(x)")
+    assert "T1" in st.ensure(log).items
+    with similar.open_store(st) as idx:
+        assert idx.ids() == {"T1"}
