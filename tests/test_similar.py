@@ -496,3 +496,19 @@ def test_a_read_only_index_directory_is_answered_from_the_log(repo, log, cfg, ca
     finally:
         st.path.parent.chmod(0o755)
     assert "could not be rebuilt" in capsys.readouterr().err
+
+
+def test_cantopen_in_a_writable_directory_is_a_bug_not_the_environment(repo, log, cfg):
+    """A CANTOPEN from a wrong path (here a directory that does not exist) while the
+    index directory is writable must surface: only an unwritable directory degrades."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+
+    def wrong_path(*a, **k):
+        sqlite3.connect(st.path.parent / "no-such-dir" / "x.db")
+
+    st.path.parent.mkdir(parents=True, exist_ok=True)
+    st._build_into = wrong_path
+    with pytest.raises(sqlite3.OperationalError) as caught:
+        st.ensure(log)
+    assert caught.value.sqlite_errorcode == sqlite3.SQLITE_CANTOPEN

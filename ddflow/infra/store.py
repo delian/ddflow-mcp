@@ -54,7 +54,10 @@ REBUILD_LOCK_TIMEOUT_S = 120.0
 #: old process may still be building into it during an upgrade.
 LEGACY_TEMP_MAX_AGE_S = 3600.0
 #: The OSError numbers and SQLite result codes that mean "the machine said no", not "the
-#: projection is wrong" -- the only failures `Store.ensure` answers from the log.
+#: projection is wrong" -- the only failures `Store.ensure` answers from the log. EPERM is
+#: left out on purpose: the index is written only where `.ddflow/` already is, and there
+#: a permission problem reads as EACCES (or as SQLite's CANTOPEN, see `_cannot_write`);
+#: an EPERM is far more often a code path doing something it may not.
 _ENV_ERRNOS = frozenset({errno.ENOSPC, errno.EACCES, errno.EROFS, errno.EDQUOT, errno.EIO})
 _ENV_SQLITE = frozenset(
     {
@@ -419,13 +422,15 @@ class Store:
             return fold(log.read_all(), strict=False)
 
     def _cannot_write(self, exc: BaseException) -> bool:
-        """SQLITE_CANTOPEN counts as the environment only when the index's directory is
-        really not writable: from a wrong path it is a bug, and must surface."""
-        code = getattr(exc, "sqlite_errorcode", None)
+        """SQLITE_CANTOPEN counts as the environment only when the index's directory
+        EXISTS and is not writable. From a wrong or missing path it is a bug and must
+        surface; only the plain code is taken (an extended one, such as CANTOPEN_ISDIR,
+        names a path problem)."""
+        parent = self.path.parent
         return (
-            code is not None
-            and (code & 0xFF) == sqlite3.SQLITE_CANTOPEN
-            and not os.access(self.path.parent, os.W_OK)
+            getattr(exc, "sqlite_errorcode", None) == sqlite3.SQLITE_CANTOPEN
+            and parent.is_dir()
+            and not os.access(parent, os.W_OK)
         )
 
     # -- search ---------------------------------------------------------------------
