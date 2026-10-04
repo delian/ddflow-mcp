@@ -387,8 +387,35 @@ def new_reports_block(item: str, rep: dict) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+#: How many recovery entries the brief spells out; the rest are counted.
+_RECOVERY_SHOWN = 5
+
+
+def _recovery_rank(r) -> int | None:
+    """Where a recovery entry stands in the brief: 0 work found, 1 COULD NOT MEASURE
+    (treat as work), 2 RUNNING with nobody on it; None for a clean, merged leftover,
+    which is counted rather than listed (B20e103326b)."""
+    if r.salvageable:
+        return 0
+    if r.salvageable is None:
+        return 1
+    return 2 if r.kind == "stale_running" else None
+
+
 def _brief_recovery(out: list[str], recovery: list) -> None:
-    if not recovery:
+    ranked = sorted(
+        ((k, r) for r in recovery if (k := _recovery_rank(r)) is not None),
+        key=lambda kr: (kr[0], kr[1].kind, kr[1].item),
+    )
+    shown = [r for _, r in ranked]
+    clean = len(recovery) - len(shown)
+    if not shown:
+        if clean:
+            out += [
+                f"_{clean} clean leftover(s) from earlier claims (merged, nothing to "
+                f"salvage): `ddflow recover` lists them._",
+                "",
+            ]
         return
     out += [
         "## ⚠ Recoverable work found",
@@ -397,7 +424,14 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
         "holds finished work that exists nowhere else.",
         "",
     ]
-    out += [f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in recovery[:5]]
+    out += [
+        f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in shown[:_RECOVERY_SHOWN]
+    ]
+    more = len(shown) - _RECOVERY_SHOWN
+    if more > 0:
+        out.append(f"- _{more} more needing a look: `ddflow recover` lists them._")
+    if clean:
+        out.append(f"- _{clean} clean leftover(s) (merged, nothing to salvage): `ddflow recover`._")
     out.append("")
 
 
