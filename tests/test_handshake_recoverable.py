@@ -3,8 +3,8 @@
 It counted every situation `leases.scan` returned -- one per ITEM, including trees
 `recover` itself measured clean -- and the template called each one "work that exists
 nowhere else". One harness tree adopted by 64 finished items read as 64 crashed agents to
-salvage, every session. The count is now trees that may hold work, as `recover` and the
-brief judge it.
+salvage, every session. The count is now trees that may hold work -- dirty, unmerged, or
+unmeasurable -- once each.
 """
 
 from __future__ import annotations
@@ -18,11 +18,13 @@ from ddflow.surfaces.mcp import _instruction_vars, _instructions
 HARNESS = "/x/.claude/worktrees/bridge-cse_1"
 
 
-def _rec(item: str, worktree: str, salvageable: bool | None, **kw) -> L.Recovery:
+def _rec(
+    item: str, worktree: str, salvageable: bool | None, kind: str = "orphan_worktree", **kw
+) -> L.Recovery:
     return L.Recovery(
         item=item,
         holder="a",
-        kind="orphan_worktree",
+        kind=kind,
         worktree=worktree,
         salvageable=salvageable,
         **kw,
@@ -55,10 +57,14 @@ def test_the_count_is_per_tree_and_only_trees_that_may_hold_work(adopted, monkey
             _rec("A", "/w/a", True, dirty_files=2),
             _rec("A2", "/w/a", True, dirty_files=2),  # same tree, a second item
             _rec("B", "/w/b", True, unmerged_commits=1),
+            _rec("B2", "/w/b/", True, unmerged_commits=1),  # same tree, spelt differently
             _rec("C", "/w/c", False),  # measured clean
+            _rec("D", "/w/d", None),  # could not measure: treat as holding work
+            _rec("E", "", True, kind="expired_lease"),  # no tree: counted by item
+            _rec("F", "", True, kind="expired_lease"),
         ],
     )
-    assert _instruction_vars(adopted)["recoverable"] == 2
+    assert _instruction_vars(adopted)["recoverable"] == 5
     text = _instructions(adopted)
     assert "Waiting for you right now" in text
-    assert "2 worktree(s)" in text
+    assert "5 worktree(s)" in text
