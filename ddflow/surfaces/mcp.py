@@ -933,32 +933,42 @@ TOOLS: dict[str, dict[str, Any]] = {
             "Close a bug as a FALSE finding -- nothing was broken, so nothing was fixed. "
             "Never counts as a fix. Requires the reason; give the probe or test that "
             "showed it false as evidence. Refused (exit 3) for an unknown id or a bug "
-            "already closed; a real bug is closed with `ddflow_bug_fixed` instead."
+            "already closed; a real bug is closed with `ddflow_bug_fixed` instead. "
+            "`reopen`: instead UNDO a closure (fixed or invalid) made by mistake."
         ),
         "properties": {
             "id": ("string", "Bug id.", True),
-            "reason": ("string", "Why the finding is false.", True),
+            "reason": ("string", "Why the finding is false (with reopen: why reopen).", True),
             "evidence": (
                 "string",
                 "The probe command or test node id that showed it false.",
                 False,
             ),
+            "reopen": ("boolean", "Reopen the closed bug instead.", False),
         },
-        "api": lambda repo, a, agent: _api().bug_invalid(
-            repo,
-            a["id"],
-            reason=a.get("reason", "") or "",
-            evidence=a.get("evidence", "") or "",
-            agent=agent,
+        "api": lambda repo, a, agent: (
+            _bug_reopen(repo, a, agent=agent)
+            if _reopening(a)
+            else _api().bug_invalid(
+                repo,
+                a["id"],
+                reason=a.get("reason", "") or "",
+                evidence=a.get("evidence", "") or "",
+                agent=agent,
+            )
         ),
-        "payload": (
-            "id",
-            "invalid_reason",
-            "evidence",
-            "unchecked",
-            "fix_task",
-            "fix_task_removed",
-            "fix_task_kept",
+        "payload": lambda a: (
+            ("id", "was", "reason_given", "fix_task", "fix_task_state", "previous_fix_task", "next")
+            if _reopening(a)
+            else (
+                "id",
+                "invalid_reason",
+                "evidence",
+                "unchecked",
+                "fix_task",
+                "fix_task_removed",
+                "fix_task_kept",
+            )
         ),
     },
     "ddflow_recover": {
@@ -2957,6 +2967,30 @@ def _bisect(repo, a):
     )
 
 
+def _reopening(a: dict[str, Any]) -> bool:
+    """`ddflow_bug_invalid`'s mode, for its `api` and its `payload` alike. Strict: the
+    two modes do opposite things, so a `"false"` string must not pick one."""
+    mode = a.get("reopen", False)
+    if not isinstance(mode, bool):
+        raise ValueError("reopen must be true or false")
+    return mode
+
+
+def _bug_reopen(repo, a: dict[str, Any], *, agent: str):
+    """`bug reopen` (B7bdcc6b212), served by `ddflow_bug_invalid` with `reopen`. Evidence
+    a reopen cannot record is refused (exit 3), not dropped; an empty one carries nothing."""
+    from ..api.bug_reopen import bug_reopen
+    from ..core import outcome as O
+
+    if a.get("evidence"):
+        return O.refused(
+            "bug.reopened",
+            "evidence is for closing a bug as invalid; a reopen records only its reason.",
+            id=a["id"],
+        )
+    return bug_reopen(repo, a["id"], reason=a.get("reason", "") or "", agent=agent)
+
+
 def _api():
     """Imported lazily: `surfaces` may reach `api`, and doing it at call time keeps the
     module import graph flat for anything that only wants the tool table."""
@@ -3113,14 +3147,15 @@ def _outcome_result(
         # An add that went onto an existing record, or a dry run: what the check decided
         # IS the answer, and the tool's usual `{"id": ...}` projection would drop it.
         payload_key = ""
-    if (
-        isinstance(payload_key, tuple)
-        and "export_refresh" in out.data
-        and "export_refresh" not in payload_key
-    ):
-        # merge / complete carry what the optional document refresh did (B-export-refresh),
-        # as the CLI's --json does; absent when nothing was refreshed, so the shape is unchanged.
-        payload_key = (*payload_key, "export_refresh")
+    if isinstance(payload_key, tuple):
+        # merge / complete carry their optional extras as the CLI's --json does: what the
+        # document refresh did (B-export-refresh), the base's health after a merge
+        # ([ci].on_merge) and the progress block after a completion. Absent when nothing
+        # was produced, so the shape is unchanged.
+        payload_key = (
+            *payload_key,
+            *(k for k in _OPTIONAL_KEYS if k in out.data and k not in payload_key),
+        )
     if as_text:
         body = out.body(payload_key)
         if not isinstance(body, str):
@@ -3250,6 +3285,12 @@ class Server:
         #: Declared identity for this connection; empty means "use the process
         #: default", which is the backward-compatible single-agent behaviour.
         self.agent = agent
+        if not agent:
+            # A server restarted under the same harness keeps what the agent declared
+            # there, or its shell (which still reads the record) and it would split.
+            from ..infra import harness_identity
+
+            self.agent = harness_identity.own(self.repo)
         #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
         #: only -- `listChanged` is false and there is no call that widens it.
         self.tier = resolve_tier(self.repo)
@@ -3479,8 +3520,14 @@ class Server:
                         ),
                     )
                 self.agent = want
+                # The same agent's shell commands take it too (Bfad021e8d9).
+                from ..infra import harness_identity
+
+                shell = harness_identity.declare(self.repo, want)
                 if want:
-                    detail = "declared on this connection"
+                    detail = "declared on this connection" + (
+                        f"; {shell}: pass --agent to the CLI" if shell else ", and for its shell"
+                    )
                 else:
                     want_who, detail = _default_agent(self.repo)
                     who = want_who
@@ -3492,6 +3539,8 @@ class Server:
                         " Every agent in this tree derives the SAME name, so if you are "
                         "one of several here, declare one."
                     )
+                if not want and shell:
+                    note += f" Its shell may still use the previous name ({shell})."
                 return _ok(
                     mid,
                     _text(
@@ -3760,6 +3809,10 @@ def _test_gates(repo: Path) -> list[str]:
         and g.is_command_gate
         and any(w in g.id for w in ("test", "e2e", "smoke", "integration", "ui"))
     )
+
+
+#: Keys a tool's payload carries only when the operation produced them.
+_OPTIONAL_KEYS = ("export_refresh", "ci", "progress")
 
 
 def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
