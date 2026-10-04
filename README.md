@@ -3407,7 +3407,8 @@ open and are not completion blockers: `complete` names them in a warning and, on
 task is done, files each its own `fix-<bug>` (or links the one it has). A bug closed
 by mistake (fixed or invalid) is reopened with `ddflow bug reopen <bug> --reason "..."`
 (event `bug.reopened`): the closure stays in the history, the record reads open, and it
-points at its own open fix task -- or at none, so `bug file-tasks` files one.
+points at the task filed to fix it -- when that task is done, `ddflow verify <task>
+--reopen` sends it back to the queue -- or at none, so `bug file-tasks` files one.
 
 Three cases file nothing or undo it: `--no-task` (MCP `no_task`), for a bug fixed in
 the commit that found it; `--item <an OPEN bug-fix task>`, which links the bug to it

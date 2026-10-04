@@ -18,16 +18,20 @@ from ._base import _load
 
 
 def _fix_task_after(st, bug) -> str:
-    """The task that fixes the reopened bug: its current `fix_task` if that is still open
-    and was filed to fix it, else its own open `fix-<bug>`, else "" -- so `bug file-tasks`
-    files one rather than leaving it pointed at a finished task that never fixed it."""
-    for tid in (bug.fix_task, f"fix-{bug.id}"):
-        it = st.items.get(tid) if tid else None
-        if it is None or it.removed or it.state in (DONE, ABANDONED):
-            continue
-        if bug.id in fixes_of(st, tid):
-            return tid
-    return ""
+    """The task that fixes the reopened bug: a task filed to fix it (its current
+    `fix_task`, else its own `fix-<bug>`), an open one first. A DONE one is kept -- it is
+    the bug's own fix, which did not hold, and `ddflow verify <task> --reopen` sends it
+    back to the queue. "" when no task was filed to fix it (say, the finished task it was
+    merely reported against), so `bug file-tasks` files one."""
+    mine = [
+        st.items[t]
+        for t in dict.fromkeys((bug.fix_task, f"fix-{bug.id}"))
+        if t in st.items and not st.items[t].removed and bug.id in fixes_of(st, t)
+    ]
+    for it in mine:
+        if it.state not in (DONE, ABANDONED):
+            return it.id
+    return next((it.id for it in mine if it.state == DONE), "")
 
 
 def bug_reopen(repo: Path, bug: str, *, reason: str, agent: str = "") -> O.Outcome:
@@ -55,6 +59,7 @@ def bug_reopen(repo: Path, bug: str, *, reason: str, agent: str = "") -> O.Outco
         was=was,
         reason_given=reason,
         fix_task=fix_task,
+        fix_task_state=st.items[fix_task].state if fix_task else "",
         previous_fix_task=rec.fix_task,
     )
 
