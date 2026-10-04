@@ -83,6 +83,7 @@ def test_the_mode_is_strict_and_nothing_is_dropped(repo):
     assert malformed.get("isError") and "reopen must be" in malformed["content"][0]["text"]
     conflict = _call(srv, id=bid, reason="real", reopen=True, evidence="probe")
     assert conflict["_meta"]["exit"] == 3, conflict
+    assert "evidence" in conflict["content"][-1]["text"], conflict
     blank = _call(srv, id=bid, reason="", reopen=True)
-    assert blank.get("isError") and "reason" in blank["content"][0]["text"], blank
+    assert blank["_meta"]["exit"] == 1 and "reason" in blank["content"][0]["text"], blank
     assert _bug(repo, bid)["state"] == "invalid"

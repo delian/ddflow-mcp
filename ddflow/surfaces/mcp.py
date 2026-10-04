@@ -2978,7 +2978,7 @@ def _reopening(a: dict[str, Any]) -> bool:
 
 def _bug_reopen(repo, a: dict[str, Any], *, agent: str):
     """`bug reopen` (B7bdcc6b212), served by `ddflow_bug_invalid` with `reopen`. Evidence
-    a reopen cannot record is refused (exit 3), not dropped."""
+    a reopen cannot record is refused (exit 3), not dropped; an empty one carries nothing."""
     from ..api.bug_reopen import bug_reopen
     from ..core import outcome as O
 
