@@ -81,7 +81,9 @@ def resolve_command(repo: Path, cfg: Config) -> tuple[str, str]:
     return DEFAULT_COMMAND, ""
 
 
-_SHELL_WORDS = frozenset({"cd", "export", "set", "source", ".", "(", "{", "if", "for", "test", "["})
+_SHELL_WORDS = frozenset(
+    {"cd", "export", "set", "source", ".", "(", "{", "if", "for", "test", "[", "[[", "(("}
+)
 
 
 def tool_missing(command: str) -> str:
@@ -165,10 +167,10 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
     base_ok = bool(base) and W.git(repo, "rev-parse", "--verify", "--quiet", base).ok
     if named and not base_ok:
         return Result(
-            "unavailable",
+            "failed",
             command=cmd,
             sha=sha,
-            reason=f"base {named!r} is not a commit, so the merge result cannot be checked",
+            reason=f"base {named!r} is not a commit (misconfigured [ci].base or --base?), so the merge result cannot be checked",
         )
     with merge_tree(repo, sha, base if base_ok else "") as (tree, failure):
         if tree is None:
