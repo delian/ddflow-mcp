@@ -238,6 +238,72 @@ def test_chatty_stderr_is_summarised_by_its_last_line(tmp_path):
     assert v.speaks_mcp is False and "exited (4)" in v.detail and "log line 49999" in v.detail
 
 
+CLOSE_STDOUT_THEN_EXIT = textwrap.dedent(
+    """
+    import os, time
+    os.close(1)      # the pipe closes while the process is still alive
+    time.sleep(0.4)
+    os._exit(4)
+    """
+)
+
+
+def test_an_exit_code_is_read_even_when_stdout_closes_first(tmp_path):
+    """B297ede2447: EOF on stdout can arrive before the child's exit is visible to waitid,
+    so the detail must still name the exit code rather than 'closed its output'."""
+    v = CO.verify_one(
+        _companion("late", sys.executable, _script(tmp_path, "le.py", CLOSE_STDOUT_THEN_EXIT))
+    )
+    assert v.speaks_mcp is False, v.detail
+    assert "exited (4)" in v.detail, v.detail
+
+
+LINGERING_CHILD = "import os, time\nos.close(1)\ntime.sleep(5)\n"
+SELF_SIGKILL = "import os, signal\nos.close(1)\nos.kill(os.getpid(), signal.SIGKILL)\n"
+
+
+def test_a_child_that_closes_stdout_and_stays_alive_is_not_waited_for(tmp_path):
+    """The grace is bounded: a child that closed stdout and kept running must still be
+    reported as 'closed its output' promptly, not wait out the whole timeout."""
+    v = CO.verify_one(
+        _companion("linger", sys.executable, _script(tmp_path, "li.py", LINGERING_CHILD))
+    )
+    assert v.speaks_mcp is False, v.detail
+    assert "closed its output" in v.detail, v.detail
+    assert v.elapsed_s < 10, v.elapsed_s
+
+
+def test_the_grace_is_clamped_to_the_remaining_timeout(tmp_path, monkeypatch):
+    """The post-EOF wait cannot outrun the caller's timeout: the grace handed to
+    _await_exit is the remaining budget, not the full _EXIT_GRACE_S. Against unclamped
+    code the assertion sees that full grace (30.0 here) and fails, which is what makes
+    this a regression test. The timeout leaves interpreter startup ample headroom."""
+    seen: dict[str, float] = {}
+
+    def fake_await(proc, grace_s):
+        seen["grace"] = grace_s
+
+    monkeypatch.setattr(CO, "_EXIT_GRACE_S", 30.0)
+    monkeypatch.setattr(CO, "_await_exit", fake_await)
+    v = CO.verify_one(
+        _companion("brief", sys.executable, _script(tmp_path, "bf.py", LINGERING_CHILD)),
+        timeout_s=10.0,
+    )
+    assert v.speaks_mcp is False, v.detail
+    assert "closed its output" in v.detail, v.detail
+    assert 0 < seen.get("grace", 0) < 10.0, seen
+
+
+def test_a_signal_killed_child_is_named_as_a_signal(tmp_path, monkeypatch):
+    """A waitid record for a killed child holds the signal number in si_status, not an
+    exit code: report it as one, not as 'exited (9)'. A longer grace keeps the record
+    visible even on a loaded runner."""
+    monkeypatch.setattr(CO, "_EXIT_GRACE_S", 5.0)
+    v = CO.verify_one(_companion("sig", sys.executable, _script(tmp_path, "sg.py", SELF_SIGKILL)))
+    assert v.speaks_mcp is False, v.detail
+    assert "killed by signal 9" in v.detail, v.detail
+
+
 def test_the_companions_env_reaches_the_launched_server(tmp_path):
     body = textwrap.dedent(
         """

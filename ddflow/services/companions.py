@@ -333,6 +333,12 @@ _MAX_BUF = 1 << 20
 #: What an echoing binary (`cat`) sends back: our own request, recognisable by its method.
 _ECHO_MARK = b'"method": "initialize"'
 
+#: How long to keep polling for a child's exit once its stdout has closed. The pipe's EOF
+#: can be read before the waitable status exists: a process closes its descriptors during
+#: interpreter shutdown, a moment ahead of exiting (B297ede2447). A poll bounded by this
+#: grace recovers the exit code; a child that merely closed stdout and stayed alive lapses.
+_EXIT_GRACE_S = 1.0
+
 
 @dataclass
 class Verification:
@@ -402,6 +408,31 @@ def _exit_info(proc: subprocess.Popen) -> os.waitid_result | None:
         return None
 
 
+def _await_exit(proc: subprocess.Popen, grace_s: float) -> os.waitid_result | None:
+    """The child's exit record once it is visible, or None if it is still alive after
+    `grace_s`. A pipe's EOF can be read before the process that closed it is waitable: the
+    descriptors close during interpreter shutdown, a moment ahead of the exit, so a single
+    `_exit_info` sample can miss the code (B297ede2447). Poll WITHOUT reaping, so the
+    leader's pid stays reserved for the final group SIGKILL.
+    """
+    deadline = time.monotonic() + grace_s
+    info = _exit_info(proc)
+    while info is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+        info = _exit_info(proc)
+    return info
+
+
+def _exit_how(info: os.waitid_result | None) -> str:
+    """How the child ended, for the failure detail: an exit code, the signal that killed
+    it (si_status is then the signal, not a code), or that it merely closed its output."""
+    if info is None:
+        return "closed its output"
+    if info.si_code in (os.CLD_KILLED, os.CLD_DUMPED):
+        return f"killed by signal {info.si_status}"
+    return f"exited ({info.si_status})"
+
+
 def _stop(proc: subprocess.Popen) -> None:
     """End the launched server and EVERYTHING it started (an `npx` wrapper has children).
 
@@ -411,9 +442,7 @@ def _stop(proc: subprocess.Popen) -> None:
     """
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, signal.SIGTERM)
-    deadline = time.monotonic() + 3
-    while _exit_info(proc) is None and time.monotonic() < deadline:
-        time.sleep(0.02)
+    _await_exit(proc, 3.0)
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, signal.SIGKILL)
     with contextlib.suppress(subprocess.TimeoutExpired):
@@ -511,8 +540,8 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                 msg, buf = _reply_to(buf, 1)
                 if msg is not None:
                     return done(True, *_describe_answer(msg))
-            info = _exit_info(proc)
-            how = f"exited ({info.si_status})" if info is not None else "closed its output"
+            grace = min(_EXIT_GRACE_S, max(0.0, deadline - time.monotonic()))
+            how = _exit_how(_await_exit(proc, grace))
             return done(
                 False, f"`{c.command}` {how} without answering `initialize`." + stderr_tail()
             )
