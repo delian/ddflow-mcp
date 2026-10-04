@@ -20,7 +20,25 @@ def _flag_paragraph() -> str:
 
 
 def test_the_runbook_names_every_kind_of_entry_recover_flags():
+    """One phrase per band `recover` flags (`views.markdown.recovery_band`); a band added
+    there without a phrase here fails, so the runbook cannot silently fall behind
+    (roborev 1507)."""
+    from ddflow.services.leases import Recovery
+    from ddflow.views import markdown as M
+
+    phrase = {
+        M._HOLDING: "**measured** to hold it",
+        M._UNMEASURED: "**could\nnot measure**",
+        M._UNHELD: "RUNNING with nobody on it",
+    }
+    # Every band an entry can land in, from every kind x salvageable value.
+    bands = {
+        M.recovery_band(Recovery(item="x", holder="h", kind=k, salvageable=s))
+        for k in ("expired_lease", "orphan_worktree", "stale_running")
+        for s in (True, False, None)
+    } - {None}
+    assert bands == set(phrase), f"a band without a runbook phrase: {bands - set(phrase)}"
     para = _flag_paragraph()
-    assert "could not measure" in para.lower(), para
-    assert "RUNNING with nobody on it" in para, para
+    for band in bands:
+        assert " ".join(phrase[band].split()) in para, (band, para)
     assert "were **measured** to contain work" not in para, para
