@@ -24,7 +24,8 @@
     rules_drift        list    {path, state, detail} for each rules file that is missing,
                                stripped or drifted. Empty when they are current.
     gate_gaps          list    gate ids in the task pipeline with no companion behind them
-    recoverable        int     crashed agents' worktrees waiting
+    recoverable        int     crashed agents' worktrees that may hold work (dirty or
+                               unmerged), one per tree; clean ones are not counted
     ready, running, blocked, open_bugs, loops   int
     tool_tier_note     str     what this connection's `[mcp].tools` tier hides, or ""
     task_pipeline      list    the gate ids every task passes through, in order
@@ -277,9 +278,10 @@ record linked to it. `check_only` shows the candidates and writes nothing.
 {% if recoverable %}
 ## Waiting for you right now
 
-{{ recoverable }} worktree(s) from a crashed agent hold work that exists nowhere else.
-Call `ddflow_recover` and deal with them BEFORE picking up anything new. Nothing is
-ever stolen or deleted automatically, which is why it is still there.
+{{ recoverable }} worktree(s) from a crashed agent may hold work that exists nowhere
+else: uncommitted changes or unmerged commits. Call `ddflow_recover` and deal with them
+BEFORE picking up anything new. Nothing is ever stolen or deleted automatically, which
+is why it is still there.
 {% endif %}
 {% if loops %}
 ## The queue is looping
