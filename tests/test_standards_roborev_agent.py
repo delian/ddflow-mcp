@@ -96,7 +96,9 @@ def test_the_agent_that_ran_is_recorded_not_the_one_typed(repo, fake_roborev):
     assert code == 0, out + err
     rec = _gate(repo)
     assert rec.evidence["model"] == "claude-code", rec.evidence
-    assert rec.evidence["roborev"] == {"job": 7, "agent": "claude-code", "model": ""}
+    assert rec.evidence["roborev"] == {
+        "verified": True, "job": 7, "agent": "claude-code", "model": ""
+    }  # fmt: skip
     assert "roborev job 7 was reviewed by claude-code" in out + err
     # ...so reviewer independence sees an anthropic reviewer, not an unknown 'kilo'.
     assert G.family_of(rec.evidence["model"], Config()) == "anthropic"
@@ -144,3 +146,41 @@ def test_a_null_job_list_is_no_review_not_a_crash(repo, fake_roborev, tmp_path):
     code, out, err = _record(repo, head)
     assert code == 0, out + err
     assert "no finished review" in out + err
+
+
+def test_a_failed_job_is_ignored_and_an_older_done_one_is_used(repo, fake_roborev):
+    head = _item(repo)
+    fake_roborev([_job(7, head, "claude-code"), _job(9, head, "kilo", status="failed")])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    assert _gate(repo).evidence["roborev"]["job"] == 7
+
+
+def test_a_row_with_no_numeric_id_is_skipped_not_a_crash(repo, fake_roborev):
+    head = _item(repo)
+    fake_roborev([{**_job(7, head, "claude-code"), "id": "x"}])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    assert _gate(repo).evidence["model"] == "kilo"
+
+
+@pytest.mark.parametrize(
+    ("body", "said"),
+    [("not json", "no JSON"), ("import sys; sys.exit(1)", "could not ask roborev")],
+)
+def test_roborev_that_cannot_answer_leaves_the_typed_model_marked_unverified(
+    repo, tmp_path, monkeypatch, body, said
+):
+    head = _item(repo)
+    bin_dir = tmp_path / "badbin"
+    bin_dir.mkdir()
+    script = bin_dir / "roborev"
+    code_ = f"print({body!r})" if body == "not json" else body
+    script.write_text(f"#!{sys.executable}\n{code_}\n")
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    ev = _gate(repo).evidence
+    assert ev["model"] == "kilo" and ev["roborev"]["verified"] is False, ev
+    assert said in ev["roborev"]["why"], ev

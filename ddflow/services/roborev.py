@@ -70,15 +70,24 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
     if not isinstance(jobs, list):  # `null` for a repository roborev has no jobs for
         jobs = []
     done = [
-        j
+        (_job_id(j), j)
         for j in jobs if isinstance(j, dict)
         and j.get("status") == "done"
         and j.get("job_type", "review") == "review"
         and _covers(str(j.get("git_ref") or ""), sha)
+        and _job_id(j) is not None
     ]  # fmt: skip
     if not done:
-        return None, f"roborev holds no finished review of {sha[:10]}; the reviewer is unchecked"
-    j = max(done, key=lambda j: int(j.get("id") or 0))
-    return Review(
-        job=int(j["id"]), agent=str(j.get("agent") or ""), model=str(j.get("model") or "")
-    ), ""
+        where_ = f"among its last {_LIMIT} jobs" if len(jobs) >= _LIMIT else "on this branch"
+        return None, (
+            f"roborev holds no finished review of {sha[:10]} {where_}; the reviewer is unchecked"
+        )
+    job, j = max(done, key=lambda pair: pair[0])
+    return Review(job=job, agent=str(j.get("agent") or ""), model=str(j.get("model") or "")), ""
+
+
+def _job_id(j: dict) -> int | None:
+    try:
+        return int(j.get("id"))  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
