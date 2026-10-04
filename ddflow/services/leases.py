@@ -303,9 +303,9 @@ def _acquire_locked(
                 raise LeaseError(
                     f"{item_id} has an EXPIRED lease from {existing.holder}, and its "
                     f"expiry was recorded at {existing.expired_at}: recover measured its "
-                    f"tree (worktree {existing.worktree or '-'}) with nothing to salvage. "
-                    f"Taking it over is deliberate, and safe: "
-                    f"`ddflow claim {item_id} --force`.",
+                    f"tree (worktree {existing.worktree or '-'}) then, with nothing to "
+                    f"salvage. Taking it over is deliberate, and safe as of that sweep: "
+                    f"`ddflow claim {item_id} --force` adopts the tree as it is now.",
                     holder=existing.holder,
                     item=item_id,
                 )
