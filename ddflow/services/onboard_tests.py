@@ -9,8 +9,9 @@ known-failures list rather than a gate everyone learns to ignore; and the phase-
 `live_test` is the smallest real run of the project's entry point that FAILS when it
 produces nothing.
 
-Nothing is written here: the proposal is set with `ddflow_configure`, which asks the
-operator. The baseline is not trapped into the returned object's prose either -- a
+Nothing is written here: the operator sets the proposal with `ddflow_configure`
+(B-onboard-surface wires this service to the CLI and MCP; until then the render IS the
+report). The baseline is not trapped into the returned object's prose either -- a
 command that could not run is `ran=False`, never a passing baseline.
 """
 
@@ -24,6 +25,7 @@ import signal
 import subprocess
 import tempfile
 import time
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -91,6 +93,28 @@ class Report:
     notes: list[str] = field(default_factory=list)
 
 
+def _declares_xdist(text: str) -> bool:
+    """Is pytest-xdist a declared dependency? A substring test counts a comment
+    (`# no xdist here`) as a plugin that is not installed (roborev on 72ee825)."""
+    try:
+        data = tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return "pytest-xdist" in text
+    deps: list[str] = []
+
+    def collect(values):
+        if isinstance(values, (list, tuple)):
+            deps.extend(v for v in values if isinstance(v, str))
+
+    project = data.get("project") if isinstance(data.get("project"), dict) else {}
+    collect(project.get("dependencies"))
+    for group in (project.get("optional-dependencies") or {}).values():
+        collect(group)
+    for group in (data.get("dependency-groups") or {}).values():
+        collect(group)
+    return any("pytest-xdist" in dep for dep in deps)
+
+
 def _text(path: Path) -> str:
     return path.read_text("utf-8", errors="replace") if path.is_file() else ""
 
@@ -115,7 +139,7 @@ def detect_runner(repo: Path) -> Runner | None:
         uvproject = (repo / "uv.lock").is_file()
         evidence = str(pyproject) if "[tool.pytest.ini_options]" in text else "tests/ + conftest"
         workers = ""
-        if "xdist" in text:
+        if _declares_xdist(text):
             # Several agents run this gate at once, so a count that saturates the box is
             # the wrong answer (`auto` included); a quarter of the cores leaves room.
             workers = f"-n {max(2, (os.cpu_count() or 4) // 4)}"
@@ -162,12 +186,24 @@ def baseline(repo: Path, command: str, *, timeout: int = 900) -> Baseline:
             # A command that could not be found measured NOTHING; "exit 127" is not a
             # baseline (critic on 215407bb).
             return Baseline(command, False, 127, "the command could not be found (exit 127)")
+        summary = _summary(out)
+        if code != 0 and not summary:
+            # A non-zero exit with nothing a baseline recognises is a run that could not
+            # be MEASURED (the runner may not exist on the default branch at all), not a
+            # red suite (roborev on 72ee825).
+            return Baseline(
+                command,
+                False,
+                code,
+                f"the command failed with no test counts (exit {code}); the runner may not exist on {W.default_branch(repo)}",
+            )
         counts: dict[str, int] = {}
-        for match in _COUNT.finditer(out):
+        for match in _COUNT.finditer(summary):
             counts[match.group(2).rstrip("s")] = int(match.group(1))
         failing = [m.group(2) for line in out.splitlines() if (m := _FAILING.match(line))]
-        detail = _summary(out) or f"exit {code}"
-        return Baseline(command, True, code, detail, counts, failing, seconds, out[-_TAIL:])
+        return Baseline(
+            command, True, code, summary or f"exit {code}", counts, failing, seconds, out[-_TAIL:]
+        )
     finally:
         W.git(repo, "worktree", "remove", "--force", str(tmp))
         shutil.rmtree(tmp, ignore_errors=True)
@@ -238,7 +274,7 @@ def live_test(repo: Path) -> Proposal | None:
                     ".ddflow/gates.toml",
                     f"the console script {name} is the project's entry point; confirm the flag",
                 )
-    for main in sorted(repo.glob("*/__main__.py")):
+    for main in sorted([*repo.glob("*/__main__.py"), *repo.glob("src/*/__main__.py")]):
         package = main.parent.name
         if package.startswith(".") or (main.parent / "__init__.py").is_file() is False:
             continue
