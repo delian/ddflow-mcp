@@ -2224,7 +2224,10 @@ def brief(
         lessons=lessons,
         skills=project_skills,
         rules=rules,
-        recovery=[r for r in recovery if r.salvageable],
+        # All of it: the view ranks and counts (B20e103326b). Filtering on `salvageable`
+        # dropped `stale_running` (False) and unmeasurable trees (None) -- the most
+        # dangerous leftovers -- and the clean ones without a word.
+        recovery=recovery,
         decisions=decisions,
         memories=live,
         held=held_ids,
