@@ -868,13 +868,27 @@ def review_threads(
         if reply or resolve:
             found = forge.threads(it.pr.number)
     except FG.ForgeUnavailable as exc:
-        rep.unavailable = str(exc)
+        rep.unavailable = str(exc) + _already(rep)
         return rep
     except FG.ForgeError as exc:
-        rep.refused = str(exc)
+        rep.refused = str(exc) + _already(rep)
         return rep
     rep.threads = [t.as_dict() for t in found]
     return rep
+
+
+def _already(rep: ThreadsReport) -> str:
+    """What the forge already took before a later step failed: a reply is public and is
+    not idempotent, so a failure after it must not read as "nothing happened"."""
+    done = [
+        w
+        for w, ok in (
+            ("the reply was posted", rep.replied),
+            ("the thread was resolved", rep.resolved),
+        )
+        if ok
+    ]
+    return f" -- note: {' and '.join(done)} before this failed; do not repeat it" if done else ""
 
 
 # -- versions -----------------------------------------------------------------------

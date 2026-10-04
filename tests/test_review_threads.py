@@ -179,3 +179,59 @@ def test_the_mcp_twin_replies_and_resolves(pr_repo):
     assert not reply["result"].get("isError"), reply
     assert forge.thread(1, "PRRT_a")["resolved"] is True
     assert forge.thread(1, "PRRT_a")["comments"][-1]["body"] == "done"
+
+
+def test_a_failure_after_the_reply_says_the_reply_was_posted(pr_repo, monkeypatch):
+    """A reply is public and not idempotent: if the resolve then fails, the report must say
+    the reply landed, not read as 'nothing happened' (so the agent does not post it twice)."""
+    from ddflow.config import Config
+    from ddflow.core.model import fold
+    from ddflow.infra import forge as FG
+    from ddflow.infra.log import EventLog
+    from ddflow.services import flow as SF
+
+    repo, _forge = _in_review(pr_repo)
+    calls = []
+
+    class Stub:
+        def threads(self, number):
+            return [
+                FG.Thread(
+                    id="PRRT_a",
+                    path="a.py",
+                    line=3,
+                    resolved=False,
+                    author="r",
+                    body="x",
+                    replies=0,
+                )
+            ]
+
+        def reply(self, number, thread_id, body):
+            calls.append(("reply", thread_id))
+
+        def resolve(self, number, thread_id):
+            raise FG.ForgeError("resolve failed: 502")
+
+    monkeypatch.setattr(FG, "detect", lambda *a, **k: Stub())
+    st = fold(EventLog(repo).read_all(), strict=False)
+    rep = SF.review_threads(
+        repo, Config.load(repo), st, "T1", thread="PRRT_a", reply="done", resolve=True
+    )
+    assert calls == [("reply", "PRRT_a")]
+    assert rep.replied and not rep.resolved
+    assert (
+        "502" in rep.refused
+        and "the reply was posted" in rep.refused
+        and "do not repeat" in rep.refused
+    )
+
+
+def test_the_github_graphql_documents_are_brace_balanced():
+    import ast
+
+    from ddflow.infra import forge as FG
+
+    docs = [FG._GH_THREADS_QUERY, FG._GH_REPLY_MUTATION, FG._GH_RESOLVE_MUTATION]
+    for d in docs:
+        assert d.count("{") == d.count("}") and "{" in d, d
