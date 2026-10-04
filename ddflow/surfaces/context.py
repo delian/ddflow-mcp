@@ -83,7 +83,9 @@ class Ctx:
         if not self.requested_agent and not os.environ.get("DDFLOW_AGENT"):
             # What this agent declared with `ddflow_identify`: its shell is a different
             # process from its MCP connection, and deriving here split one agent's
-            # claim and heartbeat across two names (Bfad021e8d9).
+            # claim and heartbeat across two names (Bfad021e8d9). A declaration, so it
+            # rides in `requested_agent`: the api calls re-resolve from that, and
+            # leaving it out would split them again.
             from ..infra import harness_identity
 
             harness = self.requested_agent = harness_identity.declared(self.repo)

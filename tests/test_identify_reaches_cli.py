@@ -85,3 +85,43 @@ def test_withdrawing_the_declaration_returns_the_shell_to_its_derived_name(conne
     r = _shell(repo, "claim", "P1.T1", "--no-worktree")
     assert r.returncode == 0, r.stdout + r.stderr
     assert _holder(repo) not in ("", "kilo-onboard")
+
+
+@needs_proc
+def test_identify_says_whether_the_shell_will_see_it(connection):
+    _repo, srv = connection
+    text = _call(srv, "ddflow_identify", agent="kilo-onboard")["content"][0]["text"]
+    assert "and for its shell" in text, text
+
+
+def test_a_record_for_a_process_that_has_exited_is_neither_found_nor_kept(repo, monkeypatch):
+    """Keyed by pid AND start time: a reused pid is a different process."""
+    from ddflow.infra import harness_identity as H
+
+    d = repo / ".git" / H.DIR
+    d.mkdir()
+    me = H._stat(os.getppid())
+    if me is None:
+        pytest.skip("reads /proc")
+    stale = d / f"{os.getppid()}-{int(me[2]) + 1}"
+    stale.write_text("ghost\n")
+    assert H.declared(repo) == ""
+    assert H.declare(repo, "live") == ""
+    assert not stale.exists()
+    assert H.declared(repo) == "live"
+    H.declare(repo, "")
+    assert H.declared(repo) == ""
+
+
+@needs_proc
+def test_the_record_is_shared_with_a_linked_worktree(repo):
+    from ddflow.infra import harness_identity as H
+
+    wt = repo.parent / "wt"
+    subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", str(wt)], check=True)
+    try:
+        assert H.declare(wt, "kilo-wt") == ""
+        assert H.declared(repo) == "kilo-wt"
+        assert H.declared(wt) == "kilo-wt"
+    finally:
+        H.declare(repo, "")
