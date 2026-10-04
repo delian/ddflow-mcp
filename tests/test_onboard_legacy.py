@@ -8,6 +8,7 @@ reaches no agent and forks the record -- a ticked box that leaves the item open.
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -83,7 +84,7 @@ def test_a_basename_does_not_match_inside_a_longer_name(repo):
 
 
 def test_no_candidates_renders_a_clear_report():
-    assert "no cutover proposals" in L.render([])
+    assert "no cutover proposal in the files scanned" in L.render([])
 
 
 def test_render_shows_path_line_text_and_replacement(repo):
@@ -121,7 +122,7 @@ def test_freeze_without_precommit_writes_manifest_and_a_failing_test(repo):
     generated = repo / L.GENERATED_TEST_ROOT  # no tests/ directory in this repo
     assert generated.is_file() and L.TEST_MARK in generated.read_text()
     assert not (repo / L.GENERATED_TEST).exists()
-    assert any("suite goes red" in a for a in actions)
+    assert any("turns the suite red" in a for a in actions)
 
 
 def test_the_generated_test_goes_red_when_a_byte_changes(repo):
@@ -211,8 +212,13 @@ def test_a_precommit_project_gets_a_fail_hook_instead_of_a_test(repo):
     actions = L.freeze(repo, ["todo.md"])
     text = (repo / ".pre-commit-config.yaml").read_text()
     assert L.HOOK_ID in text and "language: fail" in text
-    assert "'^(?:todo\\.md)$'" in text
-    assert isinstance(read_precommit_yaml(text), dict)
+    doc = read_precommit_yaml(text)
+    local = [r for r in doc["repos"] if isinstance(r, dict) and r.get("repo") == "local"]
+    hooks = [h for r in local for h in r.get("hooks", [])]
+    frozen = next(h for h in hooks if h.get("id") == L.HOOK_ID)
+    assert frozen["language"] == "fail"
+    assert re.fullmatch(frozen["files"], "todo.md"), "the pattern must match a frozen path"
+    assert not re.fullmatch(frozen["files"], "other.md"), "and nothing else"
     assert not (repo / L.GENERATED_TEST_ROOT).exists()
     assert any("frozen-files hook" in a for a in actions)
     second = L.freeze(repo, ["todo.md"])
