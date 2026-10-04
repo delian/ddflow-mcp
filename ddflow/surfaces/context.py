@@ -79,7 +79,17 @@ class Ctx:
         #: `resolve_agent_id` makes it look explicit — which is how `config --explain`
         #: came to report `[explicit]` for an identity nobody had set anywhere.
         self.requested_agent = args.agent or ""
+        harness = ""
+        if not self.requested_agent and not os.environ.get("DDFLOW_AGENT"):
+            # What this agent declared with `ddflow_identify`: its shell is a different
+            # process from its MCP connection, and deriving here split one agent's
+            # claim and heartbeat across two names (Bfad021e8d9).
+            from ..infra import harness_identity
+
+            harness = self.requested_agent = harness_identity.declared(self.repo)
         resolved, layer = resolve_agent_id(self.repo, self.cfg, self.requested_agent)
+        if harness:
+            layer = "ddflow_identify"
         if resolved != self.cfg.agent.id:
             self.cfg.agent.id = resolved
             # The layer that actually won, not a guess from comparing values. With

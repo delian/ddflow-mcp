@@ -3479,6 +3479,10 @@ class Server:
                         ),
                     )
                 self.agent = want
+                # The same agent's shell commands take it too (Bfad021e8d9).
+                from ..infra import harness_identity
+
+                harness_identity.declare(self.repo, want)
                 if want:
                     detail = "declared on this connection"
                 else:
