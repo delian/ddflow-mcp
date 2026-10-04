@@ -93,6 +93,7 @@ class PRInfo:
             "queue": self.queue,
             "queue_position": self.queue_position,
             "queue_state": self.queue_state,
+            "queue_known": self.queue_known,
         }
 
 
