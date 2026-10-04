@@ -58,14 +58,27 @@ LEGACY_TEMP_MAX_AGE_S = 3600.0
 _ENV_ERRNOS = frozenset(
     {errno.ENOSPC, errno.EACCES, errno.EROFS, errno.EDQUOT, errno.EPERM, errno.EIO}
 )
-_ENV_SQLITE = ("locked", "busy", "disk i/o", "readonly", "read-only", "full", "unable to open")
+_ENV_SQLITE = frozenset(
+    {
+        sqlite3.SQLITE_BUSY,
+        sqlite3.SQLITE_LOCKED,
+        sqlite3.SQLITE_IOERR,
+        sqlite3.SQLITE_READONLY,
+        sqlite3.SQLITE_FULL,
+        sqlite3.SQLITE_CANTOPEN,
+    }
+)
 
 
 def _environmental(exc: BaseException) -> bool:
     if isinstance(exc, TimeoutError):
         return True
     if isinstance(exc, sqlite3.OperationalError):
-        return any(m in str(exc).lower() for m in _ENV_SQLITE)
+        # By SQLite's result code, never by the message: a message carries identifiers,
+        # and `no such column: full_text` must not read as a full disk. The low byte is
+        # the primary code an extended one (SQLITE_IOERR_WRITE, ...) belongs to.
+        code = getattr(exc, "sqlite_errorcode", None)
+        return code is not None and (code & 0xFF) in _ENV_SQLITE
     return isinstance(exc, OSError) and exc.errno in _ENV_ERRNOS
 
 
