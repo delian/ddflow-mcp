@@ -1821,9 +1821,13 @@ def merge(  # noqa: PLR0913 -- each flag is a distinct refusal the caller may ov
         kept_reason = "; ".join(
             filter(None, [kept_reason, "back-merge FAILED into " + ", ".join(back_failed)])
         )
+    from . import ci as CIA
+
+    ci_after = CIA.check_after_merge(repo, sha=sha, item=item, agent=agent)
     return O.ok(
         "worktree.merged",
         id=item,
+        **({"ci": ci_after} if ci_after else {}),
         sha=sha,
         branch_head=branch_head,
         base=wt.base,

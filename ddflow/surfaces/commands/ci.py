@@ -18,7 +18,7 @@ def add_ci_parser(sub) -> None:
     ci.add_argument(
         "verb",
         nargs="?",
-        choices=["run", "status"],
+        choices=["run", "status", "record"],
         default="status",
         help="run: check the merge result; status (default): what would run, and whether it can",
     )
@@ -27,6 +27,18 @@ def add_ci_parser(sub) -> None:
         "--base", default="", help="run: merge this branch in first (default [ci].base)"
     )
     ci.add_argument("--command", default="", help="run: use this instead of [ci].command")
+    ci.add_argument(
+        "--stage", default="pre-push", help="record: gate | merge | pre-push | schedule"
+    )
+    ci.add_argument(
+        "--result", choices=["passed", "failed"], default="", help="record: how it went"
+    )
+    ci.add_argument(
+        "--report",
+        default="",
+        help="record: file with the pre-commit output, parsed for the failing checks",
+    )
+    ci.add_argument("--sha", default="", help="record: the commit that was checked")
     ci.set_defaults(fn=cmd_ci)
 
 
@@ -42,6 +54,18 @@ def _here_or_head(repo: Path) -> str:
 
 
 def cmd_ci(a, c: Ctx) -> int:
+    if a.verb == "record":
+        if not a.result:
+            print("ci record needs --result passed|failed", file=sys.stderr)
+            return 1
+        out = A.record(c.repo, stage=a.stage, ok=a.result == "passed", sha=a.sha, report=a.report)
+        if c.json:
+            print(json.dumps(out.body(""), indent=2, default=str))
+        elif out.exit:
+            print(out.reason, file=sys.stderr)
+        else:
+            print(f"ci: recorded {a.stage} {out.data['status']}")
+        return out.exit
     if a.verb == "status":
         out = A.status(c.repo)
         if c.json:

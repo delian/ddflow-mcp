@@ -6,6 +6,7 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import ci as CI
+from . import knowledge as K
 from ._base import _load
 
 
@@ -24,6 +25,99 @@ def run(
     if res.status == "failed":
         return O.Outcome(kind="ci.run", data=data, exit=O.FAIL, reason=res.reason)
     return O.nothing("ci.run", res.reason, **data)
+
+
+def _record(log, stage: str, res: CI.Result, subject: str = "ci") -> None:
+    log.append(
+        "ci.result",
+        subject,
+        {
+            "stage": stage,
+            "status": res.status,
+            "ok": res.ok,
+            "sha": res.sha,
+            "checks": [{"id": c.id, "ok": c.ok, "detail": c.detail[:300]} for c in res.checks],
+        },
+    )
+
+
+def file_failures(repo: Path, res: CI.Result, *, stage: str, agent: str = "") -> list[str]:
+    """A bug and its fix task per failing check, once while the bug is open (the dedupe key
+    is the check id: Bci-<check>). Returns the bug ids this call filed."""
+    _log, _cfg, st = _load(repo, agent)
+    filed: list[str] = []
+    failing = [c for c in res.checks if not c.ok]
+    for c in failing:
+        bid = CI.bug_id(c.id)
+        held = st.bugs.get(bid)
+        if held is not None and held.open:
+            continue
+        if held is not None:  # fixed before and failing again: a new bug, not a reopening
+            bid = f"{bid}-{res.sha[:7]}"
+            if (st.bugs.get(bid) is not None) and st.bugs[bid].open:
+                continue
+        out = K.bug_found(
+            repo,
+            id=bid,
+            title=f"{stage} CI check failed: {c.id}",
+            summary=(
+                f"The CI check {c.id!r} fails on {res.sha[:12] or 'the base'} ({stage}). "
+                f"{c.detail}\nRun `ddflow ci run` to see it."
+            ),
+            severity="high",
+            answer=K.DD.Answer(relation="new"),
+            agent=agent,
+        )
+        if out.ok:
+            filed.append(bid)
+    return filed
+
+
+def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str = "") -> dict:
+    """`[ci].on_merge`: run the CI command on the base a merge just landed on, record the
+    result and file the failures. Never raises into the merge: it already landed.
+    Returns what to say about it ({} when nothing ran)."""
+    log, cfg, _st = _load(repo, agent)
+    mode = cfg.ci.on_merge
+    if mode == "off":
+        return {}
+    if mode not in CI.ON_MERGE_MODES:
+        return {"status": "unavailable", "why": f"[ci].on_merge={mode!r}: off | fast | full"}
+    cmd, _why = CI.main_command(repo, cfg)
+    if not cmd:
+        return {}  # no CI command in this project: nothing to check, nothing to claim
+    res = CI.run(repo, cfg, ref=sha or "HEAD", command=cmd)
+    _record(log, "merge", res, item or "ci")
+    filed = [] if res.status != "failed" else file_failures(repo, res, stage="merge", agent=agent)
+    return {
+        "status": res.status,
+        "failed": [c.id for c in res.checks if not c.ok],
+        "bugs": filed,
+        **({"why": res.reason} if res.status != "passed" else {}),
+    }
+
+
+def record(
+    repo: Path, *, stage: str, ok: bool, sha: str = "", report: str = "", agent: str = ""
+) -> O.Outcome:
+    """`ddflow ci record`: write down a CI outcome that ran elsewhere (the pre-push hook).
+    `report` is the file holding the pre-commit output, parsed for the failing checks."""
+    if stage not in ("gate", "merge", "pre-push", "schedule"):
+        return O.refused(
+            "ci.record", f"unknown stage {stage!r}: gate | merge | pre-push | schedule"
+        )
+    log, _cfg, _st = _load(repo, agent)
+    checks: list[CI.Check] = []
+    if report:
+        try:
+            checks = CI.parse_checks(Path(report).read_text("utf-8", errors="replace"))
+        except OSError as e:
+            return O.failed("ci.record", f"cannot read the report {report!r}: {e}")
+    res = CI.Result("passed" if ok else "failed", checks=checks, sha=sha)
+    _record(log, stage, res)
+    return O.ok(
+        "ci.record", stage=stage, status=res.status, failed=[c.id for c in checks if not c.ok]
+    )
 
 
 def status(repo: Path, *, agent: str = "") -> O.Outcome:
