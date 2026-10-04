@@ -79,12 +79,10 @@ def test_the_mode_is_strict_and_nothing_is_dropped(repo):
     bid = json.loads(out)["id"]
     srv = Server(repo)
     _call(srv, id=bid, reason="noise")
-    for bad in (
-        {"reopen": "false"},
-        {"reopen": True, "evidence": "probe"},
-    ):
-        r = _call(srv, id=bid, reason="real", **bad)
-        assert r.get("isError"), (bad, r)
-    assert _bug(repo, bid)["state"] == "invalid"
+    malformed = _call(srv, id=bid, reason="real", reopen="false")
+    assert malformed.get("isError") and "reopen must be" in malformed["content"][0]["text"]
+    conflict = _call(srv, id=bid, reason="real", reopen=True, evidence="probe")
+    assert conflict["_meta"]["exit"] == 3, conflict
     blank = _call(srv, id=bid, reason="", reopen=True)
-    assert blank.get("isError"), blank
+    assert blank.get("isError") and "reason" in blank["content"][0]["text"], blank
+    assert _bug(repo, bid)["state"] == "invalid"
