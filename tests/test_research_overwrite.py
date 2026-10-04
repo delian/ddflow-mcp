@@ -135,6 +135,8 @@ def test_every_recorded_field_round_trips_through_the_fold(repo):
     from ddflow.api.knowledge import _research_fields
 
     run_cli(repo, "init")
+    rc, _, err = run_cli(repo, "task", "add", "T9", "--title", "a task", "--globs", "x.py")
+    assert rc == 0, err
     f = api.ResearchFinding(
         id="R9",
         question="q",
@@ -146,9 +148,26 @@ def test_every_recorded_field_round_trips_through_the_fold(repo):
         verdict="CONFIRMED",
         sources="a,b",
         budget="1h",
-        item="",
+        item="T9",
     )
     assert api.research_add(repo, f).exit == OK
     note = fold(EventLog(repo, "reader").read_all()).research["R9"]
     for k, v in _research_fields(f).items():
         assert getattr(note, k) == v, k
+
+
+def test_another_kind_filed_after_the_state_was_read_is_still_refused(repo, monkeypatch):
+    from ddflow.api import knowledge as K
+
+    run_cli(repo, "init")
+    real = K._load
+
+    def stale_load(*a, **k):
+        log, cfg, _ = real(*a, **k)
+        return log, cfg, fold([])
+
+    rc, _, err = run_cli(repo, "phase", "add", "P7", "--title", "a phase")
+    assert rc == 0, err
+    monkeypatch.setattr(K, "_load", stale_load)
+    out = _add(repo, id="P7", question="q", claim="c")
+    assert out.exit == REFUSED and "phase" in out.reason, out
