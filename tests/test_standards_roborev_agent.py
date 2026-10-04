@@ -227,3 +227,14 @@ def test_completion_judges_independence_by_the_agent_that_ran(
     st = fold(EventLog(repo).read_all(), strict=False)
     ok, why = G.reviewer_independence(st, Config(), "T1", "claude-opus-5-5")
     assert ok is independent, why
+
+
+def test_a_job_that_names_no_agent_is_unverified(repo, fake_roborev):
+    head = _item(repo)
+    fake_roborev([_job(7, head, "")])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    ev = _gate(repo).evidence
+    assert ev["model"] == "kilo" and ev["roborev"] == {
+        "verified": False, "why": "roborev job 7 names no agent"
+    }, ev  # fmt: skip
