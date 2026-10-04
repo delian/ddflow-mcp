@@ -50,13 +50,11 @@ def file_failures(repo: Path, res: CI.Result, *, stage: str, agent: str = "") ->
     failing = [c for c in res.checks if not c.ok]
     for c in failing:
         bid = CI.bug_id(c.id)
-        held = st.bugs.get(bid)
-        if held is not None and held.open:
+        # Open under the base id or under any sha-suffixed re-file of it: one bug while open.
+        if any(b.open and (k == bid or k.startswith(bid + "-")) for k, b in st.bugs.items()):
             continue
-        if held is not None:  # fixed before and failing again: a new bug, not a reopening
+        if bid in st.bugs:  # fixed before and failing again: a new bug, not a reopening
             bid = f"{bid}-{res.sha[:7]}"
-            if (st.bugs.get(bid) is not None) and st.bugs[bid].open:
-                continue
         out = bug_found(
             repo,
             id=bid,
