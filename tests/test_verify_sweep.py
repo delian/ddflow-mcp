@@ -148,7 +148,9 @@ def test_an_explicit_limit_with_an_id_is_refused_on_both_surfaces_whatever_its_v
     from ddflow.surfaces.mcp import Server
 
     _project(repo)
-    assert run_cli(repo, "verify", "T-GOOD", "--limit", "20")[0] == 1
+    code, _, err = run_cli(repo, "verify", "T-GOOD", "--limit", "20")
+    # T-GOOD verifies cleanly, so exit 1 here can only be the refusal, and the message says so
+    assert code == 1 and "sweep" in err and "T-GOOD: " not in err
     code, _, err = run_cli(repo, "verify", "T-GOOD", "--limit", "0")
     assert code == 1 and "sweep" in err
     reply = Server(repo).handle(
@@ -167,3 +169,32 @@ def test_an_unknown_phase_is_refused_before_its_descendants_are_looked_up(repo, 
     monkeypatch.setattr(State, "descendants", boom)
     _project(repo)
     assert verify_sweep(repo, phase="NOPE").exit == O.FAIL
+
+
+def test_a_single_id_failure_over_mcp_keeps_the_item_verdict_claims_shape(repo):
+    """B1ad5aa1408 (4): `payload` went from ("item", "verdict", "claims") to "" (the whole
+    data) so the sweep can use it. A failing verification is a RESULT, not a refusal: the
+    body stays exactly those three fields, is an error (exit 1), and has no `refusal` lead;
+    a misused argument combination IS a refusal and leads with one."""
+    import json
+
+    from ddflow.surfaces.mcp import Server
+
+    _project(repo)
+
+    def call(args):
+        reply = Server(repo).handle(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "ddflow_verify", "arguments": args}}
+        )  # fmt: skip
+        return reply["result"], json.loads(reply["result"]["content"][0]["text"])
+
+    result, body = call({"id": "T-FALSE"})
+    assert result["isError"] is True and set(body) == {"item", "verdict", "claims"}
+    assert body["item"] == "T-FALSE" and body["verdict"] == "does not hold"
+    assert any(c["id"] == "declared_files" and c["status"] == "fail" for c in body["claims"])
+    assert "refusal" not in body
+
+    result, body = call({"id": "T-GOOD", "pack": True, "judge": True})
+    assert next(iter(body)) == "refusal" and body["refusal"]["exit"] == 3
+    assert "pack or judge" in body["refusal"]["reason"]

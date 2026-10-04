@@ -36,7 +36,13 @@ def _stat(repo: Path, sha: str) -> list[str]:
     if not sha:
         return []
     r = git(repo, "show", "--stat", "--format=", "-m", "--first-parent", sha, timeout=60)
-    return r.out.splitlines()[:MAX_STAT_LINES] if r.ok else []
+    if not r.ok:
+        return []
+    lines = r.out.splitlines()
+    if len(lines) <= MAX_STAT_LINES:
+        return lines
+    more = len(lines) - MAX_STAT_LINES
+    return [*lines[:MAX_STAT_LINES], f"[... truncated: {more} more line(s) of diff stat]"]
 
 
 def requirement_text(title: str, body: str) -> str:
@@ -62,6 +68,11 @@ def requirement(events: Sequence[Event], item_id: str) -> str | None:
 def _data(kind: str, ident: str, text: str) -> str:
     """Free text from the record, as DATA: a skip reason is as untrusted as the requirement."""
     return PV.fence(kind, ident, text, PV.Origin(PV.UNKNOWN))
+
+
+def _data_block(kind: str, ident: str, text: str) -> str:
+    """Multi-line free text as DATA: the fence keeps its line breaks."""
+    return PV.fence(kind, ident, text, PV.Origin(PV.UNKNOWN), inline=False)
 
 
 def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: str) -> str | None:
@@ -130,15 +141,16 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
     out += ["", "## What landed", ""]
     if d["files_known"]:
         out.append(f"- {d['files_total']} file(s) changed, {len(d['tests'])} of them tests")
-        out += [f"  - `{f}`" for f in d["files"][:12]]
+        out += [f"  - {_data('path', item_id, f)}" for f in d["files"][:12]]
         out += [
-            f"- tests: {', '.join(f'`{t}`' for t in d['tests'][:8])}"
+            "- tests: " + ", ".join(_data("path", item_id, t) for t in d["tests"][:8])
             if d["tests"]
             else "- tests: NONE touched"
         ]
         stat = _stat(repo, led["sha"])
         if stat:
-            out += ["", "```", *stat, "```"]
+            # git's stat lines are paths: record text like the lists above, so fenced too
+            out += ["", _data_block("diff-stat", item_id, "\n".join(stat))]
     else:
         out.append("- UNKNOWN: no landing could be found, so what changed is not known")
     if led.get("backfill"):
