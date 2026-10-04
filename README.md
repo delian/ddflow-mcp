@@ -2681,6 +2681,14 @@ at first use and followed from then on.
   | approved, checks green | merges it (`pr_merge = "on_approval"`, pinned to the approved head) |
   | enqueued in a **merge queue** (GitHub; `gh pr merge` on a queue-protected branch enqueues) | stays in review and is said to be queued: `queued` with its position, `pr status` shows `[merge queue #N]`, and it is not asked to merge again. A request that was queued and no longer is, still open, was **ejected** (`queue_ejected`); the queue landing it is an ordinary `merged` |
 
+* **Review threads are data.** Feedback still arrives as text in `brief`, but each line
+  conversation is also a record with the forge's own id: `pr threads T1` lists them live
+  (id, `file:line`, author, the opening comment, resolved or not), and `pr threads T1
+  --thread ID --reply "renamed in abc123" --resolve` answers one and marks it resolved —
+  so the reviewer sees which comments were addressed instead of re-reading the diff.
+  GitHub (GraphQL review threads) and GitLab (resolvable discussions); the write is the
+  forge's own, made as the operator who is logged in. MCP: `ddflow_pr_threads`.
+
 * **Stacking keeps work moving through review.** While `T1` waits in review, a task that
   needs it may start **on top of `T1`'s branch** (`stack = true`); its request targets
   `T1`'s branch and is retargeted to the real base when `T1` merges. ddflow never merges
@@ -3953,6 +3961,7 @@ ddflow merge <id> --branch <b>  an item claimed --no-worktree: land <b> (default
                                 ([flow].integration=pr: push + open/update a PR instead)
 ddflow pr sync [--item]         what reviewers did: complete / reopen / park / merge (2 = forge unreachable)
 ddflow pr status               every item's request, from the log (no forge call)
+ddflow pr threads <id> [--thread T [--reply TEXT] [--resolve]]  review threads, live from the forge; reply and resolve one (2 = forge unreachable)
 ddflow version show            current and next version, why, release notes (2 = nothing new)
 ddflow version cut [--push]    tag it (gitflow: via release/X, or a release PR)
 ddflow version cut --changelog  also write the version's CHANGELOG.md section (--force over a hand-edited file)

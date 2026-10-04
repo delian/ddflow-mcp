@@ -462,6 +462,28 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().pr_status(repo, agent=agent),
         "payload": "",
     },
+    "ddflow_pr_threads": {
+        "description": (
+            "An item's review threads, read live from the forge. With `thread`, `reply` on "
+            "it and/or `resolve` it, so the reviewer sees what was addressed. Exit 2 = "
+            "forge not reached; 3 = refused."
+        ),
+        "properties": {
+            "id": ("string", "The item.", True),
+            "thread": ("string", "Thread id, as listed.", False),
+            "reply": ("string", "Reply text.", False),
+            "resolve": ("boolean", "Resolve it.", False),
+        },
+        "api": lambda repo, a, agent: _api().pr_threads(
+            repo,
+            a["id"],
+            thread=a.get("thread", "") or "",
+            reply=a.get("reply", "") or "",
+            resolve=bool(a.get("resolve")),
+            agent=agent,
+        ),
+        "payload": "",
+    },
     "ddflow_version_show": {
         "description": (
             "The current version (highest `<tag_prefix>X.Y.Z` tag reachable from the "
@@ -1040,7 +1062,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_similar": {
         "description": (
-            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson or other record. Read-only. Candidates cross kinds and include closed records (a bug that repeats a fixed one is caught); each carries id, kind, title, state, score (0-1), the words shared and flags, per [dedupe] show_floor, max_candidates and kinds. A score is a prompt to LOOK, not a verdict. Nothing close: exit 2 / an empty list."
+            "'IS THIS ALREADY FILED?' -- the existing records most like a text, BEFORE you file it as a bug, task, lesson or other record. Read-only. Candidates cross kinds and include closed records (a bug that repeats a fixed one is caught); each carries id, kind, title, state, score (0-1), shared words and flags, per [dedupe] show_floor, max_candidates and kinds. A score is a prompt to LOOK, not a verdict. Nothing close: exit 2."
         ),
         "properties": {
             "text": (
@@ -1785,7 +1807,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_precommit": {
         "description": (
-            "A .pre-commit-config.yaml proposed for THIS repository: its stacks (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON checks) mapped to pinned hooks, plus ddflow's check-commit and check-msg as local hooks, so the pre-commit framework owns .git/hooks/ (remove ddflow's own hooks first; the body names them). Proposes; installs nothing. `write` creates the file and is REFUSED (exit 3) when one exists. The body names missing programs and whether the hooks can reach ddflow. Installing pre-commit itself is the operator's call."
+            "A .pre-commit-config.yaml proposed for THIS repository: its stacks (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON checks) mapped to pinned hooks, plus ddflow's check-commit and check-msg as local hooks, so pre-commit owns .git/hooks/ (remove ddflow's own first; the body names them). Proposes; installs nothing. `write` creates the file, REFUSED (exit 3) when one exists. The body names missing programs. Installing pre-commit is the operator's call."
         ),
         "properties": {
             "ddflow_cmd": (
@@ -1810,7 +1832,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_tests": {
         "description": (
-            "AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly or one step removed, tests named after it, a changed conftest's), each with why, and a command running them IN PARALLEL (the project's test command, files swapped in). Run it; do not reason about which tests matter. Never a pass: unit_tests runs the WHOLE suite. `item`: diff that item's worktree. Exit 2: no test reaches the change."
+            "AFTER EACH CHANGE: the tests your change reaches (changed tests, tests importing a changed module directly or one step removed, tests named after it, a changed conftest's), each with why, and a command running them IN PARALLEL. Run it; do not reason about which matter. Never a pass: unit_tests runs the WHOLE suite. `item`: diff that item's worktree. Exit 2: no test reaches the change."
         ),
         "properties": {
             "item": ("string", "The item whose worktree and base to use.", False),
@@ -2421,7 +2443,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_resolve": {
         "description": (
-            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rival definitions and claims, `ddflow_next` withholds them). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost`: re-add it under a new id with `refile_as`, or it exists only in the log. Refused (exit 3) when not contested."
+            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rivals, `ddflow_next` withholds them). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost`: re-add it under a new id with `refile_as`, or it stays only in the log. Refused (exit 3) when not contested."
         ),
         "properties": {
             "id": ("string", "The contested item.", True),
@@ -2714,7 +2736,7 @@ ALLOW_OLDER = "allow_older_version"
 AS_AGENT = "as_agent"
 _AS_AGENT_SPEC = (
     "string",
-    "A subagent's own stable name, this call only (see ddflow_identify).",
+    "A subagent's own name, this call only.",
     False,
 )
 
@@ -2811,7 +2833,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
     for n in (
         "abandon block unblock release board progress doctor recover configure companions "
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
-        "flow_show pr_status reviewers_list version_show research_add phase_add split resolve "
+        "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
         "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify"
     ).split()
