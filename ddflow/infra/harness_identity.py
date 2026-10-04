@@ -13,8 +13,13 @@ process that is not one -- keyed by pid AND start time, so a reused pid never in
 it. A CLI run that names no identity (`--agent`, `DDFLOW_AGENT`) takes the record of its
 nearest ancestor that has one.
 
-Records live in the primary checkout's `.git` directory: per repository, never committed.
-Linux only (it reads /proc); elsewhere nothing is recorded and nothing is found.
+Records live in the repository's common `.git` directory: per repository, never
+committed. Linux only (it reads /proc); elsewhere nothing is recorded and nothing is
+found, and `declare` says so.
+
+Every shell below the harness takes the name -- a subagent's too, unless it names its
+own (`--agent`, `DDFLOW_AGENT`). That is the same rule as its MCP calls on the shared
+connection, which carry the parent's identity unless they pass `as_agent`.
 """
 
 from __future__ import annotations
@@ -49,8 +54,22 @@ def _stat(pid: int) -> tuple[str, int, str] | None:
 
 
 def _dir(repo: Path | str) -> Path | None:
+    """`<common git dir>/ddflow-identity`, from a primary checkout or a linked worktree."""
     git = Path(repo) / ".git"
-    return git / DIR if git.is_dir() else None
+    if git.is_dir():
+        return git / DIR
+    if not git.is_file():
+        return None
+    from . import worktree as W
+
+    r = W.git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return Path(r.out.strip()) / DIR if r.ok and r.out.strip() else None
+
+
+def _alive(key: str) -> bool:
+    pid, _, start = key.partition("-")
+    st = _stat(int(pid)) if pid.isdigit() else None
+    return st is not None and st[2] == start
 
 
 def _harness(pid: int) -> list[str]:
@@ -68,21 +87,30 @@ def _harness(pid: int) -> list[str]:
     return keys
 
 
-def declare(repo: Path | str, agent: str) -> None:
-    """Record `agent` for this process's harness; "" withdraws it. Never raises."""
+def declare(repo: Path | str, agent: str) -> str:
+    """Record `agent` for this process's harness; "" withdraws it. Never raises.
+
+    Returns "" when it did, else why not -- which `ddflow_identify` reports, because a
+    declaration the shell will not see is the original split, silently back."""
     d = _dir(repo)
-    if d is None:
-        return
+    keys = _harness(os.getppid())
+    if d is None or not keys:
+        return "not recorded for shell commands (needs a git repository and /proc)"
     try:
-        for key in _harness(os.getppid()):
+        if d.is_dir():
+            for old in d.iterdir():  # harnesses that have exited
+                if not _alive(old.name):
+                    old.unlink(missing_ok=True)
+        for key in keys:
             f = d / key
             if agent:
                 d.mkdir(exist_ok=True)
                 f.write_text(agent + "\n")
             else:
                 f.unlink(missing_ok=True)
-    except OSError:
-        pass
+    except OSError as exc:
+        return f"not recorded for shell commands: {exc}"
+    return ""
 
 
 def declared(repo: Path | str) -> str:

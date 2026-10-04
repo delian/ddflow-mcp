@@ -3482,9 +3482,11 @@ class Server:
                 # The same agent's shell commands take it too (Bfad021e8d9).
                 from ..infra import harness_identity
 
-                harness_identity.declare(self.repo, want)
+                shell = harness_identity.declare(self.repo, want)
                 if want:
-                    detail = "declared on this connection"
+                    detail = "declared on this connection" + (
+                        f"; {shell}: pass --agent to the CLI" if shell else ", and for its shell"
+                    )
                 else:
                     want_who, detail = _default_agent(self.repo)
                     who = want_who
