@@ -286,9 +286,9 @@ def cmd_research(a, c: Ctx) -> int:
     settled = D.settle(a, c, out)
     if settled is not None:
         return settled
-    if out.exit == FAIL:
+    if out.exit != OK:  # a failure, or a refused re-add of a taken id (exit 3)
         print(out.reason, file=sys.stderr)
-        return FAIL
+        return out.exit
     c.out(
         f"research {out.data['id']} recorded ({out.data['verdict']})",
         out.body(("id", "verdict")),
