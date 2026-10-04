@@ -436,6 +436,17 @@ def _brief_current(
         f"- kind `{it.kind}` · state `{it.state}`"
         + (f" · held by `{it.lease.holder}`" if it.lease else "")
     )
+    if it.reopened:
+        last = it.reopened[-1]
+        out += [
+            f"- **REOPENED by verification** ({last['at'][:10]}, {len(it.reopened)}x): "
+            f"{last['reason']}",
+            *[
+                f"  - [{c.get('status', '?')}] {c.get('id', '?')}: {c.get('detail', '')}"
+                for c in last["claims"][:5]
+            ],
+            "  _Its earlier gates were cleared: re-do the work and re-run them._",
+        ]
     tier = tier_of(it.tags)
     if tier:
         out.append(f"- tier `{tier}` (advisory: the model to dispatch a subagent on)")

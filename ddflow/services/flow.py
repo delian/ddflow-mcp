@@ -808,6 +808,89 @@ def _waiting(item: str, info: FG.PRInfo) -> dict[str, Any]:
     return row
 
 
+# -- review threads ------------------------------------------------------------------
+
+
+@dataclass
+class ThreadsReport:
+    number: int = 0
+    url: str = ""
+    threads: list[dict[str, Any]] = field(default_factory=list)
+    replied: bool = False
+    resolved: bool = False
+    refused: str = ""
+    unavailable: str = ""
+
+
+def review_threads(
+    repo: Path,
+    cfg: Config,
+    st: State,
+    item: str,
+    *,
+    thread: str = "",
+    reply: str = "",
+    resolve: bool = False,
+) -> ThreadsReport:
+    """An item's review threads, read from the forge; optionally reply on one and/or
+    resolve it -- so the reviewer sees which comments were addressed (B176).
+
+    Read live, never from the log: a thread is the forge's, and the log is a snapshot.
+    Replying and resolving are the forge's own writes, made as the operator who is logged
+    in -- ddflow adds no identity of its own.
+    """
+    rep = ThreadsReport()
+    it = st.items.get(item)
+    if it is None or it.pr is None or not it.pr.number:
+        rep.refused = f"{item} has no pull request: nothing to read threads from"
+        return rep
+    rep.number, rep.url = it.pr.number, it.pr.url
+    if (reply or resolve) and not thread:
+        rep.refused = "--reply and --resolve act on one thread: name it with --thread ID"
+        return rep
+    if reply and not reply.strip():
+        rep.refused = "an empty reply says nothing"
+        return rep
+    try:
+        forge = FG.detect(repo, cfg)
+        found = forge.threads(it.pr.number)
+        if thread and thread not in {t.id for t in found}:
+            ids = ", ".join(t.id for t in found[:10]) or "none"
+            rep.refused = f"no thread {thread!r} on #{it.pr.number} (threads: {ids})"
+            rep.threads = [t.as_dict() for t in found]
+            return rep
+        if reply:
+            forge.reply(it.pr.number, thread, reply)
+            rep.replied = True
+        if resolve:
+            forge.resolve(it.pr.number, thread)
+            rep.resolved = True
+        if reply or resolve:
+            found = forge.threads(it.pr.number)
+    except FG.ForgeUnavailable as exc:
+        rep.unavailable = str(exc) + _already(rep)
+        return rep
+    except FG.ForgeError as exc:
+        rep.refused = str(exc) + _already(rep)
+        return rep
+    rep.threads = [t.as_dict() for t in found]
+    return rep
+
+
+def _already(rep: ThreadsReport) -> str:
+    """What the forge already took before a later step failed: a reply is public and is
+    not idempotent, so a failure after it must not read as "nothing happened"."""
+    done = [
+        w
+        for w, ok in (
+            ("the reply was posted", rep.replied),
+            ("the thread was resolved", rep.resolved),
+        )
+        if ok
+    ]
+    return f" -- note: {' and '.join(done)} before this failed; do not repeat it" if done else ""
+
+
 # -- versions -----------------------------------------------------------------------
 
 
@@ -1068,6 +1151,7 @@ class Cut:
     steps: list[str] = field(default_factory=list)
     plan: VersionPlan | None = None
     changelog: str = ""  # the changelog file the cut wrote (--changelog), "" when none
+    version_files: list[str] = field(default_factory=list)  # files the cut bumped (B174)
 
 
 def cut(
@@ -1122,6 +1206,9 @@ def cut(
         )
         return out
     direct = cfg.flow.model != F.GITFLOW or F.is_maintenance(cfg, line)
+    planned, vfiles = _plan_version_files(repo, cfg, out, vp, direct=direct)
+    if not planned:
+        return out
     prep = None
     if changelog:
         if direct and cfg.flow.integration == "pr":
@@ -1139,16 +1226,86 @@ def cut(
             return out
     if dry_run:
         out.ok = True
+        if vfiles:
+            out.steps.append(f"dry run: would {vfiles.describe(vp.next)}")
         out.steps.append("dry run: nothing written")
         return out
     if direct:
         # A maintenance line is tagged where it stands: it has no develop/production
         # pair of its own, so there is no release branch to route through.
+        # The changelog first, the bump last: a failed bump rolls its own working tree back,
+        # but a changelog commit already made on the branch STAYS (a branch ref cannot be
+        # reset safely when another worktree may have it checked out), so say so.
+        before = W.rev(repo, vp.ref)
         if prep and not _write_changelog(repo, cfg, out, vp.ref, prep, vp.next, force=force):
+            return out
+        if vfiles and not _write_version_files(repo, cfg, out, vp.ref, vfiles, vp.next):
+            _note_changelog_commit_stays(repo, out, vp.ref, before)
             return out
         out.sha = W.rev(repo, vp.ref)
         return _tag_and_push(repo, cfg, log, out, vp, branch=vp.ref, push=push)
-    return _cut_gitflow(repo, cfg, log, out, vp, push=push, prep=prep, force=force)
+    return _cut_gitflow(repo, cfg, log, out, vp, push=push, prep=prep, force=force, vfiles=vfiles)
+
+
+def _note_changelog_commit_stays(repo: Path, out: Cut, ref: str, before: str) -> None:
+    """A failed bump rolls its own tree back, but a changelog commit already made on the
+    branch stays: say which commit, and how to remove it."""
+    landed = W.rev(repo, ref)
+    if landed and landed != before:
+        out.steps.append(
+            f"NOTE: the changelog commit {landed[:10]} was already made on {ref} and "
+            f"stays: `git revert {landed[:10]}` removes it, or fix the bump and run "
+            f"`ddflow version cut` again (the changelog section is then already there)"
+        )
+
+
+def _plan_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan, *, direct: bool):
+    """``(ok, prepared)``: what `[flow.version_files]` will change, checked before anything
+    is written. ``ok`` False means the cut is refused (the reason is on ``out``)."""
+    if not cfg.flow.version_files:
+        return True, None
+    if direct and cfg.flow.integration == "pr":
+        out.refused, out.reason = (
+            True,
+            (
+                "[flow.version_files] with pull requests needs [flow].model = gitflow: a "
+                "trunk or maintenance cut tags the remote branch as it is, and the bump "
+                "commit would have no request to travel in"
+            ),
+        )
+        return False, None
+    prep = _prepare_version_files(repo, cfg, out, vp)
+    return prep is not None, prep
+
+
+def _prepare_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan):
+    """The new text of every `[flow.version_files]` file, or None after recording why not."""
+    from . import version_files as VF
+
+    try:
+        return VF.prepare(repo, cfg, version=vp.next, ref=vp.ref)
+    except VF.VersionFileError as exc:
+        out.refused, out.reason = True, str(exc)
+        return None
+
+
+def _write_version_files(
+    repo: Path, cfg: Config, out: Cut, branch: str, prep, version: str
+) -> bool:
+    """Commit the bump on ``branch``; False (with the reason on ``out``) if it cannot be."""
+    from . import version_files as VF
+
+    try:
+        changed = VF.commit_on(repo, cfg, branch, prep, message=f"chore: bump version to {version}")
+    except VF.VersionFileError as exc:
+        out.reason = str(exc)
+        out.unavailable, out.refused = exc.unavailable, not exc.unavailable
+        return False
+    out.version_files = changed
+    out.steps.append(
+        f"bumped {', '.join(changed)} on {branch}" if changed else f"{prep.describe(version)}"
+    )
+    return True
 
 
 def _export_failed(out: Cut, exc: Exception) -> None:
@@ -1211,6 +1368,7 @@ def _cut_gitflow(
     push: bool,
     prep=None,
     force: bool = False,
+    vfiles=None,
 ) -> Cut:
     remote = cfg.flow.remote
     prod = F.production(cfg, W.default_branch(repo))
@@ -1220,6 +1378,9 @@ def _cut_gitflow(
         out.refused, out.reason = True, f"could not create {rel}: {mk.err}"
         return out
     out.steps.append(f"created {rel} from {vp.ref}")
+    if vfiles and not _write_version_files(repo, cfg, out, rel, vfiles, vp.next):
+        W.git(repo, "branch", "-D", rel)  # unmade, as a failed push unmakes it
+        return out
     if prep and not _write_changelog(repo, cfg, out, rel, prep, vp.next, force=force):
         W.git(repo, "branch", "-D", rel)  # unmade, as a failed push unmakes it
         return out

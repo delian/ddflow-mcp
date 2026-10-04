@@ -198,11 +198,43 @@ def main(argv: list[str]) -> int:  # noqa: C901, PLR0911 -- one branch per faked
         pr["base"] = _arg(argv, "--base", pr["base"])
         return done()
     if argv[:2] == ["api", "graphql"]:
+        query = next(a for a in argv if a.startswith("query=")).split("=", 1)[1]
+        if st.get("graphql_down"):
+            return done(1, err="API rate limit exceeded")
+        if "reviewThreads" in query:
+            number = int(next(a for a in argv if a.startswith("number=")).split("=", 1)[1])
+            pr = next(p for p in prs if p["number"] == number)
+            nodes = [
+                {
+                    "id": t["id"],
+                    "isResolved": t.get("resolved", False),
+                    "isOutdated": t.get("outdated", False),
+                    "path": t.get("path"),
+                    "line": t.get("line"),
+                    "comments": {
+                        "totalCount": len(t["comments"]),
+                        "nodes": t["comments"],
+                    },
+                }
+                for t in pr.get("threads", [])
+            ]
+            body = {"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": nodes}}}}}
+            return done(out=json.dumps(body))
+        if "resolveReviewThread" in query or "addPullRequestReviewThreadReply" in query:
+            tid = next(a for a in argv if a.startswith("thread=")).split("=", 1)[1]
+            thread = next((t for p in prs for t in p.get("threads", []) if t["id"] == tid), None)
+            if thread is None:
+                err = json.dumps({"errors": [{"message": f"Could not resolve to a node {tid}"}]})
+                return done(out=err)
+            if "resolveReviewThread" in query:
+                thread["resolved"] = True
+            else:
+                text = next(a for a in argv if a.startswith("body=")).split("=", 1)[1]
+                thread["comments"].append({"author": {"login": "ddflow-agent"}, "body": text})
+            return done(out=json.dumps({"data": {"ok": True}}))
         number = int(next(a for a in argv if a.startswith("number=")).split("=", 1)[1])
         pr = next(p for p in prs if p["number"] == number)
         entry = pr.get("queue")
-        if st.get("graphql_down"):
-            return done(1, err="API rate limit exceeded")
         if entry:
             # Position is the entry's rank among those still queued, so it moves up as
             # entries land or are ejected -- like the real queue's.
@@ -308,6 +340,35 @@ class Forge:
         sha = merge_on_remote(st, pr, how)
         _save(self.path, st)
         return sha
+
+    def add_thread(
+        self,
+        number: int,
+        tid: str,
+        body: str,
+        *,
+        path: str = "a.py",
+        line: int = 3,
+        resolved: bool = False,
+        outdated: bool = False,
+    ) -> None:
+        """A reviewer opens a line thread."""
+        st = self.st
+        pr = next(p for p in st["prs"] if p["number"] == number)
+        pr.setdefault("threads", []).append(
+            {
+                "id": tid,
+                "path": path,
+                "line": line,
+                "resolved": resolved,
+                "outdated": outdated,
+                "comments": [{"author": {"login": "alice"}, "body": body}],
+            }
+        )
+        _save(self.path, st)
+
+    def thread(self, number: int, tid: str) -> dict:
+        return next(t for t in self.pr(number)["threads"] if t["id"] == tid)
 
     def queue_land(self, number: int) -> str:
         """The queue got to it: the merge happens now, and the entry goes away."""
