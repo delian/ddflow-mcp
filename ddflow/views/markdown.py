@@ -387,8 +387,46 @@ def new_reports_block(item: str, rep: dict) -> str:
     return "\n".join(lines) + "\n\n"
 
 
+#: How many recovery entries of EACH kind the brief spells out; the rest are counted. Per
+#: kind, so a run of salvageable trees cannot push a RUNNING item nobody holds, or a tree
+#: that could not be measured, off the list (rubber_duck on B20e103326b).
+_RECOVERY_SHOWN = 5
+_HOLDING, _UNMEASURED, _UNHELD = (
+    "holding work",
+    "could not be measured",
+    "RUNNING with nobody on it",
+)
+
+
+def _recovery_band(r) -> str | None:
+    """Which band of the brief a recovery entry is named in, in this order: a tree
+    holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
+    nobody on it; None for a leftover with nothing to salvage, which is counted rather
+    than listed (B20e103326b)."""
+    if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
+        return _UNHELD
+    if r.salvageable:
+        return _HOLDING
+    return _UNMEASURED if r.salvageable is None else None
+
+
 def _brief_recovery(out: list[str], recovery: list) -> None:
-    if not recovery:
+    bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
+    quiet = 0
+    for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
+        band = _recovery_band(r)
+        if band is not None:
+            bands[band].append(r)
+        else:
+            quiet += 1
+    count = (
+        f"{quiet} leftover(s) with nothing to salvage: `ddflow recover` lists them."
+        if quiet
+        else ""
+    )
+    if not any(bands.values()):
+        if count:
+            out += [f"_{count}_", ""]
         return
     out += [
         "## ⚠ Recoverable work found",
@@ -397,7 +435,15 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
         "holds finished work that exists nowhere else.",
         "",
     ]
-    out += [f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in recovery[:5]]
+    for what, band in bands.items():
+        out += [
+            f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in band[:_RECOVERY_SHOWN]
+        ]
+        if len(band) > _RECOVERY_SHOWN:
+            more = len(band) - _RECOVERY_SHOWN
+            out.append(f"- _{more} more {what}: `ddflow recover` lists them._")
+    if count:
+        out.append(f"- _{count}_")
     out.append("")
 
 
