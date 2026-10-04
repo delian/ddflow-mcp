@@ -121,8 +121,8 @@ def _reported_bug_warnings(state: State, item_id: str) -> list[str]:
         return []
     return [
         f"open bug(s) {', '.join(left)} were reported against {item_id} but are not what "
-        f"it was filed to fix: completing it leaves them open, and each needs a fix task "
-        f"of its own."
+        f"it was filed to fix: completing it leaves them open and files each a fix task "
+        f"of its own (`[bugs] file_task`)."
     ]
 
 

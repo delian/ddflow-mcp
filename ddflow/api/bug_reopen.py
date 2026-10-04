@@ -1,4 +1,5 @@
-"""`bug reopen`: undo a bug closure made by mistake (B7bdcc6b212).
+"""`bug reopen`: undo a bug closure made by mistake; and the re-filing of the bugs a
+completion leaves open (B7bdcc6b212).
 
 Completing fix-B297ede2447 closed four bugs it never fixed, and there was no way back: a
 re-report of a closed id merges into the record without reopening it, and `bug invalid`
@@ -56,3 +57,29 @@ def bug_reopen(repo: Path, bug: str, *, reason: str, agent: str = "") -> O.Outco
         fix_task=fix_task,
         previous_fix_task=rec.fix_task,
     )
+
+
+def refile_reported(log, cfg, item: str, bugs: list[str]) -> dict[str, str]:
+    """Give each bug reported against ``item`` -- left open by its completion, which closes
+    only what the task was filed to fix (`CM.reported_against`) -- a fix task of its own,
+    as `bug found` would have filed it, so it is not left pointing at a finished task
+    that nothing will refile (`bug file-tasks` counts a done task as its fix). Called
+    after ``item`` is DONE, so the open-fix-task link cannot be taken again. Returns
+    {bug: fix task}; nothing under `[bugs] file_task = false`."""
+    if not bugs or not cfg.bugs.file_task:
+        return {}
+    from .knowledge import _file_fix_task
+
+    out: dict[str, str] = {}
+    with log.transaction():
+        st = fold(log.read_all(), strict=False)
+        for bid in bugs:
+            b = st.bugs.get(bid)
+            if b is None or not b.open or b.fix_task != item:
+                continue
+            fix = _file_fix_task(
+                log, cfg, st, bid, title=b.title, summary=b.summary, item=item, globs=""
+            )
+            log.append("bug.found", bid, {"fix_task": fix["fix_task"]})
+            out[bid] = fix["fix_task"]
+    return out
