@@ -1490,6 +1490,12 @@ def complete(
     )
     L.release(log, item, note="completed")
     extra: dict[str, Any] = {"bugs_refiled": refiled}
+    from ..core.model import fold
+    from ..services import progress_line as PL
+
+    progress = PL.report(fold(log.read_all(), strict=False), cfg, item)
+    if progress:
+        extra["progress"] = progress
     if it.kind == "phase":  # [export].refresh = phase_close
         from ..services.export import refresh as RF
 
