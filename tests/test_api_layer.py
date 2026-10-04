@@ -28,28 +28,45 @@ from ddflow.surfaces.mcp import TOOLS
 
 OK, FAIL, NOTHING, REFUSED = 0, 1, 2, 3
 
-#: Keys whose values are MEASURED, not contract: two runs of the same command cannot
-#: agree on them, so the comparison must not either. `bisect` records each run's wall
-#: time, and under suite load the two surfaces round it differently (0.0 vs 0.01),
-#: failing a parity test on a float no caller can rely on (bug Ba0904a2430).
-_MEASURED_KEYS = frozenset({"seconds"})
+#: Which measured keys each tool may have, BY TOOL: two runs of the same command cannot
+#: agree on a wall-clock reading, so the comparison must not either. `bisect` records
+#: each run's wall time and `rebuild` its total, and under suite load the two surfaces
+#: round them differently (0.0 vs 0.01), failing a parity test on a float no caller can
+#: rely on (bug Ba0904a2430). Scoped by tool on purpose: a tool that later adds a
+#: CONTRACT field named `seconds` must not stop being compared (roborev on 3ea8143b).
+_MEASURED_KEYS = {
+    "ddflow_bisect": frozenset({"seconds"}),
+    "ddflow_rebuild": frozenset({"seconds"}),
+}
 _MEASURED = "\x00measured"
 
 
-def _without_measured(value):
+def _without_measured(value, measured=frozenset()):
     """`value` with every measured key's value replaced, every key KEPT.
 
-    Replacing the value rather than dropping the key keeps a shape difference real: a
-    payload that lost a run, or gained a field, still compares unequal.
+    The replacement keeps the VALUE'S TYPE (`(_MEASURED, "float")`), so a real `None`
+    against a float still fails, and keeping the key means a missing run or an added
+    field still compares unequal.
     """
     if isinstance(value, dict):
         return {
-            key: (_MEASURED if key in _MEASURED_KEYS else _without_measured(item))
+            key: (
+                (_MEASURED, type(item).__name__)
+                if key in measured
+                else _without_measured(item, measured)
+            )
             for key, item in value.items()
         }
     if isinstance(value, list):
-        return [_without_measured(item) for item in value]
+        return [_without_measured(item, measured) for item in value]
     return value
+
+
+def _surfaces_agree(tool, a, b):
+    """The parity comparison, in ONE place so the regression test exercises the same
+    call the migrated-tool test runs, not a copy of it (roborev on 3ea8143b)."""
+    measured = _MEASURED_KEYS.get(tool, frozenset())
+    return _without_measured(a, measured) == _without_measured(b, measured)
 
 
 #: Tools still dispatched by flattening arguments to argv. May only ever DECREASE.
@@ -551,7 +568,7 @@ def test_a_migrated_tool_reproduces_its_CLI_json_exactly(repo, tool):
 
     if tool in BOUNDS:
         from_cli = BOUNDS[tool](from_cli, arguments)[0]
-    assert _without_measured(from_mcp) == _without_measured(from_cli), (
+    assert _surfaces_agree(tool, from_mcp, from_cli), (
         f"{tool}: the surfaces disagree\nCLI: {from_cli}\nMCP: {from_mcp}"
     )
 
@@ -568,15 +585,19 @@ def test_every_typed_tool_has_a_wire_shape_row():
 
 
 def test_a_measured_field_cannot_make_the_surfaces_disagree():
-    """Bug Ba0904a2430: the parity comparison must ignore measured values while keeping
-    every key, so a real disagreement still fails."""
+    """Bug Ba0904a2430: the parity COMPARISON (not just the helper) must ignore measured
+    values while keeping every key and the value's type, so a real disagreement still
+    fails. It calls `_surfaces_agree`, the same function the migrated-tool test runs."""
     one = {"runs": [{"tests": 1, "outcome": "could_not_run", "seconds": 0.0}]}
     two = {"runs": [{"tests": 1, "outcome": "could_not_run", "seconds": 0.01}]}
-    assert _without_measured(one) == _without_measured(two), "0.0 and 0.01 differ only by clock"
+    assert _surfaces_agree("ddflow_bisect", one, two), "0.0 and 0.01 differ only by clock"
     extra = {"runs": [{"tests": 1, "outcome": "could_not_run", "detail": "x", "seconds": 0.01}]}
-    assert _without_measured(one) != _without_measured(extra), "a real field difference remains"
+    assert not _surfaces_agree("ddflow_bisect", one, extra), "a real field difference remains"
     missing = {"runs": []}
-    assert _without_measured(one) != _without_measured(missing), "a missing run remains"
+    assert not _surfaces_agree("ddflow_bisect", one, missing), "a missing run remains"
+    none = {"runs": [{"tests": 1, "outcome": "could_not_run", "seconds": None}]}
+    assert not _surfaces_agree("ddflow_bisect", one, none), "a type difference remains"
+    assert not _surfaces_agree("ddflow_other", one, two), "only the measuring tools mask"
 
 
 def test_a_migrated_tool_gives_both_surfaces_the_SAME_data(repo):
