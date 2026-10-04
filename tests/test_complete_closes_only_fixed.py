@@ -243,3 +243,18 @@ def test_the_reports_get_their_tasks_before_the_completion_is_written(repo):
     kinds = [(e.kind, e.subject) for e in EventLog(repo, "r").read_all()]
     refile = kinds.index(("task.added", "fix-Bflake"))
     assert refile < kinds.index(("item.completed", "fix-Bx")), kinds[refile - 3 :]
+
+
+def test_reopen_names_an_abandoned_fix_task_rather_than_saying_none_was_filed(repo):
+    """roborev job 1432 #4: an abandoned `fix-<bug>` is named, not reported as none."""
+    seed(repo)
+    log = EventLog(repo, "seed")
+    log.append("bug.invalid", "Bx", {"reason": "looked false", "evidence": ""})
+    log.append("item.abandoned", "fix-Bx", {"reason": "bug was invalid"})
+    out = bug_reopen(repo, "Bx", reason="it is real after all", agent="a")
+    assert (out.data["fix_task"], out.data["fix_task_state"]) == ("fix-Bx", "abandoned")
+    code, text, err = run_cli(repo, "bug", "reopen", "Bx", "--reason", "x")
+    assert code == 3  # open now
+    log.append("bug.invalid", "Bx", {"reason": "again", "evidence": ""})
+    code, text, err = run_cli(repo, "bug", "reopen", "Bx", "--reason", "real")
+    assert code == 0 and "abandoned" in text, (text, err)

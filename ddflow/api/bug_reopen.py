@@ -22,8 +22,9 @@ def _fix_task_after(st, bug) -> str:
     """The task that fixes the reopened bug: a task filed to fix it (its current
     `fix_task`, else its own `fix-<bug>`), an open one first. A DONE one is kept -- it is
     the bug's own fix, which did not hold, and `ddflow verify <task> --reopen` sends it
-    back to the queue. "" when no task was filed to fix it (say, the finished task it was
-    merely reported against), so `bug file-tasks` files one."""
+    back to the queue; an ABANDONED one is named too, since `bug file-tasks` would link
+    straight back to it. "" when no task was filed to fix it (say, the finished task it
+    was merely reported against), so `bug file-tasks` files one."""
     mine = [
         st.items[t]
         for t in dict.fromkeys((bug.fix_task, FIX_TASK_PREFIX + bug.id))
@@ -32,7 +33,8 @@ def _fix_task_after(st, bug) -> str:
     for it in mine:
         if it.state not in (DONE, ABANDONED):
             return it.id
-    return next((it.id for it in mine if it.state == DONE), "")
+    # Then a finished one: DONE before ABANDONED, so a fix that landed is the one named.
+    return next((it.id for st_ in (DONE, ABANDONED) for it in mine if it.state == st_), "")
 
 
 def bug_reopen(repo: Path, bug: str, *, reason: str, agent: str = "") -> O.Outcome:
@@ -81,7 +83,9 @@ def refile_reported(log, cfg, item: str, bugs: list[str]) -> dict[str, str]:
     out: dict[str, str] = {}
     with log.transaction():
         st = fold(log.read_all(), strict=False)
-        if item in st.items:  # a throwaway fold: the completion is going through
+        # `fold` builds a fresh State from the events (no cache), so this mark lives only
+        # in this decision: the completion is going through, and is written next.
+        if item in st.items:
             st.items[item].state = DONE
         for bid in bugs:
             b = st.bugs.get(bid)
