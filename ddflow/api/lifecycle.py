@@ -1382,8 +1382,8 @@ def complete(
     verdict, and records the override when one is taken — an unrecorded `--force` is a
     pipeline that was never really enforced.
 
-    ``regression_test`` closes the open bugs this item is the fix task of (`bug found`
-    files one per bug) through `bug_fixed` -- the same refusals: a test must be named and
+    ``regression_test`` closes the open bugs this item was filed to fix (its `fixes`,
+    `CM.open_bugs_of`; never a bug merely reported against it, B7bdcc6b212) through `bug_fixed` -- the same refusals: a test must be named and
     must exist. The verdict is judged FIRST, with that one blocker lifted: a completion
     refused for anything else closes no bug (the bug closes when the task completes, not
     when the command is typed), and the flag on an item that fixes no open bug is refused

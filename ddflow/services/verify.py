@@ -31,6 +31,7 @@ from ..core.schedule import conflicts
 from . import backfill as BF
 from . import gates as G
 from . import ledger as LG
+from .completion import fixes_of
 
 OK, WARN, FAIL, UNKNOWN = "ok", "warn", "fail", "unknown"
 _WILD = re.compile(r"[*?\[]")
@@ -237,7 +238,9 @@ def _tests(led: dict[str, Any], tracked: set[str] | None) -> Claim:
 
 
 def _regression(st: State, item_id: str, tracked: set[str] | None) -> Claim | None:
-    bugs = [b for b in st.bugs.values() if b.fix_task == item_id]
+    # What the item was filed to fix, as `complete` asks it: a bug merely reported
+    # against it stays open after it, and is not a broken claim of its (B7bdcc6b212).
+    bugs = [st.bugs[b] for b in sorted(fixes_of(st, item_id))]
     if not bugs:
         return None
     for b in bugs:
