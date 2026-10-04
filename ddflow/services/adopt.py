@@ -576,6 +576,9 @@ DDFLOW_GITIGNORE = (
     "# The lock `config --set` / `workflow gate` take for a read-modify-write of a\n"
     "# config file. Without this line `git add .ddflow`, as `init` instructs, committed it.\n"
     ".*.lock\n"
+    "# Every agent's task worktrees (decision D-worktree-home) and per-run logs: git\n"
+    "# worktrees and scratch, never committed.\n"
+    "/worktrees/\n/runs/\n"
 )
 
 #: The line that makes two clones' event-log shards concatenate on merge instead of
