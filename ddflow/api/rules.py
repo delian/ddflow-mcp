@@ -10,9 +10,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..services.rules import Rule, RulesStorage
 from ..core import outcome as O
+from ..services.rules import Rule, RulesStorage
 from ._base import _load
+
+DEFAULT_RULE_PRIORITY = 50
 
 
 @dataclass(frozen=True)
@@ -23,7 +25,7 @@ class RuleDedupAnswer:
     target: str = ""  # The rule ID to point at
 
     @classmethod
-    def parse(cls, spec: str) -> "RuleDedupAnswer":
+    def parse(cls, spec: str) -> RuleDedupAnswer:
         """Parse 'new', 'extends ID', 'duplicate_of ID', or 'duplicate ID'."""
         words = (spec or "").replace(":", " ").replace("=", " ").split()
         if not words:
@@ -209,7 +211,7 @@ No project rules are currently defined.
                     lines.append(f"  - Globs: {globs_str}")
 
                 # Show priority if non-default (50)
-                if rule.priority != 50:
+                if rule.priority != DEFAULT_RULE_PRIORITY:
                     lines.append(f"  - Priority: {rule.priority}")
 
             lines.append("")
@@ -235,7 +237,7 @@ def _extend_rule(repo: Path, rule_id: str, new_content: str, agent: str = "") ->
         rule = storage.get(rule_id)
         # Append new content to existing content with separator
         extended_content = f"{rule.content}\n\n---\n\n{new_content}"
-        rule, event_fields = storage.update(rule_id, content=extended_content)
+        rule, _event_fields = storage.update(rule_id, content=extended_content)
 
         # Update the manifest
         manifest_content = rules_manifest(storage)
@@ -290,7 +292,7 @@ def apply_rule_update(
 
         # Perform the storage operation
         if existing:
-            rule, event_fields = storage.update(
+            rule, _event_fields = storage.update(
                 rule.id,
                 **{
                     "title": rule.title,
@@ -302,7 +304,7 @@ def apply_rule_update(
                 },
             )
         else:
-            rule, event_fields = storage.add(rule)
+            rule, _event_fields = storage.add(rule)
 
         # Update the manifest
         manifest_content = rules_manifest(storage)
@@ -384,7 +386,7 @@ def rule_add(
         # No answer provided - refuse and list candidates
         return O.refused(
             "rule.added",
-            f"Possible duplicate rule. It reads like:\n"
+            "Possible duplicate rule. It reads like:\n"
             + "\n".join(
                 f"  {c['id']} ({c['scope']}, score {c['score']:.2f}): "
                 f"{c['title']}" + (f" [{', '.join(c['overlap'])}]" if c["overlap"] else "")
@@ -411,7 +413,7 @@ def rule_add(
     # If "extends" or "duplicate_of", handle based on whether target is open
     if dedup_answer.relation in ("extends", "duplicate_of"):
         try:
-            target_rule = storage.get(dedup_answer.target)
+            storage.get(dedup_answer.target)  # must exist; the value is not needed here
         except FileNotFoundError:
             return O.failed(
                 "rule.added",
@@ -439,7 +441,7 @@ def rule_update(repo: Path, rule_id: str, **fields: Any) -> O.Outcome:
     storage = RulesStorage(repo)
 
     try:
-        rule, event_fields = storage.update(rule_id, **fields)
+        _rule, _event_fields = storage.update(rule_id, **fields)
 
         # Update the manifest
         manifest_content = rules_manifest(storage)
@@ -471,7 +473,7 @@ def rule_remove(repo: Path, rule_id: str) -> O.Outcome:
     storage = RulesStorage(repo)
 
     try:
-        event_fields = storage.remove(rule_id)
+        storage.remove(rule_id)
 
         # Update the manifest
         manifest_content = rules_manifest(storage)
@@ -565,7 +567,7 @@ def rule_list(repo: Path, tag: str | None = None, scope: str | None = None) -> O
             if tag:
                 reason = f" with tag '{tag}'"
             if scope:
-                reason += f" in scope '{scope}'" if reason else f" in scope '{scope}'"
+                reason += f" in scope '{scope}'"
             return O.nothing(
                 "rule.list",
                 f"No rules found{reason}.",
@@ -632,14 +634,13 @@ def rule_search(
                         score = 0.8
                 except re.error:
                     continue
+            # Default: substring match with fallback to similarity scoring
+            # First check for substring match (higher score)
+            elif query_lower in combined:
+                score = 1.0
             else:
-                # Default: substring match with fallback to similarity scoring
-                # First check for substring match (higher score)
-                if query_lower in combined:
-                    score = 1.0
-                else:
-                    # Fallback: TF-IDF-like similarity scoring
-                    score = rule.similarity_score(query)
+                # Fallback: TF-IDF-like similarity scoring
+                score = rule.similarity_score(query)
 
             if score > 0:
                 scored_rules.append((rule, score))
