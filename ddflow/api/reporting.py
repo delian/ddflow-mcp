@@ -607,6 +607,25 @@ def _launcher_findings(repo: Path, problems: list[str], notes: list[str]) -> Non
         (notes if d.fallback else problems).append(d.render())
 
 
+#: How many uncommitted shards doctor names before it summarises.
+_SHARDS_NAMED = 3
+
+
+def _loose_shards(repo: Path) -> list[str]:
+    """Event shards git has not committed: a clone or a pull gets an incomplete log
+    (Bcd3512c891)."""
+    from ..services import eventcommit as EC
+
+    loose = EC.uncommitted_shards(repo)
+    if not loose:
+        return []
+    named = ", ".join(loose[:_SHARDS_NAMED]) + (", ..." if len(loose) > _SHARDS_NAMED else "")
+    return [
+        f"{len(loose)} event shard(s) not committed ({named}): a clone or a pull gets an "
+        "incomplete log; `git add .ddflow/events && git commit -m 'events' -- .ddflow/events`"
+    ]
+
+
 def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     """Everything that is wrong, and everything worth knowing. Exit 1 on any problem.
 
@@ -657,6 +676,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     _primary_mid_merge(repo, problems, notes)
     if store.stale(log):
         notes.append("index is stale; it rebuilds automatically on next read")
+    notes += _loose_shards(repo)
     # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.
     problems += [
         f"unknown config key {k} in .ddflow/config.toml: a typo, or written by a newer "
