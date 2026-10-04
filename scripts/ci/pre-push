@@ -36,7 +36,10 @@ trap 'cleanup; exit 130' INT TERM
 status=0
 # The event log is the project's source of truth: a push without its newest shards
 # publishes an incomplete history (Bcd3512c891). A warning, not a refusal.
-loose=$(git status --porcelain --untracked-files=all -- .ddflow/events 2>/dev/null </dev/null | grep -c '\.jsonl$' || true)
+# Shards are written in the PRIMARY checkout, which a push from a linked worktree does
+# not see; -z so a quoted path is still counted.
+primary=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir </dev/null)")
+loose=$(git -C "$primary" status --porcelain -z --untracked-files=all -- .ddflow/events 2>/dev/null </dev/null | tr '\0' '\n' | grep -c '\.jsonl$' || true)
 if [ "${loose:-0}" -gt 0 ]; then
     echo "pre-push: WARNING: $loose event shard(s) in .ddflow/events are not committed, so this push leaves them out." >&2
     echo "  git add .ddflow/events && git commit -m 'events' -- .ddflow/events" >&2

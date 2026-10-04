@@ -3,7 +3,8 @@
 The log is the source of truth and is committed, but committing it was left to each
 agent, and every claim writes a shard of its own in the primary checkout while the work
 is committed in a worktree. Nothing committed those shards, so a clone or a pull got an
-incomplete history. `commit_shards` is called after merge, complete and release.
+incomplete history. `commit_shards` is called after complete and release (not after
+merge, which `complete` follows).
 
 It commits ONLY `.ddflow/events/*.jsonl`, with a pathspec so anything else staged in the
 primary stays staged and untouched, never bypasses the repository's hooks, and never
@@ -20,14 +21,23 @@ from ..infra import worktree as W
 EVENTS = ".ddflow/events"
 
 
-def uncommitted_shards(repo: Path) -> list[str]:
-    """Event shards with changes git has not committed (new or appended)."""
-    r = W.git(repo, "status", "--porcelain", "--untracked-files=all", "--", EVENTS)
+def uncommitted_shards(repo: Path) -> list[str] | None:
+    """Event shards with changes git has not committed (new or appended); None when git
+    could not tell, which is not the same as "all committed".
+
+    `-z`, so a path git would C-quote (a space, a non-ASCII byte) is read as it is."""
+    r = W.git(repo, "status", "--porcelain", "-z", "--untracked-files=all", "--", EVENTS)
     if not r.ok:
-        return []
-    return sorted(
-        line[3:].strip() for line in r.out.splitlines() if line[3:].strip().endswith(".jsonl")
-    )
+        return None
+    return sorted(p for p in map(_path_of, r.out.split("\0")) if p.endswith(".jsonl"))
+
+
+def _path_of(entry: str) -> str:
+    """The path of one `status --porcelain -z` entry ("XY path"). `W.git` strips its
+    output, which drops the leading space of a first entry such as " M path"."""
+    if entry[2:3] == " ":
+        return entry[3:]
+    return entry[2:] if entry[1:2] == " " else ""
 
 
 def _busy(repo: Path) -> str:
@@ -49,6 +59,8 @@ def commit_shards(repo: Path, reason: str) -> tuple[str, str]:
     there was nothing to commit)."""
     repo = Path(repo)
     shards = uncommitted_shards(repo)
+    if shards is None:
+        return "", "event log not committed: git could not list .ddflow/events"
     if not shards:
         return "", ""
     busy = _busy(repo)
