@@ -3490,7 +3490,9 @@ class Server:
                 else:
                     want_who, detail = _default_agent(self.repo)
                     who = want_who
-                    detail = f"not declared; {detail}" + (f"; {shell}" if shell else "")
+                    detail = f"not declared; {detail}" + (
+                        f"; its shell may still use the previous name ({shell})" if shell else ""
+                    )
                 who = want or who
                 note = ""
                 if not want and detail.endswith("working tree"):

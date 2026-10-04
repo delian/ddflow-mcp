@@ -137,3 +137,28 @@ def test_identify_says_so_when_the_shell_cannot_see_it(repo, monkeypatch):
     srv = Server(repo)
     text = _call(srv, "ddflow_identify", agent="kilo-onboard")["content"][0]["text"]
     assert "pass --agent" in text, text
+
+
+@needs_proc
+def test_a_record_whose_process_cannot_be_read_is_kept(repo, monkeypatch):
+    """Unsure is not gone: only a definitely-exited harness's record is pruned."""
+    from ddflow.infra import harness_identity as H
+
+    d = repo / ".git" / H.DIR
+    d.mkdir()
+    kept = d / f"{os.getpid()}-1"
+    kept.write_text("other\n")
+    real = H._stat
+    monkeypatch.setattr(H, "_stat", lambda pid: None if pid == os.getpid() else real(pid))
+    H.declare(repo, "live")
+    assert kept.exists()
+    H.declare(repo, "")
+
+
+def test_a_separate_git_dir_resolves_to_itself(tmp_path):
+    from ddflow.infra import harness_identity as H
+
+    gd = tmp_path / "store"
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "init", "-q", "--separate-git-dir", str(gd), str(wt)], check=True)
+    assert H._dir(wt) == gd.resolve() / H.DIR

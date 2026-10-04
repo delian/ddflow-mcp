@@ -65,9 +65,12 @@ def _dir(repo: Path | str) -> Path | None:
         if not line.startswith("gitdir:"):
             return None
         gitdir = (Path(repo) / line[len("gitdir:") :].strip()).resolve()
-        common = (gitdir / (gitdir / "commondir").read_text().strip()).resolve()
     except OSError:
         return None
+    try:
+        common = (gitdir / (gitdir / "commondir").read_text().strip()).resolve()
+    except OSError:  # no commondir: a separate git dir or a submodule, which is its own
+        common = gitdir
     return common / DIR
 
 
