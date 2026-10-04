@@ -322,12 +322,50 @@ def _parser_stamp() -> str:
     no list of "things that affect parsing" to keep current.
     """
     h = hashlib.sha256()
-    for fn in (Event.from_json, Event.compute_id, Event.body, canonical):
+    for fn in (
+        Event.from_json,
+        Event.compute_id,
+        Event.body,
+        canonical,
+        _parse_lines,
+        _parse_event,
+        _recover_glued,
+    ):
         code = fn.__code__
         h.update(code.co_code)
         h.update(repr(code.co_consts).encode())
         h.update(repr(code.co_names).encode())
     return h.hexdigest()[:16]
+
+
+#: Every line `Event.to_json` writes starts with this (`canonical` sorts the keys).
+_LINE_START = '{"agent":'
+
+
+def _parse_event(line: str) -> Event | None:
+    """One line as an Event, or None. Any JSON that is not an event object is None, not
+    an exception: a torn fragment can be any prefix of a line, including `123`."""
+    try:
+        return Event.from_json(line)
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def _recover_glued(line: str) -> Event | None:
+    """The whole event an older writer appended straight onto a torn fragment (B28b3839fe6).
+
+    Before the writer terminated a torn tail, the next append landed on the fragment's line
+    as `<fragment><event>`, and the event was lost with it. Each later start of an event
+    line is tried as the event; one is accepted only when its id is the hash of its body,
+    so a fragment cannot be resurrected as something it never was.
+    """
+    at = line.find(_LINE_START, 1)
+    while at > 0:
+        ev = _parse_event(line[at:])
+        if ev is not None and ev.id and ev.id == ev.compute_id():
+            return ev
+        at = line.find(_LINE_START, at + 1)
+    return None
 
 
 def _parse_lines(chunk: bytes) -> tuple[list[Event], int]:
@@ -338,10 +376,12 @@ def _parse_lines(chunk: bytes) -> tuple[list[Event], int]:
         line = raw.strip()
         if not line:
             continue
-        try:
-            out.append(Event.from_json(line))
-        except (json.JSONDecodeError, KeyError):
-            skipped += 1
+        ev = _parse_event(line)
+        if ev is None:
+            skipped += 1  # the fragment is still reported, recovered event or not
+            ev = _recover_glued(line)
+        if ev is not None:
+            out.append(ev)
     return out, skipped
 
 
@@ -850,10 +890,20 @@ class EventLog:
             ts=utcnow(),
         )
         ev = Event(**{**ev.__dict__, "id": ev.compute_id()})
-        line = ev.to_json() + "\n"
-        fd = os.open(self.shard, os.O_CREAT | os.O_WRONLY | os.O_APPEND, 0o644)
+        line = (ev.to_json() + "\n").encode("utf-8")
+        fd = os.open(self.shard, os.O_CREAT | os.O_RDWR | os.O_APPEND, 0o644)
         try:
-            os.write(fd, line.encode("utf-8"))
+            # A shard that does not end in a newline holds a torn append from a writer
+            # that died mid-line (every writer holds this lock, so none is mid-line now).
+            # Terminate it in the SAME write: the fragment stays its own unreadable line,
+            # which doctor reports, and this event gets a line of its own instead of being
+            # glued onto the fragment and lost with it (B28b3839fe6).
+            size = os.fstat(fd).st_size
+            if size and os.pread(fd, 1, size - 1) != b"\n":
+                line = b"\n" + line
+            view = memoryview(line)
+            while view:  # a short write is legal; finish the line rather than tear it
+                view = view[os.write(fd, view) :]
             os.fsync(fd)
         finally:
             os.close(fd)
