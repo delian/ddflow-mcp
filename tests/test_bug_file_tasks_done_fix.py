@@ -56,7 +56,8 @@ def test_a_report_left_on_an_abandoned_fix_task_is_refiled(repo):
     log = seed(repo)
     log.append("item.abandoned", "fix-Bx", {"reason": "superseded"})
     out = K.bug_file_tasks(repo, agent="a")
-    assert out.data["filed"] == ["Brep"], out.data
+    # Bx too: its own fix-Bx is the abandoned one (B974e34fa83).
+    assert out.data["tasks"] == {"Brep": "fix-Brep", "Bx": "fix-Bx-2"}, out.data
     assert state(repo).bugs["Brep"].fix_task == "fix-Brep"
 
 
@@ -102,8 +103,35 @@ def test_a_bug_its_abandoned_task_was_filed_to_fix_is_refiled(repo):
     assert K.bug_file_tasks(repo, agent="a").exit == 2
 
 
-def test_a_bugs_own_abandoned_fix_task_is_not_relinked_on_every_run(repo):
+def test_a_bugs_own_abandoned_fix_task_gets_a_successor(repo):
+    """B974e34fa83: an abandoned `fix-<bug>` is never revived, so the bug is filed
+    `fix-<bug>-2` (then `-3` when that is abandoned too), once each."""
     log = seed(repo)
     log.append("item.abandoned", "fix-Bx", {"reason": "looked invalid"})
+    dry = K.bug_file_tasks(repo, dry_run=True, agent="a")
+    assert "Bx" in dry.data["filed"], dry.data
     out = K.bug_file_tasks(repo, agent="a")
-    assert "Bx" not in out.data["filed"] + out.data["linked"], out.data
+    assert out.data["tasks"]["Bx"] == "fix-Bx-2", out.data
+    st = state(repo)
+    assert st.bugs["Bx"].fix_task == "fix-Bx-2" and st.items["fix-Bx-2"].fixes == ["Bx"]
+    assert st.items["fix-Bx"].state == "abandoned", "the abandoned one is left as it was"
+    assert K.bug_file_tasks(repo, agent="a").exit == 2, "filed once"
+    log.append("item.abandoned", "fix-Bx-2", {"reason": "again"})
+    assert K.bug_file_tasks(repo, agent="a").data["tasks"]["Bx"] == "fix-Bx-3"
+
+
+def test_the_successor_closes_the_bug_on_completion(repo):
+    from conftest import pass_pipeline
+
+    from ddflow.api import lifecycle as LC
+
+    log = seed(repo)
+    log.append("item.abandoned", "fix-Bx", {"reason": "looked invalid"})
+    K.bug_file_tasks(repo, agent="a")
+    t = repo / "tests" / "test_p_regress.py"
+    t.parent.mkdir(exist_ok=True)
+    t.write_text("def test_last_line():\n    pass\n")
+    pass_pipeline(repo, "fix-Bx-2")
+    out = LC.complete(repo, "fix-Bx-2", model="claude-opus-5",
+                      regression_test="tests/test_p_regress.py::test_last_line", agent="a")  # fmt: skip
+    assert out.exit == 0 and out.data["bugs_closed"] == ["Bx"], out.data
