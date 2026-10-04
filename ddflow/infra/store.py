@@ -23,8 +23,11 @@ on some machines is worse than one that is merely weaker.
 from __future__ import annotations
 
 import json
+import os
 import re
+import secrets
 import sqlite3
+import sys
 import time
 from contextlib import closing
 from dataclasses import asdict
@@ -34,13 +37,17 @@ from typing import Any
 from ..config import Config
 from ..core import textsim
 from ..core.model import State, fold
-from ..infra.log import EventLog
+from ..infra.log import EventLog, _flock
 
 SCHEMA = 9
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
 MIN_TERM_CHARS = 2
+
+#: How long a rebuild waits for another one to finish. A rebuild runs at ~12k events/s,
+#: so this is minutes of headroom, not an expected wait.
+REBUILD_LOCK_TIMEOUT_S = 120.0
 
 
 def _has_fts5() -> bool:
@@ -166,8 +173,26 @@ class Store:
         )
 
     # -- projection -----------------------------------------------------------------
+    @property
+    def lock_path(self) -> Path:
+        # `index.db-*`: the name every adopted project's `.ddflow/.gitignore` already ignores.
+        return self.path.with_name(self.path.name + "-lock")
+
     def rebuild(self, log: EventLog) -> State:
-        """Drop everything and re-derive from the log. The ONLY write path.
+        """Drop everything and re-derive from the log, one rebuild at a time.
+
+        Serialised by a lock beside the index (Bcdfb199cc0): two rebuilds used to share
+        one temp path with no lock, so one unlinked or published the other's half-built
+        file -- `FileNotFoundError`, `no such table: meta`, or a SIGBUS from SQLite's
+        mapped `-shm` being truncated under it.
+        """
+        self._ensure_dir()
+        with _flock(self.lock_path, REBUILD_LOCK_TIMEOUT_S):
+            return self._rebuild_locked(log)
+
+    def _rebuild_locked(self, log: EventLog) -> State:
+        """Drop everything and re-derive from the log. The ONLY write path. The caller
+        holds `lock_path`.
 
         There is deliberately no incremental update. An incremental projector is a
         second implementation of `fold` that can disagree with it, and a cache that
@@ -192,9 +217,26 @@ class Store:
         # path does, which is the whole point — `ddflow status` must not adopt a
         # repository that never ran `ddflow init`.
         self._ensure_dir()
-        tmp = self.path.with_suffix(".rebuilding")
-        for p in (tmp, tmp.with_name(tmp.name + "-wal"), tmp.with_name(tmp.name + "-shm")):
-            p.unlink(missing_ok=True)
+        # Under the lock no other rebuild is running, so every temp file left here is
+        # from one that died (and `index.rebuilding*` from before temp names were unique).
+        for old in (
+            *self.path.parent.glob(f"{self.path.name}-rebuilding*"),
+            *self.path.parent.glob(f"{self.path.stem}.rebuilding*"),
+        ):
+            old.unlink(missing_ok=True)
+        # A name of its own all the same: the lock is advisory, and a temp file that
+        # nothing else can name cannot be unlinked or published by anything else.
+        tmp = self.path.with_name(
+            f"{self.path.name}-rebuilding.{os.getpid()}.{secrets.token_hex(4)}"
+        )
+        try:
+            return self._build_into(tmp, state, events, fingerprint)
+        finally:
+            for suf in ("", "-wal", "-shm"):
+                tmp.with_name(tmp.name + suf).unlink(missing_ok=True)
+
+    def _build_into(self, tmp: Path, state: State, events: list, fingerprint) -> State:
+        """Write the projection into `tmp` and publish it over the index."""
         con = sqlite3.connect(tmp, isolation_level=None)
         con.row_factory = sqlite3.Row
         con.execute("pragma journal_mode=WAL")
@@ -311,9 +353,29 @@ class Store:
         return state
 
     def ensure(self, log: EventLog) -> State:
-        if self.stale(log):
-            return self.rebuild(log)
-        return fold(log.read_all(), strict=False)
+        """The folded state, with the index made current on the way when it is behind.
+
+        A READ path, so it never fails for the index's sake: the index is a cache, and
+        when it cannot be rebuilt (the lock held past its timeout, a full disk, an
+        unwritable directory) the state still comes from the log, with a warning. A
+        rebuild that another process finished while this one waited for the lock is not
+        redone.
+        """
+        if not self.stale(log):
+            return fold(log.read_all(), strict=False)
+        try:
+            self._ensure_dir()
+            with _flock(self.lock_path, REBUILD_LOCK_TIMEOUT_S):
+                if not self.stale(log):
+                    return fold(log.read_all(), strict=False)
+                return self._rebuild_locked(log)
+        except (TimeoutError, OSError, sqlite3.Error) as exc:
+            print(
+                f"ddflow: the index {self.path} could not be rebuilt ({exc}); "
+                f"answering from the log. `ddflow rebuild` retries.",
+                file=sys.stderr,
+            )
+            return fold(log.read_all(), strict=False)
 
     # -- search ---------------------------------------------------------------------
     def search(self, table: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
