@@ -250,3 +250,23 @@ def test_an_unanswered_lookup_still_records_a_reason(tmp_path, monkeypatch):
     by, note = AG._roborev_reviewer(tmp_path, None, "standards", ev, "kilo", skip=False)
     assert by == "kilo" and ev["roborev"] == {"verified": False, "why": "roborev gave no answer"}
     assert note == "NOTE: roborev gave no answer."
+
+
+def test_a_range_job_as_roborev_records_it_is_found(repo, fake_roborev):
+    """Bf4a6ce1b06: `roborev review --since <base>` records job_type 'range', and the
+    lookup kept only 'review' -- so the usual whole-branch review was never found."""
+    head = _item(repo)
+    fake_roborev([{**_job(9, f"abc1234..{head}", "claude-code"), "job_type": "range"}])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    ev = _gate(repo).evidence
+    assert ev["model"] == "claude-code" and ev["roborev"]["job"] == 9, ev
+
+
+@pytest.mark.parametrize("job_type", ["fix", "refine", "task"])
+def test_a_job_that_is_not_a_review_is_not_taken_for_one(repo, fake_roborev, job_type):
+    head = _item(repo)
+    fake_roborev([{**_job(9, head, "claude-code"), "job_type": job_type}])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    assert _gate(repo).evidence["roborev"]["verified"] is False
