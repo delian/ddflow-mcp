@@ -1150,11 +1150,20 @@ def cut(
     if direct:
         # A maintenance line is tagged where it stands: it has no develop/production
         # pair of its own, so there is no release branch to route through.
-        # The changelog first, the bump last: the bump rolls its own working tree back when
-        # its commit fails, so a refusal here leaves nothing half-done behind it.
+        # The changelog first, the bump last: a failed bump rolls its own working tree back,
+        # but a changelog commit already made on the branch STAYS (a branch ref cannot be
+        # reset safely when another worktree may have it checked out), so say so.
+        before = W.rev(repo, vp.ref)
         if prep and not _write_changelog(repo, cfg, out, vp.ref, prep, vp.next, force=force):
             return out
         if vfiles and not _write_version_files(repo, cfg, out, vp.ref, vfiles, vp.next):
+            landed = W.rev(repo, vp.ref)
+            if landed and landed != before:
+                out.steps.append(
+                    f"NOTE: the changelog commit {landed[:10]} was already made on {vp.ref} and "
+                    f"stays: `git revert {landed[:10]}` removes it, or fix the bump and run "
+                    f"`ddflow version cut` again (the changelog section is then already there)"
+                )
             return out
         out.sha = W.rev(repo, vp.ref)
         return _tag_and_push(repo, cfg, log, out, vp, branch=vp.ref, push=push)
