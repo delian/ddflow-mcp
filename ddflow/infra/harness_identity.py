@@ -7,7 +7,8 @@ landed under two identities: the MCP heartbeat answered "no lease held", and the
 hook refused the agent's own files (Bfad021e8d9).
 
 Both kinds of process descend from the same harness: the MCP server is its child (via a
-launcher such as `uv` at most), the shell a descendant. So the declaration is recorded
+launcher such as `uv` at most), the shell a descendant. A server restarted under the
+same harness starts with the recorded name, so it and the shell stay one agent. So the declaration is recorded
 against the harness -- the server's parent, and through any launcher up to the first
 process that is not one -- keyed by pid AND start time, so a reused pid never inherits
 it. A CLI run that names no identity (`--agent`, `DDFLOW_AGENT`) takes the record of its
@@ -31,8 +32,10 @@ from pathlib import Path
 #: Under the primary checkout's `.git`.
 DIR = "ddflow-identity"
 
-#: Processes that only start another: the harness is above them, not them.
-LAUNCHERS = frozenset({"uv", "uvx", "pipx", "npx", "env", "sh", "dash", "bash", "zsh"})
+#: Processes that only start another: the harness is above them, not them. Never a
+#: shell: an interactive one may be the harness, or the terminal above it, and climbing
+#: past it would hand the name to every command typed there.
+LAUNCHERS = frozenset({"uv", "uvx", "pipx", "npx", "env"})
 
 _NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _MAX_DEPTH = 64
