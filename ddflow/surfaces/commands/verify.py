@@ -125,6 +125,8 @@ def cmd_verify(a, c: Ctx) -> int:
             or a.phase
             or a.file_bugs
             or a.reopen
+            or a.reason
+            or a.force
             or a.limit is not None
             or (a.pack and a.judge)
         ):

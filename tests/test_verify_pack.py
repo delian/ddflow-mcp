@@ -207,3 +207,11 @@ def test_globs_and_mechanical_finding_details_are_fenced_as_data(repo):
     assert 'kind="globs"' in globs_line
     finding_lines = [x for x in text.splitlines() if x.startswith("- [") and "] gates:" in x]
     assert finding_lines and all('kind="finding"' in x for x in finding_lines)
+
+
+def test_the_cli_rejects_pack_and_judge_with_reason_or_force_like_the_mcp_tool(repo):
+    _done(repo)
+    for extra in (("--reason", "why"), ("--force",)):
+        for mode in ("--pack", "--judge"):
+            code, _out, err = run_cli(repo, "verify", "T1", mode, *extra)
+            assert code == 1 and "takes one task id" in err, (mode, extra, err)
