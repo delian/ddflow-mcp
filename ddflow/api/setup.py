@@ -581,12 +581,48 @@ def _session_start(repo: Path, agent: str) -> O.Outcome:
         parts.append(out.data.get("text", "") or out.reason)
     except Exception as exc:
         parts.append(f"ddflow could not build the brief ({exc}). Run `ddflow doctor`.")
+    parts += _companion_lines(repo)
     parts += [
         "",
         "_Use the ddflow MCP tools for the queue. A subagent passes `as_agent` on every "
         "call; `ddflow_memory_add` records a fact about this machine for the next session._",
     ]
     return O.ok("hooks", message="\n".join(parts), installed=True, policy="")
+
+
+def _companion_lines(repo: Path) -> list[str]:
+    """The brief's "Companions not wired up" section, for an agent on the hook path that
+    never saw the MCP handshake. Same actionable set as the handshake, and like it
+    NEVER probes: a session start must not wait on `npx`, so an unprobed companion says
+    "not checked", which is not "missing"."""
+    try:
+        from ..services import companions as CO
+
+        word = {
+            "register": "installed, not registered",
+            "install": "not installed",
+            "check": "not checked",
+        }
+        gaps = [s for s in CO.scan(repo, probe=False) if s.companion.default and s.advice in word]
+    except Exception as exc:
+        return ["", f"_(companions not read: {exc}; run `ddflow companions`)_"]
+    if not gaps:
+        return []
+    lines = ["", "## Companions not wired up", ""]
+    for st in gaps:
+        c = st.companion
+        lines.append(
+            f"- **{c.id}** - {c.title} [{word[st.advice]}]. Serves: "
+            f"{', '.join(c.gates) or '-'}. Install: `{c.install}` - {c.url}"
+        )
+    lines += [
+        "",
+        'Nothing was probed at session start: "not checked" is not "missing". Tell the '
+        "operator, then run `ddflow companions` to check and the `install-companions` "
+        "prompt (MCP: `/mcp__ddflow__install-companions`) to install with their consent. "
+        "A declined companion's gates are recorded `unavailable`, never passed.",
+    ]
+    return lines
 
 
 def _hook_line(name: str, armed) -> str:
