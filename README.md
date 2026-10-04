@@ -3400,11 +3400,20 @@ and names it; `complete fix-Bx --regression-test tests/test_parser.py::test_last
 closes the bug through the same path as `bug fixed` (the test must be named and must
 exist; write it first and watch it FAIL on the unfixed code), then completes. Closing the
 bug first with `bug fixed` and completing afterwards is the same thing in two steps.
+A completion closes only the bugs the task was **filed to fix** (its `fixes`, or the
+bug a hand-filed `fix-<bug>` names) -- never a bug merely reported against it with
+`--item`, a `scope = ddflow` report or a bug with a fix task of its own. Those stay
+open and are not completion blockers: `complete` names them in a warning and, once the
+task is done, files each its own `fix-<bug>` (or links the one it has). A bug closed
+by mistake (fixed or invalid) is reopened with `ddflow bug reopen <bug> --reason "..."`
+(event `bug.reopened`): the closure stays in the history, the record reads open, and it
+points at the task filed to fix it -- when that task is done, `ddflow verify <task>
+--reopen` sends it back to the queue -- or at none, so `bug file-tasks` files one.
 
 Three cases file nothing or undo it: `--no-task` (MCP `no_task`), for a bug fixed in
-the commit that found it; `--item <an OPEN bug-fix task>`, which names the fix and links
-the bug to it instead of filing a twin; and `bug invalid`, which also removes the fix
-task when nobody holds it and no other open bug needs it. A log written before fix
+the commit that found it; `--item <an OPEN bug-fix task>`, which links the bug to it
+for now instead of filing a twin (its completion files the bug's own, as above); and
+`bug invalid`, which also removes the fix task when nobody holds it and no other open bug needs it. A log written before fix
 tasks existed is upgraded once with `ddflow bug file-tasks` (`--dry-run` lists; MCP
 `ddflow_bug_file_tasks`): every open bug without a fix task gets one, as `bug found`
 would have filed it. `[bugs] file_task = false` returns to flat bug records.
@@ -4032,6 +4041,7 @@ ddflow lesson add|search        capture and retrieve lessons
 ddflow research --verdict ..    record a finding (probe required for CONFIRMED/REFUTED)
 ddflow bug found|fixed          found files the fix task fix-<id> (--no-task, --globs); fixed needs --regression-test (repeats)
 ddflow bug file-tasks [--dry-run]  a fix task for every open bug that has none (one-shot; 2 = none)
+ddflow bug reopen <id> --reason R  reopen a bug closed by mistake (fixed or invalid)
 ddflow complete <fix task> --regression-test T  closes the bug(s) the task fixes and completes
 ddflow task|phase|bug|research list   one line per record, filters, --json (2 = none match)
 
