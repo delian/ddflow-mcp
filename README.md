@@ -60,6 +60,33 @@ refused. Never treat `2` as `0`.
 
 ---
 
+## Everything is yours to change, per project
+
+ddflow ships defaults, never a fixed process. **Every part of how it works is a file or a
+setting in *your* repository, and each project can differ from the next:** the gate
+pipeline and each gate's command or prompt, which reviewers run, the rules your agents
+follow, every prompt an agent is handed (including the instructions it receives the
+moment it connects), the slash-command workflows, your own `[[macro]]` modes, the export
+document templates, the branching and release model, parallelism and lease limits,
+cadences, enforcement strictness, and the per-agent driver docs. Nothing is hard-wired
+except the four enforced rules at the top of this page, and even those are tuned through
+documented knobs, never silently bypassed.
+
+Three ways to change anything, all validated before anything is written:
+
+- **Edit the file.** It is plain TOML or Markdown under `.ddflow/` (committed, shared by
+  every clone) or `.ddflow/local/` (git-ignored, yours alone).
+- **Use the CLI** (`ddflow config --set`, `ddflow workflow …`, `ddflow prompts eject`,
+  `ddflow rule …`, `ddflow export eject`).
+- **Ask your agent**, which has the same operations as MCP tools (`ddflow_configure`,
+  `ddflow_workflow_*`, `ddflow_rule_*`). It changes a project's workflow only with your
+  agreement.
+
+The complete list of what can be changed, and where, is the
+[Customisation reference](#customisation-reference) at the end of this page.
+
+---
+
 ## Introduction
 
 ### The problem it solves
@@ -201,6 +228,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 ## Table of contents
 
 - [Instruction for an agent reader](#instruction-for-an-agent-reader)
+- [Everything is yours to change, per project](#everything-is-yours-to-change-per-project)
 - [Introduction](#introduction)
 - [How do I…?](#how-do-i)
 - [Help: what it can do, and the workflow](#help-what-it-can-do-and-the-workflow)
@@ -259,6 +287,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [Keeping the two surfaces honest](#keeping-the-two-surfaces-honest)
 - [Command reference](#command-reference)
 - [Configuration](#configuration)
+- [Customisation reference](#customisation-reference)
 - [Testing](#testing)
 - [Documentation index](#documentation-index)
 
@@ -4228,6 +4257,117 @@ The design assumption is that an agent's *honesty* cannot be verified, so the sy
 built to make an unverifiable claim expensive to make and easy to see: evidence
 contracts, mutation-verified gates, coverage gaps recorded on completion, and an exit
 code that distinguishes "could not" from "did not need to".
+
+---
+
+## Customisation reference
+
+One place to look up what can be changed. "Scope" says where a change lives: **shared**
+is committed and every clone sees it; **local** is `.ddflow/local/`, git-ignored, this
+machine only. Precedence for settings is default → shared file → local file →
+`DDFLOW_<SECTION>_<KNOB>` environment variable. Run `ddflow config --explain` for every
+knob with its value, source and documentation.
+
+### Files you can edit
+
+| File | Scope | What it controls | Change it with |
+|---|---|---|---|
+| `.ddflow/config.toml` | shared | Every knob (sections below), `[gate.*]`, `[[reviewer]]`, `[[macro]]` | editor, `ddflow config --set/--append-toml`, `ddflow_configure` |
+| `.ddflow/gates.toml` | shared | Gate definitions and human-approval checkpoints | editor, `ddflow workflow gate` |
+| `.ddflow/companions.toml` | shared | Companion tools the gates expect (what each buys, how to install) | editor |
+| `.ddflow/macros.toml` | shared | `[[macro]]` modes, if split out of `config.toml` | editor |
+| `.ddflow/local/config.toml` | local | Machine-specific knobs, worker counts, `enforce.*` overrides | `ddflow config --local --set` |
+| `.ddflow/local/gates.toml` | local | Gates for this machine only | editor |
+| `.ddflow/local/reviewers.toml` | local | Reviewer endpoints, model names, API-key variable *names* | `ddflow reviewers detect --write`, editor |
+| `.ddflow/prompts/<name>.md` | shared | Override of a shipped prompt template (Jinja2) | `ddflow prompts eject <name>` |
+| `.ddflow/templates/export/<kind>.md.j2` | shared | Format of each generated document | `ddflow export eject <kind>` |
+| `.ddflow/rules/<id>.toml` | shared | Project rules agents are told to follow | `ddflow rule add/edit/remove`, `ddflow_rule_*` |
+| `AGENTS.md` / `CLAUDE.md` | shared | The managed ddflow block plus your own prose | `ddflow adopt` (re-run), editor outside the block |
+| `docs/ddflow/drivers/implement-phase.md` and `deltas/<agent>.md` | shared | The implementation driver and per-agent notes | edit; `ddflow adopt --refresh-docs` resets to shipped |
+| `.claude/commands/implement.md` (and other agents' command dirs) | shared | The slash command that drives the queue | edit after `ddflow adopt` |
+| Agent MCP config (`.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, …) | shared | How the agent launches ddflow; see [Wiring it into your agent](#wiring-it-into-your-agent) | `ddflow adopt --agents …` |
+| `.ddflow/events/` | shared | The source-of-truth log. **Append-only: do not edit.** | the CLI/MCP only |
+
+### Configuration sections (`.ddflow/config.toml`)
+
+| Section | Controls |
+|---|---|
+| `gates`, `[gate.<id>]` | Task, phase and promotion pipelines; required gates; evidence requirements; ordering enforcement; skip policy |
+| `schedule` | Parallelism cap, readiness policy, cycle and unknown-dependency handling, bugs-first, shared resources, sibling repos |
+| `lease` | Lease TTL and heartbeat behaviour |
+| `worktree` | Where and how isolated worktrees are made and cleaned |
+| `flow` | Branching model (trunk, gitflow), integration (merge or PR), forge, PR behaviour, tags and versions, release lines, environments and promotion |
+| `enforce` | Commit hooks: lease required, item trailers, forbidden trailers, stale docs and rules, README-with-code, branch drift |
+| `review`, `[[reviewer]]`, `agent` | Reviewer endpoints, review rounds, the cross-family rule, model-family table, agent identity |
+| `prompts` | Inline prompt overrides (alternative to files under `.ddflow/prompts/`) |
+| `rules` | Rule count and size limits, allowed tags and scopes |
+| `lessons`, `memory`, `reinstruct`, `session`, `log` | Lesson and memory limits, periodic re-instruction, session provenance, log handling |
+| `cadence`, `dedupe`, `bugs`, `ci` | Periodic passes, duplicate detection thresholds, bug handling, CI parity checks |
+| `importer` | Which files an import treats as plans, lessons, decisions, research, journals |
+| `export` | Which documents are generated, redaction, size limits, refresh |
+| `companions`, `mcp`, `loops`, `upgrade` | Companion tools, which MCP tools are exposed, loop detection, upgrade behaviour |
+| `[[macro]]` | Your own named prompt modes, exposed as slash commands and `ddflow prompts` |
+
+### Prompts and workflow commands
+
+Each is overridden with `ddflow prompts eject <name>`, which copies the shipped text to
+`.ddflow/prompts/<name>.md`. `ddflow prompts list` shows where each resolves from.
+
+| Name | Used for |
+|---|---|
+| `mcp_instructions` | The instructions an MCP client receives on connect |
+| `gate_instruction` | What an agent is told at each gate |
+| `review_system`, `review_user` | The reviewer's system and user prompts |
+| `session_brief_header` | The header of the session-start brief |
+| `implement` | Drive the queue to completion |
+| `onboard`, `import-existing-project` | Install into, and import history from, an existing project |
+| `research-companions`, `install-companions` | Choose and install companion tools |
+| `bug-hunt`, `code-deduplication`, `code-clean`, `all-tests` | Periodic quality passes |
+
+### CLI commands that change the project's setup
+
+| Command | Changes |
+|---|---|
+| `ddflow config --set K V` / `--append-toml T` / `--explain` | Any knob; `--local` writes the machine-local layer |
+| `ddflow workflow` / `workflow pipeline` / `workflow gate` / `workflow drop` | Show or change the gate pipelines and individual gates |
+| `ddflow prompts list|show|eject` | Prompt templates |
+| `ddflow rule add|edit|list|search|show|remove` | Project rules |
+| `ddflow flow show` / `flow choose <knob> <v>` | Branching, release and PR choices, recorded with a reason |
+| `ddflow reviewers detect|list|test|add|approve` | Reviewer endpoints |
+| `ddflow companions` / `companions add` | List companion tools; register installed ones in an agent's MCP config |
+| `ddflow export eject|validate|enable|disable` | Generated-document templates and selection |
+| `ddflow adopt [--agents …] [--refresh-docs]` | Agent wiring, driver docs, rules blocks |
+| `ddflow hooks install|uninstall|status` | Git commit hooks |
+| `ddflow decision add` | Architectural decisions that govern file globs |
+
+### MCP tools that change the project's setup
+
+All require your agreement in the instructions they carry; most offer `dry_run`.
+
+| Tool | Equivalent |
+|---|---|
+| `ddflow_configure` | `ddflow config --set/--append-toml` |
+| `ddflow_workflow`, `ddflow_workflow_pipeline`, `ddflow_workflow_gate`, `ddflow_workflow_drop` | `ddflow workflow …` |
+| `ddflow_rule_add`, `_edit`, `_remove`, `_list`, `_search`, `_show` | `ddflow rule …` |
+| `ddflow_flow_choose`, `ddflow_flow_show` | `ddflow flow …` |
+| `ddflow_reviewers_detect`, `ddflow_reviewers_list` | `ddflow reviewers …` |
+| `ddflow_companions`, `ddflow_companions_add`, `ddflow_companions_verify` | `ddflow companions …` |
+| `ddflow_prompts`, `ddflow_export`, `ddflow_hooks` | `ddflow prompts / export / hooks` |
+| `ddflow_setup` | `ddflow adopt` |
+| `ddflow_decision_add`, `_supersede`, `_list`, `_show`, `_applicable` | `ddflow decision …` |
+
+Three things have **no MCP equivalent on purpose**, because an agent must not clear its
+own checkpoints: `ddflow approve` (human gates), `ddflow reviewers approve`, and setting
+`gate.<id>.human`. No writer can drop a human gate from a pipeline either.
+
+### Environment variables
+
+| Variable | Effect |
+|---|---|
+| `DDFLOW_<SECTION>_<KNOB>` | Overrides any knob (list and map values as JSON) |
+| `DDFLOW_AGENT` | Who is calling, for attribution |
+| `DDFLOW_REPO` | Which repository to operate on |
+| `DDFLOW_MCP_TOOLS` | Which MCP tools are exposed |
 
 ---
 
