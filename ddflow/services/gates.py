@@ -204,11 +204,12 @@ DEFAULT_GATES: dict[str, GateDef] = {
         applies_to="task",
         description="An independent model judges whether a DONE task's evidence meets its requirement.",
         prompt=(
-            "Run `ddflow verify <id> --judge` (it builds the evidence pack and sends it, with "
-            "the landed commit, to the configured cross-family reviewer). Not part of the "
-            "default pipeline: it is the optional second opinion after the mechanical "
-            "`ddflow verify <id>`. A finding is a requirement clause the evidence does not "
-            "show as met; unavailable is recorded as unavailable, never as a pass."
+            "An independent model judges whether what landed meets the requirement. "
+            "ddflow performs it: `ddflow verify <id> --judge` builds the evidence pack and "
+            "sends it, with the landed commit, to the configured cross-family reviewer. "
+            "Optional, never part of the default pipeline: the second opinion after the "
+            "mechanical `ddflow verify <id>`. A finding is a requirement clause the evidence "
+            "does not show as met; unavailable is recorded as unavailable, never as a pass."
         ),
     ),
     "standards": GateDef(

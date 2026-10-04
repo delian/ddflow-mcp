@@ -189,7 +189,7 @@ def judge(repo: Path, item: str, *, agent: str = "", on_progress=None) -> O.Outc
         repo,
         gate="verify",
         item=item,
-        intent=VP.requirement(st, item),
+        intent=VP.requirement(events, item) or "",
         context=text,
         commit=sha,
         agent=agent,
