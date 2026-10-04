@@ -121,11 +121,15 @@ def next_(
         "cycles": p.cycles,
         "interrupted": p.interrupted,
         "critical_path": critical_path(st, phase),
+        "finished_phases": p.finished,
         "_render": {"plan": p},
     }
     if p.ready:
         return O.ok("next", **data)
-    return O.nothing("next", f"Nothing actionable ({p.summary()}).{_wait_hint(p)}", **data)
+    # Still exit 2 with only a phase to close: "no task left" is the driver's cue for the
+    # phase close, which `close_note` then spells out (B28268eba1a).
+    head = "Nothing to claim" if p.finished else "Nothing actionable"
+    return O.nothing("next", f"{head} ({p.summary()}).{_wait_hint(p)}{p.close_note()}", **data)
 
 
 def _ready_rows(items) -> list[dict[str, Any]]:
@@ -2251,6 +2255,8 @@ def brief(
     if undecided:
         text = undecided + "\n" + text
     text = reports_block + text
+    if p.finished:  # B28268eba1a: else only `doctor` ever said a phase was done
+        text += "\n## Finished phases to close\n" + p.close_note() + "\n"
     text += _waiting_on_you(repo, held_ids)
     from ..services.export import select as export_select
 

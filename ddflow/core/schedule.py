@@ -143,6 +143,10 @@ class Plan:
     #: item. Not cap-held: raising the cap would not offer it, only the offered item
     #: finishing would.
     overlapped: list[str] = field(default_factory=list)
+    #: Open phases whose every task is finished (`unpickable`'s "finished_phase"), in
+    #: scope of the plan's `phase`. Offered to CLOSE -- the phase's own pipeline, then
+    #: `complete` -- and never closed here: its gates still decide (B28268eba1a).
+    finished: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         parts = [
@@ -160,7 +164,18 @@ class Plan:
             parts.append(f"{len(self.interrupted)} INTERRUPTED")
         if self.review:
             parts.append(f"{len(self.review)} in review")
+        if self.finished:
+            parts.append(f"{len(self.finished)} finished phase(s) to close")
         return ", ".join(parts)
+
+    def close_note(self) -> str:
+        """What to run for each finished phase, or "" -- one wording for `next` and the
+        brief."""
+        return "".join(
+            f"\nPhase {ph} is finished but still open: run its pipeline "
+            f"(`ddflow gate status {ph}`), then `ddflow complete {ph}`."
+            for ph in self.finished
+        )
 
 
 def globs_overlap(a: str, b: str) -> bool:
@@ -884,6 +899,13 @@ def plan(
         p.cap_note = f"the worktree cap ({cap})"
         reached = f"worktree cap reached ({cap})"
     _cut_ready(state, cfg, p, slots, flight_slots, tree_slots, live_items, live_note, reached, hold)
+    # Asked of `unpickable`, the one rule `doctor` reports by; offered, never acted on.
+    p.finished = [
+        u.item
+        for u in unpickable(state, cfg)
+        if u.kind == "finished_phase"
+        and (not phase or u.item == phase or any(a.id == phase for a in state.ancestors(u.item)))
+    ]
     return p
 
 
