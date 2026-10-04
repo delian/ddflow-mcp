@@ -3496,9 +3496,7 @@ class Server:
                 else:
                     want_who, detail = _default_agent(self.repo)
                     who = want_who
-                    detail = f"not declared; {detail}" + (
-                        f"; its shell may still use the previous name ({shell})" if shell else ""
-                    )
+                    detail = f"not declared; {detail}"
                 who = want or who
                 note = ""
                 if not want and detail.endswith("working tree"):
@@ -3506,6 +3504,8 @@ class Server:
                         " Every agent in this tree derives the SAME name, so if you are "
                         "one of several here, declare one."
                     )
+                if not want and shell:
+                    note += f" Its shell may still use the previous name ({shell})."
                 return _ok(
                     mid,
                     _text(

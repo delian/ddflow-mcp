@@ -108,6 +108,8 @@ def declare(repo: Path | str, agent: str) -> str:
 
     Returns "" when it did, else why not -- which `ddflow_identify` reports, because a
     declaration the shell will not see is the original split, silently back."""
+    if agent and not _NAME.fullmatch(agent):
+        return f"not recorded for shell commands: {agent!r} is not a usable agent name"
     d = _dir(repo)
     keys = _harness(os.getppid())
     if d is None or not keys:

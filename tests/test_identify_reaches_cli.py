@@ -195,3 +195,28 @@ def test_a_shell_wrapped_claim_still_finds_the_harness(connection):
     )
     assert r.returncode == 0, r.stdout + r.stderr
     assert _holder(repo) == "kilo-onboard"
+
+
+@needs_proc
+def test_a_record_for_a_process_that_is_not_an_ancestor_is_ignored(repo):
+    """Only shells BELOW the declaring harness take the name, never a bystander's."""
+    from ddflow.infra import harness_identity as H
+
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        st = H._stat(other.pid)
+        assert st is not None
+        d = repo / ".git" / H.DIR
+        d.mkdir()
+        (d / f"{other.pid}-{st[2]}").write_text("someone-else\n")
+        assert H.declared(repo) == ""
+    finally:
+        other.kill()
+        other.wait()
+
+
+def test_an_unusable_name_is_reported_not_recorded(repo):
+    from ddflow.infra import harness_identity as H
+
+    assert "not a usable agent name" in H.declare(repo, "kilo onboard")
+    assert H.declared(repo) == ""
