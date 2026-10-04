@@ -442,9 +442,7 @@ def _stop(proc: subprocess.Popen) -> None:
     """
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, signal.SIGTERM)
-    deadline = time.monotonic() + 3
-    while _exit_info(proc) is None and time.monotonic() < deadline:
-        time.sleep(0.02)
+    _await_exit(proc, 3.0)
     with contextlib.suppress(ProcessLookupError, PermissionError):
         os.killpg(proc.pid, signal.SIGKILL)
     with contextlib.suppress(subprocess.TimeoutExpired):
