@@ -36,7 +36,13 @@ def _stat(repo: Path, sha: str) -> list[str]:
     if not sha:
         return []
     r = git(repo, "show", "--stat", "--format=", "-m", "--first-parent", sha, timeout=60)
-    return r.out.splitlines()[:MAX_STAT_LINES] if r.ok else []
+    if not r.ok:
+        return []
+    lines = r.out.splitlines()
+    if len(lines) <= MAX_STAT_LINES:
+        return lines
+    more = len(lines) - MAX_STAT_LINES
+    return [*lines[:MAX_STAT_LINES], f"[... truncated: {more} more line(s) of diff stat]"]
 
 
 def requirement_text(title: str, body: str) -> str:
@@ -130,9 +136,9 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
     out += ["", "## What landed", ""]
     if d["files_known"]:
         out.append(f"- {d['files_total']} file(s) changed, {len(d['tests'])} of them tests")
-        out += [f"  - `{f}`" for f in d["files"][:12]]
+        out += [f"  - {_data('path', item_id, f)}" for f in d["files"][:12]]
         out += [
-            f"- tests: {', '.join(f'`{t}`' for t in d['tests'][:8])}"
+            "- tests: " + ", ".join(_data("path", item_id, t) for t in d["tests"][:8])
             if d["tests"]
             else "- tests: NONE touched"
         ]
