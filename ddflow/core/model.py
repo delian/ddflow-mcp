@@ -112,6 +112,16 @@ class Lease:
     expired_at: str = ""
     #: The `lease.acquired` event that granted it, so a lease contest can name the claims.
     event: str = ""
+    #: The item's state when this lease was granted. A release hands the item back to
+    #: it: a claim refused on a crashed (RUNNING) item must leave it RUNNING, so recovery
+    #: still sees the crash, while a deliberate release of a normal claim reopens it.
+    prior_state: str = ""
+    #: Who held the item before this lease (a crashed holder's expired lease), so a
+    #: holder releasing its OWN re-claimed work hands it back, not someone else's crash.
+    prior_holder: str = ""
+    #: An `item.started` folded under this lease: the claim went through and the holder
+    #: took the item on (a refused claim is undone before `item.started` is written).
+    started: bool = False
 
     def expired(self, now: float, grace_s: int = 0) -> bool:
         return (now - self.renewed_at) > (self.ttl_s + grace_s)
@@ -1064,6 +1074,8 @@ def _h_lease_acquired(st: State, ev: Event) -> None:
         note=d.get("note", ""),
         resources=list(d.get("resources", [])),
         event=ev.id or ev.compute_id(),
+        prior_state=it.state,
+        prior_holder=it.lease.holder if it.lease else "",
     )
     mine = _claim(new)
     cur = it.lease
@@ -1259,7 +1271,24 @@ def _h_lease_gone(st: State, ev: Event) -> None:
         it.lease.ttl_s = 0
         it.lease.expired_at = ev.ts
         return
+    gone_lease = it.lease
     it.lease = None
+    # A deliberate release hands the item back: RUNNING with nobody on it is what a
+    # crash looks like, and a release is not a crash (B601fa7eff9). Expiry keeps RUNNING
+    # (above) so recovery still sees it; a transfer (re-homing) is re-acquired at once;
+    # and a lease taken on an item that was ALREADY running (a crashed one, then a
+    # refused or abandoned takeover) gives it back running, crash signal intact.
+    # Kept RUNNING only for a lease that never took the item on (a refused or undone
+    # takeover) of ANOTHER holder's crashed item. A re-homing has no prior holder; a
+    # takeover that started work and is released deliberately hands the item back.
+    others_crash = (
+        gone_lease.prior_state == RUNNING
+        and bool(gone_lease.prior_holder)
+        and gone_lease.prior_holder != gone_lease.holder
+        and not gone_lease.started
+    )
+    if it.state == RUNNING and not d.get("transfer") and not others_crash:
+        it.state = OPEN
     _redisplay(it)
 
 
@@ -1358,6 +1387,8 @@ def _h_state(new_state: str):
         it.state = new_state
         if new_state == RUNNING:
             it.blocked_reason = ""
+            if it.lease is not None:
+                it.lease.started = True
         elif new_state == BLOCKED:
             it.blocked_reason = ev.data.get("reason", "")
         elif new_state == DONE:
