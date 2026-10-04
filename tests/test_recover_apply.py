@@ -3,8 +3,9 @@
 help/recovery.md said "`ddflow recover --apply` adopts it, keeping the work". It does
 not: `sweep(apply=True)` records expiry only for a lease whose tree it measured EMPTY and
 never touches one holding work. What adopts the tree is `claim --force` on the expired
-lease, which binds the existing worktree, work and all. The help now says that, and this
-pins both halves: the behaviour and the words.
+lease, which binds the existing worktree, work and all -- for an empty tree whose expiry
+`--apply` recorded as well. The help now says that, and this pins both halves: the
+behaviour and the words.
 """
 
 from __future__ import annotations
@@ -23,8 +24,9 @@ from ddflow.core.model import fold
 from ddflow.infra.log import EventLog
 
 
-def _crashed_with_work(repo: Path) -> Path:
-    """T1 claimed by an agent that wrote work and died; its 1 s lease has expired."""
+def _crashed_with_work(repo: Path, *, work: bool = True) -> Path:
+    """T1 claimed by an agent that wrote work (or nothing) and died; its 1 s lease has
+    expired. A real sleep: expiry only grows with time, so this cannot flake short."""
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
     text = re.sub(r"(?m)^(ttl_s|grace_s) = .*\n", "", cfg.read_text())
@@ -35,7 +37,8 @@ def _crashed_with_work(repo: Path) -> Path:
     out = LC.claim(repo, "T1", agent="crashed")
     assert out.exit == 0, out.reason
     wt = Path(out.data["worktree"])
-    (wt / "work.py").write_text("x = 1  # the only copy\n")
+    if work:
+        (wt / "work.py").write_text("x = 1  # the only copy\n")
     time.sleep(2.2)
     return wt
 
@@ -63,3 +66,15 @@ def test_the_recovery_help_says_what_apply_and_claim_do(repo):
     assert "`ddflow recover --apply` adopts" not in flat, "the promise the code never kept"
     assert "measured empty" in flat.lower(), flat
     assert "ddflow claim <item> --force" in flat, flat
+    assert "could not measure, is never touched" in flat, flat
+
+
+def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo):
+    """roborev job 1463 #1: the other half of what the help promises."""
+    _crashed_with_work(repo, work=False)
+    rec = RP.recover(repo, apply=True, agent="op")
+    assert [(r.item, r.salvageable) for r in rec.data["_render"]["found"]] == [("T1", False)]
+    lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
+    assert lease is None or lease.expired_at, lease
+    out = LC.claim(repo, "T1", agent="next", force=True)
+    assert out.exit == 0, out.reason
