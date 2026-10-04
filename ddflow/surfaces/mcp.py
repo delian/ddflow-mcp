@@ -1487,6 +1487,24 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "",
     },
+    "ddflow_ci": {
+        "description": "CI parity: run the pre-push checks on the branch merged with the base (run) or show what would run (status).",
+        "properties": {
+            "action": ("string", "run | status (default).", False),
+            "ref": ("string", "Commit to check (run).", False),
+            "base": ("string", "Branch merged in first (run).", False),
+            "command": ("string", "Override [ci].command (run).", False),
+        },
+        "api": lambda repo, a, agent: _api().ci_tool(
+            repo,
+            action=a.get("action", "status") or "status",
+            ref=a.get("ref", "HEAD") or "HEAD",
+            base=a.get("base", "") or "",
+            command=a.get("command", "") or "",
+            agent=agent,
+        ),
+        "payload": "",
+    },
     "ddflow_help": {
         "description": (
             "What ddflow IS, what it can do, and what the workflow is. Call this first if you have not used it before: the other descriptions explain one tool each and the connection instructions describe THIS repository; neither answers 'how am I meant to work here'. No argument: the loop from picking work to landing it, the exit codes, and every capability grouped by purpose. `topic`: workflow, import, gates, parallel, memory, recovery, config. Read-only; the pages are templates a project may override."
@@ -2838,7 +2856,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
-        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify"
+        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify ci"
     ).split()
 )
 

@@ -75,3 +75,14 @@ command = "uv run pytest tests/ -q --timeout=420 -n auto --maxprocesses 16"
 #   family = "<its pretraining family>"
 #   gates = ["critic"]
 # `ddflow reviewers detect` finds local endpoints and prints the block.
+
+# ---------------------------------------------------------------------------------
+# CI parity (D-ci-parity): a task is done only when the pre-push checks pass on the
+# branch merged with main. `unit_tests` already runs the suite, so the ci gate skips the
+# `tests` hook rather than running it twice.
+# ---------------------------------------------------------------------------------
+[ci]
+command = "SKIP=tests pre-commit run --hook-stage pre-push --all-files"
+
+[gates]
+task_pipeline = ["research", "rules", "implement", "rubber_duck", "critic", "standards", "ci", "unit_tests", "bug_hunt", "dedupe", "merge"]
