@@ -135,3 +135,12 @@ def test_without_roborev_the_typed_model_stands(repo, monkeypatch):
     )  # fmt: skip
     assert code == 0, out + err
     assert _gate(repo).evidence["model"] == "kilo"
+
+
+def test_a_null_job_list_is_no_review_not_a_crash(repo, fake_roborev, tmp_path):
+    """`roborev list --json` prints `null` for a repository it has no jobs for."""
+    head = _item(repo)
+    (tmp_path / "jobs.json").write_text("null")
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    assert "no finished review" in out + err

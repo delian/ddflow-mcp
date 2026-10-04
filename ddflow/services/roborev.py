@@ -67,6 +67,8 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
         jobs = json.loads(p.stdout or "[]")
     except ValueError:
         return None, f"roborev list returned no JSON; the reviewer of {sha[:10]} is unchecked"
+    if not isinstance(jobs, list):  # `null` for a repository roborev has no jobs for
+        jobs = []
     done = [
         j
         for j in jobs if isinstance(j, dict)
