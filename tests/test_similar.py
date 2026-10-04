@@ -427,6 +427,7 @@ def test_a_projection_error_is_not_swallowed_by_the_fallback(repo, log, cfg, mon
     for bug in (
         sqlite3.IntegrityError("a projection bug"),
         sqlite3.OperationalError("no such column: x"),
+        sqlite3.OperationalError("no such column: full_text"),  # names a word, not a disk
         FileNotFoundError(2, "No such file or directory"),
     ):
 
@@ -441,10 +442,9 @@ def test_a_projection_error_is_not_swallowed_by_the_fallback(repo, log, cfg, mon
 def test_a_full_disk_is_answered_from_the_log(repo, log, cfg, monkeypatch, capsys):
     log.append("task.added", "T1", {"title": "one thing", "body": "x"})
     st = Store(repo, cfg)
-    for env in (
-        sqlite3.OperationalError("database or disk is full"),
-        OSError(28, "No space left on device"),
-    ):
+    full = sqlite3.OperationalError("database or disk is full")
+    full.sqlite_errorcode = sqlite3.SQLITE_FULL  # what sqlite3 sets on a real one
+    for env in (full, OSError(28, "No space left on device")):
 
         def boom(*a, _env=env, **k):
             raise _env
@@ -456,8 +456,9 @@ def test_a_full_disk_is_answered_from_the_log(repo, log, cfg, monkeypatch, capsy
 
 @pytest.mark.parametrize("junk", ["schema-less", "garbage"])
 def test_ensure_rebuilds_over_an_unreadable_index(repo, log, cfg, junk):
-    """Reviewer finding, refuted: `stale()` treats an index it cannot read as stale, so
-    the read path rebuilds over it instead of raising."""
+    """An index that is not a database, or has no `meta` table, reads as stale (`stale()`
+    catches `sqlite3.DatabaseError`, the parent of NOTADB, CORRUPT and OperationalError),
+    so both the read path's first check and the one under the lock rebuild over it."""
     log.append("task.added", "T1", {"title": "one thing", "body": "x"})
     st = Store(repo, cfg)
     st.path.parent.mkdir(parents=True, exist_ok=True)
