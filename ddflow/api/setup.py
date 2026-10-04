@@ -598,21 +598,16 @@ def _companion_lines(repo: Path) -> list[str]:
     try:
         from ..services import companions as CO
 
-        word = {
-            "register": "installed, not registered",
-            "install": "not installed",
-            "check": "not checked",
-        }
-        gaps = [s for s in CO.scan(repo, probe=False) if s.companion.default and s.advice in word]
+        gaps = CO.actionable(CO.scan(repo, probe=False))
     except Exception as exc:
         return ["", f"_(companions not read: {exc}; run `ddflow companions`)_"]
     if not gaps:
         return []
     lines = ["", "## Companions not wired up", ""]
-    for st in gaps:
+    for st, word in gaps:
         c = st.companion
         lines.append(
-            f"- **{c.id}** - {c.title} [{word[st.advice]}]. Serves: "
+            f"- **{c.id}** - {c.title} [{word}]. Serves: "
             f"{', '.join(c.gates) or '-'}. Install: `{c.install}` - {c.url}"
         )
     lines += [
