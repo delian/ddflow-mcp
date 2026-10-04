@@ -1098,6 +1098,15 @@ def _merged_in(tree: Path) -> str:
     return os.environ.get(W.SQUASH_OF, "").strip()
 
 
+def _squash_pending(tree: Path) -> bool:
+    """A plain `git merge --squash` leaves SQUASH_MSG until the commit that concludes it:
+    that commit lands a branch's work as one commit, which is a promotion by another name."""
+    r = W.git(tree, "rev-parse", "--git-path", "SQUASH_MSG")
+    if not (r.ok and r.out):
+        return False
+    return (Path(r.out) if Path(r.out).is_absolute() else tree / r.out).is_file()
+
+
 def _merge_own_paths(tree: Path, paths: list[str]) -> list[str]:
     """The staged ``paths`` this commit is answerable for.
 
@@ -1162,12 +1171,13 @@ def environment_branch_commit(repo: Path, cfg: Config) -> str:
     tree = _committing_tree(repo) or Path(repo)
     r = W.git(tree, "symbolic-ref", "--quiet", "--short", "HEAD")
     branch = r.out.strip() if r.ok else ""
-    if branch not in envs or _merged_in(tree):
+    if branch not in envs or _merged_in(tree) or _squash_pending(tree):
         return ""
     staged = staged_paths(repo)
     if staged is not None and all(any(p.startswith(x) for x in SELF_MANAGED) for p in staged):
         return ""
     chain = " -> ".join(env_chain(cfg, W.default_branch(Path(repo))))
+    mode = cfg.enforce.environment_commits
     return "\n".join(
         [
             f"ddflow: refusing a commit made directly on {branch!r}, an environment branch.",
@@ -1179,8 +1189,12 @@ def environment_branch_commit(repo: Path, cfg: Config) -> str:
             "    git switch -c <work-branch>      # keep this commit there",
             "    ddflow promote status            # what is ready to promote",
             "",
-            'Policy is [enforce].environment_commits = "block" in .ddflow/config.toml;',
-            'set it to "warn" or "off" if committing here is deliberate (a hotfix on prod).',
+            f'Policy is [enforce].environment_commits = "{mode}" in .ddflow/config.toml;',
+            (
+                'set it to "warn" or "off" if committing here is deliberate (a hotfix on prod).'
+                if mode == "block"
+                else 'set it to "off" to silence this warning.'
+            ),
         ]
     )
 

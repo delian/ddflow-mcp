@@ -4111,7 +4111,7 @@ part that matters.
   and refuses a staged `ddflow render` view that the log no longer regenerates
   byte-for-byte — hand-edited, or stale (`[enforce] generated_views`). It also reports
   a doc line still naming an identifier, file or default the commit removes or renames
-  (`[enforce] stale_docs`, `doc_globs`, `doc_exclude`; warns by default). With `[flow].environments` set, a commit made directly on an environment branch is refused (`[enforce] environment_commits` = block | warn | off): work on a branch and `ddflow promote`; merge and squash commits, which is how a promotion lands, pass. It refuses a
+  (`[enforce] stale_docs`, `doc_globs`, `doc_exclude`; warns by default). With `[flow].environments` set, a commit made directly on an environment branch is refused (`[enforce] environment_commits` = block | warn | off): work on a branch and promote it (`ddflow promote status`); merge and squash commits, which is how a promotion lands, pass. It refuses a
   commit on a branch whose base changed a rulebook (AGENTS.md, CLAUDE.md, each agent's
   native rules file, the driver docs) since it forked (`[enforce] stale_rules`), and warns
   past `max_behind` commits behind (`[enforce] behind`); the commit concluding

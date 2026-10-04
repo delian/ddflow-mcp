@@ -34,7 +34,9 @@ def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProc
 def _setup(repo: Path, extra: str = "") -> Path:
     run_cli(repo, "adopt", "--agents", "claude")
     (repo / ".ddflow" / "config.toml").write_text(
-        '[enforce]\ncommit_without_lease = "off"\n' + extra + '\n[flow]\nenvironments = ["production"]\n'
+        '[enforce]\ncommit_without_lease = "off"\n'
+        + extra
+        + '\n[flow]\nenvironments = ["production"]\n'
     )
     (repo / "a.txt").write_text("1\n")
     _git(repo, "add", "-A")
@@ -98,3 +100,24 @@ def test_check_commit_unit(repo):
     _git(repo, "add", "a.txt")
     code, msg = E.check_commit(repo)
     assert code == 1 and "environment branch" in msg
+
+
+def test_a_squash_merge_commit_is_a_promotion_and_passes(repo):
+    _setup(repo)
+    _git(repo, "switch", "-q", "-c", "work")
+    (repo / "a.txt").write_text("work\n")
+    _git(repo, "add", "a.txt")
+    _git(repo, "commit", "-qm", "work", "--no-verify")
+    _git(repo, "switch", "-q", "production")
+    _git(repo, "merge", "-q", "--squash", "work")
+    r = _git(repo, "commit", "-qm", "promote work (squash)", check=False)
+    assert r.returncode == 0, r.stderr
+
+
+def test_the_warn_message_names_the_actual_mode_not_block(repo):
+    _setup(repo, 'environment_commits = "warn"\n')
+    _git(repo, "switch", "-q", "production")
+    (repo / "a.txt").write_text("hotfix\n")
+    _git(repo, "add", "a.txt")
+    code, msg = E.check_commit(repo)
+    assert code == 0 and 'environment_commits = "warn"' in msg and '"block"' not in msg
