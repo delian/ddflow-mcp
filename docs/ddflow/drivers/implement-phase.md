@@ -229,6 +229,12 @@ makes `complete` refuse and `off` silences it.
 Never `git add -A` — a parallel agent's unrelated file staged into your commit is very
 hard to notice and very hard to undo.
 
+**Check a completion you doubt** (yours, or one you inherit): `ddflow verify <id>` re-derives
+what `complete` claimed from the log and git; `ddflow verify --all` ranks every completion by
+suspicion. A completion that FAILS goes back with `ddflow verify <id> --reopen`; a task that is
+still open but whose work landed is named by `ddflow verify <id>`. `ddflow help verify` has the
+rest.
+
 ### 2e. Capture what you learned
 
 Before you file anything -- a bug, task, lesson, decision, research or memory -- run

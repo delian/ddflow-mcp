@@ -35,6 +35,13 @@ def _next_without_plan(out, c: Ctx) -> int:
     return out.exit
 
 
+def _print_synced(synced: dict) -> None:
+    """What the `pr sync` that `next` ran reported, each kind under its own label."""
+    for label, key in (("", "changes"), (" REFUSED", "refused"), (" UNAVAILABLE", "unavailable")):
+        for line in synced.get(key, []):
+            print(f"pr sync{label}: {line}", file=sys.stderr)
+
+
 def cmd_next(a, c: Ctx) -> int:
     """Offer the next actionable item(s). Exit 2 when nothing is actionable, 1 when
     `--phase` names no item."""
@@ -52,12 +59,7 @@ def cmd_next(a, c: Ctx) -> int:
         print(f"INTERRUPTED: {note}", file=sys.stderr)
     for pid in out.data["promoted"]:
         print(f"auto_promote: filed {pid}", file=sys.stderr)
-    for change in out.data["synced"].get("changes", []):
-        print(f"pr sync: {change}", file=sys.stderr)
-    for refusal in out.data["synced"].get("refused", []):
-        print(f"pr sync REFUSED: {refusal}", file=sys.stderr)
-    for gap in out.data["synced"].get("unavailable", []):
-        print(f"pr sync UNAVAILABLE: {gap}", file=sys.stderr)
+    _print_synced(out.data["synced"])
     if p.review:
         print(
             f"In review ({len(p.review)}): {', '.join(i.id for i in p.review)} — "

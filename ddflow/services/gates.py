@@ -196,6 +196,22 @@ DEFAULT_GATES: dict[str, GateDef] = {
             "UNAVAILABLE and must be recorded as such — never as a pass."
         ),
     ),
+    "verify": GateDef(
+        id="verify",
+        title="Completion verification",
+        evidence=True,
+        reviewer="different_family",
+        applies_to="task",
+        description="An independent model judges whether a DONE task's evidence meets its requirement.",
+        prompt=(
+            "An independent model judges whether what landed meets the requirement. "
+            "ddflow performs it: `ddflow verify <id> --judge` builds the evidence pack and "
+            "sends it, with the landed commit, to the configured cross-family reviewer. "
+            "Optional, never part of the default pipeline: the second opinion after the "
+            "mechanical `ddflow verify <id>`. A finding is a requirement clause the evidence "
+            "does not show as met; unavailable is recorded as unavailable, never as a pass."
+        ),
+    ),
     "standards": GateDef(
         id="standards",
         title="Coding standards",

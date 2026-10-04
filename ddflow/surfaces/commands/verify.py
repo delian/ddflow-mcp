@@ -10,8 +10,8 @@ from __future__ import annotations
 import json
 import sys
 
-from ...api.verify import verify, verify_sweep
-from ..context import FAIL, NOTHING, Ctx
+from ...api.verify import judge, pack, verify, verify_sweep
+from ..context import FAIL, NOTHING, REFUSED, Ctx
 
 _MARK = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "unknown": "??  "}
 
@@ -28,20 +28,47 @@ def add_verify_parser(sub) -> None:
     vf.add_argument(
         "--file-bugs", action="store_true", help="file a bug for each completion that does not hold"
     )
+    vf.add_argument(
+        "--reopen", action="store_true", help="send a task whose completion fails back to the queue"
+    )
+    vf.add_argument("--reason", default="", help="with --reopen: why (default: the failed claims)")
+    vf.add_argument(
+        "--force", action="store_true", help="with --reopen: even when the completion holds"
+    )
+    vf.add_argument(
+        "--pack", action="store_true", help="print the evidence pack for an independent verifier"
+    )
+    vf.add_argument(
+        "--judge",
+        action="store_true",
+        help="have the configured cross-family reviewer judge it (gate: verify)",
+    )
     vf.set_defaults(fn=cmd_verify)
 
 
 def _one(a, c: Ctx) -> int:
-    out = verify(c.repo, a.id)
+    out = verify(c.repo, a.id, reopen=a.reopen, reason=a.reason, force=a.force)
     if out.exit == FAIL and not out.data.get("claims"):
         print(out.reason, file=sys.stderr)
         return FAIL
     if c.json:
-        print(json.dumps(out.body(("item", "verdict", "claims")), indent=2, default=str))
+        keys = (
+            "item",
+            "verdict",
+            "claims",
+            *(k for k in ("reopened", "reason_given", "appears_landed") if k in out.data),
+        )
+        print(json.dumps(out.body(keys), indent=2, default=str))
         return out.exit
     if out.exit == NOTHING:
         print(out.reason, file=sys.stderr)
         return NOTHING
+    if out.exit == REFUSED:
+        print(out.reason, file=sys.stderr)
+        return REFUSED
+    if out.data.get("reopened"):
+        print(f"{out.data['item']}: reopened -- {out.data['reason_given']}")
+        return out.exit
     print(f"{out.data['item']}: {out.data['verdict']}")
     for cl in out.data["claims"]:
         print(f"  [{_MARK[cl['status']]}] {cl['id']:<15} {cl['detail']}")
@@ -72,7 +99,41 @@ def _sweep(a, c: Ctx) -> int:
     return out.exit
 
 
+def _pack(a, c: Ctx) -> int:
+    out = pack(c.repo, a.id)
+    if out.exit != 0:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    print(json.dumps(out.body(("id", "pack")), indent=2) if c.json else out.data["pack"])
+    return out.exit
+
+
+def _judge(a, c: Ctx) -> int:
+    out = judge(c.repo, a.id, on_progress=None if c.json else print)
+    if c.json:
+        print(json.dumps(out.body(""), indent=2, default=str))
+    elif out.exit != 0 or not out.data.get("text"):
+        print(out.reason or out.data.get("text", ""), file=sys.stderr if out.exit else sys.stdout)
+    return out.exit
+
+
 def cmd_verify(a, c: Ctx) -> int:
+    if a.pack or a.judge:
+        if (
+            not a.id
+            or a.all
+            or a.phase
+            or a.file_bugs
+            or a.reopen
+            or a.limit is not None
+            or (a.pack and a.judge)
+        ):
+            print(
+                "--pack or --judge (one of them) takes one task id and nothing else",
+                file=sys.stderr,
+            )
+            return FAIL
+        return _pack(a, c) if a.pack else _judge(a, c)
     if a.id:
         if a.file_bugs or a.all or a.phase or a.limit is not None:
             print(
@@ -81,6 +142,9 @@ def cmd_verify(a, c: Ctx) -> int:
             )
             return FAIL
         return _one(a, c)
+    if a.reopen or a.reason or a.force:
+        print("--reopen, --reason and --force need a task id", file=sys.stderr)
+        return FAIL
     if a.all or a.phase:
         return _sweep(a, c)
     print("verify what? give a task id, or --all / --phase P for a sweep", file=sys.stderr)

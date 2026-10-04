@@ -362,6 +362,8 @@ TEXT_BODIED = {
 
 WRITES_NOT_COMPARABLE = {
     "ddflow_promote_add",
+    # Reads or WRITES the forge (a reply, a resolve); pinned by tests/test_review_threads.py.
+    "ddflow_pr_threads",
     "ddflow_promote_deployed",  # appends a deploy record each call; pinned by tests/test_environments.py
     "ddflow_flow_choose",
     "ddflow_update",

@@ -245,3 +245,30 @@ def test_pr_mode_carries_the_changelog_in_the_release_request(gitflow_pr):
         ).returncode
         != 0
     )
+
+
+def test_a_bump_that_fails_after_the_changelog_commit_says_the_changelog_commit_stays(proj):
+    """The changelog commit cannot be rolled back (the branch may be checked out elsewhere),
+    so a failed bump must name it and say how to remove it instead of claiming nothing was done."""
+    repo = proj
+    (repo / "pyproject.toml").write_text('[project]\nversion = "1.0.0"\n')
+    _git(repo, "add", "pyproject.toml")
+    _git(repo, "commit", "-qm", "chore: pyproject")
+    with (repo / ".ddflow" / "config.toml").open("a") as fh:
+        fh.write("\n[flow.version_files]\n'pyproject.toml' = '^version = \"([^\"]*)\"$'\n")
+    _git(repo, "add", ".ddflow")
+    _git(repo, "commit", "-qm", "chore: version files")
+    hook = repo / ".git" / "hooks" / "pre-commit"
+    hook.write_text(
+        "#!/bin/sh\ngit diff --cached --name-only | grep -q '^pyproject.toml$' && exit 1\nexit 0\n"
+    )
+    hook.chmod(0o755)
+    before = _git(repo, "rev-parse", "HEAD")
+    code, out, err = _cut(repo, "--changelog")
+    assert code != 0, (out, err)
+    landed = _git(repo, "rev-parse", "HEAD")
+    assert landed != before, "the changelog commit was made"
+    text = out + err
+    assert landed[:10] in text and "git revert" in text and "stays" in text, text
+    assert 'version = "1.0.0"' in (repo / "pyproject.toml").read_text(), "the bump rolled back"
+    assert _git(repo, "tag", "-l", "v1.1.0") == ""

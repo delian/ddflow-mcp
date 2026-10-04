@@ -96,6 +96,39 @@ class PRInfo:
         }
 
 
+@dataclass
+class Thread:
+    """One review thread: a conversation anchored to a line, resolved or not (B176).
+
+    The forge's own id is what `reply` and `resolve` take, so it is carried verbatim.
+    """
+
+    id: str
+    path: str = ""
+    line: int = 0
+    resolved: bool = False
+    outdated: bool = False
+    author: str = ""
+    body: str = ""  # the opening comment, clipped
+    replies: int = 0
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "path": self.path,
+            "line": self.line,
+            "resolved": self.resolved,
+            "outdated": self.outdated,
+            "author": self.author,
+            "body": self.body,
+            "replies": self.replies,
+        }
+
+
+#: One thread's opening comment is read for what it asks, not archived.
+THREAD_BODY_MAX = 600
+
+
 def _run(repo: Path, argv: list[str], *, timeout: int = 120) -> Any:
     if shutil.which(argv[0]) is None:
         raise ForgeUnavailable(
@@ -186,6 +219,15 @@ class Forge:
     def set_base(self, number: int, base: str) -> None:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def threads(self, number: int) -> list[Thread]:  # pragma: no cover - interface
+        raise ForgeError(f"{self.name} review threads are not supported")
+
+    def reply(self, number: int, thread_id: str, body: str) -> None:  # pragma: no cover
+        raise ForgeError(f"{self.name} review threads are not supported")
+
+    def resolve(self, number: int, thread_id: str) -> None:  # pragma: no cover - interface
+        raise ForgeError(f"{self.name} review threads are not supported")
+
 
 # -- GitHub ---------------------------------------------------------------------------
 
@@ -227,8 +269,76 @@ _GH_QUEUE_QUERY = (
 )
 
 
+_GH_THREADS_QUERY = (
+    "query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name)"
+    "{pullRequest(number:$number){reviewThreads(first:100){nodes{id isResolved isOutdated "
+    "path line comments(first:50){totalCount nodes{author{login} body}}}}}}}"
+)
+_GH_REPLY_MUTATION = (
+    "mutation($thread:ID!,$body:String!){addPullRequestReviewThreadReply(input:"
+    "{pullRequestReviewThreadId:$thread,body:$body}){comment{id}}}"
+)
+_GH_RESOLVE_MUTATION = (
+    "mutation($thread:ID!){resolveReviewThread(input:{threadId:$thread}){thread{id isResolved}}}"
+)
+
+
 class GitHub(Forge):
     name = GITHUB
+
+    def _graphql(self, query: str, what: str, *fields: tuple[str, str]) -> Any:
+        argv = ["gh", "api", "graphql", "-f", f"query={query}"]
+        for key, value in fields:
+            argv += ["-f", f"{key}={value}"]
+        data = _json(_run(self.repo, argv), what)
+        if isinstance(data, dict) and data.get("errors"):
+            errors = data["errors"]
+            raise ForgeError(f"{what}: {str(errors[0].get('message', errors))[:300]}")
+        return (data or {}).get("data") or {}
+
+    def threads(self, number: int) -> list[Thread]:
+        argv = ["gh", "api", "graphql", "-F", "owner={owner}", "-F", "name={repo}"]
+        argv += ["-F", f"number={number}", "-f", f"query={_GH_THREADS_QUERY}"]
+        data = _json(_run(self.repo, argv), f"review threads of #{number}")
+        if isinstance(data, dict) and data.get("errors"):
+            raise ForgeError(f"review threads of #{number}: {str(data['errors'])[:300]}")
+        try:
+            nodes = data["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+        except (KeyError, TypeError) as exc:
+            raise ForgeUnavailable(f"review threads of #{number}: unexpected answer") from exc
+        out = []
+        for n in nodes or []:
+            comments = (n.get("comments") or {}).get("nodes") or []
+            first = comments[0] if comments else {}
+            total = int((n.get("comments") or {}).get("totalCount") or len(comments))
+            out.append(
+                Thread(
+                    id=n.get("id", ""),
+                    path=n.get("path") or "",
+                    line=int(n.get("line") or 0),
+                    resolved=bool(n.get("isResolved")),
+                    outdated=bool(n.get("isOutdated")),
+                    author=(first.get("author") or {}).get("login", ""),
+                    body=(first.get("body") or "").strip()[:THREAD_BODY_MAX],
+                    replies=max(0, total - 1),
+                )
+            )
+        return out
+
+    def reply(self, number: int, thread_id: str, body: str) -> None:
+        self._graphql(
+            _GH_REPLY_MUTATION,
+            f"reply on thread {thread_id} of #{number}",
+            ("thread", thread_id),
+            ("body", body),
+        )
+
+    def resolve(self, number: int, thread_id: str) -> None:
+        self._graphql(
+            _GH_RESOLVE_MUTATION,
+            f"resolve thread {thread_id} of #{number}",
+            ("thread", thread_id),
+        )
 
     def _queue(self, number: int) -> tuple[str, int, str] | None:
         """(``queued`` | ``""``, position, state), or None when the queue could not be
@@ -509,6 +619,56 @@ class GitLab(Forge):
             args += ["-f", "auto_merge=true", "-f", "merge_when_pipeline_succeeds=true"]
         d = self._api(*args, what=f"merge !{number}")
         return (d or {}).get("web_url", "") if isinstance(d, dict) else ""
+
+    def threads(self, number: int) -> list[Thread]:
+        rows = self._api(
+            "-X",
+            "GET",
+            f"projects/:id/merge_requests/{number}/discussions",
+            "-f",
+            "per_page=100",
+            what=f"discussions of !{number}",
+        )
+        out = []
+        for d in rows or []:
+            notes = [n for n in d.get("notes") or [] if not n.get("system")]
+            if not notes or not any(n.get("resolvable") for n in notes):
+                continue  # a plain comment is not a thread that can be resolved
+            first = notes[0]
+            pos = first.get("position") or {}
+            resolvable = [n for n in notes if n.get("resolvable")]
+            out.append(
+                Thread(
+                    id=str(d.get("id", "")),
+                    path=pos.get("new_path") or pos.get("old_path") or "",
+                    line=int(pos.get("new_line") or pos.get("old_line") or 0),
+                    resolved=all(n.get("resolved") for n in resolvable),
+                    author=(first.get("author") or {}).get("username", ""),
+                    body=(first.get("body") or "").strip()[:THREAD_BODY_MAX],
+                    replies=len(notes) - 1,
+                )
+            )
+        return out
+
+    def reply(self, number: int, thread_id: str, body: str) -> None:
+        self._api(
+            "-X",
+            "POST",
+            f"projects/:id/merge_requests/{number}/discussions/{thread_id}/notes",
+            "-f",
+            f"body={body}",
+            what=f"reply on discussion {thread_id} of !{number}",
+        )
+
+    def resolve(self, number: int, thread_id: str) -> None:
+        self._api(
+            "-X",
+            "PUT",
+            f"projects/:id/merge_requests/{number}/discussions/{thread_id}",
+            "-f",
+            "resolved=true",
+            what=f"resolve discussion {thread_id} of !{number}",
+        )
 
     def set_base(self, number: int, base: str) -> None:
         self._api(
