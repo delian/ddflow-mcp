@@ -514,7 +514,8 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         # Reviving a LAPSED lease is a re-claim: expiry freed its files, and a live lease
         # granted on them since stands, as it does against `claim` (B0cb404c94e). Judged
         # on the globs the lease held: paths the item gained while it lapsed are the
-        # heartbeat catch-up's, which renews without the ones someone holds now.
+        # heartbeat catch-up's, which keeps the lease on its held globs and says why
+        # when any new one is taken (`globs_withheld`).
         now = time.time()
         lease = it.lease
         if lease is None or (not lease.expired_at and not lease.expired(now)):
