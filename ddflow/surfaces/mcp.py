@@ -1460,27 +1460,30 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
     },
     "ddflow_verify": {
-        "description": "Re-check a done task's claims (landed, files, tests, gates); fails if one does not hold. No id: sweep all done tasks, worst first.",
+        "description": "Re-check a done task's claims; fails if one does not hold. No id: sweep all, worst first.",
         "properties": {
             "id": ("string", "Task id; omit to sweep.", False),
             "phase": ("string", "Sweep only this phase.", False),
             "limit": ("integer", "How many of the worst to list (20).", False),
             "file_bugs": ("boolean", "File a bug per failing completion.", False),
+            "reopen": ("boolean", "Reopen a failing completion.", False),
+            "reason": ("string", "Why (reopen).", False),
+            "force": ("boolean", "Reopen even if it holds.", False),
+            "pack": ("boolean", "Evidence pack for a verifier.", False),
+            "judge": ("boolean", "Cross-family reviewer judges it.", False),
         },
-        "api": lambda repo, a, agent: (
-            (
-                _api().refuse_sweep_args()
-                if (a.get("phase") or a.get("limit") is not None or a.get("file_bugs"))
-                else _api().verify_item(repo, a["id"], agent=agent)
-            )
-            if a.get("id")
-            else _api().verify_sweep(
-                repo,
-                phase=a.get("phase", "") or "",
-                limit=int(a["limit"]) if a.get("limit") is not None else 20,
-                file_bugs=bool(a.get("file_bugs")),
-                agent=agent,
-            )
+        "api": lambda repo, a, agent: _api().verify_tool(
+            repo,
+            id=a.get("id", "") or "",
+            phase=a.get("phase", "") or "",
+            limit=int(a["limit"]) if a.get("limit") is not None else None,
+            file_bugs=bool(a.get("file_bugs")),
+            reopen=bool(a.get("reopen")),
+            reason=a.get("reason", "") or "",
+            force=bool(a.get("force")),
+            pack_=bool(a.get("pack")),
+            judge_=bool(a.get("judge")),
+            agent=agent,
         ),
         "payload": "",
     },
