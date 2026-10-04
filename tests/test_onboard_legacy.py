@@ -148,6 +148,7 @@ def test_the_generated_test_goes_red_when_a_byte_changes(repo):
     (repo / "todo.md").write_text("the old backlog\nand one more line\n")
     with pytest.raises(AssertionError, match=r"todo\.md"):
         namespace["test_frozen_imports_are_unchanged"]()
+    assert L.check_frozen(repo) == ["todo.md"], "the generated test and check_frozen must agree"
 
 
 def test_the_generated_test_lands_in_tests_when_that_is_where_tests_live(repo):
