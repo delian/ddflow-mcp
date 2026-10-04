@@ -341,13 +341,14 @@ def cmd_bug(a, c: Ctx) -> int:
             print(out.reason, file=sys.stderr)
             return out.exit
         if out.exit == NOTHING:
-            c.out(out.reason, out.body(("filed", "linked", "tasks", "dry_run")))
+            c.out(out.reason, out.body(("filed", "linked", "tasks", "links", "dry_run")))
             return NOTHING
         would = "would file" if a.dry_run else "filed"
         lines = [f"{would} {len(out.data['filed'])} fix task(s), linked {len(out.data['linked'])}"]
         lines += [f"  {b} -> {t}" for b, t in out.data["tasks"].items()]
-        lines += [f"  {b} -> its open fix task" for b in out.data["linked"]]
-        c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "dry_run")))
+        links = out.data["links"]
+        lines += [f"  {b} -> {links[b]['task']} ({links[b]['state']})" for b in out.data["linked"]]
+        c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "links", "dry_run")))
         return OK
     if a.bug_cmd == "invalid":
         out = A.bug_invalid(

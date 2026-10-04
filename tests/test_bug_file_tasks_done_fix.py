@@ -135,3 +135,48 @@ def test_the_successor_closes_the_bug_on_completion(repo):
     out = LC.complete(repo, "fix-Bx-2", model="claude-opus-5",
                       regression_test="tests/test_p_regress.py::test_last_line", agent="a")  # fmt: skip
     assert out.exit == 0 and out.data["bugs_closed"] == ["Bx"], out.data
+
+
+def test_the_cli_names_the_task_a_bug_is_linked_to_and_its_state(repo):
+    """B70d80555a4: every linked bug was printed as '-> its open fix task', a finished
+    `fix-<bug>` included."""
+    log = seed(repo)
+    log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
+    log.append("item.completed", "fix-Brep", {"sha": "abc"})
+    log.append("item.completed", "fix-Bx", {"sha": "abc"})
+    for dry in (["--dry-run"], []):
+        code, out, err = run_cli(repo, "bug", "file-tasks", *dry, agent="a")
+        assert code == 0, out + err
+        assert "Brep -> fix-Brep (done)" in out, out
+        assert "its open fix task" not in out, out
+    st = state(repo)
+    assert st.bugs["Brep"].fix_task == "fix-Brep"
+
+
+def test_the_links_name_an_open_fix_task_too(repo):
+    """roborev 1508 #3: a report against an OPEN fix task links to it, and says open."""
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "fix-Bx",
+               {"parent": "P1", "title": "f", "fixes": ["Bx"], "tags": ["bugfix"]})  # fmt: skip
+    log.append("bug.found", "Bx", {"summary": "s", "item": "", "fix_task": "fix-Bx"})
+    log.append("bug.found", "Brep", {"summary": "r", "item": "fix-Bx"})  # no link yet
+    out = K.bug_file_tasks(repo, dry_run=True, agent="a")
+    assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
+    out = K.bug_file_tasks(repo, agent="a")
+    assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
+
+
+def test_json_carries_the_links(repo):
+    """rubber_duck / critic / roborev 1508: the task and its state reach --json (and MCP,
+    which `test_api_layer` holds equal to it), not only the text."""
+    import json
+
+    log = seed(repo)
+    log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
+    log.append("item.completed", "fix-Brep", {"sha": "abc"})
+    log.append("item.completed", "fix-Bx", {"sha": "abc"})
+    code, out, err = run_cli(repo, "--json", "bug", "file-tasks", agent="a")
+    assert code == 0, out + err
+    assert json.loads(out)["links"] == {"Brep": {"task": "fix-Brep", "state": "done"}}, out
