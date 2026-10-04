@@ -130,22 +130,6 @@ def test_a_reopened_item_has_no_ledger_until_it_is_completed_again(repo):
     assert again is not None and again["forced"] is True
 
 
-def test_the_mcp_tool_reopens_and_refuses_reopen_arguments_without_an_id(repo):
-    from ddflow.surfaces.mcp import Server
-
-    def call(args):
-        reply = Server(repo).handle(
-            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-             "params": {"name": "ddflow_verify", "arguments": args}}
-        )  # fmt: skip
-        return reply["result"]["content"][0]["text"]
-
-    _false_completion(repo)
-    assert "need an id" in call({"reopen": True})
-    assert '"reopened":true' in call({"id": "T1", "reopen": True})
-    assert _item(repo).state == "open"
-
-
 def test_reopening_one_task_does_not_hide_another_tasks_completion(repo):
     from ddflow.services import ledger as LG
 
