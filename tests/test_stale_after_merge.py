@@ -307,7 +307,6 @@ def test_without_filemode_a_symlink_replaced_by_a_file_is_a_regular_file(repo):
     _commit_all_matches(repo)
 
 
-@pytest.mark.xfail(strict=True, reason="bug Bb47a48b173: false stale note when the tree is kept")
 def test_an_untracked_file_left_in_a_kept_tree_does_not_make_the_evidence_stale(repo):
     """Salvaged probe (/tmp/rev74e): a scratch file that never landed is not a change."""
     assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == OK
@@ -324,3 +323,21 @@ def test_an_untracked_file_left_in_a_kept_tree_does_not_make_the_evidence_stale(
     assert code == OK, out + err
     assert NOTE not in out + err, out + err
     assert tree.exists()  # kept, as configured
+
+
+def test_work_committed_in_a_kept_tree_after_the_merge_is_still_reported_stale(repo):
+    """The other side of Bb47a48b173: only untracked scratch is forgiven, not new work."""
+    assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == OK
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    code, out, err = run_cli(repo, "merge", "T1")
+    assert code == OK, out + err
+    (tree / "a.py").write_text("a = 2\n")  # changed after landing, never landed
+    _git(tree, "commit", "-qam", "after the merge")
+    pass_pipeline(repo, "T1", omit=("unit_tests", "merge"))
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
+    assert code == OK, out + err
+    assert NOTE in out + err, out + err
