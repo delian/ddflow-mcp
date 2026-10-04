@@ -53,7 +53,7 @@ REBUILD_LOCK_TIMEOUT_S = 120.0
 #: A rebuild's temp index left behind is removed only once untouched this long: a live
 #: rebuild (an older lock-less ddflow's, or one the lock did not serialise) may still be
 #: building into it.
-LEGACY_TEMP_MAX_AGE_S = 3600.0
+REBUILD_TEMP_MAX_AGE_S = 3600.0
 #: The OSError numbers and SQLite result codes that mean "the machine said no", not "the
 #: projection is wrong" -- the only failures `Store.ensure` answers from the log. EPERM is
 #: left out on purpose: the index is written only where `.ddflow/` already is, and there
@@ -261,11 +261,12 @@ class Store:
         # fixed `index.rebuilding*` an older, lock-less ddflow used -- go only once they
         # are older than any rebuild should take. Age, not the lock, decides: the lock is
         # advisory (an older ddflow never takes it, and a filesystem may not honour it),
-        # and a live rebuild's temp must never be unlinked under it.
+        # and a live rebuild's temp must never be unlinked under it. Each file is aged by
+        # its own mtime; a rebuild runs at ~12k events/s, so the hour is far beyond one.
         for pattern in (f"{self.path.name}-rebuilding*", f"{self.path.stem}.rebuilding*"):
             for old in self.path.parent.glob(pattern):
                 with contextlib.suppress(OSError):
-                    if time.time() - old.stat().st_mtime > LEGACY_TEMP_MAX_AGE_S:
+                    if time.time() - old.stat().st_mtime > REBUILD_TEMP_MAX_AGE_S:
                         old.unlink()
         # A name of its own all the same: the lock is advisory, and a temp file that
         # nothing else can name cannot be unlinked or published by anything else.
