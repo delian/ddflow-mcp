@@ -1490,6 +1490,17 @@ def complete(
     )
     L.release(log, item, note="completed")
     extra: dict[str, Any] = {"bugs_refiled": refiled}
+    from ..core.model import fold
+    from ..services import progress_line as PL
+
+    # The item is complete and released by now: a report that cannot be built must
+    # never make that look like a failed completion.
+    try:
+        progress = PL.report(fold(log.read_all(), strict=False), cfg, item)
+    except Exception as e:  # informational only, see above
+        progress = f"(progress report unavailable: {type(e).__name__}: {e})"
+    if progress:
+        extra["progress"] = progress
     if it.kind == "phase":  # [export].refresh = phase_close
         from ..services.export import refresh as RF
 

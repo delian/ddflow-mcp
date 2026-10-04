@@ -3,11 +3,11 @@
 ddflow runs the same code in a container as outside it, but four assumptions that are
 safe on a host are wrong in a container, and each fails quietly:
 
-1. **Worktrees default to a SIBLING of the repo** (`../.ddflow-worktrees`), which is
-   deliberate on a host: it keeps sibling worktrees out of the agent's own file globs
-   and test collection. Inside a container only the repo is bind-mounted, so a sibling
-   path lands on the ephemeral layer and is destroyed when the container exits — taking
-   an agent's uncommitted work with it. This is the one that loses data.
+1. **A worktree root OUTSIDE the repo** (`../...`, the default before D-worktree-home)
+   lands, inside a container where only the repo is bind-mounted, on the ephemeral
+   layer and is destroyed when the container exits — taking an agent's uncommitted work
+   with it. This is the one that loses data. The default is now `.ddflow/worktrees`,
+   inside the repo, so only a root an operator set outside is relocated.
 2. **`127.0.0.1` means the container**, not the host, so a locally-served model that
    `ddflow reviewers detect` found on the host is unreachable from inside.
 3. **Absolute paths are container paths.** Handled at the source — worktree paths are
@@ -60,7 +60,7 @@ def default_worktree_root(configured: str) -> str:
         return configured
     if not configured.startswith(".."):
         return configured
-    return ".ddflow-worktrees"
+    return ".ddflow/worktrees"
 
 
 def rewrite_localhost(url: str) -> str:
@@ -101,7 +101,7 @@ def warnings(repo: Path, cfg, reviewer_urls: ReviewerUrls | None = None) -> list
         out.append(
             f"worktree.root {root!r} resolves OUTSIDE the mounted repository, so "
             f"worktrees would be written to the container's ephemeral layer and "
-            f"destroyed on exit. ddflow is relocating them to '.ddflow-worktrees' "
+            f"destroyed on exit. ddflow is relocating them to '.ddflow/worktrees' "
             f"inside the repo; set it explicitly to silence this."
         )
     for name, url in reviewer_urls or []:

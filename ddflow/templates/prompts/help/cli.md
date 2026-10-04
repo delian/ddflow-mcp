@@ -16,9 +16,9 @@ Ready (1 ready, 0 running, 0 blocked):
   P1.T1  Tax rules
 
 $ ddflow claim P1.T1                           # exit 3 = refused, with the reason
-leased P1.T1 · worktree .ddflow-worktrees/P1.T1 · branch ddflow/P1.T1
+leased P1.T1 · worktree .ddflow/worktrees/P1.T1 · branch ddflow/P1.T1
 
-$ cd .ddflow-worktrees/P1.T1
+$ cd .ddflow/worktrees/P1.T1
    ... edit, commit ...
 
 $ ddflow gate status P1.T1                     # what the pipeline wants next
