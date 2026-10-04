@@ -121,3 +121,4 @@ def test_the_warn_message_names_the_actual_mode_not_block(repo):
     _git(repo, "add", "a.txt")
     code, msg = E.check_commit(repo)
     assert code == 0 and 'environment_commits = "warn"' in msg and '"block"' not in msg
+    assert "refusing" not in msg and "warning: a commit made directly" in msg
