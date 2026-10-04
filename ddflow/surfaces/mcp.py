@@ -3147,14 +3147,15 @@ def _outcome_result(
         # An add that went onto an existing record, or a dry run: what the check decided
         # IS the answer, and the tool's usual `{"id": ...}` projection would drop it.
         payload_key = ""
-    if (
-        isinstance(payload_key, tuple)
-        and "export_refresh" in out.data
-        and "export_refresh" not in payload_key
-    ):
-        # merge / complete carry what the optional document refresh did (B-export-refresh),
-        # as the CLI's --json does; absent when nothing was refreshed, so the shape is unchanged.
-        payload_key = (*payload_key, "export_refresh")
+    if isinstance(payload_key, tuple):
+        # merge / complete carry their optional extras as the CLI's --json does: what the
+        # document refresh did (B-export-refresh), the base's health after a merge
+        # ([ci].on_merge) and the progress block after a completion. Absent when nothing
+        # was produced, so the shape is unchanged.
+        payload_key = (
+            *payload_key,
+            *(k for k in _OPTIONAL_KEYS if k in out.data and k not in payload_key),
+        )
     if as_text:
         body = out.body(payload_key)
         if not isinstance(body, str):
@@ -3808,6 +3809,10 @@ def _test_gates(repo: Path) -> list[str]:
         and g.is_command_gate
         and any(w in g.id for w in ("test", "e2e", "smoke", "integration", "ui"))
     )
+
+
+#: Keys a tool's payload carries only when the operation produced them.
+_OPTIONAL_KEYS = ("export_refresh", "ci", "progress")
 
 
 def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
