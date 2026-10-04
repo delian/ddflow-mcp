@@ -2286,6 +2286,15 @@ commit (main, another branch, an unknown sha, or a symbolic ref such as `HEAD`, 
 a different commit in each checkout) is refused with exit 3. An item with no branch to
 compare against records the sha with a note.
 
+**The reviewer recorded is the one roborev ran.** roborev runs its `backup_agent` when the
+requested agent fails, so a job enqueued as `agent: kilo` can be reviewed by `claude-code`
+(`roborev show N`: "by claude-code"). With `--reviewed-sha` on a reviewer gate, ddflow asks
+`roborev list --json` for the newest finished review of that commit (or of a range ending
+at it) and records the model roborev ran -- else its agent -- as the reviewer, with the
+job under `evidence.roborev`, whatever `--model` said; a same-family reviewer is then
+judged as one at `complete`, as `--reviewer-model` would be. Without roborev on PATH, or
+with no finished review of the sha, the typed model stands, with a note.
+
 `ddflow review` of an item reviews the branch's commits plus tracked edits in its worktree.
 Untracked files are *not* sent to the reviewer; they are listed in the output and in the
 evidence's `diff_source` as "untracked, not reviewed" — commit a file to have it reviewed.
