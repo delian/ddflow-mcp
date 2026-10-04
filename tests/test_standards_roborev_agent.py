@@ -238,3 +238,15 @@ def test_a_job_that_names_no_agent_is_unverified(repo, fake_roborev):
     assert ev["model"] == "kilo" and ev["roborev"] == {
         "verified": False, "why": "roborev job 7 names no agent"
     }, ev  # fmt: skip
+
+
+def test_an_unanswered_lookup_still_records_a_reason(tmp_path, monkeypatch):
+    """critic round 4: whatever `review_of` returns, `why` is a string."""
+    from ddflow.api import gates as AG
+    from ddflow.services import roborev as RR
+
+    monkeypatch.setattr(RR, "review_of", lambda where, sha: (None, ""))
+    ev = {"reviewed_sha": "a" * 40}
+    by, note = AG._roborev_reviewer(tmp_path, None, "standards", ev, "kilo", skip=False)
+    assert by == "kilo" and ev["roborev"] == {"verified": False, "why": "roborev gave no answer"}
+    assert note == "NOTE: roborev gave no answer."

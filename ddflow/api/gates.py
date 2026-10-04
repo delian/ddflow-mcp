@@ -542,7 +542,11 @@ def _roborev_reviewer(
     rv, note = RR.review_of(where, str(ev["reviewed_sha"]))
     if rv is None or not rv.reviewer:
         # Nobody vouched for the typed model: said in the record, not only on screen.
-        why = f"roborev job {rv.job} names no agent" if rv is not None else note
+        why = (
+            f"roborev job {rv.job} names no agent"
+            if rv is not None
+            else note or "roborev gave no answer"
+        )
         ev["roborev"] = {"verified": False, "why": why}
         return typed, f"NOTE: {why}."
     ev["roborev"] = {"verified": True, "job": rv.job, "agent": rv.agent, "model": rv.model}
