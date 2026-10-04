@@ -938,6 +938,9 @@ class CiConfig:
     command: str = ""
     base: str = ""
     timeout_s: int = 3600
+    #: Health of the base after a merge lands: off | fast (lint, format, security: the
+    #: pre-commit set without the test hooks) | full (the whole command).
+    on_merge: str = "fast"
 
 
 _doc(
