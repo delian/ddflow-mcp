@@ -149,7 +149,9 @@ def git_ignored(repo: Path, rel: str) -> bool | None:
     return None
 
 
-def copy_local_configs(repo: Path, source: Path, *, names: tuple[str, ...] = LOCAL_CONFIGS) -> list[str]:
+def copy_local_configs(
+    repo: Path, source: Path, *, names: tuple[str, ...] = LOCAL_CONFIGS
+) -> list[str]:
     """Copy machine-local config from a sibling project, never overwriting what is here.
 
     `configwrite.ensure_local_dir` creates `.ddflow/local/` with its own `*` `.gitignore`,
@@ -325,11 +327,10 @@ def pinned_cli(entry: Any, *, base: Path | None = None) -> str | None:
     argv = _cli_argv(entry)
     parts = str(pin).split(os.pathsep)
     pin_text = os.pathsep.join(_resolve_path(p, base) for p in parts if p)
-    invocation = " ".join(shlex.quote(part) for part in (_resolve_command(str(command), base), *argv))
-    return (
-        f"PYTHONPATH={shlex.quote(pin_text)}${{PYTHONPATH:+:$PYTHONPATH}} "
-        f'exec {invocation} "$@"'
+    invocation = " ".join(
+        shlex.quote(part) for part in (_resolve_command(str(command), base), *argv)
     )
+    return f'PYTHONPATH={shlex.quote(pin_text)}${{PYTHONPATH:+:$PYTHONPATH}} exec {invocation} "$@"'
 
 
 def wrapper_text(entry: Any, *, base: Path | None = None) -> str:
