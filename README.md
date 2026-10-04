@@ -413,9 +413,9 @@ $ ddflow task add P1.T1 --phase P1 --title "Tax rules" --globs "src/billing/tax.
 
 $ ddflow next                          # exit 2 = nothing actionable; exit 1 = unknown --phase
 $ ddflow claim P1.T1                   # exit 3 = refused, with the reason
-leased P1.T1 · worktree .ddflow-worktrees/P1.T1 · branch ddflow/P1.T1
+leased P1.T1 · worktree .ddflow/worktrees/P1.T1 · branch ddflow/P1.T1
 
-$ cd .ddflow-worktrees/P1.T1 && ...    # do the work
+$ cd .ddflow/worktrees/P1.T1 && ...   # do the work
 $ ddflow gate status P1.T1             # what the pipeline wants next
 $ ddflow gate run P1.T1 unit_tests     # runs it; the exit code IS the evidence
 $ ddflow gate record P1.T1 implement --outcome passed --evidence "added tax.py"
@@ -674,7 +674,7 @@ four are silent, one of them loses work, and all four are handled:
 
 | Trap | What it looks like | Handled by |
 |---|---|---|
-| **Worktrees land outside the mount** | `worktree.root` defaults to `../.ddflow-worktrees`, a sibling of the repo. In a container only the repo is mounted, so worktrees go to the ephemeral layer and **are destroyed on exit with the agent's uncommitted work inside them.** | `container.default_worktree_root` relocates a sibling root to `.ddflow-worktrees` inside the repo, and `adopt` gitignores it |
+| **Worktrees land outside the mount** | A `worktree.root` set outside the repo (such as `../.ddflow-worktrees`, the default before D-worktree-home) goes, in a container where only the repo is mounted, to the ephemeral layer, and **the trees are destroyed on exit with the agent's uncommitted work inside them.** | the default is `.ddflow/worktrees`, inside the repo and ignored by `.ddflow/.gitignore`; `container.default_worktree_root` relocates an outside root there |
 | **Root-owned files** | On a Linux bind mount the operator needs `sudo` to edit their own project afterwards | the entrypoint reads the mount's uid/gid and `su-exec`s down to it |
 | **git refuses the mount** | "detected dubious ownership", surfacing as an unexplained ddflow failure | `safe.directory` set in the entrypoint |
 | **No git identity** | `git commit` fails with "Please tell me who you are" | entrypoint prefers `GIT_AUTHOR_*`, then the repo's own config, then a clearly-marked placeholder |
@@ -3030,7 +3030,7 @@ $ ddflow recover
 1 recoverable situation(s); 1 may contain work:
 
 !! P1.T1  [expired_lease]  was: delta
-     worktree /repo/../.ddflow-worktrees/P1.T1
+     worktree /repo/.ddflow/worktrees/P1.T1
      INSPECT FIRST — 1 uncommitted file(s), 1 unmerged commit(s).
      `git -C .../P1.T1 diff main` then salvage,
      then `ddflow release P1.T1 --note salvaged`.
