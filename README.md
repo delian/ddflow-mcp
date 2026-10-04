@@ -160,7 +160,12 @@ the same implementation, so neither drifts from the other.
 | I want to… | CLI | MCP tool |
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
+<<<<<<< HEAD
 | **check a done task really is done** | `ddflow verify <id>` (or `--all` / `--phase P` to sweep every done task, worst first, `--file-bugs` to file what fails; `--reopen` sends a completion that fails back to the queue with its gates cleared (`--reason` says why; `--force` reopens one that holds); `--pack` prints the evidence pack (requirement fenced as data, what landed, mechanical findings) for an independent verifier and `--judge` hands it to the cross-family reviewer (gate `verify`, optional, never part of the default pipeline); on a task that is not done it names work that landed anyway): landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
+=======
+| **the pre-push checks, on the merge result** | `ddflow ci run` (the `ci` gate; `ddflow ci status` shows what would run): a scratch worktree of your branch merged with the base, then the project's own `pre-commit run --hook-stage pre-push` (or `[ci].command`); exit 0 passed, 1 failed, 2 could not run (never a pass) | `ddflow_ci` |
+| **check a done task really is done** | `ddflow verify <id>` (or `--all` / `--phase P` to sweep every done task, worst first, `--file-bugs` to file what fails; `--reopen` sends a completion that fails back to the queue with its gates cleared; `--pack` prints the evidence pack (requirement fenced as data, what landed, mechanical findings) for an independent verifier and `--judge` hands it to the cross-family reviewer (gate `verify`, optional, never part of the default pipeline); on a task that is not done it names work that landed anyway): landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
+>>>>>>> main
 | **what a finished task required and changed** | `ddflow show <id>` on a done task prints its completion ledger: requirement digest, files and tests the landing changed, skipped gates, forced flag, later amendments | `ddflow_show` |
 | **one-page state of the project** | `ddflow workflow state` | `ddflow_workflow_state` |
 | **project rules** | `ddflow rule add\|edit\|list\|search\|show\|remove` | `ddflow_rule_add` · `_edit` · `_list` · `_search` · `_show` · `_remove` |
@@ -764,7 +769,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 160 knobs.
+cadences, and the rest of the 163 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -4043,7 +4048,7 @@ declared once and persists — see
 
 ## Configuration
 
-160 knobs across 24 sections, every one documented in place:
+163 knobs across 25 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

@@ -236,6 +236,9 @@ def test_a_diff_stat_cut_at_the_cap_says_how_much_was_not_shown(repo):
     assert len(lines) == VP.MAX_STAT_LINES + 1
     assert "truncated" in lines[-1] and "more line(s)" in lines[-1]
     assert lines[-1].startswith("[...")
+    whole = _git(repo, "show", "--stat", "--format=", "-m", "--first-parent", sha)
+    hidden = len(whole.splitlines()) - VP.MAX_STAT_LINES
+    assert hidden > 0 and f"{hidden} more line(s)" in lines[-1]
     text = pack(repo, "T1").data["pack"]
     assert "[... truncated:" in text
 

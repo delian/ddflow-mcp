@@ -34,6 +34,7 @@ from ..services import leases as L
 from ..services.adopt import AGENT_TARGETS
 from . import dedupe_flags
 from .commands.bisect import add_bisect_parser
+from .commands.ci import add_ci_parser
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
     _workflow_problems,
@@ -1015,6 +1016,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     ru.set_defaults(fn=cmd_rule, rule_cmd="list", tag="", scope="")
 
     add_verify_parser(s)
+    add_ci_parser(s)
 
     stt = s.add_parser("status", help="one answer to 'what is the state of this project?'")
     stt.set_defaults(fn=cmd_status)
