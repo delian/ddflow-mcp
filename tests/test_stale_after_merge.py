@@ -175,7 +175,8 @@ def test_a_fast_forwarded_branch_head_that_is_itself_a_merge_is_what_landed(repo
     assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
     head = _git(tree, "rev-parse", "HEAD")
     said = _merge_and_complete(repo)
-    assert _git(repo, "rev-parse", "main") == head, "expected a fast-forward"
+    # `complete` commits the event log on top of the landing (Bcd3512c891).
+    assert _git(repo, "rev-parse", "main^") == head, "expected a fast-forward"
     assert NOTE not in said, said
 
 

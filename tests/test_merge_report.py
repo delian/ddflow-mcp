@@ -85,7 +85,9 @@ def test_complete_without_sha_reports_the_merge_commit(repo):
     pass_pipeline(repo, "T1")
     code, out, err = run_cli(repo, "--json", "complete", "T1", "--model", "claude-opus-5")
     assert code == OK, out + err
-    assert json.loads(out)["sha"] == _git(repo, "rev-parse", "main")
+    # `complete` then commits the event log on top (Bcd3512c891): the landing is below it.
+    assert json.loads(out)["sha"] == _git(repo, "rev-parse", "main^")
+    assert _git(repo, "log", "-1", "--format=%s", "main").startswith("events: complete T1")
 
 
 def _ddflow_in(tree: Path, script: str) -> subprocess.CompletedProcess:

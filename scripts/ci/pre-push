@@ -34,6 +34,13 @@ trap cleanup EXIT
 trap 'cleanup; exit 130' INT TERM
 
 status=0
+# The event log is the project's source of truth: a push without its newest shards
+# publishes an incomplete history (Bcd3512c891). A warning, not a refusal.
+loose=$(git status --porcelain --untracked-files=all -- .ddflow/events 2>/dev/null </dev/null | grep -c '\.jsonl$' || true)
+if [ "${loose:-0}" -gt 0 ]; then
+    echo "pre-push: WARNING: $loose event shard(s) in .ddflow/events are not committed, so this push leaves them out." >&2
+    echo "  git add .ddflow/events && git commit -m 'events' -- .ddflow/events" >&2
+fi
 # git feeds one line per pushed ref on stdin. The loop owns stdin: every command inside
 # reads /dev/null instead, or the first one to read stdin would swallow the next refs.
 while read -r local_ref local_sha _remote_ref remote_sha; do

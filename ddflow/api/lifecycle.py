@@ -1348,14 +1348,30 @@ def _waiters(repo: Path, item: str) -> list[dict[str, Any]]:
         return []  # advisory: a waiter's bad file must never stop a holder releasing
 
 
+def _commit_events(log, cfg, reason: str) -> dict[str, str]:
+    """`[log].commit_events`: commit the event shards when an item is completed or handed
+    back, so the log in git is the whole log (Bcd3512c891). Not at merge: `complete`
+    follows it, and the base's head is then still the merge commit `merge` reported.
+    Never fails the caller: a refusal is returned."""
+    if not cfg.log.commit_events:
+        return {}
+    from ..services import eventcommit as EC
+
+    sha, why = EC.commit_shards(log.root, reason)
+    if sha:
+        return {"events_committed": sha}
+    return {"events_note": why} if why else {}
+
+
 def release(repo: Path, item: str, *, note: str = "", agent: str = "") -> O.Outcome:
-    log, _cfg, _st = _load(repo, agent)
+    log, cfg, _st = _load(repo, agent)
     # Read BEFORE letting go: a waiter wakes on the release and unregisters, and one
     # quick enough to do that before a read after it would never be reported.
     waiting = _waiters(repo, item)
     released = L.release(log, item, note=note)
     if released:
-        return O.ok("lease.released", id=item, released=True, woke=waiting)
+        committed = _commit_events(log, cfg, f"release {item}")
+        return O.ok("lease.released", id=item, released=True, woke=waiting, **committed)
     return O.nothing("lease.released", f"no lease on {item}", id=item, released=False, woke=[])
 
 
@@ -1511,6 +1527,7 @@ def complete(
         rr = RF.refresh_selected(repo, "phase_close", cfg=cfg)
         if rr.outcomes:
             extra["export_refresh"] = {**rr.data(), "summary": rr.summary()}
+    extra.update(_commit_events(log, cfg, f"complete {item}"))
     return O.ok("item.completed", forced=forced, woke=waiting, **base, **extra)
 
 
