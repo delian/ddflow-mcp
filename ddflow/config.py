@@ -525,8 +525,15 @@ class SessionConfig:
     brief_max_tokens: int = 1200
     brief_lesson_count: int = 4
     replay_verify_diffs: bool = True
+    #: The progress block `complete` adds: on | phase | off (see services/progress_line).
+    progress_after_complete: str = "on"
 
 
+_doc(
+    "session",
+    "progress_after_complete",
+    "After every completion, a few lines on where the work stands: tasks, bugs (fixed, open, high) and phases done of total with percentages, the item's phase, and the next ready items. on (default) | phase (only the phase line and next) | off. The agent relays it to the operator; turn it off with `ddflow config session.progress_after_complete off`, or ask the agent to.",
+)
 _doc(
     "session",
     "log_prompts",
