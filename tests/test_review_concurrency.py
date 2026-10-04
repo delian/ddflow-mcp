@@ -10,10 +10,17 @@ from __future__ import annotations
 
 import time
 
-from tests.test_review_parallel import _diff, _Fake, _rev  # noqa: F401
-from tests.test_review_parallel import fake  # noqa: F401  (pytest fixture)
+import pytest
 
 from ddflow.services.review import PARTIAL, REVIEWED, review
+from tests.test_review_parallel import _diff, _Fake, _rev
+
+
+@pytest.fixture
+def fake():
+    f = _Fake()
+    yield f
+    f.server.shutdown()
 
 
 def _timed(rev, diff):
