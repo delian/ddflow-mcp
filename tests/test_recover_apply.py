@@ -81,3 +81,25 @@ def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo):
     assert lease is not None and lease.expired_at, "the expiry is RECORDED, not dropped"
     out = LC.claim(repo, "T1", agent="next", force=True)
     assert out.exit == 0, out.reason
+
+
+def test_a_plain_claim_after_apply_says_the_expiry_is_recorded_and_force_is_safe(repo):
+    """Bc58ea6b7a7: the help says a recorded expiry is still taken back with --force, and
+    the refusal sent the agent back to `recover`, which had already run. The refusal now
+    says what the record says: nothing to salvage, and --force takes it over."""
+    _crashed_with_work(repo, work=False)
+    RP.recover(repo, apply=True, agent="op")
+    out = LC.claim(repo, "T1", agent="next")
+    assert out.exit == 3, "a recorded expiry is still taken back deliberately (the help)"
+    flat = " ".join(out.reason.split())
+    assert "recorded" in flat and "nothing to salvage" in flat, flat
+    assert "ddflow claim T1 --force" in flat, flat
+    assert "Run `ddflow recover" not in flat, "recover already ran: " + flat
+    assert "wait --item" not in flat, flat
+
+
+def test_a_plain_claim_of_an_unswept_expired_lease_still_sends_to_recover(repo):
+    _crashed_with_work(repo)
+    out = LC.claim(repo, "T1", agent="next")
+    assert out.exit == 3
+    assert "ddflow recover --item T1" in out.reason, out.reason
