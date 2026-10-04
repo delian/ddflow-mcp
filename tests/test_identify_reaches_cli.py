@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -185,9 +186,9 @@ def test_a_shell_wrapped_claim_still_finds_the_harness(connection):
     """The CLI side walks EVERY ancestor: a `sh -c` between it and the harness is fine."""
     repo, _srv = connection
     env = {k: v for k, v in os.environ.items() if k != "DDFLOW_AGENT"}
-    cmd = f"{sys.executable} -m ddflow --repo {repo} claim P1.T1 --no-worktree"
+    cmd = f"{shlex.quote(sys.executable)} -m ddflow --repo {shlex.quote(str(repo))} claim P1.T1"
     r = subprocess.run(
-        ["/bin/sh", "-c", f"{cmd}; true"],
+        ["/bin/sh", "-c", f": ; {cmd} --no-worktree"],
         capture_output=True,
         text=True,
         env={**env, "PYTHONPATH": str(ROOT)},
@@ -210,6 +211,10 @@ def test_a_record_for_a_process_that_is_not_an_ancestor_is_ignored(repo):
         d.mkdir()
         (d / f"{other.pid}-{st[2]}").write_text("someone-else\n")
         assert H.declared(repo) == ""
+        assert Server(repo).agent == "", "a server must not inherit a bystander's name"
+        mine = H._stat(os.getppid())
+        (d / f"{os.getppid()}-{mine[2]}").write_text("ancestor\n")
+        assert H.declared(repo) == "ancestor", "positive control: an ancestor's IS read"
     finally:
         other.kill()
         other.wait()
@@ -219,4 +224,21 @@ def test_an_unusable_name_is_reported_not_recorded(repo):
     from ddflow.infra import harness_identity as H
 
     assert "not a usable agent name" in H.declare(repo, "kilo onboard")
-    assert H.declared(repo) == ""
+    assert not (repo / ".git" / H.DIR).exists()
+
+
+def test_a_wrapper_shell_is_climbed_an_interactive_one_is_not(monkeypatch):
+    from ddflow.infra import harness_identity as H
+
+    chain = {40: ("bash", 30, "4"), 30: ("claude", 20, "3"), 20: ("bash", 1, "2")}
+    monkeypatch.setattr(H, "_stat", chain.get)
+    monkeypatch.setattr(H, "_wrapper_shell", lambda pid: pid == 40)
+    assert H._harness(40) == ["40-4", "30-3"]
+    assert H._harness(20) == ["20-2"]
+
+
+@needs_proc
+def test_a_withdrawn_name_is_not_taken_by_a_restarted_server(connection):
+    repo, srv = connection
+    _call(srv, "ddflow_identify", agent="")
+    assert Server(repo).agent == ""
