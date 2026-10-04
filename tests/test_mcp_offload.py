@@ -16,10 +16,11 @@ from __future__ import annotations
 
 import json
 import os
-import selectors
+import queue
 import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -37,7 +38,7 @@ pytestmark = pytest.mark.skipif(
 
 def _server(repo: Path, stderr=subprocess.DEVNULL) -> subprocess.Popen:
     env = {**os.environ, "PYTHONPATH": str(ROOT), "DDFLOW_AGENT": "offload-test"}
-    return subprocess.Popen(
+    proc = subprocess.Popen(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "mcp"],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -46,6 +47,17 @@ def _server(repo: Path, stderr=subprocess.DEVNULL) -> subprocess.Popen:
         bufsize=1,
         env=env,
     )
+    # Lines through a thread and a queue: a selector on the fd misses a second line
+    # that one buffered read already pulled out of the pipe.
+    proc.lines = queue.Queue()
+
+    def pump() -> None:
+        for line in proc.stdout:
+            proc.lines.put(line)
+        proc.lines.put("")
+
+    threading.Thread(target=pump, daemon=True).start()
+    return proc
 
 
 def _send(proc, method: str, params: dict | None = None, rid: int | None = None) -> None:
@@ -59,22 +71,18 @@ def _send(proc, method: str, params: dict | None = None, rid: int | None = None)
 def _frames(proc, want: set[int], timeout_s: float = DEADLINE_S) -> list[dict]:
     """Replies in arrival order until every id in `want` has answered, or the deadline."""
     got: list[dict] = []
-    sel = selectors.DefaultSelector()
-    sel.register(proc.stdout, selectors.EVENT_READ)
     end = time.monotonic() + timeout_s
-    try:
-        while want - {f.get("id") for f in got}:
-            left = end - time.monotonic()
-            if left <= 0 or not sel.select(left):
-                break
-            line = proc.stdout.readline()
-            if not line:
-                break
-            frame = json.loads(line)
-            if "method" not in frame:
-                got.append(frame)
-    finally:
-        sel.close()
+    while want - {f.get("id") for f in got}:
+        left = end - time.monotonic()
+        try:
+            line = proc.lines.get(timeout=max(left, 0.001)) if left > 0 else ""
+        except queue.Empty:
+            break
+        if not line:
+            break
+        frame = json.loads(line)
+        if "method" not in frame:
+            got.append(frame)
     return got
 
 
@@ -229,5 +237,18 @@ def test_a_burst_of_long_calls_is_capped_not_all_started(repo):
         assert len(_workers(proc.pid)) == MAX_WORKERS
         run_cli(repo, "--agent", "holder", "release", "P1.T1")
         assert {f["id"] for f in _frames(proc, set(ids[:-1]))} == set(ids[:-1])
+    finally:
+        _stop(proc)
+
+
+def test_a_tool_name_that_is_not_a_string_does_not_end_the_loop(repo):
+    """The offload check reads client input before any per-call error handling."""
+    run_cli(repo, "init")
+    proc = _server(repo)
+    try:
+        _start(proc)
+        _send(proc, "tools/call", {"name": ["ddflow_review"], "arguments": {}}, 2)
+        _send(proc, "ping", rid=3)
+        assert {f["id"] for f in _frames(proc, {2, 3})} == {2, 3}, f"exit={proc.poll()}"
     finally:
         _stop(proc)
