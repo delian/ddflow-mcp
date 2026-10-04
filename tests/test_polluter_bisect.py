@@ -373,7 +373,17 @@ def _collected_files(project: Path) -> list[str]:
     import subprocess
 
     out = subprocess.run(
-        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "--collect-only",
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "no:randomly",
+        ],
         cwd=project,
         capture_output=True,
         text=True,
