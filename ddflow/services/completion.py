@@ -68,9 +68,36 @@ class Verdict:
 OPEN_BUG_BLOCKER = "fixes open bug(s) "
 
 
+#: `bug found` files a bug's fix task as `fix-<bug>` (`api.knowledge.FIX_TASK_PREFIX`;
+#: services do not import the api layer).
+_FIX_PREFIX = "fix-"
+
+
+def fixes_of(state: State, item_id: str) -> set[str]:
+    """The bugs ``item_id`` was filed to fix: its `fixes` list, plus the bug a hand-filed
+    `fix-<bug>` names. NOT every bug whose `fix_task` points here: `bug found --item <open
+    fix task>` links a mere report to the task it was filed against, and completing
+    fix-B297ede2447 closed four such reports nobody had fixed (B7bdcc6b212)."""
+    it = state.items.get(item_id)
+    named = set(it.fixes) if it is not None else set()
+    if item_id.startswith(_FIX_PREFIX):
+        named.add(item_id[len(_FIX_PREFIX) :])
+    return {b for b in named if b in state.bugs}
+
+
 def open_bugs_of(state: State, item_id: str) -> list[str]:
-    """The open bugs ``item_id`` is the fix task of (`bug found` filed it), sorted."""
-    return sorted(b.id for b in state.bugs.values() if b.open and b.fix_task == item_id)
+    """The open bugs ``item_id`` was filed to fix (`fixes_of`), sorted: what its completion
+    must close, and what `--regression-test` closes."""
+    return sorted(b for b in fixes_of(state, item_id) if state.bugs[b].open)
+
+
+def reported_against(state: State, item_id: str) -> list[str]:
+    """Open bugs linked to ``item_id`` (`fix_task`) that it was NOT filed to fix: its
+    completion leaves them open, and says so."""
+    mine = fixes_of(state, item_id)
+    return sorted(
+        b.id for b in state.bugs.values() if b.open and b.fix_task == item_id and b.id not in mine
+    )
 
 
 def _open_bug_blockers(state: State, item_id: str) -> list[str]:
@@ -83,6 +110,19 @@ def _open_bug_blockers(state: State, item_id: str) -> list[str]:
         f"--regression-test <test>` (a test that FAILS on the unfixed code), or pass "
         f"`--regression-test <test>` to complete, which closes them; a false finding is "
         f"`ddflow bug invalid <bug> --reason ...`."
+    ]
+
+
+def _reported_bug_warnings(state: State, item_id: str) -> list[str]:
+    """The bugs reported against ``item_id`` that its completion leaves open, as one
+    warning (`reported_against`)."""
+    left = reported_against(state, item_id)
+    if not left:
+        return []
+    return [
+        f"open bug(s) {', '.join(left)} were reported against {item_id} but are not what "
+        f"it was filed to fix: completing it leaves them open, and each needs a fix task "
+        f"of its own."
     ]
 
 
@@ -144,9 +184,11 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
 
     # A fix task closes its bug or does not complete (B-bugs-as-items): the bug record is
     # what carries the regression test, and `bug fixed` is what refuses to close without
-    # one. Asked of the BUGS (`fix_task`), not the task's `fixes` list: a bug linked to an
-    # existing task after the fact has no entry there.
+    # one. Asked of the task's `fixes` (B7bdcc6b212), not of every bug whose `fix_task`
+    # names it: a report filed against the task is not what the task fixes, so it neither
+    # blocks the completion nor is closed by it -- it is named as left open.
     v.blockers += _open_bug_blockers(state, item_id)
+    v.warnings += _reported_bug_warnings(state, item_id)
 
     if it.kind == "phase":
         # Periodic passes counted in phases (architecture review, mutation tests, lessons)
