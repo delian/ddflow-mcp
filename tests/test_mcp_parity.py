@@ -119,10 +119,6 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "invoked BY the Claude Code SessionStart hook to put the brief into a new "
         "session; over MCP that is ddflow_brief"
     ),
-    ("bug", "reopen"): (
-        "a rare correction of a closure made by mistake (B7bdcc6b212); the tools/list "
-        "byte budget is nearly full, and the shell command serves it"
-    ),
     ("session", "adopt-orphans"): (
         "a one-off backfill an operator runs after ddflow doctor names id-less prompts; "
         "agents record with ddflow_session_prompt, which never lacks a session now"
@@ -169,6 +165,9 @@ LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = {
     ("session", "list"): ("ddflow_list", "session"),
     ("session", "show"): ("ddflow_list", "session"),
     ("search",): ("ddflow_list", "search"),
+    # Not a viewer: `bug reopen` is `ddflow_bug_invalid` with `reopen=true`, the one
+    # bug-closure tool, rather than a tool of its own (tools/list byte budget).
+    ("bug", "reopen"): ("ddflow_bug_invalid", "reopen"),
 }
 
 
@@ -522,4 +521,8 @@ def test_every_viewer_leaf_names_a_kind_ddflow_list_accepts():
     from ddflow.api.viewers import READ_KINDS
 
     for path, (tool, kind) in LEAF_VIA.items():
-        assert tool in TOOLS and kind in READ_KINDS, path
+        assert tool in TOOLS, path
+        if tool == "ddflow_list":
+            assert kind in READ_KINDS, path
+        else:  # a mode of another tool: `kind` names the argument that selects it
+            assert kind in TOOLS[tool]["properties"], path
