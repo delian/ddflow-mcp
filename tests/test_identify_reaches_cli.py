@@ -279,3 +279,14 @@ def test_which_shells_are_wrappers(argv, wrapper, monkeypatch):
     real = Path.read_bytes
     monkeypatch.setattr(Path, "read_bytes", lambda p: argv if p.name == "cmdline" else real(p))
     assert H._wrapper_shell(1234) is wrapper
+
+
+def test_a_process_name_that_is_not_utf8_is_read_not_raised(monkeypatch):
+    """`comm` is up to 15 BYTES: a multibyte name is cut mid-character."""
+    from ddflow.infra import harness_identity as H
+
+    raw = b"77 (\xe6\x97\xa5\xe6\x9c) S 1" + b" 0" * 30 + b"\n"
+    real = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda p: raw if p.name == "stat" else real(p))
+    st = H._stat(77)
+    assert st is not None and st[1] == 1
