@@ -28,6 +28,7 @@ from ..config import Config
 from ..core.events import Event
 from ..core.model import State
 from ..core.schedule import conflicts
+from . import backfill as BF
 from . import gates as G
 from . import ledger as LG
 
@@ -173,24 +174,47 @@ def _landed(repo: Path, cfg: Config, led: dict[str, Any]) -> Claim:
     return Claim("landed", FAIL, f"{sha[:10]} exists but is on none of {', '.join(on)}")
 
 
+def _present(repo: Path, path: str, tracked: set[str]) -> bool:
+    """Does `path` exist now? Tracked, on disk (untracked and ignored files count: a
+    declared `.mcp.json` is real even though git never saw it), or a directory that
+    contains tracked files."""
+    bare = path.rstrip("/")
+    if path in tracked or (repo / bare).exists():
+        return True
+    prefix = bare + "/"
+    return any(t.startswith(prefix) for t in tracked)
+
+
 def _declared(repo: Path, led: dict[str, Any], tracked: set[str] | None) -> Claim:
     globs = led["requirement"]["globs"]
     landed = set(led["done"]["files"])
     if tracked is None:
         return Claim("declared_files", UNKNOWN, "the tracked file list could not be read")
     exact = [g for g in globs if not _WILD.search(g)]
-    absent = [g for g in exact if g not in tracked and g not in landed]
+    absent = [g for g in exact if not _present(repo, g, tracked) and g not in landed]
     # Absent now and not in the landing: either it never existed (the false positive) or
     # it existed and was removed or renamed later -- history tells the two apart.
     rev = led["sha"] or "HEAD"
     removed_later = [g for g in absent if _ever_existed(repo, g, rev)]
     never = [g for g in absent if g not in removed_later]
-    gone = [g for g in exact if g not in tracked and g in landed] + removed_later
+    gone = [g for g in exact if not _present(repo, g, tracked) and g in landed] + removed_later
     if never:
         return Claim("declared_files", FAIL, f"declared but never created: {_trim(never)}")
     notes = []
     if gone:
         notes.append(f"existed once but absent now: {_trim(gone)}")
+    # On this machine but unknown to git: real here, absent from any other checkout.
+    local_only = [
+        g
+        for g in exact
+        if g not in tracked
+        and _present(repo, g, tracked)
+        and not any(t.startswith(g.rstrip("/") + "/") for t in tracked)
+    ]
+    if local_only:
+        notes.append(
+            f"exists here but is untracked, so no other checkout has it: {_trim(local_only)}"
+        )
     if led["done"]["files_known"] and globs and not conflicts(sorted(landed), globs):
         notes.append("the landing touched nothing inside its declared globs")
     if notes:
@@ -280,6 +304,16 @@ def _survives(led: dict[str, Any], tracked: set[str] | None) -> Claim:
     return Claim("survives", OK, f"all {len(files)} changed file(s) still exist")
 
 
+def _rebuilt_claim(rebuilt: dict[str, str], why: str) -> Claim:
+    if rebuilt.get("kind") == "recorded":
+        what = f"the recorded landing {rebuilt['sha'][:10]} had no file facts; they were rebuilt from git"
+    else:
+        what = f"the landing {rebuilt['sha'][:10]} was found afterwards by {rebuilt['how']}"
+    return Claim(
+        "ledger", WARN, f"{why}; {what} -- reconstructed, not what the completing agent recorded"
+    )
+
+
 def check(
     repo: Path,
     cfg: Config,
@@ -297,22 +331,27 @@ def check(
         return Report(item_id, completed=False)
     if tracked == "read":
         tracked = _tracked(repo)
+    led = BF.apply(repo, st, led, item_id)
+    rebuilt = led.get("backfill")
     if led["imported"]:
-        # Closed in a document before ddflow existed: there is no landing, gate history or
-        # file list to check, and saying "no gates ran" would accuse work nobody recorded.
-        # What CAN still be checked is a declared file that never existed.
+        # Closed in a document before ddflow existed: there is no gate history to check,
+        # and saying "no gates ran" would accuse work nobody recorded. What CAN still be
+        # checked is a declared file that never existed -- and, when git still shows the
+        # landing, that it landed and survived.
         note = led["import_evidence"] or "no evidence recorded"
-        return Report(
-            item_id,
-            [
-                _declared(repo, led, tracked),
+        claims = [_declared(repo, led, tracked)]
+        if rebuilt:
+            claims += [_landed(repo, cfg, led), _survives(led, tracked)]
+            claims.append(_rebuilt_claim(rebuilt, f"imported as already closed ({note})"))
+        else:
+            claims.append(
                 Claim(
                     "ledger",
                     UNKNOWN,
                     f"imported as already closed ({note}); no gate or landing history",
-                ),
-            ],
-        )
+                )
+            )
+        return Report(item_id, claims)
     pipeline = G.pipeline_for(st.items[item_id], cfg) if item_id in st.items else []
     claims = [
         _landed(repo, cfg, led),

@@ -160,7 +160,7 @@ the same implementation, so neither drifts from the other.
 | I want to… | CLI | MCP tool |
 |---|---|---|
 | **see what the workflow is** | `ddflow workflow` | `ddflow_workflow` |
-| **check a done task really is done** | `ddflow verify <id>` (or `--all` / `--phase P` to sweep every done task, worst first, `--file-bugs` to file what fails): landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
+| **check a done task really is done** | `ddflow verify <id>` (or `--all` / `--phase P` to sweep every done task, worst first, `--file-bugs` to file what fails; `--reopen` sends a completion that fails back to the queue with its gates cleared; `--pack` prints the evidence pack (requirement fenced as data, what landed, mechanical findings) for an independent verifier and `--judge` hands it to the cross-family reviewer (gate `verify`, optional, never part of the default pipeline); on a task that is not done it names work that landed anyway): landed on main, declared files exist, tests exist, no gate failed or skipped without a reason (exit 1 = a claim does not hold) | `ddflow_verify` |
 | **what a finished task required and changed** | `ddflow show <id>` on a done task prints its completion ledger: requirement digest, files and tests the landing changed, skipped gates, forced flag, later amendments | `ddflow_show` |
 | **one-page state of the project** | `ddflow workflow state` | `ddflow_workflow_state` |
 | **project rules** | `ddflow rule add\|edit\|list\|search\|show\|remove` | `ddflow_rule_add` · `_edit` · `_list` · `_search` · `_show` · `_remove` |
@@ -764,7 +764,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 158 knobs.
+cadences, and the rest of the 159 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -2718,6 +2718,16 @@ recorded (`pr status` lists it under `back_merges`) and every later `pr sync` re
 forge until it merges ("back_merge: merged into develop") or is closed without merging,
 which is refused loudly: develop would not have a fix production already ships.
 
+**Version files.** `[flow.version_files]` maps a path to a regex with exactly one capture
+group, the version text — `'pyproject.toml' = '^version = "([^"]*)"$'` — and `version cut`
+replaces that group with the new version (no tag prefix) and commits it as `chore: bump
+version to X`, so the tag's commit says what the tag says. The commit is on the branch the
+tag names: the release branch under gitflow (in pr mode it travels in the release request),
+the release source for a trunk or maintenance cut. Everything is checked against that
+source first and a missing file, a pattern matching nothing or matching twice refuses the
+whole cut (exit 3) rather than guessing which line is the version; a trunk cut with
+`integration = "pr"` is refused too, because the bump would have no request to travel in.
+
 **Changelog with the cut.** `version cut --changelog` also writes the new version's
 section into `CHANGELOG.md` (the path of `[export.changelog]`, default `CHANGELOG.md`)
 through [`ddflow export changelog`](#exporting-documents): the Unreleased entries
@@ -4033,7 +4043,7 @@ declared once and persists — see
 
 ## Configuration
 
-158 knobs across 24 sections, every one documented in place:
+159 knobs across 24 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease

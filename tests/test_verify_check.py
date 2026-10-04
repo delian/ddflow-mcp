@@ -346,3 +346,30 @@ def test_a_commit_that_merely_mentions_the_subject_in_its_body_is_not_a_twin(rep
     )
     run_cli(repo, "complete", "T1", "--sha", old, "--force")
     assert _claims(verify(repo, "T1"))["landed"]["status"] == "fail"
+
+
+def test_an_untracked_file_and_a_declared_directory_that_exist_are_not_never_created(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, ".mcp.json,local-dir/")
+    sha = _commit(repo, {"other.py": "1\n"})
+    # created AFTER the commit and never added: git has never seen either
+    (repo / ".mcp.json").write_text("{}\n")
+    (repo / "local-dir").mkdir()
+    (repo / "local-dir" / "x.txt").write_text("x\n")
+    run_cli(repo, "complete", "T1", "--sha", sha, "--force")
+    d = _claims(verify(repo, "T1"))["declared_files"]
+    assert d["status"] == "warn" and "never created" not in d["detail"], d
+    assert "untracked" in d["detail"] and ".mcp.json" in d["detail"]
+
+
+def test_a_landed_file_later_removed_from_git_but_kept_on_disk_is_a_warning(repo):
+    run_cli(repo, "init")
+    _commit(repo, {"seed.txt": "s\n"}, "seed")
+    _task(repo, "foo.py")
+    sha = _commit(repo, {"foo.py": "1\n"})
+    run_cli(repo, "complete", "T1", "--sha", sha, "--force")
+    _git(repo, "rm", "-q", "--cached", "foo.py")
+    _git(repo, "commit", "-qm", "untrack foo")
+    d = _claims(verify(repo, "T1"))["declared_files"]
+    assert d["status"] == "warn" and "untracked" in d["detail"], d

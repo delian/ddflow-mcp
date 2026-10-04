@@ -193,6 +193,8 @@ class FlowConfig:
     port_strategy: str = "forward-merge"  # forward-merge | cherry-pick
     environments: list[str] = field(default_factory=list)  # downstream branches, in order
     auto_promote: list[str] = field(default_factory=list)
+    #: path -> regex with ONE capture group (the version text): `version cut` bumps these.
+    version_files: dict[str, str] = field(default_factory=dict)
 
 
 _doc(
@@ -304,6 +306,11 @@ _doc(
     "flow",
     "lines",
     'Maintenance lines -- older majors still receiving fixes -- as name -> branch, OLDEST FIRST (e.g. `[flow.lines]` `"1" = "maint/1.x"`, `"2" = "maint/2.x"`). The newest line is always the current one, which follows `model` as usual. Empty (default): one line, today\'s behaviour. An item targets a line with `--line`; a fix that must reach several gets `--lines` and ports are generated per `port_strategy`.',
+)
+_doc(
+    "flow",
+    "version_files",
+    'Files `version cut` bumps, as path -> regex with exactly ONE capture group, the version text (e.g. `[flow.version_files]` `\'pyproject.toml\' = \'^version = "([^"]*)"$\'`). The pattern is matched in multiline mode and must match exactly once; the group is replaced by the new version (no tag prefix) and committed on the branch the tag names -- the release branch under gitflow, so in pr mode it travels in the release request. A trunk or maintenance cut with `integration = "pr"` is refused: the bump would have no request to travel in. Empty (default): nothing is bumped.',
 )
 _doc(
     "flow",

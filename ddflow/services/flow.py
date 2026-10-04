@@ -1137,6 +1137,7 @@ class Cut:
     steps: list[str] = field(default_factory=list)
     plan: VersionPlan | None = None
     changelog: str = ""  # the changelog file the cut wrote (--changelog), "" when none
+    version_files: list[str] = field(default_factory=list)  # files the cut bumped (B174)
 
 
 def cut(
@@ -1191,6 +1192,9 @@ def cut(
         )
         return out
     direct = cfg.flow.model != F.GITFLOW or F.is_maintenance(cfg, line)
+    planned, vfiles = _plan_version_files(repo, cfg, out, vp, direct=direct)
+    if not planned:
+        return out
     prep = None
     if changelog:
         if direct and cfg.flow.integration == "pr":
@@ -1208,16 +1212,80 @@ def cut(
             return out
     if dry_run:
         out.ok = True
+        if vfiles:
+            out.steps.append(f"dry run: would {vfiles.describe(vp.next)}")
         out.steps.append("dry run: nothing written")
         return out
     if direct:
         # A maintenance line is tagged where it stands: it has no develop/production
         # pair of its own, so there is no release branch to route through.
+        # The changelog first, the bump last: a failed bump rolls its own working tree back,
+        # but a changelog commit already made on the branch STAYS (a branch ref cannot be
+        # reset safely when another worktree may have it checked out), so say so.
+        before = W.rev(repo, vp.ref)
         if prep and not _write_changelog(repo, cfg, out, vp.ref, prep, vp.next, force=force):
+            return out
+        if vfiles and not _write_version_files(repo, cfg, out, vp.ref, vfiles, vp.next):
+            landed = W.rev(repo, vp.ref)
+            if landed and landed != before:
+                out.steps.append(
+                    f"NOTE: the changelog commit {landed[:10]} was already made on {vp.ref} and "
+                    f"stays: `git revert {landed[:10]}` removes it, or fix the bump and run "
+                    f"`ddflow version cut` again (the changelog section is then already there)"
+                )
             return out
         out.sha = W.rev(repo, vp.ref)
         return _tag_and_push(repo, cfg, log, out, vp, branch=vp.ref, push=push)
-    return _cut_gitflow(repo, cfg, log, out, vp, push=push, prep=prep, force=force)
+    return _cut_gitflow(repo, cfg, log, out, vp, push=push, prep=prep, force=force, vfiles=vfiles)
+
+
+def _plan_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan, *, direct: bool):
+    """``(ok, prepared)``: what `[flow.version_files]` will change, checked before anything
+    is written. ``ok`` False means the cut is refused (the reason is on ``out``)."""
+    if not cfg.flow.version_files:
+        return True, None
+    if direct and cfg.flow.integration == "pr":
+        out.refused, out.reason = (
+            True,
+            (
+                "[flow.version_files] with pull requests needs [flow].model = gitflow: a "
+                "trunk or maintenance cut tags the remote branch as it is, and the bump "
+                "commit would have no request to travel in"
+            ),
+        )
+        return False, None
+    prep = _prepare_version_files(repo, cfg, out, vp)
+    return prep is not None, prep
+
+
+def _prepare_version_files(repo: Path, cfg: Config, out: Cut, vp: VersionPlan):
+    """The new text of every `[flow.version_files]` file, or None after recording why not."""
+    from . import version_files as VF
+
+    try:
+        return VF.prepare(repo, cfg, version=vp.next, ref=vp.ref)
+    except VF.VersionFileError as exc:
+        out.refused, out.reason = True, str(exc)
+        return None
+
+
+def _write_version_files(
+    repo: Path, cfg: Config, out: Cut, branch: str, prep, version: str
+) -> bool:
+    """Commit the bump on ``branch``; False (with the reason on ``out``) if it cannot be."""
+    from . import version_files as VF
+
+    try:
+        changed = VF.commit_on(repo, cfg, branch, prep, message=f"chore: bump version to {version}")
+    except VF.VersionFileError as exc:
+        out.reason = str(exc)
+        out.unavailable, out.refused = exc.unavailable, not exc.unavailable
+        return False
+    out.version_files = changed
+    out.steps.append(
+        f"bumped {', '.join(changed)} on {branch}" if changed else f"{prep.describe(version)}"
+    )
+    return True
 
 
 def _export_failed(out: Cut, exc: Exception) -> None:
@@ -1280,6 +1348,7 @@ def _cut_gitflow(
     push: bool,
     prep=None,
     force: bool = False,
+    vfiles=None,
 ) -> Cut:
     remote = cfg.flow.remote
     prod = F.production(cfg, W.default_branch(repo))
@@ -1289,6 +1358,9 @@ def _cut_gitflow(
         out.refused, out.reason = True, f"could not create {rel}: {mk.err}"
         return out
     out.steps.append(f"created {rel} from {vp.ref}")
+    if vfiles and not _write_version_files(repo, cfg, out, rel, vfiles, vp.next):
+        W.git(repo, "branch", "-D", rel)  # unmade, as a failed push unmakes it
+        return out
     if prep and not _write_changelog(repo, cfg, out, rel, prep, vp.next, force=force):
         W.git(repo, "branch", "-D", rel)  # unmade, as a failed push unmakes it
         return out
