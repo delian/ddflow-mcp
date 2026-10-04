@@ -3440,8 +3440,9 @@ for now instead of filing a twin (its completion files the bug's own, as above);
 tasks existed is upgraded once with `ddflow bug file-tasks` (`--dry-run` lists; MCP
 `ddflow_bug_file_tasks`): every open bug without a fix task gets one, as `bug found`
 would have filed it. It also refiles an open bug left on a finished task that will not
-fix it: a DONE task it was only reported against, or any ABANDONED task but the bug's own
-`fix-<bug>` (a done task's own bug is `verify --reopen`'s). `[bugs] file_task = false`
+fix it: a DONE task it was only reported against, or an ABANDONED one -- its own
+`fix-<bug>` included, which nothing revives, so the new task is `fix-<bug>-2` (then `-3`)
+(a done task's own bug is `verify --reopen`'s). `[bugs] file_task = false`
 returns to flat bug records.
 
 ### Listing tasks, phases, bugs and research
