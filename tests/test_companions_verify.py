@@ -282,7 +282,6 @@ def test_the_grace_is_clamped_to_the_remaining_timeout(tmp_path, monkeypatch):
 
     def fake_await(proc, grace_s):
         seen["grace"] = grace_s
-        return None
 
     monkeypatch.setattr(CO, "_EXIT_GRACE_S", 30.0)
     monkeypatch.setattr(CO, "_await_exit", fake_await)
@@ -300,9 +299,7 @@ def test_a_signal_killed_child_is_named_as_a_signal(tmp_path, monkeypatch):
     exit code: report it as one, not as 'exited (9)'. A longer grace keeps the record
     visible even on a loaded runner."""
     monkeypatch.setattr(CO, "_EXIT_GRACE_S", 5.0)
-    v = CO.verify_one(
-        _companion("sig", sys.executable, _script(tmp_path, "sg.py", SELF_SIGKILL))
-    )
+    v = CO.verify_one(_companion("sig", sys.executable, _script(tmp_path, "sg.py", SELF_SIGKILL)))
     assert v.speaks_mcp is False, v.detail
     assert "killed by signal 9" in v.detail, v.detail
 
