@@ -73,6 +73,21 @@ def test_a_file_already_in_the_worktree_is_never_overwritten(repo):
     assert (tree / ".roborev.toml").read_text() == "agent = 'mine'\n"
 
 
+def test_a_dangling_symlink_in_the_worktree_is_skipped_not_written_through(repo):
+    """Bug B6fb68b641e: `exists()` is False for a dangling link, so copy2 followed it and
+    wrote the primary's file to whatever the link pointed at -- through the very path the
+    helper promises never to touch. The regression test fails against the unfixed code:
+    the target file exists and the copy is reported as `['.roborev.toml']`."""
+    _setup(repo)
+    tree = repo.parent / "wt5"
+    _git(repo, "worktree", "add", "-q", "-b", "v", str(tree))
+    target = repo.parent / "outside-the-tree.toml"
+    (tree / ".roborev.toml").symlink_to(target)
+    assert W.copy_local_files(repo, tree, [".roborev.toml"]) == []
+    assert not target.exists(), "the copy wrote through a dangling symlink"
+    assert (tree / ".roborev.toml").is_symlink()
+
+
 def test_a_tracked_file_deleted_in_the_worktree_is_not_brought_back(repo):
     """A tracked path is the checkout's business: an agent that deleted it on purpose
     must not find the primary's copy resurrected by the next claim."""
