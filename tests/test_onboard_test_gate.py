@@ -96,7 +96,8 @@ def test_a_timed_out_command_takes_its_whole_process_group_with_it(repo):
 
 def test_a_command_that_fails_is_not_green(repo):
     result = OT.baseline(repo, "no-such-runner-xyz", timeout=30)
-    assert not result.green and result.exit_code != 0
+    assert not result.green and not result.ran
+    assert "could not be found" in result.detail
 
 
 def test_live_test_wraps_the_entry_point_so_empty_output_fails(repo):

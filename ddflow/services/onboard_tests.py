@@ -37,6 +37,8 @@ _FAILING = re.compile(r"^(FAILED|ERROR) (\S+)")
 _TAIL = 2000
 #: How many failing ids the known-failures list quotes.
 _KNOWN = 50
+#: The shell's own "command not found" exit code.
+_NOT_FOUND = 127
 
 
 @dataclass(frozen=True)
@@ -156,6 +158,10 @@ def baseline(repo: Path, command: str, *, timeout: int = 900) -> Baseline:
         seconds = time.monotonic() - started
         if code is None:
             return Baseline(command, False, -1, f"the command did not finish within {timeout}s")
+        if code == _NOT_FOUND:
+            # A command that could not be found measured NOTHING; "exit 127" is not a
+            # baseline (critic on 215407bb).
+            return Baseline(command, False, 127, "the command could not be found (exit 127)")
         counts: dict[str, int] = {}
         for match in _COUNT.finditer(out):
             counts[match.group(2).rstrip("s")] = int(match.group(1))
@@ -258,8 +264,7 @@ def propose(repo: Path, *, timeout: int = 900) -> Report:
                 "no runner detected: no CI config, pyproject, package.json or Makefile said how tests run"
             ],
         )
-    command = f"{runner.command} {runner.workers}".strip()
-    result = baseline(repo, command, timeout=timeout)
+    result = baseline(repo, runner.command, timeout=timeout)
     known = result.failing[:_KNOWN] if result.failing else []
     notes: list[str] = []
     if result.counts.get("failed") and not known:
@@ -269,8 +274,12 @@ def propose(repo: Path, *, timeout: int = 900) -> Report:
     if not result.ran:
         notes.append(f"the baseline did not run: {result.detail}")
     if runner.workers:
+        # The committed command carries NO worker count: one machine's size would
+        # dictate it for every clone. The local file wins over it (prompt, test-gate
+        # stage), and several agents run the gate at once.
         notes.append(
-            f"workers for THIS machine belong in .ddflow/local/gates.toml: {runner.workers}"
+            f"unit_tests for THIS machine: {runner.command} {runner.workers} -> "
+            f".ddflow/local/gates.toml"
         )
     elif runner.family == "python":
         notes.append(
@@ -278,7 +287,7 @@ def propose(repo: Path, *, timeout: int = 900) -> Report:
         )
     unit = Proposal(
         "unit_tests",
-        command,
+        runner.command,
         ".ddflow/gates.toml",
         f"{runner.evidence} says so; the baseline measured {result.detail}",
     )
@@ -286,18 +295,29 @@ def propose(repo: Path, *, timeout: int = 900) -> Report:
 
 
 def render(report: Report) -> str:
-    """The operator's offer, one gate per line, with the evidence attached."""
+    """The operator's offer: each gate, its evidence, and what confirming it means."""
     if report.runner is None:
         return report.notes[0] if report.notes else "no runner detected"
     lines = [f"runner: {report.runner.family} ({report.runner.evidence})"]
     if report.baseline is not None:
-        state = "green" if report.baseline.green else "not green"
-        lines.append(f"baseline: {state} -- {report.baseline.detail} in a detached tree")
+        base = report.baseline
+        if base.ran and base.green:
+            lines.append(
+                f"baseline: green -- {base.detail}, {base.seconds:.1f}s in a detached tree"
+            )
+        elif base.ran:
+            lines.append(
+                f"baseline: RED -- {base.detail}, {base.seconds:.1f}s in a detached tree; "
+                f"every item stays blocked until the shrink-only known-failures phase exists"
+            )
+        else:
+            lines.append(f"baseline: not measured -- {base.detail}")
     if report.unit_tests:
         lines.append(f"unit_tests: {report.unit_tests.command}  [{report.unit_tests.where}]")
     if report.known_failures:
         lines.append(
-            f"known failures ({len(report.known_failures)}), shrink-only, as its own phase:"
+            f"known failures ({len(report.known_failures)}), shrink-only: propose its own "
+            f"phase (ddflow_phase_add) rather than making the gate permanently red:"
         )
         lines += [f"  {ident}" for ident in report.known_failures]
     if report.live_test:
@@ -305,4 +325,8 @@ def render(report: Report) -> str:
     else:
         lines.append("live_test: no entry point found; name it by hand")
     lines += [f"note: {note}" for note in report.notes]
+    lines.append(
+        "set them with ddflow_configure after the operator confirms: the command, the "
+        "worker count, the known-failures policy, the smoke run"
+    )
     return "\n".join(lines)
