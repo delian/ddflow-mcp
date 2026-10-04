@@ -119,6 +119,10 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "invoked BY the Claude Code SessionStart hook to put the brief into a new "
         "session; over MCP that is ddflow_brief"
     ),
+    ("bug", "reopen"): (
+        "a rare correction of a closure made by mistake (B7bdcc6b212); the tools/list "
+        "byte budget is nearly full, and the shell command serves it"
+    ),
     ("session", "adopt-orphans"): (
         "a one-off backfill an operator runs after ddflow doctor names id-less prompts; "
         "agents record with ddflow_session_prompt, which never lacks a session now"
