@@ -9,6 +9,7 @@ import os
 import sqlite3
 import sys
 import threading
+import time
 from contextlib import closing
 from pathlib import Path
 
@@ -512,3 +513,20 @@ def test_cantopen_in_a_writable_directory_is_a_bug_not_the_environment(repo, log
     with pytest.raises(sqlite3.OperationalError) as caught:
         st.ensure(log)
     assert caught.value.sqlite_errorcode == sqlite3.SQLITE_CANTOPEN
+
+
+def test_a_live_rebuild_temp_is_never_removed_only_a_stale_one(repo, log, cfg):
+    """rubber-duck finding: the cleanup used to unlink every `index.db-rebuilding*`
+    unconditionally, trusting the advisory lock; a fresh temp may be another rebuild's."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    st.path.parent.mkdir(parents=True, exist_ok=True)
+    live = st.path.with_name("index.db-rebuilding.1.live")
+    legacy_live = st.path.with_name("index.rebuilding")
+    dead = st.path.with_name("index.db-rebuilding.2.dead")
+    for p in (live, legacy_live, dead):
+        p.write_bytes(b"x")
+    old = time.time() - store_mod.LEGACY_TEMP_MAX_AGE_S - 60
+    os.utime(dead, (old, old))
+    st.rebuild(log)
+    assert live.exists() and legacy_live.exists() and not dead.exists()
