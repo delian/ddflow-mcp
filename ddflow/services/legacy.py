@@ -14,8 +14,11 @@ sources) -- so `imported_files` derives the set from what actually happened. The
 is a `pre-commit` `language: fail` hook where the project uses the framework
 (R-onboard-legacy-precommit-fail), otherwise a generated test that pins each file's
 sha256, so the `unit_tests` gate goes red instead of the record forking in silence.
-`.ddflow/frozen.toml` is the one source of truth for both: the generated test reads it,
-`check_frozen` reads it, and B-onboard-verify reports "unchanged since import" from it.
+`.ddflow/frozen.toml` is the manifest the generated test and `check_frozen` both read;
+B-onboard-verify reports "unchanged since import" from it. The pre-commit hook embeds the
+path list (pre-commit cannot read the manifest), and pre-commit never passes a DELETED
+file to a hook, so deletion is caught by `check_frozen` at verification rather than at
+the commit.
 """
 
 from __future__ import annotations
@@ -30,18 +33,51 @@ from pathlib import Path
 from typing import Any
 
 from ..infra.tomlcfg import atomic_write
-from .adopt import BEGIN, END, Refused
+from .adopt import BEGIN, END, NATIVE_RULES, Refused
 from .enforce import UnreadableYaml, read_precommit_yaml
 
 #: Where the onboarding prompt looks for instructions that write an imported surface.
-RULEBOOK_FILES = ("AGENTS.md", "CLAUDE.md", "CLAUDE.local.md")
+#: The native list comes from `adopt.NATIVE_RULES` -- the same source `enforce.rulebooks`
+#: derives from -- so an agent added there is not silently left unscanned (critic on
+#: b71fc69). Its ddflow-managed blocks are skipped by `scan` with every other block.
+RULEBOOK_FILES = (
+    "AGENTS.md",
+    "CLAUDE.md",
+    "CLAUDE.local.md",
+    *(rule.path for rule in NATIVE_RULES.values()),
+)
 #: The harness's slash commands, which often carry the same duties in yet another copy.
 COMMANDS_GLOB = ".claude/commands/*.md"
 
 #: A duty a rulebook line asks for, and what ddflow does instead. First match wins, so
 #: the more specific duties come first; a line matching none but naming an imported file
-#: still gets a proposal (see `scan`).
+#: still gets a proposal (see `scan`). The last four move a convention into config, as
+#: stage 4 asks, instead of leaving it as prose nothing enforces.
 DUTY_REPLACEMENTS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"\bco-?author(ed)?[- ]by\b|\battribution trailer\b", re.I),
+        'make it config, not prose: `[enforce] forbidden_trailers = ["Co-Authored-By"]` '
+        "-- the commit-msg hook refuses the trailer from every route",
+    ),
+    (
+        re.compile(
+            r"\bcommit trailer\b|\btrailer\b.{0,20}\b(convention|key|keys)\b",
+            re.I,
+        ),
+        "make it config, not prose: `[enforce] item_trailer_keys` names the trailers ddflow reads",
+    ),
+    (
+        re.compile(
+            r"\b(weekly|daily|monthly|every \d+ days?)\b.{0,30}\b(bug ?hunt|dedupe|audit)\b"
+            r"|\b(bug ?hunt|dedupe)\b.{0,30}\b(weekly|daily|monthly)\b",
+            re.I,
+        ),
+        "make it a cadence, not a habit: `[cadence] every_days = N` -- ddflow surfaces it when due",
+    ),
+    (
+        re.compile(r"\bsibling (repo|repository)\b|\bwait(s|ing)? (on|for) .{0,24}\brepo", re.I),
+        "make it config, not prose: `[schedule] repos` -- an external dependency is observed, not remembered",
+    ),
     (
         re.compile(
             r"\btick(ed|ing)?\b.{0,24}\b(box|checkbox)\b|\bcheck(ed|ing)? the (box|checkbox)\b",
@@ -208,7 +244,11 @@ def render(proposals: Iterable[Proposal]) -> str:
     """The report the operator reads and approves, one proposal per line pair."""
     items = list(proposals)
     if not items:
-        return "no cutover proposals: no rulebook line writes an imported surface"
+        return (
+            "no cutover proposal in the files scanned (the native rulebooks, "
+            ".claude/commands/*.md, and every file the operator named); name any other "
+            "prompt or rulebook file explicitly so it is scanned too"
+        )
     return "\n".join(f"{p.path}:{p.line}: {p.text}\n  -> {p.replacement}" for p in items)
 
 
@@ -284,9 +324,10 @@ def freeze(
     """Write the frozen manifest and arm ONE ratchet for it, and say what was done.
 
     The pre-commit framework wins where it is used: a `language: fail` hook refuses the
-    commit and prints what to use instead. Elsewhere a generated test pins the hashes,
-    so the project's own `unit_tests` gate goes red. Files that no longer exist are
-    reported, not invented into the manifest.
+    commit and prints what to use instead -- it catches EDITS, since pre-commit passes
+    only existing files; a deletion is caught by `check_frozen`. Elsewhere a generated
+    test pins the hashes, so the project's own `unit_tests` gate goes red. Files that no
+    longer exist are reported, not invented into the manifest.
     """
     repo = Path(repo)
     paths = list(paths)
@@ -342,10 +383,16 @@ def _arm_precommit(config: Path, paths: list[str]) -> str:
         newline = text.find("\n", end_at)
         stop = len(text) if newline == -1 else newline + 1
         new_text = text[:start] + block + text[stop:]
-        action = f"updated the frozen-files hook in {config.name}"
+        action = (
+            f"updated the frozen-files hook in {config.name} (it fires once the "
+            f"pre-commit framework is installed: `pre-commit install`)"
+        )
     else:
         new_text = _insert_hook(text, block)
-        action = f"added the frozen-files hook to {config.name}"
+        action = (
+            f"added the frozen-files hook to {config.name} (it fires once the pre-commit "
+            f"framework is installed: `pre-commit install`)"
+        )
     try:
         read_precommit_yaml(new_text)
     except UnreadableYaml as exc:
@@ -452,4 +499,7 @@ def _generate_test(repo: Path, paths: list[str]) -> str:
         f"    )\n"
     )
     atomic_write(target, body)
-    return f"wrote {target.relative_to(repo)}: the suite goes red on an edit to a frozen file"
+    return (
+        f"wrote {target.relative_to(repo)}: change a byte and watch it fail, then restore; "
+        f"it turns the suite red once the project's unit_tests command collects it"
+    )
