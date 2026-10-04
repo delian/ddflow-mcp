@@ -531,7 +531,8 @@ def _roborev_reviewer(
     same-family reviewer passed as cross-family. roborev's job record names the agent
     that ran; that is recorded as the reviewer (in ``ev``, as `--reviewer-model` would:
     a same-family one is then flagged at completion, not refused here). Without roborev,
-    or without a finished review of the sha, the typed model stands, with a note.
+    or without a finished review of the sha, the typed model stands, with a note and
+    ``evidence.roborev.verified = false``.
     """
     from ..services import roborev as RR
 
@@ -540,9 +541,10 @@ def _roborev_reviewer(
     where = wt if wt is not None and wt.exists() else repo
     rv, note = RR.review_of(where, str(ev["reviewed_sha"]))
     if rv is None or not rv.reviewer:
-        if note:  # roborev is there and could not vouch: say so in the record, not only here
-            ev["roborev"] = {"verified": False, "why": note}
-        return typed, f"NOTE: {note}." if note else ""
+        # Nobody vouched for the typed model: said in the record, not only on screen.
+        why = note or f"roborev job {rv.job if rv else '?'} names no agent"
+        ev["roborev"] = {"verified": False, "why": why}
+        return typed, f"NOTE: {why}."
     ev["roborev"] = {"verified": True, "job": rv.job, "agent": rv.agent, "model": rv.model}
     ev["model"] = rv.reviewer
     if not typed or typed in (rv.agent, rv.model):

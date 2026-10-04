@@ -2293,7 +2293,8 @@ requested agent fails, so a job enqueued as `agent: kilo` can be reviewed by `cl
 at it) and records the model roborev ran -- else its agent -- as the reviewer, with the
 job under `evidence.roborev`, whatever `--model` said; a same-family reviewer is then
 judged as one at `complete`, as `--reviewer-model` would be. Without roborev on PATH, or
-with no finished review of the sha, the typed model stands, with a note.
+with no finished review of the sha, the typed model stands, with a note and
+`evidence.roborev.verified = false` in the record.
 
 `ddflow review` of an item reviews the branch's commits plus tracked edits in its worktree.
 Untracked files are *not* sent to the reviewer; they are listed in the output and in the
