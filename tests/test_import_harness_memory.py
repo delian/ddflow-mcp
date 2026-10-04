@@ -161,6 +161,25 @@ def test_a_near_copy_over_the_threshold_is_asked_not_kept_silently(repo, tmp_pat
     assert duplicates and not duplicates[0].identical
 
 
+def test_with_on_match_off_nothing_is_dropped(repo, tmp_path):
+    """The knob means what it says: a project that turned the duplicate check off keeps
+    every fact (critic on 2c18772)."""
+    long_fact = (
+        "---\nname: xdist-long\ndescription: Run the suite with -n 48 because serial "
+        "runs take 24 minutes and the unit_tests gate times out every time\n---\n"
+    )
+    root = _memory_dir(tmp_path, repo, {"xdist-long.md": long_fact})
+    scan = H.scan(repo, projects_root=root)
+    near = (
+        "Run the suite with -n 48 because serial runs take 24 minutes and the unit_tests "
+        "gate times out every single time"
+    )
+    cfg = Config.load(repo)  # the suite's env leaves on_match off
+    assert cfg.dedupe.on_match == "off"
+    kept, duplicates = H.dedupe(scan.found, _state_with(near), cfg)
+    assert [f.ident for f in kept] == ["M-harness-xdist-long"] and duplicates == []
+
+
 def test_a_short_near_copy_is_kept_because_the_rule_needs_min_words(repo, tmp_path):
     """`[dedupe].min_words` exists so a two-word fact does not match everything; a
     short memory that scores 1.0 against an existing one is the rule working."""
@@ -186,8 +205,21 @@ def test_an_unrelated_memory_is_kept(repo, tmp_path):
 def test_two_identical_files_in_one_scan_fold_to_one_line(repo, tmp_path):
     root = _memory_dir(tmp_path, repo, {"a.md": FACT, "b.md": FACT.replace("use-xdist", "copy")})
     scan = H.scan(repo, projects_root=root)
-    kept, duplicates = H.dedupe(scan.found, None, _cfg(repo))
+    kept, duplicates = H.dedupe(
+        scan.found, _state_with("LAN reviewers live in the machine-local file"), _cfg(repo)
+    )
     assert len(kept) == 1 and duplicates[0].where == "import" and duplicates[0].identical
+
+
+def test_propose_scans_and_dedupes_in_one_call(repo, tmp_path):
+    root = _memory_dir(tmp_path, repo, {"use-xdist.md": FACT})
+    scan_result, kept, duplicates = H.propose(
+        repo,
+        projects_root=root,
+        state=_state_with("Run tests with -n 48; serial takes 24 minutes and the gate times out"),
+        cfg=_cfg(repo),
+    )
+    assert scan_result.found and kept == [] and duplicates[0].identical
 
 
 def test_apply_records_the_memory_once(repo, tmp_path):
@@ -247,6 +279,25 @@ def test_apply_without_a_state_folds_the_log_itself(repo, tmp_path):
     again = H.apply(log, scan.found)
     assert any(a.startswith("already remembered") for a in again)
     assert len([e for e in log.read_all() if e.kind == "memory.recorded"]) == 1
+
+
+def test_apply_refuses_a_near_copy_the_caller_did_not_dedupe(repo, tmp_path):
+    """The approved list normally comes from dedupe; a caller passing the raw scan must
+    not slip a near-copy past the ask an add would raise (critic on 2c18772)."""
+    long_fact = (
+        "---\nname: xdist-long\ndescription: Run the suite with -n 48 because serial "
+        "runs take 24 minutes and the unit_tests gate times out every time\n---\n"
+    )
+    root = _memory_dir(tmp_path, repo, {"xdist-long.md": long_fact})
+    scan = H.scan(repo, projects_root=root)
+    near = (
+        "Run the suite with -n 48 because serial runs take 24 minutes and the unit_tests "
+        "gate times out every single time"
+    )
+    log = EventLog(repo, "tester")
+    out = H.apply(log, scan.found, state=_state_with(near), cfg=_cfg(repo))
+    assert any("reads like M-existing" in a for a in out)
+    assert not list(log.read_all())
 
 
 def test_a_fact_over_the_memory_limit_is_refused_not_truncated(repo, tmp_path):

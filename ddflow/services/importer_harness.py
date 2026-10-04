@@ -190,6 +190,38 @@ def _normalize(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
+def _hit(assessment: Any, cfg: Config) -> Any:
+    """The candidate that makes a fact a duplicate, per the rule an add uses."""
+    return next(
+        (
+            c
+            for c in assessment.candidates
+            if "identical" in c.flags
+            or (c.score >= cfg.dedupe.ask_threshold and assessment.words >= cfg.dedupe.min_words)
+        ),
+        None,
+    )
+
+
+def propose(
+    repo: Path,
+    *,
+    projects_root: Path | None = None,
+    state: Any = None,
+    cfg: Config | None = None,
+) -> tuple[HarnessScan, list[Found], list[Duplicate]]:
+    """`scan` then `dedupe`, in the one order that is correct.
+
+    The caller supplies what it has -- a state for the queue check, a config when one is
+    already loaded; everything else is loaded here, so a caller cannot assemble the steps
+    in the wrong order or forget the dedupe (critic on 2c18772). `render` is the offer
+    that goes with this tuple.
+    """
+    scan_result = scan(repo, projects_root=projects_root)
+    kept, duplicates = dedupe(scan_result.found, state, cfg or Config.load(repo))
+    return scan_result, kept, duplicates
+
+
 def dedupe(found: list[Found], state: Any, cfg: Config) -> tuple[list[Found], list[Duplicate]]:
     """Split `found` into the new facts and the ones already remembered.
 
@@ -211,18 +243,7 @@ def dedupe(found: list[Found], state: Any, cfg: Config) -> tuple[list[Found], li
     duplicates: list[Duplicate] = []
     seen: dict[str, Found] = {}
     for f in found:
-        assessment = similar.assess(index, _as_record(f), cfg)
-        hit = next(
-            (
-                c
-                for c in assessment.candidates
-                if "identical" in c.flags
-                or (
-                    c.score >= cfg.dedupe.ask_threshold and assessment.words >= cfg.dedupe.min_words
-                )
-            ),
-            None,
-        )
+        hit = _hit(similar.assess(index, _as_record(f), cfg), cfg)
         if hit is not None:
             duplicates.append(Duplicate(f, hit.id, hit.score, "identical" in hit.flags, "queue"))
             continue
@@ -242,8 +263,13 @@ def render(scan_result: HarnessScan, kept: list[Found], duplicates: list[Duplica
         return "no harness memory directory for this checkout; nothing to import"
     lines = [f"harness memory: {scan_result.directory}"]
     for f in kept:
-        lines.append(f"  remember {f.ident} [{f.title}]: {f.body}")
-        lines.append(f"      from {f.source}")
+        when = f.extra.get("origin_at")
+        since = f" since {when}" if when else ""
+        lines.append(f"  remember {f.ident} [{f.title}]{since}: {f.body}")
+        # The body's reasoning stays in the file: the memory is one fact, the reasoning
+        # belongs in a lesson, and the operator judging "still true" needs BOTH the date
+        # and where the full text is (critic on 2c18772).
+        lines.append(f"      from {f.source} (full text: {f.extra.get('file', f.source)})")
     for d in duplicates:
         why = "identical to" if d.identical else f"reads like ({d.score:.2f})"
         lines.append(f"  skip {d.found.ident} [{d.found.title}]: {why} {d.of}")
@@ -254,7 +280,9 @@ def render(scan_result: HarnessScan, kept: list[Found], duplicates: list[Duplica
     return "\n".join(lines)
 
 
-def apply(log: EventLog, found: list[Found], *, state: Any = None) -> list[str]:
+def apply(
+    log: EventLog, found: list[Found], *, state: Any = None, cfg: Config | None = None
+) -> list[str]:
     """Record the approved facts as `memory.recorded`, once each, and say what happened.
 
     Idempotent by the deterministic id and by exact text: re-running onboarding must not
@@ -271,8 +299,10 @@ def apply(log: EventLog, found: list[Found], *, state: Any = None) -> list[str]:
     they are reviving it.
     """
     from ..core.model import fold
+    from ..infra.store import similar_records
+    from . import similar
 
-    cfg = Config.load(log.root)
+    cfg = cfg or Config.load(log.root)
     if state is None:
         state = fold(log.read_all(), strict=False)
     memories = getattr(state, "memories", {})
@@ -281,6 +311,7 @@ def apply(log: EventLog, found: list[Found], *, state: Any = None) -> list[str]:
         _normalize(m.text): m for m in memories.values() if not getattr(m, "live", True)
     }
     texts = set(id_text.values())
+    queue = similar.build(similar_records(state))
     out: list[str] = []
     with log.transaction():
         for f in found:
@@ -311,6 +342,17 @@ def apply(log: EventLog, found: list[Found], *, state: Any = None) -> list[str]:
                 continue
             if key in texts:
                 out.append(f"already remembered: {f.ident} [{f.title}]")
+                continue
+            hit = _hit(similar.assess(queue, _as_record(f), cfg), cfg)
+            if hit is not None and hit.id != f.ident:
+                # The approved list normally comes from dedupe; a caller passing the raw
+                # scan must not slip a near-copy past the ask an add would raise
+                # (critic on 2c18772).
+                out.append(
+                    f"not recorded {f.ident}: reads like {hit.id} ({hit.score:.2f}); "
+                    f"approve it through dedupe/render, or record it by hand if it really "
+                    f"is new"
+                )
                 continue
             log.append(
                 "memory.recorded",
