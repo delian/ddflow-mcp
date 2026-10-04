@@ -130,6 +130,7 @@ class Scenario:
         # scenario put in this directory is left alone -- scenario 3 keeps its
         # surviving event log here on purpose.
         self.dir.mkdir(parents=True, exist_ok=True)
+        # The former sibling root too, for a directory left by an older run.
         for victim in (repo, self.dir / ".ddflow-worktrees"):
             if victim.exists():
                 shutil.rmtree(victim)
