@@ -111,3 +111,9 @@ def test_a_report_that_fails_does_not_fail_the_completion(repo, monkeypatch):
     monkeypatch.setattr(PL, "report", boom)
     out = LC.complete(repo, "T1", force=True)
     assert out.exit == 0 and "progress report unavailable" in out.data["progress"]
+
+
+def test_a_share_short_of_complete_never_reads_100_percent():
+    assert PL._pct(306, 307) == "306/307 (99%)"
+    assert PL._pct(307, 307) == "307/307 (100%)" and PL._pct(0, 0) == "0/0 (100%)"
+    assert PL._pct(1, 3) == "1/3 (33%)" and PL._pct(2, 3) == "2/3 (66%)"
