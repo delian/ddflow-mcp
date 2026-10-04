@@ -67,6 +67,9 @@ def test_the_recovery_help_says_what_apply_and_claim_do(repo):
     assert "measured empty" in flat.lower(), flat
     assert "ddflow claim <item> --force" in flat, flat
     assert "could not measure, is never touched" in flat, flat
+    # Nor the half-truth: a recorded expiry does not let a plain claim through.
+    assert "free again" not in flat, "a plain claim still refuses the item"
+    assert "Either way the item is taken back with `ddflow claim <item> --force`" in flat
 
 
 def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo):
@@ -75,6 +78,6 @@ def test_apply_expires_a_lease_whose_tree_it_measured_empty(repo):
     rec = RP.recover(repo, apply=True, agent="op")
     assert [(r.item, r.salvageable) for r in rec.data["_render"]["found"]] == [("T1", False)]
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
-    assert lease is None or lease.expired_at, lease
+    assert lease is not None and lease.expired_at, "the expiry is RECORDED, not dropped"
     out = LC.claim(repo, "T1", agent="next", force=True)
     assert out.exit == 0, out.reason
