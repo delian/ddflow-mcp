@@ -513,8 +513,8 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
     def lapsed_onto_a_live_claim(state: State, it: Item) -> bool:
         # Reviving a LAPSED lease is a re-claim: expiry freed its files, and a live lease
         # granted on them since stands, as it does against `claim` (B0cb404c94e). Judged
-        # on the lease's globs and the item's, which the heartbeat's catch-up then
-        # points the lease at.
+        # on the globs the lease held: paths the item gained while it lapsed are the
+        # heartbeat catch-up's, which renews without the ones someone holds now.
         now = time.time()
         lease = it.lease
         if lease is None or (not lease.expired_at and not lease.expired(now)):
@@ -522,8 +522,7 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         cfg = Config.load(log.root)
         if not (lease.expired_at or lease.expired(now, cfg.lease.grace_s)):
             return False
-        want = list(dict.fromkeys([*lease.globs, *it.globs]))
-        return glob_clash(state, cfg, it, holder, want, now) is not None
+        return glob_clash(state, cfg, it, holder, list(lease.globs), now) is not None
 
     ok = _transition(
         log,
