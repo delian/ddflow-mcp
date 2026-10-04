@@ -1,0 +1,98 @@
+diff --git a/ddflow/surfaces/mcp.py b/ddflow/surfaces/mcp.py
+index 86a2b51..2343d0e 100644
+--- a/ddflow/surfaces/mcp.py
++++ b/ddflow/surfaces/mcp.py
+@@ -1075,7 +1075,7 @@ TOOLS: dict[str, dict[str, Any]] = {
+     },
+     "ddflow_identify": {
+         "description": (
+-            "Declare WHO you are on this connection before anything that writes. Call it first when 2+ agents or subagents work this repository at once: identity attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role), distinct from the others'. Idempotent. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (the CLI's `--agent`)."
++            "Declare WHO you are on this connection before anything that writes. Call it first when 2+ agents or subagents work this repository at once: identity attributes every claim, gate outcome and review, and the tree-derived default merges several agents in one tree into one identity with no error (a review would pass independence against itself). Pick a short stable name (your role), distinct from the others'. A SUBAGENT sharing its parent's connection must NOT call this; it passes `as_agent` on each call instead (the CLI's `--agent`)."
+         ),
+         "properties": {
+             "agent": (
+@@ -1341,7 +1341,7 @@ TOOLS: dict[str, dict[str, Any]] = {
+     },
+     "ddflow_workflow": {
+         "description": (
+-            "The rules THIS project runs by, in one answer: the gates every task and phase passes in order, the completion rules, parallelism caps, reviewers, and where each value came from. Call it before your first `ddflow_claim` and after any workflow change: instructions are computed once at start. Exit 1: the workflow does not hang together (e.g. a pipeline names a gate with no definition). Read-only."
++            "The rules THIS project runs by, in one answer: the gates every task and phase passes in order, the completion rules, parallelism caps, reviewers, and where each value came from. Call it before your first `ddflow_claim` and after any workflow change: instructions are computed once at start. Exit 1: it does not hang together. Read-only."
+         ),
+         "properties": {},
+         "api": lambda repo, a, agent: _api().workflow_show(repo),
+@@ -1438,26 +1438,40 @@ TOOLS: dict[str, dict[str, Any]] = {
+         ),
+     },
+     "ddflow_verify": {
+-        "description": "Re-check a done task's claims (landed, files, tests, gates); fails if one does not hold. No id: sweep all done tasks, worst first.",
++        "description": "Re-check a done task's claims; fails if one does not hold. No id: sweep all, worst first.",
+         "properties": {
+             "id": ("string", "Task id; omit to sweep.", False),
+             "phase": ("string", "Sweep only this phase.", False),
+             "limit": ("integer", "How many of the worst to list (20).", False),
+             "file_bugs": ("boolean", "File a bug per failing completion.", False),
++            "reopen": ("boolean", "Reopen a failing completion.", False),
++            "reason": ("string", "Why (reopen).", False),
++            "force": ("boolean", "Reopen even if it holds.", False),
+         },
+         "api": lambda repo, a, agent: (
+             (
+                 _api().refuse_sweep_args()
+                 if (a.get("phase") or a.get("limit") is not None or a.get("file_bugs"))
+-                else _api().verify_item(repo, a["id"], agent=agent)
++                else _api().verify_item(
++                    repo,
++                    a["id"],
++                    reopen=bool(a.get("reopen")),
++                    reason=a.get("reason", "") or "",
++                    force=bool(a.get("force")),
++                    agent=agent,
++                )
+             )
+             if a.get("id")
+-            else _api().verify_sweep(
+-                repo,
+-                phase=a.get("phase", "") or "",
+-                limit=int(a["limit"]) if a.get("limit") is not None else 20,
+-                file_bugs=bool(a.get("file_bugs")),
+-                agent=agent,
++            else (
++                _api().refuse_sweep_args("reopen, reason and force need an id")
++                if (a.get("reopen") or a.get("reason") or a.get("force"))
++                else _api().verify_sweep(
++                    repo,
++                    phase=a.get("phase", "") or "",
++                    limit=int(a["limit"]) if a.get("limit") is not None else 20,
++                    file_bugs=bool(a.get("file_bugs")),
++                    agent=agent,
++                )
+             )
+         ),
+         "payload": "",
+@@ -1785,7 +1799,7 @@ TOOLS: dict[str, dict[str, Any]] = {
+     },
+     "ddflow_precommit": {
+         "description": (
+-            "A .pre-commit-config.yaml proposed for THIS repository: its stacks (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON checks) mapped to pinned hooks, plus ddflow's check-commit and check-msg as local hooks, so the pre-commit framework owns .git/hooks/ (remove ddflow's own hooks first; the body names them). Proposes; installs nothing. `write` creates the file and is REFUSED (exit 3) when one exists. The body names missing programs and whether the hooks can reach ddflow. Installing pre-commit itself is the operator's call."
++            "A .pre-commit-config.yaml proposed for THIS repository: its stacks (Python, shell, Docker, JS, Go, Rust; YAML/TOML/JSON checks) mapped to pinned hooks, plus ddflow's check-commit and check-msg as local hooks, so the pre-commit framework owns .git/hooks/ (remove ddflow's own hooks first; the body names them). Proposes; installs nothing. `write` creates the file and is REFUSED (exit 3) when one exists. The body names missing programs and whether the hooks can reach ddflow."
+         ),
+         "properties": {
+             "ddflow_cmd": (
+@@ -1894,7 +1908,7 @@ TOOLS: dict[str, dict[str, Any]] = {
+     },
+     "ddflow_configure": {
+         "description": (
+-            'Read or write .ddflow/config.toml (WRITES). No arguments: every knob with value, source and meaning. `set` edits one dotted key in place (preferred); `toml` APPENDS a fragment, e.g.\n[gate.unit_tests]\ncommand = "pytest -q -n auto"\n(needs pytest-xdist). The committed file is generic project policy; anything of THIS machine or operator (a reviewer endpoint, a host, a key variable, worker counts) goes with local=true to the git-ignored .ddflow/local/config.toml, read last and never committed. A reviewer there is a `[[reviewer]]` block; `ddflow_reviewers_detect` write=true writes one.'
++            'Read or write .ddflow/config.toml (WRITES). No arguments: every knob with value, source and meaning. `set` edits one dotted key in place (preferred); `toml` APPENDS a fragment, e.g.\n[gate.unit_tests]\ncommand = "pytest -q -n auto"\n(needs pytest-xdist). The committed file is generic project policy; anything of THIS machine or operator (a reviewer endpoint, a host, a key variable, worker counts) goes with local=true to the git-ignored .ddflow/local/config.toml, read last and never committed. A reviewer there is a `[[reviewer]]` block (`ddflow_reviewers_detect` write=true).'
+         ),
+         "properties": {
+             "set": (
+@@ -2421,7 +2435,7 @@ TOOLS: dict[str, dict[str, Any]] = {
+     },
+     "ddflow_resolve": {
+         "description": (
+-            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rival definitions and claims, `ddflow_next` withholds them). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost`: re-add it under a new id with `refile_as`, or it exists only in the log. Refused (exit 3) when not contested."
++            "Settle a CONTESTED item: two clones each added the same id with different content, or each claimed it, and a merge brought both in (`ddflow_doctor` names them, `ddflow_show` lists the rivals). `keep` names the definition (event id or agent) and/or the lease holder to keep; the losing claim is released in the same transaction; a losing DEFINITION comes back in `lost`: re-add it under a new id with `refile_as`, or it exists only in the log. Refused (exit 3) when not contested."
+         ),
+         "properties": {
+             "id": ("string", "The contested item.", True),
