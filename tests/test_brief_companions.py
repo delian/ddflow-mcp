@@ -26,7 +26,9 @@ def test_session_start_brief_lists_missing_default_companions(repo):
     gaps = [s for s in CO.scan(repo, probe=False) if s.companion.default and s.advice != "ok"]
     assert gaps
     for st in gaps:
-        assert st.companion.id in out
+        line = next(ln for ln in out.splitlines() if f"**{st.companion.id}**" in ln)
+        assert "[not checked]" in line  # unprobed: stated as such, not as "missing"
+        assert st.companion.install in line
 
 
 def test_readme_names_install_companions_and_counts_right():
