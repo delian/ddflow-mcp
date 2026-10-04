@@ -22,9 +22,10 @@ def _fix_task_after(st, bug) -> str:
     """The task that fixes the reopened bug: a task filed to fix it (its current
     `fix_task`, else its own `fix-<bug>`), an open one first. A DONE one is kept -- it is
     the bug's own fix, which did not hold, and `ddflow verify <task> --reopen` sends it
-    back to the queue; an ABANDONED one is named too (`_next_step` says the way out),
-    since `bug file-tasks` would link straight back to it. "" when no task was filed to fix it (say, the finished task it
-    was merely reported against), so `bug file-tasks` files one."""
+    back to the queue. An ABANDONED one is named too, since `bug file-tasks` would link
+    straight back to it (`_next_step` gives the way out). "" when no task was filed to
+    fix it (say, the finished task it was merely reported against), so `bug file-tasks`
+    files one."""
     mine = [
         st.items[t]
         for t in dict.fromkeys((bug.fix_task, FIX_TASK_PREFIX + bug.id))
@@ -45,8 +46,9 @@ def _next_step(bug: str, task: str, state: str) -> str:
         # Nothing revives an abandoned item, and `bug file-tasks` links straight back to
         # a live `fix-<bug>`: the way that works is a fix under a new task, closed here.
         return (
-            f"its fix task {task} was abandoned (nothing revives it): fix the bug under a "
-            f"new task and close it with `ddflow bug fixed {bug} --regression-test <test>`"
+            f"its fix task {task} was abandoned (nothing revives it): `ddflow bug fixed "
+            f"{bug} --regression-test <test>` is the way out, once a regression test that "
+            f"fails on the unfixed code is in"
         )
     if state == DONE:
         return f"its fix task {task} is done: `ddflow verify {task} --reopen` reopens it"
