@@ -287,7 +287,7 @@ def test_a_refused_reclaim_at_an_occupied_default_path_keeps_the_held_lease(repo
     assert run_cli(repo, "init")[0] == OK
     assert run_cli(repo, "task", "add", "T1", "--globs", "a.py")[0] == OK
     assert run_cli(repo, "claim", "T1", "--no-worktree", agent="lead")[0] == OK
-    _git(repo, "worktree", "add", "-q", str(repo.parent / ".ddflow-worktrees" / "T1"), "-b", "x")
+    _git(repo, "worktree", "add", "-q", str(repo / ".ddflow" / "worktrees" / "T1"), "-b", "x")
 
     code, out, err = run_cli(repo, "claim", "T1", agent="lead")
     assert code == REFUSED, out + err

@@ -9,8 +9,8 @@ The driver is `templates/drivers/implement-phase.md`. Read and follow it in full
 4. **File references.** Plain paths.
 5. **Instructions file.** Codex reads `AGENTS.md` — point it at the canonical driver.
 6. **Sandboxing.** Codex may run with restricted filesystem access. Worktrees are created
-   *outside* the repo by default (`worktree.root`); if your sandbox forbids that, set
-   `worktree.root = ".ddflow-worktrees"` and add it to `.gitignore`.
+   inside the repo by default (`worktree.root = ".ddflow/worktrees"`, git-ignored), so a
+   sandbox limited to the project can reach them.
 
 MCP registration in `~/.codex/config.toml`:
 
