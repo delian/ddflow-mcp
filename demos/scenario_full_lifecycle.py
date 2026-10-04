@@ -368,7 +368,7 @@ def run(sc: Scenario) -> None:
     sc.head("Scenario 6 — a whole project: plan, build, change course, rebuild")
 
     repo = sc.make_repo("ledger", SCAFFOLD)
-    wt_root = sc.dir / ".ddflow-worktrees"
+    wt_root = repo / ".ddflow" / "worktrees"  # the default root (D-worktree-home)
 
     alpha = McpClient(repo, ROOT, agent="alpha")
     beta = McpClient(repo, ROOT, agent="beta")
@@ -1099,7 +1099,9 @@ def _act8_rebuild_from_the_log(sc, alpha, repo):
     for path in sorted(repo.rglob("*.py")):
         if ".ddflow" not in path.parts and ".git" not in path.parts:
             path.unlink()
-    remaining = [p for p in repo.rglob("*.py") if ".git" not in p.parts]
+    # .ddflow/ survives whole, worktrees included (D-worktree-home): the project's code is
+    # what is gone.
+    remaining = [p for p in repo.rglob("*.py") if not {".git", ".ddflow"} & set(p.parts)]
     sc.check("the code is genuinely gone", not remaining, str(remaining))
 
     sc.step("`replay` reconstructs the instruction history from the log alone")
