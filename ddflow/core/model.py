@@ -394,6 +394,8 @@ class Bug:
     #: The queue item that fixes this bug (`bug.found` `fix_task`: the task `bug found`
     #: filed, or the open bug-fix task the report named). Its completion requires the
     #: bug closed; "" for a bug with no task (`--no-task`, or filed before fix tasks were).
+    #: A report filed against an open fix task links to it here without being one of the
+    #: task's `fixes`: that task's completion leaves it open (B7bdcc6b212).
     fix_task: str = ""
     #: `bug.reported_upstream`: where the report about this bug went (a ddflow bug filed
     #: against ddflow itself).
@@ -402,6 +404,9 @@ class Bug:
     upstream_delivery: str = ""
     upstream_sent_at: str = ""
     upstream_digest: str = ""
+    #: `bug.reopened`: the last time a closure was undone, and why (B7bdcc6b212).
+    reopened_at: str = ""
+    reopen_reason: str = ""
 
     @property
     def resolution(self) -> str:
@@ -1679,6 +1684,21 @@ def _h_bug_invalid(st: State, ev: Event) -> None:
     bug.evidence = ev.data.get("evidence", "")
 
 
+def _h_bug_reopened(st: State, ev: Event) -> None:
+    """Undo a closure, fixed or invalid (B7bdcc6b212: a completion closed bugs it never
+    fixed, and neither `bug found` nor `bug invalid` could say so). The closure's events
+    stay in the log; the record reads open again, and ``fix_task`` is what the writer
+    decided (`api.bug_reopen`), "" when the old one cannot fix it."""
+    bug = st.bugs.setdefault(ev.subject, Bug(id=ev.subject))
+    bug.fixed_at = bug.regression_test = bug.lesson = ""
+    bug.regression_tests = []
+    bug.changelog = {}
+    bug.invalid_at = bug.invalid_reason = bug.evidence = ""
+    bug.fix_task = str(ev.data.get("fix_task", bug.fix_task) or "")
+    bug.reopened_at = ev.ts
+    bug.reopen_reason = ev.data.get("reason", "")
+
+
 def _h_lesson(st: State, ev: Event) -> None:
     """Merge, never replace — the same rule `_h_decision` and `_h_bug_found` follow.
 
@@ -2171,6 +2191,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "bug.found": _linking(_h_bug_found),
     "bug.fixed": _h_bug_fixed,
     "bug.invalid": _h_bug_invalid,
+    "bug.reopened": _h_bug_reopened,  # first writer: api/bug_reopen.py
     "bug.reported_upstream": _h_bug_reported_upstream,
     "lesson.recorded": _linking(_h_lesson),
     "research.recorded": _linking(_h_research),
