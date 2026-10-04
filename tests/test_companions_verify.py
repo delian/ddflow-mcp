@@ -276,7 +276,8 @@ def test_a_child_that_closes_stdout_and_stays_alive_is_not_waited_for(tmp_path):
 def test_the_grace_is_clamped_to_the_remaining_timeout(tmp_path, monkeypatch):
     """The post-EOF wait cannot outrun the caller's timeout: the grace handed to
     _await_exit is the remaining budget, not the full _EXIT_GRACE_S. Against unclamped
-    code the assertion sees 1.0 and fails, which is what makes this a regression test."""
+    code the assertion sees that full grace (30.0 here) and fails, which is what makes
+    this a regression test. The timeout leaves interpreter startup ample headroom."""
     seen: dict[str, float] = {}
 
     def fake_await(proc, grace_s):
@@ -287,11 +288,11 @@ def test_the_grace_is_clamped_to_the_remaining_timeout(tmp_path, monkeypatch):
     monkeypatch.setattr(CO, "_await_exit", fake_await)
     v = CO.verify_one(
         _companion("brief", sys.executable, _script(tmp_path, "bf.py", LINGERING_CHILD)),
-        timeout_s=2.0,
+        timeout_s=10.0,
     )
     assert v.speaks_mcp is False, v.detail
     assert "closed its output" in v.detail, v.detail
-    assert 0 < seen["grace"] < 2.0, seen
+    assert 0 < seen.get("grace", 0) < 10.0, seen
 
 
 def test_a_signal_killed_child_is_named_as_a_signal(tmp_path, monkeypatch):
