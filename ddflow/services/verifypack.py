@@ -39,9 +39,29 @@ def _stat(repo: Path, sha: str) -> list[str]:
     return r.out.splitlines()[:MAX_STAT_LINES] if r.ok else []
 
 
-def requirement(st: State, item_id: str) -> str:
-    it = st.items[item_id]
-    return f"{it.title}\n\n{it.body}".strip()[:MAX_BODY_CHARS]
+def requirement_text(title: str, body: str) -> str:
+    """The requirement the verifier reads, with an explicit marker when it was cut."""
+    text = f"{title}\n\n{body}".strip()
+    if len(text) <= MAX_BODY_CHARS:
+        return text
+    return (
+        text[:MAX_BODY_CHARS]
+        + f"\n[... truncated: {len(text) - MAX_BODY_CHARS} more characters of requirement]"
+    )
+
+
+def requirement(events: Sequence[Event], item_id: str) -> str | None:
+    """The requirement AS IT STOOD AT COMPLETION (not as it reads now), or None."""
+    led = LG.build(events, item_id)
+    if led is None:
+        return None
+    r = led["requirement"]
+    return requirement_text(r["title"], r["body"])
+
+
+def _data(kind: str, ident: str, text: str) -> str:
+    """Free text from the record, as DATA: a skip reason is as untrusted as the requirement."""
+    return PV.fence(kind, ident, text, PV.Origin(PV.UNKNOWN))
 
 
 def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: str) -> str | None:
@@ -64,7 +84,11 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
         "## Requirement (as it stood at completion)",
         "",
         PV.fence(
-            "requirement", item_id, requirement(st, item_id), PV.Origin(PV.UNKNOWN), inline=False
+            "requirement",
+            item_id,
+            requirement(events, item_id) or "",
+            PV.Origin(PV.UNKNOWN),
+            inline=False,
         ),
         "",
         f"- declared globs: {', '.join(f'`{g}`' for g in led['requirement']['globs']) or '(none)'}",
@@ -77,7 +101,7 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
         "",
         "## What was recorded",
         "",
-        f"- completed {led['completed_at'][:19]} by `{led['completed_by']}`"
+        f"- completed {led['completed_at'][:19]} by {_data('agent', 'completed_by', led['completed_by'])}"
         + (f" as `{led['sha'][:10]}`" if led["sha"] else " (no commit recorded)"),
         f"- forced: {'YES, overriding ' + ', '.join(led['overridden']) if led['forced'] else 'no'}",
         "- gates: "
@@ -87,7 +111,13 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
         out.append(
             "- skipped gates and why: "
             + "; ".join(
-                f"{g}: {led['gates'][g].get('reason') or 'NO REASON'}" for g in led["skipped"]
+                f"{g}: "
+                + (
+                    _data("skip-reason", g, led["gates"][g]["reason"])
+                    if led["gates"][g].get("reason")
+                    else "NO REASON"
+                )
+                for g in led["skipped"]
             )
         )
     if led["amendments"]:
@@ -107,7 +137,9 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
     else:
         out.append("- UNKNOWN: no landing could be found, so what changed is not known")
     if led.get("backfill"):
-        out.append(f"- _reconstructed after the fact: {led['backfill']['how']}_")
+        out.append(
+            f"- _reconstructed after the fact: {led['backfill']['how']}_"
+        )  # ours, not record text
     out += ["", f"## Mechanical findings: {rep.verdict}", ""]
     out += [f"- [{c.status}] {c.id}: {c.detail}" for c in rep.claims]
     out += ["", "## Your task", "", _QUESTION, ""]

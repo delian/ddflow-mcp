@@ -119,8 +119,19 @@ def _judge(a, c: Ctx) -> int:
 
 def cmd_verify(a, c: Ctx) -> int:
     if a.pack or a.judge:
-        if not a.id or a.all or a.phase or a.file_bugs or a.reopen:
-            print("--pack and --judge take one task id and nothing else", file=sys.stderr)
+        if (
+            not a.id
+            or a.all
+            or a.phase
+            or a.file_bugs
+            or a.reopen
+            or a.limit is not None
+            or (a.pack and a.judge)
+        ):
+            print(
+                "--pack or --judge (one of them) takes one task id and nothing else",
+                file=sys.stderr,
+            )
             return FAIL
         return _pack(a, c) if a.pack else _judge(a, c)
     if a.id:
