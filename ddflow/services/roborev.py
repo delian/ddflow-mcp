@@ -18,6 +18,8 @@ from pathlib import Path
 from ..infra import proc
 
 #: How many of the branch's most recent jobs are searched for the reviewed commit.
+#: The shortest abbreviated sha matched as a prefix (git's own default abbreviation).
+_MIN_ABBREV = 7
 _LIMIT = 100
 _TIMEOUT_S = 30
 
@@ -38,18 +40,23 @@ class Review:
 
 
 def _covers(git_ref: str, sha: str) -> bool:
-    """A job of ``sha`` itself, or of a range ending at it (`roborev review --since`)."""
-    return bool(git_ref) and (git_ref == sha or git_ref.rsplit("..", 1)[-1] == sha)
+    """A job of ``sha`` itself, or of a range ending at it (`roborev review --since`).
+    roborev records full shas; an abbreviated one (7+ hex) is matched as a prefix."""
+    end = git_ref.rsplit("..", 1)[-1].strip().lower()
+    return (
+        len(end) >= _MIN_ABBREV
+        and all(c in "0123456789abcdef" for c in end)
+        and sha.startswith(end)
+    )
 
 
 def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
-    """(the newest finished review of ``sha``, a note). ``(None, "")`` when roborev is
-    not installed -- nothing to check against; ``(None, note)`` when it could not be
-    asked or holds no finished review of ``sha``. Searched from ``where`` (the item's
+    """(the newest finished review of ``sha``, a note). ``(None, note)`` when roborev is
+    not installed, could not be asked, or holds no finished review of ``sha``. Searched from ``where`` (the item's
     worktree), whose branch is the one roborev filed the job under."""
     exe = shutil.which("roborev")
     if not exe:
-        return None, ""
+        return None, f"roborev is not on PATH; the reviewer of {sha[:10]} is unchecked"
     try:
         p = proc.run(
             [exe, "list", "--json", "--limit", str(_LIMIT)],

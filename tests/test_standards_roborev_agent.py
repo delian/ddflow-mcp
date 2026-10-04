@@ -124,8 +124,9 @@ def test_no_review_of_the_sha_keeps_the_typed_model_with_a_note(repo, fake_robor
     fake_roborev([_job(7, "0" * 40, "claude-code")])
     code, out, err = _record(repo, head)
     assert code == 0, out + err
-    assert _gate(repo).evidence["model"] == "kilo"
-    assert "no finished review" in out + err
+    ev = _gate(repo).evidence
+    assert ev["model"] == "kilo" and ev["roborev"]["verified"] is False, ev
+    assert "no finished review" in ev["roborev"]["why"] and "no finished review" in out + err
 
 
 def test_without_roborev_the_typed_model_stands(repo, monkeypatch):
@@ -136,7 +137,9 @@ def test_without_roborev_the_typed_model_stands(repo, monkeypatch):
         "--evidence", "linters", "--model", "kilo", "--reviewed-sha", head, agent="impl",
     )  # fmt: skip
     assert code == 0, out + err
-    assert _gate(repo).evidence["model"] == "kilo"
+    ev = _gate(repo).evidence
+    assert ev["model"] == "kilo" and ev["roborev"]["verified"] is False, ev
+    assert "not on PATH" in ev["roborev"]["why"] and "not on PATH" in out + err
 
 
 def test_a_null_job_list_is_no_review_not_a_crash(repo, fake_roborev, tmp_path):
@@ -184,3 +187,43 @@ def test_roborev_that_cannot_answer_leaves_the_typed_model_marked_unverified(
     ev = _gate(repo).evidence
     assert ev["model"] == "kilo" and ev["roborev"]["verified"] is False, ev
     assert said in ev["roborev"]["why"], ev
+
+
+def test_an_abbreviated_ref_in_roborevs_record_still_matches(repo, fake_roborev):
+    head = _item(repo)
+    fake_roborev([_job(7, f"abc1234..{head[:12]}", "claude-code")])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    assert _gate(repo).evidence["roborev"]["job"] == 7
+
+
+def test_a_roborev_that_hangs_is_could_not_ask(tmp_path, monkeypatch):
+    from ddflow.services import roborev as RR
+
+    bin_dir = tmp_path / "slowbin"
+    bin_dir.mkdir()
+    script = bin_dir / "roborev"
+    script.write_text(f"#!{sys.executable}\nimport time; time.sleep(30)\n")
+    script.chmod(script.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(RR, "_TIMEOUT_S", 0.5)
+    rv, note = RR.review_of(tmp_path, "a" * 40)
+    assert rv is None and "could not ask roborev" in note, note
+
+
+@pytest.mark.parametrize(("agent", "model", "independent"), [
+    ("claude-code", "", False),
+    ("kilo", "elmdeepseek/deepseek-ai/DeepSeek-V4.1-Flash", True),
+])  # fmt: skip
+def test_completion_judges_independence_by_the_agent_that_ran(
+    repo, fake_roborev, agent, model, independent
+):
+    """The point of the fix: a claude-code fallback is an anthropic reviewer for an
+    anthropic author, whatever --model said."""
+    head = _item(repo)
+    fake_roborev([_job(7, head, agent, model)])
+    code, out, err = _record(repo, head)
+    assert code == 0, out + err
+    st = fold(EventLog(repo).read_all(), strict=False)
+    ok, why = G.reviewer_independence(st, Config(), "T1", "claude-opus-5-5")
+    assert ok is independent, why
