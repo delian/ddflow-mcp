@@ -15,6 +15,7 @@ from ..core import outcome as O
 from ..core.model import ABANDONED, DONE, fold
 from ..services.completion import fixes_of
 from ._base import _load
+from .knowledge import FIX_TASK_PREFIX
 
 
 def _fix_task_after(st, bug) -> str:
@@ -25,7 +26,7 @@ def _fix_task_after(st, bug) -> str:
     merely reported against), so `bug file-tasks` files one."""
     mine = [
         st.items[t]
-        for t in dict.fromkeys((bug.fix_task, f"fix-{bug.id}"))
+        for t in dict.fromkeys((bug.fix_task, FIX_TASK_PREFIX + bug.id))
         if t in st.items and not st.items[t].removed and bug.id in fixes_of(st, t)
     ]
     for it in mine:
