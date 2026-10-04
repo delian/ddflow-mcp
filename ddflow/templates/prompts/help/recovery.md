@@ -13,7 +13,10 @@ and tells you whether it is salvageable. **It is never stolen automatically.** A
 that expired because an agent was thinking for an hour looks exactly like one that
 expired because it died, and the difference is only visible to a human.
 
-`ddflow recover --apply` adopts it, keeping the work. Nothing is deleted.
+`ddflow recover --apply` acts only on an expired lease whose tree it measured EMPTY: it
+records that lease expired, so the item is free again. A tree holding work, or one it
+could not measure, is never touched. To resume one, `ddflow claim <item> --force`: the
+claim adopts the existing worktree, the work in it included. Nothing is deleted.
 
 ## A broken index
 
