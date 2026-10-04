@@ -22,6 +22,7 @@ on some machines is worse than one that is merely weaker.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -186,8 +187,20 @@ class Store:
         file -- `FileNotFoundError`, `no such table: meta`, or a SIGBUS from SQLite's
         mapped `-shm` being truncated under it.
         """
+        return self._rebuild(log, only_if_stale=False)
+
+    def _rebuild(self, log: EventLog, *, only_if_stale: bool) -> State:
+        """Take the rebuild lock and rebuild; with `only_if_stale`, first ask again under
+        the lock, so a rebuild another process finished while this one waited is not
+        redone. The ONE place the lock is taken."""
+        # `rebuild` writes its temp database beside the index rather than through
+        # `connect`, so it needs the directory itself. Only a rebuild asks; no read
+        # path does, which is the whole point — `ddflow status` must not adopt a
+        # repository that never ran `ddflow init`.
         self._ensure_dir()
         with _flock(self.lock_path, REBUILD_LOCK_TIMEOUT_S):
+            if only_if_stale and not self.stale(log):
+                return fold(log.read_all(), strict=False)
             return self._rebuild_locked(log)
 
     def _rebuild_locked(self, log: EventLog) -> State:
@@ -212,18 +225,16 @@ class Store:
         fingerprint = log.head()
         events = log.read_all()
         state = fold(events, strict=False)
-        # `rebuild` writes its temp database beside the index rather than through
-        # `connect`, so it needs the directory itself. Both write paths ask; no read
-        # path does, which is the whole point — `ddflow status` must not adopt a
-        # repository that never ran `ddflow init`.
-        self._ensure_dir()
-        # Under the lock no other rebuild is running, so every temp file left here is
-        # from one that died (and `index.rebuilding*` from before temp names were unique).
-        for old in (
-            *self.path.parent.glob(f"{self.path.name}-rebuilding*"),
-            *self.path.parent.glob(f"{self.path.stem}.rebuilding*"),
-        ):
+        # Under the lock no other rebuild of THIS version is running, so a temp file of
+        # ours left here is from one that died. `index.rebuilding*` is the fixed name an
+        # older ddflow used without the lock: one may still be building into it during an
+        # upgrade, so it goes only once it is older than any rebuild should take.
+        for old in self.path.parent.glob(f"{self.path.name}-rebuilding*"):
             old.unlink(missing_ok=True)
+        for old in self.path.parent.glob(f"{self.path.stem}.rebuilding*"):
+            with contextlib.suppress(OSError):
+                if time.time() - old.stat().st_mtime > REBUILD_LOCK_TIMEOUT_S:
+                    old.unlink()
         # A name of its own all the same: the lock is advisory, and a temp file that
         # nothing else can name cannot be unlinked or published by anything else.
         tmp = self.path.with_name(
@@ -364,12 +375,11 @@ class Store:
         if not self.stale(log):
             return fold(log.read_all(), strict=False)
         try:
-            self._ensure_dir()
-            with _flock(self.lock_path, REBUILD_LOCK_TIMEOUT_S):
-                if not self.stale(log):
-                    return fold(log.read_all(), strict=False)
-                return self._rebuild_locked(log)
-        except (TimeoutError, OSError, sqlite3.Error) as exc:
+            return self._rebuild(log, only_if_stale=True)
+        except (TimeoutError, OSError, sqlite3.OperationalError) as exc:
+            # The environment (a held lock, a full or read-only disk, a locked database),
+            # not a bug in the projection: anything else -- an IntegrityError, a fold
+            # error -- still propagates, so a broken rebuild cannot hide behind this.
             print(
                 f"ddflow: the index {self.path} could not be rebuilt ({exc}); "
                 f"answering from the log. `ddflow rebuild` retries.",
