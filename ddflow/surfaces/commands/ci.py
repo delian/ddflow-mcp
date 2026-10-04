@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import sys
+from pathlib import Path
 
 from ...api import ci as A
+from ...infra import worktree as W
 from ..context import Ctx
 
 
@@ -13,25 +15,34 @@ def add_ci_parser(sub) -> None:
     ci = sub.add_parser(
         "ci", help="the CI parity gate: run the pre-push checks on the merge result"
     )
-    ci_s = ci.add_subparsers(dest="ci_cmd", required=False)
-    run = ci_s.add_parser(
-        "run", help="run the checks in a scratch worktree of the branch merged with the base"
+    ci.add_argument(
+        "verb",
+        nargs="?",
+        choices=["run", "status"],
+        default="status",
+        help="run: check the merge result; status (default): what would run, and whether it can",
     )
-    run.add_argument("--ref", default="HEAD", help="the commit to check (default HEAD)")
-    run.add_argument(
-        "--base",
-        default="",
-        help="merge this branch in first (default [ci].base or the default branch)",
+    ci.add_argument("--ref", default="", help="run: the commit or item id (default: HEAD here)")
+    ci.add_argument(
+        "--base", default="", help="run: merge this branch in first (default [ci].base)"
     )
-    run.add_argument("--command", default="", help="run this instead of [ci].command")
-    run.set_defaults(fn=cmd_ci)
-    st = ci_s.add_parser("status", help="what `ci run` would execute here, and whether it can")
-    st.set_defaults(fn=cmd_ci)
-    ci.set_defaults(fn=cmd_ci, ci_cmd="status")
+    ci.add_argument("--command", default="", help="run: use this instead of [ci].command")
+    ci.set_defaults(fn=cmd_ci)
+
+
+def _here_or_head(repo: Path) -> str:
+    """HEAD of the current directory when it is a worktree of THIS repository, else HEAD."""
+    here = Path.cwd()
+    common = [
+        W.git(p, "rev-parse", "--path-format=absolute", "--git-common-dir") for p in (here, repo)
+    ]
+    if all(r.ok for r in common) and Path(common[0].out).resolve() == Path(common[1].out).resolve():
+        return W.rev(here, "HEAD") or "HEAD"
+    return "HEAD"
 
 
 def cmd_ci(a, c: Ctx) -> int:
-    if (a.ci_cmd or "status") == "status":
+    if a.verb == "status":
         out = A.status(c.repo)
         if c.json:
             print(json.dumps(out.body(""), indent=2, default=str))
@@ -42,7 +53,10 @@ def cmd_ci(a, c: Ctx) -> int:
         print(f"timeout:   {d['timeout_s']}s")
         print(f"available: {'yes' if d['available'] else 'NO -- ' + d['why']}")
         return out.exit
-    out = A.run(c.repo, ref=a.ref, base=a.base, command=a.command)
+    # The default is the HEAD of the tree the command runs in: as a gate it runs in the
+    # item's worktree, while c.repo is the primary checkout (whose HEAD is main).
+    ref = a.ref or _here_or_head(c.repo)
+    out = A.run(c.repo, ref=ref, base=a.base, command=a.command)
     if c.json:
         print(json.dumps(out.body(""), indent=2, default=str))
         return out.exit

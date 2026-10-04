@@ -175,3 +175,30 @@ def test_leading_environment_assignments_are_not_the_program():
         == "definitely-not-installed-xyz"
     )
     assert CI.tool_missing("") == ""
+
+
+def test_an_item_id_names_its_branch_and_the_cli_defaults_to_the_directorys_head(
+    repo, fake_precommit
+):
+    """As a gate it runs in the item's worktree: the primary checkout's HEAD is main, not the work."""
+    _project(repo)
+    default = _git(repo, "rev-parse", "--abbrev-ref", "HEAD")
+    run_cli(repo, "task", "add", "T1", "--globs", "x.txt")
+    wt = repo.parent / "wt-T1"
+    _git(repo, "worktree", "add", "-q", "-b", "ddflow/T1", str(wt))
+    _commit(wt, {"BAD.txt": "x\n"}, "T1 work")  # only the item's branch is bad
+    assert CI.run(repo, Config.load(repo), ref=default).ok  # the primary checkout is clean
+    run_cli(repo, "claim", "T1", "--no-worktree")
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+
+    EventLog(repo).append(
+        "worktree.adopted", "T1", {"path": str(wt), "branch": "ddflow/T1", "base": ""}
+    )
+    assert fold(EventLog(repo).read_all(), strict=False).items["T1"].branch == "ddflow/T1"
+    assert A.run(repo, ref="T1").data["status"] == "failed"
+    proc = subprocess.run(
+        ["python", "-m", "ddflow", "--repo", str(repo), "ci", "run"],
+        cwd=wt, capture_output=True, text=True, check=False,
+    )  # fmt: skip
+    assert proc.returncode == 1 and "ruff check" in proc.stdout, (proc.stdout, proc.stderr)

@@ -13,7 +13,10 @@ def run(
     repo: Path, *, ref: str = "HEAD", base: str = "", command: str = "", agent: str = ""
 ) -> O.Outcome:
     """Run the CI command on `ref` merged with `base`. 0 passed, 1 failed, 2 could not run."""
-    _log, cfg, _st = _load(repo, agent)
+    _log, cfg, st = _load(repo, agent)
+    item = st.items.get(ref)
+    if item is not None and item.branch:  # an item id names its branch
+        ref = item.branch
     res = CI.run(repo, cfg, ref=ref, base=base, command=command)
     data = res.as_data()
     if res.ok:
