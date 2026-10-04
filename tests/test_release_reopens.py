@@ -51,3 +51,39 @@ def test_release_after_completion_does_not_reopen(repo):
     _claimed(repo)
     run_cli(repo, "complete", "T1", "--force")
     assert _state(repo) == "done"
+    assert run_cli(repo, "release", "T1")[0] == 2  # nothing to release
+    assert _state(repo) == "done"
+
+
+def test_a_takeover_lease_released_on_a_crashed_item_keeps_it_running(repo):
+    """A claim refused (or given up) on an item that was ALREADY running after a crash
+    must not erase the crash: recover and brief keep flagging its worktree."""
+    _claimed(repo)
+    log = EventLog(repo)
+    first = fold(log.read_all(), strict=False).items["T1"].lease
+    log.append("lease.expired", "T1", {"holder": first.holder, "event": first.event})
+    log.append(
+        "lease.acquired",
+        "T1",
+        {"holder": "second", "at": 2e9, "ttl_s": 1800, "globs": ["a.py"]},
+    )
+    taken = fold(log.read_all(), strict=False).items["T1"].lease
+    assert taken.holder == "second" and taken.prior_state == "running"
+    log.append("lease.released", "T1", {"holder": "second", "event": taken.event})
+    assert _state(repo) == "running"
+
+
+def test_a_holder_releasing_its_own_reclaimed_work_hands_it_back(repo):
+    """B194: kilo-main's lease lapsed, it re-claimed its own item, then released it."""
+    _claimed(repo)
+    log = EventLog(repo)
+    first = fold(log.read_all(), strict=False).items["T1"].lease
+    log.append("lease.expired", "T1", {"holder": first.holder, "event": first.event})
+    log.append(
+        "lease.acquired",
+        "T1",
+        {"holder": first.holder, "at": 2e9, "ttl_s": 1800, "globs": ["a.py"]},
+    )
+    again = fold(log.read_all(), strict=False).items["T1"].lease
+    log.append("lease.released", "T1", {"holder": again.holder, "event": again.event})
+    assert _state(repo) == "open"
