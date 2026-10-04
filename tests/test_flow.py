@@ -25,6 +25,7 @@ from ddflow.core.model import REVIEW, Item, State, fold
 from ddflow.infra import forge as FG
 from ddflow.infra import worktree as W
 from ddflow.infra.log import EventLog
+from ddflow.services.flow import SyncReport, _report_queue
 
 AUTHOR = "claude-opus-5"
 
@@ -710,3 +711,30 @@ def test_a_promotion_in_pr_mode_is_a_request_into_the_environment(pr_repo):
         ).returncode
         == 0
     ), "the environment branch on the forge must have the work"
+
+
+def test_queue_ejection_not_reported_when_queue_unknown():
+    """When the merge queue couldn't be read due to transient failure, do not report ejection.
+
+    Bug B79402e967e: _report_queue incorrectly reports queue_ejected when:
+    - PR was previously queued (was_queued=True)
+    - PR is still open (state="open")
+    - Queue info couldn't be read (queue_known=False)
+    - Queue appears empty (queue="")
+
+    This is a transient failure (rate limit, network) not an actual ejection.
+    """
+    # PR was previously queued
+    it = Item(id="T1", kind="task", pr=FG.PRInfo(number=1, state="open", queue="QUEUED"))
+    it.pr.queue_position = 1
+
+    # Queue info couldn't be read (transient failure)
+    info = FG.PRInfo(number=1, state="open", queue="", queue_known=False, url="http://example.com/pr/1")
+
+    # Report queue status - should NOT report ejection
+    rep = SyncReport()
+    _report_queue(it, info, moved=False, was_queued=True, rep=rep)
+
+    # Bug: this incorrectly reports queue_ejected when queue_known=False
+    assert not any(c.what == "queue_ejected" for c in rep.changes), \
+        "Should not report ejection when queue info couldn't be read (queue_known=False)"
