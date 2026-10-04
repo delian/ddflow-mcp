@@ -106,7 +106,7 @@ def _rules(repo: Path) -> dict:
 def _diagram(pipeline: list[str]) -> str:
     """Mermaid flowchart of the task pipeline: claim, each gate in order, merge, complete."""
     nodes = ["Claim"] + [re.sub(r"\W", "_", g) or "gate" for g in pipeline] + ["Complete"]
-    labels = ["Claim"] + list(pipeline) + ["Complete"]
+    labels = ["Claim", *pipeline, "Complete"]
     lines = ["flowchart LR"]
     for a, b, lb in zip(nodes, nodes[1:], labels[1:], strict=False):
         lines.append(f"    {a} --> {b}[{lb}]")

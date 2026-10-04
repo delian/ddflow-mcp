@@ -113,5 +113,5 @@ def test_a_record_without_a_state_is_open(gitflow_pr):
 def test_next_tells_the_operator_when_a_back_merge_was_closed_unmerged(gitflow_pr):
     repo, forge, _ = _to_back_merge(gitflow_pr)
     forge.edit(2, state="CLOSED")
-    code, out, err = run_cli(repo, "next")
+    _code, out, err = run_cli(repo, "next")
     assert "pr sync REFUSED" in err and "develop" in err, (out, err)
