@@ -106,8 +106,19 @@ def test_imported_files_are_the_file_part_of_every_origin():
     assert L.imported_files(state) == ["docs/todo.md", "notes.md", "research.md"]
 
 
-def test_typed_records_and_branches_are_not_files():
-    assert L.files_from_sources(["", "git:feature/x", "same.md:1", "same.md:9"]) == ["same.md"]
+def test_identifiers_and_urls_are_not_files():
+    """`issue:123` is not a file named `issue`, and a URL origin is not a path; freezing
+    either would report a phantom (roborev on c8fbfee)."""
+    assert L.files_from_sources(
+        ["", "git:feature/x", "issue:123", "https://x.example/a.md:1", "same.md:1", "same.md:9"]
+    ) == ["same.md"]
+
+
+def test_a_missing_named_file_is_an_error_not_a_clean_report(repo):
+    """'nobody looked' must not render as 'nothing found' (roborev on c8fbfee)."""
+    _write(repo, "CLAUDE.md", "nothing here\n")
+    with pytest.raises(ValueError, match=r"nope\.md"):
+        L.scan(repo, [], extra=["nope.md"])
 
 
 # --- stage 5: the manifest and the generated test -------------------------------------
@@ -148,6 +159,29 @@ def test_the_generated_test_lands_in_tests_when_that_is_where_tests_live(repo):
     namespace = {"__file__": str(generated)}
     exec(compile(generated.read_text("utf-8"), str(generated), "exec"), namespace)
     namespace["test_frozen_imports_are_unchanged"]()
+
+
+def test_a_stale_root_ratchet_is_removed_when_tests_appear(repo):
+    """ONE ratchet, wherever the suite lives: a later freeze must not leave a second
+    copy at the old location (roborev on c8fbfee)."""
+    _write(repo, "todo.md", "x\n")
+    L.freeze(repo, ["todo.md"])
+    assert (repo / L.GENERATED_TEST_ROOT).is_file()
+    (repo / "tests").mkdir()
+    actions = L.freeze(repo, ["todo.md"])
+    assert not (repo / L.GENERATED_TEST_ROOT).exists()
+    assert (repo / L.GENERATED_TEST).is_file()
+    assert any("removed the superseded ratchet" in a for a in actions)
+
+
+def test_a_stale_generated_test_is_removed_when_precommit_arrives(repo):
+    _write(repo, "todo.md", "x\n")
+    L.freeze(repo, ["todo.md"])
+    _write(repo, ".pre-commit-config.yaml", PRE_COMMIT)
+    actions = L.freeze(repo, ["todo.md"])
+    assert not (repo / L.GENERATED_TEST_ROOT).exists()
+    assert L.HOOK_ID in (repo / ".pre-commit-config.yaml").read_text()
+    assert any("removed the superseded ratchet" in a for a in actions)
 
 
 def test_check_frozen_reports_a_changed_file_and_a_missing_one(repo):
