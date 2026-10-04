@@ -131,6 +131,25 @@ def test_propose_end_to_end_with_a_makefile(repo):
     assert "unit_tests: make test" in OT.render(report)
 
 
+def test_a_zero_exit_with_no_tests_observed_is_not_green(repo):
+    """Exit 0 with nothing that looks like a test result is not a baseline (roborev)."""
+    result = OT.baseline(repo, "sh -c 'exit 0'", timeout=30)
+    assert result.ran and not result.green and result.detail == "exit 0"
+
+
+def test_a_nonzero_exit_with_no_counts_is_unmeasured_not_red(repo):
+    """The runner may not exist on the default branch; that is not a red suite."""
+    result = OT.baseline(repo, "sh -c 'exit 2'", timeout=30)
+    assert not result.ran and "no test counts" in result.detail and "not exist" in result.detail
+
+
+def test_live_test_finds_a_src_layout_entry_point(repo):
+    _write(repo, "src/thing/__init__.py", "")
+    _write(repo, "src/thing/__main__.py", "print('x')\n")
+    prop = OT.live_test(repo)
+    assert prop is not None and "python -m thing" in prop.command
+
+
 def test_render_shows_the_gates_and_notes(repo):
     runner = OT.Runner("python", "uv run pytest", "pyproject.toml", "-n 4")
     base = OT.Baseline("uv run pytest -n 4", True, 0, "2 passed in 1s", {"passed": 2}, [], 1.0, "")
