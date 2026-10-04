@@ -23,6 +23,7 @@ on some machines is worse than one that is merely weaker.
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
 import re
@@ -49,6 +50,23 @@ MIN_TERM_CHARS = 2
 #: How long a rebuild waits for another one to finish. A rebuild runs at ~12k events/s,
 #: so this is minutes of headroom, not an expected wait.
 REBUILD_LOCK_TIMEOUT_S = 120.0
+#: A pre-lock ddflow's fixed-name temp index is removed only once untouched this long: an
+#: old process may still be building into it during an upgrade.
+LEGACY_TEMP_MAX_AGE_S = 3600.0
+#: The OSError numbers and SQLite messages that mean "the machine said no", not "the
+#: projection is wrong" -- the only failures `Store.ensure` answers from the log.
+_ENV_ERRNOS = frozenset(
+    {errno.ENOSPC, errno.EACCES, errno.EROFS, errno.EDQUOT, errno.EPERM, errno.EIO}
+)
+_ENV_SQLITE = ("locked", "busy", "disk i/o", "readonly", "read-only", "full", "unable to open")
+
+
+def _environmental(exc: BaseException) -> bool:
+    if isinstance(exc, TimeoutError):
+        return True
+    if isinstance(exc, sqlite3.OperationalError):
+        return any(m in str(exc).lower() for m in _ENV_SQLITE)
+    return isinstance(exc, OSError) and exc.errno in _ENV_ERRNOS
 
 
 def _has_fts5() -> bool:
@@ -233,7 +251,7 @@ class Store:
             old.unlink(missing_ok=True)
         for old in self.path.parent.glob(f"{self.path.stem}.rebuilding*"):
             with contextlib.suppress(OSError):
-                if time.time() - old.stat().st_mtime > REBUILD_LOCK_TIMEOUT_S:
+                if time.time() - old.stat().st_mtime > LEGACY_TEMP_MAX_AGE_S:
                     old.unlink()
         # A name of its own all the same: the lock is advisory, and a temp file that
         # nothing else can name cannot be unlinked or published by anything else.
@@ -377,9 +395,12 @@ class Store:
         try:
             return self._rebuild(log, only_if_stale=True)
         except (TimeoutError, OSError, sqlite3.OperationalError) as exc:
-            # The environment (a held lock, a full or read-only disk, a locked database),
-            # not a bug in the projection: anything else -- an IntegrityError, a fold
-            # error -- still propagates, so a broken rebuild cannot hide behind this.
+            # Only the environment (a held lock, a full or read-only disk, a locked
+            # database) degrades to the log. A bug in the projection -- a bad statement,
+            # a missing column, an IntegrityError, a fold error -- still propagates, so a
+            # broken rebuild cannot hide behind this.
+            if not _environmental(exc):
+                raise
             print(
                 f"ddflow: the index {self.path} could not be rebuilt ({exc}); "
                 f"answering from the log. `ddflow rebuild` retries.",
