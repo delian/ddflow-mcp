@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 
 import pytest
 from conftest import run_cli
@@ -94,8 +95,9 @@ def test_a_parallel_merge_interaction_is_caught_on_the_merge_result_not_the_bran
     _git(repo, "switch", "-q", default)
     _commit(repo, {"a.txt": "a\n"}, "main moved on")
     _git(repo, "switch", "-q", "work")
-    alone = CI.run(repo, Config.load(repo), base="__no_such_branch__")
+    alone = CI.run(repo, Config.load(repo), base="HEAD")
     assert alone.ok, "the branch by itself is clean"
+    assert CI.run(repo, Config.load(repo), base="__no_such_branch__").status == "unavailable"
     merged = CI.run(repo, Config.load(repo), base=default)
     assert merged.status == "failed" and merged.merged_with == default
     assert [c.id for c in merged.checks if not c.ok] == ["no-a-with-b"]
@@ -198,7 +200,11 @@ def test_an_item_id_names_its_branch_and_the_cli_defaults_to_the_directorys_head
     assert fold(EventLog(repo).read_all(), strict=False).items["T1"].branch == "ddflow/T1"
     assert A.run(repo, ref="T1").data["status"] == "failed"
     proc = subprocess.run(
-        ["python", "-m", "ddflow", "--repo", str(repo), "ci", "run"],
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "ci", "run"],
         cwd=wt, capture_output=True, text=True, check=False,
     )  # fmt: skip
     assert proc.returncode == 1 and "ruff check" in proc.stdout, (proc.stdout, proc.stderr)
+
+
+def test_a_shell_builtin_start_is_not_reported_as_a_missing_tool():
+    assert CI.tool_missing("cd frontend && npm test") == ""

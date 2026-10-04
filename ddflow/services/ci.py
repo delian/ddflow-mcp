@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from ..config import Config
+from ..infra import proc as P
 from ..infra import worktree as W
 
 PRE_COMMIT_CONFIG = ".pre-commit-config.yaml"
@@ -80,6 +81,9 @@ def resolve_command(repo: Path, cfg: Config) -> tuple[str, str]:
     return DEFAULT_COMMAND, ""
 
 
+_SHELL_WORDS = frozenset({"cd", "export", "set", "source", ".", "(", "{", "if", "for", "test", "["})
+
+
 def tool_missing(command: str) -> str:
     """The executable the command starts with, when it is not installed ("" when it is)."""
     try:
@@ -88,6 +92,8 @@ def tool_missing(command: str) -> str:
         return command
     # `SKIP=tests pre-commit run ...`: leading VAR=value words are environment, not the program.
     program = next((w for w in words if not _ENV_WORD.match(w)), "")
+    if program in _SHELL_WORDS:  # a builtin or compound command: the shell, not `which`, decides
+        return ""
     return "" if (program and shutil.which(program)) else program
 
 
@@ -154,14 +160,22 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
     sha = W.rev(repo, ref)
     if not sha:
         return Result("unavailable", command=cmd, reason=f"{ref!r} is not a commit")
-    base = base or cfg.ci.base or W.default_branch(repo)
+    named = base or cfg.ci.base
+    base = named or W.default_branch(repo)
     base_ok = bool(base) and W.git(repo, "rev-parse", "--verify", "--quiet", base).ok
+    if named and not base_ok:
+        return Result(
+            "unavailable",
+            command=cmd,
+            sha=sha,
+            reason=f"base {named!r} is not a commit, so the merge result cannot be checked",
+        )
     with merge_tree(repo, sha, base if base_ok else "") as (tree, failure):
         if tree is None:
             status = "failed" if "does not merge" in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         try:
-            p = subprocess.run(
+            p = P.run(
                 cmd,
                 shell=True,
                 cwd=tree,
