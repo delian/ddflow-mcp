@@ -212,6 +212,31 @@ def test_an_unreadable_config_is_not_reported_as_not_listed(repo, tmp_path, monk
     assert not any("add them to" in a for a in actions)
 
 
+def test_a_failed_copy_is_not_reported_as_committed_policy(repo, tmp_path, monkeypatch):
+    """Every other skip reason is named, so a copy that failed (permissions, disk)
+    reports a refusal instead of 'tracked in the source' -- a false reason that leaves
+    the machine's endpoints uncopied with no error (delta hunt on 8f88cc0)."""
+    source = _sibling(tmp_path, {H.LOCAL_CONFIGS[0]: "x\n"})
+    monkeypatch.setattr(H, "copy_local_files", lambda primary, tree, names: [])
+    actions = H.copy_local_configs(repo, source)
+    failed = [a for a in actions if isinstance(a, Refused)]
+    assert failed and "could not copy" in failed[0]
+    assert not any("tracked" in a for a in actions)
+
+
+def test_a_tracked_source_file_is_skipped_as_committed_policy(repo, tmp_path):
+    source = _sibling(tmp_path, {H.LOCAL_CONFIGS[0]: "x\n"})
+    subprocess.run(
+        ["git", "init", "-q", "-b", "main", str(source)], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "-C", str(source), "add", H.LOCAL_CONFIGS[0]], check=True, capture_output=True
+    )
+    actions = H.copy_local_configs(repo, source)
+    assert not (repo / H.LOCAL_CONFIGS[0]).exists(), "committed policy is not copied"
+    assert any("tracked in" in a for a in actions)
+
+
 def test_without_git_the_copy_still_happens_with_a_caveat(tmp_path):
     target = tmp_path / "target"
     target.mkdir()
