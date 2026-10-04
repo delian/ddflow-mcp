@@ -70,6 +70,11 @@ def _data(kind: str, ident: str, text: str) -> str:
     return PV.fence(kind, ident, text, PV.Origin(PV.UNKNOWN))
 
 
+def _data_block(kind: str, ident: str, text: str) -> str:
+    """Multi-line free text as DATA: the fence keeps its line breaks."""
+    return PV.fence(kind, ident, text, PV.Origin(PV.UNKNOWN), inline=False)
+
+
 def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: str) -> str | None:
     """The pack for one completed item, or None when it is not completed."""
     led = LG.build(events, item_id)
@@ -144,7 +149,8 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
         ]
         stat = _stat(repo, led["sha"])
         if stat:
-            out += ["", "```", *stat, "```"]
+            # git's stat lines are paths: record text like the lists above, so fenced too
+            out += ["", _data_block("diff-stat", item_id, "\n".join(stat))]
     else:
         out.append("- UNKNOWN: no landing could be found, so what changed is not known")
     if led.get("backfill"):
