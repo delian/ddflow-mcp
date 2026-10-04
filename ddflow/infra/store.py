@@ -50,8 +50,9 @@ MIN_TERM_CHARS = 2
 #: How long a rebuild waits for another one to finish. A rebuild runs at ~12k events/s,
 #: so this is minutes of headroom, not an expected wait.
 REBUILD_LOCK_TIMEOUT_S = 120.0
-#: A pre-lock ddflow's fixed-name temp index is removed only once untouched this long: an
-#: old process may still be building into it during an upgrade.
+#: A rebuild's temp index left behind is removed only once untouched this long: a live
+#: rebuild (an older lock-less ddflow's, or one the lock did not serialise) may still be
+#: building into it.
 LEGACY_TEMP_MAX_AGE_S = 3600.0
 #: The OSError numbers and SQLite result codes that mean "the machine said no", not "the
 #: projection is wrong" -- the only failures `Store.ensure` answers from the log. EPERM is
@@ -256,16 +257,16 @@ class Store:
         fingerprint = log.head()
         events = log.read_all()
         state = fold(events, strict=False)
-        # Under the lock no other rebuild of THIS version is running, so a temp file of
-        # ours left here is from one that died. `index.rebuilding*` is the fixed name an
-        # older ddflow used without the lock: one may still be building into it during an
-        # upgrade, so it goes only once it is older than any rebuild should take.
-        for old in self.path.parent.glob(f"{self.path.name}-rebuilding*"):
-            old.unlink(missing_ok=True)
-        for old in self.path.parent.glob(f"{self.path.stem}.rebuilding*"):
-            with contextlib.suppress(OSError):
-                if time.time() - old.stat().st_mtime > LEGACY_TEMP_MAX_AGE_S:
-                    old.unlink()
+        # Temp files left by a rebuild that died -- ours, `index.db-rebuilding.*`, and the
+        # fixed `index.rebuilding*` an older, lock-less ddflow used -- go only once they
+        # are older than any rebuild should take. Age, not the lock, decides: the lock is
+        # advisory (an older ddflow never takes it, and a filesystem may not honour it),
+        # and a live rebuild's temp must never be unlinked under it.
+        for pattern in (f"{self.path.name}-rebuilding*", f"{self.path.stem}.rebuilding*"):
+            for old in self.path.parent.glob(pattern):
+                with contextlib.suppress(OSError):
+                    if time.time() - old.stat().st_mtime > LEGACY_TEMP_MAX_AGE_S:
+                        old.unlink()
         # A name of its own all the same: the lock is advisory, and a temp file that
         # nothing else can name cannot be unlinked or published by anything else.
         tmp = self.path.with_name(
