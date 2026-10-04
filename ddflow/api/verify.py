@@ -148,3 +148,50 @@ def _reopen(log, rep, data: dict, *, reason: str, force: bool) -> O.Outcome:
         },
     )
     return O.ok("verify", reopened=True, reason_given=why, **data)
+
+
+def pack(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
+    """The evidence pack for an independent verifier (`ddflow verify <id> --pack`)."""
+    from ..services import verifypack as VP
+
+    log, cfg, st = _load(repo, agent)
+    if item not in st.items or st.items[item].removed:
+        return O.failed("verify.pack", f"no such item {item!r}", id=item)
+    text = VP.pack(repo, cfg, st, log.read_all(), item)
+    if text is None:
+        return O.nothing("verify.pack", f"{item} is not done: there is nothing to pack", id=item)
+    return O.ok("verify.pack", id=item, pack=text)
+
+
+def judge(repo: Path, item: str, *, agent: str = "", on_progress=None) -> O.Outcome:
+    """Hand the pack to the configured different-family reviewer (gate `verify`) as the
+    review's context, against the commit that landed. A finding is a requirement clause the
+    evidence does not show as met; the outcome is recorded on the item like any review."""
+    from ..services import ledger as LG
+    from ..services import verifypack as VP
+    from .review import review
+
+    log, cfg, st = _load(repo, agent)
+    if item not in st.items or st.items[item].removed:
+        return O.failed("verify.judge", f"no such item {item!r}", id=item)
+    events = log.read_all()
+    text = VP.pack(repo, cfg, st, events, item)
+    if text is None:
+        return O.nothing("verify.judge", f"{item} is not done: there is nothing to judge", id=item)
+    sha = ((LG.build(events, item) or {}).get("sha")) or st.items[item].merged_sha
+    if not sha:
+        return O.nothing(
+            "verify.judge",
+            f"{item} has no recorded commit to judge: `ddflow verify {item}` says what is known",
+            id=item,
+        )
+    return review(
+        repo,
+        gate="verify",
+        item=item,
+        intent=VP.requirement(st, item),
+        context=text,
+        commit=sha,
+        agent=agent,
+        on_progress=on_progress,
+    )

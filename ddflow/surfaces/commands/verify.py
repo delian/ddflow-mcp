@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import sys
 
-from ...api.verify import verify, verify_sweep
+from ...api.verify import judge, pack, verify, verify_sweep
 from ..context import FAIL, NOTHING, REFUSED, Ctx
 
 _MARK = {"ok": "ok  ", "warn": "WARN", "fail": "FAIL", "unknown": "??  "}
@@ -34,6 +34,14 @@ def add_verify_parser(sub) -> None:
     vf.add_argument("--reason", default="", help="with --reopen: why (default: the failed claims)")
     vf.add_argument(
         "--force", action="store_true", help="with --reopen: even when the completion holds"
+    )
+    vf.add_argument(
+        "--pack", action="store_true", help="print the evidence pack for an independent verifier"
+    )
+    vf.add_argument(
+        "--judge",
+        action="store_true",
+        help="have the configured cross-family reviewer judge it (gate: verify)",
     )
     vf.set_defaults(fn=cmd_verify)
 
@@ -91,7 +99,30 @@ def _sweep(a, c: Ctx) -> int:
     return out.exit
 
 
+def _pack(a, c: Ctx) -> int:
+    out = pack(c.repo, a.id)
+    if out.exit != 0:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    print(json.dumps(out.body(("id", "pack")), indent=2) if c.json else out.data["pack"])
+    return out.exit
+
+
+def _judge(a, c: Ctx) -> int:
+    out = judge(c.repo, a.id, on_progress=None if c.json else print)
+    if c.json:
+        print(json.dumps(out.body(""), indent=2, default=str))
+    elif out.exit != 0 or not out.data.get("text"):
+        print(out.reason or out.data.get("text", ""), file=sys.stderr if out.exit else sys.stdout)
+    return out.exit
+
+
 def cmd_verify(a, c: Ctx) -> int:
+    if a.pack or a.judge:
+        if not a.id or a.all or a.phase or a.file_bugs or a.reopen:
+            print("--pack and --judge take one task id and nothing else", file=sys.stderr)
+            return FAIL
+        return _pack(a, c) if a.pack else _judge(a, c)
     if a.id:
         if a.file_bugs or a.all or a.phase or a.limit is not None:
             print(
