@@ -16,6 +16,7 @@ from ddflow.config import Config
 from ddflow.core.model import Memory, State, fold
 from ddflow.infra.log import EventLog
 from ddflow.services import importer_harness as H
+from ddflow.services.importer import Found
 
 FACT = """---
 name: use-xdist
@@ -70,6 +71,15 @@ def test_the_memory_directory_is_found_by_slug(repo, tmp_path):
     expected = root / H.project_slug(repo) / "memory"
     assert H.harness_memory_dir(repo, projects_root=root) == expected
     assert H.harness_memory_dir(repo, projects_root=tmp_path / "nope") is None
+
+
+def test_a_symlinked_checkout_resolves_to_the_same_store(repo, tmp_path):
+    """A path reached through a symlink encodes differently; reporting a store that
+    exists as absent is the 'could not find shown as none' class (roborev on a7aa493)."""
+    root = _memory_dir(tmp_path, repo, {"use-xdist.md": FACT})
+    link = tmp_path / "linked"
+    link.symlink_to(repo, target_is_directory=True)
+    assert H.harness_memory_dir(link, projects_root=root) == root / H.project_slug(repo) / "memory"
 
 
 def test_scan_reads_the_fact_and_its_origin(repo, tmp_path):
@@ -131,7 +141,9 @@ def test_a_fact_with_nothing_in_it_is_reported(repo, tmp_path):
 def test_no_directory_is_not_an_error_but_says_so(repo, tmp_path):
     scan = H.scan(repo, projects_root=tmp_path / "nothing")
     assert scan.directory is None and scan.found == []
-    assert "nothing to import" in H.render(scan, [], [])
+    text = H.render(scan, [], [])
+    assert "nothing to import" in text
+    assert "looked under" in text and H.project_slug(repo) in text
 
 
 def test_an_identical_memory_is_a_duplicate_not_a_second_fact(repo, tmp_path):
@@ -241,18 +253,44 @@ def test_apply_records_the_memory_once(repo, tmp_path):
 
 
 def test_two_files_with_one_id_are_flagged_and_the_second_is_refused(repo, tmp_path):
-    """`a_b.md` and `a-b.md` slug to one id and the fold keeps one text per id; the
-    report must not call both remembered (rubber_duck on a86e6f43)."""
+    """`a_b.md` and `a-b.md` slug to one id and the fold keeps one text per id: the
+    second is kept out of the offer, and the apply guard still refuses one passed by
+    hand (roborev on a7aa493)."""
     a = "---\nname: a\ndescription: First fact from file a\n---\n"
     b = "---\nname: b\ndescription: Second fact from file b\n---\n"
     root = _memory_dir(tmp_path, repo, {"a_b.md": a, "a-b.md": b})
     scan = H.scan(repo, projects_root=root)
+    assert len(scan.found) == 1
     assert any("yield the same id" in p for p in scan.problems)
     log = EventLog(repo, "tester")
     out = H.apply(log, scan.found)
     assert any(a.startswith("remembered M-harness-a-b:") for a in out)
-    assert any("uses this id with different text" in a for a in out)
+    state = fold(log.read_all(), strict=False)
+    clash = Found(
+        kind="memory",
+        ident="M-harness-a-b",
+        title="b",
+        source="claude-memory/b.md",
+        body="A third fact entirely, passed by hand",
+    )
+    again = H.apply(log, [clash], state=state)
+    assert any("uses this id with different text" in a for a in again)
     assert len([e for e in log.read_all() if e.kind == "memory.recorded"]) == 1
+
+
+def test_a_forgotten_id_is_refused_even_when_the_text_changed(repo, tmp_path):
+    """The refusal is keyed on the id, not the text: an edited description must not
+    smuggle a forgotten fact back in (roborev on a7aa493)."""
+    root = _memory_dir(tmp_path, repo, {"use-xdist.md": FACT})
+    scan = H.scan(repo, projects_root=root)
+    state = State()
+    state.memories["M-harness-use-xdist"] = Memory(
+        id="M-harness-use-xdist", text="an older wording", forgotten="no longer true"
+    )
+    log = EventLog(repo, "tester")
+    out = H.apply(log, scan.found, state=state)
+    assert any("was forgotten" in a for a in out)
+    assert not list(log.read_all())
 
 
 def test_a_forgotten_fact_is_refused_not_silently_revived(repo, tmp_path):
