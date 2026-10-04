@@ -617,7 +617,7 @@ def _companion_lines(repo: Path) -> list[str]:
         )
     lines += [
         "",
-        "Nothing was probed at session start: \"not checked\" is not \"missing\". Tell the "
+        'Nothing was probed at session start: "not checked" is not "missing". Tell the '
         "operator, then run `ddflow companions` to check and the `install-companions` "
         "prompt (MCP: `/mcp__ddflow__install-companions`) to install with their consent. "
         "A declined companion's gates are recorded `unavailable`, never passed.",
