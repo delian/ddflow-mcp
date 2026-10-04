@@ -8,7 +8,7 @@ false negative (done, but still open) is found by a command, not by luck.
 
     ddflow verify <id>
 
-It checks seven things and says which hold (`ok`), which are worth a look (`WARN`), which do
+It checks eight things and says which hold (`ok`), which are worth a look (`WARN`), which do
 not hold (`FAIL`) and which it cannot tell (`??`):
 
     landed          the recorded commit exists and is on the integration branch
@@ -19,6 +19,7 @@ not hold (`FAIL`) and which it cannot tell (`??`):
                     reason (what `complete` itself enforces, asked again of the record)
     survives        what the landing changed was not removed afterwards
     regression      a fix task's bug is closed with a regression test that exists
+    requirement     whether its requirement text was edited after completion
     ledger          whether the evidence is the completing agent's own or was reconstructed
 
 Exit 1 when a claim does not hold, 2 when the task is not done, 0 otherwise. "Cannot tell"
