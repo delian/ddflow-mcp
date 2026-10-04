@@ -272,10 +272,12 @@ def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path 
 
 
 def _measure(repo: Path, it, wt: Path | None) -> dict:
-    """What ddflow measures for a recorded gate: the item's tree, and once the item has
-    landed, the content that landed instead. Recorded after the merge, a gate vouches
-    for what landed, not the kept tree as it is now -- an untracked scratch file there
-    never landed and made every later gate read as stale at complete (Bb47a48b173)."""
+    """What ddflow measures for a recorded gate: the item's tree. Once the item has
+    landed and its tree was kept, a tree that differs from what landed ONLY by untracked
+    files (scratch that never landed) is measured as what landed: those files made every
+    gate recorded after the merge read as stale at complete (Bb47a48b173). Any other
+    difference -- work committed or edited after the landing -- is kept, so complete
+    still reports it."""
     if not wt:
         return {}
     measured = {
@@ -283,22 +285,29 @@ def _measure(repo: Path, it, wt: Path | None) -> dict:
         "source_tree": G.source_tree(wt),
         "diff_stat": G.diff_stat(wt),
     }
-    measured.update(_landed_content(repo, it))
+    measured.update(_landed_if_only_untracked_differs(repo, it, wt, measured["source_tree"]))
     return measured
 
 
-def _landed_content(repo: Path, it) -> dict:
-    """`tree_sha` and `source_tree` of the commit the item landed as, or {} before it has
-    landed. The same commit `complete` compares against (`completion._tree_being_completed`)."""
+def _landed_if_only_untracked_differs(repo: Path, it, wt: Path, here: str) -> dict:
+    """`tree_sha`/`source_tree` of the landed commit when ``wt`` holds exactly that content
+    plus untracked files; {} otherwise (not landed, the same already, or a real change)."""
     from ..services.completion import _tree_being_completed
 
     if not (it.landed_after or it.merged_sha):
         return {}
     _cwd, landed = _tree_being_completed(repo, it)
-    if not landed:
+    source = G.commit_source_tree(repo, landed) if landed else ""
+    if not source or source == here:
         return {}
-    source = G.commit_source_tree(repo, landed)
-    return {"tree_sha": f"{landed[:12]}+clean", "source_tree": source} if source else {}
+    entries = G.worktree_entries(wt)
+    if entries is None:
+        return {}
+    untracked = set(G._untracked_paths(wt))
+    tracked_only = {p: e for p, e in entries.items() if p not in untracked}
+    if G.content_id(tracked_only) != source:
+        return {}  # the tree changed beyond scratch: let complete say so
+    return {"tree_sha": f"{landed[:12]}+clean", "source_tree": source}
 
 
 def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
