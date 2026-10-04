@@ -32,9 +32,10 @@ def test_a_taken_research_id_with_different_text_is_refused(repo):
 
 def test_a_changed_verdict_under_a_taken_id_is_refused_too(repo):
     run_cli(repo, "init")
-    assert _add(repo, id="R1", question="q one", claim="c").exit == OK
-    out = _add(repo, id="R1", question="q one", claim="c", verdict="REFUTED", probe="p")
+    assert _add(repo, id="R1", question="q one", claim="c", probe="p").exit == OK
+    out = _add(repo, id="R1", question="q one", claim="c", probe="p", verdict="REFUTED")
     assert out.exit == REFUSED, out
+    assert out.data["differs"] == ["verdict"]  # the verdict alone, isolated
 
 
 def test_the_same_record_again_is_idempotent(repo):
