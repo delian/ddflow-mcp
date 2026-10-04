@@ -93,32 +93,44 @@ def _status(path: Path) -> tuple[bool, list[str], list[str]]:
     holding a `.env` or a hand-edited local file is exactly the tree that must not be
     removed (rubber_duck on f0d27314). A status that could not run is NOT clean.
     """
-    r = W.git(path, "status", "--porcelain", "--ignored=matching")
+    r = W.git(path, "status", "--porcelain", "-z", "--ignored=matching")
     if not r.ok:
         return False, [], []
     work: list[str] = []
     ignored: list[str] = []
-    for line in r.out.splitlines():
-        if not line.strip():
+    fields = r.out.split("\0")
+    index = 0
+    while index < len(fields):
+        entry = fields[index]
+        index += 1
+        if not entry.strip():
             continue
-        entry = line[_XY_WIDTH:].strip() if len(line) > _XY_WIDTH else line.strip()
-        if not entry:
+        code = entry[:2]
+        name = entry[_XY_WIDTH:].strip() if len(entry) > _XY_WIDTH else ""
+        if not name:
             continue
-        if line.startswith("!!"):
-            if not _is_cache(entry):
-                ignored.append(entry)
-        elif not _is_cache(entry):
-            work.append(entry)
+        if "R" in code or "C" in code:
+            index += 1  # -z: a rename/copy carries its source as the next field
+        if code == "!!":
+            if not _is_cache(name):
+                ignored.append(name)
+        elif not _is_cache(name):
+            work.append(name)
     return True, work, ignored
 
 
-def _commits(repo: Path, base: str, ref: str) -> list[str]:
+def _commits(repo: Path, base: str, ref: str) -> list[str] | None:
+    """The commits on `ref` not in `base`; None when git itself could not answer."""
     r = W.git(repo, "log", "--oneline", f"{base}..{ref}")
-    return [line.strip() for line in r.out.splitlines() if line.strip()] if r.ok else []
+    if not r.ok:
+        return None
+    return [line.strip() for line in r.out.splitlines() if line.strip()]
 
 
 def _commit_detail(repo: Path, base: str, ref: str) -> str:
     lines = _commits(repo, base, ref)
+    if lines is None:
+        return f"could not list {base}..{ref} (git failed); inspect by hand"
     if not lines:
         return f"nothing in {base}..{ref}?"
     head = ", ".join(lines[:_EXAMPLES])
@@ -172,6 +184,12 @@ def _worktrees(ctx: _Context) -> list[Leftover]:
     for entry in W.list_worktrees(ctx.repo):
         path = Path(entry["worktree"])
         branch = str(entry.get("branch", "")).removeprefix("refs/heads/")
+        # record EVERY checked-out branch, including the caller's and the primary's,
+        # before the skip: `_branches` must not offer to delete a branch that is
+        # checked out somewhere, and `git branch -d` would refuse it anyway (roborev
+        # on 876f5b79).
+        if branch:
+            ctx.checked_out[branch] = path
         # The checkout we were run from, the main working tree, and the branch whose
         # deletion would be catastrophic are never candidates -- including when this
         # runs from a linked worktree or a subdirectory, where the "primary" is an
@@ -185,7 +203,6 @@ def _worktrees(ctx: _Context) -> list[Leftover]:
                 )
             )
             continue
-        ctx.checked_out[branch] = path
         problems: list[str] = []
         readable, work, ignored = _status(path)
         merged = W.is_merged(ctx.repo, branch, ctx.base)
@@ -316,7 +333,19 @@ def _remove_worktree(repo: Path, cfg: Config, item: Leftover) -> dict[str, str]:
     say "and its branch" when the branch is still there (critic on f0d27314).
     """
     path = Path(item.name)
-    worktree = W.Worktree(item="", path=path, branch=item.branch, base=W.default_branch(repo))
+    base = W.default_branch(repo)
+    # Re-inspect IMMEDIATELY before the forced removal: force skips W.remove's own
+    # guard, so anything written into the tree after the report would be deleted
+    # without warning (roborev on 876f5b79).
+    readable, work, ignored = _status(path)
+    if not readable or work or ignored or not W.is_merged(repo, item.branch, base):
+        return {
+            "name": item.name,
+            "kind": "worktree",
+            "outcome": "failed",
+            "detail": "changed or no longer merged since the report; re-run the preflight",
+        }
+    worktree = W.Worktree(item="", path=path, branch=item.branch, base=base)
     had_branch = bool(item.branch) and _branch_exists(repo, item.branch)
     # force only AFTER this module's own inspection: the tree is merged, unlocked and
     # holds nothing beyond caches. `W.remove`'s check counts an untracked `__pycache__`
@@ -372,8 +401,11 @@ def apply(repo: Path, names: Iterable[str] | None = None) -> list[dict[str, str]
     repo = Path(repo)
     cfg = Config.load(repo)
     wanted = None if names is None else set(names)
+    seen: set[str] = set()
     out: list[dict[str, str]] = []
     for item in preflight(repo):
+        if wanted is not None and item.name in wanted:
+            seen.add(item.name)
         if item.action != "remove":
             if wanted is not None and item.name in wanted:
                 out.append(
@@ -409,4 +441,16 @@ def apply(repo: Path, names: Iterable[str] | None = None) -> list[dict[str, str]
                         "detail": (r.err or r.out).strip() or f"git exit {r.code}",
                     }
                 )
+    if wanted is not None:
+        # An approval that matched nothing is a vacuous pass unless it is said: a
+        # mistyped name used to return ok with every list empty (roborev on 876f5b79).
+        for name in sorted(wanted - seen):
+            out.append(
+                {
+                    "name": name,
+                    "kind": "unknown",
+                    "outcome": "refused",
+                    "detail": "no such leftover; nothing was matched",
+                }
+            )
     return out
