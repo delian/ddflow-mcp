@@ -81,3 +81,12 @@ def test_json_carries_the_block(repo):
     _project(repo)
     body = json.loads(run_cli(repo, "--json", "complete", "T1", "--force")[1])
     assert body["progress"].startswith("Progress:")
+
+
+def test_ready_work_held_by_the_cap_is_named_not_reported_as_nothing(repo):
+    _project(repo)
+    cfg = Config.load(repo)
+    cfg.schedule.max_parallel_tasks = 0
+    st = fold(EventLog(repo).read_all(), strict=False)
+    text = PL.report(st, cfg, "T1")
+    assert "Next (when a slot frees): " in text and "nothing ready" not in text

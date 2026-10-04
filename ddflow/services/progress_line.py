@@ -62,6 +62,12 @@ def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
     if phase:
         done, total = _phase_counts(items, phase)
         lines.append(f"Phase {phase}: {_pct(done, total)}")
-    ready = S.plan(st, cfg).ready[:NEXT_SHOWN]
-    lines.append("Next: " + (", ".join(it.id for it in ready) if ready else "nothing ready"))
+    plan = S.plan(st, cfg)
+    ready = [it.id for it in plan.ready[:NEXT_SHOWN]]
+    if ready:
+        lines.append("Next: " + ", ".join(ready))
+    elif plan.capped:  # ready work exists, only the parallelism cap holds it back
+        lines.append(f"Next (when a slot frees): {', '.join(plan.capped[:NEXT_SHOWN])}")
+    else:
+        lines.append("Next: nothing ready")
     return "\n".join(lines)
