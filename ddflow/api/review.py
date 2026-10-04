@@ -552,13 +552,15 @@ class _ReplyFile:
         return {"output_file": str(self.path.relative_to(self.repo)), "output_digest": digest}
 
 
-def _round_evidence(
-    repo, it, branch, commit, kind, done, status, forced, deltas=0
-) -> dict[str, Any]:
+def _round_evidence(head, kind, done, status, forced, deltas=0) -> dict[str, Any]:
     """The round bookkeeping a recorded review carries: kind, the running count of full
     rounds and of delta rounds (kept apart: `gate status` shows both), the head it
     covered (what a delta diffs from), and a forced round's reason. A round counts only
-    when a reviewer actually reviewed something."""
+    when a reviewer actually reviewed something.
+
+    `head` is the one captured BEFORE the diff was taken (B4f5be8179f): a review runs for
+    minutes, and the branch's head when it ends may hold commits made meanwhile that no
+    reviewer saw -- recording that one let the next delta skip them."""
     from ..services import review as R
 
     reviewed = status in (R.REVIEWED, R.PARTIAL)
@@ -571,7 +573,7 @@ def _round_evidence(
     if reviewed:
         # Only a review that reached a reviewer covered this head: recording it for one
         # that did not would let the next delta start past commits nobody reviewed.
-        ev["reviewed_head"] = _head_of(repo, it, branch, commit)
+        ev["reviewed_head"] = head
     if counted:
         ev["round"] = done + 1
     if forced:
@@ -950,6 +952,10 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
         )
 
     it = st.items.get(item)
+    # The head the diff is taken from, captured BEFORE the diff (B4f5be8179f): a commit
+    # landing in between is then in the diff AND after this head, so it is reviewed again
+    # by the next delta rather than counted as reviewed by none.
+    taken = _head_of(repo, it, branch, commit)
     kind, done, forced, diff, how, why, rerun = _scope(
         repo,
         cfg,
@@ -1050,10 +1056,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
             "diff_source": how,
             "diff_chars": len(diff),
             **_round_evidence(
-                repo,
-                it,
-                branch,
-                commit,
+                taken,
                 kind,
                 done,
                 best.status,
