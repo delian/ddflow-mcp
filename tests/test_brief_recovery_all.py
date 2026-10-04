@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import pytest
 from conftest import run_cli
 
 from ddflow.api import lifecycle as LC
@@ -112,3 +113,12 @@ def test_every_band_has_its_own_cap_and_label():
     text = _render([*unmeasured, *unheld])
     assert "1 more could not be measured" in text and "1 more RUNNING with nobody" in text
     assert "**U4**" in text and "**S4**" in text, text
+
+
+@pytest.mark.parametrize("salvageable", [True, None, False])
+def test_a_running_item_nobody_holds_is_always_in_its_own_band(salvageable):
+    """roborev job 1455 #1 / rubber_duck #2: `stale_running` is never measured, so its
+    `salvageable` says nothing -- it is listed as RUNNING whatever the flag reads."""
+    from ddflow.views.markdown import _recovery_band
+
+    assert _recovery_band(_rec("S", "stale_running", salvageable)) == "RUNNING with nobody on it"
