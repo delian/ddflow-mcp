@@ -540,8 +540,10 @@ def _roborev_reviewer(
     where = wt if wt is not None and wt.exists() else repo
     rv, note = RR.review_of(where, str(ev["reviewed_sha"]))
     if rv is None or not rv.reviewer:
+        if note:  # roborev is there and could not vouch: say so in the record, not only here
+            ev["roborev"] = {"verified": False, "why": note}
         return typed, f"NOTE: {note}." if note else ""
-    ev["roborev"] = {"job": rv.job, "agent": rv.agent, "model": rv.model}
+    ev["roborev"] = {"verified": True, "job": rv.job, "agent": rv.agent, "model": rv.model}
     ev["model"] = rv.reviewer
     if not typed or typed in (rv.agent, rv.model):
         return rv.reviewer, ""
