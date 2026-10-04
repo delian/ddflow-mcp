@@ -18,17 +18,19 @@ similarity. This module is the foundation that other Phase 1 tasks build on.
 from __future__ import annotations
 
 import re
+import tomllib
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import tomllib
+_FRONTMATTER_PARTS = 2  # frontmatter + content, split on the first blank line
+_MIN_TOKEN_LEN = 2  # tokens this short are noise
 
 
 def _now() -> datetime:
     """Get current UTC time as timezone-aware datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @dataclass
@@ -72,7 +74,7 @@ class Rule:
 
         # Find the frontmatter boundary (first blank line or first content line)
         parts = toml_text.split("\n\n", 1)
-        if len(parts) == 2:
+        if len(parts) == _FRONTMATTER_PARTS:
             frontmatter_text, content = parts
         else:
             # No content block found; all is frontmatter
@@ -92,7 +94,7 @@ class Rule:
         # Content can be empty, but must be present either in data dict or as a content block
         # If the text has a \n\n separator, there's a content block (even if empty)
         has_content_in_data = "content" in data
-        has_content_block = len(parts) == 2  # There was a \n\n separator
+        has_content_block = len(parts) == _FRONTMATTER_PARTS  # There was a \n\n separator
         if not has_content_in_data and not has_content_block:
             raise ValueError("Rule must have a 'content' field or content block")
 
@@ -139,26 +141,22 @@ class Rule:
 
         # Format timestamps as ISO strings if they are datetime objects
         created_str = (
-            self.created.isoformat()
-            if isinstance(self.created, dt)
-            else str(self.created)
+            self.created.isoformat() if isinstance(self.created, dt) else str(self.created)
         )
         updated_str = (
-            self.updated.isoformat()
-            if isinstance(self.updated, dt)
-            else str(self.updated)
+            self.updated.isoformat() if isinstance(self.updated, dt) else str(self.updated)
         )
 
         lines = []
         lines.append(f'id = "{self.id}"')
         lines.append(f'title = "{self.title}"')
         if self.tags:
-            tags_str = ', '.join(f'"{t}"' for t in self.tags)
+            tags_str = ", ".join(f'"{t}"' for t in self.tags)
             lines.append(f"tags = [{tags_str}]")
         lines.append(f'scope = "{self.scope}"')
         lines.append(f"priority = {self.priority}")
         if self.globs:
-            globs_str = ', '.join(f'"{g}"' for g in self.globs)
+            globs_str = ", ".join(f'"{g}"' for g in self.globs)
             lines.append(f"globs = [{globs_str}]")
         lines.append(f'created = "{created_str}"')
         lines.append(f'updated = "{updated_str}"')
@@ -241,7 +239,7 @@ def _tokenize(text: str) -> list[str]:
     text = re.sub(r"[^\w\s-]", " ", text.lower())
     tokens = text.split()
     # Filter out very short tokens (noise)
-    return [t for t in tokens if len(t) > 2]
+    return [t for t in tokens if len(t) > _MIN_TOKEN_LEN]
 
 
 def _globs_match(pattern1: str, pattern2: str) -> bool:
@@ -259,7 +257,7 @@ def _globs_match(pattern1: str, pattern2: str) -> bool:
         # Both are recursive, check suffix overlap
         suffix1 = pattern1[2:].lstrip("/")
         suffix2 = pattern2[2:].lstrip("/")
-        if suffix1 == suffix2 or suffix1 == "" or suffix2 == "":
+        if suffix1 in (suffix2, "") or suffix2 == "":
             return True
         # Check if suffixes are exactly the same (e.g., "*.py" and "*.py")
         if suffix1 == suffix2:

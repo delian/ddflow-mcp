@@ -11,9 +11,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from test_review_budget import _setup
+
 import ddflow.api.review as api
 from ddflow.infra.log import EventLog
-from test_review_budget import _setup
 
 
 def _gate_events(repo, gate):

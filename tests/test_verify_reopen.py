@@ -56,7 +56,7 @@ def test_the_brief_puts_the_failed_claims_at_the_top_of_the_reopened_task(repo):
     _false_completion(repo)
     verify(repo, "T1", reopen=True)
     out = run_cli(repo, "brief", "--item", "T1")[1]
-    head, _, rest = out.partition("## Current: T1")
+    _head, _, rest = out.partition("## Current: T1")
     current = rest.split("\n## ", 1)[0]  # the section about this task, not a later one
     assert "REOPENED by verification" in current
     assert "declared_files" in current and "gates were cleared" in current
