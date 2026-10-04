@@ -70,8 +70,10 @@ def refile_reported(log, cfg, item: str, bugs: list[str]) -> dict[str, str]:
     only what the task was filed to fix (`CM.reported_against`) -- a fix task of its own,
     as `bug found` would have filed it, so it is not left pointing at a finished task
     that nothing will refile (`bug file-tasks` counts a done task as its fix). Called
-    after ``item`` is DONE, so the open-fix-task link cannot be taken again. Returns
-    {bug: fix task}; nothing under `[bugs] file_task = false`."""
+    just before ``item``'s completion is written, and decided as if it were DONE, so the
+    open-fix-task link back to ``item`` cannot be taken again; ``item`` still lends its
+    phase, globs, priority and line. A `fix-<bug>` already in the queue is linked, not
+    filed twice. Returns {bug: fix task}; nothing under `[bugs] file_task = false`."""
     if not bugs or not cfg.bugs.file_task:
         return {}
     from .knowledge import _file_fix_task
@@ -79,6 +81,8 @@ def refile_reported(log, cfg, item: str, bugs: list[str]) -> dict[str, str]:
     out: dict[str, str] = {}
     with log.transaction():
         st = fold(log.read_all(), strict=False)
+        if item in st.items:  # a throwaway fold: the completion is going through
+            st.items[item].state = DONE
         for bid in bugs:
             b = st.bugs.get(bid)
             if b is None or not b.open or b.fix_task != item:
