@@ -6,6 +6,11 @@ END counted those commits as reviewed, and the next `--delta` said "nothing chan
 the reviewed head" -- unreviewed commits passing the delta check. Both a full round and a
 delta round must capture the head with the diff. The reviewer here is a shell script that
 commits to the branch while it "reviews", once per armed marker file.
+
+That reviewer has a side effect, so it runs with `hedge = 1` (B10034dff26 / Ba1ac2327a4):
+hedged, two copies race, the copy that finds the marker already taken answers first, and
+the winner's cancel kills the copy that was committing -- under load, a review with no
+late commit, and a test that flaked one run in six.
 """
 
 from __future__ import annotations
@@ -36,8 +41,9 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     branch mid-review (and disarms). Returns the marker path."""
     arm = tmp_path / "arm"
     cli = tmp_path / "fake-reviewer"
+    calls = tmp_path / "calls"
     cli.write_text(
-        "#!/bin/sh\ncat >/dev/null\n"
+        f"#!/bin/sh\necho x >> '{calls}'\ncat >/dev/null\n"
         f"if [ -f '{arm}' ]; then n=$(cat '{arm}'); rm -f '{arm}'; "
         f"printf 'late = %s\\n' \"$n\" > '{repo}/late'$n'.py'; "
         f"git -C '{repo}' add 'late'$n'.py' >/dev/null; "
@@ -49,7 +55,7 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
     (repo / ".ddflow" / "config.toml").write_text(
         "[worktree]\nenabled = false\n"
         f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{cli}"\n'
-        'model = "gemini-2.5-pro"\ngates = ["critic"]\n'
+        'model = "gemini-2.5-pro"\ngates = ["critic"]\nhedge = 1\n'
     )
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "ddflow")
@@ -67,6 +73,18 @@ def _review(repo: Path, **kw):
 
 def _ev(repo: Path) -> dict:
     return fold(EventLog(repo).read_all(), strict=False).items["T1"].gates["critic"].evidence
+
+
+def test_the_side_effecting_reviewer_runs_once_per_review(repo, tmp_path):
+    """The fixture's reviewer commits, so it must not be hedged: a second copy racing it
+    can win and kill it mid-commit. One review, one invocation."""
+    from ddflow.services import review as R
+
+    arm = _setup(repo, tmp_path)
+    assert [r.hedge for r in R.reviewers_for(R.load_reviewers(repo), "critic")] == [1]
+    arm.write_text("1")
+    assert _review(repo).exit == OK
+    assert (tmp_path / "calls").read_text().count("x") == 1
 
 
 def test_a_commit_made_while_a_full_review_runs_shows_up_in_the_next_delta(repo, tmp_path):
