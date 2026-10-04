@@ -162,13 +162,29 @@ def copy_local_configs(repo: Path, source: Path, *, names: tuple[str, ...] = LOC
     reported so the operator can see what changed.
     """
     repo, source = Path(repo), Path(source)
+    local_dir = Path(repo) / ".ddflow" / "local"
+    if (
+        local_dir.is_dir()
+        and (local_dir / ".gitignore").exists()  # ensure_local_dir would write nothing
+        and git_ignored(repo, ".ddflow/local/") is False
+    ):
+        # Refuse BEFORE anything can be written: the `Refused` contract is "nothing was
+        # written", and a project that actively un-ignores `local/` has to be fixed
+        # first, not worked around (critic on 6de8b73). A directory WITHOUT its own
+        # ignore file is not this case -- `ensure_local_dir` creating it IS the fix.
+        return [
+            Refused(
+                f"{repo}/.ddflow/local/ is NOT git-ignored; refusing to copy machine-local "
+                f"config into a path that can be committed. Nothing was written."
+            )
+        ]
     ensure_local_dir(repo)
     ignored = git_ignored(repo, ".ddflow/local/")
     if ignored is False:
         return [
             Refused(
-                f"{repo}/.ddflow/local/ is NOT git-ignored; refusing to copy machine-local "
-                f"config into a path that can be committed"
+                f"{repo}/.ddflow/local/ is still NOT git-ignored after ensuring its own "
+                f".gitignore (a tracked file there?); nothing was copied"
             )
         ]
     out: list[str] = []
@@ -319,10 +335,13 @@ def install_shell_command(
     """Write the `ddflow` wrapper a harness's shell needs, and say where it landed.
 
     `repo` is the project root the entry is registered in: needed to make a relative
-    command or PYTHONPATH absolute. The operator's own `ddflow` is never overwritten: a
-    file without this module's marker is theirs, and is refused. A wrapper already
-    written is refreshed in place when the pin changes, so re-running onboarding is safe
-    and one run is enough.
+    command or PYTHONPATH absolute. `bindir` is where the caller wants the wrapper, and
+    it is NOT defaulted: without it this only PROPOSES `~/.local/bin` and writes nothing,
+    because a library that installs a machine-wide command on a default is exactly what
+    the operator should be asked about (critic on 6de8b73). The operator's own `ddflow`
+    is never overwritten: a file without this module's marker is theirs, and is refused.
+    A wrapper already written is refreshed in place when the pin changes, so re-running
+    onboarding is safe and one run is enough.
     """
     base = Path(repo) if repo is not None else None
     try:
@@ -335,6 +354,11 @@ def install_shell_command(
             "docker): there is no checkout for the shell to mirror"
         )
     directory = Path(bindir) if bindir else Path.home() / ".local" / "bin"
+    if bindir is None:
+        return (
+            f"not installed: name the bin directory to write it to (proposed: {directory}); "
+            f"the wrapper line is: {line}"
+        )
     target = directory / "ddflow"
     text = wrapper_text(entry, base=base)
     if target.exists() or target.is_symlink():
