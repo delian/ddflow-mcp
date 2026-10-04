@@ -34,10 +34,13 @@ def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
     """The block, or "" when the mode is off. `item` names the item just completed: its
     phase is the one shown as current."""
     mode = mode or cfg.session.progress_after_complete
-    if mode not in ("on", "phase"):
+    if mode == "off":
         return ""
-    items = _live(st)
     lines: list[str] = []
+    if mode not in MODES:  # a typo must not silently turn the report off
+        lines.append(f"(session.progress_after_complete = {mode!r} is not one of on|phase|off)")
+        mode = "on"
+    items = _live(st)
     cur = st.items.get(item)
     phase = cur.id if cur is not None and cur.kind == "phase" else (cur.parent if cur else "")
     if mode == "on":

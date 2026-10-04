@@ -1493,7 +1493,12 @@ def complete(
     from ..core.model import fold
     from ..services import progress_line as PL
 
-    progress = PL.report(fold(log.read_all(), strict=False), cfg, item)
+    # The item is complete and released by now: a report that cannot be built must
+    # never make that look like a failed completion.
+    try:
+        progress = PL.report(fold(log.read_all(), strict=False), cfg, item)
+    except Exception as e:  # noqa: BLE001 -- informational only, see above
+        progress = f"(progress report unavailable: {type(e).__name__}: {e})"
     if progress:
         extra["progress"] = progress
     if it.kind == "phase":  # [export].refresh = phase_close

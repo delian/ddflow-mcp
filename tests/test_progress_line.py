@@ -91,3 +91,23 @@ def test_ready_work_held_by_the_cap_is_named_not_reported_as_nothing(repo):
     st = fold(EventLog(repo).read_all(), strict=False)
     text = PL.report(st, cfg, "T1")
     assert "Next (when a slot frees): " in text and "nothing ready" not in text
+
+
+def test_an_unknown_mode_is_said_and_falls_back_to_on(repo):
+    _project(repo)
+    st = fold(EventLog(repo).read_all(), strict=False)
+    text = PL.report(st, Config.load(repo), "T1", mode="full")
+    assert "'full' is not one of on|phase|off" in text and "Progress:" in text
+
+
+def test_a_report_that_fails_does_not_fail_the_completion(repo, monkeypatch):
+    from ddflow.api import lifecycle as LC
+
+    _project(repo)
+
+    def boom(*a, **k):
+        raise RuntimeError("no")
+
+    monkeypatch.setattr(PL, "report", boom)
+    out = LC.complete(repo, "T1", force=True)
+    assert out.exit == 0 and "progress report unavailable" in out.data["progress"]
