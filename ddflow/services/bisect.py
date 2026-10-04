@@ -221,7 +221,7 @@ def bisect(
             raise _Stop("unavailable", "a run could not be made (timeout or spawn failure)")
         return outcome is False
 
-    best = list(candidates)
+    best: list[str] = []
     try:
         alone = run([])
         if alone is None:
@@ -242,6 +242,8 @@ def bisect(
                 "pollution is not about earlier files)",
             )
             return res
+        # At this point we've verified that all candidates together make the victim fail
+        best = list(candidates)
 
         def tracked(subset: list[str]) -> bool:
             nonlocal best
