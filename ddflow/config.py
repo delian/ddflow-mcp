@@ -1274,7 +1274,7 @@ _doc(
 _doc(
     "enforce",
     "environment_commits",
-    "What the pre-commit hook does with a commit made directly on a branch listed in [flow].environments (GitLab flow's upstream-first): 'block' (default) refuses it and names the remedy (work on a branch, then `ddflow promote`), 'warn' prints and allows, 'off' disables. Merge and squash commits are never refused: that is how a promotion lands. Commits that stage only ddflow's own files are exempt.",
+    "What the pre-commit hook does with a commit made directly on a branch listed in [flow].environments (GitLab flow's upstream-first): 'block' (default) refuses it and names the remedy (work on a branch, then `ddflow promote status`), 'warn' prints and allows, 'off' disables. Merge and squash commits are never refused: that is how a promotion lands. Commits that stage only ddflow's own files are exempt.",
 )
 _doc(
     "enforce",
