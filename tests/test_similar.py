@@ -7,6 +7,7 @@ from __future__ import annotations
 import dataclasses
 import sqlite3
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -359,8 +360,6 @@ def test_store_and_memory_agree_past_fifty_candidates(tmp_path):
 def test_concurrent_rebuilds_neither_traceback_nor_leave_a_broken_index(repo, log, cfg):
     """Bcdfb199cc0: parallel rebuilds shared ONE temp path and no lock, so one unlinked or
     published the other's half-built file (FileNotFoundError, `no such table: meta`)."""
-    import threading
-
     for i in range(40):
         log.append("task.added", f"T{i}", {"title": f"thing {i}", "body": "about claims"})
     errors: list[BaseException] = []
@@ -387,15 +386,46 @@ def test_concurrent_rebuilds_neither_traceback_nor_leave_a_broken_index(repo, lo
     assert leftovers == []
 
 
-def test_ensure_does_not_traceback_when_the_rebuild_cannot_run(repo, log, cfg, monkeypatch):
-    """A read path answers from the log when the index cannot be rebuilt (a held rebuild
-    lock past its timeout, an unwritable directory): the index is a cache."""
+def test_ensure_answers_from_the_log_while_another_rebuild_holds_the_lock(
+    repo, log, cfg, monkeypatch, capsys
+):
+    """A read path answers from the log when the index cannot be rebuilt in time (here:
+    another rebuild holds the lock past the timeout): the index is a cache."""
+    from ddflow.infra.log import _flock
+
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    monkeypatch.setattr(store_mod, "REBUILD_LOCK_TIMEOUT_S", 0.1)
+    held = threading.Event()
+    release = threading.Event()
+
+    def holder() -> None:
+        with _flock(st.lock_path, 5):
+            held.set()
+            release.wait(10)
+
+    t = threading.Thread(target=holder)
+    t.start()
+    try:
+        assert held.wait(5)
+        state = st.ensure(log)
+    finally:
+        release.set()
+        t.join()
+    assert "T1" in state.items
+    assert "could not be rebuilt" in capsys.readouterr().err
+    assert not st.path.exists()  # nothing was half-published either
+
+
+def test_a_projection_error_is_not_swallowed_by_the_fallback(repo, log, cfg, monkeypatch):
+    """Only the environment (lock timeout, OSError, OperationalError) degrades to the log;
+    a bug in the rebuild still surfaces."""
     log.append("task.added", "T1", {"title": "one thing", "body": "x"})
     st = Store(repo, cfg)
 
     def boom(*a, **k):
-        raise TimeoutError("could not acquire the index lock")
+        raise sqlite3.IntegrityError("a projection bug")
 
-    monkeypatch.setattr(st, "_rebuild_locked", boom)
-    state = st.ensure(log)
-    assert "T1" in state.items
+    monkeypatch.setattr(st, "_build_into", boom)
+    with pytest.raises(sqlite3.IntegrityError):
+        st.ensure(log)
