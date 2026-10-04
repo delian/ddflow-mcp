@@ -959,7 +959,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": lambda a: (
             ("id", "was", "reason_given", "fix_task", "fix_task_state", "previous_fix_task", "next")
-            if a.get("reopen") is True
+            if _reopening(a)
             else (
                 "id",
                 "invalid_reason",
@@ -2968,21 +2968,26 @@ def _bisect(repo, a):
 
 
 def _reopening(a: dict[str, Any]) -> bool:
-    """`ddflow_bug_invalid`'s mode. Strict: the two modes do opposite things, so a
-    `"false"` string must not pick one, and evidence a reopen cannot record is refused
-    rather than dropped."""
+    """`ddflow_bug_invalid`'s mode, for its `api` and its `payload` alike. Strict: the
+    two modes do opposite things, so a `"false"` string must not pick one."""
     mode = a.get("reopen", False)
     if not isinstance(mode, bool):
         raise ValueError("reopen must be true or false")
-    if mode and a.get("evidence"):
-        raise ValueError("evidence is for closing as invalid; a reopen records its reason")
     return mode
 
 
 def _bug_reopen(repo, a: dict[str, Any], *, agent: str):
-    """`bug reopen` (B7bdcc6b212), served by `ddflow_bug_invalid` with `reopen`."""
+    """`bug reopen` (B7bdcc6b212), served by `ddflow_bug_invalid` with `reopen`. Evidence
+    a reopen cannot record is refused (exit 3), not dropped."""
     from ..api.bug_reopen import bug_reopen
+    from ..core import outcome as O
 
+    if a.get("evidence"):
+        return O.refused(
+            "bug.reopened",
+            "evidence is for closing a bug as invalid; a reopen records only its reason.",
+            id=a["id"],
+        )
     return bug_reopen(repo, a["id"], reason=a.get("reason", "") or "", agent=agent)
 
 
