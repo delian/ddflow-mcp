@@ -34,6 +34,7 @@ from ..services import leases as L
 from ..services.adopt import AGENT_TARGETS
 from . import dedupe_flags
 from .commands.bisect import add_bisect_parser
+from .commands.bug_reopen import add_bug_reopen_parser
 from .commands.ci import add_ci_parser
 from .commands.config import (  # noqa: F401  -- moved out of this module
     _config_set,
@@ -1099,6 +1100,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "--evidence", default="", help="the probe command or test node id that showed it"
     )
     bv.set_defaults(fn=cmd_bug)
+    add_bug_reopen_parser(bg_s)
 
     se = s.add_parser("session")
     se_s = se.add_subparsers(dest="session_cmd", required=True)
