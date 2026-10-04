@@ -661,6 +661,8 @@ class Session:
 
 @dataclass
 class State:
+    #: `ci.result`: the last CI_RESULTS_KEPT outcomes of the CI command, oldest first.
+    ci_results: list[dict[str, Any]] = field(default_factory=list)
     items: dict[str, Item] = field(default_factory=dict)
     bugs: dict[str, Bug] = field(default_factory=dict)
     lessons: dict[str, Lesson] = field(default_factory=dict)
@@ -1865,6 +1867,27 @@ def _h_session_prompt(st: State, ev: Event) -> None:
     )
 
 
+CI_RESULTS_KEPT = 50
+
+
+def _h_ci_result(st: State, ev: Event) -> None:
+    """One outcome of the CI command: where it ran (gate | merge | pre-push | schedule),
+    whether it held, which checks failed, and on what commit."""
+    d = ev.data
+    st.ci_results.append(
+        {
+            "at": ev.ts,
+            "stage": d.get("stage", ""),
+            "status": d.get("status", ""),
+            "ok": bool(d.get("ok")),
+            "sha": d.get("sha", ""),
+            "subject": ev.subject,
+            "checks": list(d.get("checks") or []),
+        }
+    )
+    del st.ci_results[:-CI_RESULTS_KEPT]
+
+
 def _h_session_note(st: State, ev: Event) -> None:
     """A note, with the fields that make it addressable afterwards.
 
@@ -2160,6 +2183,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "memory.forgotten": _h_memory_forgotten,
     "session.started": _h_session_started,
     "session.prompt": _h_session_prompt,
+    "ci.result": _h_ci_result,
     "session.note": _h_session_note,
     "session.ended": _h_session_ended,
     "gate.out_of_order": _h_gate_out_of_order,
