@@ -307,7 +307,6 @@ def test_without_filemode_a_symlink_replaced_by_a_file_is_a_regular_file(repo):
     _commit_all_matches(repo)
 
 
-@pytest.mark.xfail(strict=True, reason="bug Bb47a48b173: false stale note when the tree is kept")
 def test_an_untracked_file_left_in_a_kept_tree_does_not_make_the_evidence_stale(repo):
     """Salvaged probe (/tmp/rev74e): a scratch file that never landed is not a change."""
     assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == OK
