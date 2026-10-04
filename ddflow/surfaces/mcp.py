@@ -4121,7 +4121,8 @@ def _offloaded(msg: dict[str, Any]) -> bool:
         msg.get("method") == "tools/call"
         and msg.get("id") is not None
         and isinstance(params, dict)
-        and params.get("name") in OFFLOADED
+        and isinstance(params.get("name"), str)  # a list name must not end the loop
+        and params["name"] in OFFLOADED
     )
 
 
