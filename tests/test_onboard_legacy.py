@@ -160,8 +160,16 @@ def test_check_frozen_reports_a_changed_file_and_a_missing_one(repo):
 
 
 def test_no_manifest_is_not_a_pass(repo):
-    assert L.read_frozen(repo) == {}
+    assert L.read_frozen(repo) is None
     assert L.check_frozen(repo) is None, "'never frozen' is not 'everything unchanged'"
+
+
+def test_a_manifest_that_validly_freezes_nothing_is_present_not_absent(repo):
+    """The operator may unfreeze the last file -- the manifest's own comment says so;
+    the ratchet is then present and watches nothing, which is not the same as missing."""
+    _write(repo, L.MANIFEST_REL, "# all unfrozen by the operator\n[frozen]\n")
+    assert L.read_frozen(repo) == {}
+    assert L.check_frozen(repo) == []
 
 
 def test_a_malformed_manifest_is_not_nothing_frozen(repo):
@@ -207,9 +215,8 @@ def test_a_precommit_project_gets_a_fail_hook_instead_of_a_test(repo):
     assert isinstance(read_precommit_yaml(text), dict)
     assert not (repo / L.GENERATED_TEST_ROOT).exists()
     assert any("frozen-files hook" in a for a in actions)
-    assert (
-        L.freeze(repo, ["todo.md"])[1] == "updated the frozen-files hook in .pre-commit-config.yaml"
-    )
+    second = L.freeze(repo, ["todo.md"])
+    assert any("updated the frozen-files hook in .pre-commit-config.yaml" in a for a in second)
     assert (repo / ".pre-commit-config.yaml").read_text() == text
 
 
@@ -245,6 +252,42 @@ def test_a_test_file_that_is_not_ddflows_is_never_overwritten(repo):
     refused = [a for a in actions if isinstance(a, Refused)]
     assert refused and "not ddflow's" in refused[0]
     assert (repo / L.GENERATED_TEST_ROOT).read_text() == "def test_mine():\n    assert True\n"
+    assert not (repo / L.MANIFEST_REL).exists(), "a refusal must not leave a ratchet-less manifest"
+
+
+def test_an_incomplete_hook_block_is_refused_not_duplicated(repo):
+    """A half-deleted managed block must not be 'completed' by inserting a second one:
+    the next run would replace the span from the orphan marker to the new end, deleting
+    whatever the operator has between them (rubber_duck on 276c2cbe)."""
+    _write(repo, "a.md", "a\n")
+    orphan_begin = f"repos:\n\n{L.HOOK_BEGIN}\n- repo: local\n"
+    _write(repo, ".pre-commit-config.yaml", orphan_begin)
+    actions = L.freeze(repo, ["a.md"])
+    refused = [a for a in actions if isinstance(a, Refused)]
+    assert refused and "clean the block up by hand" in refused[0]
+    assert (repo / ".pre-commit-config.yaml").read_text() == orphan_begin
+    assert not (repo / L.MANIFEST_REL).exists()
+
+
+def test_two_managed_blocks_are_refused(repo):
+    _write(repo, "a.md", "a\n")
+    block = f"{L.HOOK_BEGIN}\n- repo: local\n  hooks:\n    - id: x\n{L.HOOK_END}\n"
+    text = f"repos:\n{block}{block}"
+    _write(repo, ".pre-commit-config.yaml", text)
+    actions = L.freeze(repo, ["a.md"])
+    refused = [a for a in actions if isinstance(a, Refused)]
+    assert refused and "2 begin and 2 end" in refused[0]
+    assert (repo / ".pre-commit-config.yaml").read_text() == text
+
+
+def test_an_end_marker_before_its_begin_marker_is_refused(repo):
+    _write(repo, "a.md", "a\n")
+    text = f"repos:\n{L.HOOK_END}\n# later\n{L.HOOK_BEGIN}\n"
+    _write(repo, ".pre-commit-config.yaml", text)
+    actions = L.freeze(repo, ["a.md"])
+    refused = [a for a in actions if isinstance(a, Refused)]
+    assert refused and "before its begin marker" in refused[0]
+    assert (repo / ".pre-commit-config.yaml").read_text() == text
 
 
 def test_a_config_that_would_not_parse_is_refused_untouched(repo):

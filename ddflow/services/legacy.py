@@ -237,15 +237,18 @@ def write_manifest(repo: Path, paths: Iterable[str]) -> str:
     return f"wrote {MANIFEST_REL} with {len(frozen)} frozen file(s)"
 
 
-def read_frozen(repo: Path) -> dict[str, str]:
-    """The frozen set; `{}` when no manifest exists.
+def read_frozen(repo: Path) -> dict[str, str] | None:
+    """The frozen set; None when NO manifest exists.
 
-    Raises ValueError for a manifest that exists but is not a `[frozen]` table of
-    strings: "could not read" must never render as "nothing is frozen".
+    `{}` is a manifest that validly freezes nothing (the operator unfroze the last file,
+    as the manifest's own comment says they may), and is deliberately distinct from "the
+    ratchet was never generated" -- the collapse that would report a missing ratchet as
+    an empty, passing one. Raises ValueError for a manifest that exists but is not a
+    `[frozen]` table of strings: "could not read" is not "nothing is frozen" either.
     """
     path = Path(repo) / MANIFEST_REL
     if not path.is_file():
-        return {}
+        return None
     data = tomllib.loads(path.read_text("utf-8"))
     table = data.get("frozen")
     if not isinstance(table, dict) or not all(
@@ -258,12 +261,13 @@ def read_frozen(repo: Path) -> dict[str, str]:
 def check_frozen(repo: Path) -> list[str] | None:
     """Frozen paths whose bytes changed or that are gone; `[]` when all match.
 
-    None means there is no manifest -- the ratchet was never generated -- which is NOT
-    "everything is unchanged" (the three-valued collapse this project keeps catching).
+    None means there is NO manifest -- the ratchet was never generated -- which is NOT
+    "everything is unchanged"; a present-but-empty manifest is `[]`, with nothing to
+    drift.
     """
     repo = Path(repo)
     frozen = read_frozen(repo)
-    if not frozen:
+    if frozen is None:
         return None
     drifted = []
     for rel, want in sorted(frozen.items()):
@@ -294,12 +298,17 @@ def freeze(
     if not existing:
         out.append("no imported files to freeze; no ratchet written")
         return out
-    out.append(write_manifest(repo, existing))
+    # Arm the ratchet BEFORE the manifest: a refusal from here then leaves nothing
+    # behind, and the generated test reads the manifest only when the suite runs.
     config = repo / config_rel
     if config.is_file():
-        out.append(_arm_precommit(config, existing))
+        armed = _arm_precommit(config, existing)
     else:
-        out.append(_generate_test(repo, existing))
+        armed = _generate_test(repo, existing)
+    if isinstance(armed, Refused):
+        return [*out, armed]
+    out.append(armed)
+    out.append(write_manifest(repo, existing))
     return out
 
 
@@ -313,11 +322,25 @@ def _arm_precommit(config: Path, paths: list[str]) -> str:
     text = config.read_text("utf-8")
     indent = _repos_item_indent(text)
     block = _hook_block(paths, indent)
-    if HOOK_BEGIN in text and HOOK_END in text:
-        start = text.index(HOOK_BEGIN)
-        start = text.rfind("\n", 0, start) + 1
-        stop = text.index(HOOK_END, start)
-        stop = text.index("\n", stop) + 1
+    begins, ends = text.count(HOOK_BEGIN), text.count(HOOK_END)
+    if begins != ends or begins > 1:
+        # Replacing a half-deleted block by finding the first END would swallow whatever
+        # sits between the orphan marker and the next block (rubber_duck on 276c2cbe).
+        return Refused(
+            f"{config.name} has {begins} begin and {ends} end marker(s) for ddflow's "
+            f"frozen-files hook, expected one of each; clean the block up by hand and "
+            f"re-run"
+        )
+    if begins == 1:
+        start = text.rfind("\n", 0, text.index(HOOK_BEGIN)) + 1
+        end_at = text.find(HOOK_END, start)
+        if end_at == -1:
+            return Refused(
+                f"{config.name}'s hook end marker comes before its begin marker; fix the "
+                f"block by hand and re-run"
+            )
+        newline = text.find("\n", end_at)
+        stop = len(text) if newline == -1 else newline + 1
         new_text = text[:start] + block + text[stop:]
         action = f"updated the frozen-files hook in {config.name}"
     else:
