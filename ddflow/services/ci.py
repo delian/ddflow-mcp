@@ -177,7 +177,7 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
             status = "failed" if "does not merge" in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         try:
-            p = P.run(
+            p = P.run(  # nosec B604 - the operator's own [ci].command, run as they wrote it
                 cmd,
                 shell=True,
                 cwd=tree,

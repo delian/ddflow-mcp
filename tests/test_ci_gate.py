@@ -210,3 +210,13 @@ def test_an_item_id_names_its_branch_and_the_cli_defaults_to_the_directorys_head
 
 def test_a_shell_builtin_start_is_not_reported_as_a_missing_tool():
     assert CI.tool_missing("cd frontend && npm test") == ""
+
+
+def test_the_shell_spawn_carries_its_bandit_justification():
+    """bandit is a pre-push hook, not a test dependency: check the marker it keys on.
+
+    The gate's own `shell=True` spawn failed `bandit -ll` on main (B7c31db560d)."""
+    src = (Path(__file__).resolve().parents[1] / "ddflow/services/ci.py").read_text("utf-8")
+    spawn = src[src.index("P.run(") :].split("\n")
+    window = "\n".join(spawn[: spawn.index(next(ln for ln in spawn if "shell=True" in ln)) + 1])
+    assert "nosec B604" in window, "shell=True needs `# nosec B604` + why on the P.run( line"
