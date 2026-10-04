@@ -4002,10 +4002,15 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         v["blocked"] = len(p.blocked)
         v["open_bugs"] = sum(1 for b in st.bugs.values() if b.open)
         v["loops"] = len(PR.detect(events, st, cfg))
-        # Trees that may hold work, as `recover` and the brief judge it: one per tree,
-        # not per item, and never a tree measured clean (B904edd649c).
+        # Trees that may hold work: one per tree, not per item, and never a tree
+        # measured clean (B904edd649c). One that could not be measured (None) counts:
+        # `recover` says to treat it as containing work until someone has looked.
         v["recoverable"] = len(
-            {r.worktree or r.item for r in L.scan(log, cfg, repo) if r.salvageable}
+            {
+                os.path.normpath(r.worktree) if r.worktree else r.item
+                for r in L.scan(log, cfg, repo)
+                if r.salvageable is not False
+            }
         )
     except Exception:
         pass
