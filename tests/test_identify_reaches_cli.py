@@ -178,3 +178,20 @@ def test_the_record_does_not_climb_past_a_shell(monkeypatch):
     chain = {40: ("uv", 30, "4"), 30: ("bash", 20, "3"), 20: ("tmux", 1, "2")}
     monkeypatch.setattr(H, "_stat", chain.get)
     assert H._harness(40) == ["40-4", "30-3"]
+
+
+@needs_proc
+def test_a_shell_wrapped_claim_still_finds_the_harness(connection):
+    """The CLI side walks EVERY ancestor: a `sh -c` between it and the harness is fine."""
+    repo, _srv = connection
+    env = {k: v for k, v in os.environ.items() if k != "DDFLOW_AGENT"}
+    cmd = f"{sys.executable} -m ddflow --repo {repo} claim P1.T1 --no-worktree"
+    r = subprocess.run(
+        ["/bin/sh", "-c", f"{cmd}; true"],
+        capture_output=True,
+        text=True,
+        env={**env, "PYTHONPATH": str(ROOT)},
+        timeout=120,
+    )
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert _holder(repo) == "kilo-onboard"
