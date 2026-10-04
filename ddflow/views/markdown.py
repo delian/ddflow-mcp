@@ -402,8 +402,10 @@ def recovery_band(r) -> str | None:
     """Which band of the brief a recovery entry is named in, in this order: a tree
     holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
     nobody on it; None for a leftover with nothing to salvage, which is counted rather
-    than listed (B20e103326b). `recover`, `status` and `doctor` count by the same bands
-    (B3f8c406fea): a truthy `salvageable` drops the unmeasured and the unheld."""
+    than listed (B20e103326b). `recover` and `status` count all three bands as "may
+    contain work" (B3f8c406fea): a truthy `salvageable` dropped the unmeasured and the
+    unheld. `doctor` makes the two TREE bands a problem and leaves a RUNNING item nobody
+    holds a note, since `next` offers it to resume."""
     if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
         return _UNHELD
     if r.salvageable:
