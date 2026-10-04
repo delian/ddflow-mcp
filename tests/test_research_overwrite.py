@@ -56,3 +56,72 @@ def test_the_cli_exits_3_and_research_list_keeps_the_first(repo):
     assert rc == 3, (out, err)
     _, listing, _ = run_cli(repo, "research", "list")
     assert "first q" in listing and "second q" not in listing
+
+
+def test_the_idempotent_re_add_writes_nothing(repo):
+    run_cli(repo, "init")
+    _add(repo, id="R1", question="q one", claim="c")
+    before = len(EventLog(repo, "reader").read_all())
+    again = _add(repo, id="R1", question="q one", claim="c")
+    assert again.data.get("unchanged") is True
+    assert len(EventLog(repo, "reader").read_all()) == before
+
+
+def test_an_id_held_by_another_kind_is_refused(repo):
+    run_cli(repo, "init")
+    rc, _, err = run_cli(repo, "phase", "add", "P1", "--title", "a phase")
+    assert rc == 0, err
+    out = _add(repo, id="P1", question="q", claim="c")
+    assert out.exit == REFUSED and "phase" in out.reason, out
+
+
+def test_every_recorded_field_is_a_note_attribute():
+    """`_research_fields` is the payload AND the equality key: a field the fold does not
+    hold would make every re-add read as changed (or, missing, as unchanged)."""
+    from dataclasses import fields
+
+    from ddflow.api.knowledge import _research_fields
+    from ddflow.core.model import ResearchNote
+
+    names = {f.name for f in fields(ResearchNote)}
+    assert set(_research_fields(api.ResearchFinding(question="q", verdict="X"))) <= names
+
+
+def test_the_mcp_tool_refuses_too(repo):
+    import json
+
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    _add(repo, id="R1", question="first q", claim="c")
+    reply = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_research_add",
+                "arguments": {"id": "R1", "question": "second q", "verdict": "THEORETICAL"},
+            },
+        }
+    )
+    body = json.loads(reply["result"]["content"][0]["text"])
+    assert reply["result"]["_meta"]["exit"] == REFUSED and "refusal" in body, body
+
+
+def test_an_id_filed_after_the_state_was_read_is_still_refused(repo, monkeypatch):
+    """The check is repeated under the log's lock: an agent that read the state before
+    another filed R1 must not overwrite it (roborev 1436)."""
+    from ddflow.api import knowledge as K
+
+    run_cli(repo, "init")
+    real = K._load
+
+    def stale_load(*a, **k):
+        log, cfg, _ = real(*a, **k)
+        return log, cfg, fold([])
+
+    _add(repo, id="R1", question="first q", claim="c")
+    monkeypatch.setattr(K, "_load", stale_load)
+    out = _add(repo, id="R1", question="second q", claim="other")
+    assert out.exit == REFUSED, out

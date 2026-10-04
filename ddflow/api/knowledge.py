@@ -439,6 +439,12 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
     if chk.extension:
         return DD.extend(log, cfg, chk, "research.recorded")
     with log.transaction():
+        # Asked again under the log's lock: another agent may have filed this id since
+        # `st` was read, and the check above is only advisory across agents.
+        if finding.id:
+            raced = _research_id_taken(fold(log.read_all(), strict=False), rid, finding)
+            if raced is not None:
+                return raced
         log.append(
             "research.recorded",
             rid,
@@ -449,7 +455,9 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
 
 
 def _research_fields(finding: Finding) -> dict[str, Any]:
-    """What a research note records, as the fold will hold it."""
+    """What a research note records, as the fold will hold it. Both the event payload
+    and what "the same record again" compares (`_research_id_taken`): a field written
+    here is a field compared, so the two cannot drift apart."""
     return {
         "question": finding.question,
         "claim": finding.claim,
