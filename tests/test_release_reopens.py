@@ -87,3 +87,34 @@ def test_a_holder_releasing_its_own_reclaimed_work_hands_it_back(repo):
     again = fold(log.read_all(), strict=False).items["T1"].lease
     log.append("lease.released", "T1", {"holder": again.holder, "event": again.event})
     assert _state(repo) == "open"
+
+
+def test_a_takeover_that_started_work_and_is_released_hands_the_item_back(repo):
+    _claimed(repo)
+    log = EventLog(repo)
+    first = fold(log.read_all(), strict=False).items["T1"].lease
+    log.append("lease.expired", "T1", {"holder": first.holder, "event": first.event})
+    log.append(
+        "lease.acquired",
+        "T1",
+        {"holder": "second", "at": 2e9, "ttl_s": 1800, "globs": ["a.py"]},
+    )
+    log.append("item.started", "T1", {})
+    taken = fold(log.read_all(), strict=False).items["T1"].lease
+    log.append("lease.released", "T1", {"holder": "second", "event": taken.event})
+    assert _state(repo) == "open"
+
+
+def test_a_rehomed_lease_released_later_hands_the_item_back(repo):
+    """B190 re-homing: transfer release, then the new identity acquires (no item.started)."""
+    _claimed(repo)
+    log = EventLog(repo)
+    old = fold(log.read_all(), strict=False).items["T1"].lease
+    log.append("lease.released", "T1", {"holder": old.holder, "event": old.event, "transfer": True})
+    log.append(
+        "lease.acquired", "T1", {"holder": "me", "at": 2e9, "ttl_s": 1800, "globs": ["a.py"]}
+    )
+    assert _state(repo) == "running"
+    now = fold(log.read_all(), strict=False).items["T1"].lease
+    log.append("lease.released", "T1", {"holder": "me", "event": now.event})
+    assert _state(repo) == "open"
