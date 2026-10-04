@@ -1163,7 +1163,9 @@ class EventLog:
                 or meta["sha256"] != hashlib.sha256(payload).hexdigest()
             ):
                 return entries
-            body = marshal.loads(payload)
+            # Only reached after the file's own sha256, size, ddflow version and parser
+            # fingerprint matched (above): local machine state, never merged or fetched.
+            body = marshal.loads(payload)  # nosec B302
             order = body.pop("\0order", None)
             for name, (consumed, digest, skipped, tuples) in body.items():
                 if (
