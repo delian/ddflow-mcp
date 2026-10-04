@@ -1260,6 +1260,11 @@ def _h_lease_gone(st: State, ev: Event) -> None:
         it.lease.expired_at = ev.ts
         return
     it.lease = None
+    # A deliberate release hands the item back: RUNNING with nobody on it is what a
+    # crash looks like, and a release is not a crash (B601fa7eff9). Expiry keeps RUNNING
+    # (above) so recovery still sees it; a transfer (re-homing) is re-acquired at once.
+    if it.state == RUNNING and not d.get("transfer"):
+        it.state = OPEN
     _redisplay(it)
 
 
