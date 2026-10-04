@@ -439,8 +439,6 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
     if chk.extension:
         return DD.extend(log, cfg, chk, "research.recorded")
     with log.transaction():
-        # Asked again under the log's lock: another agent may have filed this id since
-        # `st` was read, and the check above is only advisory across agents.
         # Asked again under the log's lock: another agent may have filed this id (as
         # research or as anything else) since `st` was read. Only a NAMED id can collide
         # (`auto_id` is time-salted), so only an explicit --id pays for this re-read and

@@ -168,6 +168,8 @@ def test_another_kind_filed_after_the_state_was_read_is_still_refused(repo, monk
 
     rc, _, err = run_cli(repo, "phase", "add", "P7", "--title", "a phase")
     assert rc == 0, err
+    before = len(EventLog(repo, "reader").read_all())
     monkeypatch.setattr(K, "_load", stale_load)
     out = _add(repo, id="P7", question="q", claim="c")
     assert out.exit == REFUSED and "phase" in out.reason, out
+    assert len(EventLog(repo, "reader").read_all()) == before
