@@ -22,6 +22,10 @@ from ..infra import proc
 _MIN_ABBREV = 7
 _LIMIT = 100
 _TIMEOUT_S = 30
+#: The job types that are reviews of commits: one commit (`review`), or a range
+#: (`range`, what `roborev review --since <base>` records -- Bf4a6ce1b06). Fix, refine
+#: and other agent jobs are not reviews.
+_REVIEW_JOBS = ("review", "range")
 
 
 @dataclass
@@ -80,7 +84,7 @@ def review_of(where: Path, sha: str) -> tuple[Review | None, str]:
         (_job_id(j), j)
         for j in jobs if isinstance(j, dict)
         and j.get("status") == "done"
-        and j.get("job_type", "review") == "review"
+        and j.get("job_type", "review") in _REVIEW_JOBS
         and _covers(str(j.get("git_ref") or ""), sha)
         and _job_id(j) is not None
     ]  # fmt: skip
