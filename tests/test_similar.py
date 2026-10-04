@@ -354,3 +354,48 @@ def test_store_and_memory_agree_past_fifty_candidates(tmp_path):
     with similar.StoreIndex(db) as disk:
         got = disk.query(q)
     assert len(got) == 300 and got == similar.build(recs).query(q)
+
+
+def test_concurrent_rebuilds_neither_traceback_nor_leave_a_broken_index(repo, log, cfg):
+    """Bcdfb199cc0: parallel rebuilds shared ONE temp path and no lock, so one unlinked or
+    published the other's half-built file (FileNotFoundError, `no such table: meta`)."""
+    import threading
+
+    for i in range(40):
+        log.append("task.added", f"T{i}", {"title": f"thing {i}", "body": "about claims"})
+    errors: list[BaseException] = []
+    barrier = threading.Barrier(6)
+
+    def run() -> None:
+        try:
+            barrier.wait()
+            for _ in range(3):
+                Store(repo, cfg).rebuild(log)
+        except BaseException as exc:  # the assertion is that none happen
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    st = Store(repo, cfg)
+    with similar.open_store(st) as idx:
+        assert len(idx.ids()) == 40
+    leftovers = [p.name for p in st.path.parent.iterdir() if "rebuilding" in p.name]
+    assert leftovers == []
+
+
+def test_ensure_does_not_traceback_when_the_rebuild_cannot_run(repo, log, cfg, monkeypatch):
+    """A read path answers from the log when the index cannot be rebuilt (a held rebuild
+    lock past its timeout, an unwritable directory): the index is a cache."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+
+    def boom(*a, **k):
+        raise TimeoutError("could not acquire the index lock")
+
+    monkeypatch.setattr(st, "_rebuild_locked", boom)
+    state = st.ensure(log)
+    assert "T1" in state.items
