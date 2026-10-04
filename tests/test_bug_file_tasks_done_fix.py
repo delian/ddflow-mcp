@@ -166,3 +166,17 @@ def test_the_links_name_an_open_fix_task_too(repo):
     assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
     out = K.bug_file_tasks(repo, agent="a")
     assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
+
+
+def test_json_carries_the_links(repo):
+    """rubber_duck / critic / roborev 1508: the task and its state reach --json (and MCP,
+    which `test_api_layer` holds equal to it), not only the text."""
+    import json
+
+    log = seed(repo)
+    log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
+    log.append("item.completed", "fix-Brep", {"sha": "abc"})
+    log.append("item.completed", "fix-Bx", {"sha": "abc"})
+    code, out, err = run_cli(repo, "--json", "bug", "file-tasks", agent="a")
+    assert code == 0, out + err
+    assert json.loads(out)["links"] == {"Brep": {"task": "fix-Brep", "state": "done"}}, out
