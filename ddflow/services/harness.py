@@ -28,11 +28,11 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from ..infra import proc as P
 from ..infra.worktree import copy_local_files, tracks_local_file
 from .adopt import SHAPE_MCP_SERVERS, Refused, get_servers
 from .claudehooks import SettingsError, _read, _write
@@ -136,15 +136,17 @@ def enable_project_servers(
 def git_ignored(repo: Path, rel: str) -> bool | None:
     """Is `rel` ignored by git here? None when git cannot answer -- not a repo, no git."""
     try:
-        proc = subprocess.run(
+        # P.run, not subprocess.run: a child that inherits this process's stdin eats the
+        # MCP JSON-RPC stream (tests/test_stdio_safety.py's ratchet).
+        done = P.run(
             ["git", "-C", str(repo), "check-ignore", "-q", "--", rel],
             capture_output=True,
         )
     except OSError:
         return None
-    if proc.returncode == 0:
+    if done.returncode == 0:
         return True
-    if proc.returncode == 1:
+    if done.returncode == 1:
         return False
     return None
 
