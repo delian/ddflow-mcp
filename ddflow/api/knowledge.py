@@ -767,10 +767,25 @@ def _live(st, item: str) -> bool:
     return it is not None and not it.removed
 
 
+def _needs_fix_task(st, b) -> bool:
+    """Whether open bug ``b`` has no fix task that will ever fix it: none in the queue,
+    or a finished (done or abandoned) task it was merely reported against -- `bug found
+    --item <open fix task>` links a report to that task, and the task's completion does
+    not fix it (B8dcbf2f8da). A done task's OWN bug is not refiled: `verify --reopen`
+    sends that task back."""
+    from ..core.model import ABANDONED, DONE
+    from ..services.completion import fixes_of
+
+    if not _live(st, b.fix_task):
+        return True
+    return st.items[b.fix_task].state in (DONE, ABANDONED) and b.id not in fixes_of(st, b.fix_task)
+
+
 def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
     """Give every OPEN bug that has no fix task one -- the one-shot upgrade for a log
     written before `bug found` filed them, and the repair for a bug whose `fix_task` names
-    an item that is not in the queue (a crash between the two appends of `bug found`). A
+    an item that is not in the queue (a crash between the two appends of `bug found`) or a
+    finished task it was only reported against (`_needs_fix_task`, B8dcbf2f8da). A
     bug whose item is an open bug-fix task is linked to it (``linked``); any other gets
     `fix-<bug>` filed (``filed``), as `bug found` would have. Nothing to do is exit 2.
     ``dry_run`` reports and writes nothing."""
@@ -780,7 +795,7 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         todo = sorted(
-            (b for b in st.bugs.values() if b.open and not _live(st, b.fix_task)),
+            (b for b in st.bugs.values() if b.open and _needs_fix_task(st, b)),
             key=lambda b: (b.found_at, b.id),
         )
         for b in todo:
