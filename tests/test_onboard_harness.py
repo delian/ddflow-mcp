@@ -264,6 +264,27 @@ def test_the_entrys_argv_prefix_is_preserved_not_guessed(tmp_path):
     assert isinstance(refused, Refused) and "no `-m" in refused
 
 
+def test_without_a_bindir_the_wrapper_is_proposed_not_written(tmp_path, monkeypatch):
+    """A library must not install a machine-wide command on a default (critic)."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    action = H.install_shell_command(ENTRY, path="")
+    assert "not installed" in action and "-m ddflow" in action
+    assert not (home / ".local" / "bin" / "ddflow").exists()
+
+
+def test_a_local_dir_git_does_not_ignore_refuses_before_any_copy(repo, tmp_path):
+    """The refusal contract is 'nothing was written'; the check runs before the dir is
+    ensured, so a project that un-ignores local/ gets a refusal, not a half-done copy."""
+    local = repo / ".ddflow" / "local"
+    local.mkdir(parents=True)
+    (local / ".gitignore").write_text("!*\n")
+    source = _sibling(tmp_path, {H.LOCAL_CONFIGS[0]: "theirs\n"})
+    actions = H.copy_local_configs(repo, source)
+    assert isinstance(actions[0], Refused) and "NOT git-ignored" in actions[0]
+    assert not (repo / H.LOCAL_CONFIGS[0]).exists()
+
+
 def test_a_failed_refresh_is_reported_not_raised(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     H.install_shell_command(ENTRY, bindir=bindir, path="")
