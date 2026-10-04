@@ -219,3 +219,28 @@ def test_the_shell_spawn_carries_its_bandit_justification():
     src = (Path(__file__).resolve().parents[1] / "ddflow/services/ci.py").read_text("utf-8")
     call = next(ln for ln in src.splitlines() if "P.run(" in ln)  # bandit keys on this line
     assert "nosec B604" in call, "the P.run( line needs `# nosec B604` + why"
+
+
+def test_an_unresolvable_default_base_is_unavailable_never_a_pass(
+    repo, fake_precommit, monkeypatch
+):
+    """Ba08203b0f1: no base named and the default branch not resolvable ran the branch alone."""
+    from ddflow.infra import worktree as W
+
+    _project(repo)
+    monkeypatch.setattr(W, "default_branch", lambda _repo: "__gone__")
+    r = CI.run(repo, Config.load(repo))
+    assert r.status == "unavailable" and "__gone__" in r.reason
+
+
+def test_a_default_base_that_exists_only_as_a_remote_ref_is_still_merged(
+    repo, fake_precommit, monkeypatch
+):
+    from ddflow.infra import worktree as W
+
+    _project(repo)
+    head = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "update-ref", "refs/remotes/origin/trunk", head)
+    monkeypatch.setattr(W, "default_branch", lambda _repo: "trunk")
+    r = CI.run(repo, Config.load(repo))
+    assert r.merged_with == "origin/trunk" and r.ok
