@@ -48,7 +48,8 @@ _MAX_DEPTH = 64
 def _stat(pid: int) -> tuple[str, int, str] | None:
     """(comm, ppid, start time) of `pid`, or None when it cannot be read."""
     try:
-        raw = Path(f"/proc/{pid}/stat").read_text()
+        # Bytes, decoded leniently: a `comm` may be any bytes, cut mid-character.
+        raw = Path(f"/proc/{pid}/stat").read_bytes().decode("utf-8", "replace")
     except OSError:
         return None
     # comm is in parentheses and may itself contain spaces or ')'.
@@ -68,14 +69,15 @@ def _dir(repo: Path | str) -> Path | None:
     # A linked worktree: `.git` is a file naming its gitdir, whose `commondir` names the
     # shared one. Read, not asked of git: this runs on every CLI call in a worktree.
     try:
-        line = git.read_text().strip()
+        line = git.read_bytes().decode("utf-8", "surrogateescape").strip()
         if not line.startswith("gitdir:"):
             return None
         gitdir = (Path(repo) / line[len("gitdir:") :].strip()).resolve()
     except OSError:
         return None
     try:
-        common = (gitdir / (gitdir / "commondir").read_text().strip()).resolve()
+        raw = (gitdir / "commondir").read_bytes().decode("utf-8", "surrogateescape")
+        common = (gitdir / raw.strip()).resolve()
     except OSError:  # no commondir: a separate git dir or a submodule, which is its own
         common = gitdir
     return common / DIR
