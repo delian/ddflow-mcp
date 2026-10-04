@@ -68,7 +68,7 @@ def test_recover_counts_a_running_item_nobody_holds(repo):
 def test_recover_still_leaves_a_clean_tree_unflagged(repo):
     _seed(repo, ["T4"])
     _orphan(repo, "T4")
-    code, out, _ = run_cli(repo, "recover")
+    _, out, _ = run_cli(repo, "recover")
     assert "0 may contain work" in out, out
     line = next(ln for ln in out.splitlines() if "T4" in ln and "[orphan_worktree]" in ln)
     assert line.startswith("   "), line
