@@ -958,6 +958,11 @@ _doc(
     "timeout_s",
     "Seconds the CI command may run before the gate records UNAVAILABLE. Default 3600: the pre-push set includes the whole test suite.",
 )
+_doc(
+    "ci",
+    "on_merge",
+    "Health check of the base right after a merge lands: off | fast (default: the project's pre-commit set without the test hooks, `SKIP=tests,scenarios`; an explicit [ci].command runs as written) | full (the whole command). The result is recorded as `ci.result`; each failing check files one bug and fix task while the bug is open. A project with no CI command is left alone.",
+)
 
 
 @dataclass
