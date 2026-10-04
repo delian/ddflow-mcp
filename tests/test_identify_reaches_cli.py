@@ -94,7 +94,8 @@ def test_identify_says_whether_the_shell_will_see_it(connection):
     assert "and for its shell" in text, text
 
 
-def test_a_record_for_a_process_that_has_exited_is_neither_found_nor_kept(repo, monkeypatch):
+@needs_proc
+def test_a_record_for_a_process_that_has_exited_is_neither_found_nor_kept(repo):
     """Keyed by pid AND start time: a reused pid is a different process."""
     from ddflow.infra import harness_identity as H
 
@@ -125,3 +126,14 @@ def test_the_record_is_shared_with_a_linked_worktree(repo):
         assert H.declared(wt) == "kilo-wt"
     finally:
         H.declare(repo, "")
+
+
+def test_identify_says_so_when_the_shell_cannot_see_it(repo, monkeypatch):
+    """A declaration the shell will not see is reported, not passed off as done."""
+    from ddflow.infra import harness_identity as H
+
+    run_cli(repo, "init")
+    monkeypatch.setattr(H, "_harness", lambda pid: [])
+    srv = Server(repo)
+    text = _call(srv, "ddflow_identify", agent="kilo-onboard")["content"][0]["text"]
+    assert "pass --agent" in text, text

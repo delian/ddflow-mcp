@@ -58,18 +58,28 @@ def _dir(repo: Path | str) -> Path | None:
     git = Path(repo) / ".git"
     if git.is_dir():
         return git / DIR
-    if not git.is_file():
+    # A linked worktree: `.git` is a file naming its gitdir, whose `commondir` names the
+    # shared one. Read, not asked of git: this runs on every CLI call in a worktree.
+    try:
+        line = git.read_text().strip()
+        if not line.startswith("gitdir:"):
+            return None
+        gitdir = (Path(repo) / line[len("gitdir:") :].strip()).resolve()
+        common = (gitdir / (gitdir / "commondir").read_text().strip()).resolve()
+    except OSError:
         return None
-    from . import worktree as W
-
-    r = W.git(repo, "rev-parse", "--path-format=absolute", "--git-common-dir")
-    return Path(r.out.strip()) / DIR if r.ok and r.out.strip() else None
+    return common / DIR
 
 
-def _alive(key: str) -> bool:
+def _gone(key: str) -> bool:
+    """Has the process a record names DEFINITELY exited? Unsure is not gone."""
     pid, _, start = key.partition("-")
-    st = _stat(int(pid)) if pid.isdigit() else None
-    return st is not None and st[2] == start
+    if not pid.isdigit():
+        return False
+    if not Path(f"/proc/{pid}").exists():
+        return Path("/proc/self").exists()  # no /proc at all says nothing
+    st = _stat(int(pid))
+    return st is not None and st[2] != start
 
 
 def _harness(pid: int) -> list[str]:
@@ -99,7 +109,7 @@ def declare(repo: Path | str, agent: str) -> str:
     try:
         if d.is_dir():
             for old in d.iterdir():  # harnesses that have exited
-                if not _alive(old.name):
+                if _gone(old.name):
                     old.unlink(missing_ok=True)
         for key in keys:
             f = d / key
