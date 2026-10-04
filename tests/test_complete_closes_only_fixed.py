@@ -61,6 +61,13 @@ def test_a_bug_reported_against_the_fix_task_is_not_closed_by_its_completion(rep
     assert st.bugs["Bup"].open and st.bugs["Bflake"].open
     # Said out loud: the reports stay open and are not this task's to close.
     assert any("Bflake" in w and "Bup" in w for w in out.data["warnings"]), out.data
+    # ...and each gets a fix task of its own, rather than pointing at a finished task
+    # that `bug file-tasks` would never refile (roborev job 1426 #1).
+    assert out.data["bugs_refiled"] == {"Bflake": "fix-Bflake", "Bup": "fix-Bup"}, out.data
+    st = state(repo)
+    assert st.bugs["Bup"].fix_task == "fix-Bup" and st.items["fix-Bup"].fixes == ["Bup"]
+    assert st.items["fix-Bup"].state == "open" and st.items["fix-Bup"].parent == "P1"
+    assert K.bug_file_tasks(repo, agent="a").exit == 2, "nothing left without a fix task"
 
 
 def test_a_reported_bug_does_not_block_the_fix_tasks_completion(repo):
@@ -85,7 +92,8 @@ def test_a_bug_with_its_own_fix_task_is_closed_by_that_task_only(repo):
     pass_pipeline(repo, "fix-Bx")
     assert LC.complete(repo, "fix-Bx", model="claude-opus-5", regression_test=node,
                        agent="a").exit == 0  # fmt: skip
-    assert state(repo).bugs["Bflake"].open
+    st = state(repo)
+    assert st.bugs["Bflake"].open and st.bugs["Bflake"].fix_task == "fix-Bflake"
     pass_pipeline(repo, "fix-Bflake")
     out = LC.complete(repo, "fix-Bflake", model="claude-opus-5", regression_test=node, agent="a")
     assert out.exit == 0 and out.data["bugs_closed"] == ["Bflake"], out.reason
@@ -168,3 +176,27 @@ def test_reopen_on_the_cli(repo):
     assert b.open and not b.invalid_reason
     code, _, err = run_cli(repo, "bug", "reopen", "Bx", "--reason", "again")
     assert code == 3 and "open" in err
+
+
+def test_reopen_leaves_no_closure_field_behind(repo):
+    """roborev job 1426 #4: every field a closure writes reads at its default again."""
+    from dataclasses import fields
+
+    from ddflow.core.events import Event
+    from ddflow.core.model import Bug
+
+    found = Event(kind="bug.found", subject="B1", data={"summary": "s"}, ts="t0")
+    blank = fold([found]).bugs["B1"]
+    closures = [
+        Event(kind="bug.fixed", subject="B1", ts="t1", data={
+            "regression_test": "t::x", "regression_tests": ["t::x"], "lesson": "L1",
+            "changelog": {"category": "Fixed", "line": "x"}}),
+        Event(kind="bug.invalid", subject="B1", ts="t2", data={"reason": "r", "evidence": "e"}),
+    ]  # fmt: skip
+    reopen = Event(kind="bug.reopened", subject="B1", ts="t3", data={"reason": "why"})
+    b = fold([found, *closures, reopen]).bugs["B1"]
+    for f in fields(Bug):
+        if f.name in ("reopened_at", "reopen_reason"):
+            continue
+        assert getattr(b, f.name) == getattr(blank, f.name), f.name
+    assert b.open and b.reopen_reason == "why"

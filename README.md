@@ -3402,15 +3402,16 @@ exist; write it first and watch it FAIL on the unfixed code), then completes. Cl
 bug first with `bug fixed` and completing afterwards is the same thing in two steps.
 A completion closes only the bugs the task was **filed to fix** (its `fixes`, or the
 bug a hand-filed `fix-<bug>` names) -- never a bug merely reported against it with
-`--item`, a `scope = ddflow` report or a bug with a fix task of its own; those stay
-open, are not completion blockers, and `complete` names them in a warning. A bug closed
+`--item`, a `scope = ddflow` report or a bug with a fix task of its own. Those stay
+open and are not completion blockers: `complete` names them in a warning and, once the
+task is done, files each its own `fix-<bug>` (or links the one it has). A bug closed
 by mistake (fixed or invalid) is reopened with `ddflow bug reopen <bug> --reason "..."`
 (event `bug.reopened`): the closure stays in the history, the record reads open, and it
 points at its own open fix task -- or at none, so `bug file-tasks` files one.
 
 Three cases file nothing or undo it: `--no-task` (MCP `no_task`), for a bug fixed in
 the commit that found it; `--item <an OPEN bug-fix task>`, which links the bug to it
-instead of filing a twin (that task's completion does not close it, as above); and
+for now instead of filing a twin (its completion files the bug's own, as above); and
 `bug invalid`, which also removes the fix task when nobody holds it and no other open bug needs it. A log written before fix
 tasks existed is upgraded once with `ddflow bug file-tasks` (`--dry-run` lists; MCP
 `ddflow_bug_file_tasks`): every open bug without a fix task gets one, as `bug found`
