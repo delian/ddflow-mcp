@@ -91,7 +91,7 @@ def rehome_pre_upgrade_leases(log: EventLog, cfg: Config, st: State, layer: str)
             log.append(
                 "lease.released",
                 item_id,
-                {"holder": bare, "event": lease.event, "by": me, "note": why},
+                {"holder": bare, "event": lease.event, "by": me, "note": why, "transfer": True},
             )
             log.append(
                 "lease.acquired",
