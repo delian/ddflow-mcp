@@ -70,4 +70,36 @@ def test_salvageable_work_still_comes_first_and_clean_leftovers_are_counted(repo
     block = _recovery_block(repo)
     assert block.index("**T3**") < block.index("**T1**"), block
     assert "**T4**" not in block, "a clean leftover is a count, not an alarm"
-    assert "1 clean leftover" in block, block
+    assert "1 leftover(s) with nothing to salvage" in block, block
+
+
+# -- the view, on its own (roborev job 1451 #2, rubber_duck #1) ---------------------------
+
+
+def _rec(item, kind, salvageable):
+    from ddflow.services.leases import Recovery
+
+    return Recovery(item=item, holder="h", kind=kind, salvageable=salvageable, advice="a")
+
+
+def _render(recovery) -> str:
+    from ddflow.views.markdown import _brief_recovery
+
+    out: list[str] = []
+    _brief_recovery(out, recovery)
+    return "\n".join(out)
+
+
+def test_each_kind_is_ranked_and_capped_on_its_own():
+    work = [_rec(f"W{i}", "orphan_worktree", True) for i in range(7)]
+    text = _render([_rec("S1", "stale_running", False), _rec("U1", "expired_lease", None), *work])
+    assert text.index("**W0**") < text.index("**U1**") < text.index("**S1**"), text
+    # Seven trees holding work do not push the others off: 5 named, 2 counted.
+    assert "**W4**" in text and "**W5**" not in text and "2 more holding work" in text
+
+
+def test_only_quiet_leftovers_are_one_line_without_the_alarm():
+    text = _render([_rec("C1", "orphan_worktree", False), _rec("C2", "expired_lease", False)])
+    assert "Recoverable work found" not in text and "**C1**" not in text
+    assert "2 leftover(s) with nothing to salvage" in text, text
+    assert _render([]) == ""
