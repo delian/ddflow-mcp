@@ -78,11 +78,13 @@ command = "uv run pytest tests/ -q --timeout=420 -n auto --maxprocesses 16"
 
 # ---------------------------------------------------------------------------------
 # CI parity (D-ci-parity): a task is done only when the pre-push checks pass on the
-# branch merged with main. `unit_tests` already runs the suite, so the ci gate skips the
-# `tests` hook rather than running it twice.
+# branch merged with main -- ALL of them. The ci gate used to skip the `tests` hook
+# because `unit_tests` runs the suite, but `unit_tests` deselects the slow scenarios and
+# runs on the branch, not the merge result: a moved default broke a scenario and only
+# `git push` found it (Bc8efdd77b7). The whole pre-push stage is the project default, so
+# no [ci].command is set.
 # ---------------------------------------------------------------------------------
 [ci]
-command = "SKIP=tests pre-commit run --hook-stage pre-push --all-files"
 
 [gates]
 task_pipeline = ["research", "rules", "implement", "rubber_duck", "critic", "standards", "ci", "unit_tests", "bug_hunt", "dedupe", "merge"]

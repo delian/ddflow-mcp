@@ -295,6 +295,20 @@ def _acquire_locked(
                 alternatives=_alternatives(state, cfg, item_id, holder, now),
             )
         if existing and not force and cfg.lease.reclaim_policy == "report":
+            if existing.expired_at:
+                # Recorded by `recover --apply`, which records only a tree it measured
+                # EMPTY. Sending the agent back to `recover` sent it round in a circle:
+                # the take-back is still deliberate (help/recovery.md), and safe
+                # (Bc58ea6b7a7).
+                raise LeaseError(
+                    f"{item_id} has an EXPIRED lease from {existing.holder}, and its "
+                    f"expiry was recorded at {existing.expired_at}: recover measured its "
+                    f"tree (worktree {existing.worktree or '-'}) then, with nothing to "
+                    f"salvage. Taking it over is deliberate, and safe as of that sweep: "
+                    f"`ddflow claim {item_id} --force` adopts the tree as it is now.",
+                    holder=existing.holder,
+                    item=item_id,
+                )
             raise LeaseError(
                 f"{item_id} has an EXPIRED lease from {existing.holder} "
                 f"(worktree {existing.worktree or '-'}). It is NOT stolen automatically: "
