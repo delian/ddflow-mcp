@@ -122,6 +122,33 @@ def test_an_id_filed_after_the_state_was_read_is_still_refused(repo, monkeypatch
         return log, cfg, fold([])
 
     _add(repo, id="R1", question="first q", claim="c")
+    before = len(EventLog(repo, "reader").read_all())
     monkeypatch.setattr(K, "_load", stale_load)
     out = _add(repo, id="R1", question="second q", claim="other")
     assert out.exit == REFUSED, out
+    assert len(EventLog(repo, "reader").read_all()) == before
+
+
+def test_every_recorded_field_round_trips_through_the_fold(repo):
+    """The idempotence compare reads the folded note: a field the fold dropped would make
+    every re-add read as changed."""
+    from ddflow.api.knowledge import _research_fields
+
+    run_cli(repo, "init")
+    f = api.ResearchFinding(
+        id="R9",
+        question="q",
+        claim="c",
+        mechanism="m",
+        falsifier="f",
+        probe="p",
+        probe_output="o",
+        verdict="CONFIRMED",
+        sources="a,b",
+        budget="1h",
+        item="",
+    )
+    assert api.research_add(repo, f).exit == OK
+    note = fold(EventLog(repo, "reader").read_all()).research["R9"]
+    for k, v in _research_fields(f).items():
+        assert getattr(note, k) == v, k

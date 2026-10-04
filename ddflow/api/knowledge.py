@@ -441,10 +441,15 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
     with log.transaction():
         # Asked again under the log's lock: another agent may have filed this id since
         # `st` was read, and the check above is only advisory across agents.
+        # Only a NAMED id can collide (`auto_id` is time-salted), and the fold is paid
+        # only when an event about this id has landed since: a scan, not a fold, holds
+        # the lock otherwise.
         if finding.id:
-            raced = _research_id_taken(fold(log.read_all(), strict=False), rid, finding)
-            if raced is not None:
-                return raced
+            events = log.read_all()
+            if any(e.subject == rid for e in events):
+                raced = _research_id_taken(fold(events, strict=False), rid, finding)
+                if raced is not None:
+                    return raced
         log.append(
             "research.recorded",
             rid,
@@ -455,9 +460,9 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
 
 
 def _research_fields(finding: Finding) -> dict[str, Any]:
-    """What a research note records, as the fold will hold it. Both the event payload
-    and what "the same record again" compares (`_research_id_taken`): a field written
-    here is a field compared, so the two cannot drift apart."""
+    """What a research note records, as the fold will hold it. These keys are both the
+    event payload (with the dedupe fields beside them) and what "the same record again"
+    compares (`_research_id_taken`), so a field added here is compared too."""
     return {
         "question": finding.question,
         "claim": finding.claim,
