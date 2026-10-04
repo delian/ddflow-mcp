@@ -262,7 +262,7 @@ LINGERING_CHILD = "import os, time\nos.close(1)\ntime.sleep(5)\n"
 SELF_SIGKILL = "import os, signal\nos.close(1)\nos.kill(os.getpid(), signal.SIGKILL)\n"
 
 
-def test_a_child_that_closes_stdout_and_stays_alive_is_not_wait_for(tmp_path):
+def test_a_child_that_closes_stdout_and_stays_alive_is_not_waited_for(tmp_path):
     """The grace is bounded: a child that closed stdout and kept running must still be
     reported as 'closed its output' promptly, not wait out the whole timeout."""
     v = CO.verify_one(
@@ -273,9 +273,32 @@ def test_a_child_that_closes_stdout_and_stays_alive_is_not_wait_for(tmp_path):
     assert v.elapsed_s < 10, v.elapsed_s
 
 
-def test_a_signal_killed_child_is_named_as_a_signal(tmp_path):
+def test_the_grace_is_clamped_to_the_remaining_timeout(tmp_path, monkeypatch):
+    """The post-EOF wait cannot outrun the caller's timeout: the grace handed to
+    _await_exit is the remaining budget, not the full _EXIT_GRACE_S. Against unclamped
+    code the assertion sees 1.0 and fails, which is what makes this a regression test."""
+    seen: dict[str, float] = {}
+
+    def fake_await(proc, grace_s):
+        seen["grace"] = grace_s
+        return None
+
+    monkeypatch.setattr(CO, "_EXIT_GRACE_S", 30.0)
+    monkeypatch.setattr(CO, "_await_exit", fake_await)
+    v = CO.verify_one(
+        _companion("brief", sys.executable, _script(tmp_path, "bf.py", LINGERING_CHILD)),
+        timeout_s=2.0,
+    )
+    assert v.speaks_mcp is False, v.detail
+    assert "closed its output" in v.detail, v.detail
+    assert 0 < seen["grace"] < 2.0, seen
+
+
+def test_a_signal_killed_child_is_named_as_a_signal(tmp_path, monkeypatch):
     """A waitid record for a killed child holds the signal number in si_status, not an
-    exit code: report it as one, not as 'exited (9)'."""
+    exit code: report it as one, not as 'exited (9)'. A longer grace keeps the record
+    visible even on a loaded runner."""
+    monkeypatch.setattr(CO, "_EXIT_GRACE_S", 5.0)
     v = CO.verify_one(
         _companion("sig", sys.executable, _script(tmp_path, "sg.py", SELF_SIGKILL))
     )
