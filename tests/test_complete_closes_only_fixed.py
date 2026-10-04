@@ -200,3 +200,20 @@ def test_reopen_leaves_no_closure_field_behind(repo):
             continue
         assert getattr(b, f.name) == getattr(blank, f.name), f.name
     assert b.open and b.reopen_reason == "why"
+
+
+def test_reopening_a_bug_whose_own_fix_did_not_hold_keeps_its_task_for_verify(repo):
+    """bug_hunt probe: unlinking the bug's own DONE fix task left `bug file-tasks` to
+    link it straight back (a live `fix-<bug>`), so the record kept pointing at a finished
+    task. The done task is kept, and `verify --reopen` sends it back to the queue."""
+    node = seed(repo)
+    pass_pipeline(repo, "fix-Bx")
+    assert LC.complete(repo, "fix-Bx", model="claude-opus-5", regression_test=node,
+                       agent="a").exit == 0  # fmt: skip
+    out = bug_reopen(repo, "Bx", reason="the fix did not hold", agent="a")
+    assert out.exit == 0, out.reason
+    assert (out.data["fix_task"], out.data["fix_task_state"]) == ("fix-Bx", "done"), out.data
+    code, _, err = run_cli(repo, "verify", "fix-Bx", "--reopen")
+    assert code == 0, err
+    st = state(repo)
+    assert st.items["fix-Bx"].state == "open" and st.bugs["Bx"].fix_task == "fix-Bx"
