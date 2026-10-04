@@ -82,21 +82,38 @@ def test_doctor_lists_the_finished_open_phase(repo):
     assert "P1: all 1 task(s) under it are finished but the phase is still open" in out + err
 
 
-def test_mcp_next_and_brief_offer_it_too(repo, monkeypatch):
-    """roborev 1494 #3: the agent surface, not only the shell."""
+def _mcp_next_and_brief(repo: Path) -> tuple[str, str]:
     import io
 
     from ddflow.surfaces.mcp import serve
 
-    _finished_phase(repo)
-    monkeypatch.setenv("DDFLOW_AGENT", "a")
     calls = [
         {"jsonrpc": "2.0", "id": n, "method": "tools/call", "params": {"name": t, "arguments": {}}}
         for n, t in ((1, "ddflow_next"), (2, "ddflow_brief"))
     ]
     out = io.StringIO()
     serve(repo, stdin=io.StringIO("\n".join(json.dumps(c) for c in calls) + "\n"), stdout=out)
-    replies = {r["id"]: r for r in map(json.loads, out.getvalue().splitlines()) if r}
-    nxt = json.dumps(replies[1]["result"])
+    replies = {
+        r["id"]: r for r in (json.loads(ln) for ln in out.getvalue().splitlines() if ln.strip())
+    }
+    assert {1, 2} <= replies.keys(), replies
+    assert not replies[2]["result"].get("isError"), replies[2]
+    return json.dumps(replies[1]["result"]), json.dumps(replies[2]["result"])
+
+
+def test_mcp_next_and_brief_offer_it_too(repo, monkeypatch):
+    """roborev 1494 #3: the agent surface, not only the shell."""
+    _finished_phase(repo)
+    monkeypatch.setenv("DDFLOW_AGENT", "a")
+    nxt, brief = _mcp_next_and_brief(repo)
     assert "finished_phases" in nxt and "ddflow complete P1" in nxt, nxt
-    assert "ddflow complete P1" in json.dumps(replies[2]["result"])
+    assert "ddflow complete P1" in brief, brief
+
+
+def test_mcp_does_not_offer_a_phase_with_work_left(repo, monkeypatch):
+    _finished_phase(repo)
+    assert run_cli(repo, "task", "add", "T3", "--phase", "P1", "--title", "u", agent="a")[0] == 0
+    monkeypatch.setenv("DDFLOW_AGENT", "a")
+    nxt, brief = _mcp_next_and_brief(repo)
+    assert "T3" in nxt and "ddflow complete P1" not in nxt, nxt
+    assert "ddflow complete P1" not in brief, brief
