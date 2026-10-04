@@ -352,32 +352,49 @@ def test_bisect_treats_a_duplicated_candidate_as_one_file():
     assert r.state == "found" and r.polluters == ["c"] and r.candidates == 3
 
 
-def test_budget_exhaustion_does_not_return_unverified_candidates():
-    """Bug Beca0feba54: budget exhaustion should not return all candidates as polluters.
-
-    When bisect exhausts its budget, it should return only verified minimal polluters,
-    not all candidates (which is just the initial value of `best`).
-    """
-    # Use same pattern as existing tests: probe that fails only with specific set
+def test_budget_exhaustion_before_the_full_set_is_shown_to_fail_reports_no_polluters():
+    """Bug Beca0feba54: with the budget gone before the whole candidate set was seen to
+    make the victim fail, the candidates are unverified and must not come back as polluters."""
     candidates = list("abcdef")
 
-    # Probe that requires "c" to fail; victim passes alone
-    def needs_c(subset):
-        assert subset[-1] == "V"  # victim is always last
-        return "c" in subset[:-1]
+    needs_c = _probe({"c"})  # the victim fails once c has run before it
 
-    # Run with extremely tight budget that exhausts during ddmin search
-    # (after initial checks but before finding the 1-minimal set)
-    r = B.bisect("V", candidates, needs_c, max_runs=4)
+    # one run: only the victim alone was run; the full set was never tried
+    r = B.bisect("V", candidates, needs_c, max_runs=1)
+    assert r.state == "budget_exhausted"
+    assert r.polluters == [], f"unverified candidates returned: {r.polluters}"
+    # two runs: the full set is shown to fail, so it is a (not minimal) verified set
+    r = B.bisect("V", candidates, needs_c, max_runs=2)
+    assert r.state == "budget_exhausted" and set(r.polluters) >= {"c"}
 
-    # The bug is that when budget exhausts, `best` still holds all initial candidates
-    # instead of the smaller verified set {"c"} that was likely found earlier in ddmin
-    if r.state == "budget_exhausted":
-        # Bug: returns all candidates instead of just "c"
-        assert r.polluters != candidates, (
-            f"Bug: returned all {len(candidates)} unverified candidates. "
-            f"Should have smaller set, got {r.polluters}"
-        )
+
+def _collected_files(project: Path) -> list[str]:
+    """The files in the order pytest itself collects them."""
+    import subprocess
+
+    out = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-p", "no:cacheprovider"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+    ).stdout
+    files = [ln.split("::", 1)[0] for ln in out.splitlines() if "::" in ln]
+    return list(dict.fromkeys(files))
+
+
+def test_candidate_order_follows_pytests_real_collection_order(tmp_path):
+    """Bug Beca0feba54: a directory sorts before a same-stem file ('test_a' < 'test_a.py'),
+    which a whole-path string sort gets backwards ('.' < '/')."""
+    t = tmp_path / "tests"
+    (t / "test_a").mkdir(parents=True)
+    for rel in ("test_a.py", "test_a/test_x.py", "test_a/test_y.py", "test_b.py", "test_a_b.py"):
+        (t / rel).write_text("def test_t():\n    pass\n")
+    order = _collected_files(tmp_path)
+    assert order[:2] == ["tests/test_a/test_x.py", "tests/test_a/test_y.py"], order
+    assert order.index("tests/test_a/test_x.py") < order.index("tests/test_a.py")
+    for victim in order:
+        want = order[: order.index(victim)]
+        assert API.candidates_before(tmp_path, victim + "::test_t", [], "") == want, victim
 
 
 # -- the real CLI and the MCP tool ----------------------------------------------------------
