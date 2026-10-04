@@ -86,3 +86,24 @@ def test_a_report_whose_own_fix_task_already_finished_is_linked_once(repo):
     assert out.data["linked"] == ["Brep"] and out.data["filed"] == [], out.data
     assert state(repo).bugs["Brep"].fix_task == "fix-Brep"
     assert K.bug_file_tasks(repo, agent="a").exit == 2
+
+
+def test_a_bug_its_abandoned_task_was_filed_to_fix_is_refiled(repo):
+    """rubber_duck / roborev 1475 #1: an abandoned task is never sent back, so a bug in
+    its `fixes` (a `--same-fix` report) needs a task of its own."""
+    log = seed(repo)
+    log.append("task.added", "T-both", {"parent": "P1", "title": "both", "fixes": ["Bx", "Brep"]})
+    log.append("bug.found", "Brep", {"fix_task": "T-both"})
+    log.append("item.abandoned", "T-both", {"reason": "superseded"})
+    log.append("item.completed", "fix-Bx", {"sha": "abc"})  # not open to link to either
+    out = K.bug_file_tasks(repo, agent="a")
+    assert out.data["filed"] == ["Brep"], out.data
+    assert state(repo).bugs["Brep"].fix_task == "fix-Brep"
+    assert K.bug_file_tasks(repo, agent="a").exit == 2
+
+
+def test_a_bugs_own_abandoned_fix_task_is_not_relinked_on_every_run(repo):
+    log = seed(repo)
+    log.append("item.abandoned", "fix-Bx", {"reason": "looked invalid"})
+    out = K.bug_file_tasks(repo, agent="a")
+    assert "Bx" not in out.data["filed"] + out.data["linked"], out.data

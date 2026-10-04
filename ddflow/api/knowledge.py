@@ -768,17 +768,22 @@ def _live(st, item: str) -> bool:
 
 
 def _needs_fix_task(st, b) -> bool:
-    """Whether open bug ``b`` has no fix task that will ever fix it: none in the queue,
-    or a finished (done or abandoned) task it was merely reported against -- `bug found
-    --item <open fix task>` links a report to that task, and the task's completion does
-    not fix it (B8dcbf2f8da). A done task's OWN bug is not refiled: `verify --reopen`
-    sends that task back."""
+    """Whether open bug ``b`` has no fix task that will ever fix it: none in the queue; a
+    DONE task it was merely reported against -- `bug found --item <open fix task>` links
+    a report to that task, and the task's completion does not fix it (B8dcbf2f8da); or an
+    ABANDONED task, which nothing sends back (rubber_duck, roborev 1475). Left alone: a
+    done task's OWN bug (`verify --reopen` sends that task back), and an abandoned
+    `fix-<bug>` of the bug itself, which a refile could only link again (`bug reopen`
+    names it, and `bug fixed` is the way out)."""
     from ..core.model import ABANDONED, DONE
     from ..services.completion import fixes_of
 
     if not _live(st, b.fix_task):
         return True
-    return st.items[b.fix_task].state in (DONE, ABANDONED) and b.id not in fixes_of(st, b.fix_task)
+    state = st.items[b.fix_task].state
+    if state == ABANDONED:
+        return b.fix_task != FIX_TASK_PREFIX + b.id
+    return state == DONE and b.id not in fixes_of(st, b.fix_task)
 
 
 def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
