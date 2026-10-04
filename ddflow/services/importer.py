@@ -2917,7 +2917,7 @@ def _dedupe_found(repo: Path, state, plan: ImportPlan) -> None:
                 if not is_summary(f) or is_summary(tgt):
                     continue
             ident = "identical" in c.flags
-            if ident or (c.score >= dd.ask_threshold and a.words >= dd.min_words):
+            if similar.is_duplicate(c, a, cfg):
                 dropped[id(f)] = Duplicate(
                     f, c.id.removeprefix(_THIS_IMPORT), c.score, ident, where
                 )
