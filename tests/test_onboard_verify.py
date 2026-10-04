@@ -91,7 +91,7 @@ def test_the_freeze_ratchet_must_exist_and_hold(repo):
 
 
 def test_brief_must_print_something(repo):
-    check = _check(V.verify(repo, suite=False), "brief answers")
+    check = _check(V.verify(repo, suite=False), "brief/next answer")
     assert check.outcome == "passed" and "line(s)" in check.detail
 
 
