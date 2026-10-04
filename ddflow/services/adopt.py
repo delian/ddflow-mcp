@@ -578,7 +578,7 @@ DDFLOW_GITIGNORE = (
     ".*.lock\n"
     "# Every agent's task worktrees (decision D-worktree-home) and per-run logs: git\n"
     "# worktrees and scratch, never committed.\n"
-    "worktrees/\nruns/\n"
+    "/worktrees/\n/runs/\n"
 )
 
 #: The line that makes two clones' event-log shards concatenate on merge instead of
