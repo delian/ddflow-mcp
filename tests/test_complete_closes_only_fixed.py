@@ -259,7 +259,7 @@ def test_reopen_names_an_abandoned_fix_task_rather_than_saying_none_was_filed(re
     code, text, err = run_cli(repo, "bug", "reopen", "Bx", "--reason", "real")
     assert code == 0, err
     assert "fix task fix-Bx was abandoned (nothing revives it)" in text, text
-    assert "`ddflow bug fixed Bx --regression-test <test>`" in text, text
+    assert "`ddflow bug fixed Bx --regression-test <test>` is the way out" in text, text
     # ...and that way out works: the bug closes with its regression test.
     assert K.bug_fixed(repo, "Bx", regression_test=[node], agent="a").exit == 0
 
