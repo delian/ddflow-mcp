@@ -70,3 +70,40 @@ def test_doctor_names_uncommitted_shards(repo):
     run_cli(repo, "complete", "T1", "--force")
     out = run_cli(repo, "doctor")[1]
     assert "event shard(s) not committed" in out
+
+
+def test_a_shard_whose_name_git_would_quote_is_still_seen(repo):
+    _project(repo)
+    odd = repo / ".ddflow" / "events" / "café agent.jsonl"
+    odd.write_text("{}\n")
+    assert ".ddflow/events/café agent.jsonl" in (EC.uncommitted_shards(repo) or [])
+
+
+def test_git_failing_is_could_not_tell_not_clean(tmp_path):
+    assert EC.uncommitted_shards(tmp_path) is None  # not a repository
+
+
+def test_the_pre_push_hook_warns_from_a_linked_worktree(repo, tmp_path):
+    from pathlib import Path
+
+    _project(repo)
+    (repo / ".ddflow" / "events" / "loose.jsonl").write_text("{}\n")
+    wt = tmp_path / "linked"
+    _git(repo, "worktree", "add", "-q", "-b", "side", str(wt))
+    hook = Path(__file__).resolve().parents[1] / "scripts" / "ci" / "pre-push"
+    p = subprocess.run(
+        ["bash", str(hook), "origin"], input="", cwd=wt, capture_output=True, text=True,
+        check=False,
+    )  # fmt: skip
+    assert "event shard(s) in .ddflow/events are not committed" in p.stderr, p.stderr
+
+
+def test_a_modified_tracked_shard_listed_first_is_read_whole(repo):
+    """`W.git` strips output: the first entry " M path" loses its leading space."""
+    _project(repo)
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "shards")
+    shard = sorted((repo / ".ddflow" / "events").glob("*.jsonl"))[0]
+    shard.write_text(shard.read_text() + "{}\n")
+    rel = str(shard.relative_to(repo))
+    assert EC.uncommitted_shards(repo) == [rel]

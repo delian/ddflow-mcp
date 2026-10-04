@@ -617,6 +617,8 @@ def _loose_shards(repo: Path) -> list[str]:
     from ..services import eventcommit as EC
 
     loose = EC.uncommitted_shards(repo)
+    if loose is None:
+        return ["could not tell whether the event shards are committed: git status failed"]
     if not loose:
         return []
     named = ", ".join(loose[:_SHARDS_NAMED]) + (", ..." if len(loose) > _SHARDS_NAMED else "")
