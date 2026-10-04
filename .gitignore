@@ -28,3 +28,7 @@ __pycache__/
 # roborev's agent/model/reasoning (decision D-roborev-local); git carries .roborev.toml.example.
 .roborev.toml
 
+# VS Code workspace state (editor-local; note `ddflow adopt --agents vscode` writes a
+# committable `.vscode/mcp.json`, so allow it explicitly if that integration is wanted)
+.vscode/
+
