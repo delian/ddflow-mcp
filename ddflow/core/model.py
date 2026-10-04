@@ -247,6 +247,10 @@ class Item:
     blocked_reason: str = ""
     created_at: str = ""
     completed_at: str = ""
+    #: Each time verification sent a completed item back: {"at", "by", "reason", "claims",
+    #: "forced"}, oldest first. The completion's gates are cleared with it, so the work is
+    #: re-done and re-gated; the log keeps what they were.
+    reopened: list[dict[str, Any]] = field(default_factory=list)
     removed: bool = False
     #: Where this item came from, when it was not created by hand: `docs/todo.md:41`,
     #: `git:feature/x`. Empty for an item someone typed.
@@ -1367,6 +1371,27 @@ def _h_state(new_state: str):
     return handler
 
 
+def _h_reopened(st: State, ev: Event) -> None:
+    """A DONE item returns to OPEN because its completion did not hold (`ddflow verify
+    --reopen`). Anything not done is left exactly as it is."""
+    it = st.items.get(ev.subject)
+    if it is None or it.state != DONE:
+        return
+    it.state = OPEN
+    it.completed_at = ""
+    it.lease = None
+    it.gates = {}
+    it.reopened.append(
+        {
+            "at": ev.ts,
+            "by": ev.agent,
+            "reason": ev.data.get("reason", ""),
+            "claims": list(ev.data.get("claims") or []),
+            "forced": bool(ev.data.get("forced")),
+        }
+    )
+
+
 def _h_unblocked(st: State, ev: Event) -> None:
     """Release a BLOCKED item back to OPEN. Anything else is left exactly as it is.
 
@@ -2094,6 +2119,7 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "item.unblocked": _h_unblocked,
     "item.resolved": _h_resolved,
     "item.completed": _h_state(DONE),
+    "item.reopened": _h_reopened,
     "item.abandoned": _h_state(ABANDONED),
     **{f"gate.{o}": _h_gate(o) for o in ("started", *GATE_OUTCOMES)},
     "review.triaged": _h_review_triaged,

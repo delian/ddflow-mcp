@@ -11,7 +11,18 @@ from ._base import _load
 _BUG_PREFIX = "verify: the completion of "
 
 
-def verify(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
+def verify(
+    repo: Path,
+    item: str,
+    *,
+    reopen: bool = False,
+    reason: str = "",
+    force: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """Re-derive a completion's claims. For an item that is NOT done, say whether its work
+    nevertheless appears to have landed (the false-negative direction). With `reopen`, a
+    completion that does not hold goes back to the queue (`force` for one that does)."""
     log, cfg, st = _load(repo, agent)
     it = st.items.get(item)
     if it is None or it.removed:
@@ -19,9 +30,23 @@ def verify(repo: Path, item: str, *, agent: str = "") -> O.Outcome:
     rep = V.check(repo, cfg, st, log.read_all(), item)
     data = rep.as_data()
     if not rep.completed:
+        from ..services import backfill as BF
+
+        found = BF.find_commit(repo, st, item) if it.state != "done" else None
+        if found:
+            data["appears_landed"] = {"sha": found[0], "how": found[1]}
+            return O.nothing(
+                "verify",
+                f"{item} is {it.state}, but its work appears to have landed ({found[0][:10]}, "
+                f"found by {found[1]}). If it did, `ddflow complete {item} --sha {found[0][:10]} "
+                f"--force` records it done without redoing it; the override is recorded.",
+                **data,
+            )
         return O.nothing(
             "verify", f"{item} is {it.state}, not done: there is no completion to verify", **data
         )
+    if reopen:
+        return _reopen(log, rep, data, reason=reason, force=force)
     if rep.failed:
         bad = "; ".join(f"{c.id}: {c.detail}" for c in rep.claims if c.status == V.FAIL)
         return O.Outcome(kind="verify", data=data, exit=O.FAIL, reason=f"{item}: {bad}")
@@ -89,6 +114,37 @@ def verify_sweep(
     return O.ok("verify.sweep", **data)
 
 
-def refuse_sweep_args() -> O.Outcome:
-    """`phase`, `limit` and `file_bugs` are sweep arguments; they cannot ride on one id."""
-    return O.refused("verify", "phase, limit and file_bugs are for a sweep: omit id")
+def refuse_sweep_args(
+    reason: str = "phase, limit and file_bugs are for a sweep: omit id",
+) -> O.Outcome:
+    """Arguments that belong to the other mode (sweep vs one task) are refused, not dropped."""
+    return O.refused("verify", reason)
+
+
+def _reopen(log, rep, data: dict, *, reason: str, force: bool) -> O.Outcome:
+    """Append `item.reopened` for a completion that failed verification."""
+    bad = [c for c in rep.claims if c.status == V.FAIL]
+    if not bad and not force:
+        return O.refused(
+            "verify",
+            f"{rep.item}: its completion holds ({rep.verdict}); nothing to reopen. "
+            f'--force --reason "..." reopens it anyway, and says so in the log.',
+            **data,
+        )
+    if not bad and not reason:
+        return O.refused("verify", f"{rep.item}: --force needs a --reason", **data)
+    why = reason or "; ".join(f"{c.id}: {c.detail}" for c in bad)
+    log.append(
+        "item.reopened",
+        rep.item,
+        {
+            "reason": why,
+            "claims": [
+                {"id": c.id, "status": c.status, "detail": c.detail}
+                for c in rep.claims
+                if c.status != V.OK
+            ],
+            "forced": not bad,
+        },
+    )
+    return O.ok("verify", reopened=True, reason_given=why, **data)
