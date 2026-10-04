@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -81,6 +82,16 @@ def test_a_failed_baseline_names_the_failing_ids(repo):
 def test_a_timeout_is_not_a_pass(repo):
     result = OT.baseline(repo, 'python -c "import time; time.sleep(5)"', timeout=1)
     assert not result.ran and not result.green and "did not finish" in result.detail
+
+
+def test_a_timed_out_command_takes_its_whole_process_group_with_it(repo):
+    """`subprocess.run` kills only the shell; a grandchild holding the pipes made the
+    bound vanish and left workers in a tree about to be deleted (rubber_duck)."""
+    started = time.monotonic()
+    result = OT.baseline(repo, "sh -c 'sleep 600 & wait'", timeout=1)
+    elapsed = time.monotonic() - started
+    assert not result.ran and "did not finish" in result.detail
+    assert elapsed < 20, f"the bound was not enforced ({elapsed:.1f}s)"
 
 
 def test_a_command_that_fails_is_not_green(repo):
