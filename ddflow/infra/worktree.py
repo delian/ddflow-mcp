@@ -19,6 +19,7 @@ Three rules encoded here, each from a failure that actually happened somewhere:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import tempfile
@@ -114,8 +115,11 @@ def _ignore_inside(repo: Path, wt_root: Path) -> None:
     except ValueError:
         return
     marker = wt_root / ".gitignore"
-    if not marker.exists():
-        marker.write_text("# ddflow worktrees: never committed\n*\n", "utf-8")
+    # A convenience, never a reason to fail a claim: a read-only root still works, and
+    # `.ddflow/.gitignore` covers the default location anyway.
+    with contextlib.suppress(OSError):
+        if not marker.exists():
+            marker.write_text("# ddflow worktrees: never committed\n*\n", "utf-8")
 
 
 def default_branch(repo: Path) -> str:
@@ -237,6 +241,7 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     wt = Worktree(item=item_id, path=path, branch=branch, base=base)
 
     if path.exists() and (path / ".git").exists():
+        _ignore_inside(root, wt_root)
         wt.local_files = copy_local_files(root, path, cfg.worktree.local_files)
         return wt  # adopt
     wt_root.mkdir(parents=True, exist_ok=True)
