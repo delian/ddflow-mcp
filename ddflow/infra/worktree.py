@@ -241,6 +241,12 @@ def create(repo: Path, cfg: Config, item_id: str, *, base: str = "", branch: str
     return wt
 
 
+def tracks_local_file(primary: Path | str, name: str) -> bool:
+    """Is ``name`` tracked in ``primary``? The check ``copy_local_files`` skips on,
+    exposed so a caller reporting WHAT was skipped does not re-implement it and drift."""
+    return git(Path(primary), "ls-files", "--error-unmatch", "--", name).ok
+
+
 def copy_local_files(primary: Path, tree: Path, names: list[str]) -> list[str]:
     """Copy ``names`` -- git-ignored, machine-local files -- from the primary checkout into
     ``tree``. Returns what was copied.
@@ -265,7 +271,7 @@ def copy_local_files(primary: Path, tree: Path, names: list[str]) -> list[str]:
         # target this function promises never to touch (bug B6fb68b641e).
         if not src.is_relative_to(root) or not src.is_file() or dst.exists() or dst.is_symlink():
             continue
-        if git(root, "ls-files", "--error-unmatch", "--", name).ok:
+        if tracks_local_file(root, name):
             continue
         try:
             dst.parent.mkdir(parents=True, exist_ok=True)

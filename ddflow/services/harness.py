@@ -33,7 +33,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ..infra.worktree import copy_local_files
+from ..infra.worktree import copy_local_files, tracks_local_file
 from .adopt import SHAPE_MCP_SERVERS, Refused, get_servers
 from .claudehooks import SettingsError, _read, _write
 from .configwrite import ensure_local_dir
@@ -201,6 +201,7 @@ def copy_local_configs(
     # overwriting, never writing through a symlink): one implementation, not two that
     # drift (dedupe on the branch review).
     copied = copy_local_files(source, repo, list(names))
+    source_root = Path(source).resolve()
     for rel in names:
         # `rel in copied` FIRST: after the helper ran, `dst.exists()` is true for exactly
         # the files it just copied, so a later check would report every copy as "kept".
@@ -210,10 +211,19 @@ def copy_local_configs(
             out.append(f"copied {rel} from {source}")
         elif (repo / rel).exists() or (repo / rel).is_symlink():
             out.append(f"kept {rel}: already present here")
+        elif not (source / rel).resolve().is_relative_to(source_root):
+            out.append(f"skipped {rel}: the source path resolves outside {source}")
+        elif tracks_local_file(source, rel):
+            out.append(f"skipped {rel}: tracked in {source}; committed policy, not machine-local")
         else:
+            # Every other reason the helper skips is NAMED above, so this is a copy that
+            # failed (permissions, disk). Saying "likely tracked" here cost the operator
+            # the machine's endpoints with no error (delta hunt on 8f88cc0).
             out.append(
-                f"skipped {rel}: the source side is tracked or outside {source}, so it "
-                f"is committed policy, not machine-local"
+                Refused(
+                    f"could not copy {rel}: the copy failed (permissions or disk?); "
+                    f"nothing was written -- copy it by hand and re-run"
+                )
             )
 
     present = [rel for rel in names if (repo / rel).is_file()]
