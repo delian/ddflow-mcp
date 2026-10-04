@@ -90,6 +90,10 @@ Every one of those must carry an outcome before `ddflow_complete` will finish th
 Silence is not a pass. If a step genuinely does not apply, say so on the record with
 `ddflow_gate_skip <id> <gate> --reason "..."` — that names the one step you dropped,
 where `force` would override all of them at once.
+
+`ddflow_complete` ends with a short `Progress:` block (queue, bugs, phases, next).
+Relay it to the operator verbatim at the end of your reply, unless they turned it off
+(`[session].progress_after_complete`).
 {% endif %}
 
 ## Reporting — what you record, and when
