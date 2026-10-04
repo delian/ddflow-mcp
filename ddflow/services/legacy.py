@@ -141,18 +141,29 @@ class Proposal:
     replacement: str
 
 
+#: `<path>:<line>`, where the path looks like one (a dot or a slash in it). A bare word
+#: before `:123` is an identifier (`issue:123`), not a file, and freezing "issue" would
+#: report a phantom.
+_FILE_ORIGIN = re.compile(r"^(?=.+[./])(.+):\d+$")
+
+
 def files_from_sources(sources: Iterable[str]) -> list[str]:
     """The file part of `<file>:<line>` origins, deduplicated and sorted.
 
-    `git:feature/x` origins are branches, not files, and are dropped. An empty origin is
-    an item someone typed, not an import.
+    Only a `<path>:<line>` origin names a file (importer.py writes exactly that, and
+    `git:feature/x` is a branch). `issue:123`, a URL, or prose an import answered
+    without a source is dropped rather than turned into a file that `freeze` would then
+    report as missing (roborev on c8fbfee).
     """
     out: set[str] = set()
     for source in sources:
-        text = (source or "").strip()
-        if not text or text.startswith("git:"):
+        match = _FILE_ORIGIN.match((source or "").strip())
+        if not match:
             continue
-        out.add(text.split(":", 1)[0])
+        path = match.group(1)
+        if "://" in path:
+            continue
+        out.add(path)
     return sorted(out)
 
 
@@ -183,6 +194,19 @@ def scan(repo: Path, imported: Iterable[str], *, extra: Iterable[str] = ()) -> l
     """
     repo = Path(repo)
     imported = list(imported)
+    extra = list(extra)
+    missing_named = [
+        name
+        for name in extra
+        if not (Path(name) if Path(name).is_absolute() else repo / name).is_file()
+    ]
+    if missing_named:
+        # Skipping a file the OPERATOR named would make render's "every file the operator
+        # named" claim false and turn "nobody looked" into "nothing found" (roborev on
+        # c8fbfee, the vacuous-pass class this project keeps catching).
+        raise ValueError(
+            f"named file(s) do not exist, so they were not scanned: {', '.join(missing_named)}"
+        )
     seen: set[Path] = set()
     candidates = [repo / rel for rel in RULEBOOK_FILES]
     candidates += sorted(repo.glob(COMMANDS_GLOB))
@@ -343,7 +367,7 @@ def freeze(
     # behind, and the generated test reads the manifest only when the suite runs.
     config = repo / config_rel
     if config.is_file():
-        armed = _arm_precommit(config, existing)
+        armed = _arm_precommit(repo, config, existing)
     else:
         armed = _generate_test(repo, existing)
     if isinstance(armed, Refused):
@@ -353,7 +377,7 @@ def freeze(
     return out
 
 
-def _arm_precommit(config: Path, paths: list[str]) -> str:
+def _arm_precommit(repo: Path, config: Path, paths: list[str]) -> str:
     """Add or replace the managed `language: fail` hook block in the pre-commit config.
 
     The config is edited as TEXT and the result is fed back through `enforce`'s YAML
@@ -401,7 +425,7 @@ def _arm_precommit(config: Path, paths: list[str]) -> str:
             f"`language: fail` hook for {', '.join(paths)} by hand"
         )
     atomic_write(config, new_text)
-    return action
+    return action + _superseded_note(repo, _remove_marked_tests(repo))
 
 
 def _repos_item_indent(text: str) -> str:
@@ -462,6 +486,37 @@ def _insert_hook(text: str, block: str) -> str:
     return text + "repos:\n" + block
 
 
+def _generated_test_candidates(repo: Path) -> list[Path]:
+    """Both places the generated test may live; which one is used depends on tests/."""
+    return [repo / GENERATED_TEST, repo / GENERATED_TEST_ROOT]
+
+
+def _remove_marked_tests(repo: Path, *, keep: Path | None = None) -> list[Path]:
+    """Drop ddflow's OWN generated tests at the other location(s), report them.
+
+    A project that grows a `tests/` directory or adopts pre-commit after a first freeze
+    would otherwise keep a stale second ratchet: the docstring promises ONE, and two
+    copies of the same check are one place for the two to drift (roborev on c8fbfee).
+    A file without the marker is the operator's and is never touched.
+    """
+    dropped: list[Path] = []
+    for path in _generated_test_candidates(repo):
+        if path == keep or not path.is_file():
+            continue
+        if TEST_MARK in path.read_text("utf-8", errors="replace"):
+            path.unlink()
+            dropped.append(path)
+    return dropped
+
+
+def _superseded_note(repo: Path, dropped: list[Path]) -> str:
+    if not dropped:
+        return ""
+    return "; removed the superseded ratchet at " + ", ".join(
+        str(path.relative_to(repo)) for path in dropped
+    )
+
+
 def _generate_test(repo: Path, paths: list[str]) -> str:
     """Write the hash-pinning test; the project has no pre-commit framework."""
     target = repo / GENERATED_TEST
@@ -499,7 +554,8 @@ def _generate_test(repo: Path, paths: list[str]) -> str:
         f"    )\n"
     )
     atomic_write(target, body)
+    note = _superseded_note(repo, _remove_marked_tests(repo, keep=target))
     return (
         f"wrote {target.relative_to(repo)}: change a byte and watch it fail, then restore; "
-        f"it turns the suite red once the project's unit_tests command collects it"
+        f"it turns the suite red once the project's unit_tests command collects it{note}"
     )
