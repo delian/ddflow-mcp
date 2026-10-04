@@ -3442,7 +3442,8 @@ tasks existed is upgraded once with `ddflow bug file-tasks` (`--dry-run` lists; 
 would have filed it. It also refiles an open bug left on a finished task that will not
 fix it: a DONE task it was only reported against, or an ABANDONED one -- its own
 `fix-<bug>` included, which nothing revives, so the new task is `fix-<bug>-2` (then `-3`)
-(a done task's own bug is `verify --reopen`'s). `[bugs] file_task = false`
+(a done task's own bug is `verify --reopen`'s). Each line names the task: `Bx -> fix-Bx-2`
+for one filed, `By -> fix-By (done)` for one linked, with that task's state. `[bugs] file_task = false`
 returns to flat bug records.
 
 ### Listing tasks, phases, bugs and research

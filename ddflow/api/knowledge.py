@@ -813,6 +813,8 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
     filed: list[str] = []
     linked: list[str] = []
     tasks: dict[str, str] = {}
+    #: {bug: {task, state}} for the linked ones: the task may be finished (B70d80555a4).
+    links: dict[str, dict[str, str]] = {}
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         todo = sorted(
@@ -824,6 +826,7 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
                 # The same test the write path applies, so the prediction is the outcome.
                 if _has_fix_task(st, cfg, b.id, b.item):
                     linked.append(b.id)
+                    links[b.id] = _link(st, _fix_task_id(st, cfg, b.id, b.item))
                 else:
                     filed.append(b.id)
                     tasks[b.id] = _fix_task_id(st, cfg, b.id, b.item)
@@ -835,6 +838,8 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
             # (`_h_bug_found`), and an older ddflow folds it as the record it already has.
             log.append("bug.found", b.id, {"fix_task": fix["fix_task"]})
             (filed if fix["filed"] else linked).append(b.id)
+            if not fix["filed"]:
+                links[b.id] = _link(st, fix["fix_task"])
             if fix["filed"]:
                 # The id filed, not `fix-<bug>` assumed: an abandoned one gets a successor.
                 tasks[b.id] = fix["fix_task"]
@@ -845,9 +850,19 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
             filed=[],
             linked=[],
             tasks={},
+            links={},
             dry_run=dry_run,
         )
-    return O.ok("bug.file_tasks", filed=filed, linked=linked, tasks=tasks, dry_run=dry_run)
+    return O.ok(
+        "bug.file_tasks", filed=filed, linked=linked, tasks=tasks, links=links, dry_run=dry_run
+    )
+
+
+def _link(st, task: str) -> dict[str, str]:
+    """The task a bug was linked to, with its state (open, running, done, ...); "missing"
+    should it not be in the queue, which a link is only made to when it is."""
+    it = st.items.get(task)
+    return {"task": task, "state": it.state if it is not None and not it.removed else "missing"}
 
 
 def _bug_fields_problem(scope: str, severity: str, globs: str) -> str:
