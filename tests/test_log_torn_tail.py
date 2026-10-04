@@ -12,7 +12,8 @@ from __future__ import annotations
 import pytest
 
 from ddflow.config import LogConfig
-from ddflow.infra.log import EventLog, _parse_lines, clear_parse_cache
+from ddflow.core.events import Event
+from ddflow.infra.log import _LINE_START, EventLog, _parse_lines, clear_parse_cache
 
 
 @pytest.fixture(autouse=True)
@@ -85,3 +86,10 @@ def test_recovery_refuses_a_suffix_whose_id_does_not_match(tmp_path):
 def test_non_object_line_is_skipped_not_raised():
     events, skipped = _parse_lines(b"123\n[1,2]\nnull\n")
     assert events == [] and skipped == 3
+
+
+def test_every_event_line_starts_with_the_recovery_prefix():
+    """Recovery looks for `_LINE_START`; a field sorting before `agent` would break it."""
+    ev = Event(kind="task.added", subject="s")
+    assert ev.to_json().startswith(_LINE_START)
+    assert Event(kind="k", subject="", agent="").to_json().startswith(_LINE_START)
