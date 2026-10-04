@@ -764,7 +764,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 159 knobs.
+cadences, and the rest of the 160 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -4043,7 +4043,7 @@ declared once and persists — see
 
 ## Configuration
 
-159 knobs across 24 sections, every one documented in place:
+160 knobs across 24 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -4111,7 +4111,7 @@ part that matters.
   and refuses a staged `ddflow render` view that the log no longer regenerates
   byte-for-byte — hand-edited, or stale (`[enforce] generated_views`). It also reports
   a doc line still naming an identifier, file or default the commit removes or renames
-  (`[enforce] stale_docs`, `doc_globs`, `doc_exclude`; warns by default). It refuses a
+  (`[enforce] stale_docs`, `doc_globs`, `doc_exclude`; warns by default). With `[flow].environments` set, a commit made directly on an environment branch is refused (`[enforce] environment_commits` = block | warn | off): work on a branch and promote it (`ddflow promote status`); merge and squash commits, which is how a promotion lands, pass. It refuses a
   commit on a branch whose base changed a rulebook (AGENTS.md, CLAUDE.md, each agent's
   native rules file, the driver docs) since it forked (`[enforce] stale_rules`), and warns
   past `max_behind` commits behind (`[enforce] behind`); the commit concluding

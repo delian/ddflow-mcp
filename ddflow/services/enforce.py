@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..config import Config
+from ..core.flow import env_chain
 from ..core.model import Lease, fold
 from ..core.schedule import globs_overlap, is_shared, shared_globs
 from ..infra import proc as P
@@ -1097,6 +1098,15 @@ def _merged_in(tree: Path) -> str:
     return os.environ.get(W.SQUASH_OF, "").strip()
 
 
+def _squash_pending(tree: Path) -> bool:
+    """A plain `git merge --squash` leaves SQUASH_MSG until the commit that concludes it:
+    that commit lands a branch's work as one commit, which is a promotion by another name."""
+    r = W.git(tree, "rev-parse", "--git-path", "SQUASH_MSG")
+    if not (r.ok and r.out):
+        return False
+    return (Path(r.out) if Path(r.out).is_absolute() else tree / r.out).is_file()
+
+
 def _merge_own_paths(tree: Path, paths: list[str]) -> list[str]:
     """The staged ``paths`` this commit is answerable for.
 
@@ -1146,6 +1156,53 @@ def clean_merge_conclusion(tree: Path) -> bool:
     return index.ok and index.out == auto.out.splitlines()[0]
 
 
+def environment_branch_commit(repo: Path, cfg: Config) -> str:
+    """Why this commit is refused as made directly on an environment branch, or "".
+
+    GitLab flow's "upstream first": an environment branch ([flow].environments) only
+    ever receives work by promotion, so a commit made on it is work the upstream branch
+    never had, and the next promotion conflicts -- late. A merge or squash (what a
+    promotion and `ddflow merge` commit) is not a direct commit and passes; so does a
+    commit that stages nothing but ddflow's own files.
+    """
+    envs = list(getattr(getattr(cfg, "flow", None), "environments", None) or [])
+    if not envs:
+        return ""
+    tree = _committing_tree(repo) or Path(repo)
+    r = W.git(tree, "symbolic-ref", "--quiet", "--short", "HEAD")
+    branch = r.out.strip() if r.ok else ""
+    if branch not in envs or _merged_in(tree) or _squash_pending(tree):
+        return ""
+    staged = staged_paths(repo)
+    if staged is not None and all(any(p.startswith(x) for x in SELF_MANAGED) for p in staged):
+        return ""
+    chain = " -> ".join(env_chain(cfg, W.default_branch(Path(repo))))
+    mode = cfg.enforce.environment_commits
+    return "\n".join(
+        [
+            (
+                f"ddflow: refusing a commit made directly on {branch!r}, an environment branch."
+                if mode == "block"
+                else f"ddflow: warning: a commit made directly on {branch!r}, an environment branch."
+            ),
+            "",
+            f"An environment only receives work by promotion ({chain}), upstream first; a",
+            "commit made here exists nowhere upstream and the next promotion conflicts.",
+            "",
+            "Fix by committing on a work branch and promoting it:",
+            "    git switch -c <work-branch>      # keep this commit there",
+            "    ddflow promote status            # what is ready to promote",
+            "",
+            f'Policy is [enforce].environment_commits = "{mode}" in .ddflow/config.toml;',
+            (
+                'set it to "warn" or "off" if committing here is deliberate (a hotfix on prod).'
+                if mode == "block"
+                else 'set it to "off" to silence this warning.'
+            ),
+        ]
+    )
+
+
 def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> tuple[int, str]:
     """(exit_code, message). 0 allows the commit; 1 refuses it.
 
@@ -1153,6 +1210,18 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     a CI job without three copies of the wording.
     """
     cfg = cfg or Config.load(repo)
+    env_mode = cfg.enforce.environment_commits
+    env_msg = environment_branch_commit(repo, cfg) if env_mode != "off" else ""
+    if env_msg and env_mode != "warn":
+        return 1, env_msg
+    code, msg = _check_lease(repo, cfg, agent=agent)
+    if env_msg:
+        msg = "\n\n".join(m for m in (env_msg + "\n\n(warning only)", msg) if m)
+    return code, msg
+
+
+def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]:
+    """The lease half of `check_commit`."""
     policy = getattr(cfg, "enforce", None)
     mode = getattr(policy, "commit_without_lease", "warn") if policy else "warn"
     if mode == "off":
