@@ -38,6 +38,7 @@ worktrees, running real pytest, and making real merges.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -368,7 +369,7 @@ def run(sc: Scenario) -> None:
     sc.head("Scenario 6 — a whole project: plan, build, change course, rebuild")
 
     repo = sc.make_repo("ledger", SCAFFOLD)
-    wt_root = sc.dir / ".ddflow-worktrees"
+    wt_root = repo / ".ddflow" / "worktrees"  # the default root (D-worktree-home)
 
     alpha = McpClient(repo, ROOT, agent="alpha")
     beta = McpClient(repo, ROOT, agent="beta")
@@ -1096,6 +1097,12 @@ def _act7_the_operator_asks(sc, alpha, repo):
 
 def _act8_rebuild_from_the_log(sc, alpha, repo):
     sc.step("Every source file is deleted. Only .ddflow/ survives.")
+    # The task worktrees live under .ddflow/worktrees (D-worktree-home) and hold copies
+    # of the code: they are checkouts, not the log, so they go too.
+    trees = repo / ".ddflow" / "worktrees"
+    if trees.exists():
+        shutil.rmtree(trees)
+        subprocess.run(["git", "-C", str(repo), "worktree", "prune"], check=True)
     for path in sorted(repo.rglob("*.py")):
         if ".ddflow" not in path.parts and ".git" not in path.parts:
             path.unlink()
