@@ -238,6 +238,26 @@ def test_chatty_stderr_is_summarised_by_its_last_line(tmp_path):
     assert v.speaks_mcp is False and "exited (4)" in v.detail and "log line 49999" in v.detail
 
 
+CLOSE_STDOUT_THEN_EXIT = textwrap.dedent(
+    """
+    import os, time
+    os.close(1)      # the pipe closes while the process is still alive
+    time.sleep(0.4)
+    os._exit(4)
+    """
+)
+
+
+def test_an_exit_code_is_read_even_when_stdout_closes_first(tmp_path):
+    """B297ede2447: EOF on stdout can arrive before the child's exit is visible to waitid,
+    so the detail must still name the exit code rather than 'closed its output'."""
+    v = CO.verify_one(
+        _companion("late", sys.executable, _script(tmp_path, "le.py", CLOSE_STDOUT_THEN_EXIT))
+    )
+    assert v.speaks_mcp is False, v.detail
+    assert "exited (4)" in v.detail, v.detail
+
+
 def test_the_companions_env_reaches_the_launched_server(tmp_path):
     body = textwrap.dedent(
         """
