@@ -4005,7 +4005,7 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         # Trees that may hold work: one per tree (path compared after `normpath`), not
         # per item, and never a tree measured clean (B904edd649c). One that could not be
         # measured (None) counts: `recover` says to treat it as containing work until
-        # someone has looked. A record with no tree is never salvageable.
+        # someone has looked. A record with no tree is not a tree and is not counted.
         v["recoverable"] = len(
             {
                 os.path.normpath(r.worktree)

@@ -60,7 +60,7 @@ def test_the_count_is_per_tree_and_only_trees_that_may_hold_work(adopted, monkey
             _rec("B2", "/w/b/", True, unmerged_commits=1),  # same tree, spelt differently
             _rec("C", "/w/c", False),  # measured clean
             _rec("D", "/w/d", None),  # could not measure: treat as holding work
-            _rec("E", "", False, kind="expired_lease"),  # no tree: not a worktree
+            _rec("E", "", None, kind="expired_lease"),  # no tree: not a worktree
         ],
     )
     assert _instruction_vars(adopted)["recoverable"] == 3
