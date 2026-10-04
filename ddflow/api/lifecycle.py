@@ -945,8 +945,9 @@ def claim(
     events = log.read_all()
     st = fold(events, strict=False)
     parked = st.items.get(item)
-    if parked is not None and not needs_tree(parked):  # declared by its `no-worktree` tag
-        no_worktree = True
+    no_worktree = no_worktree or (
+        parked is not None and not needs_tree(parked)
+    )  # `no-worktree` tag
     if parked is not None and parked.state == REVIEW and not force:
         # Claiming it would let a push ride into the request its reviewers already
         # judged -- and while it ran, `pr sync` would stop watching the request at all.

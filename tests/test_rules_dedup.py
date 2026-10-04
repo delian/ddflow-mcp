@@ -21,13 +21,13 @@ import pytest
 from ddflow import api as A
 from ddflow.api.rules import RuleDedupAnswer, rule_dedup_check, rule_dedup_check_dry_run
 from ddflow.services.rules import Rule, RulesStorage
-from ddflow.core import outcome as O
 
 
 @pytest.fixture
 def repo(tmp_path):
     """A test repository with git initialized."""
     import subprocess
+
     repo = tmp_path / "proj"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
@@ -99,17 +99,17 @@ def test_rule_dedup_check_multiple_candidates():
     rule1 = Rule(
         id="r-naming",
         title="Naming conventions",
-        content="Use snake_case for function names"  # Identical - score 1.0
+        content="Use snake_case for function names",  # Identical - score 1.0
     )
     rule2 = Rule(
         id="r-style",
         title="Code style",
-        content="Use snake_case for constants"  # Similar - score ~0.5
+        content="Use snake_case for constants",  # Similar - score ~0.5
     )
     rule3 = Rule(
         id="r-testing",
         title="Testing",
-        content="Write unit tests"  # Different - score low
+        content="Write unit tests",  # Different - score low
     )
 
     is_dup, candidates = rule_dedup_check(new_content, [rule1, rule2, rule3], threshold=0.4)
@@ -137,16 +137,14 @@ def test_rule_dedup_check_includes_overlap_terms():
     # Should have some overlap terms
     assert len(candidates[0]["overlap"]) > 0
     # Overlap should contain shared significant terms
-    assert any(term in ["snake", "case", "constants", "function"] for term in candidates[0]["overlap"])
+    assert any(
+        term in ["snake", "case", "constants", "function"] for term in candidates[0]["overlap"]
+    )
 
 
 def test_rule_add_without_dedup():
     """Adding a rule with check_dedup=False skips duplicate checking."""
-    rule = Rule(
-        id="r-test",
-        title="Test Rule",
-        content="This is a test rule"
-    )
+    rule = Rule(id="r-test", title="Test Rule", content="This is a test rule")
 
     # Add with dedup disabled
     outcome = A.rule_add(Path("/tmp/nonexistent"), rule, check_dedup=False)
@@ -168,9 +166,7 @@ def test_rule_add_identical_content_refused():
 
         # Add first rule
         rule1 = Rule(
-            id="r-naming",
-            title="Naming conventions",
-            content="Use snake_case for function names"
+            id="r-naming", title="Naming conventions", content="Use snake_case for function names"
         )
         outcome1 = A.rule_add(repo, rule1)
         assert outcome1.exit == 0, outcome1.reason
@@ -179,7 +175,7 @@ def test_rule_add_identical_content_refused():
         rule2 = Rule(
             id="r-naming-2",
             title="Naming conventions 2",
-            content="Use snake_case for function names"
+            content="Use snake_case for function names",
         )
         outcome2 = A.rule_add(repo, rule2)
 
@@ -201,9 +197,7 @@ def test_rule_add_answer_new():
 
         # Add first rule
         rule1 = Rule(
-            id="r-naming",
-            title="Naming conventions",
-            content="Use snake_case for function names"
+            id="r-naming", title="Naming conventions", content="Use snake_case for function names"
         )
         outcome1 = A.rule_add(repo, rule1)
         assert outcome1.exit == 0
@@ -212,7 +206,7 @@ def test_rule_add_answer_new():
         rule2 = Rule(
             id="r-naming-2",
             title="Naming conventions 2",
-            content="Use snake_case for function names"
+            content="Use snake_case for function names",
         )
         answer = RuleDedupAnswer("new", "")
         outcome2 = A.rule_add(repo, rule2, dedup_answer=answer)
@@ -240,7 +234,7 @@ def test_rule_add_answer_extends():
         rule1 = Rule(
             id="r-naming",
             title="Naming conventions",
-            content="Use snake_case for function names and variables"
+            content="Use snake_case for function names and variables",
         )
         outcome1 = A.rule_add(repo, rule1, check_dedup=False)
         assert outcome1.exit == 0
@@ -248,11 +242,7 @@ def test_rule_add_answer_extends():
         # Add similar rule with answer="extends r-naming"
         # Use content that will score above 0.4 threshold
         new_content = "Use snake_case for constants and methods"
-        rule2 = Rule(
-            id="r-naming-2",
-            title="Naming conventions 2",
-            content=new_content
-        )
+        rule2 = Rule(id="r-naming-2", title="Naming conventions 2", content=new_content)
         answer = RuleDedupAnswer("extends", "r-naming")
         # Lower threshold to 0.4 to trigger duplicate detection
         outcome2 = A.rule_add(repo, rule2, dedup_answer=answer, dedup_threshold=0.4)
@@ -282,16 +272,12 @@ def test_rule_dedup_check_dry_run_with_candidates():
         rule1 = Rule(
             id="r-naming",
             title="Naming conventions",
-            content="Use snake_case for function names and variables"
+            content="Use snake_case for function names and variables",
         )
         A.rule_add(repo, rule1, check_dedup=False)
 
         # Dry-run check with similar content (uses lower threshold)
-        outcome = rule_dedup_check_dry_run(
-            repo,
-            "Use snake_case for constants",
-            threshold=0.35
-        )
+        outcome = rule_dedup_check_dry_run(repo, "Use snake_case for constants", threshold=0.35)
 
         # Should show candidates
         assert outcome.exit == 0
@@ -311,17 +297,12 @@ def test_rule_dedup_check_dry_run_no_candidates():
 
         # Add a rule
         rule1 = Rule(
-            id="r-naming",
-            title="Naming conventions",
-            content="Use snake_case for function names"
+            id="r-naming", title="Naming conventions", content="Use snake_case for function names"
         )
         A.rule_add(repo, rule1, check_dedup=False)
 
         # Dry-run check with very different content
-        outcome = rule_dedup_check_dry_run(
-            repo,
-            "Write unit tests for everything"
-        )
+        outcome = rule_dedup_check_dry_run(repo, "Write unit tests for everything")
 
         # Should return nothing
         assert outcome.exit == 2  # nothing
@@ -397,16 +378,12 @@ def test_rule_add_answer_invalid_target():
         rule1 = Rule(
             id="r-naming",
             title="Naming conventions",
-            content="Use snake_case for function names and variables"
+            content="Use snake_case for function names and variables",
         )
         A.rule_add(repo, rule1, check_dedup=False)
 
         # Try to add similar rule with invalid target
-        rule2 = Rule(
-            id="r-new",
-            title="New Rule",
-            content="Use snake_case for constants"
-        )
+        rule2 = Rule(id="r-new", title="New Rule", content="Use snake_case for constants")
         answer = RuleDedupAnswer("extends", "r-nonexistent")
         # Use low threshold to trigger duplicate detection
         outcome = A.rule_add(repo, rule2, dedup_answer=answer, dedup_threshold=0.35)
@@ -427,11 +404,7 @@ def test_rule_add_check_flag_behavior():
         subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
 
         # Add initial rule
-        rule1 = Rule(
-            id="r-naming",
-            title="Naming conventions",
-            content="Use snake_case"
-        )
+        rule1 = Rule(id="r-naming", title="Naming conventions", content="Use snake_case")
         A.rule_add(repo, rule1, check_dedup=False)
 
         # Dry-run with identical content

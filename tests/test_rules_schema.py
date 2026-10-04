@@ -13,7 +13,7 @@ Tests cover:
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -57,10 +57,10 @@ class TestRuleFromTOML:
 
     def test_parse_minimal_rule(self):
         """Minimal valid rule has id, title, and content."""
-        toml = '''id = "r-naming"
+        toml = """id = "r-naming"
 title = "Naming conventions"
 
-Follow snake_case for all Python functions.'''
+Follow snake_case for all Python functions."""
         rule = Rule.from_toml(toml)
         assert rule.id == "r-naming"
         assert rule.title == "Naming conventions"
@@ -70,14 +70,14 @@ Follow snake_case for all Python functions.'''
 
     def test_parse_full_rule_with_all_fields(self):
         """Parse a rule with all optional fields."""
-        toml = '''id = "r-test-coverage"
+        toml = """id = "r-test-coverage"
 title = "Test coverage"
 tags = ["testing", "quality"]
 scope = "phase"
 priority = 75
 globs = ["**/*.py", "tests/**/*.py"]
 
-Every module must have at least 80% coverage.'''
+Every module must have at least 80% coverage."""
         rule = Rule.from_toml(toml)
         assert rule.id == "r-test-coverage"
         assert rule.title == "Test coverage"
@@ -89,64 +89,64 @@ Every module must have at least 80% coverage.'''
 
     def test_parse_rule_with_content_field_in_frontmatter(self):
         """Content can be specified in the frontmatter as a field."""
-        toml = '''id = "r-doc"
+        toml = """id = "r-doc"
 title = "Documentation"
 content = "Every function must have a docstring."
-'''
+"""
         rule = Rule.from_toml(toml)
         assert rule.id == "r-doc"
         assert rule.content == "Every function must have a docstring."
 
     def test_missing_id_raises_error(self):
         """Rule without id raises ValueError."""
-        toml = '''title = "Missing ID"
+        toml = """title = "Missing ID"
 
-Some content here.'''
+Some content here."""
         with pytest.raises(ValueError, match="'id' field"):
             Rule.from_toml(toml)
 
     def test_missing_title_raises_error(self):
         """Rule without title raises ValueError."""
-        toml = '''id = "r-test"
+        toml = """id = "r-test"
 
-Some content here.'''
+Some content here."""
         with pytest.raises(ValueError, match="'title' field"):
             Rule.from_toml(toml)
 
     def test_missing_content_raises_error(self):
         """Rule without content or content block raises ValueError."""
-        toml = '''id = "r-test"
+        toml = """id = "r-test"
 title = "Test"
-'''
+"""
         with pytest.raises(ValueError, match="'content'"):
             Rule.from_toml(toml)
 
     def test_invalid_id_format_raises_error(self):
         """Rule with invalid ID format raises ValueError."""
-        toml = '''id = "naming"
+        toml = """id = "naming"
 title = "Bad ID"
 
-Content here.'''
+Content here."""
         with pytest.raises(ValueError, match="Invalid rule id"):
             Rule.from_toml(toml)
 
     def test_invalid_toml_raises_error(self):
         """Malformed TOML raises ValueError."""
-        toml = '''id = "r-bad"
+        toml = """id = "r-bad"
 title = "Bad TOML
-This is broken'''
+This is broken"""
         with pytest.raises(ValueError, match="Invalid TOML"):
             Rule.from_toml(toml)
 
     def test_parse_rule_with_multiline_content(self):
         """Content can span multiple lines."""
-        toml = '''id = "r-style"
+        toml = """id = "r-style"
 title = "Code style"
 
 1. Use 4-space indentation
 2. Keep lines under 100 characters
 3. Use descriptive variable names
-4. Write tests before implementing'''
+4. Write tests before implementing"""
         rule = Rule.from_toml(toml)
         assert "4-space indentation" in rule.content
         assert "descriptive variable names" in rule.content
@@ -282,9 +282,7 @@ class TestSimilarityScoring:
             title="Test",
             content="Python naming conventions use snake_case",
         )
-        score = rule.similarity_score(
-            "JavaScript uses camelCase entirely different language"
-        )
+        score = rule.similarity_score("JavaScript uses camelCase entirely different language")
         assert score < 0.5
 
     def test_very_similar_content_scores_high(self):
@@ -294,9 +292,7 @@ class TestSimilarityScoring:
             title="Test",
             content="Python functions should use snake_case naming conventions",
         )
-        score = rule.similarity_score(
-            "Python functions use snake_case naming conventions"
-        )
+        score = rule.similarity_score("Python functions use snake_case naming conventions")
         # With significant word overlap, score should be > 0.3
         assert score > 0.3
 
@@ -370,10 +366,9 @@ class TestRuleFieldDefaults:
 
     def test_created_and_updated_timestamps(self):
         """Created and updated are set to current UTC time by default."""
-        from datetime import timezone
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         rule = Rule(id="r-test", title="Test", content="Content")
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
         assert before <= rule.created <= after
         assert before <= rule.updated <= after
 
