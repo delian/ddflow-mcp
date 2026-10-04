@@ -37,7 +37,9 @@ $ ddflow recover
      then `ddflow release P2.T3 --note salvaged`.
 ```
 
-Entries marked `!!` were **measured** to contain work. ddflow will not touch them.
+Entries marked `!!` may contain work: the tree was **measured** to hold it, git **could
+not measure** it (treat it as holding work), or the item is RUNNING with nobody on it.
+ddflow will not touch them.
 
 **Procedure.**
 
