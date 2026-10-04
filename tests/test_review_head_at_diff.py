@@ -7,10 +7,10 @@ the reviewed head" -- unreviewed commits passing the delta check. Both a full ro
 delta round must capture the head with the diff. The reviewer here is a shell script that
 commits to the branch while it "reviews", once per armed marker file.
 
-That reviewer has a side effect, so it runs with `hedge = 1` (B10034dff26 / Ba1ac2327a4):
-hedged, two copies race, the copy that finds the marker already taken answers first, and
-the winner's cancel kills the copy that was committing -- under load, a review with no
-late commit, and a test that flaked one run in six.
+That reviewer has a side effect, so it runs with `hedge = 1` (B10034dff26 / Ba1ac2327a4),
+one copy per request. Hedged (the default: 2 copies), the copies race; the copy that finds
+the marker already taken answers first, and the winner's cancel kills the copy that was
+committing -- under load, a review with no late commit, and a test that flaked one run in six.
 """
 
 from __future__ import annotations
