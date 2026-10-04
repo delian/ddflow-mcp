@@ -162,3 +162,19 @@ def test_a_separate_git_dir_resolves_to_itself(tmp_path):
     wt = tmp_path / "wt"
     subprocess.run(["git", "init", "-q", "--separate-git-dir", str(gd), str(wt)], check=True)
     assert H._dir(wt) == gd.resolve() / H.DIR
+
+
+@needs_proc
+def test_a_restarted_server_under_the_same_harness_keeps_the_name(connection):
+    """Else the new connection derives a name while the shell keeps the declared one."""
+    repo, _srv = connection
+    assert Server(repo).agent == "kilo-onboard"
+
+
+def test_the_record_does_not_climb_past_a_shell(monkeypatch):
+    """An interactive shell may be the harness, or the terminal above it."""
+    from ddflow.infra import harness_identity as H
+
+    chain = {40: ("uv", 30, "4"), 30: ("bash", 20, "3"), 20: ("tmux", 1, "2")}
+    monkeypatch.setattr(H, "_stat", chain.get)
+    assert H._harness(40) == ["40-4", "30-3"]

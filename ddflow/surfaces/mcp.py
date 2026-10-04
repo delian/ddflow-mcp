@@ -3250,6 +3250,12 @@ class Server:
         #: Declared identity for this connection; empty means "use the process
         #: default", which is the backward-compatible single-agent behaviour.
         self.agent = agent
+        if not agent:
+            # A server restarted under the same harness keeps what the agent declared
+            # there, or its shell (which still reads the record) and it would split.
+            from ..infra import harness_identity
+
+            self.agent = harness_identity.declared(self.repo)
         #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
         #: only -- `listChanged` is false and there is no call that widens it.
         self.tier = resolve_tier(self.repo)
