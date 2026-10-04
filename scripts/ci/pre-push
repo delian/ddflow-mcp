@@ -38,11 +38,13 @@ status=0
 # publishes an incomplete history (Bcd3512c891). A warning, not a refusal.
 # Shards are written in the PRIMARY checkout, which a push from a linked worktree does
 # not see; -z so a quoted path is still counted.
-primary=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir </dev/null)")
+common=$(git rev-parse --git-common-dir </dev/null 2>/dev/null || true)
+case "$common" in /*) ;; *) common="$PWD/$common" ;; esac  # relative before git 2.31's --path-format
+primary=$(dirname "$common")
 loose=$(git -C "$primary" status --porcelain -z --untracked-files=all -- .ddflow/events 2>/dev/null </dev/null | tr '\0' '\n' | grep -c '\.jsonl$' || true)
 if [ "${loose:-0}" -gt 0 ]; then
     echo "pre-push: WARNING: $loose event shard(s) in .ddflow/events are not committed, so this push leaves them out." >&2
-    echo "  git add .ddflow/events && git commit -m 'events' -- .ddflow/events" >&2
+    echo "  git -C \"$primary\" add .ddflow/events && git -C \"$primary\" commit -m 'events' -- .ddflow/events" >&2
 fi
 # git feeds one line per pushed ref on stdin. The loop owns stdin: every command inside
 # reads /dev/null instead, or the first one to read stdin would swallow the next refs.
