@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 import stat
 import subprocess
 import sys
@@ -202,6 +203,7 @@ def test_an_item_id_names_its_branch_and_the_cli_defaults_to_the_directorys_head
     proc = subprocess.run(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "ci", "run"],
         cwd=wt, capture_output=True, text=True, check=False,
+        env={**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])},
     )  # fmt: skip
     assert proc.returncode == 1 and "ruff check" in proc.stdout, (proc.stdout, proc.stderr)
 
