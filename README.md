@@ -1217,6 +1217,12 @@ and the operational memory.) A project that installs ddflow and stops has the ot
 wired to nothing — and because an agent gate passes on an assertion, that gap is invisible in
 exactly the way the rest of this design exists to prevent.
 
+So the gap is **named**, and an agent is told to act on it: the MCP handshake and the
+SessionStart brief (hook path, nothing probed, "not checked" stated as such) both list the
+default companions that are not wired up. To install them with the operator's consent run
+the `install-companions` prompt (MCP: `/mcp__ddflow__install-companions`; `ddflow prompts
+show install-companions` elsewhere).
+
 So the gap is **named**:
 
 ```console
@@ -1327,7 +1333,7 @@ are registered with an agent or detected as installed (launching a registry entr
 merely known would download it); `--id a,b` launches exactly those. It is opt-in and
 **never on the scan path**: `ddflow companions` and the MCP handshake still launch nothing.
 
-Adding a fifth is a TOML block in `.ddflow/companions.toml`, not a patch:
+Adding another is a TOML block in `.ddflow/companions.toml`, not a patch:
 
 ```toml
 [[companion]]
