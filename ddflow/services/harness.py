@@ -101,8 +101,11 @@ def enable_project_servers(
         return [f"no servers registered in {mcp_rel}; nothing to approve"]
     path = Path(repo) / settings_rel
     data = _read(path)
-    enabled = data.get(ENABLED_KEY) or []
-    denied = data.get(DISABLED_KEY) or []
+    # `.get(KEY, [])`, NOT `.get(KEY) or []`: a falsy non-list (`{}`, `""`, `false`)
+    # would be silently replaced by a list, rewriting exactly the malformed file the
+    # type check below exists to leave alone (rubber_duck on 91c639e).
+    enabled = data.get(ENABLED_KEY, [])
+    denied = data.get(DISABLED_KEY, [])
     for key, value in ((ENABLED_KEY, enabled), (DISABLED_KEY, denied)):
         if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
             raise SettingsError(f"{path}: `{key}` is not a list of names; not touching it")
@@ -179,7 +182,10 @@ def copy_local_configs(repo: Path, source: Path, *, names: tuple[str, ...] = LOC
         if not src.is_file():
             out.append(f"no {rel} in {source}")
             continue
-        if dst.exists():
+        # `is_symlink` as well as `exists`: a DANGLING link reports absent, and copy2
+        # would then follow it and write the machine's endpoints through the link, to a
+        # target the ignore check never saw (rubber_duck on 91c639e).
+        if dst.exists() or dst.is_symlink():
             out.append(f"kept {rel}: already present here")
             continue
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -210,13 +216,67 @@ def _local_files(repo: Path) -> list[str]:
         return []
 
 
-def pinned_cli(entry: Any) -> str | None:
+def _resolve_path(part: str, base: Path | None) -> str:
+    """`part` absolute, resolving a relative one against `base` (the project root).
+
+    The MCP client starts a project-scoped entry with the project as its working
+    directory; the wrapper runs from wherever the shell is, so a relative path that is
+    copied verbatim points somewhere else -- a different checkout, or nowhere
+    (rubber_duck on 91c639e).
+    """
+    path = Path(part)
+    if path.is_absolute():
+        return str(path)
+    if base is None:
+        raise ValueError(
+            f"the path {part!r} is relative and no project root was given to resolve it "
+            f"against; the wrapper would run from whatever directory the shell is in"
+        )
+    return str((Path(base) / path).resolve())
+
+
+def _resolve_command(command: str, base: Path | None) -> str:
+    """The entry's command, absolute when it is a path, unchanged when it is a bare name.
+
+    `python`, `uv` and `ddflow-mcp` are PATH lookups for the client too; resolving them
+    against the project would invent a file that does not exist there.
+    """
+    text = command.strip()
+    bare = not text.startswith(".") and os.sep not in text and not (os.altsep and os.altsep in text)
+    return text if bare else _resolve_path(text, base)
+
+
+def _cli_argv(entry: dict) -> list[str]:
+    """The entry's argv prefix with its `-m <module>` pair replaced by `-m ddflow`.
+
+    Preserving the prefix is what keeps an entry like `uv run python -m ddflow.mcp`
+    mirroring as `uv run python -m ddflow` rather than the broken `uv -m ddflow`
+    (rubber_duck on 91c639e). An entry with no `-m <module>` at all has no CLI
+    invocation to derive from it, and is refused rather than guessed at.
+    """
+    args = entry.get("args") or []
+    if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("the MCP entry's `args` is not a list of strings")
+    for i, arg in enumerate(args):
+        if arg == "-m" and i + 1 < len(args):
+            # Anything after the module belonged to the server invocation; the CLI takes
+            # its own arguments, and carrying them over would silently parse as flags.
+            return [*args[:i], "-m", "ddflow"]
+    raise ValueError(
+        "the MCP entry has no `-m <module>` in its args, so there is no CLI invocation to "
+        "mirror; install ddflow so the shell finds the same version, or write the "
+        "wrapper by hand"
+    )
+
+
+def pinned_cli(entry: Any, *, base: Path | None = None) -> str | None:
     """The line that runs the CLI from a PYTHONPATH-pinned MCP entry, or None.
 
     Only a pinned entry has code to mirror: a `uvx`, installed-`ddflow-mcp` or `docker`
     entry names a published artifact or an image, and the shell either finds that same
     installation or cannot reach it at all. The pin is PREPENDED, so it wins over an
-    inherited PYTHONPATH entry (R-onboard-harness-pin).
+    inherited PYTHONPATH entry (R-onboard-harness-pin). Raises ValueError for a pinned
+    entry that cannot be mirrored (no `-m <module>`, or a relative path without `base`).
     """
     if not isinstance(entry, dict):
         return None
@@ -224,15 +284,19 @@ def pinned_cli(entry: Any) -> str | None:
     command = entry.get("command")
     if not pin or not command:
         return None
+    argv = _cli_argv(entry)
+    parts = str(pin).split(os.pathsep)
+    pin_text = os.pathsep.join(_resolve_path(p, base) for p in parts if p)
+    invocation = " ".join(shlex.quote(part) for part in (_resolve_command(str(command), base), *argv))
     return (
-        f"PYTHONPATH={shlex.quote(str(pin))}${{PYTHONPATH:+:$PYTHONPATH}} "
-        f'exec {shlex.quote(str(command))} -m ddflow "$@"'
+        f"PYTHONPATH={shlex.quote(pin_text)}${{PYTHONPATH:+:$PYTHONPATH}} "
+        f'exec {invocation} "$@"'
     )
 
 
-def wrapper_text(entry: Any) -> str:
-    """The full wrapper script for `entry`; ValueError when it is not pinned."""
-    line = pinned_cli(entry)
+def wrapper_text(entry: Any, *, base: Path | None = None) -> str:
+    """The full wrapper script for `entry`; ValueError when it cannot be mirrored."""
+    line = pinned_cli(entry, base=base)
     if line is None:
         raise ValueError("the MCP entry is not PYTHONPATH-pinned; there is no code to mirror")
     return f"#!/bin/sh\n{WRAPPER_MARK}\n{line}\n"
@@ -246,15 +310,25 @@ def on_path(directory: Path, *, path: str | None = None) -> bool:
 
 
 def install_shell_command(
-    entry: Any, *, bindir: str | Path | None = None, path: str | None = None
+    entry: Any,
+    *,
+    repo: str | Path | None = None,
+    bindir: str | Path | None = None,
+    path: str | None = None,
 ) -> str:
     """Write the `ddflow` wrapper a harness's shell needs, and say where it landed.
 
-    The operator's own `ddflow` is never overwritten: a file without this module's marker
-    is theirs, and is refused. A wrapper already written is refreshed in place when the
-    pin changes, so re-running onboarding is safe and one run is enough.
+    `repo` is the project root the entry is registered in: needed to make a relative
+    command or PYTHONPATH absolute. The operator's own `ddflow` is never overwritten: a
+    file without this module's marker is theirs, and is refused. A wrapper already
+    written is refreshed in place when the pin changes, so re-running onboarding is safe
+    and one run is enough.
     """
-    line = pinned_cli(entry)
+    base = Path(repo) if repo is not None else None
+    try:
+        line = pinned_cli(entry, base=base)
+    except ValueError as exc:
+        return Refused(str(exc))
     if line is None:
         return (
             "the MCP entry is not PYTHONPATH-pinned (uvx, an installed ddflow-mcp or "
@@ -262,7 +336,7 @@ def install_shell_command(
         )
     directory = Path(bindir) if bindir else Path.home() / ".local" / "bin"
     target = directory / "ddflow"
-    text = wrapper_text(entry)
+    text = wrapper_text(entry, base=base)
     if target.exists() or target.is_symlink():
         try:
             existing = target.read_text("utf-8", errors="replace")
@@ -275,8 +349,11 @@ def install_shell_command(
             )
         if existing == text:
             return f"the shell command is already at {target}"
-        target.write_text(text, "utf-8")
-        target.chmod(0o755)
+        try:
+            target.write_text(text, "utf-8")
+            target.chmod(0o755)
+        except OSError as exc:
+            return Refused(f"could not update {target} ({exc}); replace it by hand")
         return f"updated {target} to the pinned checkout"
     try:
         directory.mkdir(parents=True, exist_ok=True)

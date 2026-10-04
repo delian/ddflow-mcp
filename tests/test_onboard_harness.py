@@ -102,6 +102,16 @@ def test_a_non_list_approval_key_refuses_rather_than_overwrites(repo):
         H.enable_project_servers(repo)
 
 
+@pytest.mark.parametrize("bad", [{}, "", 0, False, None])
+def test_a_falsy_non_list_key_refuses_rather_than_overwrites(repo, bad):
+    """`get(k) or []` turned `{}`/`""`/`false` into a list and rewrote it (rubber_duck)."""
+    _write(repo / H.SETTINGS_REL, {H.ENABLED_KEY: bad})
+    _write(repo / H.MCP_REL, MCP)
+    with pytest.raises(SettingsError):
+        H.enable_project_servers(repo)
+    assert _settings(repo)[H.ENABLED_KEY] == bad
+
+
 def test_no_registered_servers_is_a_no_op(repo):
     assert "nothing to approve" in H.enable_project_servers(repo)[0]
     assert not (repo / H.SETTINGS_REL).exists(), "a settings file was created for no server"
@@ -161,6 +171,19 @@ def test_a_missing_sibling_file_is_reported_not_created(repo, tmp_path):
     assert any("no .ddflow/local/reviewers.toml" in a for a in actions)
 
 
+def test_a_dangling_symlink_is_kept_not_written_through(repo, tmp_path):
+    """`exists()` is False for a dangling link, so copy2 would follow it and write the
+    machine's endpoints outside the git-ignored directory (rubber_duck on 91c639e)."""
+    source = _sibling(tmp_path, {H.LOCAL_CONFIGS[0]: "theirs\n"})
+    link = repo / H.LOCAL_CONFIGS[0]
+    link.parent.mkdir(parents=True)
+    outside = tmp_path / "outside.toml"
+    link.symlink_to(outside)
+    actions = H.copy_local_configs(repo, source)
+    assert not outside.exists(), "the copy wrote through a dangling symlink"
+    assert any("kept" in a for a in actions)
+
+
 def test_copied_local_config_is_flagged_when_worktrees_would_not_get_it(repo, tmp_path):
     """A git-ignored file does not reach a worktree; `[worktree].local_files` is how a
     claim copies it in, and onboarding has to say so or the gate reads the wrong config."""
@@ -207,6 +230,56 @@ def test_the_wrapper_mirrors_the_pin_and_runs_the_cli_not_the_mcp_module():
     assert text.endswith('"$@"\n')
 
 
+def test_a_relative_entry_is_resolved_against_the_project_root(tmp_path):
+    """The client starts a project-scoped entry in the project; the wrapper runs from
+    wherever the shell is -- so a relative pin/command must be made absolute
+    (rubber_duck on 91c639e)."""
+    repo = tmp_path / "proj"
+    (repo / ".venv" / "bin").mkdir(parents=True)
+    entry = {
+        "command": ".venv/bin/python",
+        "args": ["-m", "ddflow.surfaces.mcp"],
+        "env": {"PYTHONPATH": "src"},
+    }
+    text = H.wrapper_text(entry, base=repo)
+    assert f"exec {repo}/.venv/bin/python -m ddflow" in text
+    assert f"PYTHONPATH={repo}/src" in text
+    bindir = tmp_path / "bin"
+    refused = H.install_shell_command(entry, bindir=bindir, path="")
+    assert isinstance(refused, Refused) and "relative" in refused
+    assert not bindir.exists()
+
+
+def test_the_entrys_argv_prefix_is_preserved_not_guessed(tmp_path):
+    """`uv run python -m ddflow.mcp` mirrors as `uv run python -m ddflow`, never the
+    broken `uv -m ddflow` an interpreter-only assumption produced (rubber_duck)."""
+    uv = {
+        "command": "uv",
+        "args": ["run", "python", "-m", "ddflow.surfaces.mcp"],
+        "env": {"PYTHONPATH": "/opt/pin"},
+    }
+    assert "exec uv run python -m ddflow" in H.wrapper_text(uv)
+    no_module = {"command": "ddflow-mcp", "env": {"PYTHONPATH": "/opt/pin"}}
+    refused = H.install_shell_command(no_module, bindir=tmp_path / "bin", path="")
+    assert isinstance(refused, Refused) and "no `-m" in refused
+
+
+def test_a_failed_refresh_is_reported_not_raised(tmp_path, monkeypatch):
+    bindir = tmp_path / "bin"
+    H.install_shell_command(ENTRY, bindir=bindir, path="")
+    moved = {**ENTRY, "env": {"PYTHONPATH": "/opt/moved"}}
+    real = Path.write_text
+
+    def boom(self, *args, **kwargs):
+        if self.name == "ddflow":
+            raise OSError("disk full")
+        return real(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", boom)
+    action = H.install_shell_command(moved, bindir=bindir, path="")
+    assert isinstance(action, Refused) and "could not update" in action
+
+
 def test_the_wrapper_runs_the_pinned_checkout_not_an_ambient_copy(tmp_path):
     """The probe behind R-onboard-harness-pin, as a test: a decoy ddflow is importable
     from the inherited PYTHONPATH, and the wrapper still runs the pinned one."""
@@ -220,7 +293,11 @@ def test_the_wrapper_runs_the_pinned_checkout_not_an_ambient_copy(tmp_path):
     decoy.mkdir(parents=True)
     (decoy / "__init__.py").write_text("")
     (decoy / "__main__.py").write_text("print('DECOY')\n")
-    entry = {"command": sys.executable, "env": {"PYTHONPATH": str(tmp_path / "pinned")}}
+    entry = {
+        "command": sys.executable,
+        "args": ["-m", "ddflow.surfaces.mcp"],
+        "env": {"PYTHONPATH": str(tmp_path / "pinned")},
+    }
     bindir = tmp_path / "bin"
     action = H.install_shell_command(entry, bindir=bindir, path="")
     target = bindir / "ddflow"
