@@ -140,3 +140,37 @@ def test_reopening_one_task_does_not_hide_another_tasks_completion(repo):
     assert _item(repo, "T2").state == "open"
     assert LG.build(EventLog(repo).read_all(), "T1") is not None
     assert verify(repo, "T1").data["verdict"] == "does not hold"
+
+
+def test_the_mcp_tool_reopens_and_refuses_reopen_arguments_without_an_id(repo):
+    from ddflow.surfaces.mcp import Server
+
+    def call(args):
+        reply = Server(repo).handle(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "ddflow_verify", "arguments": args}}
+        )  # fmt: skip
+        return reply["result"]["content"][0]["text"]
+
+    _false_completion(repo)
+    assert "need an id" in call({"reopen": True})
+    assert '"reopened":true' in call({"id": "T1", "reopen": True})
+    assert _item(repo).state == "open"
+
+
+def test_the_mcp_tool_packs_and_refuses_mixed_modes(repo):
+    from ddflow.surfaces.mcp import Server
+
+    def call(args):
+        reply = Server(repo).handle(
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+             "params": {"name": "ddflow_verify", "arguments": args}}
+        )  # fmt: skip
+        return reply["result"]["content"][0]["text"]
+
+    _false_completion(repo)
+    assert "# Verify the completion of T1" in call({"id": "T1", "pack": True})
+    assert "one of them" in call({"id": "T1", "pack": True, "judge": True})
+    assert "one of them" in call({"id": "T1", "pack": True, "reopen": True})
+    assert "for a sweep" in call({"id": "T1", "limit": 3})
+    assert "need an id" in call({"judge": True})

@@ -202,3 +202,44 @@ def judge(repo: Path, item: str, *, agent: str = "", on_progress=None) -> O.Outc
         agent=agent,
         on_progress=on_progress,
     )
+
+
+def verify_tool(  # noqa: PLR0913 -- the tool's own argument list
+    repo: Path,
+    *,
+    id: str = "",
+    phase: str = "",
+    limit: int | None = None,
+    file_bugs: bool = False,
+    reopen: bool = False,
+    reason: str = "",
+    force: bool = False,
+    pack_: bool = False,
+    judge_: bool = False,
+    agent: str = "",
+) -> O.Outcome:
+    """The `ddflow_verify` tool: one task (check, reopen, pack, judge) or a sweep. Arguments
+    that belong to the other mode are refused, never dropped (the CLI refuses the same
+    combinations)."""
+    one = bool(id)
+    sweep_args = bool(phase) or limit is not None or file_bugs
+    one_args = reopen or bool(reason) or force or pack_ or judge_
+    if one and sweep_args:
+        return refuse_sweep_args()
+    if not one and one_args:
+        return refuse_sweep_args("reopen, reason, force, pack and judge need an id")
+    if (pack_ and judge_) or ((pack_ or judge_) and (reopen or reason or force)):
+        return refuse_sweep_args("pack or judge (one of them) takes an id and nothing else")
+    if not one:
+        return verify_sweep(
+            repo,
+            phase=phase,
+            limit=limit if limit is not None else 20,
+            file_bugs=file_bugs,
+            agent=agent,
+        )
+    if pack_:
+        return pack(repo, id, agent=agent)
+    if judge_:
+        return judge(repo, id, agent=agent)
+    return verify(repo, id, reopen=reopen, reason=reason, force=force, agent=agent)
