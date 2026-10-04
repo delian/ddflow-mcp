@@ -54,12 +54,25 @@ def project_slug(path: Path) -> str:
 
 
 def harness_memory_dir(repo: Path, *, projects_root: Path | None = None) -> Path | None:
-    """The memory directory the harness keeps for `repo`, or None when it has none."""
+    """The memory directory the harness keeps for `repo`, or None when it has none.
+
+    Both the path as given and its resolved form are tried: a checkout reached through a
+    symlink encodes differently, and reporting a store that exists as absent is the
+    "could not find shown as none" class (roborev on a7aa493).
+    """
     root = (
         Path(projects_root) if projects_root is not None else Path.home() / ".claude" / "projects"
     )
-    candidate = root / project_slug(repo) / MEMORY_DIRNAME
-    return candidate if candidate.is_dir() else None
+    seen: set[str] = set()
+    for candidate_repo in (Path(repo), Path(repo).resolve()):
+        slug = project_slug(candidate_repo)
+        if slug in seen:
+            continue
+        seen.add(slug)
+        candidate = root / slug / MEMORY_DIRNAME
+        if candidate.is_dir():
+            return candidate
+    return None
 
 
 def _slug(text: str, limit: int) -> str:
@@ -145,7 +158,12 @@ def scan(repo: Path, *, projects_root: Path | None = None) -> HarnessScan:
     """
     directory = harness_memory_dir(repo, projects_root=projects_root)
     if directory is None:
-        return HarnessScan()
+        root = (
+            Path(projects_root)
+            if projects_root is not None
+            else Path.home() / ".claude" / "projects"
+        )
+        return HarnessScan(problems=[f"looked under {root} for {project_slug(repo)}"])
     out = HarnessScan(directory=directory)
     index = directory / INDEX_NAME
     listed: set[str] = set()
@@ -164,16 +182,17 @@ def scan(repo: Path, *, projects_root: Path | None = None) -> HarnessScan:
             continue
         if found is None:
             continue
-        out.found.append(found)
         clash = idents.get(found.ident)
         if clash is not None:
             # `a_b.md` and `a-b.md` slug to one id, and the fold keeps one text per id:
-            # the second fact would vanish at apply time (rubber_duck on a86e6f43).
+            # the second fact would vanish at apply time, so it is kept out of the offer
+            # rather than shown as a remember that apply will refuse (roborev on a7aa493).
             out.problems.append(
                 f"{path.name} and {clash} yield the same id {found.ident}; rename one"
             )
-        else:
-            idents[found.ident] = path.name
+            continue
+        idents[found.ident] = path.name
+        out.found.append(found)
         if index.is_file() and path.name not in listed:
             out.problems.append(f"{path.name} is not listed in {INDEX_NAME}")
     return out
@@ -260,7 +279,9 @@ def render(scan_result: HarnessScan, kept: list[Found], duplicates: list[Duplica
     """The offer the operator reads: what would be remembered, what repeats, and what is
     wrong with the store itself."""
     if scan_result.directory is None:
-        return "no harness memory directory for this checkout; nothing to import"
+        lines = ["no harness memory directory for this checkout; nothing to import"]
+        lines += [f"  problem: {p}" for p in scan_result.problems]
+        return "\n".join(lines)
     lines = [f"harness memory: {scan_result.directory}"]
     for f in kept:
         when = f.extra.get("origin_at")
@@ -303,17 +324,22 @@ def apply(
     from . import similar
 
     cfg = cfg or Config.load(log.root)
-    if state is None:
-        state = fold(log.read_all(), strict=False)
-    memories = getattr(state, "memories", {})
-    id_text = {mid: _normalize(m.text) for mid, m in memories.items() if getattr(m, "live", True)}
-    text_forgotten = {
-        _normalize(m.text): m for m in memories.values() if not getattr(m, "live", True)
-    }
-    texts = set(id_text.values())
-    queue = similar.build(similar_records(state))
+    # The read-decide-append runs INSIDE the lock: a second onboarding run must not pass
+    # the same "already remembered" check and append the same fact (roborev on a7aa493).
+    # The fold is O(events) under the lock, which this one-shot import can afford; a hot
+    # path would not.
     out: list[str] = []
     with log.transaction():
+        if state is None:
+            state = fold(log.read_all(), strict=False)
+        memories = getattr(state, "memories", {})
+        id_text = {
+            mid: _normalize(m.text) for mid, m in memories.items() if getattr(m, "live", True)
+        }
+        forgotten_ids = {mid: m for mid, m in memories.items() if not getattr(m, "live", True)}
+        text_forgotten = {_normalize(m.text): m for m in forgotten_ids.values()}
+        texts = set(id_text.values())
+        queue = similar.build(similar_records(state))
         for f in found:
             limit = cfg.memory.max_chars
             if len(f.body) > limit:
@@ -333,11 +359,13 @@ def apply(
                         f"different text; rename {f.source} or record it by hand"
                     )
                 continue
-            if key in text_forgotten:
+            # By ID as well as by text: an edited description must not smuggle a
+            # forgotten fact back in under its own id (roborev on a7aa493).
+            if f.ident in forgotten_ids or key in text_forgotten:
+                reason = (forgotten_ids.get(f.ident) or text_forgotten[key]).forgotten
                 out.append(
-                    f"not recorded {f.ident}: this fact was forgotten "
-                    f"({text_forgotten[key].forgotten}); re-record it deliberately with "
-                    f"ddflow memory add if it is true again"
+                    f"not recorded {f.ident}: this fact was forgotten ({reason}); "
+                    f"re-record it deliberately with ddflow memory add if it is true again"
                 )
                 continue
             if key in texts:
