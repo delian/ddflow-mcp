@@ -1192,8 +1192,7 @@ def check_commit(repo: Path, cfg: Config | None = None, *, agent: str = "") -> t
     a CI job without three copies of the wording.
     """
     cfg = cfg or Config.load(repo)
-    policy = getattr(cfg, "enforce", None)
-    env_mode = getattr(policy, "environment_commits", "block") if policy else "block"
+    env_mode = cfg.enforce.environment_commits
     env_msg = environment_branch_commit(repo, cfg) if env_mode != "off" else ""
     if env_msg and env_mode != "warn":
         return 1, env_msg
