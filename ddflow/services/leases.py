@@ -517,8 +517,8 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         # points the lease at.
         now = time.time()
         lease = it.lease
-        if lease is None:
-            return False
+        if lease is None or (not lease.expired_at and not lease.expired(now)):
+            return False  # live even before any grace: no config to read
         cfg = Config.load(log.root)
         if not (lease.expired_at or lease.expired(now, cfg.lease.grace_s)):
             return False
