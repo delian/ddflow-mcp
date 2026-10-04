@@ -50,3 +50,41 @@ def test_reopening_an_open_bug_is_refused_not_silently_done(repo):
     bid = json.loads(out)["id"]
     r = _call(Server(repo), id=bid, reason="why not", reopen=True)
     assert r["_meta"]["exit"] == 3, r
+
+
+def test_a_bug_closed_as_fixed_is_reopened_too(repo):
+    run_cli(repo, "init")
+    _rc, out, _err = run_cli(
+        repo, "--json", "bug", "found", "--summary", "flaky", "--severity", "low", "--new"
+    )
+    bid = json.loads(out)["id"]
+    (repo / "tests").mkdir()
+    (repo / "tests" / "test_x.py").write_text("def test_y():\n    pass\n")
+    rc, out, err = run_cli(
+        repo, "bug", "fixed", bid, "--regression-test", "tests/test_x.py::test_y"
+    )
+    assert rc == 0, out + err
+    r = _call(Server(repo), id=bid, reason="the fix did not hold", reopen=True)
+    assert r["_meta"]["exit"] == 0, r
+    body = json.loads(r["content"][0]["text"])
+    assert body["was"] == "fixed" and "next" in body and "fix_task" in body
+    assert _bug(repo, bid)["state"] == "open"
+
+
+def test_the_mode_is_strict_and_nothing_is_dropped(repo):
+    run_cli(repo, "init")
+    _rc, out, _err = run_cli(
+        repo, "--json", "bug", "found", "--summary", "x", "--severity", "low", "--new"
+    )
+    bid = json.loads(out)["id"]
+    srv = Server(repo)
+    _call(srv, id=bid, reason="noise")
+    for bad in (
+        {"reopen": "false"},
+        {"reopen": True, "evidence": "probe"},
+    ):
+        r = _call(srv, id=bid, reason="real", **bad)
+        assert r.get("isError"), (bad, r)
+    assert _bug(repo, bid)["state"] == "invalid"
+    blank = _call(srv, id=bid, reason="", reopen=True)
+    assert blank.get("isError"), blank
