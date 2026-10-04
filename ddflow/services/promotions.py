@@ -42,7 +42,12 @@ def _ahead(repo: Path, cfg: Config, frm: str, to: str) -> int:
     a, b = FS._ref(repo, cfg, frm), FS._ref(repo, cfg, to)
     if not W.rev(repo, a) or not W.rev(repo, b):
         return -1
-    r = W.git(repo, "rev-list", "--count", "--no-merges", f"{b}..{a}")
+    # A commit of the event log alone (`[log].commit_events`, Bcd3512c891) is not work
+    # to promote: only commits that touch something outside .ddflow/events count.
+    r = W.git(
+        repo, "rev-list", "--count", "--no-merges", f"{b}..{a}", "--", ".",
+        ":(exclude).ddflow/events",
+    )  # fmt: skip
     return int(r.out) if r.ok and r.out.isdigit() else -1
 
 
