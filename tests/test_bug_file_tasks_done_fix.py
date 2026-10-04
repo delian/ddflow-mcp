@@ -72,3 +72,17 @@ def test_a_report_on_a_running_fix_task_is_still_its_fix(repo):
     seed(repo)
     out = K.bug_file_tasks(repo, agent="a")
     assert out.exit == 2, out.data
+
+
+def test_a_report_whose_own_fix_task_already_finished_is_linked_once(repo):
+    """roborev job 1475 #2: a refile that meets an existing finished `fix-<bug>` links
+    the bug to it once -- its own task now, so `verify --reopen` is the way back -- and
+    is not relinked on every run."""
+    log = seed(repo)
+    log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
+    log.append("item.completed", "fix-Brep", {"sha": "abc"})
+    log.append("item.completed", "fix-Bx", {"sha": "abc"})
+    out = K.bug_file_tasks(repo, agent="a")
+    assert out.data["linked"] == ["Brep"] and out.data["filed"] == [], out.data
+    assert state(repo).bugs["Brep"].fix_task == "fix-Brep"
+    assert K.bug_file_tasks(repo, agent="a").exit == 2
