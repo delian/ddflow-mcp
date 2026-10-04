@@ -287,6 +287,8 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
     ("ddflow_verify", "--reopen"): "B-verify-reopen-mcp (mcp.py was leased by B176)",
     ("ddflow_verify", "--reason"): "B-verify-reopen-mcp (mcp.py was leased by B176)",
     ("ddflow_verify", "--force"): "B-verify-reopen-mcp (mcp.py was leased by B176)",
+    ("ddflow_verify", "--pack"): "B-verify-reopen-mcp (mcp.py was leased by B176)",
+    ("ddflow_verify", "--judge"): "B-verify-reopen-mcp (mcp.py was leased by B176)",
     ("ddflow_list", "--kind"): "carried by `sources`: `kind` selects the viewer",
     ("ddflow_list", "--exact"): "carried by `mode`=exact",
     ("ddflow_list", "--regex"): "carried by `mode`=regex",

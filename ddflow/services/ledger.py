@@ -112,6 +112,7 @@ def build(events: Sequence[Event], item_id: str) -> dict[str, Any] | None:
             "digest": at_completion,
             "globs": list(it.globs),
             "needs": list(it.needs),
+            "body": it.body,
             "body_chars": len(it.body),
         },
         "done": {
