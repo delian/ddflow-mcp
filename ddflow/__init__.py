@@ -14,4 +14,4 @@ decided each choice.
 #: version), `surfaces/mcp.py` builds SERVER_INFO from it, and server.json is generated
 #: from server.template.json. Keep it a plain `__version__ = "X.Y.Z"` literal: hatch and
 #: scripts/render_server_json.py both read it as text.
-__version__ = "0.1.12"
+__version__ = "0.1.13"
