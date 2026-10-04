@@ -157,6 +157,7 @@ def version_cut(
         "steps": c.steps,
         "dry_run": dry_run,
         "changelog": c.changelog,
+        "version_files": c.version_files,
         "notes": c.plan.notes if c.plan else "",
         "warning": c.reason if c.ok else "",
     }
