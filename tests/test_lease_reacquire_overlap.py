@@ -83,7 +83,8 @@ def test_a_heartbeat_still_revives_a_lapsed_lease_nobody_overlaps(repo):
 def test_a_heartbeat_revives_onto_widened_globs_without_the_held_ones(repo):
     """roborev 1477 #2, answered by the catch-up: globs the ITEM gained while the lease
     lapsed are not the lease's to defend. The revival is judged on what the lease held;
-    the catch-up then withholds the path someone holds now (tests/test_heartbeat_globs.py)."""
+    the catch-up then keeps the lease on those and names the path someone holds now
+    (tests/test_heartbeat_globs.py)."""
     _lapsed_then_taken(repo)
     assert run_cli(repo, "--agent", "second", "release", "T2")[0] == 0
     log = EventLog(repo, "seed")
@@ -92,6 +93,7 @@ def test_a_heartbeat_revives_onto_widened_globs_without_the_held_ones(repo):
     log.append("task.updated", "T1", {"globs": ["src/a.py", "src/b.py"]})
     out = LC.heartbeat(repo, "T1", agent="first")
     assert out.data.get("renewed"), out.reason
+    assert "src/b.py" in out.data.get("globs_withheld", ""), out.data
     lease = fold(EventLog(repo, "r").read_all()).items["T1"].lease
     assert lease is not None and lease.globs == ["src/a.py"], lease
 
