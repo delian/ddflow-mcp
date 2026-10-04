@@ -258,11 +258,43 @@ def test_the_caller_and_the_main_checkout_are_never_candidates(repo, tmp_path):
     # From a linked worktree, the MAIN checkout is an entry like any other.
     from_wt = ON.preflight(caller_wt)
     assert not [i for i in from_wt if i.name == str(repo) or i.name == str(caller_wt)]
+    assert not [i for i in from_wt if i.kind == "branch" and i.name == "wip"]
     assert not [i for i in from_wt if i.name == "main"]
     # From a subdirectory of the primary, the primary is no candidate either.
     (repo / "sub").mkdir()
     from_sub = ON.preflight(repo / "sub")
     assert not [i for i in from_sub if i.name == "main"]
+
+
+def test_the_callers_own_merged_branch_is_not_a_leftover(repo, tmp_path):
+    """The normal state of a ddflow worktree after merge: its branch is merged and it
+    is checked out here. It must not be offered for deletion (roborev on 876f5b79)."""
+    _merged_branch(repo)
+    caller = _worktree(repo, tmp_path, "landed", "callerwt")
+    assert ON.preflight(caller) == []
+
+
+def test_an_approval_that_matches_nothing_is_refused_not_silently_ignored(repo):
+    _merged_branch(repo)
+    records = ON.apply(repo, ["lnaded"])
+    assert records == [
+        {
+            "name": "lnaded",
+            "kind": "unknown",
+            "outcome": "refused",
+            "detail": "no such leftover; nothing was matched",
+        }
+    ]
+    assert _branch_exists(repo, "landed")
+
+
+def test_a_renamed_file_is_reported_by_its_name_not_raw_porcelain(repo, tmp_path):
+    _merged_branch(repo)
+    path = _worktree(repo, tmp_path, "landed")
+    _git(path, "mv", "README.md", "docs.md")
+    item = _item(ON.preflight(repo), "worktree", str(path))
+    assert item.state == "dirty"
+    assert "docs.md" in item.detail and "->" not in item.detail
 
 
 def test_the_api_reports_nothing_as_exit_2_and_the_report_as_text(repo):
