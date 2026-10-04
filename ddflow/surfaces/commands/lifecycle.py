@@ -374,9 +374,21 @@ def cmd_merge(a, c: Ctx) -> int:
         print(f"  back-merged into {extra}", file=sys.stderr)
     if out.data.get("export_refresh"):
         print(f"  {out.data['export_refresh']['summary']}", file=sys.stderr)
+    ci = out.data.get("ci")
+    if ci:  # the base's health after the landing ([ci].on_merge)
+        said = {"passed": "passed", "failed": "FAILED", "unavailable": "could not run"}.get(
+            ci["status"], ci["status"]
+        )
+        extra = f": {', '.join(ci['failed'])}" if ci.get("failed") else ""
+        print(f"  ci on {out.data['base']}: {said}{extra}", file=sys.stderr)
+        for bug in ci.get("bugs", []):
+            task = ci.get("fix_tasks", {}).get(bug)
+            print(
+                f"    bug {bug} filed" + (f" ({task} is queued)" if task else ""), file=sys.stderr
+            )
     c.out(
         f"merged {a.id} ({out.data['sha'][:8]}) into {out.data['base']}",
-        out.body(MERGE_PAYLOAD + (("export_refresh",) if "export_refresh" in out.data else ())),
+        out.body(MERGE_PAYLOAD + tuple(k for k in ("export_refresh", "ci") if k in out.data)),
     )
     return OK
 

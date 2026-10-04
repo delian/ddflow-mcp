@@ -13,6 +13,7 @@ Exit contract of `run`: 0 every check passed, 1 a check failed (or the merge con
 
 from __future__ import annotations
 
+import hashlib
 import re
 import shlex
 import shutil
@@ -212,3 +213,31 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
         reason="" if p.returncode == 0 else f"{cmd} exited {p.returncode}",
         output_tail=out[-TAIL_CHARS:],
     )
+
+
+#: Hooks `[ci].on_merge = "fast"` leaves out of the default pre-commit command: the suites.
+FAST_SKIP = "tests,scenarios"
+ON_MERGE_MODES = ("off", "fast", "full")
+
+
+def main_command(repo: Path, cfg: Config) -> tuple[str, str]:
+    """The command that checks the base after a merge: (command, "" | why there is none).
+
+    `full` is the CI command as it stands. `fast` is the same with the test hooks skipped
+    when the command is the project's own pre-commit stage; an explicit `[ci].command` is
+    the operator's whole decision and is not rewritten, so `fast` runs it as written."""
+    if cfg.ci.on_merge == "off":
+        return "", "[ci].on_merge is off"
+    cmd, why = resolve_command(repo, cfg)
+    if not cmd or cfg.ci.on_merge != "fast" or cfg.ci.command.strip():
+        return cmd, why
+    return f"SKIP={FAST_SKIP} {cmd}", ""
+
+
+def bug_id(check: str) -> str:
+    """A stable bug id per failing check, so the same failure is one bug while it is open.
+
+    The slug is for people; the digest of the whole check id is what keeps two long ids
+    that share a prefix (pytest node ids) from being one bug."""
+    slug = re.sub(r"[^A-Za-z0-9]+", "-", check).strip("-").lower()[:30].strip("-")
+    return f"Bci-{slug}-{hashlib.sha1(check.encode()).hexdigest()[:10]}"  # nosec B324 - not security
