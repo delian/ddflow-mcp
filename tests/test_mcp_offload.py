@@ -201,7 +201,14 @@ def test_a_client_that_goes_away_does_not_lose_the_run(repo):
     try:
         _start(proc)
         _send(proc, "tools/call", _call("ddflow_gate_run", id="P1.T1", gate="unit_tests"), 2)
-        time.sleep(1.0)
+        end = time.monotonic() + DEADLINE_S
+        while not (kids := _workers(proc.pid)) and time.monotonic() < end:
+            time.sleep(0.05)
+        assert kids, "the gate is running inside the server, so it dies with it"
+        theirs = os.readlink(f"/proc/{proc.pid}/fd/2")
+        assert all(os.readlink(f"/proc/{k}/fd/2") != theirs for k in kids), (
+            "the worker writes into the client's stderr pipe, which goes with the client"
+        )
         proc.stderr.close()
         proc.kill()
         proc.wait()

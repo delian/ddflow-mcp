@@ -4110,8 +4110,9 @@ OFFLOADED = frozenset(
     }
 )
 
-#: Workers running at once. A burst beyond it is answered "busy" (exit 2) rather than
-#: started: each is a whole interpreter, and memory is how B55e649ca6e began.
+#: Workers running at once ON ONE CONNECTION. A burst beyond it is answered "busy"
+#: (exit 2) rather than started: each is a whole interpreter. Per connection, not per
+#: machine: what it bounds is one client's burst.
 MAX_WORKERS = 4
 
 
@@ -4134,12 +4135,15 @@ def _worker_stderr(repo: Path):
     import subprocess
 
     local = repo / ".ddflow" / "local"
+    log = local / "mcp-workers.log"
     try:
         if (repo / ".ddflow").is_dir():
             local.mkdir(exist_ok=True)
-            return open(local / "mcp-workers.log", "a")  # the worker owns it
-    except OSError:
-        pass
+            # Kept small: overwritten once past a megabyte rather than rotated.
+            big = log.exists() and log.stat().st_size > 1 << 20
+            return open(log, "w" if big else "a")  # the worker owns it
+    except OSError as exc:
+        print(f"ddflow mcp: worker log {log} unavailable ({exc})", file=sys.stderr)
     return subprocess.DEVNULL
 
 
