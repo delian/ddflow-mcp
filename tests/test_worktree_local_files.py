@@ -73,6 +73,23 @@ def test_a_file_already_in_the_worktree_is_never_overwritten(repo):
     assert (tree / ".roborev.toml").read_text() == "agent = 'mine'\n"
 
 
+def test_copy_local_files_report_names_each_skip_reason(repo):
+    """The reason comes back WITH the copy, so a caller reporting the outcome cannot
+    re-derive a different one (dedupe on 07bf509c)."""
+    _setup(repo)
+    tree = repo.parent / "wt6"
+    _git(repo, "worktree", "add", "-q", "-b", "u", str(tree))
+    (tree / ".roborev.toml").write_text("mine\n")  # present, never overwritten
+    (tree / "tracked.toml").unlink()  # tracked in the primary
+    report = W.copy_local_files_report(
+        repo, tree, [".roborev.toml", "tracked.toml", "missing.toml", "../outside.toml"]
+    )
+    assert report[".roborev.toml"] == W.SKIP_PRESENT
+    assert report["tracked.toml"] == W.SKIP_TRACKED
+    assert report["missing.toml"] == W.SKIP_ABSENT
+    assert report["../outside.toml"] == W.SKIP_OUTSIDE
+
+
 def test_a_dangling_symlink_in_the_worktree_is_skipped_not_written_through(repo):
     """Bug B6fb68b641e: `exists()` is False for a dangling link, so copy2 followed it and
     wrote the primary's file to whatever the link pointed at -- through the very path the

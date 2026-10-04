@@ -32,8 +32,15 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ..infra import proc as P
-from ..infra.worktree import copy_local_files, tracks_local_file
+from ..infra.worktree import (
+    SKIP_ABSENT,
+    SKIP_FAILED,
+    SKIP_OUTSIDE,
+    SKIP_PRESENT,
+    SKIP_TRACKED,
+    copy_local_files_report,
+    git,
+)
 from .adopt import SHAPE_MCP_SERVERS, Refused, get_servers
 from .claudehooks import SettingsError, _read, _write
 from .configwrite import ensure_local_dir
@@ -136,17 +143,14 @@ def enable_project_servers(
 def git_ignored(repo: Path, rel: str) -> bool | None:
     """Is `rel` ignored by git here? None when git cannot answer -- not a repo, no git."""
     try:
-        # P.run, not subprocess.run: a child that inherits this process's stdin eats the
-        # MCP JSON-RPC stream (tests/test_stdio_safety.py's ratchet).
-        done = P.run(
-            ["git", "-C", str(repo), "check-ignore", "-q", "--", rel],
-            capture_output=True,
-        )
+        # `git()` already runs through proc.P, whose stdin guard keeps a child from
+        # eating the MCP JSON-RPC stream (tests/test_stdio_safety.py's ratchet).
+        done = git(repo, "check-ignore", "-q", "--", rel, timeout=60)
     except OSError:
         return None
-    if done.returncode == 0:
+    if done.code == 0:
         return True
-    if done.returncode == 1:
+    if done.code == 1:
         return False
     return None
 
@@ -198,35 +202,32 @@ def copy_local_configs(
             "git could not say whether .ddflow/local/ is ignored (not a repository?); "
             "check before staging anything"
         )
-    # The copy itself is `infra.worktree.copy_local_files` -- the same operation a claim
-    # runs (git-ignored machine-local files from one checkout into another, never
-    # overwriting, never writing through a symlink): one implementation, not two that
-    # drift (dedupe on the branch review).
-    copied = copy_local_files(source, repo, list(names))
-    source_root = Path(source).resolve()
-    for rel in names:
-        # `rel in copied` FIRST: after the helper ran, `dst.exists()` is true for exactly
-        # the files it just copied, so a later check would report every copy as "kept".
-        if not (source / rel).is_file():
-            out.append(f"no {rel} in {source}")
-        elif rel in copied:
+    # The copy itself is `infra.worktree.copy_local_files_report` -- the same operation a
+    # claim runs (git-ignored machine-local files from one checkout into another): one
+    # implementation, and the reasons come back with it, so this cannot re-derive a
+    # different story from the one that happened (dedupe on 07bf509c).
+    report = copy_local_files_report(source, repo, list(names))
+    for rel, why in report.items():
+        if why is None:
             out.append(f"copied {rel} from {source}")
-        elif (repo / rel).exists() or (repo / rel).is_symlink():
+        elif why == SKIP_ABSENT:
+            out.append(f"no {rel} in {source}")
+        elif why == SKIP_PRESENT:
             out.append(f"kept {rel}: already present here")
-        elif not (source / rel).resolve().is_relative_to(source_root):
-            out.append(f"skipped {rel}: the source path resolves outside {source}")
-        elif tracks_local_file(source, rel):
+        elif why == SKIP_TRACKED:
             out.append(f"skipped {rel}: tracked in {source}; committed policy, not machine-local")
-        else:
-            # Every other reason the helper skips is NAMED above, so this is a copy that
-            # failed (permissions, disk). Saying "likely tracked" here cost the operator
-            # the machine's endpoints with no error (delta hunt on 8f88cc0).
+        elif why == SKIP_OUTSIDE:
+            out.append(f"skipped {rel}: the source path resolves outside {source}")
+        elif why == SKIP_FAILED:
             out.append(
                 Refused(
                     f"could not copy {rel}: the copy failed (permissions or disk?); "
                     f"nothing was written -- copy it by hand and re-run"
                 )
             )
+        else:
+            # A new SKIP_* reason must be handled here, not silently rendered as failure.
+            raise AssertionError(f"unhandled skip reason {why!r} from copy_local_files_report")
 
     present = [rel for rel in names if (repo / rel).is_file()]
     listed = _local_files(repo)
