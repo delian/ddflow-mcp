@@ -3047,9 +3047,10 @@ Four behaviours, each chosen against a specific way this goes wrong:
   it measured as *empty*.
 - **Adoption, not duplication:** an agent resuming a recovered item gets the *existing*
   worktree back, not a second one beside it.
-- **The brief leads with it.** `ddflow brief` lists, before anything new, every tree
-  holding work, every tree it COULD NOT MEASURE (treated as holding work) and every
-  RUNNING item nobody holds; clean, merged leftovers are counted in one line.
+- **The brief leads with it.** `ddflow brief` names, before anything new, the trees
+  holding work, the trees it COULD NOT MEASURE (treated as holding work) and the RUNNING
+  items nobody holds -- up to five of each, the rest counted; leftovers with nothing to
+  salvage are counted in one line.
 
 ---
 
