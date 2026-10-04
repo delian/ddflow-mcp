@@ -53,6 +53,13 @@ def project_slug(path: Path) -> str:
     return re.sub(r"[^A-Za-z0-9]", "-", str(path))
 
 
+def _projects_root(projects_root: Path | None) -> Path:
+    """Where Claude Code roots its per-project state, with the caller's override."""
+    return (
+        Path(projects_root) if projects_root is not None else Path.home() / ".claude" / "projects"
+    )
+
+
 def harness_memory_dir(repo: Path, *, projects_root: Path | None = None) -> Path | None:
     """The memory directory the harness keeps for `repo`, or None when it has none.
 
@@ -60,9 +67,7 @@ def harness_memory_dir(repo: Path, *, projects_root: Path | None = None) -> Path
     symlink encodes differently, and reporting a store that exists as absent is the
     "could not find shown as none" class (roborev on a7aa493).
     """
-    root = (
-        Path(projects_root) if projects_root is not None else Path.home() / ".claude" / "projects"
-    )
+    root = _projects_root(projects_root)
     seen: set[str] = set()
     for candidate_repo in (Path(repo), Path(repo).resolve()):
         slug = project_slug(candidate_repo)
@@ -75,7 +80,7 @@ def harness_memory_dir(repo: Path, *, projects_root: Path | None = None) -> Path
     return None
 
 
-def _slug(text: str, limit: int) -> str:
+def _id_fragment(text: str, limit: int) -> str:
     """A stable, readable id fragment; `""` only for text with no alphanumerics at all."""
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")[:limit]
 
@@ -128,9 +133,9 @@ def _note(path: Path) -> tuple[Found | None, str]:
     metadata = fm.get("metadata") if isinstance(fm.get("metadata"), dict) else {}
     name = fm.get("name") if isinstance(fm.get("name"), str) and fm.get("name") else path.stem
     modified = metadata.get("modified", "")
-    ident = f"M-harness-{_slug(path.stem, 28)}"
+    ident = f"M-harness-{_id_fragment(path.stem, 28)}"
     if ident == "M-harness-":
-        ident = f"M-harness-{_slug(name, 28)}"
+        ident = f"M-harness-{_id_fragment(name, 28)}"
     if ident == "M-harness-":
         return None, f"{path.name}: the file name yields no id"
     return (
@@ -158,11 +163,7 @@ def scan(repo: Path, *, projects_root: Path | None = None) -> HarnessScan:
     """
     directory = harness_memory_dir(repo, projects_root=projects_root)
     if directory is None:
-        root = (
-            Path(projects_root)
-            if projects_root is not None
-            else Path.home() / ".claude" / "projects"
-        )
+        root = _projects_root(projects_root)
         return HarnessScan(problems=[f"looked under {root} for {project_slug(repo)}"])
     out = HarnessScan(directory=directory)
     index = directory / INDEX_NAME
@@ -209,19 +210,6 @@ def _normalize(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
-def _hit(assessment: Any, cfg: Config) -> Any:
-    """The candidate that makes a fact a duplicate, per the rule an add uses."""
-    return next(
-        (
-            c
-            for c in assessment.candidates
-            if "identical" in c.flags
-            or (c.score >= cfg.dedupe.ask_threshold and assessment.words >= cfg.dedupe.min_words)
-        ),
-        None,
-    )
-
-
 def propose(
     repo: Path,
     *,
@@ -262,7 +250,7 @@ def dedupe(found: list[Found], state: Any, cfg: Config) -> tuple[list[Found], li
     duplicates: list[Duplicate] = []
     seen: dict[str, Found] = {}
     for f in found:
-        hit = _hit(similar.assess(index, _as_record(f), cfg), cfg)
+        hit = similar.first_duplicate(similar.assess(index, _as_record(f), cfg), cfg)
         if hit is not None:
             duplicates.append(Duplicate(f, hit.id, hit.score, "identical" in hit.flags, "queue"))
             continue
@@ -371,7 +359,7 @@ def apply(
             if key in texts:
                 out.append(f"already remembered: {f.ident} [{f.title}]")
                 continue
-            hit = _hit(similar.assess(queue, _as_record(f), cfg), cfg)
+            hit = similar.first_duplicate(similar.assess(queue, _as_record(f), cfg), cfg)
             if hit is not None and hit.id != f.ident:
                 # The approved list normally comes from dedupe; a caller passing the raw
                 # scan must not slip a near-copy past the ask an add would raise
