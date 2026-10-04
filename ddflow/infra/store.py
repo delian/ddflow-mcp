@@ -53,11 +53,9 @@ REBUILD_LOCK_TIMEOUT_S = 120.0
 #: A pre-lock ddflow's fixed-name temp index is removed only once untouched this long: an
 #: old process may still be building into it during an upgrade.
 LEGACY_TEMP_MAX_AGE_S = 3600.0
-#: The OSError numbers and SQLite messages that mean "the machine said no", not "the
+#: The OSError numbers and SQLite result codes that mean "the machine said no", not "the
 #: projection is wrong" -- the only failures `Store.ensure` answers from the log.
-_ENV_ERRNOS = frozenset(
-    {errno.ENOSPC, errno.EACCES, errno.EROFS, errno.EDQUOT, errno.EPERM, errno.EIO}
-)
+_ENV_ERRNOS = frozenset({errno.ENOSPC, errno.EACCES, errno.EROFS, errno.EDQUOT, errno.EIO})
 _ENV_SQLITE = frozenset(
     {
         sqlite3.SQLITE_BUSY,
@@ -65,7 +63,6 @@ _ENV_SQLITE = frozenset(
         sqlite3.SQLITE_IOERR,
         sqlite3.SQLITE_READONLY,
         sqlite3.SQLITE_FULL,
-        sqlite3.SQLITE_CANTOPEN,
     }
 )
 
@@ -412,7 +409,7 @@ class Store:
             # database) degrades to the log. A bug in the projection -- a bad statement,
             # a missing column, an IntegrityError, a fold error -- still propagates, so a
             # broken rebuild cannot hide behind this.
-            if not _environmental(exc):
+            if not (_environmental(exc) or self._cannot_write(exc)):
                 raise
             print(
                 f"ddflow: the index {self.path} could not be rebuilt ({exc}); "
@@ -420,6 +417,16 @@ class Store:
                 file=sys.stderr,
             )
             return fold(log.read_all(), strict=False)
+
+    def _cannot_write(self, exc: BaseException) -> bool:
+        """SQLITE_CANTOPEN counts as the environment only when the index's directory is
+        really not writable: from a wrong path it is a bug, and must surface."""
+        code = getattr(exc, "sqlite_errorcode", None)
+        return (
+            code is not None
+            and (code & 0xFF) == sqlite3.SQLITE_CANTOPEN
+            and not os.access(self.path.parent, os.W_OK)
+        )
 
     # -- search ---------------------------------------------------------------------
     def search(self, table: str, query: str, limit: int = 5) -> list[dict[str, Any]]:
