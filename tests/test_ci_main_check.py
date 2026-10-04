@@ -60,10 +60,10 @@ def test_a_failing_base_is_recorded_and_files_one_bug_and_fix_task_per_check(rep
     sha = _project(repo, bad=True)
     out = A.check_after_merge(repo, sha=sha, item="T1")
     assert out["status"] == "failed" and out["failed"] == ["ruff check"]
-    assert out["bugs"] == ["Bci-ruff-check"]
+    assert out["bugs"] == [CI.bug_id("ruff check")]
     st = _state(repo)
     assert st.ci_results[-1]["stage"] == "merge" and st.ci_results[-1]["ok"] is False
-    bug = st.bugs["Bci-ruff-check"]
+    bug = st.bugs[CI.bug_id("ruff check")]
     assert bug.open and bug.fix_task and bug.fix_task in st.items
     # the same failure on the next merge is the same bug, not a second one
     again = A.check_after_merge(repo, sha=sha, item="T2")
@@ -73,10 +73,10 @@ def test_a_failing_base_is_recorded_and_files_one_bug_and_fix_task_per_check(rep
 def test_a_check_that_fails_again_after_its_bug_was_fixed_is_a_new_bug(repo, fake_precommit):
     sha = _project(repo, bad=True)
     A.check_after_merge(repo, sha=sha)
-    EventLog(repo).append("bug.fixed", "Bci-ruff-check", {"sha": sha})
-    assert not _state(repo).bugs["Bci-ruff-check"].open
+    EventLog(repo).append("bug.fixed", CI.bug_id("ruff check"), {"sha": sha})
+    assert not _state(repo).bugs[CI.bug_id("ruff check")].open
     out = A.check_after_merge(repo, sha=sha)
-    assert out["bugs"] == [f"Bci-ruff-check-{sha[:7]}"]
+    assert out["bugs"] == [f"{CI.bug_id('ruff check')}-{sha[:7]}"]
 
 
 def test_a_healthy_base_is_recorded_and_files_nothing(repo, fake_precommit):
@@ -144,7 +144,7 @@ def test_the_merge_verb_reports_the_base_health(repo, fake_precommit):
     _git(wt, "add", "-A")
     _git(wt, "commit", "-qm", "work")
     code, out, err = run_cli(repo, "--json", "merge", "T1")
-    assert '"ci"' in out and "Bci-ruff-check" in out, (code, out[-600:], err[-300:])
+    assert '"ci"' in out and CI.bug_id("ruff check") in out, (code, out[-600:], err[-300:])
 
 
 def test_the_pre_push_hook_reports_its_outcome_to_ddflow(repo, fake_precommit, tmp_path):
@@ -167,3 +167,27 @@ def test_the_pre_push_hook_reports_its_outcome_to_ddflow(repo, fake_precommit, t
     last = _state(repo).ci_results[-1]
     assert last["stage"] == "pre-push" and not last["ok"] and last["sha"] == sha
     assert [c["id"] for c in last["checks"] if not c["ok"]] == ["ruff check"]
+
+
+def test_a_regression_that_keeps_failing_across_merges_is_one_open_bug(repo, fake_precommit):
+    sha = _project(repo, bad=True)
+    A.check_after_merge(repo, sha=sha)
+    first = CI.bug_id("ruff check")
+    EventLog(repo).append("bug.fixed", first, {"sha": sha})
+    second = A.check_after_merge(repo, sha=sha)["bugs"]
+    third = A.check_after_merge(repo, sha=sha[::-1])["bugs"]  # a later merge, still failing
+    assert len(second) == 1 and third == []
+    assert len([b for b in _state(repo).bugs.values() if b.open]) == 1
+
+
+def test_long_check_ids_with_a_shared_prefix_are_different_bugs():
+    a = "tests/test_services/test_ci.py::test_main_command_off"
+    b = "tests/test_services/test_ci.py::test_main_command_full"
+    assert CI.bug_id(a) != CI.bug_id(b) and CI.bug_id(a) == CI.bug_id(a)
+
+
+def test_main_command_says_there_is_none_when_off(repo, fake_precommit):
+    _project(repo)
+    cfg = Config.load(repo)
+    cfg.ci.on_merge = "off"
+    assert CI.main_command(repo, cfg) == ("", "[ci].on_merge is off")
