@@ -149,6 +149,7 @@ def scan(repo: Path, *, projects_root: Path | None = None) -> HarnessScan:
     out = HarnessScan(directory=directory)
     index = directory / INDEX_NAME
     listed: set[str] = set()
+    idents: dict[str, str] = {}
     if index.is_file():
         listed = set(_LINK.findall(index.read_text("utf-8", errors="replace")))
         for name in sorted(listed):
@@ -164,6 +165,15 @@ def scan(repo: Path, *, projects_root: Path | None = None) -> HarnessScan:
         if found is None:
             continue
         out.found.append(found)
+        clash = idents.get(found.ident)
+        if clash is not None:
+            # `a_b.md` and `a-b.md` slug to one id, and the fold keeps one text per id:
+            # the second fact would vanish at apply time (rubber_duck on a86e6f43).
+            out.problems.append(
+                f"{path.name} and {clash} yield the same id {found.ident}; rename one"
+            )
+        else:
+            idents[found.ident] = path.name
         if index.is_file() and path.name not in listed:
             out.problems.append(f"{path.name} is not listed in {INDEX_NAME}")
     return out
@@ -248,13 +258,29 @@ def apply(log: EventLog, found: list[Found], *, state: Any = None) -> list[str]:
     """Record the approved facts as `memory.recorded`, once each, and say what happened.
 
     Idempotent by the deterministic id and by exact text: re-running onboarding must not
-    double the queue. A fact over `[memory] max_chars` is REFUSED with what to do
-    instead, never truncated -- the rule `memory_add` enforces; the importer's 4000-byte
-    cap belongs to its own free-form store, not to a fresh import.
+    double the queue. `state` is optional -- without one this folds the log itself,
+    because a caller who forgets it must not silently double the queue (rubber_duck on
+    a86e6f43). A fact over `[memory] max_chars` is REFUSED with what to do instead,
+    never truncated -- the rule `memory_add` enforces; the importer's 4000-byte cap
+    belongs to its own free-form store, not to a fresh import.
+
+    Two facts whose file names slug to the same id are a REFUSAL, not a merge: the fold
+    keeps one text per id, so appending both would silently lose one while the report
+    called both remembered. And a fact that was FORGOTTEN is refused too: re-recording
+    clears the reason, and the operator approving a plain "remember" line does not know
+    they are reviving it.
     """
+    from ..core.model import fold
+
     cfg = Config.load(log.root)
-    live = {m.id: m for m in getattr(state, "memories", {}).values() if getattr(m, "live", True)}
-    texts = {_normalize(m.text) for m in live.values()}
+    if state is None:
+        state = fold(log.read_all(), strict=False)
+    memories = getattr(state, "memories", {})
+    id_text = {mid: _normalize(m.text) for mid, m in memories.items() if getattr(m, "live", True)}
+    text_forgotten = {
+        _normalize(m.text): m for m in memories.values() if not getattr(m, "live", True)
+    }
+    texts = set(id_text.values())
     out: list[str] = []
     with log.transaction():
         for f in found:
@@ -266,7 +292,24 @@ def apply(log: EventLog, found: list[Found], *, state: Any = None) -> list[str]:
                     f"({f.source})"
                 )
                 continue
-            if f.ident in live or _normalize(f.body) in texts:
+            key = _normalize(f.body)
+            if f.ident in id_text:
+                if id_text[f.ident] == key:
+                    out.append(f"already remembered: {f.ident} [{f.title}]")
+                else:
+                    out.append(
+                        f"not recorded {f.ident}: another fact already uses this id with "
+                        f"different text; rename {f.source} or record it by hand"
+                    )
+                continue
+            if key in text_forgotten:
+                out.append(
+                    f"not recorded {f.ident}: this fact was forgotten "
+                    f"({text_forgotten[key].forgotten}); re-record it deliberately with "
+                    f"ddflow memory add if it is true again"
+                )
+                continue
+            if key in texts:
                 out.append(f"already remembered: {f.ident} [{f.title}]")
                 continue
             log.append(
@@ -279,6 +322,7 @@ def apply(log: EventLog, found: list[Found], *, state: Any = None) -> list[str]:
                     "tags": list(IMPORTED_TAGS),
                 },
             )
-            texts.add(_normalize(f.body))
+            id_text[f.ident] = key
+            texts.add(key)
             out.append(f"remembered {f.ident}: {f.body}")
     return out

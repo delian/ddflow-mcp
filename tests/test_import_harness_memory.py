@@ -208,6 +208,47 @@ def test_apply_records_the_memory_once(repo, tmp_path):
     assert len(recorded) == 1, "a re-run must not double the queue"
 
 
+def test_two_files_with_one_id_are_flagged_and_the_second_is_refused(repo, tmp_path):
+    """`a_b.md` and `a-b.md` slug to one id and the fold keeps one text per id; the
+    report must not call both remembered (rubber_duck on a86e6f43)."""
+    a = "---\nname: a\ndescription: First fact from file a\n---\n"
+    b = "---\nname: b\ndescription: Second fact from file b\n---\n"
+    root = _memory_dir(tmp_path, repo, {"a_b.md": a, "a-b.md": b})
+    scan = H.scan(repo, projects_root=root)
+    assert any("yield the same id" in p for p in scan.problems)
+    log = EventLog(repo, "tester")
+    out = H.apply(log, scan.found)
+    assert any(a.startswith("remembered M-harness-a-b:") for a in out)
+    assert any("uses this id with different text" in a for a in out)
+    assert len([e for e in log.read_all() if e.kind == "memory.recorded"]) == 1
+
+
+def test_a_forgotten_fact_is_refused_not_silently_revived(repo, tmp_path):
+    """Re-recording clears the reason; the operator approving a plain 'remember' line
+    does not know they are reviving it (rubber_duck on a86e6f43)."""
+    root = _memory_dir(tmp_path, repo, {"use-xdist.md": FACT})
+    scan = H.scan(repo, projects_root=root)
+    state = State()
+    state.memories["M-harness-use-xdist"] = Memory(
+        id="M-harness-use-xdist", text=scan.found[0].body, forgotten="the box lost the GPUs"
+    )
+    log = EventLog(repo, "tester")
+    out = H.apply(log, scan.found, state=state)
+    assert any("was forgotten" in a for a in out)
+    assert not list(log.read_all())
+
+
+def test_apply_without_a_state_folds_the_log_itself(repo, tmp_path):
+    """A careless caller must not double the queue (rubber_duck on a86e6f43)."""
+    root = _memory_dir(tmp_path, repo, {"use-xdist.md": FACT})
+    scan = H.scan(repo, projects_root=root)
+    log = EventLog(repo, "tester")
+    H.apply(log, scan.found)
+    again = H.apply(log, scan.found)
+    assert any(a.startswith("already remembered") for a in again)
+    assert len([e for e in log.read_all() if e.kind == "memory.recorded"]) == 1
+
+
 def test_a_fact_over_the_memory_limit_is_refused_not_truncated(repo, tmp_path):
     fact = "---\nname: long\ndescription: " + "x" * 300 + "\n---\n"
     root = _memory_dir(tmp_path, repo, {"long.md": fact})
