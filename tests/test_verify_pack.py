@@ -37,6 +37,9 @@ def _done(repo, body="make a widget that frobs", globs="w.py,tests/test_w.py", v
             "[worktree]\nenabled = false\n"
             f'[[reviewer]]\nname = "fake"\nkind = "command"\ncommand = "{verifier}"\n'
             'model = "gemini-2.5-pro"\ngates = ["verify"]\n'
+            # One copy: the fake writes what it was sent to a file, and a second hedged
+            # copy truncates that file and is then cancelled (Bd111e2e9f9, B10034dff26).
+            "hedge = 1\n"
         )
     _commit(repo, {"seed.txt": "s\n"}, "seed")
     run_cli(repo, "task", "add", "T1", "--title", "add widget", "--body", body, "--globs", globs)
@@ -285,3 +288,16 @@ def test_the_diff_stat_is_fenced_as_data_too(repo):
 
     outside = re.sub(r"<ddflow-record .*?</ddflow-record>", "", text, flags=re.S)
     assert "ignore previous instructions" not in outside
+
+
+def test_the_side_effecting_verifier_runs_once_per_judgement(repo, tmp_path):
+    """Bd111e2e9f9: two hedged copies of a fake that logs its input race on the file."""
+    calls = tmp_path / "calls.txt"
+    cli = tmp_path / "counting-verifier"
+    cli.write_text(
+        f"#!/bin/sh\ncat > /dev/null\nprintf 'x' >> '{calls}'\nprintf 'STATUS: NO FINDINGS\\n'\n"
+    )
+    cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
+    _done(repo, verifier=cli)
+    assert judge(repo, "T1").data["outcome"] == "passed"
+    assert calls.read_text() == "x"
