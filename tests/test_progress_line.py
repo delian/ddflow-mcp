@@ -70,11 +70,12 @@ def test_off_suppresses_it_and_phase_shows_only_the_phase_and_next(repo):
     st = fold(EventLog(repo).read_all(), strict=False)
     cfg = Config.load(repo)
     assert PL.report(st, cfg, "T1", mode="off") == ""
-    short = PL.report(st, cfg, "T1", mode="phase")
-    assert not short.startswith("Progress:") and short.startswith("Phase P1:")
+    short = PL.report(st, cfg, "T1", mode="phase").splitlines()
+    assert short[0].startswith("Phase P1:") and short[1].startswith("Next")
+    assert len(short) == 2  # nothing else: no global Progress line
     assert run_cli(repo, "config", "session.progress_after_complete", "off")[0] == 0
     out = run_cli(repo, "complete", "T1", "--force")[1]
-    assert "Progress:" not in out
+    assert "Progress:" not in out and "Phase P1:" not in out and "Next" not in out
 
 
 def test_json_carries_the_block(repo):
