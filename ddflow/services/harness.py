@@ -30,6 +30,7 @@ import os
 import shlex
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -183,7 +184,7 @@ def copy_local_configs(repo: Path, source: Path, *, names: tuple[str, ...] = LOC
     if ignored is False:
         return [
             Refused(
-                f"{repo}/.ddflow/local/ is still NOT git-ignored after ensuring its own "
+                f"{repo}/.ddflow/local/ is still NOT git-ignored after creating its own "
                 f".gitignore (a tracked file there?); nothing was copied"
             )
         ]
@@ -208,28 +209,39 @@ def copy_local_configs(repo: Path, source: Path, *, names: tuple[str, ...] = LOC
         shutil.copy2(src, dst)
         out.append(f"copied {rel} from {source}")
 
-    missing = [rel for rel in names if (repo / rel).is_file() and rel not in _local_files(repo)]
-    if missing:
-        out.append(
-            "git-ignored, so a worktree will NOT have these unless listed: "
-            + ", ".join(missing)
-            + " -- add them to [worktree].local_files so a claim copies them in"
-        )
+    present = [rel for rel in names if (repo / rel).is_file()]
+    listed = _local_files(repo)
+    if listed is None:
+        # "could not tell" is NOT "not listed": telling the operator to add entries that
+        # may already be there is the three-valued collapse roborev flagged on e9bbfd74.
+        if present:
+            out.append(
+                "could not read [worktree].local_files; check whether these reach "
+                "worktrees: " + ", ".join(present)
+            )
+    else:
+        missing = [rel for rel in present if rel not in listed]
+        if missing:
+            out.append(
+                "git-ignored, so a worktree will NOT have these unless listed: "
+                + ", ".join(missing)
+                + " -- add them to [worktree].local_files so a claim copies them in"
+            )
     return out
 
 
-def _local_files(repo: Path) -> list[str]:
-    """`[worktree].local_files` in force here; [] when the config cannot be read.
+def _local_files(repo: Path) -> list[str] | None:
+    """`[worktree].local_files` in force here; None when the config cannot be read.
 
-    A convenience report must not fail the copy: an unreadable config is a different
-    problem, surfaced by `doctor`.
+    A convenience report must not fail the copy, but it must not guess either: None
+    keeps "could not read the config" distinct from "read it, and they are not listed".
     """
     from ..config import Config
 
     try:
         return list(Config.load(repo).worktree.local_files)
     except Exception:  # a report about worktrees must not break the copy it reports on
-        return []
+        return None
 
 
 def _resolve_path(part: str, base: Path | None) -> str:
@@ -238,9 +250,10 @@ def _resolve_path(part: str, base: Path | None) -> str:
     The MCP client starts a project-scoped entry with the project as its working
     directory; the wrapper runs from wherever the shell is, so a relative path that is
     copied verbatim points somewhere else -- a different checkout, or nowhere
-    (rubber_duck on 91c639e).
+    (rubber_duck on 91c639e). `~` expands against the HOME of whoever writes the
+    wrapper, which is the machine the harness runs on (roborev on e9bbfd74).
     """
-    path = Path(part)
+    path = Path(os.path.expanduser(part))
     if path.is_absolute():
         return str(path)
     if base is None:
@@ -257,8 +270,12 @@ def _resolve_command(command: str, base: Path | None) -> str:
     `python`, `uv` and `ddflow-mcp` are PATH lookups for the client too; resolving them
     against the project would invent a file that does not exist there.
     """
-    text = command.strip()
-    bare = not text.startswith(".") and os.sep not in text and not (os.altsep and os.altsep in text)
+    text = os.path.expanduser(command.strip())
+    bare = (
+        not text.startswith((".", "~"))
+        and os.sep not in text
+        and not (os.altsep and os.altsep in text)
+    )
     return text if bare else _resolve_path(text, base)
 
 
@@ -296,7 +313,12 @@ def pinned_cli(entry: Any, *, base: Path | None = None) -> str | None:
     """
     if not isinstance(entry, dict):
         return None
-    pin = (entry.get("env") or {}).get("PYTHONPATH")
+    env = entry.get("env")
+    if env is not None and not isinstance(env, dict):
+        # An `env` that is a list or a string used to raise AttributeError out of the
+        # caller instead of the promised ValueError (roborev on e9bbfd74).
+        raise ValueError("the MCP entry's `env` is not a JSON object")
+    pin = (env or {}).get("PYTHONPATH")
     command = entry.get("command")
     if not pin or not command:
         return None
@@ -361,7 +383,14 @@ def install_shell_command(
         )
     target = directory / "ddflow"
     text = wrapper_text(entry, base=base)
-    if target.exists() or target.is_symlink():
+    if target.is_symlink():
+        # Reading through the link found the marker, but writing would follow it and
+        # rewrite whatever it points at, not the link (roborev on e9bbfd74).
+        return Refused(
+            f"{target} is a symlink; not writing through it -- point PATH at the real "
+            f"wrapper, or remove the link and re-run"
+        )
+    if target.exists():
         try:
             existing = target.read_text("utf-8", errors="replace")
         except OSError as exc:
@@ -374,15 +403,13 @@ def install_shell_command(
         if existing == text:
             return f"the shell command is already at {target}"
         try:
-            target.write_text(text, "utf-8")
-            target.chmod(0o755)
+            _write_executable(target, text)
         except OSError as exc:
             return Refused(f"could not update {target} ({exc}); replace it by hand")
         return f"updated {target} to the pinned checkout"
     try:
         directory.mkdir(parents=True, exist_ok=True)
-        target.write_text(text, "utf-8")
-        target.chmod(0o755)
+        _write_executable(target, text)
     except OSError as exc:
         return Refused(f"could not write {target} ({exc}); create the wrapper by hand")
     note = (
@@ -391,3 +418,23 @@ def install_shell_command(
         else f'; add it to PATH first: export PATH="{directory}:$PATH"'
     )
     return f"wrote {target}: the shell runs the pinned checkout{note}"
+
+
+def _write_executable(path: Path, text: str) -> None:
+    """Atomically replace `path` with an executable script.
+
+    A temp file in the same directory plus ONE `os.replace`: a plain write truncates
+    first, and a failure midway leaves a wrapper that runs nothing. The replace also
+    never follows a symlink -- rename(2) replaces the link itself -- although the caller
+    refuses symlinks outright rather than silently severing the operator's link
+    (roborev on e9bbfd74).
+    """
+    fd, tmp_name = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        tmp.chmod(0o755)
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)

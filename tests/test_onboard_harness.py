@@ -202,6 +202,16 @@ def test_the_worktree_note_is_silent_once_local_files_lists_them(repo, tmp_path)
     assert not any("local_files" in a for a in actions)
 
 
+def test_an_unreadable_config_is_not_reported_as_not_listed(repo, tmp_path, monkeypatch):
+    """'could not read the config' must not be rendered as 'these are not listed'
+    (roborev on e9bbfd74)."""
+    source = _sibling(tmp_path, {H.LOCAL_CONFIGS[0]: "x\n"})
+    monkeypatch.setattr(H, "_local_files", lambda repo: None)
+    actions = H.copy_local_configs(repo, source)
+    assert any("could not read [worktree].local_files" in a for a in actions)
+    assert not any("add them to" in a for a in actions)
+
+
 def test_without_git_the_copy_still_happens_with_a_caveat(tmp_path):
     target = tmp_path / "target"
     target.mkdir()
@@ -289,16 +299,46 @@ def test_a_failed_refresh_is_reported_not_raised(tmp_path, monkeypatch):
     bindir = tmp_path / "bin"
     H.install_shell_command(ENTRY, bindir=bindir, path="")
     moved = {**ENTRY, "env": {"PYTHONPATH": "/opt/moved"}}
-    real = Path.write_text
 
-    def boom(self, *args, **kwargs):
-        if self.name == "ddflow":
-            raise OSError("disk full")
-        return real(self, *args, **kwargs)
+    def boom(path, text):
+        raise OSError("disk full")
 
-    monkeypatch.setattr(Path, "write_text", boom)
+    monkeypatch.setattr(H, "_write_executable", boom)
     action = H.install_shell_command(moved, bindir=bindir, path="")
     assert isinstance(action, Refused) and "could not update" in action
+
+
+def test_our_wrapper_reached_through_a_symlink_is_refused(tmp_path):
+    """Reading through a link found the marker; writing would follow it and rewrite
+    whatever it points at (roborev on e9bbfd74)."""
+    real = tmp_path / "elsewhere"
+    real.write_text(H.wrapper_text(ENTRY))
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    (bindir / "ddflow").symlink_to(real)
+    moved = {**ENTRY, "env": {"PYTHONPATH": "/opt/moved"}}
+    action = H.install_shell_command(moved, bindir=bindir, path="")
+    assert isinstance(action, Refused) and "symlink" in action
+    assert real.read_text() == H.wrapper_text(ENTRY), "the linked file was rewritten"
+    assert (bindir / "ddflow").is_symlink()
+
+
+def test_an_env_that_is_not_an_object_is_refused_not_crashed(tmp_path):
+    broken = {"command": "python", "args": ["-m", "x"], "env": ["PYTHONPATH=/x"]}
+    action = H.install_shell_command(broken, bindir=tmp_path / "bin", path="")
+    assert isinstance(action, Refused) and "env" in action
+
+
+def test_a_tilde_path_expands_against_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    entry = {
+        "command": "~/venv/bin/python",
+        "args": ["-m", "ddflow.surfaces.mcp"],
+        "env": {"PYTHONPATH": "~/src"},
+    }
+    text = H.wrapper_text(entry)
+    assert f"exec {tmp_path}/venv/bin/python -m ddflow" in text
+    assert f"PYTHONPATH={tmp_path}/src" in text
 
 
 def test_the_wrapper_runs_the_pinned_checkout_not_an_ambient_copy(tmp_path):
