@@ -97,7 +97,7 @@ def test_a_parallel_merge_interaction_is_caught_on_the_merge_result_not_the_bran
     _git(repo, "switch", "-q", "work")
     alone = CI.run(repo, Config.load(repo), base="HEAD")
     assert alone.ok, "the branch by itself is clean"
-    assert CI.run(repo, Config.load(repo), base="__no_such_branch__").status == "unavailable"
+    assert CI.run(repo, Config.load(repo), base="__no_such_branch__").status == "failed"
     merged = CI.run(repo, Config.load(repo), base=default)
     assert merged.status == "failed" and merged.merged_with == default
     assert [c.id for c in merged.checks if not c.ok] == ["no-a-with-b"]
