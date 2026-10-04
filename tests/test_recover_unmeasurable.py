@@ -101,7 +101,10 @@ def test_doctor_calls_an_unmeasurable_tree_a_problem(repo):
     log = _seed(repo, ["T1", "T2"])
     log.append("item.started", "T1", {})
     _unmeasurable(repo, "T2")
-    d = R.doctor(repo).data
+    out = R.doctor(repo)
+    # A tree that may hold work is a PROBLEM: doctor exits 1 on it, as on a measured one.
+    assert out.exit == 1, out.reason
+    d = out.data
     assert any("orphan_worktree: T2" in p for p in d["problems"]), d["problems"]
     # A RUNNING item nobody holds stays a note: `next` offers it to resume.
     assert any("stale_running: T1" in n for n in d["notes"]), d["notes"]

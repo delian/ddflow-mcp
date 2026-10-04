@@ -411,6 +411,7 @@ def recovery_band(r) -> str | None:
     return _UNMEASURED if r.salvageable is None else None
 
 
+#: The name tests/test_brief_recovery_all.py imports; one function, not a copy.
 _recovery_band = recovery_band
 
 
@@ -423,7 +424,7 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
     bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
     quiet = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
-        band = _recovery_band(r)
+        band = recovery_band(r)
         if band is not None:
             bands[band].append(r)
         else:
