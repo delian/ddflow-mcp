@@ -5,6 +5,7 @@ tests/test_dedupe_eval.py; this file pins the parts that bar cannot see."""
 from __future__ import annotations
 
 import dataclasses
+import os
 import sqlite3
 import sys
 import threading
@@ -438,6 +439,15 @@ def test_a_projection_error_is_not_swallowed_by_the_fallback(repo, log, cfg, mon
         with pytest.raises(type(bug)):
             st.ensure(log)
 
+    def real_bug(*a, **k):
+        with closing(sqlite3.connect(":memory:")) as con:
+            con.execute("select nope from missing")  # what the driver really raises
+
+    monkeypatch.setattr(st, "_build_into", real_bug)
+    with pytest.raises(sqlite3.OperationalError) as caught:
+        st.ensure(log)
+    assert caught.value.sqlite_errorcode & 0xFF == sqlite3.SQLITE_ERROR
+
 
 def test_a_full_disk_is_answered_from_the_log(repo, log, cfg, monkeypatch, capsys):
     log.append("task.added", "T1", {"title": "one thing", "body": "x"})
@@ -470,3 +480,19 @@ def test_ensure_rebuilds_over_an_unreadable_index(repo, log, cfg, junk):
     assert "T1" in st.ensure(log).items
     with similar.open_store(st) as idx:
         assert idx.ids() == {"T1"}
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes through a read-only directory")
+def test_a_read_only_index_directory_is_answered_from_the_log(repo, log, cfg, capsys):
+    """End to end, no patching: the rebuild cannot create its temp database in a
+    directory it may not write, and the read path still answers."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    st.rebuild(log)  # the lock file exists; the directory then goes read-only
+    log.append("task.added", "T2", {"title": "another", "body": "x"})
+    st.path.parent.chmod(0o555)
+    try:
+        assert {"T1", "T2"} <= set(st.ensure(log).items)
+    finally:
+        st.path.parent.chmod(0o755)
+    assert "could not be rebuilt" in capsys.readouterr().err
