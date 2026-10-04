@@ -520,6 +520,47 @@ def _reviewed_sha_check(repo: Path, cfg, it, wt: Path | None, sha: str) -> tuple
     )
 
 
+def _roborev_reviewer(
+    repo: Path, wt: Path | None, gate: str, ev: dict[str, Any], typed: str, *, skip: bool
+) -> tuple[str, str]:
+    """(the reviewer to record, a note) for a reviewer gate recorded with --reviewed-sha.
+
+    The agent roborev ENQUEUED a job for is not always the one that ran it: when it
+    fails, the daemon falls back to its backup agent -- kilo enqueued, claude-code
+    reviewed (B03437a6b45). The model the caller typed was recorded either way, so a
+    same-family reviewer passed as cross-family. roborev's job record names the agent
+    that ran; that is recorded as the reviewer (in ``ev``, as `--reviewer-model` would:
+    a same-family one is then flagged at completion, not refused here). Without roborev,
+    or without a finished review of the sha, the typed model stands, with a note and
+    ``evidence.roborev.verified = false``.
+    """
+    from ..services import roborev as RR
+
+    if skip or gate not in G.REVIEWER_GATES or not ev.get("reviewed_sha"):
+        return typed, ""
+    where = wt if wt is not None and wt.exists() else repo
+    rv, note = RR.review_of(where, str(ev["reviewed_sha"]))
+    if rv is None or not rv.reviewer:
+        # Nobody vouched for the typed model: said in the record, not only on screen.
+        why = (
+            f"roborev job {rv.job} names no agent"
+            if rv is not None
+            else note or "roborev gave no answer"
+        )
+        ev["roborev"] = {"verified": False, "why": why}
+        return typed, f"NOTE: {why}."
+    ev["roborev"] = {"verified": True, "job": rv.job, "agent": rv.agent, "model": rv.model}
+    ev["model"] = rv.reviewer
+    if not typed or typed in (rv.agent, rv.model):
+        return rv.reviewer, ""
+    ran = rv.agent + (f" ({rv.model})" if rv.model else "")
+    return rv.reviewer, (
+        f"NOTE: roborev job {rv.job} was reviewed by {ran}, not {typed!r} (its backup "
+        f"agent ran when the requested one failed?): {rv.reviewer!r} is recorded as the "
+        f"reviewer."
+    )
+
+
 def _docs_gate_export(repo: Path, cfg, ev: dict[str, Any], warning: str) -> str:
     """`[export].refresh = docs_gate`: the docs gate's export step. Regenerates and verifies
     the selected documents and records them with their body digests in ``ev``; returns the
@@ -645,6 +686,8 @@ def record(
         return O.refused("gate.record", vetted.refusal, id=item, gate=gate, outcome=result)
     ev.update(vetted.evidence)
     warning = " ".join(filter(None, [warning, vetted.note]))
+    by, note = _roborev_reviewer(repo, wt, gate, ev, evidence.model, skip=skip)
+    warning = " ".join(filter(None, [warning, note]))
 
     try:
         G.record(
@@ -656,7 +699,7 @@ def record(
             reason=reason,
             evidence=ev or None,
             gates=gates,
-            by=evidence.model,
+            by=by,
             measured=measured,
         )
     except ValueError as exc:

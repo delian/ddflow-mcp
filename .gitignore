@@ -28,3 +28,9 @@ __pycache__/
 # roborev's agent/model/reasoning (decision D-roborev-local); git carries .roborev.toml.example.
 .roborev.toml
 
+# VS Code workspace state (editor-local). A project that wants the VS Code agent
+# integration (`ddflow adopt --agents vscode` writes `.vscode/mcp.json`) must use
+# `.vscode/*` plus `!.vscode/mcp.json`: a negation cannot re-include a file while its
+# parent DIRECTORY is excluded, as the trailing slash here does.
+.vscode/
+
