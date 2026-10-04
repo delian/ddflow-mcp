@@ -91,7 +91,12 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
             inline=False,
         ),
         "",
-        f"- declared globs: {', '.join(f'`{g}`' for g in led['requirement']['globs']) or '(none)'}",
+        "- declared globs: "
+        + (
+            _data("globs", item_id, ", ".join(led["requirement"]["globs"]))
+            if led["requirement"]["globs"]
+            else "(none)"
+        ),
         f"- requirement digest `{led['requirement']['digest']}`"
         + (
             "; **the requirement was edited after completion**"
@@ -141,7 +146,8 @@ def pack(repo: Path, cfg: Config, st: State, events: Sequence[Event], item_id: s
             f"- _reconstructed after the fact: {led['backfill']['how']}_"
         )  # ours, not record text
     out += ["", f"## Mechanical findings: {rep.verdict}", ""]
-    out += [f"- [{c.status}] {c.id}: {c.detail}" for c in rep.claims]
+    # A claim's detail can echo record text (a declared path, a skip reason): fenced too.
+    out += [f"- [{c.status}] {c.id}: {_data('finding', c.id, c.detail)}" for c in rep.claims]
     out += ["", "## Your task", "", _QUESTION, ""]
     if it.reopened:
         out.append(f"_This item was reopened {len(it.reopened)} time(s) before._")
