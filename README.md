@@ -2964,6 +2964,12 @@ refuses a name that could not be a log filename — it becomes one, and refusing
 declaration time means the caller reads the reason rather than discovering it at the
 first write.
 
+`ddflow_identify` also reaches the same harness's **shell**: the name is recorded (in the
+primary checkout's `.git/ddflow-identity/`, keyed by the harness's pid and start time), and
+a CLI run below that harness that names no identity (`--agent`, `DDFLOW_AGENT`) takes it,
+so a `ddflow claim` in the shell and a `ddflow_heartbeat` on the connection are one agent,
+and so is the commit hook. Linux only; `ddflow_identify` with no name withdraws it.
+
 **If more than one agent works one tree at once, declare identity.** Everything that
 attributes work depends on it. A subagent must not call `ddflow_identify` on a shared
 connection — that renames its parent — and passes `as_agent` instead; without it, two
