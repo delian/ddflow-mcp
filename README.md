@@ -1243,6 +1243,12 @@ Gates in this project's task pipeline with no companion behind them:
   implement, rubber_duck, critic, unit_tests, bug_hunt, dedupe, merge
 ```
 
+The gap is also told to the agent, not only shown: the MCP handshake and the
+SessionStart brief (hook path, nothing probed, "not checked" stated as such) both list the
+default companions that are not wired up. To install them with the operator's consent run
+the `install-companions` prompt (MCP: `/mcp__ddflow__install-companions`; `ddflow prompts
+show install-companions` elsewhere).
+
 A companion counts as **registered** only when an entry under its id can actually launch
 something: a bare or junk table with its name does not hide a real launch registered
 elsewhere, and does not pass for one. A non-table `mcp_servers` is refused with the parser's
@@ -1327,7 +1333,7 @@ are registered with an agent or detected as installed (launching a registry entr
 merely known would download it); `--id a,b` launches exactly those. It is opt-in and
 **never on the scan path**: `ddflow companions` and the MCP handshake still launch nothing.
 
-Adding a fifth is a TOML block in `.ddflow/companions.toml`, not a patch:
+Adding another is a TOML block in `.ddflow/companions.toml`, not a patch:
 
 ```toml
 [[companion]]
