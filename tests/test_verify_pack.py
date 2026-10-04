@@ -198,3 +198,12 @@ def test_judge_refuses_a_task_with_no_requirement_text_instead_of_passing_it(rep
     out = judge(repo, "T1")
     assert out.exit == O.NOTHING and "no requirement text" in out.reason
     assert not seen.exists()  # the reviewer was never called
+
+
+def test_globs_and_mechanical_finding_details_are_fenced_as_data(repo):
+    _done(repo)
+    text = pack(repo, "T1").data["pack"]
+    globs_line = next(x for x in text.splitlines() if x.startswith("- declared globs"))
+    assert 'kind="globs"' in globs_line
+    finding_lines = [x for x in text.splitlines() if x.startswith("- [") and "] gates:" in x]
+    assert finding_lines and all('kind="finding"' in x for x in finding_lines)
