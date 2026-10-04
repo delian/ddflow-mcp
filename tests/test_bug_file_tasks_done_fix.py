@@ -135,3 +135,19 @@ def test_the_successor_closes_the_bug_on_completion(repo):
     out = LC.complete(repo, "fix-Bx-2", model="claude-opus-5",
                       regression_test="tests/test_p_regress.py::test_last_line", agent="a")  # fmt: skip
     assert out.exit == 0 and out.data["bugs_closed"] == ["Bx"], out.data
+
+
+def test_the_cli_names_the_task_a_bug_is_linked_to_and_its_state(repo):
+    """B70d80555a4: every linked bug was printed as '-> its open fix task', a finished
+    `fix-<bug>` included."""
+    log = seed(repo)
+    log.append("task.added", "fix-Brep", {"parent": "P1", "title": "f", "fixes": ["Brep"]})
+    log.append("item.completed", "fix-Brep", {"sha": "abc"})
+    log.append("item.completed", "fix-Bx", {"sha": "abc"})
+    for dry in (["--dry-run"], []):
+        code, out, err = run_cli(repo, "bug", "file-tasks", *dry, agent="a")
+        assert code == 0, out + err
+        assert "Brep -> fix-Brep (done)" in out, out
+        assert "its open fix task" not in out, out
+    st = state(repo)
+    assert st.bugs["Brep"].fix_task == "fix-Brep"
