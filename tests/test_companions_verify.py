@@ -14,6 +14,7 @@ import stat
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 from pathlib import Path
 
@@ -80,12 +81,25 @@ def _alive(pid: int) -> bool:
     return state not in ("Z", "X")
 
 
-def _wait_dead(pid: int, timeout_s: float = 5.0) -> bool:
+def _gone(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return True
+    return False
+
+
+def _wait_dead(pid: int, *, reaped: bool = False, timeout_s: float = 5.0) -> bool:
     """True once `pid` is no longer running. A SIGKILL is delivered asynchronously, so a
-    single `os.kill(pid, 0)` right after the kill can still find the process -- alive
-    or a zombie -- on a loaded runner (B90101e389c). Poll instead of sampling once."""
+    single `os.kill(pid, 0)` right after the kill can still find the process on a loaded
+    runner (B90101e389c). Poll instead of sampling once.
+
+    `reaped=True` waits for the pid to be gone outright, not merely a zombie: for OUR
+    direct child, which `verify_one` must reap. An orphaned grandchild is reaped by PID 1,
+    which may never do it, so for one a zombie counts as dead."""
+    done = _gone if reaped else (lambda p: not _alive(p))
     deadline = time.monotonic() + timeout_s
-    while _alive(pid):
+    while not done(pid):
         if time.monotonic() >= deadline:
             return False
         time.sleep(0.05)
@@ -187,19 +201,22 @@ def test_the_launched_server_does_not_outlive_the_check(tmp_path):
     body = f"import os, time\nopen({str(pidfile)!r}, 'w').write(str(os.getpid()))\ntime.sleep(60)\n"
     CO.verify_one(_companion("leak", sys.executable, _script(tmp_path, "l.py", body)), timeout_s=1)
     pid = int(pidfile.read_text())
-    assert _wait_dead(pid)
+    assert _wait_dead(pid, reaped=True)
 
 
 def test_a_killed_process_is_waited_for_not_sampled_once():
     """B90101e389c: the kill is async, so the check must poll. A SIGKILLed child that is
     not reaped yet still answers `os.kill(pid, 0)` -- the old single-sample assertion
-    fails on it, and the polling helper the leak tests now use does not."""
+    fails on it. The helper waits: it counts the zombie as dead only where a zombie is
+    all that can be asked for, and with `reaped=True` holds out until the pid is gone."""
     proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
         os.kill(proc.pid, signal.SIGKILL)
-        time.sleep(0.2)
+        assert _wait_dead(proc.pid)  # killed: a zombie now, or gone
         os.kill(proc.pid, 0)  # unreaped: the pid is still there, no ProcessLookupError
-        assert _wait_dead(proc.pid)
+        assert not _wait_dead(proc.pid, reaped=True, timeout_s=0.3)
+        threading.Timer(0.3, proc.wait).start()
+        assert _wait_dead(proc.pid, reaped=True)
     finally:
         proc.kill()
         proc.wait()
