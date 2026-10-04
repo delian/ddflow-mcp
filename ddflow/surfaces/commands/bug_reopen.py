@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 
 from ...api.bug_reopen import bug_reopen
-from ...core.model import ABANDONED, DONE
 from ...core.outcome import OK
 from ..context import Ctx
 
@@ -24,17 +23,10 @@ def cmd_bug_reopen(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
-    task, state = out.data["fix_task"], out.data["fix_task_state"]
-    if not task:
-        tail = "\nno task was filed to fix it: `ddflow bug file-tasks` files one"
-    elif state == ABANDONED:
-        tail = f"\nits fix task {task} was abandoned: the bug needs a new task to fix it"
-    elif state == DONE:
-        tail = f"\nits fix task {task} is done: `ddflow verify {task} --reopen` reopens it"
-    else:
-        tail = f"\nfix task: {task}"
     c.out(
-        f"bug {a.id} reopened (was {out.data['was']}): {out.data['reason_given']}{tail}",
-        out.body(("id", "was", "reason_given", "fix_task", "fix_task_state", "previous_fix_task")),
+        f"bug {a.id} reopened (was {out.data['was']}): {out.data['reason_given']}\n{out.data['next']}",
+        out.body(
+            ("id", "was", "reason_given", "fix_task", "fix_task_state", "previous_fix_task", "next")
+        ),
     )
     return OK

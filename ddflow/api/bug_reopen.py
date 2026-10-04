@@ -22,8 +22,8 @@ def _fix_task_after(st, bug) -> str:
     """The task that fixes the reopened bug: a task filed to fix it (its current
     `fix_task`, else its own `fix-<bug>`), an open one first. A DONE one is kept -- it is
     the bug's own fix, which did not hold, and `ddflow verify <task> --reopen` sends it
-    back to the queue; an ABANDONED one is named too, since `bug file-tasks` would link
-    straight back to it. "" when no task was filed to fix it (say, the finished task it
+    back to the queue; an ABANDONED one is named too (`_next_step` says the way out),
+    since `bug file-tasks` would link straight back to it. "" when no task was filed to fix it (say, the finished task it
     was merely reported against), so `bug file-tasks` files one."""
     mine = [
         st.items[t]
@@ -35,6 +35,22 @@ def _fix_task_after(st, bug) -> str:
             return it.id
     # Then a finished one: DONE before ABANDONED, so a fix that landed is the one named.
     return next((it.id for st_ in (DONE, ABANDONED) for it in mine if it.state == st_), "")
+
+
+def _next_step(bug: str, task: str, state: str) -> str:
+    """What to do about the reopened bug's fix, for every surface alike."""
+    if not task:
+        return "no task was filed to fix it: `ddflow bug file-tasks` files one"
+    if state == ABANDONED:
+        # Nothing revives an abandoned item, and `bug file-tasks` links straight back to
+        # a live `fix-<bug>`: the way that works is a fix under a new task, closed here.
+        return (
+            f"its fix task {task} was abandoned (nothing revives it): fix the bug under a "
+            f"new task and close it with `ddflow bug fixed {bug} --regression-test <test>`"
+        )
+    if state == DONE:
+        return f"its fix task {task} is done: `ddflow verify {task} --reopen` reopens it"
+    return f"fix task: {task}"
 
 
 def bug_reopen(repo: Path, bug: str, *, reason: str, agent: str = "") -> O.Outcome:
@@ -56,14 +72,16 @@ def bug_reopen(repo: Path, bug: str, *, reason: str, agent: str = "") -> O.Outco
         was = rec.resolution
         fix_task = _fix_task_after(st, rec)
         log.append("bug.reopened", bug, {"reason": reason, "was": was, "fix_task": fix_task})
+    state = st.items[fix_task].state if fix_task else ""
     return O.ok(
         "bug.reopened",
         id=bug,
         was=was,
         reason_given=reason,
         fix_task=fix_task,
-        fix_task_state=st.items[fix_task].state if fix_task else "",
+        fix_task_state=state,
         previous_fix_task=rec.fix_task,
+        next=_next_step(bug, fix_task, state),
     )
 
 
