@@ -240,4 +240,4 @@ def bug_id(check: str) -> str:
     The slug is for people; the digest of the whole check id is what keeps two long ids
     that share a prefix (pytest node ids) from being one bug."""
     slug = re.sub(r"[^A-Za-z0-9]+", "-", check).strip("-").lower()[:30].strip("-")
-    return f"Bci-{slug}-{hashlib.sha1(check.encode()).hexdigest()[:6]}"  # nosec B324 - not security
+    return f"Bci-{slug}-{hashlib.sha1(check.encode()).hexdigest()[:10]}"  # nosec B324 - not security

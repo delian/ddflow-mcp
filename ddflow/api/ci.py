@@ -42,11 +42,14 @@ def _record(log, stage: str, res: CI.Result, subject: str = "ci") -> None:
     )
 
 
-def file_failures(repo: Path, res: CI.Result, *, stage: str, agent: str = "") -> list[str]:
+def file_failures(
+    repo: Path, res: CI.Result, *, stage: str, agent: str = ""
+) -> tuple[list[str], dict[str, str]]:
     """A bug and its fix task per failing check, once while the bug is open (the dedupe key
-    is the check id: Bci-<check>). Returns the bug ids this call filed."""
+    is the check id: Bci-<check>). Returns the bug ids this call filed, and the fix task of each that got one."""
     _log, _cfg, st = _load(repo, agent)
     filed: list[str] = []
+    fixes: dict[str, str] = {}
     failing = [c for c in res.checks if not c.ok]
     for c in failing:
         bid = CI.bug_id(c.id)
@@ -69,7 +72,9 @@ def file_failures(repo: Path, res: CI.Result, *, stage: str, agent: str = "") ->
         )
         if out.ok:
             filed.append(bid)
-    return filed
+            if out.data.get("fix_task"):
+                fixes[bid] = out.data["fix_task"]
+    return filed, fixes
 
 
 def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str = "") -> dict:
@@ -87,11 +92,14 @@ def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str =
         return {}  # no CI command in this project: nothing to check, nothing to claim
     res = CI.run(repo, cfg, ref=sha or "HEAD", command=cmd)
     _record(log, "merge", res, item or "ci")
-    filed = [] if res.status != "failed" else file_failures(repo, res, stage="merge", agent=agent)
+    filed, fixes = (
+        ([], {}) if res.status != "failed" else file_failures(repo, res, stage="merge", agent=agent)
+    )
     return {
         "status": res.status,
         "failed": [c.id for c in res.checks if not c.ok],
         "bugs": filed,
+        "fix_tasks": fixes,
         **({"why": res.reason} if res.status != "passed" else {}),
     }
 

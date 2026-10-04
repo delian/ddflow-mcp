@@ -191,3 +191,20 @@ def test_main_command_says_there_is_none_when_off(repo, fake_precommit):
     cfg = Config.load(repo)
     cfg.ci.on_merge = "off"
     assert CI.main_command(repo, cfg) == ("", "[ci].on_merge is off")
+
+
+def test_the_merge_report_names_the_fix_task_only_when_one_was_filed(repo, fake_precommit):
+    sha = _project(repo, bad=True)
+    out = A.check_after_merge(repo, sha=sha)
+    bug = out["bugs"][0]
+    assert out["fix_tasks"][bug] == _state(repo).bugs[bug].fix_task != ""
+    (repo / ".ddflow" / "config.toml").write_text("[bugs]\nfile_task = false\n")
+    EventLog(repo).append("bug.fixed", bug, {"sha": sha})
+    again = A.check_after_merge(repo, sha=sha)
+    assert again["bugs"] and again["fix_tasks"] == {}
+
+
+def test_on_merge_is_documented():
+    from ddflow.config import KNOB_DOCS
+
+    assert KNOB_DOCS.get("ci.on_merge")
