@@ -164,15 +164,20 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
         return Result("unavailable", command=cmd, reason=f"{ref!r} is not a commit")
     named = base or cfg.ci.base
     base = named or W.default_branch(repo)
-    base_ok = bool(base) and W.git(repo, "rev-parse", "--verify", "--quiet", base).ok
-    if named and not base_ok:
-        return Result(
-            "failed",
-            command=cmd,
-            sha=sha,
-            reason=f"base {named!r} is not a commit (misconfigured [ci].base or --base?), so the merge result cannot be checked",
-        )
-    with merge_tree(repo, sha, base if base_ok else "") as (tree, failure):
+    if not W.git(repo, "rev-parse", "--verify", "--quiet", base).ok:
+        remote = f"origin/{base}"  # origin/HEAD names a branch that may exist only as a remote ref
+        if not named and W.git(repo, "rev-parse", "--verify", "--quiet", remote).ok:
+            base = remote
+        else:
+            return Result(
+                "failed" if named else "unavailable",
+                command=cmd,
+                sha=sha,
+                reason=f"base {base!r} is not a commit"
+                + (" (misconfigured [ci].base or --base?)" if named else "")
+                + ", so the merge result cannot be checked",
+            )
+    with merge_tree(repo, sha, base) as (tree, failure):
         if tree is None:
             status = "failed" if "does not merge" in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
@@ -202,7 +207,7 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
         "passed" if p.returncode == 0 else "failed",
         checks=checks,
         sha=sha,
-        merged_with=base if base_ok else "",
+        merged_with=base,
         command=cmd,
         reason="" if p.returncode == 0 else f"{cmd} exited {p.returncode}",
         output_tail=out[-TAIL_CHARS:],
