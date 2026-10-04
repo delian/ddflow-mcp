@@ -335,3 +335,18 @@ def assess(matcher: Matcher, record: Mapping[str, Any], cfg: Config) -> Assessme
     if not asked:
         return Assessment("show", out, words)
     return Assessment("ask" if dd.on_match == "ask" else "warn", out, words)
+
+
+def is_duplicate(candidate: Candidate, assessment: Assessment, cfg: Config) -> bool:
+    """The rule an add uses: an identical record, or a near match with enough content
+    words (`[dedupe]`). ONE implementation, shared by the import path and the add check,
+    so a threshold change cannot land in one and miss the other (dedupe on 5c9fc38)."""
+    dd = cfg.dedupe
+    return "identical" in candidate.flags or (
+        candidate.score >= dd.ask_threshold and assessment.words >= dd.min_words
+    )
+
+
+def first_duplicate(assessment: Assessment, cfg: Config) -> Candidate | None:
+    """The first candidate `is_duplicate` accepts, or None."""
+    return next((c for c in assessment.candidates if is_duplicate(c, assessment, cfg)), None)
