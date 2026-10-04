@@ -6,8 +6,9 @@ from pathlib import Path
 
 from ..core import outcome as O
 from ..services import ci as CI
-from . import knowledge as K
 from ._base import _load
+from ._dedupe import Answer
+from .knowledge import bug_found
 
 
 def run(
@@ -56,7 +57,7 @@ def file_failures(repo: Path, res: CI.Result, *, stage: str, agent: str = "") ->
             bid = f"{bid}-{res.sha[:7]}"
             if (st.bugs.get(bid) is not None) and st.bugs[bid].open:
                 continue
-        out = K.bug_found(
+        out = bug_found(
             repo,
             id=bid,
             title=f"{stage} CI check failed: {c.id}",
@@ -65,7 +66,7 @@ def file_failures(repo: Path, res: CI.Result, *, stage: str, agent: str = "") ->
                 f"{c.detail}\nRun `ddflow ci run` to see it."
             ),
             severity="high",
-            answer=K.DD.Answer(relation="new"),
+            answer=Answer(relation="new"),
             agent=agent,
         )
         if out.ok:
