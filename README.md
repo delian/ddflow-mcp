@@ -3056,7 +3056,10 @@ Four behaviours, each chosen against a specific way this goes wrong:
 - **The brief leads with it.** `ddflow brief` names, before anything new, the trees
   holding work, the trees it COULD NOT MEASURE (treated as holding work) and the RUNNING
   items nobody holds -- up to five of each, the rest counted; leftovers with nothing to
-  salvage are counted in one line.
+  salvage are counted in one line. `recover` (its `!!` flag and "may contain work"
+  count), `status` (`recoverable` and "may contain unsaved work") and `doctor` (a
+  PROBLEM, not a note, for a tree) count the same three, so an unmeasurable tree is never
+  reported as nothing to lose.
 
 ---
 

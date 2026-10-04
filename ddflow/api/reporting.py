@@ -13,6 +13,7 @@ from ..core.model import fold
 from ..core.plain import plain
 from ..core.tier import unknown_tier_notes
 from ..infra.log import EventLog
+from ..views.markdown import may_hold_work
 from ._base import _load
 
 
@@ -170,7 +171,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "lessons": len(st.lessons),
         "open_bugs": len(open_bugs),
         "loops": [f.__dict__ for f in findings],
-        "recoverable": [plain(r) for r in rec if r.salvageable],
+        "recoverable": [plain(r) for r in rec if may_hold_work(r)],
     }
     if st.skipped_kinds:
         data["skipped_kinds"] = dict(st.skipped_kinds)
@@ -435,7 +436,9 @@ def recover(repo: Path, *, item: str = "", apply: bool = False, agent: str = "")
 
     log, cfg, _ = _load(repo, agent)
     found = [r for r in L.sweep(log, cfg, repo, apply=apply) if not item or r.item == item]
-    salvageable = [r for r in found if r.salvageable]
+    # Every entry that may hold work, as the brief bands them: a tree git could not
+    # measure and a RUNNING item nobody holds count too (B3f8c406fea, Be0d308babd).
+    salvageable = [r for r in found if may_hold_work(r)]
     data: dict[str, Any] = {
         "found": [absolutise(repo, plain(r)) for r in found],
         "count": len(found),
@@ -753,7 +756,10 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
     for f in PR.detect(log.read_all(), st, cfg):
         (problems if f.severity == "block" else notes).append(f.render())
     for r in L.scan(log, cfg, repo):
-        (problems if r.salvageable else notes).append(f"{r.kind}: {r.item} — {r.advice}")
+        # A tree holding work or one git could not measure; a RUNNING item nobody holds
+        # stays a note, as `next` offers it to resume (B3f8c406fea).
+        tree_at_risk = may_hold_work(r) and r.kind != "stale_running"
+        (problems if tree_at_risk else notes).append(f"{r.kind}: {r.item} — {r.advice}")
 
     known = {str(W.load_path(repo, it.worktree)) for it in st.items.values() if it.worktree}
     for w in W.list_worktrees(repo):
