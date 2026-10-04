@@ -7,12 +7,13 @@ landed under two identities: the MCP heartbeat answered "no lease held", and the
 hook refused the agent's own files (Bfad021e8d9).
 
 Both kinds of process descend from the same harness: the MCP server is its child (via a
-launcher such as `uv` at most), the shell a descendant. A server restarted under the
-same harness starts with the recorded name, so it and the shell stay one agent. So the declaration is recorded
-against the harness -- the server's parent, and through any launcher up to the first
-process that is not one -- keyed by pid AND start time, so a reused pid never inherits
-it. A CLI run that names no identity (`--agent`, `DDFLOW_AGENT`) takes the record of its
-nearest ancestor that has one.
+launcher such as `uv`, or a `sh -c` wrapper), the shell a descendant. So the
+declaration is recorded against the harness -- the server's parent, and through any
+launcher up to the first process that is not one -- keyed by pid AND start time, so a
+reused pid never inherits it. A CLI run that names no identity (`--agent`,
+`DDFLOW_AGENT`) takes the record of its nearest ancestor that has one; a server
+restarted under the same harness starts with that harness's own record (`own`), so it
+and the shell stay one agent.
 
 Records live in the repository's common `.git` directory: per repository, never
 committed. Linux only (it reads /proc); elsewhere nothing is recorded and nothing is
@@ -32,10 +33,13 @@ from pathlib import Path
 #: Under the primary checkout's `.git`.
 DIR = "ddflow-identity"
 
-#: Processes that only start another: the harness is above them, not them. Never a
-#: shell: an interactive one may be the harness, or the terminal above it, and climbing
-#: past it would hand the name to every command typed there.
+#: Processes that only start another: the harness is above them, not them.
 LAUNCHERS = frozenset({"uv", "uvx", "pipx", "npx", "env"})
+
+#: Shells are launchers only when they run a command or a script (`sh -c ...`,
+#: `bash start.sh`). An INTERACTIVE one may be the harness, or the terminal above it,
+#: and climbing past it would hand the name to every command typed there.
+SHELLS = frozenset({"sh", "dash", "bash", "zsh"})
 
 _NAME = re.compile(r"[A-Za-z0-9._-]{1,64}")
 _MAX_DEPTH = 64
@@ -88,6 +92,15 @@ def _gone(key: str) -> bool:
     return st is not None and st[2] != start
 
 
+def _wrapper_shell(pid: int) -> bool:
+    """A shell running a command or script: anything but option flags after argv[0]."""
+    try:
+        argv = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[1:]
+    except OSError:
+        return False
+    return any(a == b"-c" or (a and not a.startswith(b"-")) for a in argv)
+
+
 def _harness(pid: int) -> list[str]:
     """Record keys for `pid` and, while it is a launcher, its ancestors (at most 4)."""
     keys: list[str] = []
@@ -97,7 +110,7 @@ def _harness(pid: int) -> list[str]:
             break
         comm, ppid, start = st
         keys.append(f"{pid}-{start}")
-        if comm not in LAUNCHERS:
+        if comm not in LAUNCHERS and not (comm in SHELLS and _wrapper_shell(pid)):
             break
         pid = ppid
     return keys
@@ -109,7 +122,10 @@ def declare(repo: Path | str, agent: str) -> str:
     Returns "" when it did, else why not -- which `ddflow_identify` reports, because a
     declaration the shell will not see is the original split, silently back."""
     if agent and not _NAME.fullmatch(agent):
-        return f"not recorded for shell commands: {agent!r} is not a usable agent name"
+        return (
+            f"not recorded for shell commands: {agent!r} is not a usable agent name, "
+            "so they keep any name declared before"
+        )
     d = _dir(repo)
     keys = _harness(os.getppid())
     if d is None or not keys:
@@ -128,6 +144,23 @@ def declare(repo: Path | str, agent: str) -> str:
                 f.unlink(missing_ok=True)
     except OSError as exc:
         return f"not recorded for shell commands: {exc}"
+    return ""
+
+
+def own(repo: Path | str) -> str:
+    """The record of THIS process's own harness (see `_harness`), or "": for a server
+    restarting under it. Never an outer harness's: a nested agent CLI started from
+    another agent's shell must not inherit that agent's name."""
+    d = _dir(repo)
+    if d is None or not d.is_dir():
+        return ""
+    for key in _harness(os.getppid()):
+        try:
+            name = (d / key).read_text().strip()
+        except OSError:
+            continue
+        if _NAME.fullmatch(name):
+            return name
     return ""
 
 

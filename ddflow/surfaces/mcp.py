@@ -3255,7 +3255,7 @@ class Server:
             # there, or its shell (which still reads the record) and it would split.
             from ..infra import harness_identity
 
-            self.agent = harness_identity.declared(self.repo)
+            self.agent = harness_identity.own(self.repo)
         #: Which tools `tools/list` advertises: `[mcp].tools`, read ONCE here. Start-time
         #: only -- `listChanged` is false and there is no call that widens it.
         self.tier = resolve_tier(self.repo)
