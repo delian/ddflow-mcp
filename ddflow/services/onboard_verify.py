@@ -22,6 +22,7 @@ from pathlib import Path
 
 from ..config import Config
 from ..infra import proc as P
+from ..infra import worktree as W
 from . import harness as H
 from . import legacy as L
 from . import onboard_tests as T
@@ -100,11 +101,9 @@ def _handshake(repo: Path, entry: object) -> Check:
         proc.stdin.flush()
         answer = _line(proc, _HANDSHAKE_TIMEOUT)
         if answer is None:
-            err = (proc.stderr.read() or "")[-300:] if proc.stderr else ""
+            _stop(proc)  # before ANY stderr read: a live pipe's read never returns
             return Check(
-                "mcp handshake",
-                "failed",
-                f"no initialize answer in {_HANDSHAKE_TIMEOUT}s ({err.strip()})",
+                "mcp handshake", "failed", f"no initialize answer in {_HANDSHAKE_TIMEOUT}s"
             )
         hello = json.loads(answer)
         if "result" not in hello:
@@ -148,11 +147,21 @@ def _stop(proc: subprocess.Popen) -> None:
         pass
 
 
+def _hooks_dir(repo: Path) -> Path:
+    """Where git ACTUALLY runs hooks: a linked worktree's .git is a file, and
+    core.hooksPath can point anywhere (rubber_duck on 11e2bc14)."""
+    r = W.git(repo, "rev-parse", "--git-path", "hooks")
+    if r.ok and r.out.strip():
+        path = Path(r.out.strip())
+        return path if path.is_absolute() else (repo / path).resolve()
+    return repo / ".git" / "hooks"
+
+
 def _hooks(repo: Path) -> Check:
     """Both git hooks present, executable, and carrying ddflow's invocation."""
     missing = []
     for name in ("pre-commit", "commit-msg"):
-        path = repo / ".git" / "hooks" / name
+        path = _hooks_dir(repo) / name
         if not path.is_file() or "ddflow" not in path.read_text("utf-8", errors="replace"):
             missing.append(name)
         elif not os.access(path, os.X_OK):
@@ -164,7 +173,7 @@ def _hooks(repo: Path) -> Check:
 
 def _trailer_refused(repo: Path) -> Check:
     """The commit-msg hook must REFUSE a forbidden trailer, not merely exist."""
-    hook = repo / ".git" / "hooks" / "commit-msg"
+    hook = _hooks_dir(repo) / "commit-msg"
     if not hook.is_file():
         return Check("trailer refused", "unavailable", "no commit-msg hook to probe")
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
@@ -182,22 +191,40 @@ def _trailer_refused(repo: Path) -> Check:
 
 
 def _answers(repo: Path) -> Check:
-    """`brief` answers with something on stdout; an empty brief is the failure."""
-    done = P.run(
+    """`brief` and `next` answer on stdout. Exit 2 means nothing READY for `next` (a
+    real answer with text); `brief` exiting 2 is a failure to run, never a pass."""
+    brief = P.run(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "brief"],
         capture_output=True,
         text=True,
         timeout=120,
     )
-    if done.returncode not in (0, 2):
+    if brief.returncode != 0:
         return Check(
-            "brief answers",
+            "brief/next answer",
             "failed",
-            f"brief exited {done.returncode}: {(done.stderr or '')[-200:].strip()}",
+            f"brief exited {brief.returncode}: {(brief.stderr or '')[-200:].strip()}",
         )
-    if not (done.stdout or "").strip():
-        return Check("brief answers", "failed", "brief printed nothing")
-    return Check("brief answers", "passed", f"{len(done.stdout.splitlines())} line(s) of brief")
+    if not (brief.stdout or "").strip():
+        return Check("brief/next answer", "failed", "brief printed nothing")
+    nxt = P.run(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "next"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    if nxt.returncode not in (0, 2) or not (nxt.stdout or "").strip():
+        return Check(
+            "brief/next answer",
+            "failed",
+            f"next exited {nxt.returncode}: {(nxt.stderr or '')[-200:].strip()}",
+        )
+    ready = "ready" if nxt.returncode == 0 else "nothing ready"
+    return Check(
+        "brief/next answer",
+        "passed",
+        f"brief {len(brief.stdout.splitlines())} line(s); next: {ready}",
+    )
 
 
 def _frozen(repo: Path) -> Check:
