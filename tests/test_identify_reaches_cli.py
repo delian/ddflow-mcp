@@ -242,3 +242,40 @@ def test_a_withdrawn_name_is_not_taken_by_a_restarted_server(connection):
     repo, srv = connection
     _call(srv, "ddflow_identify", agent="")
     assert Server(repo).agent == ""
+
+
+def test_a_restarted_server_reads_only_its_own_harness(repo, monkeypatch):
+    """server -> harness -> outer agent with a record: a nested agent's server must not
+    inherit the outer one's name, while its shell (`declared`) is below both."""
+    from ddflow.infra import harness_identity as H
+
+    chain = {30: ("claude", 20, "3"), 20: ("claude", 1, "2")}
+    monkeypatch.setattr(H, "_stat", chain.get)
+    monkeypatch.setattr(H.os, "getppid", lambda: 30)
+    d = repo / ".git" / H.DIR
+    d.mkdir()
+    (d / "20-2").write_text("outer\n")
+    assert H.own(repo) == ""
+    assert H.declared(repo) == "outer"
+    (d / "30-3").write_text("inner\n")
+    assert H.own(repo) == "inner"
+
+
+@pytest.mark.parametrize(
+    "argv,wrapper",
+    [
+        (b"bash\0-c\0uv run ddflow mcp\0", True),
+        (b"bash\0-lc\0x\0", True),
+        (b"sh\0start.sh\0", True),
+        (b"bash\0", False),
+        (b"-bash\0", False),
+        (b"bash\0-o\0vi\0", False),
+        (b"bash\0--rcfile\0rc\0-i\0", False),
+    ],
+)
+def test_which_shells_are_wrappers(argv, wrapper, monkeypatch):
+    from ddflow.infra import harness_identity as H
+
+    real = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda p: argv if p.name == "cmdline" else real(p))
+    assert H._wrapper_shell(1234) is wrapper

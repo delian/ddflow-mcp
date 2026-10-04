@@ -92,13 +92,27 @@ def _gone(key: str) -> bool:
     return st is not None and st[2] != start
 
 
+#: Shell options that take a value, so the word after them is not a script.
+_VALUED = frozenset({b"-o", b"+o", b"-O", b"+O", b"--rcfile", b"--init-file"})
+
+
 def _wrapper_shell(pid: int) -> bool:
-    """A shell running a command or script: anything but option flags after argv[0]."""
+    """A shell running a command (`-c`, alone or bundled as `-lc`) or a script operand."""
     try:
         argv = Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0")[1:]
     except OSError:
         return False
-    return any(a == b"-c" or (a and not a.startswith(b"-")) for a in argv)
+    skip = False
+    for a in argv:
+        if skip:
+            skip = False
+        elif a in _VALUED:
+            skip = True
+        elif a.startswith(b"-") and not a.startswith(b"--") and b"c" in a[1:]:
+            return True
+        elif a and not a.startswith((b"-", b"+")):
+            return True
+    return False
 
 
 def _harness(pid: int) -> list[str]:
