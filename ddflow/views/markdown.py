@@ -391,34 +391,40 @@ def new_reports_block(item: str, rep: dict) -> str:
 #: kind, so a run of salvageable trees cannot push a RUNNING item nobody holds, or a tree
 #: that could not be measured, off the list (rubber_duck on B20e103326b).
 _RECOVERY_SHOWN = 5
-_RECOVERY_KINDS = ("holding work", "could not be measured", "RUNNING with nobody on it")
+_HOLDING, _UNMEASURED, _UNHELD = (
+    "holding work",
+    "could not be measured",
+    "RUNNING with nobody on it",
+)
 
 
-def _recovery_rank(r) -> int | None:
-    """Where a recovery entry stands in the brief: 0 work found, 1 COULD NOT MEASURE
-    (treat as work), 2 RUNNING with nobody on it; None for a leftover with nothing to
-    salvage, which is counted rather than listed (B20e103326b)."""
+def _recovery_band(r) -> str:
+    """Which band of the brief a recovery entry is named in, in this order: a tree
+    holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
+    nobody on it; "" for a leftover with nothing to salvage, which is counted rather
+    than listed (B20e103326b)."""
+    if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
+        return _UNHELD
     if r.salvageable:
-        return 0
-    if r.salvageable is None:
-        return 1
-    return 2 if r.kind == "stale_running" else None
+        return _HOLDING
+    return _UNMEASURED if r.salvageable is None else ""
 
 
 def _brief_recovery(out: list[str], recovery: list) -> None:
-    bands: list[list] = [[] for _ in _RECOVERY_KINDS]
+    bands: dict[str, list] = {_HOLDING: [], _UNMEASURED: [], _UNHELD: []}
+    quiet = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
-        k = _recovery_rank(r)
-        if k is not None:
-            bands[k].append(r)
-    listed = sum(len(b) for b in bands)
-    quiet = len(recovery) - listed
+        band = _recovery_band(r)
+        if band:
+            bands[band].append(r)
+        else:
+            quiet += 1
     count = (
         f"{quiet} leftover(s) with nothing to salvage: `ddflow recover` lists them."
         if quiet
         else ""
     )
-    if not listed:
+    if not any(bands.values()):
         if count:
             out += [f"_{count}_", ""]
         return
@@ -429,7 +435,7 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
         "holds finished work that exists nowhere else.",
         "",
     ]
-    for what, band in zip(_RECOVERY_KINDS, bands, strict=True):
+    for what, band in bands.items():
         out += [
             f"- **{r.item}** ({r.kind}, was {r.holder}): {r.advice}" for r in band[:_RECOVERY_SHOWN]
         ]

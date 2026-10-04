@@ -103,3 +103,12 @@ def test_only_quiet_leftovers_are_one_line_without_the_alarm():
     assert "Recoverable work found" not in text and "**C1**" not in text
     assert "2 leftover(s) with nothing to salvage" in text, text
     assert _render([]) == ""
+
+
+def test_every_band_has_its_own_cap_and_label():
+    """roborev job 1453 #2."""
+    unmeasured = [_rec(f"U{i}", "orphan_worktree", None) for i in range(6)]
+    unheld = [_rec(f"S{i}", "stale_running", False) for i in range(6)]
+    text = _render([*unmeasured, *unheld])
+    assert "1 more could not be measured" in text and "1 more RUNNING with nobody" in text
+    assert "**U4**" in text and "**S4**" in text, text
