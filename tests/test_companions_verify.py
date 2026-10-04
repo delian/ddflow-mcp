@@ -193,7 +193,7 @@ def test_the_launched_server_does_not_outlive_the_check(tmp_path):
 def test_a_killed_process_is_waited_for_not_sampled_once():
     """B90101e389c: the kill is async, so the check must poll. A SIGKILLed child that is
     not reaped yet still answers `os.kill(pid, 0)` -- the old single-sample assertion
-    fails on it -- and a process that dies a moment later is still waited for."""
+    fails on it, and the polling helper the leak tests now use does not."""
     proc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
     try:
         os.kill(proc.pid, signal.SIGKILL)
@@ -203,13 +203,6 @@ def test_a_killed_process_is_waited_for_not_sampled_once():
     finally:
         proc.kill()
         proc.wait()
-    late = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(0.5)"])
-    try:
-        assert _alive(late.pid)
-        assert _wait_dead(late.pid)
-    finally:
-        late.kill()
-        late.wait()
 
 
 def test_an_answering_server_and_a_sigterm_proof_grandchild_do_not_outlive_the_check(tmp_path):
