@@ -39,7 +39,7 @@ def test_detection_requires_positive_evidence(monkeypatch):
 def test_a_sibling_worktree_root_is_relocated_inside_the_repo(as_container):
     """THE data-loss case: only the repo is bind-mounted, so `../x` lands on the
     container's ephemeral layer and is destroyed on exit with the work inside it."""
-    assert CT.default_worktree_root("../.ddflow-worktrees") == ".ddflow-worktrees"
+    assert CT.default_worktree_root("../.ddflow-worktrees") == ".ddflow/worktrees"
 
 
 def test_an_explicit_inside_root_is_left_alone(as_container):
