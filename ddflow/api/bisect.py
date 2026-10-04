@@ -30,12 +30,19 @@ def _norm(repo: Path, path: str) -> str:
     return PurePath(os.path.normpath(p)).as_posix()
 
 
+def _collection_key(path: str) -> tuple[str, ...]:
+    """Sort key giving pytest's collection order: each directory's entries are sorted by
+    name and recursed depth first, so `tests/test_a/` runs before `tests/test_a.py`
+    ('test_a' < 'test_a.py'), which a whole-path string sort gets backwards ('.' < '/')."""
+    return tuple(path.split("/"))
+
+
 def candidates_before(repo: Path, victim: str, names: list[str], glob: str) -> list[str]:
     """The files that run before `victim` in a full run, excluding the victim's own file.
 
     Named files are normalised (repo-relative, forward slashes, `./` and `..` collapsed),
     dropped if they are the victim's file, and kept in the order given. Otherwise `glob` is
-    expanded and sorted, which is how a default pytest run orders files, and only the files
+    expanded and sorted the way pytest collects (see `_collection_key`), and only the files
     that sort BEFORE the victim's are candidates: a file that runs after cannot pollute it.
     The rule is the same whether or not the glob happens to match the victim's own file.
     """
@@ -43,9 +50,11 @@ def candidates_before(repo: Path, victim: str, names: list[str], glob: str) -> l
     if names:
         return [_norm(repo, n) for n in names if _norm(repo, n) != victim_file]
     found = sorted(
-        p.relative_to(repo).as_posix() for p in repo.glob(glob or DEFAULT_GLOB) if p.is_file()
+        (p.relative_to(repo).as_posix() for p in repo.glob(glob or DEFAULT_GLOB) if p.is_file()),
+        key=_collection_key,
     )
-    return [f for f in found if f < victim_file]
+    mine = _collection_key(victim_file)
+    return [f for f in found if _collection_key(f) < mine]
 
 
 def bisect(
