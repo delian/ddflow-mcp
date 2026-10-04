@@ -2964,6 +2964,12 @@ refuses a name that could not be a log filename — it becomes one, and refusing
 declaration time means the caller reads the reason rather than discovering it at the
 first write.
 
+`ddflow_identify` also reaches the same harness's **shell**: the name is recorded (in the
+primary checkout's `.git/ddflow-identity/`, keyed by the harness's pid and start time), and
+a CLI run below that harness that names no identity (`--agent`, `DDFLOW_AGENT`) takes it,
+so a `ddflow claim` in the shell and a `ddflow_heartbeat` on the connection are one agent,
+and so is the commit hook. Linux only; `ddflow_identify` with no name withdraws it.
+
 **If more than one agent works one tree at once, declare identity.** Everything that
 attributes work depends on it. A subagent must not call `ddflow_identify` on a shared
 connection — that renames its parent — and passes `as_agent` instead; without it, two
@@ -3050,7 +3056,10 @@ Four behaviours, each chosen against a specific way this goes wrong:
 - **The brief leads with it.** `ddflow brief` names, before anything new, the trees
   holding work, the trees it COULD NOT MEASURE (treated as holding work) and the RUNNING
   items nobody holds -- up to five of each, the rest counted; leftovers with nothing to
-  salvage are counted in one line.
+  salvage are counted in one line. `recover` (its `!!` flag and "may contain work"
+  count), `status` (`recoverable` and "may contain unsaved work") and `doctor` (a
+  PROBLEM, not a note, for a tree) count the same three, so an unmeasurable tree is never
+  reported as nothing to lose.
 
 ---
 
@@ -3410,7 +3419,7 @@ bug a hand-filed `fix-<bug>` names) -- never a bug merely reported against it wi
 open and are not completion blockers: `complete` names them in a warning and, once the
 task is done, files each its own `fix-<bug>` (or links the one it has). A bug closed
 by mistake (fixed or invalid) is reopened with `ddflow bug reopen <bug> --reason "..."`
-(event `bug.reopened`): the closure stays in the history, the record reads open, and it
+(over MCP: `ddflow_bug_invalid` with `reopen=true`; event `bug.reopened`): the closure stays in the history, the record reads open, and it
 points at the task filed to fix it -- when that task is done, `ddflow verify <task>
 --reopen` sends it back to the queue -- or at none, so `bug file-tasks` files one.
 
@@ -3420,7 +3429,10 @@ for now instead of filing a twin (its completion files the bug's own, as above);
 `bug invalid`, which also removes the fix task when nobody holds it and no other open bug needs it. A log written before fix
 tasks existed is upgraded once with `ddflow bug file-tasks` (`--dry-run` lists; MCP
 `ddflow_bug_file_tasks`): every open bug without a fix task gets one, as `bug found`
-would have filed it. `[bugs] file_task = false` returns to flat bug records.
+would have filed it. It also refiles an open bug left on a finished task that will not
+fix it: a DONE task it was only reported against, or any ABANDONED task but the bug's own
+`fix-<bug>` (a done task's own bug is `verify --reopen`'s). `[bugs] file_task = false`
+returns to flat bug records.
 
 ### Listing tasks, phases, bugs and research
 

@@ -81,6 +81,8 @@ def cmd_next(a, c: Ctx) -> int:
         print("\nThese are independent — run them in parallel worktrees.")
     for b in p.blocked[:6]:
         print(f"  (blocked) {b.item}: {b.reason} — {b.detail}")
+    if p.finished:
+        print(p.close_note())
     return OK
 
 
