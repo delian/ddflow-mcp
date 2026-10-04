@@ -532,10 +532,14 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                 msg, buf = _reply_to(buf, 1)
                 if msg is not None:
                     return done(True, *_describe_answer(msg))
-            info = _exit_info(proc)
+            grace = min(_EXIT_GRACE_S, max(0.0, deadline - time.monotonic()))
+            info = _await_exit(proc, grace)
             if info is None:
-                info = _await_exit(proc, _EXIT_GRACE_S)
-            how = f"exited ({info.si_status})" if info is not None else "closed its output"
+                how = "closed its output"
+            elif info.si_code in (os.CLD_KILLED, os.CLD_DUMPED):
+                how = f"killed by signal {info.si_status}"
+            else:
+                how = f"exited ({info.si_status})"
             return done(
                 False, f"`{c.command}` {how} without answering `initialize`." + stderr_tail()
             )

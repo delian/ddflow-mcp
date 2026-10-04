@@ -258,6 +258,31 @@ def test_an_exit_code_is_read_even_when_stdout_closes_first(tmp_path):
     assert "exited (4)" in v.detail, v.detail
 
 
+LINGERING_CHILD = "import os, time\nos.close(1)\ntime.sleep(5)\n"
+SELF_SIGKILL = "import os, signal\nos.close(1)\nos.kill(os.getpid(), signal.SIGKILL)\n"
+
+
+def test_a_child_that_closes_stdout_and_stays_alive_is_not_wait_for(tmp_path):
+    """The grace is bounded: a child that closed stdout and kept running must still be
+    reported as 'closed its output' promptly, not wait out the whole timeout."""
+    v = CO.verify_one(
+        _companion("linger", sys.executable, _script(tmp_path, "li.py", LINGERING_CHILD))
+    )
+    assert v.speaks_mcp is False, v.detail
+    assert "closed its output" in v.detail, v.detail
+    assert v.elapsed_s < 10, v.elapsed_s
+
+
+def test_a_signal_killed_child_is_named_as_a_signal(tmp_path):
+    """A waitid record for a killed child holds the signal number in si_status, not an
+    exit code: report it as one, not as 'exited (9)'."""
+    v = CO.verify_one(
+        _companion("sig", sys.executable, _script(tmp_path, "sg.py", SELF_SIGKILL))
+    )
+    assert v.speaks_mcp is False, v.detail
+    assert "killed by signal 9" in v.detail, v.detail
+
+
 def test_the_companions_env_reaches_the_launched_server(tmp_path):
     body = textwrap.dedent(
         """
