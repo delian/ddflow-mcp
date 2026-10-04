@@ -165,8 +165,6 @@ LEAF_VIA: dict[tuple[str, ...], tuple[str, str]] = {
     ("session", "list"): ("ddflow_list", "session"),
     ("session", "show"): ("ddflow_list", "session"),
     ("search",): ("ddflow_list", "search"),
-    ("ci", "run"): ("ddflow_ci", "run"),
-    ("ci", "status"): ("ddflow_ci", "status"),
 }
 
 
