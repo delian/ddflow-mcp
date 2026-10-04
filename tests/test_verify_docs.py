@@ -59,5 +59,16 @@ def test_the_driver_notes_mention_verify_and_both_copies_agree():
 
 def test_the_readme_names_every_verify_flag():
     readme = (ROOT / "README.md").read_text("utf-8")
-    for flag in ("--all", "--phase", "--file-bugs", "--reopen", "--pack", "--judge"):
-        assert re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", readme), flag
+    # In the verify row itself: `--force` and `--reason` are named all over the README.
+    row = next(ln for ln in readme.splitlines() if "check a done task really is done" in ln)
+    for flag in (
+        "--all",
+        "--phase",
+        "--file-bugs",
+        "--reopen",
+        "--reason",
+        "--force",
+        "--pack",
+        "--judge",
+    ):
+        assert re.search(rf"(?<![\w-]){re.escape(flag)}(?![\w-])", row), flag
