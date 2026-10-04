@@ -34,13 +34,14 @@ def _copy(tmp_path: Path) -> Path:
     return proj
 
 
-def _probe(proj: Path) -> subprocess.CompletedProcess:
+def _probe(proj: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     return subprocess.run(
         ["bash", str(proj / "scripts" / "ci" / "build-probe.sh")],
         cwd=proj,
         capture_output=True,
         text=True,
         timeout=400,
+        env=env,
     )
 
 
@@ -72,3 +73,22 @@ def test_a_broken_console_script_fails_the_probe(tmp_path):
     r = _probe(proj)
     assert r.returncode != 0, r.stdout + r.stderr
     assert "mian" in r.stdout + r.stderr
+
+
+def test_an_ambient_pythonpath_cannot_make_the_probe_import_the_checkout(tmp_path):
+    """A PYTHONPATH pinned at the source tree (an agent gate environment sets one) put the
+    checkout ahead of the wheel: the probe reported 'probed the source tree' -- or, with
+    the file present, passed a wheel that lacked its templates (Beef9e39bc9)."""
+    import os
+
+    proj = _copy(tmp_path)
+    toml = proj / "pyproject.toml"
+    marker = '[tool.hatch.build.targets.wheel]\npackages = ["ddflow"]\n'
+    toml.write_text(
+        toml.read_text().replace(
+            marker, marker + 'exclude = ["ddflow/templates/companions.toml"]\n'
+        )
+    )
+    r = _probe(proj, {**os.environ, "PYTHONPATH": str(ROOT)})
+    assert r.returncode != 0, r.stdout + r.stderr
+    assert "missing package data" in r.stdout + r.stderr, r.stdout + r.stderr
