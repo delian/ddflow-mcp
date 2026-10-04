@@ -28,12 +28,12 @@ from __future__ import annotations
 import json
 import os
 import shlex
-import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from ..infra.worktree import copy_local_files
 from .adopt import SHAPE_MCP_SERVERS, Refused, get_servers
 from .claudehooks import SettingsError, _read, _write
 from .configwrite import ensure_local_dir
@@ -196,20 +196,25 @@ def copy_local_configs(
             "git could not say whether .ddflow/local/ is ignored (not a repository?); "
             "check before staging anything"
         )
+    # The copy itself is `infra.worktree.copy_local_files` -- the same operation a claim
+    # runs (git-ignored machine-local files from one checkout into another, never
+    # overwriting, never writing through a symlink): one implementation, not two that
+    # drift (dedupe on the branch review).
+    copied = copy_local_files(source, repo, list(names))
     for rel in names:
-        src, dst = source / rel, repo / rel
-        if not src.is_file():
+        # `rel in copied` FIRST: after the helper ran, `dst.exists()` is true for exactly
+        # the files it just copied, so a later check would report every copy as "kept".
+        if not (source / rel).is_file():
             out.append(f"no {rel} in {source}")
-            continue
-        # `is_symlink` as well as `exists`: a DANGLING link reports absent, and copy2
-        # would then follow it and write the machine's endpoints through the link, to a
-        # target the ignore check never saw (rubber_duck on 91c639e).
-        if dst.exists() or dst.is_symlink():
+        elif rel in copied:
+            out.append(f"copied {rel} from {source}")
+        elif (repo / rel).exists() or (repo / rel).is_symlink():
             out.append(f"kept {rel}: already present here")
-            continue
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
-        out.append(f"copied {rel} from {source}")
+        else:
+            out.append(
+                f"skipped {rel}: the source side is tracked or outside {source}, so it "
+                f"is committed policy, not machine-local"
+            )
 
     present = [rel for rel in names if (repo / rel).is_file()]
     listed = _local_files(repo)

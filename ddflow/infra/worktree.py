@@ -260,7 +260,10 @@ def copy_local_files(primary: Path, tree: Path, names: list[str]) -> list[str]:
     for name in names:
         src = (root / name).resolve()
         dst = Path(tree) / name
-        if not src.is_relative_to(root) or not src.is_file() or dst.exists():
+        # `is_symlink` as well as `exists`: a DANGLING link reports absent, and copy2
+        # would then follow it and write through the link, outside the tree -- to a
+        # target this function promises never to touch (bug B6fb68b641e).
+        if not src.is_relative_to(root) or not src.is_file() or dst.exists() or dst.is_symlink():
             continue
         if git(root, "ls-files", "--error-unmatch", "--", name).ok:
             continue
