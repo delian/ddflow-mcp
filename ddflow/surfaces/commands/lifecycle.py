@@ -263,10 +263,20 @@ def cmd_complete(a, c: Ctx) -> int:
         f"{a.id} completed"
         + (f" as {a.sha}" if a.sha else "")
         + (f" [FORCED over {len(blockers)} unmet condition(s)]" if blockers else "")
-        + _waiting(out.data.get("woke", []), "woke:"),
+        + _waiting(out.data.get("woke", []), "woke:")
+        + (f"\n{out.data['progress']}" if out.data.get("progress") else ""),
         out.body(
-            ("id", "sha", "independence", "forced", "coverage_gaps", "note", "woke", "bugs_closed")
-            + (("export_refresh",) if "export_refresh" in out.data else ())
+            (
+                "id",
+                "sha",
+                "independence",
+                "forced",
+                "coverage_gaps",
+                "note",
+                "woke",
+                "bugs_closed",
+                *(k for k in ("export_refresh", "progress") if k in out.data),
+            )
         ),
     )
     return OK
