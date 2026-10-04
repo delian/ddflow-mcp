@@ -328,11 +328,21 @@ def _acquire_locked(
 
         mine = list(globs if globs is not None else it.globs)
         clash = glob_clash(state, cfg, it, holder, mine, now)
-        if clash and not force:
+        # Taking over an EXPIRED lease -- the holder's own or a crashed agent's -- needs
+        # --force for the expiry alone. It must not also waive the overlap check: expiry
+        # freed those files, and a live lease granted on them since stands (B08b6e40bfb).
+        if clash and (not force or existing is not None):
             other_id, lease, pair = clash
             raise LeaseError(
                 f"{item_id} writes {pair[0]!r} which overlaps {pair[1]!r} "
-                f"held by {lease.holder} on {other_id}",
+                f"held by {lease.holder} on {other_id}"
+                + (
+                    f". {item_id}'s lease lapsed and those files were claimed since: "
+                    f"--force takes over the expired lease, not another live one: "
+                    f"{lease.holder} releases {other_id}, or you wait for it."
+                    if existing is not None
+                    else ""
+                ),
                 holder=lease.holder,
                 item=item_id,
                 alternatives=_alternatives(state, cfg, item_id, holder, now),
@@ -466,6 +476,7 @@ def _transition(
     mine: bool,
     holder: str,
     payload: Callable[[Lease], dict[str, Any]],
+    refuse: Callable[[State, Item], bool] | None = None,
 ) -> bool:
     """Append one lease-lifecycle event, under the lock, if the lease is in a fit state.
 
@@ -489,6 +500,8 @@ def _transition(
             return False
         if mine and it.lease.holder != holder:
             return False
+        if refuse is not None and refuse(state, it):
+            return False
         log.append(kind, item_id, payload(it.lease))
         return True
 
@@ -496,6 +509,22 @@ def _transition(
 def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
     """Extend MY lease. Refuses on someone else's: a renewal is a claim of possession."""
     holder = holder or log.agent_id
+
+    def lapsed_onto_a_live_claim(state: State, it: Item) -> bool:
+        # Reviving a LAPSED lease is a re-claim: expiry freed its files, and a live lease
+        # granted on them since stands, as it does against `claim` (B0cb404c94e). Judged
+        # on the globs the lease held: paths the item gained while it lapsed are the
+        # heartbeat catch-up's, which keeps the lease on its held globs and says why
+        # when any new one is taken (`globs_withheld`).
+        now = time.time()
+        lease = it.lease
+        if lease is None or (not lease.expired_at and not lease.expired(now)):
+            return False  # live even before any grace: no config to read
+        cfg = Config.load(log.root)
+        if not (lease.expired_at or lease.expired(now, cfg.lease.grace_s)):
+            return False
+        return glob_clash(state, cfg, it, holder, list(lease.globs), now) is not None
+
     ok = _transition(
         log,
         item_id,
@@ -503,10 +532,9 @@ def renew(log: EventLog, item_id: str, holder: str = "") -> bool:
         mine=True,
         holder=holder,
         payload=lambda _lease: {"at": time.time(), "holder": holder},
+        refuse=lapsed_onto_a_live_claim,
     )
     if ok:
-        from ..config import Config
-
         # A claim someone else took over on the remote is not renewed: False, as for any
         # lease we no longer hold.
         return not _remote_renew(log, Config.load(log.root), item_id, holder, time.time())

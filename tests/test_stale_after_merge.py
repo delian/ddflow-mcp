@@ -305,3 +305,22 @@ def test_without_filemode_a_symlink_replaced_by_a_file_is_a_regular_file(repo):
     (repo / "link").unlink()
     (repo / "link").write_text("now a file\n")
     _commit_all_matches(repo)
+
+
+@pytest.mark.xfail(strict=True, reason="bug Bb47a48b173: false stale note when the tree is kept")
+def test_an_untracked_file_left_in_a_kept_tree_does_not_make_the_evidence_stale(repo):
+    """Salvaged probe (/tmp/rev74e): a scratch file that never landed is not a change."""
+    assert run_cli(repo, "config", "worktree.remove_on_merge", "false")[0] == OK
+    tree = _claimed(repo)
+    (tree / "a.py").write_text("a = 1\n")
+    _git(tree, "add", "a.py")
+    _git(tree, "commit", "-qm", "T1")
+    assert run_cli(tree, "gate", "run", "T1", "unit_tests")[0] == OK
+    (tree / "scratch.txt").write_text("never committed, never landed\n")
+    code, out, err = run_cli(repo, "merge", "T1", "--allow-dirty")
+    assert code == OK, out + err
+    pass_pipeline(repo, "T1", omit=("unit_tests", "merge"))
+    code, out, err = run_cli(repo, "complete", "T1", "--model", "claude-opus-5")
+    assert code == OK, out + err
+    assert NOTE not in out + err, out + err
+    assert tree.exists()  # kept, as configured
