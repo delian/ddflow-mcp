@@ -217,7 +217,11 @@ def test_a_failed_copy_is_not_reported_as_committed_policy(repo, tmp_path, monke
     reports a refusal instead of 'tracked in the source' -- a false reason that leaves
     the machine's endpoints uncopied with no error (delta hunt on 8f88cc0)."""
     source = _sibling(tmp_path, {H.LOCAL_CONFIGS[0]: "x\n"})
-    monkeypatch.setattr(H, "copy_local_files", lambda primary, tree, names: [])
+    monkeypatch.setattr(
+        H,
+        "copy_local_files_report",
+        lambda primary, tree, names: {H.LOCAL_CONFIGS[0]: H.SKIP_FAILED},
+    )
     actions = H.copy_local_configs(repo, source)
     failed = [a for a in actions if isinstance(a, Refused)]
     assert failed and "could not copy" in failed[0]
