@@ -99,7 +99,7 @@ class WorktreeConfig:
     """Git worktree isolation for parallel agents."""
 
     enabled: bool = True
-    root: str = "../.ddflow-worktrees"
+    root: str = ".ddflow/worktrees"
     branch_prefix: str = "ddflow/"
     base_ref: str = ""  # "" = the repo's default branch, auto-detected
     merge_strategy: str = "no-ff"  # no-ff | ff-only | squash
@@ -118,7 +118,7 @@ _doc(
 _doc(
     "worktree",
     "root",
-    "Where worktrees are created, relative to the repo root. Kept OUTSIDE the repo by default so the agent's own file globs and test collection never see sibling worktrees.",
+    "Where worktrees are created, relative to the repo root. Default `.ddflow/worktrees`: inside the project for every agent and harness, so the trees are found, kept and shared in one place (decision D-worktree-home), and git-ignored (`.ddflow/.gitignore`, and a `.gitignore` the root writes into itself), a dot-directory that the default settings of pytest, ruff and ripgrep skip; a tool configured to walk dot-directories or ignore `.gitignore` needs `.ddflow/worktrees` excluded. The former default, `../.ddflow-worktrees`, still works when set; trees created there keep their recorded paths.",
 )
 _doc(
     "worktree",
