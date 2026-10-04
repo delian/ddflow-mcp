@@ -68,9 +68,11 @@ class Baseline:
 
     @property
     def green(self) -> bool:
-        return (
-            self.ran and self.exit_code == 0 and not self.failing and not self.counts.get("failed")
-        )
+        """Green means tests RAN and none failed: exit 0 with zero observed tests is not
+        a baseline (roborev on 72ee825)."""
+        passed = self.counts.get("passed", 0)
+        bad = self.counts.get("failed", 0) + self.counts.get("error", 0)
+        return self.ran and self.exit_code == 0 and passed > 0 and not bad and not self.failing
 
 
 @dataclass(frozen=True)
@@ -220,7 +222,7 @@ def _run_bounded(command: str, cwd: Path, timeout: int) -> tuple[int | None, str
     proc = P.popen(
         command,
         cwd=cwd,
-        shell=True,
+        shell=True,  # nosec B604: the command IS a configured shell line, by design
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
