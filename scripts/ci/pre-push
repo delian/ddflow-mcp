@@ -56,7 +56,19 @@ while read -r local_ref local_sha _remote_ref remote_sha; do
     tree=$(mktemp -d "${TMPDIR:-/tmp}/ddflow-prepush.XXXXXX")
     git worktree add --quiet --detach "$tree" "$local_sha" </dev/null
     echo "pre-push: checking $local_ref at ${local_sha:0:12} in a scratch worktree"
-    (cd "$tree" && pre-commit run --hook-stage pre-push "${range[@]}" </dev/null) || status=1
+    report=$(mktemp "${TMPDIR:-/tmp}/ddflow-prepush-report.XXXXXX")
+    result=passed
+    set +e
+    (cd "$tree" && pre-commit run --hook-stage pre-push "${range[@]}" </dev/null 2>&1) | tee "$report"
+    rc=${PIPESTATUS[0]}
+    set -e
+    if [ "$rc" -ne 0 ]; then result=failed; status=1; fi
+    # Tell ddflow how it went, so a trigger can read a failed push (best effort: a project
+    # without ddflow, or a log that cannot be written, must not change the push's verdict).
+    if command -v ddflow >/dev/null 2>&1; then
+        ddflow ci record --stage pre-push --result "$result" --sha "$local_sha" --report "$report" </dev/null >/dev/null 2>&1 || true
+    fi
+    rm -f "$report"
     cleanup
     tree=""
 done
