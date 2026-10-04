@@ -217,6 +217,5 @@ def test_the_shell_spawn_carries_its_bandit_justification():
 
     The gate's own `shell=True` spawn failed `bandit -ll` on main (B7c31db560d)."""
     src = (Path(__file__).resolve().parents[1] / "ddflow/services/ci.py").read_text("utf-8")
-    spawn = src[src.index("P.run(") :].split("\n")
-    window = "\n".join(spawn[: spawn.index(next(ln for ln in spawn if "shell=True" in ln)) + 1])
-    assert "nosec B604" in window, "shell=True needs `# nosec B604` + why on the P.run( line"
+    call = next(ln for ln in src.splitlines() if "P.run(" in ln)  # bandit keys on this line
+    assert "nosec B604" in call, "the P.run( line needs `# nosec B604` + why"
