@@ -151,3 +151,18 @@ def test_the_cli_names_the_task_a_bug_is_linked_to_and_its_state(repo):
         assert "its open fix task" not in out, out
     st = state(repo)
     assert st.bugs["Brep"].fix_task == "fix-Brep"
+
+
+def test_the_links_name_an_open_fix_task_too(repo):
+    """roborev 1508 #3: a report against an OPEN fix task links to it, and says open."""
+    run_cli(repo, "init")
+    log = EventLog(repo, "seed")
+    log.append("phase.added", "P1", {"title": "Phase one"})
+    log.append("task.added", "fix-Bx",
+               {"parent": "P1", "title": "f", "fixes": ["Bx"], "tags": ["bugfix"]})  # fmt: skip
+    log.append("bug.found", "Bx", {"summary": "s", "item": "", "fix_task": "fix-Bx"})
+    log.append("bug.found", "Brep", {"summary": "r", "item": "fix-Bx"})  # no link yet
+    out = K.bug_file_tasks(repo, dry_run=True, agent="a")
+    assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data
+    out = K.bug_file_tasks(repo, agent="a")
+    assert out.data["links"] == {"Brep": {"task": "fix-Bx", "state": "open"}}, out.data

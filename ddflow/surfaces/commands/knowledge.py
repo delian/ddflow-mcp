@@ -346,13 +346,8 @@ def cmd_bug(a, c: Ctx) -> int:
         would = "would file" if a.dry_run else "filed"
         lines = [f"{would} {len(out.data['filed'])} fix task(s), linked {len(out.data['linked'])}"]
         lines += [f"  {b} -> {t}" for b, t in out.data["tasks"].items()]
-        links = out.data.get("links", {})
-        lines += [
-            f"  {b} -> {links[b]['task']} ({links[b]['state'] or 'unknown'})"
-            if b in links
-            else f"  {b} -> its fix task"
-            for b in out.data["linked"]
-        ]
+        links = out.data["links"]
+        lines += [f"  {b} -> {links[b]['task']} ({links[b]['state']})" for b in out.data["linked"]]
         c.out("\n".join(lines), out.body(("filed", "linked", "tasks", "dry_run")))
         return OK
     if a.bug_cmd == "invalid":

@@ -859,9 +859,10 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
 
 
 def _link(st, task: str) -> dict[str, str]:
-    """The task a bug was linked to, with its state (open, running, done, ...)."""
+    """The task a bug was linked to, with its state (open, running, done, ...); "missing"
+    should it not be in the queue, which a link is only made to when it is."""
     it = st.items.get(task)
-    return {"task": task, "state": it.state if it is not None else ""}
+    return {"task": task, "state": it.state if it is not None and not it.removed else "missing"}
 
 
 def _bug_fields_problem(scope: str, severity: str, globs: str) -> str:
