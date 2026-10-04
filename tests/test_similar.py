@@ -5,8 +5,12 @@ tests/test_dedupe_eval.py; this file pins the parts that bar cannot see."""
 from __future__ import annotations
 
 import dataclasses
+import os
 import sqlite3
 import sys
+import threading
+import time
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -354,3 +358,178 @@ def test_store_and_memory_agree_past_fifty_candidates(tmp_path):
     with similar.StoreIndex(db) as disk:
         got = disk.query(q)
     assert len(got) == 300 and got == similar.build(recs).query(q)
+
+
+def test_concurrent_rebuilds_neither_traceback_nor_leave_a_broken_index(repo, log, cfg):
+    """Bcdfb199cc0: parallel rebuilds shared ONE temp path and no lock, so one unlinked or
+    published the other's half-built file (FileNotFoundError, `no such table: meta`)."""
+    for i in range(40):
+        log.append("task.added", f"T{i}", {"title": f"thing {i}", "body": "about claims"})
+    errors: list[BaseException] = []
+    barrier = threading.Barrier(6)
+
+    def run() -> None:
+        try:
+            barrier.wait()
+            for _ in range(3):
+                Store(repo, cfg).rebuild(log)
+        except BaseException as exc:  # the assertion is that none happen
+            errors.append(exc)
+
+    threads = [threading.Thread(target=run) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == []
+    st = Store(repo, cfg)
+    with similar.open_store(st) as idx:
+        assert len(idx.ids()) == 40
+    leftovers = [p.name for p in st.path.parent.iterdir() if "rebuilding" in p.name]
+    assert leftovers == []
+
+
+def test_ensure_answers_from_the_log_while_another_rebuild_holds_the_lock(
+    repo, log, cfg, monkeypatch, capsys
+):
+    """A read path answers from the log when the index cannot be rebuilt in time (here:
+    another rebuild holds the lock past the timeout): the index is a cache."""
+    from ddflow.infra.log import _flock
+
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    monkeypatch.setattr(store_mod, "REBUILD_LOCK_TIMEOUT_S", 0.1)
+    held = threading.Event()
+    release = threading.Event()
+
+    def holder() -> None:
+        with _flock(st.lock_path, 5):
+            held.set()
+            release.wait(10)
+
+    t = threading.Thread(target=holder)
+    t.start()
+    try:
+        assert held.wait(5)
+        state = st.ensure(log)
+    finally:
+        release.set()
+        t.join()
+    assert "T1" in state.items
+    assert "could not be rebuilt" in capsys.readouterr().err
+    assert not st.path.exists()  # nothing was half-published either
+
+
+def test_a_projection_error_is_not_swallowed_by_the_fallback(repo, log, cfg, monkeypatch):
+    """Only the environment (lock timeout, OSError, OperationalError) degrades to the log;
+    a bug in the rebuild still surfaces."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+
+    for bug in (
+        sqlite3.IntegrityError("a projection bug"),
+        sqlite3.OperationalError("no such column: x"),
+        sqlite3.OperationalError("no such column: full_text"),  # names a word, not a disk
+        FileNotFoundError(2, "No such file or directory"),
+    ):
+
+        def boom(*a, _bug=bug, **k):
+            raise _bug
+
+        monkeypatch.setattr(st, "_build_into", boom)
+        with pytest.raises(type(bug)):
+            st.ensure(log)
+
+    def real_bug(*a, **k):
+        with closing(sqlite3.connect(":memory:")) as con:
+            con.execute("select nope from missing")  # what the driver really raises
+
+    monkeypatch.setattr(st, "_build_into", real_bug)
+    with pytest.raises(sqlite3.OperationalError) as caught:
+        st.ensure(log)
+    assert caught.value.sqlite_errorcode & 0xFF == sqlite3.SQLITE_ERROR
+
+
+def test_a_full_disk_is_answered_from_the_log(repo, log, cfg, monkeypatch, capsys):
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    full = sqlite3.OperationalError("database or disk is full")
+    full.sqlite_errorcode = sqlite3.SQLITE_FULL  # what sqlite3 sets on a real one
+    for env in (full, OSError(28, "No space left on device")):
+
+        def boom(*a, _env=env, **k):
+            raise _env
+
+        monkeypatch.setattr(st, "_build_into", boom)
+        assert "T1" in st.ensure(log).items
+    assert capsys.readouterr().err.count("could not be rebuilt") == 2
+
+
+@pytest.mark.parametrize("junk", ["schema-less", "garbage"])
+def test_ensure_rebuilds_over_an_unreadable_index(repo, log, cfg, junk):
+    """An index that is not a database, or has no `meta` table, reads as stale (`stale()`
+    catches `sqlite3.DatabaseError`, the parent of NOTADB, CORRUPT and OperationalError),
+    so both the read path's first check and the one under the lock rebuild over it."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    st.path.parent.mkdir(parents=True, exist_ok=True)
+    if junk == "garbage":
+        st.path.write_bytes(b"not a database " * 100)
+    else:
+        with closing(sqlite3.connect(st.path)) as con:
+            con.execute("create table other(x)")
+    assert "T1" in st.ensure(log).items
+    with similar.open_store(st) as idx:
+        assert idx.ids() == {"T1"}
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root writes through a read-only directory")
+def test_a_read_only_index_directory_is_answered_from_the_log(repo, log, cfg, capsys):
+    """End to end, no patching: the rebuild cannot create its temp database in a
+    directory it may not write, and the read path still answers."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    st.rebuild(log)  # the lock file exists; the directory then goes read-only
+    log.append("task.added", "T2", {"title": "another", "body": "x"})
+    st.path.parent.chmod(0o555)
+    try:
+        assert {"T1", "T2"} <= set(st.ensure(log).items)
+    finally:
+        st.path.parent.chmod(0o755)
+    assert "could not be rebuilt" in capsys.readouterr().err
+
+
+def test_cantopen_in_a_writable_directory_is_a_bug_not_the_environment(repo, log, cfg):
+    """A CANTOPEN from a wrong path (here a directory that does not exist) while the
+    index directory is writable must surface: only an unwritable directory degrades."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+
+    def wrong_path(*a, **k):
+        sqlite3.connect(st.path.parent / "no-such-dir" / "x.db")
+
+    st.path.parent.mkdir(parents=True, exist_ok=True)
+    st._build_into = wrong_path
+    with pytest.raises(sqlite3.OperationalError) as caught:
+        st.ensure(log)
+    assert caught.value.sqlite_errorcode == sqlite3.SQLITE_CANTOPEN
+
+
+def test_a_live_rebuild_temp_is_never_removed_only_a_stale_one(repo, log, cfg):
+    """rubber-duck finding: the cleanup used to unlink every `index.db-rebuilding*`
+    unconditionally, trusting the advisory lock; a fresh temp may be another rebuild's."""
+    log.append("task.added", "T1", {"title": "one thing", "body": "x"})
+    st = Store(repo, cfg)
+    st.path.parent.mkdir(parents=True, exist_ok=True)
+    live = st.path.with_name("index.db-rebuilding.1.live")
+    legacy_live = st.path.with_name("index.rebuilding")
+    dead = st.path.with_name("index.db-rebuilding.2.dead")
+    legacy_dead = st.path.with_name("index.rebuilding-old")
+    for p in (live, legacy_live, dead, legacy_dead):
+        p.write_bytes(b"x")
+    old = time.time() - store_mod.REBUILD_TEMP_MAX_AGE_S - 60
+    for p in (dead, legacy_dead):
+        os.utime(p, (old, old))
+    st.rebuild(log)
+    assert live.exists() and legacy_live.exists()
+    assert not dead.exists() and not legacy_dead.exists()
