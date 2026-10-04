@@ -94,6 +94,7 @@ def test_a_plain_claim_after_apply_says_the_expiry_is_recorded_and_force_is_safe
     flat = " ".join(out.reason.split())
     assert "recorded" in flat and "nothing to salvage" in flat, flat
     assert "ddflow claim T1 --force" in flat, flat
+    assert "safe as of that sweep" in flat, "the measurement is dated, not current: " + flat
     assert "Run `ddflow recover" not in flat, "recover already ran: " + flat
     assert "wait --item" not in flat, flat
 
