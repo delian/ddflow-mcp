@@ -398,16 +398,16 @@ _HOLDING, _UNMEASURED, _UNHELD = (
 )
 
 
-def _recovery_band(r) -> str:
+def _recovery_band(r) -> str | None:
     """Which band of the brief a recovery entry is named in, in this order: a tree
     holding work, one that COULD NOT be measured (treat as work), an item RUNNING with
-    nobody on it; "" for a leftover with nothing to salvage, which is counted rather
+    nobody on it; None for a leftover with nothing to salvage, which is counted rather
     than listed (B20e103326b)."""
     if r.kind == "stale_running":  # never measured: its `salvageable` says nothing
         return _UNHELD
     if r.salvageable:
         return _HOLDING
-    return _UNMEASURED if r.salvageable is None else ""
+    return _UNMEASURED if r.salvageable is None else None
 
 
 def _brief_recovery(out: list[str], recovery: list) -> None:
@@ -415,7 +415,7 @@ def _brief_recovery(out: list[str], recovery: list) -> None:
     quiet = 0
     for r in sorted(recovery, key=lambda r: (r.kind, r.item)):
         band = _recovery_band(r)
-        if band:
+        if band is not None:
             bands[band].append(r)
         else:
             quiet += 1
