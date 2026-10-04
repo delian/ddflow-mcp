@@ -7,6 +7,9 @@
 #
 # Run by CI (quality job) and by the pre-push hook, so the two cannot drift.
 set -euo pipefail
+# Hermetic: an ambient PYTHONPATH (an agent gate environment pins one at the source tree)
+# would put the checkout ahead of the wheel on sys.path and defeat the probe.
+unset PYTHONPATH PYTHONHOME
 root=$(cd "$(dirname "$0")/../.." && pwd)
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
