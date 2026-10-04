@@ -772,7 +772,7 @@ def _report_queue(
         )
         if moved and not same_place:
             rep.changes.append(Change(it.id, "queued", _queue_detail(info), info.url))
-    elif was_queued and info.state == "open":
+    elif was_queued and info.state == "open" and info.queue_known:
         rep.changes.append(
             Change(
                 it.id,
