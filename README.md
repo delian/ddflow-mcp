@@ -1217,12 +1217,6 @@ and the operational memory.) A project that installs ddflow and stops has the ot
 wired to nothing — and because an agent gate passes on an assertion, that gap is invisible in
 exactly the way the rest of this design exists to prevent.
 
-So the gap is **named**, and an agent is told to act on it: the MCP handshake and the
-SessionStart brief (hook path, nothing probed, "not checked" stated as such) both list the
-default companions that are not wired up. To install them with the operator's consent run
-the `install-companions` prompt (MCP: `/mcp__ddflow__install-companions`; `ddflow prompts
-show install-companions` elsewhere).
-
 So the gap is **named**:
 
 ```console
@@ -1248,6 +1242,12 @@ Companion tools
 Gates in this project's task pipeline with no companion behind them:
   implement, rubber_duck, critic, unit_tests, bug_hunt, dedupe, merge
 ```
+
+The gap is also told to the agent, not only shown: the MCP handshake and the
+SessionStart brief (hook path, nothing probed, "not checked" stated as such) both list the
+default companions that are not wired up. To install them with the operator's consent run
+the `install-companions` prompt (MCP: `/mcp__ddflow__install-companions`; `ddflow prompts
+show install-companions` elsewhere).
 
 A companion counts as **registered** only when an entry under its id can actually launch
 something: a bare or junk table with its name does not hide a real launch registered
