@@ -228,6 +228,24 @@ DEFAULT_GATES: dict[str, GateDef] = {
             "that is not your branch."
         ),
     ),
+    "ci": GateDef(
+        id="ci",
+        title="CI parity",
+        evidence=True,
+        applies_to="both",
+        command="ddflow ci run",
+        timeout_s=3600,
+        unavailable_exits=[2],
+        description="The exact pre-push/CI checks pass on the branch merged with the base.",
+        prompt=(
+            "Run `ddflow ci run`: it merges your branch with the base in a scratch worktree "
+            "and runs the project's pre-push stage there (ruff check, ruff format --check, "
+            "bandit, the build probe, the tests ...). Exit 2 means it could not run "
+            "(pre-commit missing, nothing configured) and is recorded unavailable, never a "
+            "pass. Not part of the default pipeline: add it with `ddflow workflow pipeline "
+            "task ...` or `[gates].task_pipeline`, between standards and unit_tests."
+        ),
+    ),
     "unit_tests": GateDef(
         id="unit_tests",
         title="Unit tests",

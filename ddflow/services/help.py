@@ -100,7 +100,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "job",
         ),
     ),
-    ("Gates and review", ("gate", "review", "reviewers", "pins", "tests")),
+    ("Gates and review", ("gate", "review", "reviewers", "pins", "tests", "ci")),
     ("Landing it", ("merge", "pr", "version", "promote", "cleanup")),
     (
         "What the project remembers",
