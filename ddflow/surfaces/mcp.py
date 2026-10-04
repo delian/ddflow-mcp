@@ -3940,14 +3940,10 @@ def _instruction_vars(repo: Path, agent: str = "") -> dict[str, Any]:
         # Only the CLAIM about install state differs, and that is what `state_word`
         # carries. Splitting them into three rendered blocks dropped the install
         # command from the commonest case and left the agent nothing to act on.
-        word = {
-            "register": "installed, not registered",
-            "install": "not installed",
-            "check": "not checked",
-        }
+        by_id = {c["id"]: c for c in v["companions"]}
         v["actionable_companions"] = [
-            {**c, "state_word": word[c["advice"]]}
-            for c in by["register"] + by["install"] + by["check"]
+            {**by_id[st.companion.id], "state_word": word}
+            for st, word in CO.actionable(statuses, grouped=True)
         ]
         cover = CO.gate_coverage(repo, statuses, v["task_pipeline"])
         # A gate is only a GAP if every companion that could serve it is known absent.

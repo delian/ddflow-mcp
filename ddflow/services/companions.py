@@ -223,6 +223,31 @@ class Status:
         return "check"
 
 
+#: The wording for each advice a surface can act on. ONE map: the MCP handshake and the
+#: SessionStart brief both say these words, and two copies is how they drift.
+ADVICE_WORDS: dict[str, str] = {
+    "register": "installed, not registered",
+    "install": "not installed",
+    "check": "not checked",
+}
+
+
+def actionable(statuses: list[Status], *, grouped: bool = False) -> list[tuple[Status, str]]:
+    """Every DEFAULT companion with something to do about it, with its state word.
+
+    Scan order by default; `grouped=True` orders register, install, check (the handshake's
+    order, which puts the cheapest remedy first)."""
+    rows = [
+        (s, ADVICE_WORDS[s.advice])
+        for s in statuses
+        if s.companion.default and s.advice in ADVICE_WORDS
+    ]
+    if grouped:
+        order = list(ADVICE_WORDS)
+        rows.sort(key=lambda r: order.index(r[0].advice))  # stable within a group
+    return rows
+
+
 def load(repo: Path) -> list[Companion]:
     """The shipped registry, overlaid by the project's own.
 
