@@ -271,6 +271,36 @@ def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path 
     return repo, ""
 
 
+def _measure(repo: Path, it, wt: Path | None) -> dict:
+    """What ddflow measures for a recorded gate: the item's tree, and once the item has
+    landed, the content that landed instead. Recorded after the merge, a gate vouches
+    for what landed, not the kept tree as it is now -- an untracked scratch file there
+    never landed and made every later gate read as stale at complete (Bb47a48b173)."""
+    if not wt:
+        return {}
+    measured = {
+        "tree_sha": G.tree_fingerprint(wt),
+        "source_tree": G.source_tree(wt),
+        "diff_stat": G.diff_stat(wt),
+    }
+    measured.update(_landed_content(repo, it))
+    return measured
+
+
+def _landed_content(repo: Path, it) -> dict:
+    """`tree_sha` and `source_tree` of the commit the item landed as, or {} before it has
+    landed. The same commit `complete` compares against (`completion._tree_being_completed`)."""
+    from ..services.completion import _tree_being_completed
+
+    if not (it.landed_after or it.merged_sha):
+        return {}
+    _cwd, landed = _tree_being_completed(repo, it)
+    if not landed:
+        return {}
+    source = G.commit_source_tree(repo, landed)
+    return {"tree_sha": f"{landed[:12]}+clean", "source_tree": source} if source else {}
+
+
 def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     """(the directory a command gate runs in, or None; whose tree the caller is in)."""
     return (repo, "") if gdef.cwd != "worktree" else _item_tree(repo, cfg, st, it, called_from)
@@ -669,15 +699,7 @@ def record(
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.
-        measured = (
-            {
-                "tree_sha": G.tree_fingerprint(wt),
-                "source_tree": G.source_tree(wt),
-                "diff_stat": G.diff_stat(wt),
-            }
-            if wt
-            else {}
-        )
+        measured = _measure(repo, it, wt)
     else:
         measured = {}
 
