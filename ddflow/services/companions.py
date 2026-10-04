@@ -333,6 +333,12 @@ _MAX_BUF = 1 << 20
 #: What an echoing binary (`cat`) sends back: our own request, recognisable by its method.
 _ECHO_MARK = b'"method": "initialize"'
 
+#: How long to keep polling for a child's exit once its stdout has closed. The pipe's EOF
+#: can be read before the waitable status exists: a process closes its descriptors during
+#: interpreter shutdown, a moment ahead of exiting (B297ede2447). A poll bounded by this
+#: grace recovers the exit code; a child that merely closed stdout and stayed alive lapses.
+_EXIT_GRACE_S = 1.0
+
 
 @dataclass
 class Verification:
@@ -400,6 +406,21 @@ def _exit_info(proc: subprocess.Popen) -> os.waitid_result | None:
         return os.waitid(os.P_PID, proc.pid, os.WEXITED | os.WNOHANG | os.WNOWAIT)
     except ChildProcessError:
         return None
+
+
+def _await_exit(proc: subprocess.Popen, grace_s: float) -> os.waitid_result | None:
+    """The child's exit record once it is visible, or None if it is still alive after
+    `grace_s`. A pipe's EOF can be read before the process that closed it is waitable: the
+    descriptors close during interpreter shutdown, a moment ahead of the exit, so a single
+    `_exit_info` sample can miss the code (B297ede2447). Poll WITHOUT reaping, so the
+    leader's pid stays reserved for the final group SIGKILL.
+    """
+    deadline = time.monotonic() + grace_s
+    info = _exit_info(proc)
+    while info is None and time.monotonic() < deadline:
+        time.sleep(0.01)
+        info = _exit_info(proc)
+    return info
 
 
 def _stop(proc: subprocess.Popen) -> None:
@@ -512,6 +533,8 @@ def verify_one(c: Companion, *, timeout_s: float = VERIFY_TIMEOUT_S) -> Verifica
                 if msg is not None:
                     return done(True, *_describe_answer(msg))
             info = _exit_info(proc)
+            if info is None:
+                info = _await_exit(proc, _EXIT_GRACE_S)
             how = f"exited ({info.si_status})" if info is not None else "closed its output"
             return done(
                 False, f"`{c.command}` {how} without answering `initialize`." + stderr_tail()
