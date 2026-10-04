@@ -847,6 +847,13 @@ def _delta_diff(repo: Path, it, branch: str, head: str) -> str:
     return W.capture_diff(repo, head, include_untracked=False, exclude=SELF_MANAGED)
 
 
+def _log_started(log, it, item: str, gate: str) -> None:
+    """The review's start, so reviewer latency (started -> outcome) is derivable (B7ed5137d45).
+    Only for a real item: a diff reviewed with no item has no gate to start."""
+    if it is not None:
+        log.append("gate.started", item, {"gate": gate})
+
+
 def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the item's tree, and called_from says where the caller stands
     repo: Path,
     *,
@@ -997,8 +1004,7 @@ def review(  # noqa: PLR0913 -- what to diff is one of commit | branch | the ite
     overrides = P.overrides_from(cfg)
     tick_s = min(PROGRESS_EVERY_S, max(1, cfg.lease.heartbeat_s))
     keep_lease = _lease_ticker(log, cfg, it, tick_s)
-    if it is not None:
-        log.append("gate.started", item, {"gate": gate})
+    _log_started(log, it, item, gate)
     results = []
     for r in revs:
         keep = keeps[r.name] = _ReplyFile(repo, item, gate, r.name)

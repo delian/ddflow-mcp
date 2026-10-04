@@ -13,7 +13,7 @@ Tests cover:
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -21,21 +21,15 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from ddflow.services.rules import Rule, RulesStorage
 from ddflow.api.rules import (
     rules_manifest,
-    apply_rule_update,
-    rule_add,
-    rule_update,
-    rule_remove,
-    rule_get,
-    rule_list,
 )
+from ddflow.services.rules import Rule, RulesStorage
 
 
 def _now() -> datetime:
     """Get current UTC time as timezone-aware datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class TestRulesStorage:
@@ -65,7 +59,7 @@ class TestRulesStorage:
             priority=75,
         )
 
-        added_rule, event_fields = storage.add(rule)
+        _added_rule, event_fields = storage.add(rule)
 
         # Check file exists
         rule_file = temp_repo / ".ddflow" / "rules" / "r-naming.toml"
@@ -350,7 +344,7 @@ class TestRulesManifest:
             )
             toml_files = list(storage_rules_dir.glob("*.toml"))
         else:
-            assert rules_dir.exists(), f"Rules directory doesn't exist"
+            assert rules_dir.exists(), "Rules directory doesn't exist"
             toml_files = list(rules_dir.glob("*.toml"))
 
         assert len(toml_files) == 3, (
@@ -438,7 +432,6 @@ id = "test-agent"
         storage.add(rule)
 
         manifest = rules_manifest(storage)
-        manifest_file = temp_repo / "DDFLOW.md"
 
         # Manifest should be generated
         assert "r-test" in manifest
