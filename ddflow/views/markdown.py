@@ -216,6 +216,12 @@ def lessons_md(state: State, cfg: Config | None = None) -> str:
     return "\n".join(out)
 
 
+def _fold(text: str, cfg: Config | None = None) -> str:
+    """Redacted, with every CommonMark line ending (LF, CR, CRLF) folded to a space: the
+    part of a table cell's escaping every cell shares."""
+    return re.sub(r"\r\n?|\n", " ", _redact(text, cfg))
+
+
 def _cell(text: str, cfg: Config | None = None) -> str:
     """One markdown table cell: redacted, line breaks folded, `|` escaped so a title
     cannot split the row into extra columns (B2eaa1e5e8e).
@@ -227,8 +233,7 @@ def _cell(text: str, cfg: Config | None = None) -> str:
     is escaped: a title is markdown (its backticks are meant), and escaping every
     backslash turned an author's `\\*x\\*` into emphasis (roborev on 72565c2d).
     """
-    folded = re.sub(r"\r\n?|\n", " ", _redact(text, cfg))
-    return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", folded).strip()
+    return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", _fold(text, cfg)).strip()
 
 
 def _id_cell(text: str, cfg: Config | None = None) -> str:
@@ -236,8 +241,7 @@ def _id_cell(text: str, cfg: Config | None = None) -> str:
     name, not markdown: a backslash or `*` in it closed or broke the bold span and
     re-parsed the rest of the row (roborev on ded56144), so those, backticks and the
     pipe are all escaped."""
-    folded = re.sub(r"\r\n?|\n", " ", _redact(text, cfg))
-    return re.sub(r"([\\*`|])", r"\\\1", folded).strip()
+    return re.sub(r"([\\*`|])", r"\\\1", _fold(text, cfg)).strip()
 
 
 def bugs_md(state: State, cfg: Config | None = None) -> str:
