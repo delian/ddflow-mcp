@@ -2928,9 +2928,9 @@ auto_promote = ["pre-production"]   # optional: continuous delivery to staging
   default, since what it carries already passed its own pipeline; add a human gate there
   for a person's sign-off on each deploy, and name it in `gates.required` to make that
   sign-off mandatory (every `gates.*_pipeline` counts, so a gate only the promotion
-  pipeline runs is not an inert requirement). `ddflow workflow` lists the promotion
-  pipeline beside the task and phase ones. It needs no cross-family reviewer: it authors
-  nothing.
+  pipeline runs is not an inert requirement). Where environments exist, `ddflow workflow`
+  lists the promotion pipeline beside the task and phase ones. It needs no cross-family
+  reviewer: it authors nothing.
 * **With `integration = "pr"`** the promotion lands through a merge request into the
   environment branch — the approval *is* the deploy approval — and `pr sync` completes it.
 * **One open promotion per environment**, and none when there is nothing to carry (exit 2).
