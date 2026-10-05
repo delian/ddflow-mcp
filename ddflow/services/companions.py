@@ -726,6 +726,21 @@ def _in_order_with_flags(want: list[str], have: list[str], value_flags: frozense
     return i == len(want)
 
 
+def _load_toml(text: str) -> dict | None:
+    """Parsed TOML, or None when it does not parse. ONE guard for five readers.
+
+    `_servers_in`, `_toml_without`, `_toml_stale_entry`, `_toml_present` and
+    `_register_toml` each wrapped `tomllib.loads` by hand; a sixth that forgot the guard
+    would let an unparseable config read as an empty one -- the module's own recurring
+    failure. What `None` then MEANS stays at each call site, because it differs: a reader
+    treats it as unreadable, `_toml_present` as a refusal that names the file.
+    """
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return None
+
+
 def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
     """(servers by name, raw text) of one agent config; None when unreadable."""
     try:
@@ -733,12 +748,12 @@ def _servers_in(path: Path, shape: str) -> tuple[dict, str] | None:
     except OSError:
         return None
     if shape == SHAPE_TOML:
-        try:
-            servers = tomllib.loads(text).get("mcp_servers") or {}
-        except tomllib.TOMLDecodeError:
+        data = _load_toml(text)
+        if data is None:
             # Unreadable, like invalid JSON: the agent's own parser rejects the file, so
             # nothing in it launches -- a header matched as text counted it registered.
             return None
+        servers = data.get("mcp_servers") or {}
         return (servers if isinstance(servers, dict) else {}), text
     try:
         data = json.loads(text or "{}")
@@ -773,17 +788,39 @@ def _serves(entry: object) -> bool:
     )
 
 
-def _registered_name(servers: dict, text: str, shape: str, c: Companion | str) -> str | None:
-    """The name one config launches ``c`` under: its id first, else a matching launch."""
-    cid = c if isinstance(c, str) else c.id
-    if cid in servers and _serves(servers[cid]):
-        return cid
-    if isinstance(c, str):
-        return None
+def _declared(servers: dict, cid: str) -> bool:
+    """Is ``cid`` declared AND does its entry serve something (`_serves`)?
+
+    The reader (`_registered_name`), the writer (`_toml_present`) and the stale-entry test
+    (`_toml_stale_entry`) must agree on what "already registered" means; written once, so
+    one of them cannot quietly count a `{}` placeholder the others refuse (B768503a43a).
+    """
+    return cid in servers and _serves(servers[cid])
+
+
+def _launched_name(servers: dict, c: Companion, *, skip_id: bool = False) -> str | None:
+    """The name whose entry's launch is ``c``'s, or None.
+
+    `_registered_name` (what an agent DOES launch) and `_launched_elsewhere` (the second
+    copy a `register` must not add) both ask this of the same table; `skip_id` is the
+    writer's extra question -- is it launched under a name OTHER than the id.
+    """
     for name, entry in servers.items():
+        if skip_id and name == c.id:
+            continue
         if launches_as(c, entry):
             return name
     return None
+
+
+def _registered_name(servers: dict, text: str, shape: str, c: Companion | str) -> str | None:
+    """The name one config launches ``c`` under: its id first, else a matching launch."""
+    cid = c if isinstance(c, str) else c.id
+    if _declared(servers, cid):
+        return cid
+    if isinstance(c, str):
+        return None
+    return _launched_name(servers, c)
 
 
 def registrations(repo: Path, c: Companion | str) -> dict[str, str]:
@@ -924,18 +961,18 @@ def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -
     their own key (`mcp__coding-guides__*`) would get a second set they never asked for.
     """
     servers = read[0] if read else {}
-    for name, entry in servers.items():
-        if name != c.id and launches_as(c, entry):
-            msg = f"{rel} already launches {c.id} as `{name}` (the same command); left as it is"
-            # An entry under the id too is not repaired here: refreshing it would be a
-            # second copy, deleting it is the operator's call. But it is said -- and only
-            # what was CHECKED: an id entry differing by `env` launches the same server.
-            if c.id in servers and launches_as(c, servers[c.id]):
-                msg += f". `{c.id}` launches it too: two copies, remove one by hand"
-            elif c.id in servers:
-                msg += f". The entry under `{c.id}` is not this launch: remove it by hand"
-            return msg
-    return ""
+    name = _launched_name(servers, c, skip_id=True)
+    if name is None:
+        return ""
+    msg = f"{rel} already launches {c.id} as `{name}` (the same command); left as it is"
+    # An entry under the id too is not repaired here: refreshing it would be a
+    # second copy, deleting it is the operator's call. But it is said -- and only
+    # what was CHECKED: an id entry differing by `env` launches the same server.
+    if c.id in servers and launches_as(c, servers[c.id]):
+        msg += f". `{c.id}` launches it too: two copies, remove one by hand"
+    elif c.id in servers:
+        msg += f". The entry under `{c.id}` is not this launch: remove it by hand"
+    return msg
 
 
 def _toml_without(text: str, cid: str) -> str | None:
@@ -966,9 +1003,8 @@ def _toml_without(text: str, cid: str) -> str | None:
         else:
             kept.append(line)
     out = "".join(kept)
-    try:
-        before, after = tomllib.loads(text), tomllib.loads(out)
-    except tomllib.TOMLDecodeError:
+    before, after = _load_toml(text), _load_toml(out)
+    if before is None or after is None:
         return None
     srv = before.get("mcp_servers")
     if not isinstance(srv, dict):
@@ -983,14 +1019,13 @@ def _toml_without(text: str, cid: str) -> str | None:
 
 def _toml_stale_entry(text: str, c: Companion) -> bool:
     """Does the table under the id launch something that is not ``c``'s launch?"""
-    try:
-        servers = tomllib.loads(text).get("mcp_servers", {})
-    except tomllib.TOMLDecodeError:
+    data = _load_toml(text)
+    if data is None:
         return False
-    if not isinstance(servers, dict) or c.id not in servers:
+    servers = data.get("mcp_servers", {})
+    if not isinstance(servers, dict):
         return False
-    entry = servers[c.id]
-    return _serves(entry) and not launches_as(c, entry)
+    return _declared(servers, c.id) and not launches_as(c, servers[c.id])
 
 
 def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str, str] | None:
@@ -1003,18 +1038,16 @@ def _toml_present(text: str, new_text: str, c: Companion, rel: str) -> tuple[str
     a file the agent rejects whole; that is refused by name, never reported as already
     registered (B768503a43a). Nor is anything appended to a file that does not parse.
     """
-    try:
-        data = tomllib.loads(text)
-    except tomllib.TOMLDecodeError:
+    data = _load_toml(text)
+    if data is None:
         return "refused", f"SKIPPED {rel}: it is not valid TOML; add {c.id} by hand"
     servers = data.get("mcp_servers", {})
     if not isinstance(servers, dict):
         # `mcp_servers = 5`, or `[[mcp_servers]]`: an appended header would either break
         # the file or land inside the last array element, where no agent reads it.
         return "refused", f"SKIPPED {rel}: its `mcp_servers` is not a table; add {c.id} by hand"
-    if c.id in servers and _serves(servers[c.id]):
-        if launches_as(c, servers[c.id]):
-            return "unchanged", f"{rel} already registers {c.id}"
+    if _declared(servers, c.id) and launches_as(c, servers[c.id]):
+        return "unchanged", f"{rel} already registers {c.id}"
     if other := _launched_elsewhere((servers, text), c, rel):
         return "unchanged", other
     try:
@@ -1040,7 +1073,8 @@ def _register_toml(path: Path, rel: str, c: Companion, dry_run: bool) -> tuple[s
         # Refreshed like the JSON path (B662a1ace82): the old table is cut out and the
         # registry's launch appended -- unless the same launch already runs under
         # another name (a second copy), or the table is not one that can be cut out.
-        if other := _launched_elsewhere((tomllib.loads(text)["mcp_servers"], text), c, rel):
+        servers = (_load_toml(text) or {}).get("mcp_servers", {})
+        if other := _launched_elsewhere((servers, text), c, rel):
             return "unchanged", other
         if (cut := _toml_without(text, c.id)) is None:
             return "refused", (
