@@ -2723,6 +2723,8 @@ start value. A sampler that raises or times out is unavailable too, with a one-l
 | `memory_free_frac` (available / total memory) | `MemAvailable / MemTotal` from `/proc/meminfo` | `vm_stat` (free + inactive + speculative pages) over `sysctl -n hw.memsize`, each with a 2 s timeout | `GlobalMemoryStatusEx` | unavailable |
 | `disk_free_bytes`, `disk_free_frac` | `shutil.disk_usage` of the worktree root, falling back to the repository root | same | same | same |
 
+The controller reads them as `load_per_core`, `memory_pressure` (`1 - memory_free_frac`) and
+`disk_pressure` (`1 - disk_free_frac`), so that for every signal it sees higher is worse.
 `ddflow doctor` names each host signal that is unavailable on this machine, with its reason,
 as a note, not a problem.
 

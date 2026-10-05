@@ -232,6 +232,22 @@ class FakeSource:
         return out
 
 
+def controller_signals(values: Mapping[str, float | None]) -> dict[str, float | None]:
+    """Map a sample onto the names and polarity the controller (``core/flowcontrol``)
+    reads, where HIGHER is always worse: ``load_per_core`` is ``load``,
+    ``memory_pressure`` and ``disk_pressure`` are ``1 - free fraction``. Unavailable stays
+    unavailable (``None``), never becomes a number."""
+
+    def pressure(free: float | None) -> float | None:
+        return None if free is None else 1.0 - free
+
+    return {
+        "load_per_core": values.get("load"),
+        "memory_pressure": pressure(values.get("memory_free_frac")),
+        "disk_pressure": pressure(values.get("disk_free_frac")),
+    }
+
+
 def doctor_notes(source: SignalSource | None = None) -> list[str]:
     """One NOTE (never a problem) naming the host signals unavailable here and why."""
     src = source if source is not None else HostSignals()

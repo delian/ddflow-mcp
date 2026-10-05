@@ -270,3 +270,36 @@ def test_doctor_reports_unavailable_host_signal_as_a_note(repo, monkeypatch):
     notes = [n for n in out.data["notes"] if n.startswith("host signals unavailable")]
     assert len(notes) == 1 and "load (" in notes[0], out.data["notes"]
     assert not any("host signal" in p for p in out.data["problems"])
+
+
+def test_controller_signals_match_the_controller_names_and_polarity():
+    from ddflow.core import flowcontrol as FC
+
+    mapped = S.controller_signals(
+        {"load": 0.5, "memory_free_frac": 0.9, "disk_free_bytes": 10.0, "disk_free_frac": 0.2}
+    )
+    assert set(mapped) == set(FC.HOST_SIGNALS)
+    assert mapped["load_per_core"] == 0.5
+    assert mapped["memory_pressure"] == pytest.approx(0.1)  # higher is worse
+    assert mapped["disk_pressure"] == pytest.approx(0.8)
+    blind = S.controller_signals(dict.fromkeys(S.SIGNALS))
+    assert all(v is None for v in blind.values())
+
+
+def test_a_mapped_host_sample_reaches_the_controller():
+    from ddflow.core import flowcontrol as FC
+
+    fake = S.FakeSource([{"load": 2.0}])  # over the default high mark of 0.75
+    samples = [
+        FC.Sample(at=60.0 * i, signals=S.controller_signals(fake.sample())) for i in range(4)
+    ]
+    d = FC.fold_limit(samples, FC.Params(), [(0.0, 4)], now=180.0)
+    assert d.limit < FC.Params().start and d.limited_by == "load_per_core"
+
+
+def test_zero_disk_total_is_unavailable(monkeypatch, tmp_path):
+    monkeypatch.setattr(shutil, "disk_usage", lambda path: Usage(total=0, used=0, free=0))
+    src = S.HostSignals(root=tmp_path)
+    out = src.sample()
+    assert out["disk_free_bytes"] is None and out["disk_free_frac"] is None
+    assert "total of 0" in src.reasons["disk_free_frac"]
