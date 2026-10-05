@@ -12,7 +12,7 @@ import json
 import sys
 
 from ...api import workflow as A
-from ..context import FAIL, NOTHING, Ctx
+from ..context import FAIL, NOTHING, REFUSED, Ctx
 
 
 def _report(c: Ctx, out, human: str, payload: str | tuple[str, ...] = "") -> int:
@@ -21,9 +21,9 @@ def _report(c: Ctx, out, human: str, payload: str | tuple[str, ...] = "") -> int
     `out.body(payload)` is the same projection the MCP tool uses — that shared call is
     what makes "the two surfaces agree" a property rather than a habit.
     """
-    if out.exit == FAIL:
+    if out.exit in (FAIL, REFUSED):  # nothing was written: say why, not "configured"
         print(out.reason, file=sys.stderr)
-        return FAIL
+        return out.exit
     c.out(human, out.body(payload))
     return out.exit
 

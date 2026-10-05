@@ -31,6 +31,7 @@ the file editable at all.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 from ..config import Config
@@ -303,6 +304,132 @@ def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str
 _GATE_KEY_PARTS = 3
 
 
+def _key_parts(k: str) -> list[str]:
+    """A dotted key's segments, normalised: `_toml_upsert` strips them, so whitespace and
+    quoting reach the same TOML key as the bare form."""
+    return [seg.strip().strip("\"'") for seg in k.split(".")]
+
+
+class KeyRefused(str):
+    """A key refused under D-plain-keys: the caller answers exit 3 (refused), not 1."""
+
+
+_BARE = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def plain_key_problem(dotted: str) -> str:
+    """Why ``dotted`` is not a key a CLI or MCP surface accepts, or "" (D-plain-keys).
+
+    A key is typed from a normal keyboard: dot-separated TOML bare-key segments, ASCII
+    letters, digits, `_` and `-`. A quoted segment, a string escape, whitespace or
+    non-ASCII is refused -- with the plain spelling named when the key has one, so no
+    user is ever told to type an escape. Hand-written TOML files are still read as TOML.
+    """
+    if all(_BARE.fullmatch(seg) for seg in dotted.split(".")):
+        return ""
+    plain = _plain_spelling(dotted)
+    return KeyRefused(
+        f"refusing {dotted!r}: not a plain key -- each dot-separated part must be ASCII "
+        f"letters, digits, `_` or `-` (D-plain-keys)" + (f"; use {plain}" if plain else "")
+    )
+
+
+def _plain_spelling(dotted: str) -> str:
+    """The bare spelling of a quoted or escaped key, as TOML reads it, or ""."""
+    try:
+        node: object = tomllib.loads(f"{dotted} = 0")
+    except tomllib.TOMLDecodeError:
+        return ""
+    path: list[str] = []
+    while isinstance(node, dict) and len(node) == 1:
+        key = next(iter(node))
+        path.append(key)
+        node = node[key]
+    plain = ".".join(path)
+    if node != 0 or not all(_BARE.fullmatch(k) for k in path):
+        return ""
+    # Never name a key that would itself be refused: a dotted gate id (`"gate".a.b.command`),
+    # a single segment (`"gate"`), which is not <section>.<key> (roborev on babe29ff), or a
+    # gate's operator-owned `human` flag (roborev on c077d794).
+    human = len(path) >= _GATE_KEY_PARTS and path[0] == "gate" and path[-1] == "human"
+    return "" if "." not in plain or human or _gate_key_problem([(plain, "")]) else plain
+
+
+def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
+    """A plain refusal for a `gate.*` key that names a dotted gate id (B72b8adba30).
+
+    Run after `plain_key_problem`, so every segment is already bare. The id is the
+    segment after `gate.`, except that `gate.<id>.env.<VAR>` -- `env` is the one
+    table-valued gate field -- is the only four-part shape; any other longer key is a
+    dotted id (`gate.x.command.command` names `x.command`) and would nest a table.
+    """
+    for k, _v in pairs:
+        pp = k.split(".")
+        if pp[0] != "gate" or len(pp) <= _GATE_KEY_PARTS:
+            continue
+        if len(pp) == _GATE_KEY_PARTS + 1 and pp[2] == "env":
+            continue
+        return gate_id_problem(".".join(pp[1:-1]))
+    return ""
+
+
+def _parsed(text: str) -> dict:
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return {}
+
+
+def _gate_table_problems(data: dict) -> set[tuple[str, str, str]]:
+    """What is wrong with the `[gate.*]` blocks of a parsed config, STRUCTURALLY: `(kind,
+    gate, field)` for an id that is not a bare key, a table where a field belongs (a
+    dotted id nested one: `[gate.a.b]`), or a field no gate has. Tuples, not messages,
+    so a pre-existing `[gate."a.b"]` cannot mask a new nested `[gate.a.b]` that would
+    render the same words (roborev on 45abe764)."""
+    from .gates import GateDef
+
+    known = set(GateDef.__dataclass_fields__)
+    out: set[tuple[str, str, str]] = set()
+    for gid, spec in (data.get("gate") or {}).items():
+        if gate_id_problem(gid):
+            out.add(("id", gid, ""))
+            continue
+        if not isinstance(spec, dict):
+            continue
+        for name, value in spec.items():
+            if name == "env":
+                continue
+            if isinstance(value, dict):
+                out.add(("nested", gid, name))
+            elif name not in known:
+                out.add(("unknown", gid, name))
+    return out
+
+
+def _render_gate_problem(kind: str, gid: str, name: str) -> str:
+    if kind == "id":
+        return gate_id_problem(gid)
+    if kind == "nested":
+        return gate_id_problem(f"{gid}.{name}")
+    return f"[gate.{gid}] has no field {name!r}"
+
+
+def gate_id_problem(gid: str) -> str:
+    """Why ``gid`` cannot be a gate id, or "" when it can (B72b8adba30).
+
+    A gate id is the `<id>` of the `[gate.<id>]` section, written as an unquoted dotted
+    key: anything but a TOML bare key either breaks the file with a raw parse error or,
+    for a dot, nests a table -- `gate.a.b.command` wrote `[gate.a.b]`, exit 0, and
+    every later command refused to load it.
+    """
+    if _BARE.fullmatch(gid):
+        return ""
+    return KeyRefused(
+        f"{gid!r} cannot be a gate id: use only ASCII letters, digits, `_` and `-` "
+        f"(it names the [gate.<id>] section of the config; D-plain-keys)."
+    )
+
+
 def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[str]:
     """Human gates that a given config TEXT places in a pipeline. Never raises.
 
@@ -370,9 +497,6 @@ def _write_config(
     # Normalised, so whitespace and quoting cannot walk past the guard: `_toml_upsert`
     # strips the segments, so `" gate.x.human"` and `gate.x."human"` reach the same TOML
     # key as the bare form and must be refused the same way.
-    def _key_parts(k: str) -> list[str]:
-        return [seg.strip().strip("\"'") for seg in k.split(".")]
-
     blocked = [
         k
         for k, _v in pairs
@@ -381,6 +505,12 @@ def _write_config(
         and pp[0] == "gate"
         and pp[-1] == "human"
     ]
+    # The key itself first: plain keyboard keys only (D-plain-keys), exit 3 -- so the exit
+    # code says "not a plain key" whatever field the key names.
+    problem = next((plain_key_problem(k) for k, _v in pairs if plain_key_problem(k)), "")
+    problem = problem or _gate_key_problem(pairs)
+    if problem:
+        return problem, ""
     if blocked:
         return (
             f"refusing to edit {', '.join(blocked)}: whether a gate is a human "
@@ -399,6 +529,7 @@ def _write_config(
         ensure_local_dir(repo)
     with TC.locked(path):
         text = path.read_text("utf-8") if path.exists() else ""
+        text_before = text
         before = _workflow_problems(repo, text, local=local) if check_workflow else set()
         human_before = _guarded_human_gates(repo, text, local=local)
         for dotted, value in pairs:
@@ -406,9 +537,17 @@ def _write_config(
                 return f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command", text
             text = _toml_upsert(text, dotted, _toml_literal(value))
         try:
-            Config.check(tomllib.loads(text))
+            result = tomllib.loads(text)
+            Config.check(result)
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"that edit would break the config: {exc}", text
+        # `gate` is a foreign table to Config.check, so a gate block is judged here, on the
+        # parsed result: `gate.a.b.command` (however spelled -- quoted, escaped) wrote
+        # `[gate.a.b]`, exit 0, and every later command refused to load it (B72b8adba30).
+        # Only NEW problems: an existing one must not stop the edit that repairs it.
+        new = _gate_table_problems(result) - _gate_table_problems(_parsed(text_before))
+        if new:
+            return "; ".join(sorted(_render_gate_problem(*p) for p in new)), text
         # Refusing the FLAG was not enough. `workflow drop <human-gate>` took the
         # checkpoint out of the pipeline, exit 0, and `workflow pipeline task <list
         # without it>` does the same by omission — two ways to delete the operator's
