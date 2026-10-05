@@ -294,6 +294,11 @@ def test_the_warning_does_not_call_an_applied_fallback_skipped(
     Config.load(tmp_path, env={})
     err = capsys.readouterr().err
     assert "skipped" in err and "takes the value" not in err, err
+    # An overridden fallback is still not "skipped": its note names the value in effect.
+    (tmp_path / ".ddflow" / "config.toml").write_text('[enforce]\ngenerated_views = "blok"\n')
+    Config.load(tmp_path, env={"DDFLOW_ENFORCE_GENERATED_VIEWS": "warn"})
+    err = capsys.readouterr().err
+    assert "overridden by the env value 'warn'" in err and "skipped" not in err, err
 
 
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
