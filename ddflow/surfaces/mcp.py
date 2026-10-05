@@ -1553,7 +1553,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_workflow_drop": {
         "description": (
-            "Take a gate out of both pipelines, and out of `required`, so it does not become a requirement that requires nothing. WRITES config. The gate's DEFINITION stays, so putting it back is one call. Exit 2: it was in neither pipeline. Ask the operator first: a gate in a pipeline is a check somebody added on purpose."
+            "Take a gate out of every pipeline -- task, phase and promotion -- and out of `required`, so it does not become a requirement that requires nothing. WRITES config. The gate's DEFINITION stays, so putting it back is one call. Exit 2: it was in no pipeline. Ask the operator first: a gate in a pipeline is a check somebody added on purpose."
         ),
         "properties": {
             "id": ("string", "The gate id to remove from the pipelines.", True),
@@ -3163,7 +3163,7 @@ def _refusal_body(out: Any, payload_key: Any, body: Any) -> Any:
     never set is not invented as null on exit 1 and 3. Exit 2 keeps ALL the declared keys
     (null where unset), in the order the tool declares them, because "nothing" is still that
     tool's answer. (An operation that sets every declared key at exit 2 -- `heartbeat` with
-    no lease, `workflow_drop` of a gate in neither pipeline -- fills its shape and is left
+    no lease, `workflow_drop` of a gate in no pipeline -- fills its shape and is left
     alone, byte-identical to `--json`; the padded case is one that sets fewer.)
 
     A tool whose body is ONE data field (`ddflow_decision_show` answers its `decision`) is
