@@ -18,21 +18,28 @@ from conftest import finish, pass_pipeline, run_cli
 OK, REFUSED = 0, 3
 
 
+def _ok(r: tuple[int, str, str]) -> None:
+    """A CLI setup step is checked and a failure shows its output: B38a14b89e7 failed
+    once with only `assert 3 == 0` on `finish`, and an unchecked step before it would
+    have been invisible. (`pass_pipeline`'s own gate records are not checked here.)"""
+    assert r[0] == OK, r
+
+
 def _two_phases(repo):
     (repo / ".ddflow").mkdir(exist_ok=True)
     (repo / ".ddflow" / "config.toml").write_text(
         "[cadence]\narchitecture_review_every_phases = 1\n"
     )
-    run_cli(repo, "init")
+    _ok(run_cli(repo, "init"))
     for p in ("P0", "P1"):
-        run_cli(repo, "phase", "add", p, "--title", p)
-        run_cli(repo, "task", "add", f"{p}.T1", "--phase", p, "--globs", f"{p.lower()}/*")
-    run_cli(repo, "claim", "P0.T1", "--no-worktree")
-    assert finish(repo, "P0.T1")[0] == OK
+        _ok(run_cli(repo, "phase", "add", p, "--title", p))
+        _ok(run_cli(repo, "task", "add", f"{p}.T1", "--phase", p, "--globs", f"{p.lower()}/*"))
+    _ok(run_cli(repo, "claim", "P0.T1", "--no-worktree"))
+    _ok(finish(repo, "P0.T1"))
     pass_pipeline(repo, "P0")
-    assert run_cli(repo, "complete", "P0", "--model", "claude-opus-5")[0] == OK
-    run_cli(repo, "claim", "P1.T1", "--no-worktree")
-    assert finish(repo, "P1.T1")[0] == OK
+    _ok(run_cli(repo, "complete", "P0", "--model", "claude-opus-5"))
+    _ok(run_cli(repo, "claim", "P1.T1", "--no-worktree"))
+    _ok(finish(repo, "P1.T1"))
     pass_pipeline(repo, "P1")
 
 
