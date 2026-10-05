@@ -194,3 +194,11 @@ def test_an_appended_dotted_gate_id_is_refused(repo, block):
     code, out, err = run_cli(repo, "config", "--append-toml", block)
     assert code == REFUSED and "cannot be a gate id" in err, (code, out, err)
     assert (repo / ".ddflow" / "config.toml").read_text("utf-8") == before
+
+
+def test_every_new_gate_problem_in_an_appended_block_is_named(repo):
+    """roborev on 896b024d: only the first was reported."""
+    run_cli(repo, "init")
+    block = '[gate.a.b]\ncommand = "x"\n[gate.c.d]\ncommand = "y"\n'
+    code, out, err = run_cli(repo, "config", "--append-toml", block)
+    assert code == REFUSED and "'a.b'" in err and "'c.d'" in err, (code, out, err)
