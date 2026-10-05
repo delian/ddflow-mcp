@@ -29,6 +29,7 @@ _LISTS = {
     "phase": "phases with done/total progress",
     "bug": "bugs: the open ones unless --all or --state",
     "research": "research notes with their verdicts",
+    "lesson": "lessons, newest first: the live ones unless --all or --state",
 }
 #: `research` has no subcommands (`research add` is the verb form), so its list lives
 #: behind `research list` as the optional verb.
@@ -48,6 +49,11 @@ def _add_filters(p: argparse.ArgumentParser, kind: str) -> None:
     )
     if kind == "bug":
         p.add_argument("--all", action="store_true", help="include fixed and invalid bugs")
+        p.add_argument(
+            "--item", default=None, help="only bugs filed in or against this queue item id"
+        )
+    if kind == "lesson":
+        p.add_argument("--all", action="store_true", help="include superseded lessons")
 
 
 def _line(kind: str, r: dict[str, Any]) -> str:
@@ -58,15 +64,32 @@ def _line(kind: str, r: dict[str, Any]) -> str:
     tail = [x for x in (r["owner"] and f"@{r['owner']}", r["updated"][:10]) if x]
     if tail:
         parts.append("  [" + " ".join(tail) + "]")
+    if kind == "bug":
+        # The two facts worth a column: the lesson the close recorded, and how many
+        # regression tests guard it. The names themselves are one `ddflow show <id>` away.
+        marks = []
+        if r.get("lesson"):
+            marks.append(f"lesson {r['lesson']}")
+        tests = r.get("regression_tests") or []
+        if tests:
+            marks.append(f"{len(tests)} test" + ("s" if len(tests) != 1 else ""))
+        if marks:
+            parts.append("  {" + "; ".join(marks) + "}")
     return "".join(parts)
+
+
+#: What "not --all" narrows to, per kind: the state that means "still live". The engine
+#: has no opinion here -- it is CLI policy, set once, and named so the two callers (the
+#: CLI and `view_read`) cannot drift.
+_NARROW_TO = {"bug": "open", "lesson": "live"}
 
 
 def cmd_list(a, c: Ctx) -> int:
     kind = a.list_kind
     state = getattr(a, "state", "") or ""
-    defaulted = kind == "bug" and not state and not getattr(a, "all", False)
+    defaulted = kind in _NARROW_TO and not state and not getattr(a, "all", False)
     if defaulted:
-        state = "open"
+        state = _NARROW_TO[kind]
     out = view_list(
         c.repo,
         kind,
@@ -75,6 +98,7 @@ def cmd_list(a, c: Ctx) -> int:
         tag=getattr(a, "tag", "") or "",
         agent=getattr(a, "owner", "") or "",
         since=getattr(a, "since", "") or "",
+        item=getattr(a, "item", "") or "",
         limit=V.DEFAULT_LIMIT if a.limit is None else a.limit,
     )
     if "rows" in out.data and kind == "phase":
@@ -100,17 +124,18 @@ def cmd_list(a, c: Ctx) -> int:
     if out.data["truncated"]:
         print(f"\n(showing {out.data['shown']} of {out.data['total']}; raise --limit)")
     if defaulted:
-        print("\n(open bugs only; --all includes fixed and invalid)")
+        what = "fixed and invalid" if kind == "bug" else "superseded"
+        print(f"\n({_NARROW_TO[kind]} {kind}s only; --all includes {what})")
     return OK
 
 
 def register(s) -> None:
-    """Add `list` to the task, phase, bug and research parsers already on `s`, and the
-    sibling `search` viewer (registered here so `cli.py`, a hot file, needs no change)."""
+    """Add `list` to the task, phase, bug, lesson and research parsers already on `s`, and
+    the sibling `search` viewer (registered here so `cli.py`, a hot file, needs no change)."""
     from .viewers_search import register as register_search
 
     register_search(s)
-    for kind in ("task", "phase", "bug"):
+    for kind in ("task", "phase", "bug", "lesson"):
         group = s.choices[kind]
         sub = next(x for x in group._actions if isinstance(x, argparse._SubParsersAction))
         lp = sub.add_parser("list", help=f"list {_LISTS[kind]}")

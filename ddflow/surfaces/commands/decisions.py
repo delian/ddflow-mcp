@@ -146,12 +146,22 @@ def _decision_search(a, c: Ctx, st) -> int:
 
 
 def _decision_list(a, c: Ctx, st) -> int:
-    out = A.decision_list(c.repo, all=bool(getattr(a, "all", False)))
+    out = A.decision_list(
+        c.repo,
+        all=bool(getattr(a, "all", False)),
+        since=getattr(a, "since", "") or "",
+        limit=getattr(a, "limit", None),
+    )
     if c.json:
+        if out.exit not in (OK, NOTHING):
+            # A bad --since is a refusal carrying no `rows`; the reason goes to stderr so
+            # `--json` does not crash reading a data key it was never given.
+            print(out.reason, file=sys.stderr)
+            return out.exit
         return _emit(c, out, "rows")
-    if out.exit == NOTHING:
-        print(out.reason)
-        return NOTHING
+    if out.exit != OK:
+        print(out.reason, file=sys.stdout if out.exit == NOTHING else sys.stderr)
+        return out.exit
     for d in out.data["rows"]:
         flag = ""
         if not d["live"]:
@@ -165,6 +175,8 @@ def _decision_list(a, c: Ctx, st) -> int:
             f"\n({out.data['hidden']} superseded; --all to include them — the history of how "
             f"the architecture got here is kept, never deleted)"
         )
+    if out.data["total"] > out.data["shown"]:
+        print(f"\n(showing {out.data['shown']} of {out.data['total']}; raise --limit)")
     return OK
 
 
