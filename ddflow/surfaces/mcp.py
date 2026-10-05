@@ -550,9 +550,14 @@ class Server:
         era = _modern_check(msg)
         if era is None:
             return self._dispatch(msg)
+        if "id" not in msg:
+            # A notification is never answered -- not with a refusal, and not with a
+            # result either (`server/discover` sent without an id would otherwise get one).
+            if not isinstance(era, dict):
+                self._dispatch(msg)
+            return None
         if isinstance(era, dict):
-            # A refusal can only be ANSWERED to a request; a notification has no id.
-            return era if "id" in msg else None
+            return era
         if method == "server/discover":
             reply: dict[str, Any] | None = _ok(msg.get("id"), self._discover())
         else:
