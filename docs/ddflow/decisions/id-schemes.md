@@ -40,7 +40,9 @@ must never rewrite a recorded id.
    tokens express intent; they do not guarantee uniqueness on their own. The id
    service checks every key it mints against every id and key of every kind in the
    folded log, under the log lock, before recording it. A key that is already taken
-   gets `-2`, `-3`, and so on. This covers two records minted in the same second by
+   gets `-2`, `-3`, and so on. A stable template is the one exception: there, a
+   taken key IS the expected match, so the filing extends that record. A stable key
+   held by a record of another kind is refused rather than extended. This covers two records minted in the same second by
    one process, and two kinds both configured as `{seq}`. Keys share one namespace
    across kinds, because `show` and every other command accept any id.
    Otherwise it must declare `stable = true`. A stable template maps the same content
