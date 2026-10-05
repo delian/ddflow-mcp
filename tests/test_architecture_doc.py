@@ -2,13 +2,20 @@
 
 `docs/ARCHITECTURE.md` is the project's least-checked artefact -- and the irony is the
 document's own thesis: a rule that exists only in prose decays. It named
-`services/queue.py` and a `health` module that do not exist, and its layer list never
+`services/queue.py` and a `health` module that do not exist, and its layer map never
 mentioned `api/` at all, while the code (and `tests/test_layering.py`) had moved on.
 
 A doc cannot be checked down to its prose, but it CAN be checked for the one thing it
-states mechanically: the module paths it cites. This walks every `layer/name.py`
-reference in the document and requires the file to be in the tree, so the same drift
-fails the suite instead of waiting for a reader to notice.
+states mechanically: the module paths it cites. Two places cite them, and a reviewer of
+B-arch-doc-stale caught that the first draft of this file only covered one:
+
+* the **layer map** -- a fenced block like `services/   queue, gates, review,` where the
+  layer is on the left and the module column carries on over several lines;
+* the **module map table** -- rows like `` | `services/adopt.py`, `enforce.py` | `` where
+  a bare `enforce.py` inherits the layer from the path before it.
+
+Both are parsed here: the layer is remembered across continuation lines and across the
+comma-list of a table cell, so every module token is checked as `<layer>/<token>`.
 """
 
 from __future__ import annotations
@@ -19,19 +26,85 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DOC = ROOT / "docs" / "ARCHITECTURE.md"
 
-#: A `layer/name.py` reference, where layer is one of the package's layers. `config.py`
-#: sits at the top level with no layer prefix, so it is deliberately not matched here.
-_REF = re.compile(r"\b(core|infra|services|api|views|surfaces)/([A-Za-z_][A-Za-z0-9_]*)\.py\b")
+LAYERS = ("core", "infra", "services", "api", "views", "surfaces")
+
+#: A contiguous `layer/name.py` reference anywhere in the document.
+_REF = re.compile(rf"\b({'|'.join(LAYERS)})/([A-Za-z_]\w*)\.py\b")
+#: The start of a layer-map line: `services/` at the beginning of a (stripped) line.
+_LAYER_LINE = re.compile(rf"^\s*({'|'.join(LAYERS)})/\s*")
+#: A bare module token: `name.py` or `name`.
+_MOD_PY = re.compile(r"^[A-Za-z_]\w*\.py$")
+_MOD_BARE = re.compile(r"^[A-Za-z_]\w*$")
 
 
-def _named_modules(text: str) -> list[str]:
-    return sorted({f"{layer}/{name}.py" for layer, name in _REF.findall(text)})
+def _tokens(text: str) -> list[str]:
+    """The comma-separated module names in a map's module column. The description after
+    the column is separated by two or more spaces, so it is cut off first."""
+    column = re.split(r"\s{2,}", text.strip())[0]
+    return [t.strip() for t in column.split(",") if t.strip()]
+
+
+def _add(refs: set[str], layer: str | None, token: str) -> str | None:
+    """Record `layer/token` (adding `.py` to a bare name) and return the layer to carry
+    forward -- the token itself when it names one, else the unchanged layer."""
+    m = re.fullmatch(rf"({'|'.join(LAYERS)})/([A-Za-z_]\w*)\.py", token)
+    if m:
+        refs.add(f"{m.group(1)}/{m.group(2)}.py")
+        return m.group(1)
+    if layer is None:
+        return None
+    if _MOD_PY.match(token):
+        refs.add(f"{layer}/{token}")
+    elif _MOD_BARE.match(token):
+        refs.add(f"{layer}/{token}.py")
+    return layer
+
+
+def _from_layer_maps(text: str) -> set[str]:
+    """Parse every fenced layer map. A layer line sets the current layer; the indented
+    lines after it are continuations of that layer's module column."""
+    refs: set[str] = set()
+    for block in re.findall(r"```[^\n]*\n(.*?)```", text, re.S):
+        if not _LAYER_LINE.search(block):
+            continue
+        layer: str | None = None
+        for line in block.splitlines():
+            m = _LAYER_LINE.match(line)
+            if m:
+                layer = m.group(1)
+                column = line[m.end() :]
+            elif line[:1].isspace() and line.strip():
+                column = line  # a continuation row of the current layer
+            else:
+                continue  # `config.py` (no layer prefix, not indented) or a blank line
+            for token in _tokens(column):
+                layer = _add(refs, layer, token)
+    return refs
+
+
+def _from_tables(text: str) -> set[str]:
+    """Parse module-map table rows: backticked tokens, a bare name inheriting the layer
+    of the last path in the same cell."""
+    refs: set[str] = set()
+    for line in text.splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        cell = line.strip().strip("|").split("|")[0]
+        layer: str | None = None
+        for token in re.findall(r"`([^`]+)`", cell):
+            layer = _add(refs, layer, token.strip())
+    return refs
+
+
+def _named_modules(text: str) -> set[str]:
+    contiguous = {f"{a}/{b}.py" for a, b in _REF.findall(text)}
+    return contiguous | _from_layer_maps(text) | _from_tables(text)
 
 
 def test_every_module_named_in_the_architecture_doc_exists():
     named = _named_modules(DOC.read_text(encoding="utf-8"))
-    assert named, "ARCHITECTURE.md names no module paths -- the extraction regex has drifted"
-    missing = [ref for ref in named if not (ROOT / "ddflow" / ref).is_file()]
+    assert named, "ARCHITECTURE.md names no module paths -- the extraction has drifted"
+    missing = sorted(ref for ref in named if not (ROOT / "ddflow" / ref).is_file())
     assert not missing, f"ARCHITECTURE.md names module paths that do not exist: {missing}"
 
 
