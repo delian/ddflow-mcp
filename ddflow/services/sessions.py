@@ -110,16 +110,41 @@ DEDUPE_WINDOW_S = 120
 #: A hook firing twice for one prompt lands within moments; a longer window would eat an
 #: operator who really types "continue" twice.
 DOUBLE_FIRE_S = 3
+#: The most of a hook's own startup the double-fire window forgives. A process older than
+#: this is no freshly fired hook (an in-process API caller), and its start says nothing
+#: about when the harness fired.
+HOOK_START_MAX_S = 30
 
 
-def _age_s(ts: str) -> float:
+def _age_s(ts: str, now: float | None = None) -> float:
+    """Seconds from `ts` to `now` (default: the current time)."""
     from datetime import UTC, datetime
 
     try:
         then = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
     except ValueError:
         return float("inf")
-    return (datetime.now(UTC) - then).total_seconds()
+    return (time.time() if now is None else now) - then.timestamp()
+
+
+def process_started_at() -> float:
+    """When this process started, as wall-clock time; the current time where the
+    platform cannot say.
+
+    A hook is fired when its process starts. Everything after that -- the interpreter,
+    the imports, the config, the log read -- is this process's own delay, which a loaded
+    machine stretches past any short window (B72b9ab33fc). Linux keeps the start in
+    /proc on the boot clock; its distance from the boot clock now is the process's age.
+    """
+    try:
+        stat = Path("/proc/self/stat").read_text()
+        # Field 22 (starttime, in clock ticks); counted after the parenthesised name,
+        # which may itself hold spaces, the fields from 3 on are its tail.
+        ticks = int(stat[stat.rindex(")") + 2 :].split()[19])
+        age = time.clock_gettime(time.CLOCK_BOOTTIME) - ticks / os.sysconf("SC_CLK_TCK")
+    except (OSError, ValueError, IndexError, AttributeError):
+        return time.time()
+    return time.time() - max(0.0, age)
 
 
 def _recorded_recently(
@@ -129,8 +154,10 @@ def _recorded_recently(
     window: float = DEDUPE_WINDOW_S,
     subject: str = "",
     auto_only: bool = False,
+    now: float | None = None,
 ) -> bool:
-    """True when `clean` was already recorded as a prompt inside the window.
+    """True when `clean` was already recorded as a prompt inside the window before `now`
+    (default: the current time).
 
     `subject` restricts the match to one session (a hook that fired twice for one
     conversation). `auto_only` restricts it to hook-captured prompts, for an AGENT's own
@@ -141,7 +168,7 @@ def _recorded_recently(
     for ev in log.read_all():
         if ev.kind != "session.prompt" or ev.data.get("text") != clean:
             continue
-        if _age_s(ev.ts) > window:
+        if _age_s(ev.ts, now) > window:
             continue
         if subject and ev.subject != subject:
             continue
@@ -267,10 +294,21 @@ def harness_session_id(raw: str) -> str:
 
 
 def capture_prompt(
-    log: EventLog, cfg: Config, harness_id: str, text: str, *, model: str = "", tool: str = ""
+    log: EventLog,
+    cfg: Config,
+    harness_id: str,
+    text: str,
+    *,
+    model: str = "",
+    tool: str = "",
+    fired_at: float | None = None,
 ) -> str:
     """Record a prompt a harness hook delivered. Returns what happened, never raises on
     an absent id or empty text.
+
+    `fired_at` is when the harness fired the hook (default: now): a second firing is a
+    copy when it was FIRED within `DOUBLE_FIRE_S` of the first's record, however long
+    (up to `HOOK_START_MAX_S`) it then took to get here.
 
     The text is redacted BEFORE any event is built, so a secret never reaches the log; a
     session is opened once per harness session id and reused after that.
@@ -284,7 +322,9 @@ def capture_prompt(
     events = log.read_all()
     if not any(e.kind == "session.started" and e.subject == sid for e in events):
         log.append("session.started", sid, {"model": model, "tool": tool, "cwd": str(Path.cwd())})
-    if _recorded_recently(log, clean, window=DOUBLE_FIRE_S, subject=sid):
+    now = time.time()
+    fired = now if fired_at is None else min(now, max(fired_at, now - HOOK_START_MAX_S))
+    if _recorded_recently(log, clean, window=DOUBLE_FIRE_S, subject=sid, now=fired):
         return "duplicate"
     log.append("session.prompt", sid, {"text": clean, "item": "", "redactions": n, "auto": True})
     return "recorded"
