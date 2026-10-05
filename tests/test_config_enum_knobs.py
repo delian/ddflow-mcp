@@ -263,6 +263,28 @@ def test_a_typo_in_a_flow_knob_fails_closed_over_a_recorded_choice(repo: Path) -
     assert "integration" not in [ch.knob for ch in CH.pending(cfg)]
 
 
+def test_replace_carries_the_fallback_notes(tmp_path: Path) -> None:
+    import dataclasses
+
+    cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    copy = dataclasses.replace(cfg)
+    copy._apply({"enforce": {"stale_docs": "warn"}}, "env")
+    assert "in effect" not in copy.unknown_knobs[0]
+    assert "_fallback_notes" not in cfg.as_dict() and "_fallback_notes" not in cfg._sections()
+
+
+def test_the_warning_does_not_call_an_applied_fallback_skipped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    err = capsys.readouterr().err
+    assert "enforce.stale_docs = 'blok'" in err and "skipped" not in err, err
+    (tmp_path / ".ddflow" / "config.toml").write_text("[enforce]\nnot_a_knob = 1\n")
+    Config.load(tmp_path, env={})
+    err = capsys.readouterr().err
+    assert "enforce.not_a_knob" in err and "skipped" in err, err
+
+
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
     cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
     assert cfg.sources["enforce.stale_docs"] == "file (strictest fallback)"

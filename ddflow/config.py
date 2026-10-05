@@ -1506,6 +1506,10 @@ _doc(
 )
 
 
+#: `Config` fields that are bookkeeping, not `[section]`s.
+_NOT_SECTIONS = ("sources", "unknown_knobs", "_fallback_notes")
+
+
 @dataclass
 class Config:
     lease: LeaseConfig = field(default_factory=LeaseConfig)
@@ -1540,12 +1544,13 @@ class Config:
     #: for a whole section. Skipped, not fatal: see `_apply`.
     unknown_knobs: list[str] = field(default_factory=list, repr=False)
 
-    def __post_init__(self) -> None:
-        # Not a field (so not in `as_dict` or the sections): for each enum knob that fell
-        # back to its strictest value, the (index in unknown_knobs, "key = 'bad'") of each
-        # note, so a later layer's value rewrites the note from its parts, never by
-        # parsing text that holds the user's own value.
-        self._fallback_notes: dict[str, list[tuple[int, str]]] = {}
+    #: For each enum knob that fell back to its strictest value, the (index in
+    #: unknown_knobs, "key = 'bad'") of each note, so a later layer's value rewrites the
+    #: note from its parts, never by parsing text that holds the user's own value. A
+    #: field so `dataclasses.replace` carries it with `unknown_knobs`.
+    _fallback_notes: dict[str, list[tuple[int, str]]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
 
     # -- loading ------------------------------------------------------------------
     @classmethod
@@ -1600,7 +1605,7 @@ class Config:
         cls()._apply(data, "check")
 
     def _sections(self) -> list[str]:
-        return [f.name for f in fields(self) if f.name not in ("sources", "unknown_knobs")]
+        return [f.name for f in fields(self) if f.name not in _NOT_SECTIONS]
 
     #: Top-level TOML tables that are NOT config sections and must not be treated as
     #: typos. They are consumed by other loaders: `[gate.*]` by gates.load_gates,
@@ -1743,6 +1748,7 @@ class Config:
     def as_dict(self) -> dict[str, Any]:
         out = dataclasses.asdict(self)
         out.pop("sources", None)
+        out.pop("_fallback_notes", None)
         return out
 
     def explain(self) -> list[tuple[str, Any, str, str]]:
@@ -1801,12 +1807,21 @@ def _warn_unknown(keys: list[str], root: Path) -> None:
     if not new:
         return
     _WARNED.update((str(root), k) for k in new)
+    # An enum knob's unknown value is not skipped: it is APPLIED as the knob's strictest
+    # value (D-enum-fallback-strict), and saying "skipped" would read as "no effect".
+    marker = " (not a value this ddflow knows; "
+    fell_back = [k for k in new if marker in k]
+    skipped = [k for k in new if marker not in k]
+    what = []
+    if skipped:
+        what.append(f"{', '.join(skipped)}, which this ddflow does not know; skipped")
+    if fell_back:
+        what.append(f"{', '.join(fell_back)}; each such knob takes the value named")
     print(
         f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
-        f"{', '.join(new)}, which this ddflow ({_CODE_TREE}) does not know; skipped (an "
-        "unknown value of an enum knob takes the knob's strictest value, named above). The "
-        "config is newer than this code: merge main into this tree (or, if it is a "
-        "typo, fix it; `ddflow doctor` lists each).",
+        f"{'. It sets '.join(what)}. (This ddflow: {_CODE_TREE}.) The config is newer "
+        "than this code: merge main into this tree (or, if it is a typo, fix it; "
+        "`ddflow doctor` lists each).",
         file=sys.stderr,
     )
 
