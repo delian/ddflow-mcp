@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config
-from .gates import GateDef, inert_requirements, parallel_test_advice
+from .gates import GateDef, inert_requirements, parallel_test_advice, pipelined, pipelines
 
 #: A command gate with no registered mutation has never been shown able to go red.
 #: Advisory, not a defect: `ddflow gate verify` is how you find out, and a project may
@@ -46,6 +46,7 @@ class GateView:
     kind: str  # "command" | "agent" | "undefined"
     in_task: bool = False
     in_phase: bool = False
+    in_promotion: bool = False
     position: int = 0
     required: bool = False
     evidence: bool = False
@@ -75,6 +76,7 @@ class Finding:
 class WorkflowView:
     task_pipeline: list[str] = field(default_factory=list)
     phase_pipeline: list[str] = field(default_factory=list)
+    promotion_pipeline: list[str] = field(default_factory=list)
     gates: list[GateView] = field(default_factory=list)
     #: knob -> (value, where it came from). Straight from `Config.explain`, so a reader
     #: can tell a deliberate choice from a default nobody has touched.
@@ -131,12 +133,9 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
     cannot start.
     """
     out: list[Finding] = []
-    pipelines = [("task", cfg.gates.task_pipeline), ("phase", cfg.gates.phase_pipeline)]
-    if cfg.flow.environments:
-        # Checked only where promotions exist: a project with no environments never
-        # runs this pipeline, and a problem in it there would be noise.
-        pipelines.append(("promotion", cfg.gates.promotion_pipeline))
-    for kind, pipeline in pipelines:
+    # Only the pipelines that run here: a project with no environments never runs the
+    # promotion pipeline, and a problem in it there would be noise.
+    for kind, pipeline in pipelines(cfg, running=True).items():
         if not pipeline:
             # The editor already refuses `workflow pipeline task ""` as "a project with
             # no checks at all". Saying nothing about the same state when READING it is
@@ -182,8 +181,13 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
             Finding(
                 PROBLEM,
                 "gates.required",
-                f"{gid!r} is required but is in neither pipeline, so the requirement "
-                f"quietly disappears rather than being enforced.",
+                f"{gid!r} is required but is in no pipeline that runs here, so the "
+                f"requirement quietly disappears rather than being enforced"
+                + (
+                    " (the promotion pipeline runs only when flow.environments is set)."
+                    if gid in pipelines(cfg).get("promotion", ()) and not cfg.flow.environments
+                    else "."
+                ),
             )
         )
     # `applies_to` was written by the editor, advertised in the MCP tool description,
@@ -207,8 +211,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
                 )
             )
 
-    piped = set(cfg.gates.task_pipeline) | set(cfg.gates.phase_pipeline)
-    for gid in sorted(piped):
+    for gid in sorted(pipelined(cfg)):
         g = gates.get(gid)
         if g is None:
             continue  # already reported above
@@ -295,13 +298,14 @@ def describe(
     v = WorkflowView(
         task_pipeline=list(cfg.gates.task_pipeline),
         phase_pipeline=list(cfg.gates.phase_pipeline),
+        promotion_pipeline=list(cfg.gates.promotion_pipeline),
     )
     sources = {k: s for k, _val, s, _doc in cfg.explain()}
     values = {k: val for k, val, _s, _doc in cfg.explain()}
     v.rules = {k: (values.get(k), sources.get(k, "default")) for k in RULE_KEYS if k in values}
 
     seen: list[str] = []
-    for gid in list(cfg.gates.task_pipeline) + list(cfg.gates.phase_pipeline):
+    for gid in (g for ids in pipelines(cfg).values() for g in ids):
         if gid not in seen:
             seen.append(gid)
     for gid in seen:
@@ -316,6 +320,7 @@ def describe(
             kind=_gate_kind(g),
             in_task=in_task,
             in_phase=gid in cfg.gates.phase_pipeline,
+            in_promotion=gid in cfg.gates.promotion_pipeline,
             position=(cfg.gates.task_pipeline.index(gid) + 1) if in_task else 0,
             required=gid in cfg.gates.required,
             evidence=gid in cfg.gates.evidence_required,

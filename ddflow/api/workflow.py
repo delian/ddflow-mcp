@@ -21,6 +21,7 @@ from typing import Any
 from ..core import outcome as O
 from ..core.plain import plain as _plain
 from ..infra.tomlcfg import value as toml_value
+from ..services import gates as G
 from ..services.configwrite import _write_config
 from ._base import _load
 
@@ -51,6 +52,7 @@ def show(repo: Path) -> O.Outcome:
     data: dict[str, Any] = {
         "task_pipeline": v.task_pipeline,
         "phase_pipeline": v.phase_pipeline,
+        "promotion_pipeline": v.promotion_pipeline,
         "gates": [_plain(g) for g in v.gates],
         "rules": {k: {"value": val, "source": src} for k, (val, src) in v.rules.items()},
         "reviewers": v.reviewers,
@@ -225,7 +227,7 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
 
 
 def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
-    """Remove a gate from both pipelines, and from `required` with it.
+    """Remove a gate from every pipeline, and from `required` with it.
 
     Dropping it from a pipeline but leaving it `required` creates an INERT requirement:
     the rule is enforced by intersecting `required` with the pipeline, so a required
@@ -235,8 +237,10 @@ def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
     _log, cfg, _st = _load(repo)
     pairs: list[tuple[str, str]] = []
     removed: list[str] = []
-    for which in ("task", "phase"):
-        current = list(getattr(cfg.gates, f"{which}_pipeline"))
+    # Every pipeline, promotion included (B7f0b7c8839): walking task and phase only left
+    # a promotion-only gate in place and called it "in neither pipeline".
+    for which, ids in G.pipelines(cfg).items():
+        current = list(ids)
         if item in current:
             current.remove(item)
             pairs.append((f"gates.{which}_pipeline", toml_value(current)))
@@ -247,7 +251,7 @@ def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
     if not pairs:
         return O.nothing(
             "workflow.drop",
-            f"{item!r} is in neither pipeline; nothing to drop",
+            f"{item!r} is in no pipeline; nothing to drop",
             gate=item,
             removed_from=[],
             applied=False,
