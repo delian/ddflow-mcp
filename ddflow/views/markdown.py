@@ -745,9 +745,10 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
             )
 
 
-#: Unended, not-running jobs of other items listed in full by a brief about NO item
-#: (nothing held, nothing ready); the rest collapse to one count line. A brief about an
-#: item -- named, held or suggested -- lists none of them.
+#: How many of other items' jobs on another host every brief lists in full, and how many
+#: of their exited or killed jobs a brief about NO item (nothing held, nothing ready)
+#: lists; the rest of each collapse to one count line. A brief about an item -- named,
+#: held or suggested -- lists none of the exited or killed ones.
 BRIEF_OTHER_JOBS = 5
 
 
@@ -758,12 +759,13 @@ def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
     accident, and one that died unrecorded is work to collect or redo -- both are what
     the next session must know before it picks anything up.
 
-    Bounded (B8114a8b531): a running job, one on another host (it may be running), and
-    every job of the item the brief is about are listed in full, but exited or killed
-    jobs of OTHER items -- dozens, in a long-lived project --
-    collapse to one count line. Listed one by one they filled the whole token budget
-    ahead of the item's own section, and the brief was cut before it said anything about
-    the item.
+    Bounded (B8114a8b531): a job running here and every job of the item the brief is
+    about are listed in full. Other items' jobs on another host (they may be running,
+    nothing here can tell) are listed up to ``BRIEF_OTHER_JOBS``, newest first; their
+    exited or killed jobs -- dozens, in a long-lived project -- are listed only by a brief
+    about no item, and the rest of each kind collapse to one count line. Listed one by
+    one they filled the whole token budget ahead of the item's own section, and the
+    brief was cut before it said anything about the item.
     """
     from ..services import jobs as J
 
@@ -771,16 +773,18 @@ def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
     if not pending:
         return
     shown: list = []
-    others: list = []
+    remote: list = []  # other items' jobs on another host: may be running
+    stale: list = []  # other items' jobs that exited or were killed
     for j in sorted(pending, key=lambda x: x.started_at):
         s = J.status(j)
-        live = s.state in ("running", "elsewhere")  # alive, or not checkable here
-        (shown if live or (item and j.item == item) else others).append((j, s))
-    keep = 0 if item else BRIEF_OTHER_JOBS
-    if keep:
-        newest = sorted(others, key=lambda js: js[0].started_at)[-keep:]
-        shown = sorted([*shown, *newest], key=lambda js: js[0].started_at)
-    hidden = len(others) - min(keep, len(others))
+        if s.state == "running" or (item and j.item == item):
+            shown.append((j, s))
+        else:
+            (remote if s.state == "elsewhere" else stale).append((j, s))
+    keep_stale = 0 if item else BRIEF_OTHER_JOBS
+    for bucket, keep in ((remote, BRIEF_OTHER_JOBS), (stale, keep_stale)):
+        shown += bucket[len(bucket) - min(keep, len(bucket)) :]  # the newest `keep`
+    shown.sort(key=lambda js: js[0].started_at)
     out += ["## Long-running jobs", ""]
     for j, s in shown:
         tail = {
@@ -790,7 +794,12 @@ def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
             "elsewhere": "check it on that host",
         }.get(s.state, "")
         out.append(f"- **{j.item}** `{j.id}` — {s.state.upper()}: {s.detail}. {tail}")
-    if hidden:
+    if hidden := len(remote) - min(BRIEF_OTHER_JOBS, len(remote)):
+        out.append(
+            f"- _{hidden} more job(s) of other items on other hosts (they may be running): "
+            "`ddflow job list` shows them; check each on its host before restarting it._"
+        )
+    if hidden := len(stale) - min(keep_stale, len(stale)):
         whose = "other items'" if item else "older"
         out.append(
             f"- _{hidden} more unended job(s) ({whose}, exited or killed): `ddflow job list` "
