@@ -19,9 +19,9 @@ OK, REFUSED = 0, 3
 
 
 def _ok(r: tuple[int, str, str]) -> None:
-    """Every setup step is checked and a failure shows its output: B38a14b89e7 failed
+    """A CLI setup step is checked and a failure shows its output: B38a14b89e7 failed
     once with only `assert 3 == 0` on `finish`, and an unchecked step before it would
-    have been invisible."""
+    have been invisible. (`pass_pipeline`'s own gate records are not checked here.)"""
     assert r[0] == OK, r
 
 
