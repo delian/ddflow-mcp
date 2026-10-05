@@ -51,3 +51,20 @@ def test_frozen_manifest_round_trips_a_path_with_an_emoji(tmp_path):
     (tmp_path / "notes 🚀.md").write_text("x\n", "utf-8")
     L.write_manifest(tmp_path, ["notes 🚀.md"])
     assert L.read_frozen(tmp_path) == {"notes 🚀.md": L.sha256_file(tmp_path / "notes 🚀.md")}
+
+
+def test_workflow_pipeline_with_an_emoji_gate_id_writes_a_readable_pipeline(repo):
+    """roborev on 477845b7: api/workflow serialised pipelines with json.dumps, and
+    `_toml_literal` passes an array through untouched."""
+    from conftest import run_cli
+
+    run_cli(repo, "init")
+    gate = '[gate."ship🚀"]\nprompt = "sign it"\n'
+    assert run_cli(repo, "config", "--append-toml", gate)[0] == 0
+    code, out, err = run_cli(repo, "workflow", "pipeline", "task", "implement,ship🚀,merge")[:3]
+    assert code == 0, (out, err)
+    data = tomllib.loads((repo / ".ddflow" / "config.toml").read_text("utf-8"))
+    assert data["gates"]["task_pipeline"] == ["implement", "ship🚀", "merge"]
+    assert run_cli(repo, "workflow", "drop", "ship🚀")[0] == 0
+    data = tomllib.loads((repo / ".ddflow" / "config.toml").read_text("utf-8"))
+    assert data["gates"]["task_pipeline"] == ["implement", "merge"]

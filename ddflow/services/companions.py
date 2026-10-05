@@ -48,7 +48,7 @@ from pathlib import Path
 
 from ..infra import paths
 from ..infra import proc as P
-from ..infra.tomlcfg import basic_string
+from ..infra.tomlcfg import value as toml_value
 from .adopt import (
     AGENT_TARGETS,
     SHAPE_TOML,
@@ -942,18 +942,11 @@ def _toml(value: object) -> str:
 
     String escaping matters for the same reason: a `"` or a backslash in a command or
     an argument produced invalid TOML, silently, for anyone whose path has one.
+
+    One serialiser now, `tomlcfg.value`: `json.dumps` also wrote an emoji as a surrogate
+    pair TOML refuses (Bb11e7a8186).
     """
-    if isinstance(value, str):
-        return basic_string(value)  # json.dumps wrote an emoji as a surrogate pair (Bb11e7a8186)
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, (int, float)):
-        return repr(value)
-    if isinstance(value, (list, tuple)):
-        return "[" + ", ".join(_toml(v) for v in value) + "]"
-    if isinstance(value, dict):
-        return "{" + ", ".join(f"{k} = {_toml(v)}" for k, v in value.items()) + "}"
-    return basic_string(str(value))
+    return toml_value(value)
 
 
 def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -> str:

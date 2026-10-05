@@ -35,6 +35,7 @@ import contextlib
 import fcntl
 import json
 import os
+import re
 import sys
 import tempfile
 import tomllib
@@ -164,6 +165,30 @@ def basic_string(value: str) -> str:
     and without `ensure_ascii` it leaves U+007F raw, which TOML also refuses.
     """
     return json.dumps(str(value), ensure_ascii=False).replace("\x7f", "\\u007f")
+
+
+def value(v: object) -> str:
+    """Any plain value as a TOML literal: a string, bool, number, list or dict (as an
+    inline table), nested. The one serialiser for hand-built TOML: `json.dumps` agrees
+    with TOML on strings and arrays except for non-BMP characters (Bb11e7a8186), and
+    disagrees on objects outright (B-reviewers-add-launch-json)."""
+    if isinstance(v, str):
+        return basic_string(v)
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (int, float)):
+        return repr(v)
+    if isinstance(v, (list, tuple)):
+        return "[" + ", ".join(value(x) for x in v) + "]"
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"{_key(k)} = {value(x)}" for k, x in v.items()) + "}"
+    return basic_string(str(v))
+
+
+def _key(k: object) -> str:
+    """A TOML key: bare when it may be, else quoted."""
+    k = str(k)
+    return k if re.fullmatch(r"[A-Za-z0-9_-]+", k) else basic_string(k)
 
 
 def atomic_write(path: Path, text: str) -> None:
