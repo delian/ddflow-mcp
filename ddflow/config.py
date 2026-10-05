@@ -1914,7 +1914,8 @@ for _key, (_value, _why) in KNOB_STRICTEST.items():
     KNOB_DOCS[_key] = (
         f"{KNOB_DOCS[_key]} An unrecognised value in a config file is warned about, reported "
         f"by `doctor` and falls back to '{_value}', the strictest ({_why}); `config --set`, "
-        "`ddflow_configure` and the environment refuse it."
+        "`ddflow_configure` and the environment refuse it, and so does loading ddflow's own "
+        "source tree, where the file and the code are one commit."
     )
 del _key, _value, _why
 
