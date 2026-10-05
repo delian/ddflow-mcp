@@ -391,8 +391,13 @@ def test_no_strictest_value_contacts_the_remote_or_the_forge() -> None:
     # Every enum knob answers the question, so a new one cannot skip it (roborev on
     # 573fe3d9: a test-side allowlist passed for a knob nobody added to it).
     assert set(C.KNOB_OUTWARD) == set(C.KNOB_CHOICES)
-    assert C.KNOB_OUTWARD["flow.integration"] == {"pr"}
-    assert C.KNOB_OUTWARD["flow.claims"] == {"remote"}
+    # An oracle independent of the table (rubber_duck/critic on c52047d2): changing which
+    # values are outward must change this test, not only the table it checks.
+    assert {k: v for k, v in C.KNOB_OUTWARD.items() if v} == {
+        "flow.integration": {"pr"},
+        "flow.claims": {"remote"},
+        "flow.pr_merge": {"on_approval", "auto"},
+    }
     for key, values in C.KNOB_OUTWARD.items():
         assert values <= set(C.KNOB_CHOICES[key]), key  # the table names real values
         assert C.strictest(key) not in values, f"{key} falls back to {C.strictest(key)!r}"
