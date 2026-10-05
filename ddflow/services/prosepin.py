@@ -31,6 +31,8 @@ import tokenize
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ..infra.worktree import repo_relative
+
 #: Needles shorter than this are ordinary words and would mark most of any document as
 #: pinned. Twelve is the source project's measured floor.
 MIN_NEEDLE_CHARS = 12
@@ -199,7 +201,7 @@ def coverage(
     named: set[str] = set()
 
     for f in files:
-        rel = f.relative_to(repo).as_posix() if f.is_relative_to(repo) else str(f)
+        rel = repo_relative(repo, f, resolve_leaf=False) or str(f)
         try:
             source = f.read_text(encoding="utf-8")
         # OSError: a dangling symlink or an unreadable file. One bad file must not hide
