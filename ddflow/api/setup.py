@@ -204,6 +204,23 @@ def companions_add(repo: Path, reg: Registration | None = None, *, agent: str = 
             written=0,
             refused=[],
         )
+    # The id is the server's key in an agent's config: `a.b` wrote [mcp_servers.a.b], a
+    # nested table, not a server (D-plain-keys, B7a1ed66cb9).
+    from ..services.configwrite import bare_id_problem
+
+    if bad := [
+        p
+        for w in wanted
+        if (p := bare_id_problem(w, "a companion id", "the agent's [mcp_servers.<id>] entry"))
+    ]:
+        return O.refused(
+            "companions.added",
+            "; ".join(bad),
+            actions=[],
+            applied=False,
+            written=0,
+            refused=[w for w in wanted if bare_id_problem(w, "", "")],
+        )
     not_servers = [w for w in wanted if not by_id[w].companion.is_mcp]
     if not_servers:
         return O.refused(
@@ -363,7 +380,8 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
         # can load.
         err, path = _append_config(repo, edit.append_toml, local=edit.local, agent=agent)
         if err:
-            return O.failed("config", err, path="", rows=[], text="")
+            done = O.refused if isinstance(err, KeyRefused) else O.failed
+            return done("config", err, path="", rows=[], text="")
         added = [] if edit.local else _sync_attributes(repo)
         return O.ok(
             "config",

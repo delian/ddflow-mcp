@@ -93,3 +93,91 @@ def test_no_unusable_plain_spelling_is_suggested(repo, key):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "config", "--set", key, "x")
     assert code == REFUSED and "; use " not in err, (code, out, err)
+
+
+# B7a1ed66cb9: the surfaces fix-B72b8adba30 did not reach -- raw TOML appended through
+# `config --append-toml` / `ddflow_configure toml`, companion ids, and the workflow_drop
+# description.
+
+
+@pytest.mark.parametrize(
+    ("block", "plain"),
+    [
+        ('[flow]\n"tag_prefix" = "v"\n', "flow.tag_prefix"),
+        ('[gate."unit_tests"]\ntimeout_s = 5\n', "gate.unit_tests"),
+        ('[[ "reviewer" . x ]]\nname = "r"\n', "reviewer.x"),
+        ('[flow]\n"\\u0074ag_prefix" = "v"\n', "flow.tag_prefix"),
+        ("flow.'tag_prefix' = 'v'\n", "flow.tag_prefix"),
+        ("flow . tag_prefix = 'v'\n", "flow.tag_prefix"),
+        ('[gate.unit_tests]\nenv = {"FOO" = "1"}\n', "gate.unit_tests.env.FOO"),
+    ],
+)
+def test_an_appended_block_with_a_quoted_key_is_refused_naming_the_plain_one(repo, block, plain):
+    run_cli(repo, "init")
+    before = (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    code, out, err = run_cli(repo, "config", "--append-toml", block)
+    assert code == REFUSED, (code, out, err)
+    assert f"use {plain}" in err, err
+    assert (repo / ".ddflow" / "config.toml").read_text("utf-8") == before
+
+
+@pytest.mark.parametrize(
+    "block", ['[gate."two words"]\nprompt = "x"\n', '["flow"]\ntag_prefix = "v"\n']
+)
+def test_an_appended_key_with_no_plain_spelling_is_refused(repo, block):
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config", "--append-toml", block)
+    assert code == REFUSED and "letters, digits" in err, (code, out, err)
+
+
+def test_quotes_in_values_and_comments_are_not_keys(repo):
+    run_cli(repo, "init")
+    block = (
+        '[flow]  # "not" = "a key"\n'
+        'tag_prefix = "v\\"x = 1"\n'
+        "[gate.unit_tests]\n"
+        'env = {FOO = \'a = b\', BAR = """\nx"y"""}\n'
+        'prompt = """\n"k" = 1\n[not.a."header"]\n"""\n'
+    )
+    code, out, err = run_cli(repo, "config", "--append-toml", block)
+    assert code == 0, (code, out, err)
+
+
+def test_the_mcp_configure_tool_refuses_a_quoted_key_in_toml(repo):
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    r = Server(repo).handle(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "ddflow_configure",
+                "arguments": {"toml": '[flow]\n"tag_prefix" = "v"\n'},
+            },
+        }
+    )
+    text = r["result"]["content"][0]["text"]
+    assert "use flow.tag_prefix" in text, text
+    assert r["result"]["_meta"]["exit"] == REFUSED, json.dumps(r)
+
+
+@pytest.mark.parametrize("cid", ["a.b", "two words"])
+def test_a_companion_id_that_is_not_a_bare_key_is_refused(repo, cid):
+    """A dotted id wrote `[mcp_servers.a.b]` into codex's config: a nested table, not a
+    server named `a.b`."""
+    run_cli(repo, "init")
+    (repo / ".ddflow" / "companions.toml").write_text(
+        f'[[companion]]\nid = "{cid}"\ncommand = "echo"\n', "utf-8"
+    )
+    code, out, err = run_cli(repo, "companions", "add", "--id", cid, "--agents", "codex", "--force")
+    assert code == REFUSED and "letters, digits" in out + err, (code, out, err)
+    assert not (repo / ".codex" / "config.toml").exists()
+
+
+def test_workflow_drop_describes_every_pipeline():
+    from ddflow.surfaces.mcp import TOOLS
+
+    desc = TOOLS["ddflow_workflow_drop"]["description"]
+    assert "both pipelines" not in desc and "promotion" in desc, desc
