@@ -246,10 +246,42 @@ def _answers(repo: Path) -> Check:
     )
 
 
+def _has_imports(repo: Path) -> bool | None:
+    """Would the freeze have anything to freeze? Ask the SAME records it reads.
+
+    `legacy.imported_files` reads items, memories and research; the first version asked
+    a function that does not exist and swallowed the AttributeError, so the unfrozen
+    branch was dead (roborev on c61278a4). None means the log could not be read at all:
+    "could not tell" is not "nothing was imported".
+    """
+    from ..core.model import fold
+    from ..infra.log import EventLog
+
+    try:
+        state = fold(
+            EventLog(repo, "onboard-verify", log_cfg=Config.load(repo).log).read_all(),
+            strict=False,
+        )
+    except Exception:
+        return None
+    return bool(L.imported_files(state))
+
+
 def _frozen(repo: Path) -> Check:
     """The freeze ratchet exists, and every frozen file still has its bytes."""
     manifest = L.read_frozen(repo)
     if manifest is None:
+        imported = _has_imports(repo)
+        if imported is False:
+            return Check(
+                "freeze ratchet", "unavailable", "nothing was imported here; no ratchet expected"
+            )
+        if imported is None:
+            return Check(
+                "freeze ratchet",
+                "unavailable",
+                "the log could not be read; could not tell whether an import exists",
+            )
         return Check("freeze ratchet", "failed", "no .ddflow/frozen.toml; the import is unfrozen")
     if not manifest:
         return Check(

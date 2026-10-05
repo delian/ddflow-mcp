@@ -115,6 +115,7 @@ from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
 from .lifecycle import wait as wait_item
+from .onboard import onboard as onboard_run
 from .operations import (
     cadence,
     cleanup,
@@ -253,6 +254,7 @@ __all__ = [
     "memory_list",
     "merge_item",
     "next_item",
+    "onboard_run",
     "phase_add",
     "phase_progress",
     "pins",
