@@ -271,7 +271,11 @@ def test_bugs_md_keeps_a_lesson_with_a_pipe_or_newline_in_one_row():
     text = md.bugs_md(st)
     header = next(ln for ln in text.splitlines() if ln.startswith("| Bug "))
     rows = [ln for ln in text.splitlines() if ln.startswith("| B1 ")]
-    assert len(rows) == 1, text  # the newline did not split the row
+    # The newline is FOLDED into the row (asserted on the folded text: a continuation line
+    # would not start with the row's own prefix, so counting rows cannot see the split --
+    # the column count can, and does, below).
+    assert "line two second line" in rows[0], rows[0]
+    assert not any(ln.strip() == "second line |" for ln in text.splitlines()), text
     assert pipes(rows[0]) == pipes(header), rows[0]
     assert "\\|" in rows[0], rows[0]
 
