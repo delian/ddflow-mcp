@@ -96,7 +96,11 @@ def _hook_after_revival(repo: Path, monkeypatch, *, pause_s: float = 0.0):
     """Revive the lapsed claim, then run the commit hook on a path it covers, `pause_s`
     after the revival, as a bare-environment subprocess."""
     _lapsing_claim(repo, monkeypatch)
+    lapsed = _items(repo)["T1"].lease
     assert run_cli(repo, "heartbeat", "T1", agent=HOLDER)[0] == O.OK
+    # A revival, not a no-op: the clock moved past the lapse (with grace 0 still on).
+    revived = _items(repo)["T1"].lease
+    assert revived.renewed_at > lapsed.renewed_at + lapsed.ttl_s, "the heartbeat did not revive it"
     # The revival renews the claim on ITS TTL -- the 1 s `_lapsing_claim` gave it -- so
     # the revived lease lapses again a second later, and a hook started after that (a
     # loaded machine) read "not covered" for want of time, not of globs (Be33d572ada).
