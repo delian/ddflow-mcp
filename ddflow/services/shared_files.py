@@ -67,13 +67,24 @@ def _probe_paths(repo: Path, glob: str) -> list[str]:
     `docs/guide.md` under the same `docs/*.md` (review findings).
     """
     from ..core.schedule import is_shared
-    from ..infra import proc as P
 
     if not any(ch in glob for ch in "*?["):
         return [glob]
-    r = P.run(["git", "-C", str(repo), "ls-files"], capture_output=True, text=True)
-    hits = [p for p in r.stdout.splitlines() if is_shared(p, [glob])] if r.returncode == 0 else []
-    return hits or [glob]
+    listed = _git_z(repo, "ls-files") or []
+    return [p for p in listed if is_shared(p, [glob])] or [glob]
+
+
+def _git_z(repo: Path, *args: str) -> list[str] | None:
+    """`W.git_paths` -- `-z`, read as bytes, so a non-ASCII path comes back as the file
+    is named, not C-quoted (B9c56de9d58) -- and None when git could not run or did not
+    answer in time, never an exception out of doctor or a config write."""
+    from ..infra import proc as P
+    from ..infra import worktree as W
+
+    try:
+        return W.git_paths(repo, *args, timeout=30)
+    except (OSError, P.SubprocessError):
+        return None
 
 
 def drivers(repo: Path, glob: str) -> dict[str, str]:
@@ -85,21 +96,14 @@ def drivers(repo: Path, glob: str) -> dict[str, str]:
     `merge` (`set`), `-merge` (`unset`) or nothing (`unspecified`) is no driver; a git
     that cannot answer gives every path "".
     """
-    from ..infra import proc as P
-
     paths = _probe_paths(repo, glob)
-    r = P.run(
-        ["git", "-C", str(repo), "check-attr", "merge", "--", *paths],
-        capture_output=True,
-        text=True,
-    )
-    if r.returncode != 0:
+    # With -z each answer is `<path> NUL <attribute> NUL <value> NUL`: the path as named.
+    fields = _git_z(repo, "check-attr", "merge", "--", *paths)
+    if fields is None or len(fields) % 3:
         return dict.fromkeys(paths, "")
     out: dict[str, str] = {}
-    for ln in r.stdout.splitlines():
-        if not ln.strip():
-            continue
-        path, _attr, value = ln.rsplit(": ", 2)
+    for k in range(0, len(fields), 3):
+        path, value = fields[k], fields[k + 2]
         out[path] = "" if value in ("unspecified", "set", "unset") else value
     return out or dict.fromkeys(paths, "")
 
