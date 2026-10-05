@@ -86,7 +86,8 @@ def check_after_merge(repo: Path, *, sha: str = "", item: str = "", agent: str =
     if mode == "off":
         return {}
     if mode not in CI.ON_MERGE_MODES:
-        return {"status": "unavailable", "why": f"[ci].on_merge={mode!r}: off | fast | full"}
+        modes = " | ".join(CI.ON_MERGE_MODES)
+        return {"status": "unavailable", "why": f"[ci].on_merge={mode!r}: {modes}"}
     cmd, _why = CI.main_command(repo, cfg)
     if not cmd:
         return {}  # no CI command in this project: nothing to check, nothing to claim
