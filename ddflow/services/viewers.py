@@ -19,11 +19,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from ..config import Config
-from ..core.model import Bug, Item, ResearchNote, Session, State
+from ..core.model import Bug, Item, Lesson, ResearchNote, Session, State
 from .export.query import ExportError, _cutoff
 from .export.safe import redact_text
 
-KINDS = ("task", "phase", "bug", "research", "session")
+KINDS = ("task", "phase", "bug", "research", "lesson", "session")
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 1000
 _TITLE_MAX = 120
@@ -53,8 +53,12 @@ class View:
 _FILTERS: dict[str, frozenset[str]] = {
     "task": frozenset({"state", "phase", "tag", "agent", "since"}),
     "phase": frozenset({"state", "tag", "agent", "since"}),
-    "bug": frozenset({"state", "phase", "since"}),
+    # `item`: the queue item a bug was filed in or affects -- the bug's own `item` field,
+    # not its phase (a bug filed against no item has none).
+    "bug": frozenset({"state", "phase", "since", "item"}),
     "research": frozenset({"state", "phase", "tag", "since"}),
+    # `owner` is the lesson's `by`: the agent that first recorded it.
+    "lesson": frozenset({"state", "tag", "agent", "since"}),
     "session": frozenset({"state", "agent", "since"}),
 }
 
@@ -109,6 +113,29 @@ def _bug_row(b: Bug, cfg: Config, st: State) -> dict[str, Any]:
         "updated": b.fixed_at or b.invalid_at or b.found_at,
         "phase": _phase_of(st, it),
         "tags": [],
+        # The queue item the bug is against (`""` when it names none): `--item` filters on
+        # this, and it is the bug's OWN field -- `phase` is derived from the same item, but
+        # a bug can name an item whose phase differs from where it was filed.
+        "item": b.item,
+        # The two columns a reader scanning a bug list needs: what guards the fix
+        # (B227585c781 records the tests one by one) and the lesson the close recorded.
+        # `show <id>` has the whole record; these are the facts that belong in a row.
+        "regression_tests": list(b.regression_tests),
+        "lesson": b.lesson,
+    }
+
+
+def _lesson_row(ls: Lesson, cfg: Config) -> dict[str, Any]:
+    return {
+        "id": ls.id,
+        "kind": "lesson",
+        # Two states in one word each: a lesson is still believed, or replaced.
+        "state": "superseded" if ls.superseded_by else "live",
+        "title": _one_line(ls.title or ls.rule, cfg),
+        "owner": ls.by,
+        "updated": ls.at,
+        "phase": "",
+        "tags": _tags(ls.tags, cfg),
     }
 
 
@@ -151,6 +178,8 @@ def _candidates(st: State, kind: str, cfg: Config) -> list[dict[str, Any]]:
         return [_bug_row(b, cfg, st) for b in st.bugs.values()]
     if kind == "research":
         return [_research_row(r, cfg, st) for r in st.research.values()]
+    if kind == "lesson":
+        return [_lesson_row(ls, cfg) for ls in st.lessons.values()]
     return [_session_row(s, cfg) for s in st.sessions.values()]
 
 
@@ -164,12 +193,20 @@ def list_view(
     tag: str = "",
     agent: str = "",
     since: str = "",
+    item: str = "",
     limit: int = DEFAULT_LIMIT,
 ) -> View:
     """Rows of `kind`, newest change first (ties by id), at most `limit` of them."""
     if kind not in KINDS:
         raise ViewError(f"unknown kind {kind!r}: one of {', '.join(KINDS)}")
-    asked = {"state": state, "phase": phase, "tag": tag, "agent": agent, "since": since}
+    asked = {
+        "state": state,
+        "phase": phase,
+        "tag": tag,
+        "agent": agent,
+        "since": since,
+        "item": item,
+    }
     given = {k: v for k, v in asked.items() if v}
     unsupported = sorted(k for k in given if k not in _FILTERS[kind])
     if unsupported:
@@ -193,6 +230,10 @@ def list_view(
         rows = [r for r in rows if want_tag in r["tags"]]
     if agent:
         rows = [r for r in rows if r["owner"] == agent]
+    if item:
+        # Only kinds that carry an `item` may be filtered by one (`_FILTERS`); `.get` keeps
+        # this honest if a future kind with the filter lacks the field.
+        rows = [r for r in rows if r.get("item") == item]
     if since:
         try:
             at_or_after = _cutoff(since)

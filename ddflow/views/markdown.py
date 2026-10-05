@@ -211,6 +211,74 @@ def lessons_md(state: State, cfg: Config | None = None) -> str:
     return "\n".join(out)
 
 
+def _cell(text: str, cfg: Config | None = None) -> str:
+    """One markdown table cell: redacted, newlines folded, `|` escaped so a title cannot
+    split the row into extra columns."""
+    return _redact(text, cfg).replace("\n", " ").replace("|", "\\|").strip()
+
+
+def bugs_md(state: State, cfg: Config | None = None) -> str:
+    """Every bug, newest change first, with the columns a scanner wants: its state, the
+    item it is against, what guards the fix and the lesson the close recorded."""
+    out = [GENERATED, "", "# Bugs", ""]
+    rows = sorted(
+        state.bugs.values(),
+        key=lambda b: b.fixed_at or b.invalid_at or b.found_at or "",
+        reverse=True,
+    )
+    if not rows:
+        out.append("_None recorded._")
+        return "\n".join(out)
+    out.append("| Bug | State | Title | Item | Regression tests | Lesson |")
+    out.append("|---|---|---|---|---|---|")
+    for b in rows:
+        tests = ", ".join(_cell(t, cfg) for t in b.regression_tests) or "—"
+        out.append(
+            f"| {b.id} | {b.resolution or 'open'} | {_cell(b.title or b.summary, cfg)} | "
+            f"{_cell(b.item, cfg) or '—'} | {tests} | {_cell(b.lesson, cfg) or '—'} |"
+        )
+    out.append("")
+    return "\n".join(out)
+
+
+def decisions_md(state: State, cfg: Config | None = None) -> str:
+    """The decisions IN FORCE, oldest first -- the order they were made in, which is the
+    order the architecture was decided in."""
+    out = [GENERATED, "", "# Decisions", ""]
+    live = sorted((d for d in state.decisions.values() if d.live), key=lambda d: d.at)
+    if not live:
+        out.append("_None recorded._")
+        return "\n".join(out)
+    for d in live:
+        out.append(f"## {d.id} — {_cell(d.title, cfg)}")
+        out.append("")
+        out.append(_redact(d.decision, cfg))
+        if d.globs:
+            out.append("")
+            out.append(f"**Governs:** {', '.join(_redact(g, cfg) for g in d.globs)}")
+        out.append("")
+    return "\n".join(out)
+
+
+def sessions_md(state: State, cfg: Config | None = None) -> str:
+    """The sessions, newest first, one line each: when, who, and what it was for."""
+    out = [GENERATED, "", "# Sessions", ""]
+    rows = sorted(
+        state.sessions.values(), key=lambda s: s.ended_at or s.started_at or "", reverse=True
+    )
+    if not rows:
+        out.append("_None recorded._")
+        return "\n".join(out)
+    for s in rows:
+        first = s.prompts[0].get("text", "") if s.prompts else ""
+        when = (s.ended_at or s.started_at or "")[:16].replace("T", " ")
+        word = "ended" if s.ended_at else "open"
+        title = _cell(first, cfg)[:120] or _cell(s.model, cfg)
+        out.append(f"- **{s.id}** [{word}] {when} `{s.agent}` {title}")
+    out.append("")
+    return "\n".join(out)
+
+
 #: How much of a lesson's rule stands in for a summary it does not have. One paragraph is
 #: the unit: the first one, cut at this many characters.
 _SUMMARY_FALLBACK_CHARS = 400
