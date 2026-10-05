@@ -379,7 +379,11 @@ def test_a_quoted_table_header_is_still_reported_and_the_revert_names_the_knob(r
     reply = _configure(repo, toml='["review"]\nmax_rounds = 0\non_exceed = "warn"')
     assert "operator" in reply.lower(), reply
     assert "review.max_rounds 2" in reply and "review.on_exceed" in reply and "refuse" in reply
-    only = _configure(repo, set='"review".on_exceed', value="refuse", local=True)
+    # D-plain-keys: the quoted spelling is refused, naming the plain key ...
+    quoted = _configure(repo, set='"review".on_exceed', value="refuse", local=True)
+    assert "use review.on_exceed" in quoted, quoted
+    # ... and the plain key reverts it, naming the one knob it changed.
+    only = _configure(repo, set="review.on_exceed", value="refuse", local=True)
     assert "review.on_exceed refuse" in only and "review.max_rounds 2" not in only
     commented = _configure(repo, set="lease.ttl_s", value="1800")
     assert "operator" not in commented.lower()
