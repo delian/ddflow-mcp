@@ -303,6 +303,22 @@ def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str
 _GATE_KEY_PARTS = 3
 
 
+def gate_id_problem(gid: str) -> str:
+    """Why ``gid`` cannot be a gate id, or "" when it can (B72b8adba30).
+
+    A gate id is the `<id>` of the `[gate.<id>]` section, written as an unquoted dotted
+    key: anything but a TOML bare key either breaks the file with a raw parse error or,
+    for a dot, nests a table -- `gate.a.b.command` wrote `[gate.a.b]`, exit 0, and
+    every later command refused to load it.
+    """
+    if re.fullmatch(r"[A-Za-z0-9_-]+", gid):
+        return ""
+    return (
+        f"{gid!r} cannot be a gate id: use only ASCII letters, digits, `_` and `-` "
+        f"(it names the [gate.<id>] section of the config)."
+    )
+
+
 def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[str]:
     """Human gates that a given config TEXT places in a pipeline. Never raises.
 
@@ -381,6 +397,15 @@ def _write_config(
         and pp[0] == "gate"
         and pp[-1] == "human"
     ]
+    for k, _v in pairs:
+        pp = [seg.strip() for seg in k.split(".")]
+        if pp[0] == "gate" and len(pp) > 1:
+            # Everything between `gate.` and the field is the id: `gate.a.b.command`
+            # names the id `a.b`, which is refused, not silently nested.
+            gid = ".".join(pp[1:-1]) if len(pp) >= _GATE_KEY_PARTS else pp[1]
+            problem = gate_id_problem(gid)
+            if problem:
+                return problem, ""
     if blocked:
         return (
             f"refusing to edit {', '.join(blocked)}: whether a gate is a human "

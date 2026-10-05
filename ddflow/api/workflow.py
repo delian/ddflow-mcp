@@ -14,7 +14,6 @@ or an MCP tool, and a rule enforced in three places is a rule enforced in two.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -23,7 +22,7 @@ from ..core import outcome as O
 from ..core.plain import plain as _plain
 from ..infra.tomlcfg import value as toml_value
 from ..services import gates as G
-from ..services.configwrite import _write_config
+from ..services.configwrite import _write_config, gate_id_problem
 from ._base import _load
 
 
@@ -154,18 +153,11 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
     """
     from ..services.gates import load_gates
 
-    # The id becomes the dotted key `gate.<id>.<field>`, unquoted. One that is not a
-    # TOML bare key was refused only as a raw parse error naming a config line, and a
-    # dot in it silently became a nested table (`a.b` -> gate `a`) (B72b8adba30).
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", edit.id):
-        return O.failed(
-            "workflow.gate",
-            f"{edit.id!r} cannot be a gate id: use only ASCII letters, digits, `_` and `-` "
-            f"(it names the [gate.<id>] section of the config).",
-            gate=edit.id,
-            changed=[],
-            applied=False,
-        )
+    # Checked first for a plain answer; `_write_config` refuses it again at the choke
+    # point, for every other writer (B72b8adba30).
+    problem = gate_id_problem(edit.id)
+    if problem:
+        return O.failed("workflow.gate", problem, gate=edit.id, changed=[], applied=False)
     _log, cfg, _st = _load(repo)
     known = load_gates(repo, cfg)
     pairs: list[tuple[str, str]] = []
