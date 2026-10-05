@@ -1507,7 +1507,7 @@ _doc(
 
 
 #: `Config` fields that are bookkeeping, not `[section]`s.
-_NOT_SECTIONS = ("sources", "unknown_knobs", "_fallback_notes")
+_NOT_SECTIONS = ("sources", "unknown_knobs", "_fallback_notes", "_bad_values")
 
 
 @dataclass
@@ -1555,6 +1555,10 @@ class Config:
     _fallback_notes: dict[str, list[tuple[int, str]]] = field(
         default_factory=dict, repr=False, compare=False
     )
+    #: Indices in unknown_knobs of the OTHER entries for a known key with a value this
+    #: code does not know (skipped, not replaced): `invalid_value_indices` reads them, so
+    #: doctor never calls such a key unknown (Bf3566bbacd). Shared shallowly, as above.
+    _bad_values: list[int] = field(default_factory=list, repr=False, compare=False)
 
     # -- loading ------------------------------------------------------------------
     @classmethod
@@ -1682,6 +1686,7 @@ class Config:
                         # takes its STRICTEST value, not its default, so a typo in a
                         # tightened setting fails closed (D-enum-fallback-strict).
                         if f"{sec}.{knob}" not in KNOB_STRICTEST:
+                            self._bad_values.append(len(self.unknown_knobs))
                             self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
                             continue
                         bad, value = value, strictest(f"{sec}.{knob}")
@@ -1713,6 +1718,15 @@ class Config:
         (the strictest, or a later layer's override, as the note says), never a skipped
         key -- read from the bookkeeping, never from the notes' text."""
         return {self.unknown_knobs[i] for notes in self._fallback_notes.values() for i, _ in notes}
+
+    def invalid_value_indices(self) -> set[int]:
+        """Which `unknown_knobs` entries are for a KNOWN key whose value is not known --
+        the strictest-fallback notes and the skipped values -- by index, from the
+        bookkeeping: never from the entries' text, which holds the user's own spelling
+        (an unknown key may be spelled exactly like a value's note)."""
+        return {i for notes in self._fallback_notes.values() for i, _ in notes} | set(
+            self._bad_values
+        )
 
     def _forget_fallback(self, key: str, by: str) -> None:
         """A later layer set `key`: an earlier layer's strictest-fallback note must stop
@@ -1748,6 +1762,7 @@ class Config:
                 clean[key] = val
             if why := _export_table_problem(k, clean):
                 if lenient:  # a value a newer release defines: skipped, never fatal
+                    self._bad_values.append(len(self.unknown_knobs))
                     self.unknown_knobs.append(f"export.{k} ({why})")
                     continue
                 raise ValueError(f"invalid [export.{k}]: {why}")
@@ -1759,6 +1774,7 @@ class Config:
         out = dataclasses.asdict(self)
         out.pop("sources", None)
         out.pop("_fallback_notes", None)
+        out.pop("_bad_values", None)
         return out
 
     def explain(self) -> list[tuple[str, Any, str, str]]:

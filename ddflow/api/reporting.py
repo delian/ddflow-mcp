@@ -689,10 +689,15 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
     # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.
+    # A KNOWN knob with a value this code does not know is an INVALID VALUE, not an
+    # unknown key (Bf3566bbacd) -- asked of the config's bookkeeping, never of the entry's
+    # text, which holds the user's own spelling (roborev on 183bcf03 and eb6a482d).
+    bad_values = cfg.invalid_value_indices()
     problems += [
-        f"unknown config key {k} in .ddflow/config.toml: a typo, or written by a newer "
-        "ddflow than this checkout runs (merge main)"
-        for k in cfg.unknown_knobs
+        f"{'invalid value for' if i in bad_values else 'unknown config key'} "
+        f"{k} in .ddflow/config.toml: a typo, or written by a newer ddflow than this "
+        "checkout runs (merge main)"
+        for i, k in enumerate(cfg.unknown_knobs)
     ]
     # Events this code has no handler for: the fold skipped them (B168), so every number
     # below is computed WITHOUT them. A note, as an unknown config knob is named but the
