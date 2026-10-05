@@ -1,0 +1,2 @@
+{"agent":"Monster3-B-docsync-mutants-7267fe","data":{"install":"source-tree","version":"0.1.14"},"id":"e275902866d448f9332a328f7","kind":"ddflow.seen","lamport":18580,"schema":1,"subject":"ddflow","ts":"2026-10-05T11:13:48.441013Z"}
+{"agent":"Monster3-B-docsync-mutants-7267fe","data":{"gate":"ci"},"id":"e917d6f8e58c08be26ffa1ee4","kind":"gate.started","lamport":18581,"schema":1,"subject":"B-docsync-mutants","ts":"2026-10-05T11:13:48.498669Z"}
