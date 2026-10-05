@@ -20,6 +20,19 @@ set -euo pipefail
 remote=${1:-origin}
 z40=0000000000000000000000000000000000000000
 
+# FIRST, before anything that can stop the hook (a missing pre-commit exits below):
+# the event log is the project's source of truth: a push without its newest shards
+# publishes an incomplete history (Bcd3512c891). A warning, not a refusal.
+# Shards are written in the PRIMARY checkout, which a push from a linked worktree does
+# not see; -z so a quoted path is still counted.
+common=$(git rev-parse --git-common-dir </dev/null 2>/dev/null || true)
+case "$common" in /*) ;; *) common="$PWD/$common" ;; esac  # relative before git 2.31's --path-format
+primary=$(dirname "$common")
+loose=$(git -C "$primary" status --porcelain -z --untracked-files=all -- .ddflow/events 2>/dev/null </dev/null | tr '\0' '\n' | grep -c '\.jsonl$' || true)
+if [ "${loose:-0}" -gt 0 ]; then
+    echo "pre-push: WARNING: $loose event shard(s) in .ddflow/events are not committed, so this push leaves them out." >&2
+    echo "  git -C \"$primary\" add .ddflow/events && git -C \"$primary\" commit -m 'events' -- .ddflow/events" >&2
+fi
 if ! command -v pre-commit >/dev/null 2>&1; then
     echo "pre-push: pre-commit is not installed, so nothing was checked." >&2
     echo "  Install it (uv tool install pre-commit), or push with --no-verify to skip on purpose." >&2
@@ -34,18 +47,6 @@ trap cleanup EXIT
 trap 'cleanup; exit 130' INT TERM
 
 status=0
-# The event log is the project's source of truth: a push without its newest shards
-# publishes an incomplete history (Bcd3512c891). A warning, not a refusal.
-# Shards are written in the PRIMARY checkout, which a push from a linked worktree does
-# not see; -z so a quoted path is still counted.
-common=$(git rev-parse --git-common-dir </dev/null 2>/dev/null || true)
-case "$common" in /*) ;; *) common="$PWD/$common" ;; esac  # relative before git 2.31's --path-format
-primary=$(dirname "$common")
-loose=$(git -C "$primary" status --porcelain -z --untracked-files=all -- .ddflow/events 2>/dev/null </dev/null | tr '\0' '\n' | grep -c '\.jsonl$' || true)
-if [ "${loose:-0}" -gt 0 ]; then
-    echo "pre-push: WARNING: $loose event shard(s) in .ddflow/events are not committed, so this push leaves them out." >&2
-    echo "  git -C \"$primary\" add .ddflow/events && git -C \"$primary\" commit -m 'events' -- .ddflow/events" >&2
-fi
 # git feeds one line per pushed ref on stdin. The loop owns stdin: every command inside
 # reads /dev/null instead, or the first one to read stdin would swallow the next refs.
 while read -r local_ref local_sha _remote_ref remote_sha; do
