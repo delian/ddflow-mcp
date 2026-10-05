@@ -39,9 +39,12 @@ must never rewrite a recorded id.
    source of uniqueness: `{seq}`, `{hash}`, or `{time}` together with `{pid}`.
    Otherwise it must declare `stable = true`. A stable template maps the same content
    to the same id on purpose, so filing it again extends the existing record instead
-   of creating a new one. `{digest}` is allowed only in stable templates. The only
-   shipped stable default is the CI failure bug. Each shipped default passes this
-   rule.
+   of creating a new one. To guarantee that in both directions, a stable template
+   must contain `{digest}`. It may contain only tokens fixed by the content and the
+   kind (`{prefix}`, `{slug}`, `{parent}`, `{phase}`, `{user-text}`, `{digest}`), and
+   none that change between filings (`{seq}`, `{hash}`, `{date}`, `{time}`, `{pid}`,
+   `{env}`). `{digest}` is allowed only in stable templates. The only shipped stable
+   default is the CI failure bug. Each shipped default passes these rules.
 
 3. **Sequential numbers: next free number, suffix on clash.** Every record keeps an
    internal id, minted exactly as today. Events reference records by this id, so the
