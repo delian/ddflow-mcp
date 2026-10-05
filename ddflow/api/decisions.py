@@ -217,38 +217,49 @@ def decision_list(
     into a lie about which ones were cut. `total`/`shown` let a surface say what it left
     out, exactly as the viewers do.
     """
-    if limit is not None and limit < 0:
-        # Refused, like the viewer engine's `limit < 1`: a negative cap silently emptying
-        # the list would report "no decisions match" for an argument that cannot mean that.
-        return O.refused("decision.list", f"limit must be 0 (all) or a positive count, got {limit}")
     _log, _cfg, st = _load(repo)
     live = [d for d in st.decisions.values() if d.live]
     dead = [d for d in st.decisions.values() if not d.live]
     rows = live + dead if all else live
-    if since:
-        try:
-            at_or_after = _cutoff(since)
-        except ExportError as exc:
-            return O.refused("decision.list", str(exc).replace("--since", "since"))
-        rows = [d for d in rows if d.at and at_or_after(d.at)]
-    rows.sort(key=lambda x: x.at)
-    total = len(rows)
-    if limit:
-        rows = rows[-limit:] if limit > 0 else []
+    # The projected keys exist on EVERY path, refusals included: the MCP tool declares
+    # `payload: "rows"`, so `out.body("rows")` runs before a refusal is rendered and raises
+    # KeyError -- the wire shape must hold even when the answer is "no" (roborev on fd7ab63a,
+    # which caught the `since` branch too).
     data: dict[str, Any] = {
         # `live` is a property, so plain() leaves it out; the human renderer reads it
         # and crashed with KeyError: 'live' (Bb177c2e0e9).
-        "rows": [{**_plain(d), "live": d.live} for d in rows],
+        "rows": [],
         "live": len(live),
         # How many exist but were not shown -- so the human renderer can say so without
         # folding a second time, and a machine caller can tell "none recorded" from
         # "none in force".
         "hidden": 0 if all else len(dead),
         "all": all,
-        "total": total,
-        "shown": len(rows),
+        "total": len(rows),
+        "shown": 0,
         "limit": limit or 0,
     }
+    if limit is not None and limit < 0:
+        # Refused, like the viewer engine's `limit < 1`: a negative cap silently emptying
+        # the list would report "no decisions match" for an argument that cannot mean that.
+        return O.refused(
+            "decision.list",
+            f"limit must be 0 (all) or a positive count, got {limit}",
+            **data,
+        )
+    if since:
+        try:
+            at_or_after = _cutoff(since)
+        except ExportError as exc:
+            return O.refused("decision.list", str(exc).replace("--since", "since"), **data)
+        rows = [d for d in rows if d.at and at_or_after(d.at)]
+    rows.sort(key=lambda x: x.at)
+    total = len(rows)  # matched, before the limit cut -- what `shown` is short of
+    if limit:
+        rows = rows[-limit:] if limit > 0 else []
+    data["rows"] = [{**_plain(d), "live": d.live} for d in rows]
+    data["total"] = total
+    data["shown"] = len(rows)
     if not rows:
         # `hidden`/`total` say WHICH emptiness this is: nothing recorded at all, or
         # nothing left after a filter. Reporting the first for the second sends the
