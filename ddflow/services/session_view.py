@@ -60,7 +60,9 @@ def _gather(events: list) -> dict[str, _Acc]:
             s.implicit = s.implicit or bool(d.get("implicit"))
         elif ev.kind == "session.ended":
             s.ended = ev.ts
-            s.summary = d.get("summary", "") or s.summary
+            # The fold's rule (core/model `_h_session_ended`): trimmed, and an empty one
+            # never blanks an earlier summary (B194).
+            s.summary = (d.get("summary") or "").strip() or s.summary
         else:
             s.entries.append(
                 {
