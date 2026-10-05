@@ -915,16 +915,16 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "lesson": ("string", "Id of an EXISTING lesson this bug belongs to.", False),
             "changelog": ("string", "Optional 'Fixed: text' (any category), or skip.", False),
-            "verify_regression": (
+            "skip_regression_verify": (
                 "boolean",
-                "Whether to run the named test on the pre-fix tree (default true). The "
-                "test must FAIL there and PASS with the fix; false needs verify_reason.",
+                "Do NOT run the named test on the pre-fix tree (default false: it is run "
+                "and must FAIL there, PASS with the fix). Needs verify_reason.",
                 False,
             ),
             "verify_reason": (
                 "string",
                 "Why the pre-fix regression check is skipped (recorded). Required when "
-                "verify_regression is false.",
+                "skip_regression_verify is true.",
                 False,
             ),
         },
@@ -936,7 +936,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             lesson_title=a.get("lesson_title", "") or "",
             lesson_rule=a.get("lesson_rule", "") or "",
             changelog=a.get("changelog", "") or "",
-            verify_regression=a.get("verify_regression", True),
+            verify_regression=not a.get("skip_regression_verify", False),
             verify_reason=a.get("verify_reason", "") or "",
             agent=agent,
         ),
