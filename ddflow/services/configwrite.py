@@ -30,7 +30,6 @@ the file editable at all.
 
 from __future__ import annotations
 
-import dataclasses
 import re
 from pathlib import Path
 
@@ -313,7 +312,7 @@ def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[s
     omission. Whether the operator's approval step exists is the operator's decision, and
     the flag and the pipeline membership are two ways of saying it.
     """
-    from .gates import load_gates
+    from .gates import load_gates, pipelined
 
     try:
         data, cfg = _effective(repo, text, local)
@@ -321,16 +320,9 @@ def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[s
         for gid, spec in (data.get("gate") or {}).items():
             if gid in gates and isinstance(spec, dict) and "human" in spec:
                 gates[gid].human = bool(spec["human"])
-        # Every `gates.*_pipeline`, derived rather than listed: naming task and phase
-        # missed `promotion_pipeline` -- where a deploy sign-off belongs -- and a list
-        # would miss the next pipeline the same way.
-        in_pipeline = {
-            g
-            for f in dataclasses.fields(cfg.gates)
-            if f.name.endswith("_pipeline")
-            for g in getattr(cfg.gates, f.name) or ()
-        }
-        return {g for g in in_pipeline if g in gates and gates[g].is_human_gate}
+        # Every `gates.*_pipeline` (gates.pipelined), derived rather than listed: naming
+        # task and phase missed `promotion_pipeline` -- where a deploy sign-off belongs.
+        return {g for g in pipelined(cfg) if g in gates and gates[g].is_human_gate}
     except Exception:
         return set()
 

@@ -69,3 +69,26 @@ def test_the_workflow_checks_see_the_promotion_pipeline(repo):
     assert (
         signoff and signoff[0].in_promotion and signoff[0].required and signoff[0].kind == "human"
     )
+
+
+def test_workflow_drop_takes_a_gate_out_of_the_promotion_pipeline_too(repo):
+    """`workflow drop` walked task and phase only: a gate only promotions ran was 'in
+    neither pipeline; nothing to drop' (exit 2), and left in place."""
+    run_cli(repo, "init")
+    gate = '[gate.smoke]\ncommand = "true"'
+    assert run_cli(repo, "config", "--append-toml", gate)[0] == 0
+    code, out, err = run_cli(
+        repo, "config", "--set", "gates.promotion_pipeline", '["unit_tests", "smoke", "merge"]'
+    )
+    assert code == 0, (out, err)
+    code, out, err = run_cli(repo, "workflow", "drop", "smoke")
+    assert code == 0, (out, err)
+    assert Config.load(repo).gates.promotion_pipeline == ["unit_tests", "merge"]
+
+
+def test_workflow_json_names_the_promotion_pipeline(repo):
+    import json
+
+    _repo_requiring_a_promotion_signoff(repo)
+    data = json.loads(run_cli(repo, "--json", "workflow")[1])
+    assert data["promotion_pipeline"] == ["unit_tests", "deploy_signoff", "merge"]
