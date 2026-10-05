@@ -41,7 +41,7 @@ from ..core import textsim
 from ..core.model import State, fold
 from ..infra.log import EventLog, _flock
 
-SCHEMA = 9
+SCHEMA = 10
 
 #: Shortest token kept from a user query. One-character tokens match almost everything
 #: and rank nothing, so they cost index time and return noise.
@@ -482,7 +482,7 @@ class Store:
                             role, digits = (
                                 (tail[:1], tail[1:]) if tail[:1].isalpha() else ("p", tail)
                             )
-                            seq = int(digits or 0) + (10_000 if role == "n" else 0)
+                            seq = int(digits or 0) + _LETTER_OFFSET.get(role, 0)
                             r2 = con.execute(
                                 "select * from prompts where session=? and seq=?",
                                 (sess, seq),
@@ -583,7 +583,10 @@ def summarise_row(table: str, row: dict[str, Any], width: int = 240) -> tuple[st
         # A note is the AGENT's record of the work — a dead end, a surprise, why it
         # changed approach — and attributing one to the operator would put words in
         # their mouth, which is worse than not surfacing it at all.
-        who = "the agent noted:" if row.get("role") == "note" else "operator asked:"
+        who = {
+            "note": "the agent noted:",
+            "summary": f"SESSION SUMMARY ({row.get('session', '')}):",
+        }.get(row.get("role") or "", "operator asked:")
         return f"{row.get('at', '')[:10]} {who}", text[:width]
     return row.get("id", ""), ""
 
@@ -603,8 +606,14 @@ def _insert_memories(con, state, fts: bool) -> None:
             con.execute("insert into memories_fts values(?,?,?)", (m.id, m.text, " ".join(m.tags)))
 
 
+#: Where each role's rows sit in a session's `seq` space, so a prompt, a note and the
+#: summary never collide on the primary key; the FTS id's letter maps back to it.
+_ROLE_OFFSET = {"prompt": 0, "note": 10_000, "summary": 20_000}
+_LETTER_OFFSET = {"p": 0, "n": 10_000, "s": 20_000}
+
+
 def _insert_sessions(con, state, fts: bool) -> None:
-    """Prompts AND notes, in one table, distinguished by `role`.
+    """Prompts, notes AND the session's summary, in one table, distinguished by `role`.
 
     A note is what the agent recorded about the work — a dead end, a surprise, why it
     changed approach — and it was folded, replayed and then never indexed, so `recall`
@@ -613,13 +622,15 @@ def _insert_sessions(con, state, fts: bool) -> None:
     """
     for sess in state.sessions.values():
         entries = [(pr, "prompt") for pr in sess.prompts] + [(nt, "note") for nt in sess.notes]
+        if sess.summary:  # what `session end --summary` said the session did (B194)
+            entries.append(({"at": sess.ended_at, "text": sess.summary, "seq": 0}, "summary"))
         for n, (entry, role) in enumerate(entries):
             seq = int(entry.get("seq", n))
             con.execute(
                 "insert or replace into prompts values(?,?,?,?,?,?)",
                 (
                     sess.id,
-                    seq if role == "prompt" else 10_000 + seq,
+                    seq + _ROLE_OFFSET[role],
                     # `origin_at` when the note records something that happened before
                     # it was written down -- an imported journal entry or memory --
                     # so `recall` dates it by when it was TRUE, not by when the import
