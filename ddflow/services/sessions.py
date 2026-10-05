@@ -136,13 +136,12 @@ def process_started_at() -> float:
     machine stretches past any short window (B72b9ab33fc). Linux keeps the start in
     /proc on the boot clock; its distance from the boot clock now is the process's age.
     """
+    from .jobs import proc_start
+
     try:
-        stat = Path("/proc/self/stat").read_text()
-        # Field 22 (starttime, in clock ticks); counted after the parenthesised name,
-        # which may itself hold spaces, the fields from 3 on are its tail.
-        ticks = int(stat[stat.rindex(")") + 2 :].split()[19])
+        ticks = int(proc_start(os.getpid()))  # "" where there is no /proc
         age = time.clock_gettime(time.CLOCK_BOOTTIME) - ticks / os.sysconf("SC_CLK_TCK")
-    except (OSError, ValueError, IndexError, AttributeError):
+    except (OSError, ValueError, AttributeError):
         return time.time()
     return time.time() - max(0.0, age)
 
