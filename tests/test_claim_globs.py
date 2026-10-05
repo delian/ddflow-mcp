@@ -92,9 +92,20 @@ def test_reviving_a_lapsed_lease_keeps_the_claimed_globs(repo, monkeypatch):
     assert _lease_globs(repo, "T1") == ["docs/x.md", "src/*"], "revival wiped the claim"
 
 
-def test_after_a_revival_the_hook_accepts_a_path_the_claim_covers(repo, monkeypatch):
+def _hook_after_revival(repo: Path, monkeypatch, *, pause_s: float = 0.0):
+    """Revive the lapsed claim, then run the commit hook on a path it covers, `pause_s`
+    after the revival, as a bare-environment subprocess."""
     _lapsing_claim(repo, monkeypatch)
     assert run_cli(repo, "heartbeat", "T1", agent=HOLDER)[0] == O.OK
+    # The revival renews the claim on ITS TTL -- the 1 s `_lapsing_claim` gave it -- so
+    # the revived lease lapses again a second later, and a hook started after that (a
+    # loaded machine) read "not covered" for want of time, not of globs (Be33d572ada).
+    # A grace period keeps it live; empty or wrong revived globs still fail below.
+    cfg = repo / ".ddflow" / "config.toml"
+    text = cfg.read_text()
+    assert "grace_s = 0\n" in text
+    cfg.write_text(text.replace("grace_s = 0\n", "grace_s = 3600\n", 1))
+    time.sleep(pause_s)
     (repo / "src").mkdir(exist_ok=True)
     (repo / "src" / "a.py").write_text("x = 1\n")
     subprocess.run(["git", "-C", str(repo), "add", "src/a.py"], check=True)
@@ -103,7 +114,7 @@ def test_after_a_revival_the_hook_accepts_a_path_the_claim_covers(repo, monkeypa
         "PYTHONPATH": str(Path(__file__).resolve().parents[1]),
         "DDFLOW_AGENT": HOLDER,
     }
-    p = subprocess.run(
+    return subprocess.run(
         [sys.executable, "-m", "ddflow", "--repo", str(repo), "hooks", "check-commit"],
         cwd=repo,
         capture_output=True,
@@ -111,6 +122,18 @@ def test_after_a_revival_the_hook_accepts_a_path_the_claim_covers(repo, monkeypa
         env=env,
         timeout=120,
     )
+
+
+def test_after_a_revival_the_hook_accepts_a_path_the_claim_covers(repo, monkeypatch):
+    p = _hook_after_revival(repo, monkeypatch)
+    assert p.returncode == 0, p.stdout + p.stderr
+    assert "not covered" not in p.stdout + p.stderr, p.stdout + p.stderr
+
+
+def test_a_hook_slower_than_the_claims_ttl_still_sees_the_revived_claim(repo, monkeypatch):
+    """Be33d572ada: the case above, with the hook starting later than the 1 s TTL the
+    revival renewed -- what a loaded machine did to it at random."""
+    p = _hook_after_revival(repo, monkeypatch, pause_s=1.5)
     assert p.returncode == 0, p.stdout + p.stderr
     assert "not covered" not in p.stdout + p.stderr, p.stdout + p.stderr
 
