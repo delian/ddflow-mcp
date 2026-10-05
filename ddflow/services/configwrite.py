@@ -311,13 +311,26 @@ def _key_parts(k: str) -> list[str]:
 
 
 def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
-    """An early, plain answer for the common shape `gate.<id>.<field>` (B72b8adba30).
-    Any other spelling -- a nested key, an escaped segment -- is judged on the RESULT,
-    by `_gate_table_problems` (roborev on 6a91557b, 40a39e9f)."""
+    """A plain refusal for a `gate.*` key whose gate id is not a bare key (B72b8adba30).
+
+    The id is the segment after `gate.`, except that `gate.<id>.env.<VAR>` -- `env` is
+    the one table-valued gate field -- is the only four-part shape; any other longer key
+    is a dotted id (`gate.x.command.command` names `x.command`). Every segment must be a
+    bare key too: `_toml_upsert` writes them unquoted, so `gate.a b.c.command` would
+    otherwise fail as a raw TOML parse error. Spellings this cannot see (an escaped
+    segment) are judged on the parsed RESULT by `_gate_table_problems`.
+    """
     for k, _v in pairs:
         pp = _key_parts(k)
-        if pp[0] == "gate" and len(pp) == _GATE_KEY_PARTS and gate_id_problem(pp[1]):
-            return gate_id_problem(pp[1])
+        if pp[0] != "gate" or len(pp) < _GATE_KEY_PARTS:
+            continue
+        env_entry = len(pp) == _GATE_KEY_PARTS + 1 and pp[2] == "env"
+        gid = pp[1] if len(pp) == _GATE_KEY_PARTS or env_entry else ".".join(pp[1:-1])
+        problem = gate_id_problem(gid) or next(
+            (gate_id_problem(seg) for seg in pp[1:] if gate_id_problem(seg)), ""
+        )
+        if problem:
+            return problem
     return ""
 
 
@@ -328,27 +341,38 @@ def _parsed(text: str) -> dict:
         return {}
 
 
-def _gate_table_problems(data: dict) -> set[str]:
-    """What is wrong with the `[gate.*]` blocks of a parsed config: an id that is not a
-    bare key, or a field no gate has -- a nested table (`[gate.a.b]`) among them."""
+def _gate_table_problems(data: dict) -> set[tuple[str, str, str]]:
+    """What is wrong with the `[gate.*]` blocks of a parsed config, STRUCTURALLY: `(kind,
+    gate, field)` for an id that is not a bare key, a table where a field belongs (a
+    dotted id nested one: `[gate.a.b]`), or a field no gate has. Tuples, not messages,
+    so a pre-existing `[gate."a.b"]` cannot mask a new nested `[gate.a.b]` that would
+    render the same words (roborev on 45abe764)."""
     from .gates import GateDef
 
     known = set(GateDef.__dataclass_fields__)
-    out: set[str] = set()
+    out: set[tuple[str, str, str]] = set()
     for gid, spec in (data.get("gate") or {}).items():
         if gate_id_problem(gid):
-            out.add(gate_id_problem(gid))
+            out.add(("id", gid, ""))
             continue
         if not isinstance(spec, dict):
             continue
-        for field_name, value in spec.items():
-            if field_name in known:
+        for name, value in spec.items():
+            if name == "env":
                 continue
-            if isinstance(value, dict):  # a dotted id nested a table under this gate
-                out.add(gate_id_problem(f"{gid}.{field_name}"))
-            else:
-                out.add(f"[gate.{gid}] has no field {field_name!r}")
+            if isinstance(value, dict):
+                out.add(("nested", gid, name))
+            elif name not in known:
+                out.add(("unknown", gid, name))
     return out
+
+
+def _render_gate_problem(kind: str, gid: str, name: str) -> str:
+    if kind == "id":
+        return gate_id_problem(gid)
+    if kind == "nested":
+        return gate_id_problem(f"{gid}.{name}")
+    return f"[gate.{gid}] has no field {name!r}"
 
 
 def gate_id_problem(gid: str) -> str:
@@ -481,7 +505,7 @@ def _write_config(
         # Only NEW problems: an existing one must not stop the edit that repairs it.
         new = _gate_table_problems(result) - _gate_table_problems(_parsed(text_before))
         if new:
-            return "; ".join(sorted(new)), text
+            return "; ".join(sorted(_render_gate_problem(*p) for p in new)), text
         # Refusing the FLAG was not enough. `workflow drop <human-gate>` took the
         # checkpoint out of the pipeline, exit 0, and `workflow pipeline task <list
         # without it>` does the same by omission — two ways to delete the operator's

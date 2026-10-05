@@ -14,7 +14,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
 
-@pytest.mark.parametrize("gid", ["ship🚀", "two words", "a.b", "x]"])
+@pytest.mark.parametrize(
+    "gid", ["ship🚀", "two words", "a.b", "x]", "x.command", "a.human", "a b.c", "a🚀.b"]
+)
 def test_a_gate_id_that_is_not_a_bare_key_is_refused_plainly(repo, gid):
     run_cli(repo, "init")
     before = (repo / ".ddflow" / "config.toml").read_text("utf-8")
@@ -41,6 +43,9 @@ def test_an_ordinary_gate_id_is_still_accepted(repo):
         "'gate'.a.b.command",
         '"\\u0067ate".a.b.command',
         '"\\U00000067ate".a.b.command',
+        "gate.x.command.command",
+        "gate.a.human.prompt",
+        "gate.a b.c.command",
     ],
 )
 def test_config_set_refuses_a_gate_key_whose_id_is_not_a_bare_key(repo, key):
@@ -74,3 +79,15 @@ def test_a_misspelt_gate_field_is_refused_not_written(repo):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "config", "--set", "gate.unit_tests.comand", "x")
     assert code != 0 and "comand" in out + err, (out, err)
+
+
+def test_an_existing_quoted_id_does_not_mask_a_new_nested_block(repo):
+    """roborev on 45abe764: problems were compared as rendered text, so a hand-written
+    `[gate."a.b"]` hid a newly nested `[gate.a.b]` saying the same words."""
+    run_cli(repo, "init")
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text("utf-8") + '\n[gate."a.b"]\nprompt = "p"\n', "utf-8")
+    before = cfg.read_text("utf-8")
+    code, out, err = run_cli(repo, "config", "--set", '"\\u0067ate".a.b.command', "y")
+    assert code != 0, (out, err)
+    assert cfg.read_text("utf-8") == before
