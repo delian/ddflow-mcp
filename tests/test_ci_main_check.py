@@ -97,8 +97,14 @@ def test_on_merge_off_runs_nothing_and_records_nothing(repo, fake_precommit):
 def test_an_unknown_on_merge_mode_is_said_not_ignored(repo, fake_precommit):
     sha = _project(repo)
     (repo / ".ddflow" / "config.toml").write_text('[ci]\non_merge = "sometimes"\n')
-    out = A.check_after_merge(repo, sha=sha)
-    assert out["status"] == "unavailable" and "off | fast | full" in out["why"]
+    # An enum knob's unknown value is named when the FILE loads -- on stderr, in
+    # `unknown_knobs`, by `doctor` -- and the knob keeps its default (Beea0744a7b); a
+    # write of it is refused outright.
+    cfg = Config.load(repo)
+    assert "ci.on_merge = 'sometimes'" in cfg.unknown_knobs and cfg.ci.on_merge == "fast"
+    with pytest.raises(ValueError, match="off, fast, full"):
+        Config.check({"ci": {"on_merge": "sometimes"}})
+    assert A.check_after_merge(repo, sha=sha).get("status") != "unavailable"
 
 
 def test_a_project_without_a_ci_command_is_left_alone(repo):
