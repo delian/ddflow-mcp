@@ -201,6 +201,17 @@ def test_the_note_follows_every_later_layer_not_only_the_first(tmp_path: Path) -
     assert entry.endswith("overridden by the env value 'off')"), entry
 
 
+def test_a_bad_value_holding_the_notes_own_words_survives_the_rewrite(tmp_path: Path) -> None:
+    bad = "a (not a value this ddflow knows; b"
+    _load_file(tmp_path, f'[ci]\non_merge = "{bad}"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_CI_ON_MERGE": "off"})
+    (entry,) = cfg.unknown_knobs
+    assert (
+        entry
+        == f"ci.on_merge = {bad!r} (not a value this ddflow knows; overridden by the env value 'off')"
+    )
+
+
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
     cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
     assert cfg.sources["enforce.stale_docs"] == "file (strictest fallback)"
