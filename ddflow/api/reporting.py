@@ -305,10 +305,11 @@ def addenda(st, rid: str) -> dict[str, Any]:
     """Everything the log says was ADDED to, or LINKED to, one record (D-no-duplicates).
 
     `additions`: the verbatim `record.extended` texts, oldest first. `links`: what this
-    record points at. `linked_from`: the records that point at it -- found by scanning
-    every record's links for this target, because a new record filed `extends` /
-    `duplicate_of` X is stored as a link ON THE NEW RECORD; State keeps no index under X
-    and only `related` also writes a back-link.
+    record points at. `dismissals`: the `distinct` entries -- pairs somebody judged
+    different, each with its `reason`. `linked_from`: the records that point at it --
+    found by scanning every record's links for this target, because a new record filed
+    `extends` / `duplicate_of` X is stored as a link ON THE NEW RECORD; State keeps no
+    index under X and only `related` also writes a back-link.
     """
     mine = st.links.get(rid)
     links = []
