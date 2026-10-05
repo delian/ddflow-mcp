@@ -248,6 +248,34 @@ def test_mcp_list_kind_lesson_is_no_longer_refused(repo):
     assert "unknown kind" not in reply["result"]["content"][0]["text"]
 
 
+def test_bugs_md_keeps_a_lesson_with_a_pipe_or_newline_in_one_row():
+    """roborev on d2c05c21: the Lesson cell was written raw, so a `|` invented a column and
+    a newline split the row -- corrupting the ddflow://bugs document. The cell must be
+    escaped (and folded) like every other free-text cell."""
+    import re
+
+    from ddflow.core.model import Bug, State
+    from ddflow.views import markdown as md
+
+    def pipes(line: str) -> int:
+        return len(re.findall(r"(?<!\\)\|", line))
+
+    st = State()
+    st.bugs["B1"] = Bug(
+        id="B1",
+        title="a bug",
+        item="T1",
+        lesson="line one | line two\nsecond line",
+        found_at="2026-04-01T00:00:00",
+    )
+    text = md.bugs_md(st)
+    header = next(ln for ln in text.splitlines() if ln.startswith("| Bug "))
+    rows = [ln for ln in text.splitlines() if ln.startswith("| B1 ")]
+    assert len(rows) == 1, text  # the newline did not split the row
+    assert pipes(rows[0]) == pipes(header), rows[0]
+    assert "\\|" in rows[0], rows[0]
+
+
 def test_the_three_resources_are_listed_and_readable(repo):
     from ddflow.surfaces.mcp import Server
 
