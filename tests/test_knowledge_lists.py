@@ -173,6 +173,30 @@ def test_decision_list_since_keeps_only_recent(repo):
     assert [r["id"] for r in body] == ["D1"]
 
 
+def test_mcp_decision_list_refusal_carries_its_reason_not_an_internal_error(repo):
+    """The tool declares `payload: "rows"`, so `out.body("rows")` runs BEFORE a refusal is
+    rendered: a refusal that omits the key is a KeyError once it crosses MCP (roborev on
+    fd7ab63a). The CLI never saw it because it prints `out.reason` itself."""
+    from ddflow.surfaces.mcp import Server
+
+    run_cli(repo, "init")
+    _ok(repo, "decision", "add", "--id", "D1", "--title", "t", "--decision", "d")
+    srv = Server(repo)
+    for args in ({"limit": -1}, {"since": "nope"}):
+        reply = srv.handle(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": "ddflow_decision_list", "arguments": args},
+            }
+        )
+        assert "error" not in reply, (args, reply)  # a JSON-RPC error is the crash
+        texts = " ".join(c.get("text", "") for c in reply["result"]["content"])
+        assert "internal error" not in texts, (args, texts)
+        assert "limit" in texts or "since" in texts.lower(), (args, texts)
+
+
 def test_decision_list_negative_limit_is_refused_not_a_misleading_empty(repo):
     """roborev on d2c05c21: `--limit -1` emptied the list and reported NOTHING (2), which
     reads as "no decisions match" for an argument that cannot mean that."""
