@@ -965,7 +965,8 @@ def render(
             "research": render_md.research_md,
             "board": render_md.board,
         }[show]
-        # `board` takes the config; the two markdown views do not. INSPECTED rather than
+        # Every markdown renderer takes the config now (the views redact record text),
+        # so this stays future-proof for one that does not. INSPECTED rather than
         # try/except'd, because a TypeError raised inside a renderer would otherwise be
         # caught and retried with the wrong arity.
         import inspect
