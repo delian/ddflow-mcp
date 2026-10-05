@@ -38,6 +38,37 @@ SCAFFOLD = {
 }
 
 
+def _while_live(sc: Scenario, check):
+    """Run ``check`` inside DELTA's live lease and return what it returned.
+
+    Judged against the LEASE'S OWN CLOCK, not a margin: the check counts only when it
+    FINISHED before the lease that DELTA's last heartbeat started could expire -- an
+    upper bound on when it looked. At load average 100-190 one process could outlive an
+    8 s lease, and the scenario failed on a correct answer (B11e64b1e8c, after
+    Bdc7fe4dbbb widened the margin once). So a check that ran too late is re-observed
+    after a fresh heartbeat; a wrong answer inside the window still fails. One check per
+    window: two in a row would put the second one's start beyond the bound.
+    """
+    for attempt in range(1, LIVE_ATTEMPTS + 1):
+        sc.ddflow("heartbeat", "P1.T1", agent="delta")  # DELTA's last one
+        result = check()
+        done = time.time()
+        renewed = sc.jddflow("show", "P1.T1")["lease"]["renewed_at"]
+        if done - renewed < TTL_S:
+            return result
+        sc.note(
+            f"attempt {attempt}: the check finished {done - renewed:.1f}s after the "
+            f"heartbeat, past the {TTL_S}s lease, so it did not observe the live window; "
+            "heartbeat again and re-observe"
+        )
+    sc.check(
+        f"the live window was observed within {LIVE_ATTEMPTS} attempts",
+        False,
+        f"every attempt outlived the {TTL_S}s lease (load average {os.getloadavg()})",
+    )
+    raise AssertionError("unreachable: a failed check raises")
+
+
 def run(sc: Scenario) -> None:
     sc.head("SCENARIO 2 — crash mid-task, then recovery without losing work")
     sc.make_repo("feedparse", SCAFFOLD)
@@ -124,41 +155,18 @@ def run(sc: Scenario) -> None:
     sc.step("DELTA heartbeats one last time, then is killed — no release, nothing")
     sc.note(
         "Simulated exactly as a real kill would leave things: the process simply "
-        "stops. No cleanup code runs, because in a real crash none does."
+        "stops. No cleanup code runs, because in a real crash none does. Each check "
+        "below starts from that last heartbeat, re-taken only when the machine was too "
+        "slow to finish the check inside the lease it started."
     )
 
     sc.step("Immediately after the crash, the item is still CLAIMED")
-    # Judged against the LEASE'S OWN CLOCK, not a margin. The checks must run inside the
-    # TTL from DELTA's last heartbeat; at load average 100-190 the processes alone could
-    # outlive it, and the scenario failed on a correct answer (B11e64b1e8c, after
-    # Bdc7fe4dbbb widened the margin once). So the window is measured: the checks count
-    # only when they FINISHED before the lease could expire -- an upper bound on when
-    # each one looked -- and otherwise DELTA's last heartbeat is re-taken and they are
-    # observed again. A wrong answer inside the window still fails.
-    for attempt in range(1, LIVE_ATTEMPTS + 1):
-        # A live agent heartbeats; this is DELTA's last one.
-        sc.ddflow("heartbeat", "P1.T1", agent="delta")
-        renewed = sc.jddflow("show", "P1.T1")["lease"]["renewed_at"]
-        claim_code, _, err = sc.ddflow("claim", "P1.T1", agent="epsilon", expect=None)
-        recover_code = sc.ddflow("recover", expect=None)[0]
-        if time.time() - renewed < TTL_S:
-            break
-        sc.note(
-            f"attempt {attempt}: the checks finished {time.time() - renewed:.1f}s after "
-            f"the heartbeat, past the {TTL_S}s lease, so they did not observe the live "
-            "window; heartbeat again and re-observe"
-        )
-    else:
-        sc.check(
-            f"the live window was observed within {LIVE_ATTEMPTS} attempts",
-            False,
-            f"every attempt outlived the {TTL_S}s lease (load average {os.getloadavg()})",
-        )
-    sc.check("another agent is refused while the lease is still live", claim_code == 3, err)
-    sc.check(
-        "recover reports nothing yet — a dead agent looks like a slow one",
-        recover_code == 2,
+    code, _, err = _while_live(
+        sc, lambda: sc.ddflow("claim", "P1.T1", agent="epsilon", expect=None)
     )
+    sc.check("another agent is refused while the lease is still live", code == 3, err)
+    code = _while_live(sc, lambda: sc.ddflow("recover", expect=None))[0]
+    sc.check("recover reports nothing yet — a dead agent looks like a slow one", code == 2)
     sc.note(
         "This is deliberate. Treating a momentarily-quiet agent as dead is how two "
         "agents end up in one worktree."
