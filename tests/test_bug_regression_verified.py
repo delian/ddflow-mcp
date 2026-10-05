@@ -186,5 +186,5 @@ def test_mcp_offers_the_verify_knobs():
     from ddflow.surfaces.mcp import TOOLS, _schema
 
     props = _schema(TOOLS["ddflow_bug_fixed"])["properties"]
-    assert props["verify_regression"]["type"] == "boolean"
+    assert props["skip_regression_verify"]["type"] == "boolean"
     assert props["verify_reason"]["type"] == "string"
