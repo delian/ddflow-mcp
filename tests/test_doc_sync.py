@@ -171,16 +171,20 @@ def test_only_identifier_shaped_tokens_count(line, want):
     assert set(D.TOKEN.findall(line)) == want
 
 
+def _doc_globs_agree_with_git(repo: Path, globs: list[str]) -> set[str]:
+    """Python's idea of a doc must be exactly the set git grep searched. Returns git's set."""
+    git = set(_git(repo, "ls-files", "--", *(f":(glob){g}" for g in globs)).stdout.split())
+    ours = {p for p in _git(repo, "ls-files").stdout.split() if D.is_doc(p, globs)}
+    assert ours == git
+    return git
+
+
 def test_the_doc_globs_mean_what_git_means_by_them(repo):
-    """Python's idea of a doc must be exactly the set git grep searched."""
     for p in ("README.md", "docs/a.md", "docs/sub/b.rst", "src/x.py", "notes.txt", "a/b.txt"):
         (repo / p).parent.mkdir(parents=True, exist_ok=True)
         (repo / p).write_text("x\n")
     _git(repo, "add", "-A")
-    globs = ["**/*.md", "docs/**", "*.txt"]
-    git = set(_git(repo, "ls-files", "--", *(f":(glob){g}" for g in globs)).stdout.split())
-    ours = {p for p in _git(repo, "ls-files").stdout.split() if D.is_doc(p, globs)}
-    assert ours == git
+    _doc_globs_agree_with_git(repo, ["**/*.md", "docs/**", "*.txt"])
 
 
 def test_many_removed_names_are_all_checked_for_liveness(repo):
@@ -289,11 +293,7 @@ def test_a_question_mark_in_a_doc_glob_matches_exactly_one_character(repo):
         (repo / p).parent.mkdir(parents=True, exist_ok=True)
         (repo / p).write_text("x\n")
     _git(repo, "add", "-A")
-    globs = ["docs/?.md"]
-    git = set(_git(repo, "ls-files", "--", ":(glob)docs/?.md").stdout.split())
-    ours = {p for p in _git(repo, "ls-files").stdout.split() if D.is_doc(p, globs)}
-    assert git == {"docs/a.md"}
-    assert ours == git
+    assert _doc_globs_agree_with_git(repo, ["docs/?.md"]) == {"docs/a.md"}
 
 
 def test_a_header_path_is_unquoted_only_when_git_quoted_it():
