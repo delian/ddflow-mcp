@@ -2162,7 +2162,11 @@ agent, the MCP server and a restarted remote-control service), and appends its e
 to its log so a run nobody watched still says how it ended. Liveness is computed, not
 stored: a zombie is not alive, and a reused pid is caught by the process start time.
 `ddflow job add --pid` registers a process started some other way. Every `brief` lists
-jobs not yet recorded as ended — "WAIT, do not start it again" for a running one.
+jobs not yet recorded as ended — "WAIT, do not start it again" for a running one. Running
+jobs and the jobs of the item a brief is about are listed in full; exited or killed jobs of
+other items collapse to one count line (`brief --item X` lists none of them, a plain
+`brief` the newest five), so a backlog of uncollected jobs never pushes the item's own
+section out of the token budget. `ddflow job list` shows them all.
 
 ## Dependencies on another repository
 

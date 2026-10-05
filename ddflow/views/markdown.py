@@ -745,21 +745,41 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
             )
 
 
-def _brief_jobs(out: list[str], state: State) -> None:
+#: Unended jobs of OTHER items that are not running, listed in full in a brief with no
+#: ``--item``; the rest collapse to one count line. With ``--item`` none are listed.
+BRIEF_OTHER_JOBS = 5
+
+
+def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
     """Long-running jobs nobody has recorded as ended, with their LIVE status.
 
     Right after recovery: a job still running is the most expensive thing to restart by
     accident, and one that died unrecorded is work to collect or redo -- both are what
     the next session must know before it picks anything up.
+
+    Bounded (B8114a8b531): a running job and every job of the item asked about are listed
+    in full, but exited or killed jobs of OTHER items -- dozens, in a long-lived project --
+    collapse to one count line. Listed one by one they filled the whole token budget
+    ahead of the item's own section, and the brief was cut before it said anything about
+    the item.
     """
     from ..services import jobs as J
 
     pending = [j for j in state.jobs.values() if not j.ended_at]
     if not pending:
         return
-    out += ["## Long-running jobs", ""]
+    shown: list = []
+    others: list = []
     for j in sorted(pending, key=lambda x: x.started_at):
         s = J.status(j)
+        (shown if s.state == "running" or (item and j.item == item) else others).append((j, s))
+    keep = 0 if item else BRIEF_OTHER_JOBS
+    if keep:
+        newest = sorted(others, key=lambda js: js[0].started_at)[-keep:]
+        shown = sorted([*shown, *newest], key=lambda js: js[0].started_at)
+    hidden = len(others) - min(keep, len(others))
+    out += ["## Long-running jobs", ""]
+    for j, s in shown:
         tail = {
             "running": "WAIT for it; do not start it again",
             "exited": "collect its result, then `ddflow job end`",
@@ -767,6 +787,12 @@ def _brief_jobs(out: list[str], state: State) -> None:
             "elsewhere": "check it on that host",
         }.get(s.state, "")
         out.append(f"- **{j.item}** `{j.id}` — {s.state.upper()}: {s.detail}. {tail}")
+    if hidden:
+        whose = "other items'" if item else "older"
+        out.append(
+            f"- _{hidden} more unended job(s) ({whose}, not running): `ddflow job list` "
+            "shows them; `ddflow job end` records each one collected._"
+        )
     out.append("")
 
 
@@ -848,7 +874,7 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     """
     out: list[str] = ["# ddflow brief", ""]
     _brief_recovery(out, recovery or [])
-    _brief_jobs(out, state)
+    _brief_jobs(out, state, item)
     if item:
         _brief_current(out, state, cfg, item, repo, held=held, suggested=suggested, loops=loops)
     _brief_ready(out, plan)
