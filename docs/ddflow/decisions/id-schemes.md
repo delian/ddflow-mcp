@@ -24,17 +24,36 @@ must never rewrite a recorded id.
    sees no change, and existing logs replay byte-identically.
 
 2. **Tokens: the full set.** `{prefix}` `{seq}` `{date}` `{slug}` `{hash}`
-   `{parent}` `{phase}` `{env}` `{user-text}`. Templates are validated when the config
-   is written: every token known, the result a valid id (characters, length), and a
-   template that could produce the same id twice without `{seq}` or `{hash}` refused.
+   `{parent}` `{phase}` `{env}` `{user-text}`. Two more tokens are needed so that
+   today's defaults can be written as templates: `{time}` (UTC timestamp, second
+   resolution) and `{pid}`, for session ids `s{time}-{pid}`. `{hash}` is the salted hash
+   of `auto_id`, so the same text filed twice gets two ids. `{digest}` is a
+   deterministic content digest: CI failure bugs use `Bci-{slug}-{digest}` on
+   purpose, so the same failing check maps to the same bug. Templates are validated
+   when the config is written. Every token must be known, and the result must be a
+   valid id (characters, length). A template must also contain at least one source of
+   uniqueness: `{seq}`, `{hash}`, `{digest}` (deliberately stable), or `{time}` together
+   with `{pid}`. A template with none of these is refused. Each shipped default passes
+   this rule.
 
-3. **Sequential numbers: next free number, suffix on clash.** `{seq}` is the highest
-   number already used for that kind in the folded log, plus one, taken under the log
-   lock. All agents on one machine share the log, so numbers are unique there. Two
-   clones minting offline can pick the same number; when their logs meet, the record
-   that is later in the fold order keeps its id unchanged and gains the alias
-   `<id>.<clone suffix>` (for example `BUG-123.b`), which doctor and `show` explain.
-   Nothing is renumbered.
+3. **Sequential numbers: next free number, suffix on clash.** Every record keeps an
+   internal id, minted exactly as today. Events reference records by this id, so the
+   fold can never merge two different records into one. A template with `{seq}`
+   produces the record's KEY, which is what people see and type and what ddflow
+   prints. Commands and MCP accept a key and resolve it to the internal id before
+   anything is recorded. For kinds without `{seq}`, the key is the internal id, which
+   is today's behaviour. `{seq}` is the highest number already used for that kind in
+   the folded log, plus one, taken under the log lock. All agents on one machine share
+   the log, so a key is unique there. Two clones minting offline can pick the same
+   number. When their logs meet, the record earlier in the fold order keeps
+   `BUG-123`, and the later record's key is shown as `BUG-123.<clone suffix>` (for
+   example `BUG-123.b`). Both keys then resolve to exactly one record each. No event
+   changes, and nothing is renumbered or renamed. Doctor reports the clash, and
+   `show` explains both keys. A reference to the bare key written in free text on the
+   other clone before the merge (a commit message, a note) cannot be fixed afterwards;
+   doctor lists these references as ambiguous. Ids that the caller names explicitly
+   (tasks, phases) keep the existing rival-add flow: a clash is CONTESTED until
+   `ddflow resolve` settles it.
 
 4. **Old ids: aliases only.** A recorded id is never renamed. A scheme change applies
    to records created afterwards. Any record, old or new, may carry aliases (project
@@ -56,7 +75,9 @@ must never rewrite a recorded id.
 
 - One id service (B-id-generator) mints every id, so no call site formats ids itself.
 - `{seq}` needs the folded state at mint time, which is cheap because the fold is
-  cached. An offline clash produces a visible suffix, not a silent duplicate.
+  cached. An offline clash gives the later record a suffixed key, not a silent
+  duplicate. Keys are a lookup layer over internal ids, the same mechanism as aliases
+  (B-id-aliases).
 - The vocabulary work (B-id-terms) also covers command and tool aliases. The parity
   test must treat an alias as the canonical command.
 
