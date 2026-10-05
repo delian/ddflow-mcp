@@ -127,3 +127,25 @@ def test_zero_budget_turns_it_off(repo, tmp_path):
     _hook(repo, "pre-compact", {"session_id": "abc", "trigger": "auto",
                                 "transcript_path": str(_transcript(tmp_path))})  # fmt: skip
     assert _notes(repo) == []
+
+
+def test_a_tiny_budget_never_overflows(tmp_path):
+    for budget in range(0, 20):
+        assert len(CP.digest(_transcript(tmp_path), budget)) <= budget
+
+
+def test_off_means_no_request_after_compaction(repo):
+    run_cli(repo, "init")
+    run_cli(repo, "config", "session.compaction_digest_chars", "0")
+    out = _hook(repo, "session-start", {"session_id": "zzz-9", "source": "compact"}).stdout
+    assert "Before this compaction" not in out
+
+
+def test_a_skipped_run_says_why_on_stderr_and_still_exits_0(repo):
+    run_cli(repo, "init")
+    env = {**os.environ, "PYTHONPATH": str(ROOT)}
+    p = subprocess.run(
+        [sys.executable, "-m", "ddflow", "--repo", str(repo), "hooks", "pre-compact"],
+        input="[1, 2]", capture_output=True, text=True, env=env, check=False,
+    )  # fmt: skip
+    assert p.returncode == 0 and p.stdout == "" and "not a JSON object" in p.stderr

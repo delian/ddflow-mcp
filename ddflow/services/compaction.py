@@ -62,16 +62,24 @@ def digest(transcript: Path, budget: int) -> str:
             continue  # a tool result arrives as a user entry with no text part
         line = f"{who}: {text}"
         if used + len(line) > budget:
-            if not turns:  # the last turn alone is over budget: keep its end
-                turns.append(f"{who}: ...{text[-(budget - len(who) - 5) :]}")
+            keep = budget - len(who) - 5  # room after "<who>: ..."
+            if not turns and keep > 0:  # the last turn alone is over budget: keep its end
+                turns.append(f"{who}: ...{text[-keep:]}")
             break
         turns.append(line)
         used += len(line) + 1
     return "\n".join(reversed(turns))
 
 
-def record(log: EventLog, cfg: Config, payload: dict[str, Any], held: list[str]) -> str:
-    """Write the digest as a session note; returns what happened ("recorded", or why not)."""
+def record(
+    log: EventLog,
+    cfg: Config,
+    payload: dict[str, Any],
+    held: list[str],
+    known: set[str] | frozenset[str] = frozenset(),
+) -> str:
+    """Write the digest as a session note; returns what happened ("recorded", or why not).
+    ``known`` is the session ids the caller's fold already holds."""
     budget = cfg.session.compaction_digest_chars
     if budget <= 0:
         return "off"
@@ -82,7 +90,7 @@ def record(log: EventLog, cfg: Config, payload: dict[str, Any], held: list[str])
     if not body and not held:
         return "nothing to record (no transcript text)"
     sid = S.harness_session_id(str(payload.get("session_id") or "")) or S.resolve(log)[0]
-    if not any(e.kind == "session.started" and e.subject == sid for e in log.read_all()):
+    if sid not in known:  # the caller's fold: the log is not read a second time
         log.append("session.started", sid, {"tool": "hook", "cwd": str(Path.cwd())})
     clean, _ = S.redact(f"{head}. Last turns before it:\n{body}" if body else head, cfg)
     log.append("session.note", sid, {"text": clean, "item": "", "source": f"{SOURCE}:{trigger}"})

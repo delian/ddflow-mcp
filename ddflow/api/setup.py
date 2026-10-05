@@ -551,7 +551,8 @@ def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
         )
         st = fold(log.read_all(), strict=False)
         held = sorted(i.id for i in st.items.values() if i.lease and i.lease.holder == resolved)
-        return O.ok("hooks", message="", result=CP.record(log, cfg, payload, held))
+        result = CP.record(log, cfg, payload, held, set(st.sessions))
+        return O.ok("hooks", message="", result=result)
     except Exception as exc:  # a hook must never stand between the operator and /compact
         return O.ok("hooks", message="", result="skipped", why=f"{type(exc).__name__}: {exc}")
 
@@ -572,7 +573,10 @@ def _after_compaction(repo: Path, stdin: str) -> list[str]:
         return []
     from ..config import Config
 
-    log = EventLog(repo, log_cfg=Config.load(repo).log)
+    cfg = Config.load(repo)
+    if cfg.session.compaction_digest_chars <= 0:
+        return []  # turned off on purpose: nothing was meant to land, so nothing to ask
+    log = EventLog(repo, log_cfg=cfg.log)
     text = CP.latest(log, str(payload.get("session_id") or ""))
     if text:
         return ["## Before this compaction", "", text, ""]
@@ -580,7 +584,9 @@ def _after_compaction(repo: Path, stdin: str) -> list[str]:
         "## Before this compaction",
         "",
         "No record of what this session was doing reached ddflow. Write one now: "
-        '`ddflow session note --text "<what you were doing, what is next>"`.',
+        '`ddflow session note --text "<what you were doing, what is next>"`. '
+        "To have it recorded automatically at every compaction: "
+        "`ddflow hooks install --claude` (installs the PreCompact hook).",
         "",
     ]
 

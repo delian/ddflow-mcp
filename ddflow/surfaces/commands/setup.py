@@ -348,7 +348,12 @@ def cmd_hooks(a, c: Ctx) -> int:
             print("{}")
         return OK
     if a.hooks_cmd == "pre-compact":
-        # Silent and always 0: PreCompact output can only block, never inform (B195).
+        # stdout stays empty and the exit is always 0: PreCompact output can only block,
+        # never inform (B195). Why a run recorded nothing goes to stderr, which Claude
+        # Code shows in its verbose transcript and never treats as a decision.
+        if out.data.get("result") not in ("recorded", "off"):
+            print(f"ddflow pre-compact: {out.data.get('why') or out.data.get('result')}",
+                  file=sys.stderr)  # fmt: skip
         return OK
     if a.hooks_cmd == "session-start":
         # Claude Code puts this STDOUT into the session's context. Always exit 0: a hook
