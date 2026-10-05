@@ -59,8 +59,10 @@ def test_workflow_pipeline_with_an_emoji_gate_id_writes_a_readable_pipeline(repo
     from conftest import run_cli
 
     run_cli(repo, "init")
-    gate = '[gate."ship🚀"]\nprompt = "sign it"\n'
-    assert run_cli(repo, "config", "--append-toml", gate)[0] == 0
+    # Hand-written: no ddflow surface writes a quoted key (D-plain-keys), but a file
+    # that has one is still read as TOML.
+    cfg = repo / ".ddflow" / "config.toml"
+    cfg.write_text(cfg.read_text("utf-8") + '\n[gate."ship🚀"]\nprompt = "sign it"\n', "utf-8")
     code, out, err = run_cli(repo, "workflow", "pipeline", "task", "implement,ship🚀,merge")[:3]
     assert code == 0, (out, err)
     data = tomllib.loads((repo / ".ddflow" / "config.toml").read_text("utf-8"))
