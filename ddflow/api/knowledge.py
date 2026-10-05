@@ -899,6 +899,8 @@ def bug_fixed(
     lesson_rule: str = "",
     agent: str = "",
     changelog: str = "",
+    verify_regression: bool = True,
+    verify_reason: str = "",
 ) -> O.Outcome:
     """Close a bug. Refuses without the test that would catch it again.
 
@@ -908,6 +910,14 @@ def bug_fixed(
     displays -- as given (stripped) when one string was given, ', '-joined from a list --
     and `regression_tests` as the split list. The required-test rule asks the LIST: `;`
     alone is a truthy string naming no test.
+
+    The named test is then VERIFIED (B-bugfix-verified): it is run on the pre-fix source
+    (the fix task's base with the new test file) and on the fixed tree, and the bug is
+    REFUSED when it passes on the pre-fix tree (it does not catch the bug) or fails on the
+    fixed one. When the comparison cannot be made -- no pytest runner, no fix task with a
+    worktree, no base ref -- the check is `could-not-run`, recorded, and the bug closes
+    with the gap on the record rather than locked open. `verify_regression=False` with a
+    `verify_reason` records the override instead; a reason is required and is recorded.
     """
     entry: dict[str, Any] = {}
     if changelog:
@@ -947,6 +957,24 @@ def bug_fixed(
             f"that now guard this bug.",
             id=item,
         )
+    if not verify_regression and not verify_reason.strip():
+        return O.refused(
+            "bug.fixed",
+            "--skip-regression-verify needs --verify-reason saying why; the override is "
+            "recorded so a later reader knows the pre-fix check was skipped, and why.",
+            id=item,
+        )
+    verified, verify_ev = _verify_regression(
+        repo, cfg, st, item, tests, verify_regression=verify_regression, reason=verify_reason
+    )
+    if verified in ("passed-on-prefix", "failed-on-fix"):
+        return O.refused(
+            "bug.fixed",
+            f"cannot close {item}: {verify_ev.get('reason', '')}. Name a test that FAILS "
+            f"without the fix, or close with --skip-regression-verify --verify-reason "
+            f"'<why>' (recorded).",
+            id=item,
+        )
     log.append(
         "bug.fixed",
         item,
@@ -954,6 +982,8 @@ def bug_fixed(
             "regression_test": regression_test,
             "regression_tests": tests,
             "lesson": lesson,
+            "regression_verified": verified,
+            **({"regression_verify": verify_ev} if verify_ev else {}),
             **({"changelog": entry} if entry else {}),
         },
     )
@@ -975,6 +1005,8 @@ def bug_fixed(
         id=item,
         regression_test=regression_test,
         regression_tests=tests,
+        regression_verified=verified,
+        regression_verify=verify_ev,
         lesson_captured=captured,
         unchecked=unchecked,
     )
@@ -1101,6 +1133,58 @@ def _drop_fix_task_unchecked(log, st, rec) -> tuple[str, str]:
         return "", "needed"
     log.append("task.removed", t.id, {"reason": f"bug {rec.id} closed as invalid"})
     return t.id, ""
+
+
+def _verify_regression(
+    repo: Path,
+    cfg,
+    st,
+    bug_id: str,
+    tests: list[str],
+    *,
+    verify_regression: bool,
+    reason: str,
+) -> tuple[str, dict[str, Any]]:
+    """Run a bug's regression test on the pre-fix and fixed trees (B-bugfix-verified).
+
+    Returns (status, evidence). Only pytest NODE IDS are run: a spec or a shell command
+    is "not-applicable" (the static resolution already leaves it `unchecked`). The
+    comparison needs the bug's fix task working in a WORKTREE -- that is the only thing
+    that names a pre-fix source -- so an unclaimed fix task (or a removed tree) is
+    "could-not-run", recorded, never "verified".
+    """
+    if not verify_regression:
+        return "overridden", {"reason": reason.strip()}
+    module_tests = [t for t in tests if "::" in t and t.split("::", 1)[0].endswith(".py")]
+    if not module_tests:
+        return "not-applicable", {}
+    from ..infra import worktree as W
+    from ..services import gates as G
+
+    rec = st.bugs.get(bug_id)
+    fx = st.items.get(rec.fix_task) if rec is not None and rec.fix_task else None
+    tree = W.load_path(repo, fx.worktree) if fx is not None and fx.worktree else None
+    if tree is None:
+        return "could-not-run", {
+            "reason": "the bug's fix task is not working in a worktree, so there is no "
+            "pre-fix source to compare the test against"
+        }
+    base = fx.base or cfg.worktree.base_ref or ""
+    if not base:
+        try:
+            base = W.default_branch(W.repo_root(tree))
+        except W.GitError:
+            base = ""
+    if not base:
+        return "could-not-run", {"reason": "no base ref to build the pre-fix tree from"}
+    status, ev = G.verify_regression_test(repo, cfg, tree=tree, base=base, tests=module_tests)
+    if status == G.REGRESSION_COULD_NOT_RUN:
+        return "could-not-run", ev
+    if status == G.REGRESSION_PASSES_ON_PREFIX:
+        return "passed-on-prefix", ev
+    if status == G.REGRESSION_FAILS_ON_FIX:
+        return "failed-on-fix", ev
+    return "verified", ev
 
 
 def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:

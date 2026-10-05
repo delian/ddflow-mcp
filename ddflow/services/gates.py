@@ -822,6 +822,105 @@ def verify(
     return results, ""
 
 
+#: What `verify_regression_test` returns. `verified` is the only pass; the caller REFUSES
+#: `passed-on-prefix`/`failed-on-fix` and records `could-not-run` as the gap it is.
+REGRESSION_VERIFIED = "verified"
+REGRESSION_PASSES_ON_PREFIX = "passed-on-prefix"
+REGRESSION_FAILS_ON_FIX = "failed-on-fix"
+REGRESSION_COULD_NOT_RUN = "could-not-run"
+
+
+def verify_regression_test(
+    repo: Path,
+    cfg: Config,
+    *,
+    tree: Path,
+    base: str,
+    tests: list[str],
+    gates: dict[str, GateDef] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    """Run the named test on the PRE-FIX source (it must FAIL) and on the fixed tree (it
+    must PASS). Returns (status, evidence).
+
+    The rule a bug cannot escape -- "not closed without a regression test that fails
+    against the unfixed code" -- was prose: `bug fixed` only checked the flag was
+    non-empty (B-bugfix-verified). This RUNS the test, through the project's own unit_tests
+    command and `run_command_gate` (B15's machinery), not a second runner.
+
+    The pre-fix tree is the item's BASE with the NEW test file overlaid: the base ref in a
+    throwaway worktree (`ci.merge_tree`), then the test file(s) the node ids name, copied
+    from `tree`. A run that could not happen -- no pytest runner, no base ref, a tree git
+    would not materialise -- is `could-not-run`, RECORDED as such and never a pass: the
+    caller closes the bug with the gap on the record rather than locking it open on an
+    environment that cannot test.
+    """
+    from ..infra import worktree as W
+    from . import testselect as TS
+
+    defn = (gates or load_gates(repo, cfg)).get("unit_tests")
+    command = TS.run_command(defn.command if defn else "", tests, tree)
+    if not command:
+        return REGRESSION_COULD_NOT_RUN, {
+            "reason": "the project runs no pytest suite (no unit_tests command names a "
+            "runner), so the named test could not be run here."
+        }
+    run = GateDef(id="regression_check", title="regression test", command=command)
+    fix_outcome, fix_ev = run_command_gate(run, tree)
+    if fix_outcome == "unavailable":
+        return REGRESSION_COULD_NOT_RUN, {
+            "command": command,
+            "tree": str(tree),
+            "reason": f"the fixed tree could not run the test: {fix_ev.get('reason', '')}",
+        }
+    evidence: dict[str, Any] = {
+        "command": command,
+        "tree": str(tree),
+        "base": base,
+        "fix_outcome": fix_outcome,
+    }
+    if fix_outcome != "passed":
+        return REGRESSION_FAILS_ON_FIX, {
+            **evidence,
+            "reason": f"the named test does not pass on the fixed tree ({fix_outcome})",
+        }
+
+    try:
+        base_sha = W.rev(repo, base)
+    except W.GitError as exc:
+        return REGRESSION_COULD_NOT_RUN, {**evidence, "reason": f"no base ref {base!r}: {exc}"}
+
+    from . import ci as CI  # local: imported lazily, so gates has no module-level cycle
+
+    paths = sorted({e.split("::", 1)[0] for e in tests})
+    with CI.merge_tree(repo, base_sha, "") as (ptree, why):
+        if ptree is None:
+            return REGRESSION_COULD_NOT_RUN, {**evidence, "reason": why}
+        for rel in paths:
+            src = tree / rel
+            if not src.is_file():
+                return REGRESSION_COULD_NOT_RUN, {
+                    **evidence,
+                    "reason": f"{rel} is not in {tree}, so the pre-fix tree cannot hold the test",
+                }
+            dst = ptree / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(src, dst)
+        pre_outcome, pre_ev = run_command_gate(run, ptree)
+    evidence["prefix_outcome"] = pre_outcome
+    if pre_outcome == "unavailable":
+        return REGRESSION_COULD_NOT_RUN, {
+            **evidence,
+            "reason": f"the pre-fix tree could not run the test: {pre_ev.get('reason', '')}",
+        }
+    if pre_outcome == "passed":
+        return REGRESSION_PASSES_ON_PREFIX, {
+            **evidence,
+            "reason": "the named test PASSES on the pre-fix tree (the base with the test "
+            "file), so it does not catch this bug and cannot guard it",
+        }
+    return REGRESSION_VERIFIED, evidence
+
+
 #: How many untracked files `tree_fingerprint` will hash before giving up on content
 #: and falling back to their names alone. `--exclude-standard` already drops anything
 #: gitignored, so a repository normally has a handful; a run that has just dumped ten

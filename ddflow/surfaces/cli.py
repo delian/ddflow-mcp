@@ -1086,6 +1086,17 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="the test that now guards this bug; repeat it, or separate with ',' or ';', "
         "for several",
     )
+    bx.add_argument(
+        "--skip-regression-verify",
+        dest="skip_verify",
+        action="store_true",
+        help="do not run the named test on the pre-fix tree; requires --verify-reason (recorded)",
+    )
+    bx.add_argument(
+        "--verify-reason",
+        default="",
+        help="why the pre-fix regression check is skipped (recorded)",
+    )
     bx.add_argument("--lesson", default="")
     bx.add_argument("--lesson-title", default="")
     bx.add_argument("--lesson-rule", default="")
