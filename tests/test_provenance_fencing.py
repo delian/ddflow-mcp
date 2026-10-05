@@ -237,7 +237,12 @@ def _git(repo, *a):
 
 def _notes(repo) -> list[str]:
     _code, out, _ = run_cli(repo, "doctor", "--json", agent="me")
-    return [n for n in json.loads(out)["notes"] if "event shard" in n or "authorship" in n]
+    notes = json.loads(out)["notes"]
+    # The unknown-author notes only: the uncommitted-shard note (Bcd3512c891) also says
+    # "event shard".
+    return [
+        n for n in notes if ("event shard" in n or "authorship" in n) and "not committed" not in n
+    ]
 
 
 def test_doctor_notes_a_shard_from_an_unknown_author(repo):

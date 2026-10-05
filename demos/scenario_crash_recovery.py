@@ -46,7 +46,7 @@ def run(sc: Scenario) -> None:
         ".ddflow/config.toml",
         """
         [lease]
-        ttl_s = 2
+        ttl_s = 8
         grace_s = 0
         heartbeat_s = 1
 
@@ -114,6 +114,10 @@ def run(sc: Scenario) -> None:
         and (wt / "feedparse/rss_dates.py").exists(),
     )
 
+    # A live agent heartbeats; this is DELTA's last one. The "still claimed" checks below
+    # run inside the lease's 8 s from here, a margin a heavily loaded machine needs: with
+    # a 2 s TTL the lease expired before them at load average ~140 (Bdc7fe4dbbb).
+    sc.ddflow("heartbeat", "P1.T1", agent="delta")
     sc.step("DELTA is killed — no release, no final heartbeat, nothing")
     sc.note(
         "Simulated exactly as a real kill would leave things: the process simply "
@@ -133,7 +137,11 @@ def run(sc: Scenario) -> None:
     )
 
     sc.step("Wait for the lease to expire, then run recovery")
-    time.sleep(2.5)
+    # Poll rather than sleep a fixed time: expiry is wall-clock, and how long the steps
+    # above took varies with the machine's load.
+    deadline = time.monotonic() + 30
+    while sc.ddflow("recover", expect=None)[0] != 0 and time.monotonic() < deadline:
+        time.sleep(0.5)
     found = sc.jddflow("recover")
     sc.check("recovery finds exactly one situation", len(found) == 1, json.dumps(found))
     rec = found[0]

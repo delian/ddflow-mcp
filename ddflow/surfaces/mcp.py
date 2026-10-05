@@ -1649,7 +1649,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().bug_file_tasks(
             repo, dry_run=bool(a.get("dry_run")), agent=agent
         ),
-        "payload": ("filed", "linked", "tasks", "dry_run"),
+        "payload": ("filed", "linked", "tasks", "links", "dry_run"),
     },
     "ddflow_session_note": {
         "description": (
