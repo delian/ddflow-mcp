@@ -4180,8 +4180,12 @@ Resolution: dataclass defaults → `.ddflow/config.toml` → `DDFLOW_<SECTION>_<
 An unknown knob **in a file** is never a silent drop: ddflow skips it, so a config written
 by a newer ddflow does not stop an older checkout, but it warns on every command and
 `ddflow doctor` reports it as a problem (a typo, or a config newer than this code — merge
-main). `ddflow config --set` refuses an unknown knob or an invalid value outright, before
-writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
+main). An enumerated knob (`[enforce].stale_docs = block | warn | off`, `[flow].model`,
+`[lease].reclaim_policy` and every other one whose doc lists `a | b`) is held to its
+declared values (`KNOB_CHOICES` in `ddflow/config.py`): a value outside them in a file is
+skipped and reported the same way, the knob keeping its default, and from the
+environment it is refused. `ddflow config --set` refuses an unknown knob or an invalid
+value outright, before writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
 refuses a non-string element instead of casting it (`null` is not the string `"None"`).
 A test asserts every knob carries documentation, so the reference cannot rot.
 
