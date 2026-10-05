@@ -15,6 +15,7 @@ import sys
 from ...api import knowledge as A
 from ...core import provenance as PV
 from ...core.events import OLDER_MARK
+from ...core.model import LINK_RELATIONS
 from .. import dedupe_flags as D
 from ..context import FAIL, NOTHING, OK, Ctx
 
@@ -289,14 +290,12 @@ def cmd_dupes(a, c: Ctx) -> int:
     return OK
 
 
-#: The `ddflow link` relations, in the order the parser declares them.
-LINKS = ("extends", "duplicate_of", "related", "distinct")
-
-
+#: The `ddflow link` relations come from the model's LINK_RELATIONS, so the parser's
+#: mutually-exclusive flags, the API's accepted set and this lookup cannot drift apart.
 def cmd_link(a, c: Ctx) -> int:
     """Say how one record relates to another, settling a near-duplicate pair."""
     relation, target = "", ""
-    for rel in LINKS:
+    for rel in LINK_RELATIONS:
         target = getattr(a, rel, "") or ""
         if target:
             relation = rel
