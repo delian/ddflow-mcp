@@ -39,7 +39,9 @@ def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
         return ""
     lines: list[str] = []
     if mode not in MODES:  # a typo must not silently turn the report off
-        lines.append(f"(session.progress_after_complete = {mode!r} is not one of on|phase|off)")
+        lines.append(
+            f"(session.progress_after_complete = {mode!r} is not one of {'|'.join(MODES)})"
+        )
         mode = "on"
     items = _live(st)
     cur = st.items.get(item)
