@@ -334,19 +334,25 @@ def plain_key_problem(dotted: str) -> str:
     )
 
 
-def _plain_spelling(dotted: str) -> str:
-    """The bare spelling of a quoted or escaped key, as TOML reads it, or ""."""
+def _bare_path(dotted: str) -> list[str]:
+    """The segments TOML reads a quoted or escaped key as, when every one is bare; else []."""
     try:
         node: object = tomllib.loads(f"{dotted} = 0")
     except tomllib.TOMLDecodeError:
-        return ""
+        return []
     path: list[str] = []
     while isinstance(node, dict) and len(node) == 1:
         key = next(iter(node))
         path.append(key)
         node = node[key]
+    return path if node == 0 and all(_BARE.fullmatch(k) for k in path) else []
+
+
+def _plain_spelling(dotted: str) -> str:
+    """The bare spelling of a quoted or escaped key, as TOML reads it, or ""."""
+    path = _bare_path(dotted)
     plain = ".".join(path)
-    if node != 0 or not all(_BARE.fullmatch(k) for k in path):
+    if not path:
         return ""
     # Never name a key that would itself be refused: a dotted gate id (`"gate".a.b.command`),
     # a single segment (`"gate"`), which is not <section>.<key> (roborev on babe29ff), or a
@@ -422,12 +428,97 @@ def gate_id_problem(gid: str) -> str:
     for a dot, nests a table -- `gate.a.b.command` wrote `[gate.a.b]`, exit 0, and
     every later command refused to load it.
     """
-    if _BARE.fullmatch(gid):
+    return bare_id_problem(gid, "a gate id", "the [gate.<id>] section of the config")
+
+
+def bare_id_problem(ident: str, what: str, names: str) -> str:
+    """Why ``ident`` -- an id written as ONE TOML key -- is refused, or "" (D-plain-keys).
+
+    ``what`` says which id ("a gate id"), ``names`` the table it names. A dot nests a
+    table, and anything else that is not bare breaks the file or needs quoting."""
+    if _BARE.fullmatch(ident):
         return ""
     return KeyRefused(
-        f"{gid!r} cannot be a gate id: use only ASCII letters, digits, `_` and `-` "
-        f"(it names the [gate.<id>] section of the config; D-plain-keys)."
+        f"{ident!r} cannot be {what}: use only ASCII letters, digits, `_` and `-` "
+        f"(it names {names}; D-plain-keys)."
     )
+
+
+#: TOML lexed just far enough to find its KEYS: strings (so a quote or `=` inside one is
+#: not mistaken for a key), comments, newlines, punctuation and bare runs.
+_TOKEN = re.compile(
+    r'(?P<str>"""(?:[^"\\]|\\.|"(?!""))*"{3,5}|\'\'\'(?:[^\']|\'(?!\'\'))*\'{3,5}'
+    r'|"(?:[^"\\\n]|\\.)*"|\'[^\'\n]*\')'
+    r"|(?P<comment>#[^\n]*)|(?P<nl>\n)|(?P<ws>[ \t\r]+)|(?P<punct>[\[\]{}=,.])"
+    r"|(?P<word>[^\s\[\]{}=,.#\"']+)",
+    re.DOTALL,
+)
+
+
+def _with_header_spelling(problem: str, header: str, brackets: int) -> str:
+    """``problem``, naming the header's plain spelling when `plain_key_problem` named none:
+    a single segment (`["flow"]`) is no `<section>.<key>` for `--set`, but as a table
+    header it has one (`[flow]`)."""
+    # Only the single segment: a longer one `_plain_spelling` declined is a spelling that
+    # would itself be refused (a dotted gate id, a gate's `human`).
+    if "; use " in problem or len(path := _bare_path(header)) != 1:
+        return problem
+    return KeyRefused(f"{problem}; use {'[' * brackets}{'.'.join(path)}{']' * brackets}")
+
+
+def appended_key_problem(toml_text: str) -> str:
+    """The D-plain-keys refusal for the first key of raw TOML not spelled plain, or "".
+
+    For text `tomllib` has already accepted. `--append-toml` (and `ddflow_configure
+    toml`) take TOML as written, so a quoted (`"tag_prefix"`), escaped or spaced
+    (`a . b`) key reached the config that `--set` refuses (B7a1ed66cb9). Every key -- a
+    table header, a key/value, an inline-table key -- is judged by `plain_key_problem`
+    as its full path, so the refusal names the plain spelling when there is one."""
+    found = [m for m in _TOKEN.finditer(toml_text) if m.lastgroup not in ("ws", "comment")]
+    toks = [(m.lastgroup, m.group()) for m in found]
+    spans = [m.span() for m in found]
+
+    def raw(a: int, b: int) -> str:  # the source text of tokens a..b, spacing included
+        return toml_text[spans[a][0] : spans[b][1]]
+
+    header, last_key = "", ""
+    opened: list[tuple[str, str]] = []  # (bracket, key path owning it) of the open value
+    at_key, i = True, 0
+    while i < len(toks):
+        kind, text = toks[i]
+        if kind == "nl":
+            at_key = at_key or not opened
+        elif at_key and not opened and text == "[":
+            n = 2 if i + 1 < len(toks) and toks[i + 1][1] == "[" else 1  # [[array]]
+            k = i + n
+            while toks[k][1] != "]":
+                k += 1
+            header = raw(i + n, k - 1)
+            if problem := plain_key_problem(header):
+                return _with_header_spelling(problem, header, n)
+            i, at_key = k + n, False
+            continue
+        elif at_key and kind in ("word", "str"):
+            k = i
+            while toks[k][1] != "=":
+                k += 1
+            parent = opened[-1][1] if opened else header
+            last_key = f"{parent}.{raw(i, k - 1)}" if parent else raw(i, k - 1)
+            if problem := plain_key_problem(last_key):
+                return problem
+            i, at_key = k + 1, False
+            continue
+        elif kind == "punct" and text in ("[", "{"):
+            # An array's elements belong to the key that holds the array.
+            owner = opened[-1][1] if opened and opened[-1][0] == "[" else last_key
+            opened.append((text, owner))
+            at_key = text == "{"
+        elif kind == "punct" and text in ("]", "}"):
+            opened.pop()
+        elif text == "," and opened:
+            at_key = opened[-1][0] == "{"
+        i += 1
+    return ""
 
 
 def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[str]:
@@ -598,6 +689,9 @@ def _append_config(
         data = tomllib.loads(toml_text)
     except tomllib.TOMLDecodeError as exc:
         return f"not valid TOML: {exc}", Path()
+    # Plain keyboard keys only (D-plain-keys), exactly as `--set` judges them: exit 3.
+    if problem := appended_key_problem(toml_text):
+        return problem, Path()
     if blocked := _human_cleared(data):
         return (
             f"refusing to append {', '.join(blocked)}: whether a gate is a human "
@@ -614,9 +708,18 @@ def _append_config(
         prev = path.read_text("utf-8") if path.exists() else ""
         merged = (prev.rstrip() + "\n\n" if prev.strip() else "") + toml_text.strip() + "\n"
         try:
-            Config.check(tomllib.loads(merged))
+            result = tomllib.loads(merged)
+            Config.check(result)
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"appending this would break the config: {exc}", Path()
+        # `[gate.a.b]` is bare in every segment, so the plain-key check passes it -- and
+        # it nests a table every later command refuses to load. Judged as `_write_config`
+        # judges `--set`: only NEW gate-table problems (roborev on a1c614f4).
+        if new := _gate_table_problems(result) - _gate_table_problems(_parsed(prev)):
+            said = sorted(_render_gate_problem(*p) for p in new)
+            # Every problem at once, as `--set` says them; a key refusal keeps exit 3.
+            refused = any(isinstance(m, KeyRefused) for m in said)
+            return (KeyRefused if refused else str)("; ".join(said)), Path()
         removed = sorted(
             _guarded_human_gates(repo, prev, local=local)
             - _guarded_human_gates(repo, merged, local=local)

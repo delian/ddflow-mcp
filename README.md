@@ -558,6 +558,10 @@ validate the **result**, then replace the file atomically.
   refused with exit 3, naming the plain spelling when there is one (`use
   gate.unit_tests.command`). A gate id follows the same rule -- it names the
   `[gate.<id>]` section, and a dot in it would nest a table (`a.b` defined gate `a`).
+  `config --append-toml` and `ddflow_configure toml` hold every key of the block to the
+  same rule -- a table header, a key, an inline-table key: `[flow]` then `"tag_prefix" =
+  "v"` is refused with `use flow.tag_prefix` -- and `companions add` refuses a companion
+  id that is not one bare key (it names the agent's `[mcp_servers.<id>]` entry).
   Hand-written TOML files are still read as TOML.
 - **A pipeline naming an undefined gate is refused**, naming the near miss. That one is
   otherwise silent and permanent: the outcome folds to empty, completion refuses it
