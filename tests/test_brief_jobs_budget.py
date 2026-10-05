@@ -60,7 +60,7 @@ def test_a_brief_about_no_item_lists_the_newest_five(repo):
     assert f"{STALE - 5} more unended job(s)" in "\n".join(out)
 
 
-def test_a_job_on_another_host_is_never_collapsed(repo, monkeypatch):
+def test_a_job_on_another_host_is_listed_not_collapsed_as_dead(repo, monkeypatch):
     from ddflow.services import jobs as J
     from ddflow.views import markdown as M
 
@@ -72,3 +72,20 @@ def test_a_job_on_another_host_is_never_collapsed(repo, monkeypatch):
     text = "\n".join(out)
     assert "Jold001" in text and "ELSEWHERE" in text
     assert "Jold000" not in text and "2 more unended job(s)" in text
+
+
+def test_jobs_on_other_hosts_are_bounded_too(repo, monkeypatch):
+    """A job on another host never resolves here, so a backlog of them would crowd the
+    brief out exactly as local stale jobs did."""
+    from ddflow.services import jobs as J
+    from ddflow.views import markdown as M
+
+    st = _stale_state(repo, STALE)
+    for j in st.jobs.values():
+        j.host = "some-other-host"
+    monkeypatch.setattr(J, "host", lambda: "this-host")
+    out: list[str] = []
+    M._brief_jobs(out, st, "MINE")
+    listed = [ln for ln in out if ln.startswith("- **")]
+    assert [ln.split("`")[1] for ln in listed] == [f"Jold{i:03d}" for i in range(35, 40)]
+    assert f"{STALE - 5} more job(s) of other items on other hosts" in "\n".join(out)
