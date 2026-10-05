@@ -71,6 +71,11 @@ def test_the_cli_shows_it_too(repo):
         "ddflow_bug_found",  # a defect in ddflow hit on the way is filed, not worked around
         "Machine-local values go under `.ddflow/local/`",  # never committed
         "check that `.ddflow/config.toml`",  # setup is verified, whichever path wrote it
+        "`ddflow onboard preflight`",  # stage 0 is the surface, not a procedure to retype
+        "`ddflow onboard test-gate`",  # stage 2 measures through the command
+        "`ddflow onboard legacy`",  # stages 4-5 scan and freeze through the command
+        "`ddflow onboard memory`",  # stage 4 records the harness memory through the command
+        "`ddflow onboard verify`",  # stage 6 is one report
     ],
 )
 def test_the_steps_learned_by_hand_are_in_the_prompt(must_say):
