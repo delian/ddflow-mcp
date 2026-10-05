@@ -362,15 +362,29 @@ def addenda_lines(a: dict) -> list[str]:
         out.append("  links:")
         out += [
             f"    {x['relation']} {_ref(x, 'target')} (by {x['by']}, {x['at']}{_score(x)})"
+            + _reason(x)
             for x in a["links"]
+        ]
+    if a.get("dismissals"):
+        out.append("  dismissed as distinct:")
+        out += [
+            f"    {_ref(x, 'target')} (by {x['by']}, {x['at']})" + _reason(x)
+            for x in a["dismissals"]
         ]
     if a["linked_from"]:
         out.append("  linked from:")
         out += [
             f"    {_ref(x, 'record')} {x['relation']} this (by {x['by']}, {x['at']}{_score(x)})"
+            + _reason(x)
             for x in a["linked_from"]
         ]
     return out
+
+
+def _reason(x: dict) -> str:
+    """A link's `--reason`, as a trailing ` -- <why>`; "" when none was given."""
+    why = (x.get("reason") or "").strip()
+    return f" -- {why}" if why else ""
 
 
 def new_reports_line(item: str, count: int) -> str:

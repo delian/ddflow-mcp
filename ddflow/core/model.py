@@ -2138,6 +2138,11 @@ def _link(st: State, ev: Event, relation: str, target: str, source: str) -> None
         "at": ev.ts,
         "score": d.get("score"),
         "source": source,
+        # A `ddflow link --reason` says WHY the pair was settled (`distinct` especially).
+        # Carried into the projection, not only the raw event: `addenda`/`show`/`status`
+        # spread this dict, and a field written to the event but dropped here is
+        # unreadable from every API surface.
+        "reason": d.get("reason", ""),
     }
 
 

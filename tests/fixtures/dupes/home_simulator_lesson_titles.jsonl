@@ -1,0 +1,281 @@
+{"id": "L-34.10f-spec-xml-and-noted-nulls", "kind": "lesson", "title": "Render protocol commands from the SDK's machine-readable spec, and carry run-time ids as noted nulls rather than inventing them", "body": ""}
+{"id": "L-B-34.10g-zone-enabled-dropped", "kind": "lesson", "title": "An opt-in trait with its own enable switch must not be filtered out by a narrowing selection list", "body": ""}
+{"id": "L-B6dbac6e0a7", "kind": "lesson", "title": "len(range) overflows past sys.maxsize: bound a catalog-derived range BEFORE taking len", "body": ""}
+{"id": "L-B6dd2e84751", "kind": "lesson", "title": "A new anchor for one deixis kind must not be swept across every kind that shares the field", "body": ""}
+{"id": "L-Bafea8e827f", "kind": "lesson", "title": "Giving a previously inert node a state effect re-ranks every first-progress-step consumer", "body": ""}
+{"id": "L-Bc5749d780a", "kind": "lesson", "title": "Compare in the same normalized form you emit", "body": ""}
+{"id": "L-Bce6fcca2c1", "kind": "lesson", "title": "Bounds read from a catalog ValueDomain can be inf/nan: guard math.floor/ceil with math.isfinite", "body": ""}
+{"id": "L1", "kind": "lesson", "title": "Maintain `docs/lessons.md` from day one (process miss)", "body": ""}
+{"id": "L10", "kind": "lesson", "title": "Different-model rubber-duck is mandatory and finds author blind spots (CLAUDE.local.md)", "body": ""}
+{"id": "L100", "kind": "lesson", "title": "Threads and async share one GIL — to feed a multi-GPU fleet from a Python client, fan out across PROCESSES, not threads/", "body": ""}
+{"id": "L101", "kind": "lesson", "title": "Four recurring bug classes surfaced auditing the new high-throughput code — each is a general trap", "body": ""}
+{"id": "L102", "kind": "lesson", "title": "When you add multiprocessing, RE-AUDIT every cancel/restart assumption that held single-threaded — a parent's death no l", "body": ""}
+{"id": "L103", "kind": "lesson", "title": "Bug-hunt your own just-shipped module for the SAME dedup/extent traps — a fresh module is where L88/L91 recur, and a can", "body": ""}
+{"id": "L103-2", "kind": "lesson", "title": "A blocking-worker exit-hang has TWO interpreter-exit joins on CPython 3.13 — detaching from `concurrent.futures._python_", "body": ""}
+{"id": "L104", "kind": "lesson", "title": "A rubber-duck subagent must review the WORKTREE under test, not the primary checkout — and a CLI \"safety gate\" must FAIL", "body": ""}
+{"id": "L105", "kind": "lesson", "title": "A classifier/statistic over multi-source records must not let *measurement availability* masquerade as signal — and reus", "body": ""}
+{"id": "L106", "kind": "lesson", "title": "`all(...)` / `any(...)` over a possibly-empty collection is a vacuous-truth trap — an empty plan silently passed a \"pres", "body": ""}
+{"id": "L107", "kind": "lesson", "title": "Bug-hunt 14: a fail-safe guard added to ONE of a family of sibling commands must be propagated to ALL of them — the per-", "body": ""}
+{"id": "L108", "kind": "lesson", "title": "Dedup session 15: consolidate the freshly-shipped P26.4-P26.6 analysis commands — three sibling families grew parallel c", "body": ""}
+{"id": "L109", "kind": "lesson", "title": "A \"grounded\" simulated-user turn must be true on EVERY plan shape it can fire on — a singular claim (\"the ONE I'm contro", "body": ""}
+{"id": "L11", "kind": "lesson", "title": "Vendor a pure contract subset instead of importing a heavy package (decision)", "body": ""}
+{"id": "L110", "kind": "lesson", "title": "`ruff format <package>` in a fresh-venv worktree silently reformats UNRELATED files — format only what you edited, and v", "body": ""}
+{"id": "L111", "kind": "lesson", "title": "Bug-hunt 16: a \"weight\" knob must STEER the choice it names (not just label it), and a numeric-surface rewrite must capt", "body": ""}
+{"id": "L112", "kind": "lesson", "title": "Dedup session 17: the \"validate weight map + reject unknown keys\" idiom had drifted across 3 config sections — single-so", "body": ""}
+{"id": "L113", "kind": "lesson", "title": "Batch 6: two code paths DERIVING the same thing drift just like two copies of a rule — single-source the deriver + add a", "body": ""}
+{"id": "L114", "kind": "lesson", "title": "Batch 7: when a path has its OWN control flow + a perf optimization to preserve, share the fine-grained PRIMITIVE, not t", "body": ""}
+{"id": "L115", "kind": "lesson", "title": "Bug-hunt 18: a ratchet/guard that matches by SUBSTRING under-protects — match identifier tokens on WORD BOUNDARIES; and ", "body": ""}
+{"id": "L116", "kind": "lesson", "title": "Dedup session 19: a canonicalization tuple is a DETERMINISM CONTRACT — single-source it; and a \"leave-alone\" carve-out's", "body": ""}
+{"id": "L117", "kind": "lesson", "title": "P27.8 rubber-duck: a dict keyed by a NON-UNIQUE field silently drops rows; a Kahn in-degree must dedup the dependency li", "body": ""}
+{"id": "L118", "kind": "lesson", "title": "P27.9 rubber-duck: a per-run scalar normalized into config for ONE runner must be normalized in EVERY runner; and proven", "body": ""}
+{"id": "L119", "kind": "lesson", "title": "P27.13 rubber-duck: a synthesizer drawing UNIQUE artifacts from a fixed word-pool must validate the requested count agai", "body": ""}
+{"id": "L12", "kind": "lesson", "title": "Put the external-call boundary behind an injectable function (testability decision)", "body": ""}
+{"id": "L120", "kind": "lesson", "title": "P27.11 rubber-duck: a hard-negative DPO label must be checked against the GOAL, not just `result.ok`; and an isolation c", "body": ""}
+{"id": "L121", "kind": "lesson", "title": "Audit-batch rubber-duck: an IN-PLACE-mutating helper called in a loop over a SHARED object needs a per-iteration isolate", "body": ""}
+{"id": "L122", "kind": "lesson", "title": "Bug-hunt 20: when you remediate a \"silently-inert knob → warn\" class, enumerate ALL siblings in the family — a third one", "body": ""}
+{"id": "L123", "kind": "lesson", "title": "Dedup session 20: three behavior-preserving single-sourcings of fresh parallel-copies — a warning-FAMILY collapses to a ", "body": ""}
+{"id": "L124", "kind": "lesson", "title": "P28.7 outdoor archetypes — a monitor-only sensor must NOT freeze its dynamic reading in default_state, and every new \"do", "body": ""}
+{"id": "L125", "kind": "lesson", "title": "P28.8 rubber-duck: a read→condition goal that asserts a BOOLEAN must assert the TRUTHY case — `state.equals` collapses `", "body": ""}
+{"id": "L126", "kind": "lesson", "title": "P28.9 presence depth — the L124 dynamic-reading contract generalises to a FAMILY of monitor-only sensors, and a shared c", "body": ""}
+{"id": "L127", "kind": "lesson", "title": "The byte-identity ARTIFACT is `out/records.jsonl`, not `generate`'s stdout summary — a differing stdout hash can be a co", "body": ""}
+{"id": "L128", "kind": "lesson", "title": "P28.11 water-heater: a domain can be default-placed by a ROOM BLUEPRINT (not an archetype), so \"deepen the existing devi", "body": ""}
+{"id": "L129", "kind": "lesson", "title": "An \"all-or-nothing\" placement claim must be ENFORCED by the code, not just asserted in a docstring — per-member filterin", "body": ""}
+{"id": "L13", "kind": "lesson", "title": "Offline canonical phrasing has bounded distinct variety (design reality)", "body": ""}
+{"id": "L130", "kind": "lesson", "title": "A mutable value (list/dict) in an archetype's `default_state` is SHARED across every instantiated device — `Device.insta", "body": ""}
+{"id": "L131", "kind": "lesson", "title": "P28.1 sub-metering — a monitor-only meter with NO world model may freeze its readings in default_state (L124 does NOT ap", "body": ""}
+{"id": "L133", "kind": "lesson", "title": "P28.1 shared access — generalizing a boolean gate to a parametric one stays backward-compatible ONLY if the new dimensio", "body": ""}
+{"id": "L134", "kind": "lesson", "title": "P28.1 first-class building model — a sequential label generator must stay in its documented alphabet for ALL reachable c", "body": ""}
+{"id": "L135", "kind": "lesson", "title": "Bug-hunt (Phase 28 MDU deferred sub-features): per-feature rubber-ducks miss CROSS-feature consistency — enumerate the f", "body": ""}
+{"id": "L136", "kind": "lesson", "title": "Dedup (Phase 28 parallel-agent copy-paste): factor the SHARED LOOP/DAG SHAPE the agents each re-typed, but keep the draw", "body": ""}
+{"id": "L137", "kind": "lesson", "title": "`git stash` is REPO-GLOBAL, not per-worktree — a `stash pop` in your worktree can grab a SIBLING agent's stash and drop ", "body": ""}
+{"id": "L14", "kind": "lesson", "title": "Keep RESEARCH.md + gap-plan + todo current as each research stream lands (operator rule)", "body": ""}
+{"id": "L140", "kind": "lesson", "title": "A condition tool's INPUT SCHEMA type gates whether a gold plan validates — `state.equals` requires a STRING `state`, so ", "body": ""}
+{"id": "L141", "kind": "lesson", "title": "P29.7 cross-sensor verify — a \"residual\" that checks an ABSOLUTE threshold on an AGGREGATE signal is vacuously true; a s", "body": ""}
+{"id": "L142", "kind": "lesson", "title": "P29.4 complaint/troubleshooting — a \"confirming read-back\" condition must assert the state of the SAME home the diagnosi", "body": ""}
+{"id": "L143", "kind": "lesson", "title": "Bug-hunt (Phase 29): a \"deferred follow-up\" flagged in a PRIOR lesson is a LIVE bug the next hunt must ACT on — grep the", "body": ""}
+{"id": "L145", "kind": "lesson", "title": "P30.2 parallel-verify — a goal family that REUSES another feature's grounded proxy silently loses that proxy unless the ", "body": ""}
+{"id": "L146", "kind": "lesson", "title": "An UNCONDITIONAL catch-all in a priority cascade is a hidden `probability=1.0` that SHADOWS every lower-priority branch ", "body": ""}
+{"id": "L147", "kind": "lesson", "title": "A verdict derived from EXECUTION-SUCCESS is vacuously true — an executed action node can never \"fail\", so any fusion/ver", "body": ""}
+{"id": "L148", "kind": "lesson", "title": "Per-emitter unit tests pass while the CROSS-FEATURE corpus silently drops records — an \"all opt-ins ON together, full-co", "body": ""}
+{"id": "L149", "kind": "lesson", "title": "Bug-hunt (post-Phase-31): a gate keyed on a CORRELATED ENUM instead of the PROPERTY it means is a live bug (`node_kind==", "body": ""}
+{"id": "L15", "kind": "lesson", "title": "Mirror the consumer's config conventions when asked (operator rule)", "body": ""}
+{"id": "L150", "kind": "lesson", "title": "Dedup (post-Phase-31): when a bug FAMILY recurs a third time, promote the lesson to a SOURCE RATCHET; a \"second entry po", "body": ""}
+{"id": "L151", "kind": "lesson", "title": "Bug-hunt (post-P31.1.b): an rng-drawn GOLD DESIGNATION with no model-visible grounding is unlearnable noise — audit ever", "body": ""}
+{"id": "L152", "kind": "lesson", "title": "Scale run \"why is it so slow\": a progress bar that advances only on ACCEPTS hides a 95%-rejection regime (compute the RE", "body": ""}
+{"id": "L153", "kind": "lesson", "title": "A fan-out driver that WRAPS a runner must honour the wrapped runner's operator contracts (resume/--fresh) at ITS OWN lev", "body": ""}
+{"id": "L154", "kind": "lesson", "title": "Resume bookkeeping must count every unit EXACTLY ONCE across ALL the places it can live — a unit present in two stores (", "body": ""}
+{"id": "L155", "kind": "lesson", "title": "A gate and its RE-validation pass must derive their registry through the SAME seam — a reload gate that knows less than ", "body": ""}
+{"id": "L156", "kind": "lesson", "title": "A NEW cross-cutting parameter on a shared seam must be audited at EVERY call site of that seam the moment it lands — and", "body": ""}
+{"id": "L157", "kind": "lesson", "title": "A config string that SELECTS a code branch must be a `Literal` (typos → config-load rejection, not a silent wrong branch", "body": ""}
+{"id": "L158", "kind": "lesson", "title": "When you REUSE a shared data structure with an authoritative labeled field, compute that label with the SAME shared help", "body": ""}
+{"id": "L159", "kind": "lesson", "title": "A compiler that emits a tool payload must satisfy the SAME required-field rule the validator enforces — an `{entity_id}`", "body": ""}
+{"id": "L16", "kind": "lesson", "title": "Mirror a sibling component's parsing/regex EXACTLY, or validation and execution diverge", "body": ""}
+{"id": "L160", "kind": "lesson", "title": "Any synthetic id rendered into MODEL-VISIBLE text becomes a learnable shortcut — a `-nearmiss-` distractor id made the a", "body": ""}
+{"id": "L161", "kind": "lesson", "title": "A convert/analysis CLI that `list(read_jsonl(...))`s its input OOMs on exactly the scale corpora it exists to serve — st", "body": ""}
+{"id": "L162", "kind": "lesson", "title": "Bug-hunt (P36.1 condition-atom vocabulary): widening what a GUARD may mention opens a guard↔action collision class that ", "body": ""}
+{"id": "L163", "kind": "lesson", "title": "Dedup (post-P36.1): a shared *vocabulary* is more drift-prone than shared *logic* — a renamed state key fails SILENTLY (", "body": ""}
+{"id": "L164", "kind": "lesson", "title": "Bug-hunt + dedup (P36.2 semantic metrics): a metric that counts the STRUCTURE it measures over inflates itself — and `-(", "body": ""}
+{"id": "L165", "kind": "lesson", "title": "A ratchet must be SIZED against the codebase before it is written, and PROVEN to fail on the defect it targets — a check", "body": ""}
+{"id": "L166", "kind": "lesson", "title": "Adding the Nth sibling to a family is the cheapest audit of the other N-1 — writing the Alexa adapter surfaced the SAME ", "body": ""}
+{"id": "L167", "kind": "lesson", "title": "A NEW mixin must be diffed against what the HOST ARCHETYPES already model — three appliances already owned `consumable_l", "body": ""}
+{"id": "L168", "kind": "lesson", "title": "A missing FACT, not a missing plan shape — three of Phase 34's prompt families were blocked by the world containing noth", "body": ""}
+{"id": "L169", "kind": "lesson", "title": "Bug-hunt: a guard can be vacuous in TWO directions and fixing one produces the other — measure SATISFIABILITY across the", "body": ""}
+{"id": "L17", "kind": "lesson", "title": "A verification/shipping gate must use the SAME registry/config as the producer", "body": ""}
+{"id": "L170", "kind": "lesson", "title": "Adding an entry to a SHUFFLED strategy table changes the draw for every EXISTING record — a new strategy must be tried o", "body": ""}
+{"id": "L171", "kind": "lesson", "title": "An agent worktree that is N commits BEHIND `main` makes every audit conclusion wrong — fast-forward before you read anyt", "body": ""}
+{"id": "L172", "kind": "lesson", "title": "A drift guard left red stops being a guard — and the drift it stops reporting is exactly the drift that grows a rule you", "body": ""}
+{"id": "L173", "kind": "lesson", "title": "An empty artifact that VALIDATES is the vacuous class — and any label computed by re-validating that artifact silently f", "body": ""}
+{"id": "L174", "kind": "lesson", "title": "Decorating a Markdown heading silently breaks every anchor that points at it", "body": ""}
+{"id": "L175", "kind": "lesson", "title": "Enumerating a surface by grepping the CONVENTIONS you know finds every site that follows one and none that predates it —", "body": ""}
+{"id": "L176", "kind": "lesson", "title": "Bug hunt (Phase 35.1): a byte oracle duplicated across ten files is nine chances to re-pin the wrong number — and my own", "body": ""}
+{"id": "L177", "kind": "lesson", "title": "When one accessor answers two different questions, a fix for one silently breaks the other — and a \"silent by constructi", "body": ""}
+{"id": "L178", "kind": "lesson", "title": "A \"self-verifying\" gold plan verifies nothing unless a test asserts its check's RESULT — and a design claim in a docstri", "body": ""}
+{"id": "L18", "kind": "lesson", "title": "Streaming/resume readers must tolerate a truncated trailing line", "body": ""}
+{"id": "L19", "kind": "lesson", "title": "Don't re-query the same model in a multi-vote panel — reuse the prior verdict", "body": ""}
+{"id": "L2", "kind": "lesson", "title": "Don't reference a module that doesn't exist yet (CONFIRMED bug)", "body": ""}
+{"id": "L20", "kind": "lesson", "title": "Default-0 fields + `extra=\"ignore\"` silently accept malformed model output", "body": ""}
+{"id": "L21", "kind": "lesson", "title": "\"Shouldn't happen\" branches that count missing data as success are silent false-passes", "body": ""}
+{"id": "L21a68d2a6c", "kind": "lesson", "title": "An opt-in feature's knob defaults must make the feature's headline family fire under the opt-in switch alone", "body": ""}
+{"id": "L22", "kind": "lesson", "title": "Pick semantically-correct type defaults", "body": ""}
+{"id": "L23", "kind": "lesson", "title": "Don't rebuild expensive structures or copy large immutables on hot paths", "body": ""}
+{"id": "L24", "kind": "lesson", "title": "Run the bug-hunt / different-model review as a standing practice", "body": ""}
+{"id": "L25", "kind": "lesson", "title": "Extract one canonical \"parse JSON object out of an LLM response\" helper", "body": ""}
+{"id": "L26", "kind": "lesson", "title": "One shared tokenizer regex, not a copy per module", "body": ""}
+{"id": "L27", "kind": "lesson", "title": "Parameterize a near-duplicate reader instead of forking it", "body": ""}
+{"id": "L28", "kind": "lesson", "title": "Lift repeated test scaffolding into a shared helper module", "body": ""}
+{"id": "L29", "kind": "lesson", "title": "Deduplicate by *single source of truth*, not by coupling to a vendored/private symbol", "body": ""}
+{"id": "L2ae888527b", "kind": "lesson", "title": "A guard whose skip reason is a broad exception class turns 'wrong input' into 'environment missing' and goes green", "body": ""}
+{"id": "L3", "kind": "lesson", "title": "Dedup ONLINE when the target is a count of *distinct* items (CONFIRMED)", "body": ""}
+{"id": "L30", "kind": "lesson", "title": "\"Validates + executes cleanly\" is not \"did the right thing\" — assert the state delta", "body": ""}
+{"id": "L31", "kind": "lesson", "title": "lru_cache + mutable pydantic models = shared-singleton cache poisoning — freeze cached specs", "body": ""}
+{"id": "L32", "kind": "lesson", "title": "A rubber-duck subagent reviewing UNCOMMITTED work misreads `git status`/`git diff` as staleness", "body": ""}
+{"id": "L33", "kind": "lesson", "title": "Model \"set a property of a sub-target chosen at call time\" as a declared effect, not executor code", "body": ""}
+{"id": "L34", "kind": "lesson", "title": "Use `x if x is not None else default`, never `x or default`, for falsy-but-valid values", "body": ""}
+{"id": "L35", "kind": "lesson", "title": "Extract a `domain_of()`-style util for any parse repeated across modules; verify refactors of code-that-emits-committed-", "body": ""}
+{"id": "L36", "kind": "lesson", "title": "Don't \"deduplicate\" declarative catalog data — factor it with family builders, not per-line sugar", "body": ""}
+{"id": "L37", "kind": "lesson", "title": "When a comment claims an invariant, write a test that ENFORCES it across ALL instances — not one sample", "body": ""}
+{"id": "L38", "kind": "lesson", "title": "A closed global set (`_ACTIVE_STATE_VALUES`, verb maps) silently drifts when an OPEN catalog adds new state strings", "body": ""}
+{"id": "L39", "kind": "lesson", "title": "`frozen=True` does NOT deep-freeze a pydantic model's dict/list fields — rely on copy-on-use", "body": ""}
+{"id": "L3a3c71f98e", "kind": "lesson", "title": "Import your own side before putting a foreign checkout on sys.path", "body": ""}
+{"id": "L4", "kind": "lesson", "title": "Avoid pydantic field names that shadow `BaseModel` attributes (CONFIRMED warning)", "body": ""}
+{"id": "L40", "kind": "lesson", "title": "Ground the WHOLE structured payload, not just its metadata mirror", "body": ""}
+{"id": "L41", "kind": "lesson", "title": "Derive authoritative labels from the deterministic source — never trust an LLM's self-label", "body": ""}
+{"id": "L42", "kind": "lesson", "title": "A new orchestrator that re-runs stage logic must replicate the old loop's per-stage GUARDS, not just the stage calls", "body": ""}
+{"id": "L43", "kind": "lesson", "title": "Fingerprint a cache key BEFORE the mutation it keys, not after", "body": ""}
+{"id": "L44", "kind": "lesson", "title": "An actuator's control command must set the top-level `state`, not only a domain-specific mirror key", "body": ""}
+{"id": "L45", "kind": "lesson", "title": "Don't sample a flag and its dependent field independently — derive the dependent from the flag", "body": ""}
+{"id": "L46", "kind": "lesson", "title": "Inject faults/perturbations only into OBSERVABLE state — an unread key is a silent dead-fault", "body": ""}
+{"id": "L47", "kind": "lesson", "title": "A structural/canonical key must fold in EVERY semantic field — a false-collapse silently understates the metric it measu", "body": ""}
+{"id": "L48", "kind": "lesson", "title": "An all-or-nothing parse of an LLM's long structured output loses 100% on truncation — salvage the valid prefix", "body": ""}
+{"id": "L49", "kind": "lesson", "title": "An availability gate can MASK a dead/wrong constant that is live-and-breaking elsewhere", "body": ""}
+{"id": "L5", "kind": "lesson", "title": "Make the fixed leading param positional-only when a function also takes user `**kwargs`", "body": ""}
+{"id": "L50", "kind": "lesson", "title": "A probability-gated rng draw must be guarded by `p > 0`, or a disabled feature still shifts every downstream seed", "body": ""}
+{"id": "L51", "kind": "lesson", "title": "After rebinding a variable mid-function, every later use of the OLD meaning is a latent bug", "body": ""}
+{"id": "L52", "kind": "lesson", "title": "I wrote a fresh `_to_flat_sft` copy of `records.to_flat` IN THE SAME SESSION that authored L86 — \"build a leaf helper, d", "body": ""}
+{"id": "L52-2", "kind": "lesson", "title": "A normalizer copied ≥3× that has DIVERGED is a latent bug, not cosmetic duplication", "body": ""}
+{"id": "L53", "kind": "lesson", "title": "`str.capitalize()` lowercases the tail — wrong for sentence-casing text that holds proper nouns", "body": ""}
+{"id": "L54", "kind": "lesson", "title": "A paraphrase/humanization gate must reject an ECHO of the source, or template text ships verbatim", "body": ""}
+{"id": "L55", "kind": "lesson", "title": "A `git stash`-based \"opt-in byte-identical\" oracle is INVALID when the working tree holds other uncommitted work", "body": ""}
+{"id": "L56", "kind": "lesson", "title": "A sampling-based verification gate needs enough trials AND a full-entropy seed — or it silently under-checks", "body": ""}
+{"id": "L57", "kind": "lesson", "title": "An opt-in feature's \"byte-identical\" promise covers the OUTPUT RECORD, not just the RNG stream — don't add a metadata ke", "body": ""}
+{"id": "L58", "kind": "lesson", "title": "A content-addressed / cacheable step must seed randomness from its INPUTS, not a shared run rng", "body": ""}
+{"id": "L59", "kind": "lesson", "title": "A parser/loader of EXTERNAL real-world data must treat every field as hostile — shape, type, multiplicity, and key-colli", "body": ""}
+{"id": "L6", "kind": "lesson", "title": "Heterogeneous dict payloads can't be a native Arrow/Parquet struct (CONFIRMED)", "body": ""}
+{"id": "L60", "kind": "lesson", "title": "In a RESUMABLE streaming pipeline, any per-record decision drawn from the shared run rng diverges on resume — seed it fr", "body": ""}
+{"id": "L61", "kind": "lesson", "title": "Extracting a shared helper that consumes a shared RNG must PRESERVE each caller's draw order — pass pre-drawn values in", "body": ""}
+{"id": "L62", "kind": "lesson", "title": "A physics/constraint enforcement that mutates state must act on the FINAL set, not incrementally — or it breaks order-in", "body": ""}
+{"id": "L63", "kind": "lesson", "title": "A shared working tree with parallel agents will eat your work — isolate in a git worktree, merge to main without a branc", "body": ""}
+{"id": "L64", "kind": "lesson", "title": "A duplicated opt-in-pass WIRING block is the harmful kind — consolidate it AND let the helper own the ordering constrain", "body": ""}
+{"id": "L65", "kind": "lesson", "title": "A path-builder that grows a list to an index must BOUND the index, or a typo/abuse triggers unbounded allocation (DoS)", "body": ""}
+{"id": "L66", "kind": "lesson", "title": "A second runner/entry-point must honour EVERY config knob the first one does — a dropped knob is the L9/L17 same-registr", "body": ""}
+{"id": "L67", "kind": "lesson", "title": "A weight / probability map needs FINITENESS + non-negativity + positive-total validation — `< 0` and `<= 0` guards alone", "body": ""}
+{"id": "L68", "kind": "lesson", "title": "Deep-merge must deep-COPY the leaf it transplants, and a $ref schema-walker must guard against cycles", "body": ""}
+{"id": "L69", "kind": "lesson", "title": "A validation rule copy-pasted into N config sections DIVERGES — single-source it in one helper, and the laxest copy is t", "body": ""}
+{"id": "L6d13723fbf", "kind": "lesson", "title": "A verdict battery only guards the fields it sets", "body": ""}
+{"id": "L7", "kind": "lesson", "title": "Run the real contract validator + executor DURING synthesis, not just at export (CONFIRMED)", "body": ""}
+{"id": "L70", "kind": "lesson", "title": "Extract the repeated `sorted(collection, key=…)` idiom into a named method on the owning aggregate — the name documents ", "body": ""}
+{"id": "L71", "kind": "lesson", "title": "A \"second entry point\" accumulates DROPPED features, not just one — when you find one knob-drop, audit the whole surface", "body": ""}
+{"id": "L72", "kind": "lesson", "title": "A goal-template that hardcodes a toolname/args must validate against the registry for EVERY device type its `applicable(", "body": ""}
+{"id": "L73", "kind": "lesson", "title": "For \"absence\" set an Optional snapshot field to None, never a sentinel STRING — a string defeats `exclude_none` AND a do", "body": ""}
+{"id": "L7322e5315a", "kind": "lesson", "title": "A tools_extra.json schema shadow is NOT byte-identical: tool specs are serialized into MCP-trajectory records", "body": ""}
+{"id": "L74", "kind": "lesson", "title": "A subagent's \"CONFIRMED bug + one-line fix\" still needs the maintainer to verify the fix ACHIEVES the claim and respects", "body": ""}
+{"id": "L75", "kind": "lesson", "title": "A boolean GATE/combinator with no operands must default CLOSED — `all([]) == True` is a gate-open hole, and a docstring ", "body": ""}
+{"id": "L76", "kind": "lesson", "title": "Bug-hunt the CARTESIAN of opt-in features, not each alone — a record-transform must check the record SHAPE matches its a", "body": ""}
+{"id": "L77", "kind": "lesson", "title": "Sibling members of a curated set must carry a CONSISTENT label — assert it over EVERY member, not a spot-check", "body": ""}
+{"id": "L78", "kind": "lesson", "title": "A metric/walk computed on BOTH a model AND its dump dict belongs in the ONE leaf normalizer that already bridges them — ", "body": ""}
+{"id": "L79", "kind": "lesson", "title": "A test fixture copied verbatim across test files goes to `tests/_helpers.py` — even a 9-line builder", "body": ""}
+{"id": "L8", "kind": "lesson", "title": "Generic handlers must surface *declared* output keys, asserted by VALUE not presence", "body": ""}
+{"id": "L80", "kind": "lesson", "title": "A byte-identity oracle must EXERCISE the changed code path with a NON-DEFAULT config — the all-default run can be blind ", "body": ""}
+{"id": "L81", "kind": "lesson", "title": "\"Normalize/sort X for cache-key stability\" is WRONG when X's order is observable in the output or a parity-paired path d", "body": ""}
+{"id": "L81807842d7", "kind": "lesson", "title": "Deduping knob reads through getattr hides them from the dead-knob ratchet", "body": ""}
+{"id": "L82", "kind": "lesson", "title": "A load-bearing CONSTANT duplicated across modules is the SAME drift trap as a copied rule — single-source it + add an `i", "body": ""}
+{"id": "L83", "kind": "lesson", "title": "After centralizing a rule, also extract its ELEMENT-level guard — the per-item check gets hand-rolled even when the aggr", "body": ""}
+{"id": "L84", "kind": "lesson", "title": "A feature that SILENTLY REPLACES a cascade of other enabled features is a footgun — emit a one-shot warning naming what ", "body": ""}
+{"id": "L85", "kind": "lesson", "title": "A prompt axis that asks the model to emit grounded data MUST be handed that data — verify with a REAL model, since a fak", "body": ""}
+{"id": "L86", "kind": "lesson", "title": "A format-projection exporter must be built against REAL upstream records (every opt-in shape), and the OpenAI→HF tool-ca", "body": ""}
+{"id": "L87", "kind": "lesson", "title": "A cumulative-weighted-choice SAMPLER copied into two modules diverged on its empty-guard — single-source it in `sampling", "body": ""}
+{"id": "L88", "kind": "lesson", "title": "When you write \"single-sourced X (was N×)\", a LATER module re-introduces an (N+1)th inline copy — periodically `grep` th", "body": ""}
+{"id": "L89", "kind": "lesson", "title": "A crash-resume that keys off an output file silently ignores re-run flags — emit the resume notice at WARNING (not info)", "body": ""}
+{"id": "L9", "kind": "lesson", "title": "Default to the *contextual* registry, not the base one (rubber-duck CONFIRMED footgun)", "body": ""}
+{"id": "L90", "kind": "lesson", "title": "A record-ABLATION transform must guard that the gold SHAPE matches its SINGULAR assumption — `manufacture_clarification`", "body": ""}
+{"id": "L91", "kind": "lesson", "title": "The duplicate was an INTERNAL comprehension inside a leaf helper, re-derived externally by a NEW module — and the copy D", "body": ""}
+{"id": "L92", "kind": "lesson", "title": "A producer/worker split that reuses a mutable object across iterations races — snapshot per unit", "body": ""}
+{"id": "L93", "kind": "lesson", "title": "A per-resource limiter/cache built once per client instance is multiplied by a second client — share one registry", "body": ""}
+{"id": "L935ce9eb00", "kind": "lesson", "title": "A ddflow claim through a shared MCP connection binds the PARENT's worktree, and the binding cannot be moved", "body": ""}
+{"id": "L94", "kind": "lesson", "title": "Signal-bypassed teardown: convert SIGTERM/SIGHUP to SystemExit so child processes (vLLM/GPU) are reaped", "body": ""}
+{"id": "L95", "kind": "lesson", "title": "pydantic model_copy() skips model_validators — re-assert load-bearing cross-field invariants at the point of use", "body": ""}
+{"id": "L96", "kind": "lesson", "title": "A client-library routing id is not the wire model name — validate request-emit against the REAL target runtime", "body": ""}
+{"id": "L97", "kind": "lesson", "title": "A reasoning-model teacher emits <think> chain-of-thought into the output — strip it AND disable thinking at the source", "body": ""}
+{"id": "L98", "kind": "lesson", "title": "An uncancellable in-flight ThreadPoolExecutor worker is joined at interpreter exit — detach it, don't rely on `cancel_fu", "body": ""}
+{"id": "L99", "kind": "lesson", "title": "Thread concurrency does not scale GIL-bound per-call Python work — the online bottleneck was call COUNT × per-call CPU, ", "body": ""}
+{"id": "LS-correctness-a-blocking-worker-exit-hang", "kind": "lesson", "title": "A blocking-worker exit-hang has TWO interpreter-exit joins on CPython 3.13 — and you must test the PROCESS exits, not th", "body": ""}
+{"id": "LS-correctness-a-client-library-routing-id", "kind": "lesson", "title": "A client-library ROUTING id is not the wire model name — a fake-LLM test can't catch a real-server schema mismatch; vali", "body": ""}
+{"id": "LS-correctness-a-finally-exit-that-reaps-ch", "kind": "lesson", "title": "A `finally`/`__exit__` that reaps child processes (vLLM, GPU) is BYPASSED by SIGTERM/SIGHUP — convert catchable terminat", "body": ""}
+{"id": "LS-correctness-a-goal-templates-hardcoded-t", "kind": "lesson", "title": "A goal-template's hardcoded toolname/args must validate for EVERY device type its `applicable()` admits, not just the de", "body": ""}
+{"id": "LS-correctness-a-per-resource-limitercache", "kind": "lesson", "title": "A per-resource limiter/cache built once PER client instance is MULTIPLIED when a second client is constructed for the sa", "body": ""}
+{"id": "LS-correctness-a-producerworker-split-that", "kind": "lesson", "title": "A producer/worker split that REUSES a mutable object across iterations RACES when workers read it asynchronously — snaps", "body": ""}
+{"id": "LS-correctness-a-reasoning-model-teacher-em", "kind": "lesson", "title": "A reasoning-model teacher emits `<think>` chain-of-thought into the output — strip it AND disable thinking at the source", "body": ""}
+{"id": "LS-correctness-bug-hunt-14-p264-p266-analys", "kind": "lesson", "title": "Bug-hunt 14 (P26.4-P26.6 analysis commands): a fail-safe guard added to ONE sibling command must be propagated to ALL —", "body": ""}
+{"id": "LS-correctness-bug-hunt-16-p268910-bug-hunt", "kind": "lesson", "title": "Bug-hunt 16 (P26.8/9/10): bug-hunt the VALUE SEMANTICS of each knob/transform, not just the plumbing", "body": ""}
+{"id": "LS-correctness-bug-hunt-your-own-just-shipp", "kind": "lesson", "title": "Bug-hunt your own just-shipped module (session 13, Phase-25 viz) — L88/L91 dedup traps recur in fresh code, and a CANVAS", "body": ""}
+{"id": "LS-correctness-default-to-the-contextual-ob", "kind": "lesson", "title": "Default to the contextual object, not the global", "body": ""}
+{"id": "LS-correctness-for-absence-use-none-never-a", "kind": "lesson", "title": "For \"absence\" use None, never a sentinel STRING", "body": ""}
+{"id": "LS-correctness-guard-empty-collections", "kind": "lesson", "title": "Guard empty collections", "body": ""}
+{"id": "LS-correctness-thread-concurrency-does-not", "kind": "lesson", "title": "Thread concurrency does NOT scale GIL-bound per-call Python — when offline is ~100× faster than online, the bottleneck i", "body": ""}
+{"id": "LS-correctness-threadpoolexecutorshutdownwa", "kind": "lesson", "title": "`ThreadPoolExecutor.shutdown(wait=False, cancel_futures=True)` does NOT make the process exit promptly — Python joins in", "body": ""}
+{"id": "LS-correctness-threads-and-async-share-one", "kind": "lesson", "title": "Threads and async share ONE GIL — to feed a multi-GPU fleet from a Python client, fan out across PROCESSES", "body": ""}
+{"id": "LS-data-pipelin-widening-what-a-guard-may-me", "kind": "lesson", "title": "Widening what a GUARD may mention opens a guard↔action collision class that did not exist before — and a defensive fallb", "body": ""}
+{"id": "LS-deduplicatio-a-duplicate-can-be-an-inline", "kind": "lesson", "title": "A duplicate can be an INLINE comprehension inside a leaf helper, re-derived externally by a NEW module — grep the OPERAT", "body": ""}
+{"id": "LS-deduplicatio-a-family-of-similar-commands", "kind": "lesson", "title": "A FAMILY of similar commands shipped across separate sessions grows parallel copies — schedule a dedup pass over the fam", "body": ""}
+{"id": "LS-deduplicatio-a-feature-that-silently-repl", "kind": "lesson", "title": "A feature that silently REPLACES other enabled features must warn once, naming what it shadows", "body": ""}
+{"id": "LS-deduplicatio-a-flattennormalizeparse-step", "kind": "lesson", "title": "A flatten/normalize/parse step for a cross-cutting concern is probably ALREADY a leaf helper in a sibling module — `grep", "body": ""}
+{"id": "LS-deduplicatio-a-format-projection-exporter", "kind": "lesson", "title": "A format-projection exporter must be built against REAL upstream records (every opt-in shape on), and the OpenAI→HF tool", "body": ""}
+{"id": "LS-deduplicatio-a-grounded-simulated-userdia", "kind": "lesson", "title": "A \"grounded\" simulated-user/dialogue turn must be TRUE on every plan shape it can fire on — a singular claim lies on a m", "body": ""}
+{"id": "LS-deduplicatio-a-guard-can-be-vacuous-in-tw", "kind": "lesson", "title": "A guard can be vacuous in TWO directions, and fixing one produces the other — measure SATISFIABILITY across the corpus,", "body": ""}
+{"id": "LS-deduplicatio-a-guardratchet-that-matches", "kind": "lesson", "title": "A guard/ratchet that matches by SUBSTRING under-protects — tokenize and match WORD BOUNDARIES; and a decoder/reader pair", "body": ""}
+{"id": "LS-deduplicatio-a-load-bearing-constant-dupl", "kind": "lesson", "title": "A load-bearing CONSTANT duplicated across modules is the same drift trap as a copied rule", "body": ""}
+{"id": "LS-deduplicatio-a-load-bearing-invariant-rep", "kind": "lesson", "title": "A load-bearing invariant repeated inline → one named helper", "body": ""}
+{"id": "LS-deduplicatio-a-metric-that-counts-the-str", "kind": "lesson", "title": "A metric that counts the STRUCTURE it measures over inflates itself; and check a metric's RANGE can express the effect b", "body": ""}
+{"id": "LS-deduplicatio-a-missing-fact-not-a-missing", "kind": "lesson", "title": "A missing FACT, not a missing plan shape", "body": ""}
+{"id": "LS-deduplicatio-a-new-mixin-must-be-diffed-a", "kind": "lesson", "title": "A new MIXIN must be diffed against what the host ARCHETYPES already model — and a \"derivation\" whose input never exists", "body": ""}
+{"id": "LS-deduplicatio-a-normalizerparse-copied-3-t", "kind": "lesson", "title": "A normalizer/parse copied ≥3× that has DIVERGED is a latent bug", "body": ""}
+{"id": "LS-deduplicatio-a-prompt-axis-that-asks-the", "kind": "lesson", "title": "A prompt axis that asks the model to emit GROUNDED data must be handed that data — and verify with a REAL model, not a f", "body": ""}
+{"id": "LS-deduplicatio-a-record-ablation-transform", "kind": "lesson", "title": "A record-ABLATION transform must guard the gold SHAPE matches its SINGULAR assumption — count the target actions, not a", "body": ""}
+{"id": "LS-deduplicatio-a-second-entry-point-accumul", "kind": "lesson", "title": "A \"second entry point\" accumulates DROPPED features, not one — audit the whole surface on the first knob-drop", "body": ""}
+{"id": "LS-deduplicatio-a-shared-vocabulary-is-more", "kind": "lesson", "title": "A shared VOCABULARY is more drift-prone than shared LOGIC — a renamed state key fails SILENTLY", "body": ""}
+{"id": "LS-deduplicatio-a-validation-rule-copied-int", "kind": "lesson", "title": "A validation RULE copied into N config sections diverges — single-source it; the laxest copy is the bug", "body": ""}
+{"id": "LS-deduplicatio-a-weighted-choice-sampler-co", "kind": "lesson", "title": "A weighted-choice SAMPLER copied into two modules diverged (one lost its empty-guard) — single- source it; merging is by", "body": ""}
+{"id": "LS-deduplicatio-adding-the-nth-sibling-to-a", "kind": "lesson", "title": "Adding the Nth sibling to a family is the cheapest audit of the other N-1", "body": ""}
+{"id": "LS-deduplicatio-byte-hash-oracle-for-refacto", "kind": "lesson", "title": "Byte-hash oracle for refactors of code that emits committed data", "body": ""}
+{"id": "LS-deduplicatio-dedup-17-the-validate-weight", "kind": "lesson", "title": "Dedup 17: the \"validate weight map + reject unknown keys\" config idiom drifted across 3 sections — single-source it (L69", "body": ""}
+{"id": "LS-deduplicatio-dedup-four-loops-that-look-m", "kind": "lesson", "title": "Dedup: four loops that look mergeable but must NOT be — draw ORDER is the contract", "body": ""}
+{"id": "LS-deduplicatio-dont-normalizesort-a-value-f", "kind": "lesson", "title": "Don't normalize/sort a value for cache-key stability if its order is observable in the output or a parity-paired path de", "body": ""}
+{"id": "LS-deduplicatio-duplicated-opt-in-pass-wirin", "kind": "lesson", "title": "Duplicated opt-in-pass WIRING is harmful (not declarative) — consolidate it AND let the helper own the ordering constrai", "body": ""}
+{"id": "LS-deduplicatio-extracting-a-shared-helper-t", "kind": "lesson", "title": "Extracting a shared helper that draws from a shared rng must preserve each caller's draw ORDER", "body": ""}
+{"id": "LS-deduplicatio-l116-dedup-session-19-a-cano", "kind": "lesson", "title": "[L116, dedup session 19] A canonicalization/serialization tuple is a DETERMINISM CONTRACT — single-source it; and a \"lea", "body": ""}
+{"id": "LS-deduplicatio-one-canonical-helper-per-cro", "kind": "lesson", "title": "One canonical helper per cross-cutting concern", "body": ""}
+{"id": "LS-deduplicatio-single-sourced-x-was-n-sprin", "kind": "lesson", "title": "\"Single-sourced X (was N×)\" springs an (N+1)th leak — re-grep the raw operation each dedup pass; and a dedup-scan agent", "body": ""}
+{"id": "LS-deduplicatio-size-a-ratchet-against-the-r", "kind": "lesson", "title": "Size a ratchet against the real codebase before writing it, and PROVE it fails on the defect it targets", "body": ""}
+{"id": "LS-deduplicatio-test-code-is-code", "kind": "lesson", "title": "Test code is code", "body": ""}
+{"id": "LS-deduplicatio-the-byte-identity-oracle-mus", "kind": "lesson", "title": "The byte-identity oracle must EXERCISE the changed path with a NON-DEFAULT config", "body": ""}
+{"id": "LS-deduplicatio-two-code-paths-deriving-the", "kind": "lesson", "title": "Two code paths DERIVING the same mapping drift like two copies of a rule — single-source the deriver + a *parity test*,", "body": ""}
+{"id": "LS-deduplicatio-verify-a-pipeline-code-dedup", "kind": "lesson", "title": "Verify a pipeline-code dedup by byte-diffing the emitted output", "body": ""}
+{"id": "LS-deduplicatio-when-a-path-has-its-own-cont", "kind": "lesson", "title": "When a path has its OWN control flow + a perf optimization, share the fine-grained PRIMITIVE, not the loop shape", "body": ""}
+{"id": "LS-practice-a-compiler-that-emits-a-tool", "kind": "lesson", "title": "A compiler that emits a tool payload must satisfy the SAME required-field rule the validator enforces — else it silently", "body": ""}
+{"id": "LS-practice-a-config-string-that-selects", "kind": "lesson", "title": "A config string that SELECTS a branch must be a `Literal` (typos → config-load rejection, not a silent wrong branch); an", "body": ""}
+{"id": "LS-practice-a-convertanalysis-cli-that-l", "kind": "lesson", "title": "A convert/analysis CLI that `list(read_jsonl(...))`s its input OOMs on the scale corpora it exists to serve — stream it", "body": ""}
+{"id": "LS-practice-a-design-claim-in-a-docstrin", "kind": "lesson", "title": "A design claim in a docstring is worth nothing until a ratchet enforces it", "body": ""}
+{"id": "LS-practice-a-fan-out-driver-wrapping-a", "kind": "lesson", "title": "A fan-out driver wrapping a runner must honour the wrapped runner's operator contracts (resume/--fresh) at ITS level; a", "body": ""}
+{"id": "LS-practice-a-gate-and-its-re-validation", "kind": "lesson", "title": "A gate and its RE-validation pass must share ONE registry-construction seam; a duck-typed deriver keyed on the wrong att", "body": ""}
+{"id": "LS-practice-a-gate-keyed-on-a-correlated", "kind": "lesson", "title": "A gate keyed on a CORRELATED ENUM instead of the PROPERTY it means is a live bug; a transform must be RE-AUDITED when th", "body": ""}
+{"id": "LS-practice-a-goal-family-reusing-anothe", "kind": "lesson", "title": "A goal family REUSING another feature's grounded proxy silently loses it unless the WORLD-BUILD pass that grounds it fir", "body": ""}
+{"id": "LS-practice-a-guard-on-feasibility-is-no", "kind": "lesson", "title": "A guard on FEASIBILITY is not a guard on FREQUENCY", "body": ""}
+{"id": "LS-practice-a-new-cross-cutting-param-on", "kind": "lesson", "title": "A new cross-cutting param on a shared seam must be audited at EVERY call site the moment it lands — self-authored siblin", "body": ""}
+{"id": "LS-practice-a-progress-bar-in-an-accept", "kind": "lesson", "title": "A progress bar in an accept-gated loop shows the SURVIVOR rate, not the work rate; a seeded-producer resume that replays", "body": ""}
+{"id": "LS-practice-a-self-verifying-plan-verifi", "kind": "lesson", "title": "A \"self-verifying\" plan verifies nothing unless the test asserts its check's RESULT", "body": ""}
+{"id": "LS-practice-a-unit-living-in-two-stores", "kind": "lesson", "title": "A unit living in TWO stores that both \"count\" makes every rerun a silent no-op — persist a consumption high-water mark a", "body": ""}
+{"id": "LS-practice-a-verdict-derived-from-execu", "kind": "lesson", "title": "A verdict derived from EXECUTION-SUCCESS is vacuously true", "body": ""}
+{"id": "LS-practice-an-identifier-fix-is-not-a-r", "kind": "lesson", "title": "An identifier fix is not a referent fix; and `x % len(pool)` is a silent duplicate generator", "body": ""}
+{"id": "LS-practice-an-rng-drawn-gold-designatio", "kind": "lesson", "title": "An rng-drawn GOLD DESIGNATION with no model-visible grounding is unlearnable noise; a field name shared by the gold payl", "body": ""}
+{"id": "LS-practice-an-unconditional-catch-all-i", "kind": "lesson", "title": "An UNCONDITIONAL catch-all in a priority cascade is a hidden `probability=1.0` that SHADOWS every lower-priority branch", "body": ""}
+{"id": "LS-practice-any-synthetic-id-rendered-in", "kind": "lesson", "title": "Any synthetic id rendered into MODEL-VISIBLE text is a learnable shortcut", "body": ""}
+{"id": "LS-practice-bug-hunt-phase-28-mdu-deferr", "kind": "lesson", "title": "Bug-hunt (Phase 28 MDU deferred sub-features) — per-feature rubber-ducks miss CROSS-feature consistency; verify \"THEORET", "body": ""}
+{"id": "LS-practice-config-models-live-in-the-co", "kind": "lesson", "title": "Config models live in the config layer and import nothing above it", "body": ""}
+{"id": "LS-practice-decorating-a-markdown-headin", "kind": "lesson", "title": "Decorating a Markdown heading silently breaks every anchor pointing at it", "body": ""}
+{"id": "LS-practice-dedup-phase-28-parallel-agen", "kind": "lesson", "title": "Dedup (Phase 28 parallel-agent copy-paste) — factor the shared LOOP/DAG SHAPE, keep the ordering/hook variants separate", "body": ""}
+{"id": "LS-practice-dedup-session-20-three-behav", "kind": "lesson", "title": "Dedup session 20 — three behavior-preserving single-sourcings of fresh parallel-copies (golden SHAs unchanged)", "body": ""}
+{"id": "LS-practice-git-add-dir-misses-repo-root", "kind": "lesson", "title": "`git add <dir>/` misses repo-root files — verify `git status` is clean BEFORE `git worktree remove`", "body": ""}
+{"id": "LS-practice-on-a-bug-familys-third-recur", "kind": "lesson", "title": "On a bug family's THIRD recurrence, promote the lesson to a SOURCE RATCHET; a second entry point drops whole GATES; a \"m", "body": ""}
+{"id": "LS-practice-per-emitter-unit-tests-pass", "kind": "lesson", "title": "Per-emitter unit tests pass while the CROSS-FEATURE corpus silently drops records", "body": ""}
+{"id": "LS-practice-ruff-format-package-in-a-fre", "kind": "lesson", "title": "`ruff format <package>` in a fresh-venv worktree reformats UNRELATED files (newer ruff than `main`) — format only what y", "body": ""}
+{"id": "LS-practice-run-bug-hunt-different-model", "kind": "lesson", "title": "Run `/bug-hunt` (different-model review) after each milestone", "body": ""}
+{"id": "LS-practice-run-deduplicate-code-periodi", "kind": "lesson", "title": "Run `/deduplicate-code` periodically", "body": ""}
+{"id": "LS-practice-the-phase-29-modules-were-pe", "kind": "lesson", "title": "The Phase-29 modules were per-item rubber-ducked (a fresh 6-class hunt found 0 new bugs in them); the yield was CONFIRMI", "body": ""}
+{"id": "LS-practice-two-tables-that-must-agree-w", "kind": "lesson", "title": "Two tables that must agree, with no check that they do, is a latent defect with a fuse", "body": ""}
+{"id": "LS-practice-when-remediating-a-silently", "kind": "lesson", "title": "When remediating a \"silently-inert knob → warn\" class, grep the WHOLE family — a partial fix is worse than none", "body": ""}
+{"id": "LS-practice-when-you-reuse-a-shared-stru", "kind": "lesson", "title": "When you REUSE a shared struct with an authoritative labeled field, compute that label with the SAME shared helper the s", "body": ""}
+{"id": "Lb08060e5ec", "kind": "lesson", "title": "A 'do X to one, leave the others' goal must assert BOTH halves — asserting only the survivor passes a no-op", "body": ""}
+{"id": "Lb26a5e4cba", "kind": "lesson", "title": "A ddflow review chunk that truncates on reasoning is deterministic — cover it with a targeted direct review", "body": ""}
+{"id": "Lc5a972be7c", "kind": "lesson", "title": "An exit code shared with Python's crash status cannot carry a verdict alone", "body": ""}
+{"id": "Ld0ca0a6b95", "kind": "lesson", "title": "The vendored plan validator does not check device.services — a goal family must filter verbs itself", "body": ""}
+{"id": "Ldec7554b1c", "kind": "lesson", "title": "The executor is imported while the ontology is initialising — anything it imports must be a dependency leaf", "body": ""}

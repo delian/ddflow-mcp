@@ -305,10 +305,11 @@ def addenda(st, rid: str) -> dict[str, Any]:
     """Everything the log says was ADDED to, or LINKED to, one record (D-no-duplicates).
 
     `additions`: the verbatim `record.extended` texts, oldest first. `links`: what this
-    record points at. `linked_from`: the records that point at it -- found by scanning
-    every record's links for this target, because a new record filed `extends` /
-    `duplicate_of` X is stored as a link ON THE NEW RECORD; State keeps no index under X
-    and only `related` also writes a back-link.
+    record points at. `dismissals`: the `distinct` entries -- pairs somebody judged
+    different, each with its `reason`. `linked_from`: the records that point at it --
+    found by scanning every record's links for this target, because a new record filed
+    `extends` / `duplicate_of` X is stored as a link ON THE NEW RECORD; State keeps no
+    index under X and only `related` also writes a back-link.
     """
     mine = st.links.get(rid)
     links = []
@@ -316,6 +317,13 @@ def addenda(st, rid: str) -> dict[str, Any]:
         links.append(
             {**x, **{k: v for k, v in record_summary(st, x["target"]).items() if k != "text"}}
         )
+    # A `distinct` dismissal is an ANSWER about a pair, not a link, and `RecordLinks.links`
+    # deliberately excludes it. It is listed here too, or the reason a pair was dismissed
+    # (`ddflow link --distinct --reason`) would have no reader on any surface.
+    dismissals = [
+        {**x, **{k: v for k, v in record_summary(st, x["target"]).items() if k != "text"}}
+        for x in (mine.dismissals if mine else [])
+    ]
     out_related = {x["target"] for x in links if x["relation"] == "related"}
     inbound = []
     for src, rl in st.links.items():
@@ -331,6 +339,7 @@ def addenda(st, rid: str) -> dict[str, Any]:
     return {
         "additions": list(mine.extensions) if mine else [],
         "links": links,
+        "dismissals": dismissals,
         "linked_from": inbound,
     }
 
@@ -796,6 +805,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         ):
             notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
+    notes += _dupe_note(st, cfg)
 
     data: dict[str, Any] = {
         "problems": problems,
@@ -868,6 +878,54 @@ def _untitled(st) -> list[str]:
     return [
         f"{len(ids)} item(s) have no title of their own, only the id: {shown} — "
         f"`ddflow update <id> --title ...`"
+    ]
+
+
+#: The inline duplicate count is bounded on purpose. The sweep is all-pairs, so its cost
+#: grows with the log (measured: ~0.6 s at 640 records, ~3 s at ddflow's own 1559); a
+#: `doctor` that pays seconds at every session start is one people stop running. Above
+#: this many records `doctor` says so and points at `ddflow dupes` instead.
+_DOCTOR_SWEEP_MAX = 1000
+#: Stop the count once this many pairs are found; the note then says "at least".
+_DOCTOR_PAIR_CAP = 200
+
+
+def _dupe_note(st, cfg) -> list[str]:
+    """How many near-duplicate pairs the log holds that nobody has settled (B-dupes-sweep).
+
+    A NOTE, never a problem: below the ask threshold a score is a prompt to LOOK, not a
+    verdict (R-dedupe-matchers), so failing `doctor` on one would be failing it on a
+    question. Counted at the ASK threshold -- the actionable "likely duplicate" band,
+    not the wide show floor -- and bounded by record count and pair cap so `doctor`
+    stays fast; above the bound the note names `ddflow dupes` rather than paying the
+    sweep. `off` skips it: a project that switched the check off does not want its cost.
+    """
+    if cfg.dedupe.on_match == "off":
+        return []
+    try:
+        from .knowledge import _sweep_records, pairs_from
+
+        n_records = sum(1 for r in _sweep_records(st) if r["kind"] in cfg.dedupe.kinds)
+        if n_records > _DOCTOR_SWEEP_MAX:
+            return [
+                f"{n_records} records: the inline near-duplicate count is skipped above "
+                f"{_DOCTOR_SWEEP_MAX} — `ddflow dupes` lists the pairs"
+            ]
+        rows = pairs_from(
+            st,
+            cfg,
+            floor=cfg.dedupe.ask_threshold,
+            limit=_DOCTOR_PAIR_CAP,
+            stop_after=_DOCTOR_PAIR_CAP,
+        )
+    except Exception as exc:  # an unreadable index must not take the report down
+        return [f"near-duplicate sweep could not run ({type(exc).__name__}: {exc})"]
+    if not rows:
+        return []
+    n = f"at least {_DOCTOR_PAIR_CAP}" if len(rows) >= _DOCTOR_PAIR_CAP else str(len(rows))
+    return [
+        f"{n} unsettled near-duplicate pair(s) at the ask threshold — `ddflow dupes` "
+        f"lists them; `ddflow link A --duplicate-of B` settles one (or `--distinct`)"
     ]
 
 
