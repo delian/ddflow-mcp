@@ -132,7 +132,9 @@ def test_status_counts_every_task_in_exactly_one_bucket(repo):
 
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
-    cfg.write_text(cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 2\n", 1))
+    cfg.write_text(
+        cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 2\n", 1)
+    )
     run_cli(repo, "phase", "add", "P", "--title", "P")
     for i in range(1, 6):
         run_cli(repo, "task", "add", f"U{i}", "--phase", "P", "--globs", f"u{i}")
@@ -158,7 +160,9 @@ def test_status_and_brief_prose_name_the_items_the_cap_holds(repo):
     operator conclude only two items were startable."""
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
-    cfg.write_text(cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 2\n", 1))
+    cfg.write_text(
+        cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 2\n", 1)
+    )
     for i in range(1, 5):
         run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")
     _code, status, _err = run_cli(repo, "status")
@@ -173,7 +177,9 @@ def test_with_nothing_else_ready_the_cap_line_does_not_say_more(repo):
     "N more are ready" read as a contradiction."""
     run_cli(repo, "init")
     cfg = repo / ".ddflow" / "config.toml"
-    cfg.write_text(cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 1\n", 1))
+    cfg.write_text(
+        cfg.read_text().replace("[schedule]\n", "[schedule]\nmax_parallel_tasks = 1\n", 1)
+    )
     for i in range(1, 4):
         run_cli(repo, "task", "add", f"U{i}", "--globs", f"u{i}")
     assert run_cli(repo, "claim", "U1", "--no-worktree", agent="a1")[0] == 0
