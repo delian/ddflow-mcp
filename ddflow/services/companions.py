@@ -727,13 +727,15 @@ def _in_order_with_flags(want: list[str], have: list[str], value_flags: frozense
 
 
 def _load_toml(text: str) -> dict | None:
-    """Parsed TOML, or None when it does not parse. ONE guard for five readers.
+    """Parsed TOML, or None when it does not parse. ONE guard for the readers.
 
-    `_servers_in`, `_toml_without`, `_toml_stale_entry`, `_toml_present` and
-    `_register_toml` each wrapped `tomllib.loads` by hand; a sixth that forgot the guard
-    would let an unparseable config read as an empty one -- the module's own recurring
-    failure. What `None` then MEANS stays at each call site, because it differs: a reader
-    treats it as unreadable, `_toml_present` as a refusal that names the file.
+    `_servers_in`, `_toml_without`, `_toml_stale_entry` and `_toml_present` each wrapped
+    `tomllib.loads` by hand; a fifth that forgot the guard would let an unparseable config
+    read as an empty one -- the module's own recurring failure. (`_register_toml` called it
+    unguarded, safe only because `_toml_stale_entry` had already parsed the same text; it
+    goes through here now too.) What `None` then MEANS stays at each call site, because it
+    differs: a reader treats it as unreadable, `_toml_present` as a refusal that names the
+    file.
     """
     try:
         return tomllib.loads(text)
