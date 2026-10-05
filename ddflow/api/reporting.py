@@ -16,6 +16,10 @@ from ..infra.log import EventLog
 from ..views.markdown import may_hold_work
 from ._base import _load
 
+#: A `Config.unknown_knobs` entry for a KNOWN knob whose value is not: `sec.knob = 'v'`
+#: (and its note). An unknown key is `sec.knob` or `[sec]`.
+_KNOWN_KEY_BAD_VALUE = re.compile(r"[\w.-]+ = ")
+
 
 def loops(repo: Path) -> O.Outcome:
     """Circular references and runtime loops. Reads only.
@@ -689,9 +693,12 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
     # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.
+    # A known knob with a value this code does not know (`key = 'value'`, its note naming
+    # the value in effect) is an INVALID VALUE, not an unknown key (Bf3566bbacd).
     problems += [
-        f"unknown config key {k} in .ddflow/config.toml: a typo, or written by a newer "
-        "ddflow than this checkout runs (merge main)"
+        f"{'invalid value for' if _KNOWN_KEY_BAD_VALUE.match(k) else 'unknown config key'} "
+        f"{k} in .ddflow/config.toml: a typo, or written by a newer ddflow than this "
+        "checkout runs (merge main)"
         for k in cfg.unknown_knobs
     ]
     # Events this code has no handler for: the fold skipped them (B168), so every number
