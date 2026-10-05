@@ -182,7 +182,12 @@ def test_mcp_decision_list_refusal_carries_its_reason_not_an_internal_error(repo
     run_cli(repo, "init")
     _ok(repo, "decision", "add", "--id", "D1", "--title", "t", "--decision", "d")
     srv = Server(repo)
-    for args in ({"limit": -1}, {"since": "nope"}):
+    # The distinctive text of each refusal's REASON (not a word that also appears in the
+    # JSON body, which is why a `"limit" in texts` check would pass for both arguments).
+    for args, reason in (
+        ({"limit": -1}, "must be 0 (all) or a positive count"),
+        ({"since": "nope"}, "is not an ISO date"),
+    ):
         reply = srv.handle(
             {
                 "jsonrpc": "2.0",
@@ -194,7 +199,7 @@ def test_mcp_decision_list_refusal_carries_its_reason_not_an_internal_error(repo
         assert "error" not in reply, (args, reply)  # a JSON-RPC error is the crash
         texts = " ".join(c.get("text", "") for c in reply["result"]["content"])
         assert "internal error" not in texts, (args, texts)
-        assert "limit" in texts or "since" in texts.lower(), (args, texts)
+        assert reason in texts, (args, texts)
 
 
 def test_decision_list_negative_limit_is_refused_not_a_misleading_empty(repo):
