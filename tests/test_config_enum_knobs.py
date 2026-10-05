@@ -387,19 +387,13 @@ def test_the_modules_that_use_an_enum_take_its_values_from_config() -> None:
     assert F.PORT_STRATEGIES is choices["flow.port_strategy"]
 
 
-#: Values that make ddflow act OUTSIDE this clone: push, remote claim refs, a pull request
-#: or a forge-side merge. A typo must never switch one on (D-fallback-no-remote): outward
-#: behaviour happens only when someone sets it correctly, on purpose. A new enum knob with
-#: an outward value belongs here.
-OUTWARD = {
-    "flow.integration": {"pr"},  # pushes the branch and opens a pull request
-    "flow.claims": {"remote"},  # writes refs/ddflow/claims/<id> on the remote
-    "flow.pr_merge": {"on_approval", "auto"},  # ddflow (or the forge) merges on the forge
-}
-
-
 def test_no_strictest_value_contacts_the_remote_or_the_forge() -> None:
-    for key, values in OUTWARD.items():
+    # Every enum knob answers the question, so a new one cannot skip it (roborev on
+    # 573fe3d9: a test-side allowlist passed for a knob nobody added to it).
+    assert set(C.KNOB_OUTWARD) == set(C.KNOB_CHOICES)
+    assert C.KNOB_OUTWARD["flow.integration"] == {"pr"}
+    assert C.KNOB_OUTWARD["flow.claims"] == {"remote"}
+    for key, values in C.KNOB_OUTWARD.items():
         assert values <= set(C.KNOB_CHOICES[key]), key  # the table names real values
         assert C.strictest(key) not in values, f"{key} falls back to {C.strictest(key)!r}"
 

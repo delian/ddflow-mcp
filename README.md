@@ -4194,7 +4194,7 @@ main). An enumerated knob (`[enforce].stale_docs = block | warn | off`, `[flow].
 `[lease].reclaim_policy` and every other one whose doc lists `a | b`) is held to its
 declared values (`KNOB_CHOICES` in `ddflow/config.py`): a value outside them in a file is
 warned about and reported the same way, and the knob takes its **strictest** allowed value
-(`KNOB_STRICTEST`), not its default, so a typo can only make ddflow more careful —
+(`KNOB_STRICTEST`), not its default, so a typo makes ddflow more careful —
 `stale_docs = "blok"` acts as `block`, `[upgrade].skew = "refusee"` as `refuse`. Each
 knob's doc (`ddflow config --explain`) names its fallback and why; where a knob has no
 safety dimension the fallback is the value that does the most checking or changes least
@@ -4202,7 +4202,10 @@ safety dimension the fallback is the value that does the most checking or change
 `doctor` line names the value in effect. A fallback never makes ddflow act outside this
 clone (decision D-fallback-no-remote): `[flow].integration` falls back to `merge`, not
 `pr`, and `[flow].claims` to `local`, not `remote`, so a typo never pushes, opens a pull
-request or writes claim refs -- that happens only when someone sets it correctly. From the environment it is refused, and so
+request or writes claim refs -- that happens only when someone sets it correctly. That
+rule outranks strictness: a typo in a deliberately set `pr` or `remote` loosens approval
+or claim exclusivity until it is fixed, and `doctor` names it (`KNOB_OUTWARD` lists each
+knob's outward values). From the environment it is refused, and so
 is a typo in ddflow's own source tree, where the config and the code are one commit. `ddflow config --set` refuses an unknown knob or an invalid
 value outright, before writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
 refuses a non-string element instead of casting it (`null` is not the string `"None"`).
