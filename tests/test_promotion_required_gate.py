@@ -92,3 +92,28 @@ def test_workflow_json_names_the_promotion_pipeline(repo):
     _repo_requiring_a_promotion_signoff(repo)
     data = json.loads(run_cli(repo, "--json", "workflow")[1])
     assert data["promotion_pipeline"] == ["unit_tests", "deploy_signoff", "merge"]
+
+
+def test_with_no_environments_a_promotion_only_requirement_is_still_inert(repo):
+    """roborev on 0a1cf8a5..1e4835c6: the promotion pipeline runs only where
+    `flow.environments` exist. Without any, a gate only it names requires nothing, and
+    must still be reported inert -- the class this check exists for."""
+    run_cli(repo, "init")
+    gate = '[gate.deploy_signoff]\nhuman = true\nprompt = "sign the deploy"'
+    assert run_cli(repo, "config", "--append-toml", gate)[0] == 0
+    code, out, err = run_cli(
+        repo,
+        "config",
+        "--set",
+        "gates.promotion_pipeline",
+        '["unit_tests", "deploy_signoff", "merge"]',
+    )
+    assert code == 0, (out, err)
+    required = sorted({*Config.load(repo).gates.required, "deploy_signoff"})
+    code, out, err = run_cli(
+        repo, "config", "--set", "gates.required", repr(required).replace("'", '"')
+    )
+    assert code != 0 and "deploy_signoff" in out + err, (code, out, err)
+    cfg = Config.load(repo)
+    cfg.gates.required = required
+    assert G.inert_requirements(cfg) == ["deploy_signoff"]

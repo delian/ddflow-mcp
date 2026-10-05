@@ -133,12 +133,9 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
     cannot start.
     """
     out: list[Finding] = []
-    pipelines = [("task", cfg.gates.task_pipeline), ("phase", cfg.gates.phase_pipeline)]
-    if cfg.flow.environments:
-        # Checked only where promotions exist: a project with no environments never
-        # runs this pipeline, and a problem in it there would be noise.
-        pipelines.append(("promotion", cfg.gates.promotion_pipeline))
-    for kind, pipeline in pipelines:
+    # Only the pipelines that run here: a project with no environments never runs the
+    # promotion pipeline, and a problem in it there would be noise.
+    for kind, pipeline in pipelines(cfg, running=True).items():
         if not pipeline:
             # The editor already refuses `workflow pipeline task ""` as "a project with
             # no checks at all". Saying nothing about the same state when READING it is
@@ -184,8 +181,13 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
             Finding(
                 PROBLEM,
                 "gates.required",
-                f"{gid!r} is required but is in no pipeline, so the requirement "
-                f"quietly disappears rather than being enforced.",
+                f"{gid!r} is required but is in no pipeline that runs here, so the "
+                f"requirement quietly disappears rather than being enforced"
+                + (
+                    " (the promotion pipeline runs only when flow.environments is set)."
+                    if gid in cfg.gates.promotion_pipeline and not cfg.flow.environments
+                    else "."
+                ),
             )
         )
     # `applies_to` was written by the editor, advertised in the MCP tool description,
