@@ -31,14 +31,16 @@ must never rewrite a recorded id.
    - `{digest}`: a deterministic content digest. CI failure bugs use
      `Bci-{slug}-{digest}` so that the same failing check maps to the same bug.
 
-   `{hash}` is the salted hash of `auto_id`, so the same text filed twice gets two
-   ids.
+   `{hash}` is the ten hex digits `auto_id` produces today: blake2b over the
+   record's text salted with a nanosecond clock. It is not a hash of an existing id.
+   So the default `{prefix}{hash}` yields exactly `B9c56de9d58`-style ids, and the
+   same text filed twice gets two ids.
 
    Templates are validated when the config is written. Every token must be known, and
    the result must be a valid id (characters, length). A template must contain a
    source of uniqueness: `{seq}`, `{hash}`, or `{time}` together with `{pid}`. These
    tokens express intent; they do not guarantee uniqueness on their own. The id
-   service checks every key it mints against every id and key of every kind in the
+   service checks every key it mints against every id, key and alias of every kind in the
    folded log, under the log lock, before recording it. A key that is already taken
    gets `-2`, `-3`, and so on. A stable template is the one exception: there, a
    taken key IS the expected match, so the filing extends that record. A stable key
@@ -78,7 +80,12 @@ must never rewrite a recorded id.
 
 4. **Old ids: aliases only.** A recorded id is never renamed. A scheme change applies
    to records created afterwards. Any record, old or new, may carry aliases (project
-   labels), accepted everywhere an id is accepted (B-id-aliases). There is no bulk
+   labels), accepted everywhere an id is accepted (B-id-aliases). Ids, keys and aliases
+   share one namespace. An alias that is already an id, key or alias is refused when
+   it is added. A minted key that collides with an existing alias gets a suffix, like
+   any taken key. If logs from two clones still bring two identical names together, the
+   bare name is ambiguous and is refused with every candidate listed, the same as a
+   key clash. There is no bulk
    migration that aliases every old record.
 
 5. **Vocabulary reaches the names people type.** `[vocabulary]` maps the kinds to the
