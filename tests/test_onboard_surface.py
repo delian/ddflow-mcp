@@ -51,3 +51,23 @@ def test_status_reports_the_checks_but_does_not_run_the_suite(repo):
 def test_preflight_still_reports_nothing_on_a_clean_repo(repo):
     out = A.onboard(repo, stage="preflight")
     assert out.exit == 2 and "nothing left behind" in out.data["text"]
+
+
+def test_legacy_apply_without_imports_writes_nothing(repo):
+    """Apply on a repo with nothing imported is a no-op, not an empty freeze."""
+    out = A.onboard(repo, stage="legacy", apply=True)
+    assert out.exit == 2
+    assert not (repo / ".ddflow" / "frozen.toml").exists()
+
+
+def test_legacy_accepting_an_unknown_file_is_refused(repo):
+    out = A.onboard(repo, stage="legacy", apply=True, accept=["nope.md"])
+    assert out.exit == 3 and "nothing approved to freeze" in out.reason
+    assert not (repo / ".ddflow" / "frozen.toml").exists()
+
+
+def test_memory_accepting_an_unknown_name_is_refused(repo):
+    """A typo used to exit 0 having recorded nothing (reviews on 2130b17)."""
+    out = A.onboard(repo, stage="memory", apply=True, accept=["M-harness-nope"])
+    assert out.exit == 3
+    assert out.data["refused"] and out.data["refused"][0]["name"] == "M-harness-nope"

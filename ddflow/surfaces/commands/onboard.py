@@ -43,8 +43,9 @@ def cmd_onboard(a, c: Ctx) -> int:
     out = onboard_run(c.repo, stage=a.stage, apply=bool(a.apply), accept=tuple(a.accept or ()))
     if c.json:
         print(json.dumps(out.body(""), indent=2, default=str))
-    elif out.exit:
+    elif out.exit in (1, 3):
         print(out.data.get("text") or out.reason, file=sys.stderr)
     else:
-        print(out.data.get("text", ""))
+        # Exit 2 is "nothing to do", a REPORT: it belongs on stdout like a success.
+        print(out.data.get("text") or out.reason)
     return out.exit

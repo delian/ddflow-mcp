@@ -254,6 +254,7 @@ __all__ = [
     "memory_list",
     "merge_item",
     "next_item",
+    "onboard_run",
     "phase_add",
     "phase_progress",
     "pins",

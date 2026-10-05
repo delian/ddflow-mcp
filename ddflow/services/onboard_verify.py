@@ -247,11 +247,16 @@ def _answers(repo: Path) -> Check:
 
 
 def _has_imports(repo: Path) -> bool:
-    """Did anything ever come FROM a file here? A `<file>:<line>` origin means yes, and
-    an import without a freeze ratchet is a real gap; no imports is no ratchet expected."""
+    """Would the freeze have anything to freeze? Ask the SAME records it reads.
+
+    `importer_harness.imported_files` reads items, memories and research; checking
+    different records hid a real unfrozen gap when the only import was memories or
+    research (rubber-duck/critic on 2130b17).
+    """
     try:
         from ..core.model import fold
         from ..infra.log import EventLog
+        from . import importer_harness as MH
 
         state = fold(
             EventLog(repo, "onboard-verify", log_cfg=Config.load(repo).log).read_all(),
@@ -259,16 +264,7 @@ def _has_imports(repo: Path) -> bool:
         )
     except Exception:
         return False
-    for records in (
-        getattr(state, "items", {}),
-        getattr(state, "lessons", {}),
-        getattr(state, "bugs", {}),
-    ):
-        for record in records.values():
-            source = str(getattr(record, "source", "") or "")
-            if ":" in source and not source.startswith("git:"):
-                return True
-    return False
+    return bool(MH.imported_files(state))
 
 
 def _frozen(repo: Path) -> Check:
