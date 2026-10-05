@@ -182,7 +182,7 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
     return "\n".join(out)
 
 
-def lessons_md(state: State) -> str:
+def lessons_md(state: State, cfg: Config | None = None) -> str:
     out = [GENERATED, "", "# Lessons", ""]
     live = [x for x in state.lessons.values() if not x.superseded_by]
     if not live:
@@ -196,18 +196,18 @@ def lessons_md(state: State) -> str:
         out.append(f"## {tag}")
         out.append("")
         for ls in by_tag[tag]:
-            out.append(f"### {ls.title}")
+            out.append(f"### {_redact(ls.title, cfg)}")
             out.append("")
-            out.append(f"**Rule.** {ls.rule}")
+            out.append(f"**Rule.** {_redact(ls.rule, cfg)}")
             if ls.why:
                 out.append("")
-                out.append(f"**Why.** {ls.why}")
+                out.append(f"**Why.** {_redact(ls.why, cfg)}")
             if ls.how:
                 out.append("")
-                out.append(f"**How to apply.** {ls.how}")
+                out.append(f"**How to apply.** {_redact(ls.how, cfg)}")
             if ls.seen_in:
                 out.append("")
-                out.append(f"**Seen in:** {', '.join(ls.seen_in)}")
+                out.append(f"**Seen in:** {', '.join(_redact(x, cfg) for x in ls.seen_in)}")
             out.append("")
     return "\n".join(out)
 
@@ -217,17 +217,17 @@ def lessons_md(state: State) -> str:
 _SUMMARY_FALLBACK_CHARS = 400
 
 
-def _summary_of(ls) -> str:
+def _summary_of(ls, cfg: Config | None = None) -> str:
     if ls.summary:
-        return ls.summary
+        return _redact(ls.summary, cfg)
     first = (ls.rule or "").strip().split("\n\n", 1)[0]
     first = " ".join(first.split())
     if len(first) > _SUMMARY_FALLBACK_CHARS:
         first = first[:_SUMMARY_FALLBACK_CHARS].rsplit(" ", 1)[0] + " …"
-    return first
+    return _redact(first, cfg)
 
 
-def lessons_summary_md(state: State) -> str:
+def lessons_summary_md(state: State, cfg: Config | None = None) -> str:
     """The distilled rulebook: every live lesson in one paragraph, grouped by tag.
 
     The file a reader opens INSTEAD of the corpus. Each entry is the lesson's own
@@ -257,7 +257,9 @@ def lessons_summary_md(state: State) -> str:
         out += [f"## {tag}", ""]
         for ls in by_tag[tag]:
             mark = "" if ls.summary else " _(first paragraph)_"
-            out.append(f"- **{ls.title.rstrip('.')}.** {_summary_of(ls)}{mark} `[{ls.id}]`")
+            out.append(
+                f"- **{_redact(ls.title.rstrip('.'), cfg)}.** {_summary_of(ls, cfg)}{mark} `[{ls.id}]`"
+            )
         out.append("")
     return "\n".join(out)
 
@@ -769,8 +771,8 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
 #: without anyone remembering to.
 VIEWS: tuple[tuple[str, Callable[[State, Config | None], str]], ...] = (
     ("QUEUE.md", board),
-    ("LESSONS.md", lambda state, _cfg: lessons_md(state)),
-    ("LESSONS-SUMMARY.md", lambda state, _cfg: lessons_summary_md(state)),
+    ("LESSONS.md", lessons_md),
+    ("LESSONS-SUMMARY.md", lessons_summary_md),
     ("RESEARCH.md", research_md),
 )
 
