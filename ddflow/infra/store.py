@@ -609,7 +609,8 @@ def _insert_memories(con, state, fts: bool) -> None:
 #: Where each role's rows sit in a session's `seq` space, so a prompt, a note and the
 #: summary never collide on the primary key; the FTS id's letter maps back to it.
 _ROLE_OFFSET = {"prompt": 0, "note": 10_000, "summary": 20_000}
-_LETTER_OFFSET = {"p": 0, "n": 10_000, "s": 20_000}
+_LETTER_OFFSET = {role[0]: off for role, off in _ROLE_OFFSET.items()}
+assert len(_LETTER_OFFSET) == len(_ROLE_OFFSET), "two roles share an FTS id letter"
 
 
 def _insert_sessions(con, state, fts: bool) -> None:
