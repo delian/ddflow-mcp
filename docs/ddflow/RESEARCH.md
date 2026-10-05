@@ -5,6 +5,4638 @@
 Every entry carries a verdict. An entry with no CONFIRMED or REFUTED label
 is a literature summary, not research, and is labelled THEORETICAL.
 
+## Does docs/ARCHITECTURE.md cite modules that do not exist, and can a mechanical check catch that class?
+
+**Verdict: CONFIRMED** · item `fix-B-arch-doc-stale`
+
+- **Claim.** docs/ARCHITECTURE.md named a module that is not in the tree (`services/queue.py`, plus a `health` service), and its layer list omitted the `api/` package entirely; extracting every `layer/name.py` reference from the doc and requiring the file to exist fails on the unfixed doc and passes once the doc is corrected.
+- **Mechanism.** The doc states module paths mechanically; a regex over `(core|infra|services|api|views|surfaces)/name.py` yields the set the doc asserts exists, and comparing it to ddflow/<layer>/<name>.py turns "prose drift" into a failing assertion -- the project's own thesis that a rule nothing checks decays.
+- **Falsifier.** The extraction on the unfixed doc yields no missing module (or the fixed doc yields one).
+
+**Probe:**
+
+```console
+$ cd worktree && uv run python -c "import sys;sys.path.insert(0,'tests');import test_architecture_doc as t;..." (the test's own _named_modules + is_file check) on the unfixed then fixed doc
+unfixed: modules named include services/queue.py; MISSING: ['services/queue.py']; api/ present? False => fails. fixed: modules named: 27; MISSING: []; api/ present? True => passes.
+```
+
+## Does ddflow verify judge a done task against the pipeline as of its completion, or against the current task_pipeline?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** verify compares the RECORDED gate outcomes against the CURRENT task_pipeline, not a pipeline snapshot from the completion ledger
+- **Mechanism.** services/verify.py:358 sets pipeline = G.pipeline_for(item, cfg) (the live config). _gates() (line 266) computes silent = [g for g in pipeline if g not in recorded_outcomes]; the ledger stores a requirement hash and skipped_gates, not the pipeline gate list, so a gate added to [gates].task_pipeline after a task completed is reported 'never run and never skipped'.
+- **Falsifier.** a task completed BEFORE a gate entered the pipeline, whose verify still reports 'does not hold' for that gate
+
+**Probe:**
+
+```console
+$ ddflow verify --phase P-verify; git show -s 507e6a74 (ci gate added 2026-10-04 10:00); the 8 P-verify tasks completed 2026-10-03
+every P-verify task: [FAIL] gates  never run and never skipped: ci. B-verify-ledger recorded gates = research,rules,implement,rubber_duck,critic,standards,unit_tests,bug_hunt,dedupe,merge (the 10-gate pipeline of 2026-10-03); ci did not exist then.
+```
+
+**Sources:** ddflow/services/verify.py:260-280, 358
+
+## Do the 5 surviving mutants of services/docsync.py each correspond to a real, untested behaviour that a new test can pin?
+
+**Verdict: CONFIRMED** · item `B-docsync-mutants`
+
+- **Claim.** For each of the 5 survivors (glob_regex '?' branch, _unquote guard, _header_path /dev/null->None, the rename from/to buckets, staged_diff's own returncode!=0->None) a test built to pin that behaviour FAILS when the mutant is applied and passes on the real code.
+- **Mechanism.** Each survivor is a branch whose effect no existing test observes: the existing behaviour test passes for the /dev/null mutant via the old path's stem tokens, and test_git_failing_is_not_a_pass monkeypatches staged_diff so the real failure path is never taken. A test that exercises the branch directly (or a real git failure / real pure rename) observes the difference.
+- **Falsifier.** The new test still passes with the mutant applied (behaviour is equivalent, so no test can distinguish it).
+
+**Probe:**
+
+```console
+$ cp docsync.py aside; apply each mutant (glob_regex '?' branch off, _unquote guard forced both True and False, /dev/null guard off, rename buckets swapped, staged_diff returncode guard off); run `uv run pytest tests/test_doc_sync.py -q -k <name>` under each; cp the original back
+M1 test_a_question_mark_in_a_doc_glob_matches_exactly_one_character: FAILED (ours=set() != {'docs/a.md'}); M2 test_a_header_path_is_unquoted_only_when_git_quoted_it: FAILED under both guard=True and guard=False; M3 test_dev_null_in_a_diff_header_is_not_a_deleted_path: FAILED ('/dev/null' is not None), and a direct parse_diff probe showed names=['probe_runner'] under the mutant vs [] on real code; M4 test_renaming_a_file_the_docs_cite_is_refused: FAILED (commit returned 0, rename left the stale doc line); M5 test_a_real_git_diff_failure_is_not_a_pass: FAILED ('' is None). All 5 fail only under their own mutant; baseline (no mutant) = 33 passed in 90.44s.
+```
+
+## Why does the linked-worktree pre-push test fail on GitHub CI only?
+
+**Verdict: CONFIRMED** · item `fix-B97908cc3c7`
+
+- **Claim.** scripts/ci/pre-push exits at 'pre-commit is not installed' before its event-shard warning; the CI runner has no pre-commit, this machine does
+- **Mechanism.** check order in the hook
+- **Falsifier.** the warning appears with pre-commit off PATH on the old hook
+
+**Probe:**
+
+```console
+$ test run with PATH=/usr/bin:/bin against the old and new hook; whole suite with a CI-like PATH
+old hook: test fails (only the pre-commit message); new: passes; full suite with CI-like PATH: 5782 passed, 17 skipped, 0 failed
+```
+
+## How can ddflow support the same features, hooks, prompts and onboarding on every coding agent, with a minimal surface for adding a new one?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Per-agent knowledge is spread over ~11 files: adopt.py AGENT_TARGETS (22 agents, 7 MCP config shapes), NATIVE_RULES, AGENT_COMMANDS (Claude only), claudehooks.py (Claude SessionStart/UserPromptSubmit/PreCompact, Gemini BeforeAgent), api/setup.py and the CLI with --claude/--gemini flags and ~12 agent-name branches, launchers.py, harness.py (Claude-only onboarding), skills.py dirs, sessions.py (Claude env vars only). Today only Claude gets session-start context, only Claude and Gemini get prompt capture, only Claude gets pre-compact and commands; no agent gets stop/session-end. A new agent costs 6-8 files when hooks are involved. Command hooks with JSON on stdin are converging: Gemini CLI (SessionStart, SessionEnd, BeforeAgent, PreCompress... in settings.json), Codex (hooks.json in .codex/: SessionStart with source incl. compact, UserPromptSubmit, Stop; additionalContext), Copilot CLI (sessionStart, sessionEnd, userPromptSubmitted, preToolUse, postToolUse; PascalCase names accepted so Claude-format configs work); opencode/Kilo are plugin-based; Aider has neither MCP nor hooks. So a descriptor per agent plus a few shared hook-config styles, normalizers and emitters, with a fallback ladder (native hook > plugin > MCP first-call > MCP instructions > instruction text), makes a new agent mostly data.
+- **Mechanism.** code inventory (file:line in the report); hook docs of Gemini CLI, Codex, Copilot
+- **Falsifier.** an agent whose hook contract cannot be expressed as a style + normalizer + emitter
+
+**Probe:**
+
+```console
+$ grep of agent-specific code; web search of official hook docs for Gemini CLI, Codex and Copilot
+inventory confirmed in code; Gemini, Codex and Copilot hooks confirmed by search results citing official docs; Qwen, Cursor, Windsurf, Antigravity, Cline/Roo, Kilo plugin dir, Amp, Crush, Goose details NOT VERIFIED (B-hx-research verifies each)
+```
+
+**Sources:** https://geminicli.com/docs/hooks/reference/ ; https://developers.openai.com/codex/hooks ; https://docs.github.com/en/copilot/reference/hooks-reference ; https://code.claude.com/docs/en/hooks
+
+## What can a Claude Code hook capture at context compaction?
+
+**Verdict: CONFIRMED** · item `B195`
+
+- **Claim.** PreCompact receives session_id, transcript_path, cwd, hook_event_name and trigger (manual|auto) but no summary; the summary is made after compaction and no hook (PreCompact, PostCompact, SessionStart source=compact) receives it; PreCompact can only block (exit 2 or decision=block) or allow, never inject context. So ddflow records a bounded digest of the transcript tail at PreCompact and hands it back through SessionStart (source=compact), which can add context.
+- **Mechanism.** Claude Code hooks reference
+- **Falsifier.** the PreCompact payload carries a summary field
+
+**Probe:**
+
+```console
+$ fetched code.claude.com/docs/en/hooks (PreCompact, PostCompact, SessionStart after compaction)
+no summary in any compaction hook input; PreCompact output limited to block/allow; SessionStart compact source documented
+```
+
+**Sources:** https://code.claude.com/docs/en/hooks
+
+## Where are ddflow ids made, and can the naming scheme be made configurable without breaking anything?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Ids are made in a handful of places with hard-coded shapes: core/ids.auto_id(prefix, ...) for bugs (B), lessons (L), research (R), decisions (D), memories (M) and jobs (J), each a prefix plus a salted hash; sessions as s<UTC timestamp>-<pid> (services/sessions.py:95); fix tasks fix-<bug> and fix-<bug>-2 (api/knowledge.py _own_fix_id); promotions promote-<env>-<n> (services/promotions.py:79); CI bugs Bci-<slug>-<hash> (services/ci.py); importer L-/D-/R-<slug>; the bugs phase id from [bugs].phase; tasks and phases are named by whoever adds them. Kind is resolved by looking the id up (api/_dedupe.kind_of), not by parsing its prefix, so a configurable scheme is feasible; the log is append-only, so existing ids can never be renamed, only aliased.
+- **Mechanism.** grep of auto_id callers and f-string ids; kind_of lookup
+- **Falsifier.** code that decides a record's kind from its id prefix
+
+**Probe:**
+
+```console
+$ grep auto_id(, f"fix-, f"promote-, strftime("s, startswith("B")/("fix-") across ddflow/
+6 auto_id prefixes, 5 other generators, no prefix-based kind detection found (NOT VERIFIED for tests and docs that assume shapes)
+```
+
+## What does ddflow need so every document it manages comes from a template and mixes ddflow content with user-written content, and so it can keep an accurate ROADMAP from the queue?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Export already renders 8 kinds through overridable sandboxed Jinja2 templates with a hash-guarded writer (whole, one region per doc, append; --check/--diff), which matches cog's best practice; but region mode is config-only with one region per document, no skeleton, no merge, refresh skips region docs, and other managed text uses different mechanisms: views are non-overridable Python strings, instruction blocks in CLAUDE.md/AGENTS.md use a second marker dialect with no hash (hand edits silently overwritten), and SECURITY.md plans a third. The ROADMAP is WHOLE (no user section possible), puts a phase in Next if any task is ready (Now empty, 215 tasks listed), orders by priority not dependencies, and has no %, graph, links, changes or hiding of internal batches.
+- **Mechanism.** services/export (registry, write.py modes, frame.py header, refresh.py skip), views/markdown.py strings, services/adopt.py DDFLOW:BEGIN block via str.format, kind_roadmap.py lanes
+- **Falsifier.** a user section survives a ROADMAP refresh, or an instruction block edit is refused
+
+**Probe:**
+
+```console
+$ code reading with file:line; ddflow export roadmap --limit 3; fetched cog, terraform-docs, markdown-magic, doctoc, all-contributors, embedme, Copier update, git merge-file, markdown-it-py, mdformat, Now/Next/Later, GitHub roadmap, Keep a Changelog, GitHub Mermaid docs
+confirmed as stated; only cog protects edits (checksum + refuse); Copier preserves edits by 3-way merge (git merge-file available locally); AST round-trip (mdformat) normalises text, so line-based marker splicing is the safe approach; recommendation: keep ddflow's markers + Jinja2, one marker grammar with named regions, borrow Copier's 3-way merge
+```
+
+**Sources:** https://cog.readthedocs.io/en/latest/running.html ; https://terraform-docs.io/user-guide/configuration/output/ ; https://github.com/DavidWells/markdown-magic ; https://github.com/thlorenz/doctoc ; https://allcontributors.org/docs/en/bot/installation ; https://github.com/zakhenry/embedme ; https://copier.readthedocs.io/en/stable/updating/ ; https://git-scm.com/docs/git-merge-file ; https://mdformat.readthedocs.io/en/stable/ ; https://www.prodpad.com/blog/invented-now-next-later-roadmap/ ; https://github.com/github/roadmap ; https://keepachangelog.com/en/1.1.0/ ; https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams
+
+## Why does recall not find what a session summary says?
+
+**Verdict: CONFIRMED** · item `B194`
+
+- **Claim.** session.ended carries the summary but _h_session_ended folds only ended_at, so the summary is in no projection and the index never sees it; session list/show already exist (session_view reads the summary from events), so only fold + index + label were missing
+- **Mechanism.** core/model.py _h_session_ended; infra/store.py _insert_sessions indexes prompts and notes only
+- **Falsifier.** recall of a summary-only phrase returns a hit on main
+
+**Probe:**
+
+```console
+$ tests/test_session_recall.py on main and with the change
+main: 3 of 4 fail (recall finds nothing, summary not folded); with the change all pass; 1620 recall/session tests pass; index SCHEMA 9 -> 10 forces a rebuild
+```
+
+## Does starting the REGISTERED .mcp.json entry and speaking one JSON-RPC line prove the harness's server is alive, and does the commit-msg hook actually refuse a forbidden trailer?
+
+**Verdict: CONFIRMED** · item `B-onboard-verify`
+
+- **Claim.** An initialize plus tools/list exchange over the entry's stdio answers with the server's name and tool count; a hook that refuses the trailer message and accepts a control clean one is enforcing.
+- **Mechanism.** One JSON object per line is MCP's stdio framing; the entry's command/args/PYTHONPATH are exactly what a client launches.
+- **Falsifier.** A registered entry that answers nothing while the fake-server test passes, or a hook that refuses a clean message.
+
+**Probe:**
+
+```console
+$ tests/test_onboard_verify.py fake stdio server; hook control-message test; full suite 5781 passed and ci passed on 4c0e3755.
+```
+
+## Why does the progress block show 100% with a bug open?
+
+**Verdict: CONFIRMED** · item `fix-B23746356fa`
+
+- **Claim.** _pct rounds to the nearest integer, so 306/307 (99.67%) prints 100%
+- **Mechanism.** round(100*d/t)
+- **Falsifier.** 306/307 prints 99%
+
+**Probe:**
+
+```console
+$ tests/test_progress_line.py::test_a_share_short_of_complete_never_reads_100_percent on old and new
+old: fails ('306/307 (100%)'); new (floor): passes; 9 progress tests pass
+```
+
+## Why were 32 event shards left uncommitted in the primary checkout?
+
+**Verdict: CONFIRMED** · item `fix-Bcd3512c891`
+
+- **Claim.** Every claim writes a shard under its own per-tree identity in the primary checkout's .ddflow/events, while work is committed in worktrees; committing the log was left to each agent by hand, so shards of finished agents and of every per-item identity were never committed
+- **Mechanism.** EventLog root = primary; no code path commits .ddflow/events
+- **Falsifier.** a complete leaves no uncommitted shard on main
+
+**Probe:**
+
+```console
+$ tests/test_events_committed.py on main vs the fix
+on main the shard stays uncommitted after complete; with the fix complete and release commit only .ddflow/events (other staged files untouched), a busy index is reported without failing, off and doctor work; 24 merge/stale tests adjusted for the events commit on top
+```
+
+## Why does complete flag gates recorded after a kept-tree merge as stale?
+
+**Verdict: CONFIRMED** · item `fix-Bb47a48b173`
+
+- **Claim.** gate record measures the item's worktree as it is; with remove_on_merge = false the kept tree's untracked files enter source_tree, which then differs from the landed commit complete compares against
+- **Mechanism.** api/gates.py record -> source_tree(kept tree); completion._tree_being_completed -> landed commit
+- **Falsifier.** the note appears without the untracked file
+
+**Probe:**
+
+```console
+$ parametrized run with and without scratch.txt; salvaged test on old and new code
+note only with the untracked file; salvaged test (strict xfail before) passes after measuring the landed commit; 368 gate/complete/review tests pass
+```
+
+## Why does the crash-recovery scenario fail under heavy load?
+
+**Verdict: CONFIRMED** · item `fix-Bdc7fe4dbbb`
+
+- **Claim.** The scenario's lease TTL is 2 s; under load the steps between the simulated crash and the 'recover reports nothing yet' check take longer, so the lease has really expired and recover exits 0 instead of 2
+- **Mechanism.** wall-clock lease expiry; ttl_s = 2, grace 0; fixed 2.5 s sleep
+- **Falsifier.** the old scenario passes with a 2.1 s delay before the check
+
+**Probe:**
+
+```console
+$ inject time.sleep(2.1) before the 'still CLAIMED' step, old vs fixed scenario
+old: fails (recover exit 0); fixed (8 s TTL from a last heartbeat, expiry polled up to 30 s): passes; 16/16 under 48 CPU spinners
+```
+
+## Why does the verify-pack judge test see an empty reviewer log?
+
+**Verdict: CONFIRMED** · item `fix-Bd111e2e9f9`
+
+- **Claim.** The verifier runs hedged (2 copies); the fake writes its stdin with printf > log, so the losing copy truncates the log and is cancelled before writing
+- **Mechanism.** services/review.py hedge default 2 and _race cancellation; > truncation in the fake
+- **Falsifier.** the test passes 60/60 under 24 CPU spinners on main
+
+**Probe:**
+
+```console
+$ pytest -n 32 --count 60 under 24 spinners, before and after; new test without hedge = 1
+main: 2 failed / 60; fix: 80/80; new single-call test fails 7/10 without hedge = 1; other fake reviewers append (>>) and assert containment or monotonic counts, so hedging cannot break them
+```
+
+## Does the roborev reviewer lookup find range reviews?
+
+**Verdict: CONFIRMED** · item `fix-Bf4a6ce1b06`
+
+- **Claim.** No: roborev records 'review --since' jobs as job_type 'range' and review_of keeps only 'review'
+- **Mechanism.** services/roborev.review_of filter j.get('job_type','review') == 'review'
+- **Falsifier.** review_of finds job 1509 (range, done) for its head 0cb61a4a
+
+**Probe:**
+
+```console
+$ roborev list --json in fix-B7819fb6017 worktree; RR.review_of(Path('.'), '0cb61a4a85...') with main's code and with the fix
+jobs 1509/1507 job_type 'range'; main: (None, 'roborev holds no finished review'); fixed: Review(job=1509, agent='claude-code')
+```
+
+## Does bug file-tasks misname the task a bug is linked to?
+
+**Verdict: CONFIRMED** · item `fix-B70d80555a4`
+
+- **Claim.** The CLI prints '<bug> -> its open fix task' for every linked bug, though the link can be a finished fix-<bug>
+- **Mechanism.** surfaces/commands/knowledge.py hardcodes the text; the api returns only bug ids for linked
+- **Falsifier.** file-tasks prints the done task id and state
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_bug_file_tasks_done_fix.py -k cli_names with the ddflow change reverted
+1 failed: output 'Brep -> its open fix task' for a done fix-Brep
+```
+
+## Does RECOVERY.md describe recover's !! flag as it now behaves?
+
+**Verdict: CONFIRMED** · item `fix-B7819fb6017`
+
+- **Claim.** It says entries marked !! were measured to contain work, but since B3f8c406fea unmeasurable trees and unheld RUNNING items are flagged too
+- **Mechanism.** docs/RECOVERY.md section 1 text predates fix-B3f8c406fea
+- **Falsifier.** the paragraph mentions could-not-measure and RUNNING
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_recovery_doc.py before the doc edit
+1 failed: paragraph lacked 'could not measure'
+```
+
+## Can the runner, a safe worker count, an honest baseline and a non-empty smoke run be derived from a project's own files and git, without touching the checkout being changed?
+
+**Verdict: CONFIRMED** · item `B-onboard-test-gate`
+
+- **Claim.** Detection from pyproject/ini/tox/conftest/tests, package.json and Makefile names its evidence file; a worker count is offered only when parallelism is declared and sized to a quarter of the cores so several agents can run at once; the baseline runs in a detached worktree of the default branch, parses its own summary and failing ids, treats timeout/spawn failure as NOT green, and removes the tree; a smoke run wrapped in `test -n "$(...)"` fails when the entry point prints nothing.
+- **Mechanism.** A detached worktree is a clean checkout of the default branch with none of the measuring session's edits; `git worktree remove --force` guarantees cleanup; `test -n` turns silence into a non-zero exit, which a bare --version cannot.
+- **Falsifier.** A baseline that runs in the changed checkout, a timeout reported as green, a failing id not surfaced, or a smoke run that passes on empty output.
+- **Budget.** 15 min
+
+**Probe:**
+
+```console
+$ PYTHONPATH=. python3 -c 'detect_runner/live_test on this repo'; the 12-test module (detached cwd probe writing its own cwd, failing-id parsing, timeout, bad command, uv/console-script live tests).
+family: python | command: uv run pytest | workers: -n 48; live: Proposal(kind='live_test', command='test -n "$(uv run ddflow --version)"', where='.ddflow/gates.toml'). Module: 12 passed (job Jf663082cb9). The detached-cwd test asserts the printed cwd is not the repo and no longer exists.
+```
+
+**Sources:** onboard.md test-gate stage; infra/worktree.py (default_branch, git); infra/proc.run; probe + tests on 2026-10-04
+
+## Why did git push fail on the full-lifecycle scenario after the worktree home moved?
+
+**Verdict: CONFIRMED** · item `fix-Bc8efdd77b7`
+
+- **Claim.** The scenario hard-coded the former sibling root and counted every .py under the repo, which now includes .ddflow/worktrees; no gate ran the slow scenarios before merge because unit_tests deselects them and this repo's ci gate skipped the tests hook
+- **Mechanism.** demos/scenario_full_lifecycle.py wt_root and act 8 rglob; .ddflow/config.toml [ci].command SKIP=tests
+- **Falsifier.** the scenario passes on main
+
+**Probe:**
+
+```console
+$ pytest -m slow tests/test_scenarios.py on main and on the fix
+full-lifecycle fails on main (the push log; locally the same two checks); 6/6 scenarios pass with the fix; ddflow ci run with the whole pre-push stage passes
+```
+
+## Which git facts can classify a leftover worktree/branch/stash as merged, unique, or a harness session, without guessing?
+
+**Verdict: CONFIRMED** · item `B-onboard-preflight`
+
+- **Claim.** `git rev-list --count base..branch == 0` (exposed as infra.worktree.is_merged) is the only honest merged test; a worktree is holding work when `git status --porcelain` is non-empty even on a merged branch; `git worktree list --porcelain` (via W.list_worktrees) records `branch` and `locked <reason>` per tree; the lock reason may name a pid (free text, so absent = cannot tell); `git stash list` yields `stash@{n}: message` and stashes are shared by every worktree.
+- **Mechanism.** Ancestry is a graph fact; commit messages are not. Locked worktrees are the agent harness's own (Claude Code locks what it spawns), and its reason is the operator-visible owner id.
+- **Falsifier.** A branch whose commits are all in base but is_merged false (or vice versa); a dirty worktree classified merged; a lock reason with a pid that git does not report.
+- **Budget.** 15 min
+
+**Probe:**
+
+```console
+$ built /tmp/kilo/preflight-probe: merged-head + unique-head branches, cleanwt (locked, reason 'agent session 12345 (pid 99999)'), dirtywt with wip.py, a stash; dumped git worktree list --porcelain, git branch --format, git stash list, merge-base exit codes, the lock file, and W.list_worktrees().
+merge-base: merged exit=0, unique exit=1. Porcelain: cleanwt has `locked agent session 12345 (pid 99999)`, dirtywt has branch refs/heads/unique-head. W.list_worktrees: dicts with worktree/HEAD/branch and `locked` (reason). stash list: 'stash@{0}: On main: stashed work'.
+```
+
+**Sources:** onboard.md lines 13-18, infra/worktree.py (is_merged/branches/list_worktrees/dirty/remove), probe on 2026-10-04
+
+## Do the probe tests in the stray /tmp review worktrees hold anything not already on main?
+
+**Verdict: CONFIRMED** · item `B-salvage-probe-tests`
+
+- **Claim.** Of the four probe scenarios, three (ff-only merge head, identity-tree gate run, identity-tree merge) are already tests on main; the kept-tree scenario is new and fails on main: a false stale-evidence note (bug Bb47a48b173)
+- **Mechanism.** diff of each probe against main's test files; run of the cleaned scenario and of a control without the scratch file
+- **Falsifier.** the kept-tree scenario passes on main
+
+**Probe:**
+
+```console
+$ pytest the salvaged test and a control on main
+both the scenario and the control fail with 'passed on a different tree' for critic, rubber_duck, standards; committed as xfail(strict) naming Bb47a48b173
+```
+
+## Does an open bug whose own fix-<bug> was abandoned get a live fix task from bug file-tasks?
+
+**Verdict: CONFIRMED** · item `fix-B974e34fa83`
+
+- **Claim.** No: _needs_fix_task exempts an abandoned own fix-<bug>, and _fix_task_id/_has_fix_task always resolve to fix-<bug>, so a refile could only link the abandoned task again
+- **Mechanism.** _fix_task_id returns FIX_TASK_PREFIX + bug regardless of that item's state; _has_fix_task counts any non-removed fix-<bug>
+- **Falsifier.** file-tasks after item.abandoned fix-Bx (Bx open) files a new task for Bx
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_bug_file_tasks_done_fix.py tests/test_complete_closes_only_fixed.py with the ddflow/ change reverted
+4 failed: Bx left on abandoned fix-Bx; tasks map reports fix-<bug> rather than the id filed
+```
+
+## Is the ddflow_bisect surface disagreement exactly the measured timing field, and can it be compared deterministically?
+
+**Verdict: CONFIRMED** · item `fix-Ba0904a2430`
+
+- **Claim.** The two surfaces' bisect payloads differ only in each run's measured `seconds` (0.0 vs 0.01); comparing the payloads with every `seconds` VALUE replaced by a sentinel while KEEPING every key makes the comparison deterministic and still catches a real shape difference (a missing run, an added field).
+- **Mechanism.** The payload is produced by two independent invocations; wall-clock measurement cannot be equal across them, so it is not part of the wire contract. Replacing the value keeps key presence, so shape differences still fail.
+- **Falsifier.** Two payloads that differ only in `seconds` still comparing unequal after normalization, or payloads differing in a real field comparing equal.
+- **Budget.** 15 min
+
+**Probe:**
+
+```console
+$ PYTHONPATH=. python3 -c "a={'runs':[{'seconds':0.0,...}]}; b={'runs':[{'seconds':0.01,...}]}; print(a==b)"; then the new regression test on the fixed code, and the same test with the normalizer mutated to identity.
+raw equal: False. Fixed: 115 passed (tests/test_api_layer.py, job Jeebd385867). Mutant (normalizer returns its input): 1 failed at the first assert (job Jd1a334cbd9).
+```
+
+**Sources:** bug Ba0904a2430 probe (jobs J4ca0f858aa/Jddfb38fc48), tests/test_api_layer.py
+
+## Why does test_review_head_at_diff flake under load?
+
+**Verdict: CONFIRMED** · item `fix-B10034dff26`
+
+- **Claim.** The fake reviewer is hedged (default hedge=2): the copy that finds the arm marker already taken answers first and wins, and _race kills the copy that was committing, so no late commit lands
+- **Mechanism.** services/review._race: first on-contract copy settles the chunk, the other copy's process group is SIGKILLed
+- **Falsifier.** the test still flakes with hedge = 1 in the fixture config
+
+**Probe:**
+
+```console
+$ 24 CPU spinners + uv run --with pytest-xdist --with pytest-repeat pytest -n 32 --count 50 -p no:randomly tests/test_review_head_at_diff.py; then same with hedge=1, --count 100
+unfixed: 17 failed, 83 passed (both tests; 'the reviewer committed while it ran'). hedge=1: 300 passed. Removing hedge=1 makes the new test_the_side_effecting_reviewer_runs_once_per_review fail.
+```
+
+## Why do MCP replies miss complete's progress block and merge's ci result?
+
+**Verdict: CONFIRMED** · item `B-hy-progress-mcp`
+
+- **Claim.** The MCP tool payload is a fixed key tuple; only export_refresh had a conditional append, so progress (complete) and ci (merge) were dropped from MCP replies while the CLI --json carried them
+- **Mechanism.** surfaces/mcp.py payload projection; a generic optional-keys tuple fixes all three
+- **Falsifier.** MCP complete reply already contains progress
+
+**Probe:**
+
+```console
+$ tests/test_progress_line_mcp.py against HEAD
+2 of 3 fail on HEAD (progress, ci missing), all pass with the change; 837 MCP/api/export tests pass
+```
+
+## Is a finished phase invisible to next and brief?
+
+**Verdict: CONFIRMED** · item `fix-B28268eba1a`
+
+- **Claim.** plan() never looks at phases (kind=task candidates only), so an open phase with every task done yields 'Nothing actionable' from next and 'Nothing ready' from brief; only doctor (schedule.unpickable finished_phase) names it
+- **Mechanism.** next_/brief render only Plan.ready/blocked/running; unpickable is called by doctor alone
+- **Falsifier.** next or brief mentions P1 after: phase add P1; task add T2 --phase P1; complete T2 --force
+
+**Probe:**
+
+```console
+$ the bug's probe in a scratch repo, then tests/test_phase_ready_to_close.py on unfixed code
+next: 'Nothing actionable (0 ready, 0 running, 0 blocked).' exit 2; brief: '_Nothing ready._'; doctor: 'PROBLEM: P1: all 1 task(s) under it are finished but the phase is still open'. 4 of 6 new tests failed on main
+```
+
+## Does a plain claim after recover --apply still refuse, and is that intended?
+
+**Verdict: CONFIRMED** · item `fix-Bc58ea6b7a7`
+
+- **Claim.** The refusal for a recorded (swept) expiry is the generic one telling the agent to run recover and retry --force; help/recovery.md (fixed today, pinned by test_the_recovery_help_says_what_apply_and_claim_do) intends that --force is still required, so the defect is the circular advice, not the refusal
+- **Mechanism.** _acquire_locked raises the same LeaseError whether or not existing.expired_at is set
+- **Falsifier.** plain claim after apply succeeds, or its refusal does not mention recover
+
+**Probe:**
+
+```console
+$ LC.claim(repo,'T1',agent='next') after RP.recover(apply=True) on an empty tree (new test on unfixed code)
+exit 3, reason: 'T1 has an EXPIRED lease from crashed ... Run ddflow recover --item T1, then retry with --force.' -> test failed on 'recorded' assertion
+```
+
+## Why are roborev jobs enqueued as kilo reviewed by claude-code, and does ddflow notice?
+
+**Verdict: CONFIRMED** · item `fix-B03437a6b45`
+
+- **Claim.** kilo fails roborev's health check, so the daemon runs backup_agent claude-code; ddflow records the --model the agent typed
+- **Mechanism.** [REDACTED:path] (modified 2026-10-04 13:18Z) has keys subagent_model, subagent_variant_overrides, indexing that kilo 7.2.20 rejects; .roborev.toml backup_agent = claude-code; api/gates.record writes evidence.model verbatim
+- **Falsifier.** roborev check-agents passes kilo, or roborev list shows agent kilo for jobs 1454-1474
+
+**Probe:**
+
+```console
+$ roborev check-agents; roborev list --json; roborev show --json --job 1462; tests/test_standards_roborev_agent.py on unfixed code
+check-agents: kilo FAIL 'Configuration is invalid at [REDACTED:path] Unrecognized keys: subagent_model, subagent_variant_overrides, indexing'; jobs 1462/1473/1474 agent claude-code model None; fake-roborev tests: 3 failed on unfixed code (model recorded as kilo)
+```
+
+## Does bug file-tasks leave a report orphaned on a finished task?
+
+**Verdict: CONFIRMED** · item `fix-B8dcbf2f8da`
+
+- **Claim.** bug_file_tasks counts any non-removed item as a live fix task (_live), so an open bug reported against a fix task that is now done/abandoned is never refiled
+- **Mechanism.** _live(st, b.fix_task) checks only presence/removed, not state or whether the task was filed to fix the bug
+- **Falsifier.** file-tasks after appending item.completed fix-Bx for a log where Brep was reported against fix-Bx files fix-Brep
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_bug_file_tasks_done_fix.py on unfixed main
+2 failed: file-tasks returned exit 2 'every open bug already has a fix task' with Brep on done/abandoned fix-Bx. Note: since B7bdcc6b212 complete itself refiles reports (refile_reported), so new completions no longer orphan; the gap is file-tasks for older logs, abandoned tasks and non-complete paths
+```
+
+## Can a progress block after each completion be computed cheaply and kept small?
+
+**Verdict: CONFIRMED** · item `B-hy-progress-line`
+
+- **Claim.** Counts from the already-folded state plus one schedule.plan call give tasks, bugs (fixed/open/high), phases (done, ready to close), the item's phase and the next ready items in under 400 characters, with no extra I/O beyond one fold
+- **Mechanism.** services/progress_line.report over State; complete appends it as data['progress']; CLI prints it after the completion line
+- **Falsifier.** the block exceeds 400 chars or 4 lines on a real project
+
+**Probe:**
+
+```console
+$ tests/test_progress_line.py; PYTHONPATH=. ddflow progress block on this project
+5 tests pass; block size asserted < 400 chars and <= 4 lines
+```
+
+## Why was B194 re-acquired over bugfixB's live leases?
+
+**Verdict: CONFIRMED** · item `fix-B08b6e40bfb`
+
+- **Claim.** claim --force on an item with an EXPIRED lease skips glob_clash (leases._acquire_locked: 'if clash and not force'); the expired-lease refusal tells the agent to retry with --force, so every re-claim of a lapsed lease skips the overlap check. A heartbeat by the holder revives a lapsed lease with no overlap check either.
+- **Mechanism.** force waives both the expired-lease refusal and the overlap check; renew() has no expiry/clash guard
+- **Falsifier.** claim --force of a lapsed T1 refused while T2 holds the same glob live
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_lease_reacquire_overlap.py on unfixed leases.py; plus heartbeat probe script
+3 failed (forced reclaim by holder granted, takeover by third granted, heartbeat renewed=True with active leases [T1,T2]), 2 passed (control cases)
+```
+
+## Can an MCP-only agent reopen a bug closed by mistake?
+
+**Verdict: CONFIRMED** · item `fix-B451aafa44d`
+
+- **Claim.** No: bug reopen exists only as a CLI leaf; test_mcp_parity exempts it, and no MCP tool accepts a reopen argument
+- **Mechanism.** tests/test_mcp_parity.py LEAF_NOT_EXPOSED[('bug','reopen')]; ddflow_bug_invalid rejects unknown arguments
+- **Falsifier.** ddflow_bug_invalid (or another bug tool) accepts reopen and reopens the bug
+
+**Probe:**
+
+```console
+$ tests/test_bug_reopen_mcp.py on unfixed main
+unknown argument(s) for ddflow_bug_invalid: reopen. Known: as_agent, evidence, id, reason (exit 1); both tests fail
+```
+
+## Do recover/status/doctor drop unmeasurable trees and unheld RUNNING items from 'may contain work'?
+
+**Verdict: CONFIRMED** · item `fix-B3f8c406fea`
+
+- **Claim.** api/reporting.recover, status and the CLI filter on truthy salvageable, so salvageable None and stale_running are not counted or flagged
+- **Mechanism.** [r for r in found if r.salvageable] treats None (could not measure) like False (measured clean)
+- **Falsifier.** recover on a repo with an orphan tree whose .git points at a nonexistent gitdir prints '1 may contain work'
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_recover_unmeasurable.py on unfixed main
+4 failed, 1 passed: recover printed '0 may contain work' with no !! for T2; status --json recoverable == set(); doctor put the unmeasurable tree in notes
+```
+
+## What UX shape should the onboarding command expose so it is useful rather than a wall of writes?
+
+**Verdict: CONFIRMED** · item `B-onboard-memory`
+
+- **Claim.** The house pattern for a one-shot, partly destructive operation is: dry run by default, an explicit --apply that acts, a --verify/report mode that re-checks later state, per-item results the operator can read, and the MCP tool mirroring the CLI verb-for-verb. `ddflow import` and `ddflow cleanup` both follow it.
+- **Mechanism.** Propose-by-default keeps the operator in the loop (the onboard prompt's own rule: 'show the proposed rulebook diff before applying it'); the parity ratchet forces both surfaces to carry the same operation set; exit codes 0/2/3 let scripts and agents distinguish ok / nothing-to-do / refused without parsing prose.
+- **Falsifier.** A one-shot operation that writes without an explicit apply flag, or a CLI verb with no MCP counterpart (the parity test would fail).
+- **Budget.** 10 min
+
+**Probe:**
+
+```console
+$ ddflow import --help; ddflow cleanup --help
+import: '[--apply] write them; default is a dry run', '[--verify] report what was already imported and whether it is still true ... (exit 1 = findings, 2 = nothing imported)'. cleanup: 'usage: ddflow cleanup [-h] [--apply]'.
+```
+
+**Sources:** ddflow import --help, ddflow cleanup --help, docs/HANDOFF.md section 7, ddflow/templates/prompts/commands/onboard.md (stage 4: show before applying)
+
+## What must a new `ddflow onboard` CLI command and `ddflow_onboard` MCP tool satisfy before they can land?
+
+**Verdict: CONFIRMED** · item `B-onboard-memory`
+
+- **Claim.** Adding the pair trips at least seven mechanical ratchets: CLI subcommand<->MCP tool name parity (test_every_cli_SUBCOMMAND_is_reachable_over_mcp); a JSON/prose decision plus TEXT_BODIED when prose (tests/test_mcp_parity.py); a MIGRATED_WIRE_SHAPES row giving the equivalent CLI argv (tests/test_api_layer.py); every Outcome branch carrying the payload key; a tier placement in surfaces/mcp.py TIERS (tests/test_mcp_tool_tiers.py fails until placed); the compact tools/list byte cap (tests/test_mcp_tool_budget.py); and a help-group claim in services/help.py (tests/test_help.py fails on an unclaimed tool, which must stay empty).
+- **Mechanism.** The surfaces are generated from shared tables and policed by parity tests; the tool budget exists because every tool schema is paid for in every agent's context on every session.
+- **Falsifier.** A new tool landing without edits to PROSE_TOOLS/MIGRATED_WIRE_SHAPES/a TIERS entry/a help group passing the suite.
+- **Budget.** 15 min
+
+**Probe:**
+
+```console
+$ docs/HANDOFF.md section 7 ('five separate ratchets', plus README and agent-name ratchets); sed -n '1,14p' tests/test_mcp_tool_budget.py; rg TIER ddflow/surfaces/mcp.py (TIERS = core/standard/all); rg '^    "' ddflow/services/help.py (group table); ddflow task add --help
+HANDOFF: 'Adding one MCP tool means satisfying FIVE separate ratchets ... 1. name must match the CLI verb ... 2. PROSE_TOOLS ... 3. MIGRATED_WIRE_SHAPES ... 4. TEXT_BODIED ... 5. every Outcome branch must carry the key named by the tool's payload.' mcp.py:2825-2878: every tool 'has to be placed (tests/test_mcp_tool_tiers.py fails until it is)'; TIERS = ('core','standard','all'). test_mcp_tool_budget.py: 'The MCP tool list is paid for in every agent's context ... its size is ratcheted.' help.py: group table for workflow/import/gates/memory/... with an empty-unclaimed ratchet.
+```
+
+**Sources:** docs/HANDOFF.md, tests/test_mcp_tool_budget.py, tests/test_mcp_tool_tiers.py, tests/test_mcp_parity.py, tests/test_api_layer.py, tests/test_help.py, ddflow/surfaces/mcp.py, ddflow/services/help.py
+
+## Does recover --apply adopt a crashed agent's tree as the help says?
+
+**Verdict: CONFIRMED** · item `fix-Bdb449f37cd`
+
+- **Claim.** help/recovery.md promises 'recover --apply adopts it, keeping the work', but services/leases.sweep(apply=True) only records lease.expired for an expired lease measured EMPTY; adoption of the tree is done by claim --force
+- **Mechanism.** docs written ahead of/apart from the sweep; README Crash recovery already states the true behaviour
+- **Falsifier.** after recover --apply on an expired lease whose tree holds work, the lease changes hands or the tree is bound to someone
+
+**Probe:**
+
+```console
+$ scratch script: claim T1 (ttl 1s), write work.py, sleep, api recover(apply=True), fold, claim, claim --force
+recover: [('expired_lease', True)]; lease still holder=crashed, expired_at=''; plain claim exit 3 'NOT stolen automatically ... retry with --force'; claim --force exit 0, same worktree path, work.py present
+```
+
+## Does ddflow review record the head at round end rather than at diff capture?
+
+**Verdict: CONFIRMED** · item `fix-B4f5be8179f`
+
+- **Claim.** api/review.py _round_evidence calls _head_of after the reviewer returns, so a commit made during the review is recorded as reviewed and skipped by the next --delta (full and delta rounds alike)
+- **Mechanism.** _head_of(repo,it,branch,commit) evaluated at record time, after R.review returns
+- **Falsifier.** a reviewer that commits mid-review leaves reviewed_head == the pre-review head on unfixed code
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_head_at_diff.py on unfixed main (fake command reviewer commits late<N>.py while reviewing)
+2 failed: full round reviewed_head == late commit, not the diff's head; delta round: reviewed_head 8e22590e != taken e0425676
+```
+
+## Can every agent's worktrees live inside the project without polluting the main checkout, tests or tools?
+
+**Verdict: CONFIRMED** · item `B-hy-worktree-home`
+
+- **Claim.** With [worktree].root = .ddflow/worktrees and worktrees/ in .ddflow/.gitignore, a claimed tree and its files are invisible to git status in the main checkout; .ddflow is a dot-directory that pytest's default norecursedirs, ruff (respect-gitignore) and ripgrep skip; recorded tree paths keep older trees under ../.ddflow-worktrees working
+- **Mechanism.** worktree path = repo / root / item; .ddflow/.gitignore rewritten by init/adopt; inventory SKIP_DIRS already skips .ddflow
+- **Falsifier.** git status in the main checkout lists the tree, or a re-claim after the default changed creates a second tree
+
+**Probe:**
+
+```console
+$ tests/test_worktree_home.py against main's config and adopt
+3 of 4 tests fail on main (default root, gitignore lines, claim path); 4 pass with the change; 2494 worktree/gitignore/container tests pass except one hard-coding the old default path, updated
+```
+
+## Why does a shell ddflow claim after ddflow_identify record a different holder than the MCP connection?
+
+**Verdict: CONFIRMED** · item `fix-Bfad021e8d9`
+
+- **Claim.** ddflow_identify only sets Server.agent in the MCP process; the shell CLI resolves identity from --agent, DDFLOW_AGENT, [agent].id or the tree, and nothing carries the declaration across processes
+- **Mechanism.** mcp.Server.handle identify branch: self.agent = want, no persistence; context.Ctx: resolve_agent_id(repo, cfg, args.agent)
+- **Falsifier.** after Server.handle(ddflow_identify kilo-onboard), a CLI 'claim' without --agent/DDFLOW_AGENT records holder kilo-onboard
+
+**Probe:**
+
+```console
+$ tests/test_identify_reaches_cli.py on unfixed main
+test_a_shell_claim_after_identify_is_the_identified_agents FAILED: holder was the tree-derived name; with the fix (harness-keyed record in .git/ddflow-identity, Ctx reads nearest ancestor's record) 3 passed
+```
+
+## Why does a heavy ddflow_review/gate_run take the MCP session down, block every other call, and lose the outcome on disconnect?
+
+**Verdict: CONFIRMED** · item `fix-B55e649ca6e`
+
+- **Claim.** mcp.serve is a strictly sequential stdin loop running every tool in-process, so (a) a long tool blocks every later frame including ping, (b) anything that kills the server process kills the in-flight run, (c) a client that gives up and kills the server leaves only gate.started
+- **Mechanism.** for raw in inp: reply = srv.handle(msg) — no concurrency; the run is a child of nothing but the server
+- **Falsifier.** a ping sent while ddflow_wait runs is answered before it; killing the server mid gate_run still records the outcome
+
+**Probe:**
+
+```console
+$ tests/test_mcp_offload.py against unfixed main (real server process, python -m ddflow mcp)
+3 failed: ping/status not answered while ddflow_wait ran (got []); no worker child exists (the long call runs inside the server); after SIGKILL of the server during gate_run unit_tests = {outcome: '', at: ...} (start marker only). With the fix (worker process per OFFLOADED tool, start_new_session, relay thread): 3 passed.
+```
+
+## What should 'deduplicated' reuse for harness memories, and can ids be stable across a re-import?
+
+**Verdict: CONFIRMED** · item `B-onboard-memory`
+
+- **Claim.** The dedupe engine is services.similar over infra.store.similar_records (kind='memory' for live memories, body=m.text), with [dedupe].ask_threshold/min_words; assess flags a byte-identical text with 'identical' at 1.0 and a one-word-changed copy scores ~0.854 without flags. Ids cannot come from core.ids.auto_id: its docstring says the nanosecond salt makes the same text get two different ids on purpose, so a re-import needs an id derived from the file.
+- **Mechanism.** similar.build indexes {id,kind,title,body,item}; assess returns candidates with score/words/flags and the importer's ask rule is identical OR (score >= ask_threshold and words >= min_words). A deterministic id (M-harness-<slug of stem>) lets apply skip what a previous run recorded.
+- **Falsifier.** auto_id returning the same id for the same text twice, or assess not flagging an identical memory.
+- **Budget.** 10 min
+
+**Probe:**
+
+```console
+$ PYTHONPATH=. python3 - <<EOF ... similar.build([memory,lesson]); similar.assess(identical/near/unrelated) ... EOF; read core/ids.py docstring; read importer._dedupe_found (~2860-2930).
+identical M-example 1.0 ('identical',) words: 6 | near M-example 0.854 () words: 7 | unrelated: no candidate shown (below show_floor). importer._dedupe_found uses similar_records(state), similar.build, assess, and duplicates when 'identical' in flags or (score >= ask_threshold and words >= min_words).
+```
+
+**Sources:** services/similar.py, infra/store.py:549-600, services/importer.py:2849-2930, core/ids.py
+
+## Where does Claude Code keep a project's own memory, and in what shape?
+
+**Verdict: CONFIRMED** · item `B-onboard-memory`
+
+- **Claim.** Claude Code keeps per-project memory at [REDACTED:path]<slug>/memory/: one MEMORY.md index of one-line links, plus one YAML-frontmatter .md file per fact (name, description, metadata.node_type: memory, metadata.type, metadata.modified, body). The slug is the project path with every non-alphanumeric character replaced by '-': [REDACTED:path] -> -home-delian-src-ddflow.
+- **Mechanism.** The harness writes a fact file when an agent records an operational preference and rebuilds MEMORY.md as the index; the slug encodes the session cwd so each checkout (and each Claude Code worktree) has its own directory.
+- **Falsifier.** A memory directory whose facts are not <slug>/memory/*.md, or a slug that does not encode the path that way.
+- **Budget.** 10 min
+
+**Probe:**
+
+```console
+$ ls [REDACTED:path] | head; ls [REDACTED:path]; cat MEMORY.md commit-message-style.md done-means-merged-to-main.md
+Memory files: MEMORY.md, commit-message-style.md, ddflow-replaces-two-workflows.md, done-means-merged-to-main.md, run-tests-in-parallel.md, verify-ddflow-output.md. Slug examples: -home-delian-src-ddflow for [REDACTED:path]; -home-delian-src--ddflow-worktrees-B-onboard-memory for [REDACTED:path]; -home-delian-src-run-nemo-run for .../run_nemo_run. Frontmatter sample: name/description/metadata{node_type: memory, type: feedback, originSessionId, modified} followed by the body.
+```
+
+**Sources:** the live [REDACTED:path] tree on this machine, 2026-10-04
+
+## Why does a released item stay RUNNING?
+
+**Verdict: CONFIRMED** · item `fix-B601fa7eff9`
+
+- **Claim.** _h_lease_gone clears the lease on lease.released but never touches state, so every release leaves the item RUNNING with no lease, which brief and next then call INTERRUPTED
+- **Mechanism.** core/model.py _h_lease_gone; state changes only on item.* events
+- **Falsifier.** claim then release leaves state open
+
+**Probe:**
+
+```console
+$ tests/test_release_reopens.py against the unfixed fold
+test_release_returns_a_running_item_to_open fails on HEAD (state running), passes with the fix; 1601 lease/recovery/release-related tests pass
+```
+
+## Why do task, bug and phase states drift from reality when an agent stops, where do agents put worktrees, and why did Kilo get no onboarding or session context?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** (1) release and lease lapse leave items RUNNING, and a phase whose tasks are done is never offered for completion, so states drift whenever an agent stops; nothing at stop time (tokens, compaction, pause) commits, merges, completes or releases. (2) Worktrees are scattered: ddflow claims use [worktree].root = ../.ddflow-worktrees, outside the project (32 trees), Claude Code's harness uses .claude/worktrees (17), Kilo's uses .kilo/worktrees (1), and agents made 11 ad hoc review worktrees in /tmp; there is no /runs directory. (3) Only Claude Code gets the session-start brief and companions, through a SessionStart hook; for Kilo adopt writes only the MCP entry in .kilo/kilo.json, no instructions entry and no plugin, and AGENTS.md is a passive 'call ddflow_brief' line, so a Kilo session starts with no brief, memory or companion onboarding. Other harnesses without a hook ddflow installs are affected the same way.
+- **Mechanism.** _h_lease_gone (core/model.py:1210) changes only the lease; schedule offers tasks, never a phase whose children are done; WorktreeConfig.root default ../.ddflow-worktrees (config.py:102, kept outside so globs and test collection never see sibling trees; containers already relocate it inside the repo, infra/container.py:50); claudehooks.py is the only session-start installer; adopt AGENT_TARGETS kilo writes .kilo/kilo.json MCP only; Kilo supports an instructions array loaded at session start and opencode-style plugins with session.created / chat.message hooks
+- **Falsifier.** release returns the item to OPEN, or kilo.json carries instructions/plugin from adopt
+
+**Probe:**
+
+```console
+$ /tmp/rl: claim T1, release T1, show T1; phase with all tasks done; git worktree list grouped by parent; .kilo/kilo.json; B194 event history
+T1 state running after release; P1 state open after its only task completed; worktrees: 32 ../.ddflow-worktrees, 17 .claude/worktrees, 1 .kilo/worktrees, 11 /tmp; kilo.json has mcp only; B194: kilo-main lease.acquired 14:38 and 15:23, lease.released 15:26 with no commits, still RUNNING
+```
+
+**Sources:** https://kilo.ai/docs/automate/extending/plugins ; https://kilo.ai/docs/code-with-ai/platforms/cli ; https://github.com/vshulcz/deja-vu/issues/4398 ; https://cursor-alternatives.com/blog/kilo-code-rules/
+
+## Does brief hide stale_running and unmeasurable recovery?
+
+**Verdict: CONFIRMED** · item `fix-B20e103326b`
+
+- **Claim.** api.brief passes [r for r in recovery if r.salvageable] to the view: stale_running (salvageable False) and unmeasurable trees (None) never reach the Recoverable work block
+- **Mechanism.** truthiness filter on a three-valued salvageable field; stale_running is never measured so it is False
+- **Falsifier.** brief on a repo with a RUNNING item with no lease, or an orphan tree with a broken gitdir, shows it under Recoverable work found
+
+**Probe:**
+
+```console
+$ pytest tests/test_brief_recovery_all.py on unfixed main
+3 failed: 'Recoverable work found' not in brief text for the stale_running item and for the broken-gitdir orphan; clean leftover count absent
+```
+
+## Does research add with a taken --id overwrite the note?
+
+**Verdict: CONFIRMED** · item `fix-B14d796e03b`
+
+- **Claim.** check_add returns early for a taken id and _h_research replaces the note, so the second add silently overwrites
+- **Mechanism.** kind_of(st, rid)==kind -> Checked(); fold replaces st.research[rid]
+- **Falsifier.** after two adds with different text under --id R1, research list shows the first
+
+**Probe:**
+
+```console
+$ fresh repo: ddflow research add --id R1 --question 'first q' ...; again with --question 'second q totally different'; ddflow research list
+both adds: 'research R1 recorded (THEORETICAL)' rc=0; list: 'R1 theoretical second q totally different'. tests/test_research_overwrite.py: 3 of 4 fail on unfixed code
+```
+
+## Do parallel index rebuilds race on one temp file?
+
+**Verdict: CONFIRMED** · item `fix-Bcdfb199cc0`
+
+- **Claim.** Store.rebuild uses a fixed temp path (index.rebuilding) and no lock, so concurrent rebuilds unlink/publish each other's half-built database
+- **Mechanism.** second rebuild unlinks tmp+sidecars the first is writing; first's tmp.replace consumes the file the second then cannot find
+- **Falsifier.** 8 parallel 'ddflow similar' on a stale index all exit 0
+
+**Probe:**
+
+```console
+$ 8 parallel CLI 'similar' runs on a copy of this repo's log with index deleted, unfixed vs fixed code; plus tests/test_similar.py::test_concurrent_rebuilds_neither_traceback_nor_leave_a_broken_index on the unfixed tree
+unfixed: 8/8 rc=1 tracebacks (6x FileNotFoundError index.rebuilding->index.db, no such table: meta, database disk image is malformed). fixed: 8/8 rc=0. Unit test on unfixed tree: failed 2/3 runs with OperationalError disk I/O error, 1/3 Fatal Python error: Bus error
+```
+
+## Does the MCP handshake over-count crashed worktrees?
+
+**Verdict: CONFIRMED** · item `fix-B904edd649c`
+
+- **Claim.** _instruction_vars sets recoverable = len(L.scan(...)), counting every Recovery (one per item, clean ones included), while recover and brief only flag salvageable ones
+- **Mechanism.** scan returns one Recovery per item; an adopted harness tree reused by many items yields many clean entries
+- **Falsifier.** _instruction_vars recoverable is 0 when scan returns only salvageable=False entries
+
+**Probe:**
+
+```console
+$ tests/test_handshake_recoverable.py on unfixed code (scan monkeypatched: 64 clean adopted entries on one tree; 2 dirty items on one tree + 1 unmerged + 1 clean)
+assert 64 == 0 FAILED; assert 4 == 2 FAILED; after fix 2 passed
+```
+
+## Does complete close bugs merely reported against the fix task?
+
+**Verdict: CONFIRMED** · item `fix-B7bdcc6b212`
+
+- **Claim.** services/completion.open_bugs_of selects every open bug whose fix_task == item; bug found --item <open fix task> sets fix_task to that task (api/knowledge._fix_task_of), so complete --regression-test closes reports it never fixed, including scope=ddflow ones and bugs with their own fix-<bug> task
+- **Mechanism.** open_bugs_of keyed on Bug.fix_task rather than the task's fixes list
+- **Falsifier.** complete fix-Bx --regression-test closes only Bx when Bup (scope ddflow) and Bflake were filed with --item fix-Bx
+
+**Probe:**
+
+```console
+$ pytest tests/test_complete_closes_only_fixed.py on unfixed main
+bugs_closed ['Bflake','Bup','Bx'] != ['Bx']; blocker 'fixes open bug(s) Bflake, Bx'; Bflake closed though it had fix-Bflake; 9 failed 1 passed
+```
+
+## Does a torn shard tail swallow the next appended event?
+
+**Verdict: CONFIRMED** · item `fix-B28b3839fe6`
+
+- **Claim.** EventLog._write appends with O_APPEND without checking the shard ends in a newline, so the next event shares the fragment's line and is lost
+- **Mechanism.** fragment + event on one line fails json.loads; _parse_lines counts it skipped
+- **Falsifier.** after writing an unterminated fragment and appending 'after', read_all contains 'after'
+
+**Probe:**
+
+```console
+$ pytest tests/test_log_torn_tail.py against HEAD (unfixed) source tree
+4 failed: test_append_after_torn_tail_keeps_the_new_event[True/False] AssertionError ['one'] == ['one','after']; glued-recovery; non-object line raised TypeError 'int' object is not subscriptable from Event.from_json
+```
+
+## Can the single os.kill(pid,0) check after verify_one see a still-present process?
+
+**Verdict: CONFIRMED** · item `fix-B90101e389c`
+
+- **Claim.** A SIGKILLed process stays visible to os.kill(pid,0) until reaped; _stop's proc.wait(timeout=5) suppresses TimeoutExpired, so on a loaded runner the check can run before the process is gone
+- **Mechanism.** SIGKILL delivery and reaping are async; a zombie answers kill(pid,0)
+- **Falsifier.** os.kill(pid,0) raises ProcessLookupError right after SIGKILL of an unreaped child
+
+**Probe:**
+
+```console
+$ Popen sleep 60; SIGKILL; sleep 0.2; os.kill(pid,0); plus mutation of _wait_dead to a single kill(pid,0) sample
+os.kill(pid,0) did not raise on the killed unreaped child; mutated helper: test_a_killed_process_is_waited_for_not_sampled_once FAILED; restored: 35 passed
+```
+
+## How should ddflow run, verify, record, maintain and surface research so that every research request is extensive, accurate, verified, never duplicated, contradicted or stale, used by the project, and editable by the operator?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** ddflow records research as one claim per note (question, claim, mechanism, falsifier, probe, verdict, sources) with a research gate whose evidence is free text; research is never injected into brief, claim or gate prompts; it has no staleness, revision, supersede or retire; a same-id add silently overwrites; nothing detects a research request or ties the gate to a record; loop detection covers runtime and dependency loops, not knowledge records. External practice: orchestrator plus parallel subagents and a separate citation pass with effort scaled to complexity (Anthropic), independent answering of verification questions (CoVe), bi-temporal facts invalidated rather than deleted and hybrid BM25/embedding/graph retrieval (Zep), write-time ADD/UPDATE/DELETE/NOOP with contradicted facts marked invalid (Mem0g).
+- **Mechanism.** ResearchNote at core/model.py:630, _h_research replaces on same id, check_add returns early for a taken id (_dedupe.py:315), research gate at services/gates.py:132 has evidence=True only, brief injects lessons/decisions/memories but not research (api/lifecycle.py:2123), progress.detect covers runtime loops only
+- **Falsifier.** brief injects research, or a second research add with the same id is refused or kept as history
+
+**Probe:**
+
+```console
+$ /tmp/rr: research add --id R1 twice with different text; research list; plus WebFetch of the four sources
+both adds recorded; research list shows only 'totally different' (first silently overwritten), filed B14d796e03b. Anthropic: lead + parallel subagents + citation agent, 1 agent/3-10 calls simple to 10+ subagents complex, ~15x tokens, LLM judge rubric incl citation accuracy and source quality, agents preferred SEO content until source-quality heuristics were added. CoVe: verification questions answered independently to avoid bias. Zep: bi-temporal edges, contradicting edge's expiry set (invalidated not deleted), BM25+embedding+BFS. Mem0: LLM picks ADD/UPDATE/DELETE/NOOP vs similar memories; Mem0g marks invalid instead of removing.
+```
+
+**Sources:** https://www.anthropic.com/engineering/multi-agent-research-system ; https://arxiv.org/abs/2309.11495 ; https://arxiv.org/html/2501.13956 ; https://arxiv.org/html/2504.19413 ; NOT fetched (from the subagent): STORM 2402.14207, FActScore 2305.14251, SAFE 2403.18802, ALCE 2305.14627, self-preference 2404.13076, lost-in-the-middle 2307.03172, PRISMA, GRADE, W3C PROV-O
+
+## How should ddflow manage subagent definitions and separation of duties across harnesses: onboard, add, route, dedicate, run in parallel, complement existing ones, measure and improve, and prevent duplication and contradiction?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** ddflow has no notion of a subagent definition: nothing reads or writes .claude/agents, .codex/agents, .gemini/agents, .github/agents, .cursor/agents or .opencode/agents, and GateDef names a model family, never an agent or role. It has the groundwork: identity (ddflow_identify/as_agent), reviewer family independence, reviewer trust by digest, per-finding triage, latency signals, a skills/rules inventory and the P-skills parser/sync/doctor/trust plan, which the new work should reuse.
+- **Mechanism.** every harness defines subagents as files (Claude/Gemini/Copilot/Cursor/opencode markdown with frontmatter, Codex TOML, Kilo/Roo modes with fileRegex write scopes); delegation is by description, so overlapping descriptions misroute; precedence differs by scope; Claude caps 20 concurrent / depth 3, Codex max_threads 6 / max_depth 1
+- **Falsifier.** grep finds an agent-file reader or writer in ddflow, or an open task that already covers agent files
+
+**Probe:**
+
+```console
+$ grep of ddflow/ and open tasks for agent dirs; task lists of P-skills, P-agent-rules, B-review-budget, BL-parallel-quality; web search
+no reader/writer of agent dirs; P-skills covers SKILL.md only; P-agent-rules covers rules and commands only; Codex fields from third-party guides and Aider/Cline/Roo/LangGraph/AutoGen NOT VERIFIED
+```
+
+**Sources:** https://code.claude.com/docs/en/sub-agents ; https://geminicli.com/docs/core/subagents/ ; https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/create-custom-agents ; https://cursor.com/docs/subagents ; https://opencode.ai/docs/permissions/ ; https://kilo.ai/docs/agent-behavior/custom-modes ; https://docs.crewai.com/concepts/agents ; https://www.anthropic.com/engineering/multi-agent-research-system ; https://cognition.com/blog/multi-agents-working ; https://www.alphaxiv.org/abs/2503.13657 ; https://claudelint.com/validators/agents
+
+## How can ddflow run tasks, bugs and phases as a DAG with parallel subagents, and what is missing from the roadmap?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** ddflow already has the DAG core (needs, inheritance, cycles, bug fix tasks, conflict-aware ready set, advisory caps) and a roadmap for waves/fan-out, batch integration, adaptive limits, slots, quotas and hot-file splits (BL-parallel-quality, B-adaptive-flow, B-hot-files, B-review-budget, BL-quotas, P-resume, P-test-robustness). Missing: critical-path-first ordering (critical_path is only reported), soft dependencies, phase barriers, observed (semantic) conflict detection, parallel==serial equivalence tests, fairness/aging, auto-split, and per-worktree process isolation (ports, test databases, index.lock).
+- **Mechanism.** plan() sorts by bug, priority, id and cuts the ready set by glob overlap; the fan-out protocol is prose in implement-phase.md; merges land one item at a time; external orchestrators (Claude Code worktree subagents, Anthropic orchestrator-worker, GitHub merge queue/Zuul speculative merging, Airflow pools/priority_weight, Nx affected, Bazel caching) show these are the standard missing pieces
+- **Falsifier.** an open task or shipped code already orders the ready set by downstream chain length, or already offers a prefers edge, a phase barrier or observed-conflict events
+
+**Probe:**
+
+```console
+$ audit by subagent abe0595dbd9a64a7e: core/schedule.py plan/critical_path, task lists of the six parallelism phases, web search of external practice
+critical_path() at core/schedule.py:890 is reporting-only; no soft deps, phase barrier, conflict.observed, equivalence tests, fairness aging, auto-split or process isolation task exists; merge() serialization and Aider/Cline/CrewAI/LangGraph specifics NOT VERIFIED
+```
+
+**Sources:** https://code.claude.com/docs/en/sub-agents ; https://simonwillison.net/2025/Jun/14/multi-agent-research-system/ ; https://zuul-ci.org/docs/zuul/latest/gating.html ; https://www.astronomer.io/docs/learn/airflow-pools ; https://nx.dev/ci/features/affected ; https://bazel.build/remote/caching ; https://addyosmani.com/blog/code-agent-orchestra/
+
+## Are the files an import consumed recoverable from the ddflow log without re-running the importer?
+
+**Verdict: CONFIRMED** · item `B-onboard-legacy`
+
+- **Claim.** Every item the importer created carries its origin as `source = <file>:<line>` (e.g. 'docs/BACKLOG.md:102'), so the set of imported FILES is the deduplicated file part of those sources.
+- **Mechanism.** The importer writes `source` into the item.added event; the projection keeps it on the item, and `import_verify` already groups imported records by `source.split(':')[0]`.
+- **Falsifier.** A file that yielded imported items whose event has no source, or sources that are not of the form <file>:<line> (git: branches are excluded).
+- **Budget.** 5 min
+
+**Probe:**
+
+```console
+$ rg -o '"source": *"[^"]+"' [REDACTED:path] | head; count non-git sources.
+197 non-git source records; examples: docs/BACKLOG.md:102, :125, :167. importer.py:2584 already does paths.setdefault(it.source.split(':', 1)[0], []) -- the same derivation.
+```
+
+**Sources:** ddflow event log, importer.py:2567-2585 (import_verify's own grouping)
+
+## Does a local pre-commit hook with language: fail and a files: pattern freeze a path -- fail the run when the file matches, pass when it does not?
+
+**Verdict: CONFIRMED** · item `B-onboard-legacy`
+
+- **Claim.** A local hook `- id: ddflow-frozen-imports, language: fail, files: '^todo\.md$', entry: <message>` fails the pre-commit run when the matching file is present (printing the entry text and the file), and is skipped (exit 0) when nothing matches.
+- **Mechanism.** pre-commit executes `language: fail` hooks by failing whenever it passes them any matching path; the entry text is the explanation shown to the committer. No environment or command is installed.
+- **Falsifier.** The run exits 0 with todo.md staged/present, or exits non-zero with no matching file.
+- **Budget.** 10 min
+
+**Probe:**
+
+```console
+$ cd /tmp/kilo/pc-probe; git init; todo.md; .pre-commit-config.yaml with the local fail hook; git add -A; pre-commit run --all-files; then change files: to '^nothing' and re-run.
+matching: 'frozen imported files......Failed / - hook id: ddflow-frozen-imports / - exit code: 1 / todo.md was imported into ddflow -- use ddflow tools, not edits'; control (no match): 'frozen imported files...(no files to check)Skipped', exit 0.
+```
+
+**Sources:** pre-commit local hook docs (language: fail); probe in /tmp/kilo/pc-probe on 2026-10-04
+
+## What does a GitHub-compatible SECURITY.md look like, and how can ddflow keep one in sync with its security checks, upgrades and document maintenance?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** GitHub shows SECURITY.md (repo root, docs/ or .github/) as the repository's security policy under the Security tab; it is free-form Markdown with no required schema; GitHub's own guidance is to state the supported versions and how to report a vulnerability. ddflow can derive the supported-versions table and the known-issues list from data it already holds (version history, bugs and findings tagged security, dependency-audit results of the security pass) and keep them current in a managed block, leaving the operator's policy text and contact alone.
+- **Mechanism.** export already generates documents from the log (D-export); a managed region between ddflow markers keeps hand-written policy (contact, response times, disclosure) intact; the security pass, dependency upgrades and the version cut call the refresh
+- **Falsifier.** GitHub refuses or does not display a SECURITY.md that carries a generated block, or ddflow's refresh overwrites the operator's text
+
+**Probe:**
+
+```console
+$ fetched docs.github.com adding-a-security-policy-to-your-repository
+docs: policy lives in a SECURITY.md GitHub generates/shows under the Security tab; recommend supported versions and how to report; no formal format requirements stated. Locations root/docs/.github are from prior knowledge of GitHub behaviour, not on that page.
+```
+
+**Sources:** https://docs.github.com/en/code-security/getting-started/adding-a-security-policy-to-your-repository
+
+## What does ddflow need so that a crashed or restarted agent resumes where it stopped, automatically when that is provably safe and by asking the operator when it is not?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** ddflow detects a dead agent (expired lease, orphan worktree, stale RUNNING) only on demand and never resumes: recover reports, claim refuses an expired lease without --force, the driver says run recover then salvage by hand; stale_running and unmeasurable trees are dropped from the brief; a merge that landed before worktree.merged was logged is unreachable; nothing heartbeats automatically; no hook records session end; a torn event-log tail swallows the next event
+- **Mechanism.** leases are events with ttl; scan() classifies; reclaim_policy=report; brief filters to salvageable; merge = git merge then log.append with no intent record; log._write appends without checking the shard ends in a newline
+- **Falsifier.** an event appended after a torn tail is still read back
+
+**Probe:**
+
+```console
+$ write an unterminated JSON fragment to the shard, append a new event with EventLog, read_all
+events read: [None, 'one'] -- the event appended after the torn tail ('after') was lost; the fragment and the new event glued into one unreadable line
+```
+
+**Sources:** code audit by subagent a05d98c0ff3c21f9f (file:line refs in the report), the probe above
+
+## What exactly does Claude Code require before it starts a project `.mcp.json` server, and can a committed settings file grant that approval?
+
+**Verdict: CONFIRMED** · item `B-onboard-harness`
+
+- **Claim.** Claude Code will not start a project `.mcp.json` server until its name is approved: `enabledMcpjsonServers` records approval; `disabledMcpjsonServers` in ANY settings file blocks the server in every permission mode; and committed approvals in `.claude/settings.json` are ignored in an untrusted folder until the workspace-trust dialog is accepted once.
+- **Mechanism.** Claude Code prompts interactively before loading project-scoped servers; unattended (`-p`, SDK, cloud) sessions cannot show the prompt, so the approval must be pre-recorded; disabled entries are checked from every settings source and win.
+- **Falsifier.** Official Claude Code documentation stating project `.mcp.json` servers start without approval, or that `enabledMcpjsonServers` overrides a `disabledMcpjsonServers` entry.
+- **Budget.** 10 min, docs only
+
+**Probe:**
+
+```console
+$ context7 query of /websites/code_claude (source: https://code.claude.com/docs/en/mcp): "settings.json enabledMcpjsonServers disabledMcpjsonServers approve project .mcp.json MCP servers"
+"For security reasons, Claude Code prompts for approval in interactive sessions before using project-scoped servers from .mcp.json files. ... To keep a server out anyway: Add it to disabledMcpjsonServers, which blocks it in every permission mode. ... A cloned repository can't approve its own servers: enableAllProjectMcpServers or enabledMcpjsonServers committed to the project's .claude/settings.json is ignored in an untrusted folder ... A disabledMcpjsonServers entry in any settings file still rejects the server."
+```
+
+**Sources:** https://code.claude.com/docs/en/mcp (via context7 /websites/code_claude)
+
+## Is a machine-local file copied into `.ddflow/local/` verifiably git-ignored, even in a project whose `.ddflow/.gitignore` lacks `local/`?
+
+**Verdict: CONFIRMED** · item `B-onboard-harness`
+
+- **Claim.** `.ddflow/local/` created via configwrite.ensure_local_dir is git-ignored by the directory's own `.gitignore` (`*`), so machine-local reviewers.toml/gates.toml cannot be committed even when the project's `.ddflow/.gitignore` predates the `local/` line.
+- **Mechanism.** ensure_local_dir writes `.ddflow/local/.gitignore` containing `*`; git consults `.gitignore` files in the directory and its ancestors, so every child of local/ is ignored regardless of the parent file's content.
+- **Falsifier.** `git check-ignore` exits 1 (not ignored) for `.ddflow/local/reviewers.toml` after ensure_local_dir ran.
+- **Budget.** 5 min
+
+**Probe:**
+
+```console
+$ git init -q -b main /tmp/kilo/harness-probe/repo; PYTHONPATH=<worktree> python3 -c "from pathlib import Path; from ddflow.services.configwrite import ensure_local_dir; ensure_local_dir(Path('/tmp/kilo/harness-probe/repo'))"; git -C /tmp/kilo/harness-probe/repo check-ignore -v .ddflow/local/reviewers.toml
+/tmp/kilo/harness-probe/repo/.ddflow/local
+.ddflow/local/.gitignore:1:*	.ddflow/local/reviewers.toml
+check-ignore exit=0 (ignored)
+```
+
+## Can a one-line shell wrapper make `ddflow` run the same code as a PYTHONPATH-pinned MCP entry, even when another ddflow is importable from the ambient environment?
+
+**Verdict: CONFIRMED** · item `B-onboard-harness`
+
+- **Claim.** A wrapper whose exec line prepends the MCP entry's PYTHONPATH pin (`PYTHONPATH="<pin>${PYTHONPATH:+:$PYTHONPATH}" exec <python> -m ddflow "$@"`) imports the pinned checkout, not an ambient copy of ddflow.
+- **Mechanism.** PYTHONPATH entries are searched in order after sys.path[0]; prepending the pin puts it ahead of any inherited PYTHONPATH entry, and `exec` replaces the shell so no other interpreter state survives.
+- **Falsifier.** The wrapper prints a module path from the ambient copy (e.g. [REDACTED:path]) instead of the pinned one.
+- **Budget.** 10 min, no GPU
+
+**Probe:**
+
+```console
+$ cd /tmp/kilo && PYTHONPATH=[REDACTED:path] /tmp/kilo/harness-probe/wrapper; control: cd /tmp/kilo && python3 -m ddflow --version
+PINNED /tmp/kilo/harness-probe/fake/ddflow/__init__.py
+exit=0
+--- control (no pin) ---
+[REDACTED:path] No module named ddflow
+```
+
+**Sources:** python -m / sys.path semantics; the operator's own [REDACTED:path] wrapper uses the same prepend form
+
+## What stops ddflow filing a contradicting or superseding record, and who decides when one is filed?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Add-time duplicate checking (D-no-duplicates) covers task, phase, bug, lesson, research and decision adds, but nothing detects a CONTRADICTION or UPGRADE of an existing active record, no add path for memories/rules/instructions/prompt templates is confirmed covered, and a closed match whose work was not done has no re-add path
+- **Mechanism.** similar.py scores TF-IDF similarity only; Answer relations are new|extends|duplicate_of|related; extendable() skips closed records; no polarity/subject analysis, no 'contradicts'/'supersedes' relation, no decider rule
+- **Falsifier.** an add of a decision that says the opposite of an active decision succeeds with no refusal or flag
+
+**Probe:**
+
+```console
+$ grep check_add( callers; read api/_dedupe.py relations
+check_add callers: knowledge.py x4, decisions.py, items.py x2; relations new/extends/duplicate_of/related only; no contradiction logic anywhere
+```
+
+## Does verify_one lose a child's exit code when stdout's EOF arrives before the exit is visible to waitid?
+
+**Verdict: CONFIRMED** · item `fix-B297ede2447`
+
+- **Claim.** A child that closes stdout shortly before exiting makes verify_one's post-EOF single waitid(WNOHANG) sample return None, so it reports 'closed its output' instead of 'exited (N)'.
+- **Mechanism.** Python closes fd 1 during interpreter shutdown, before the process terminates; the parent's select/read wakes on pipe EOF in that window, and one WNOHANG probe misses the not-yet-visible exit. A bound that polls waitid until the exit becomes visible (or a short grace lapses) recovers the status.
+- **Falsifier.** A child that closes stdout then sleeps then exits still yields 'exited (4)' from a single post-EOF WNOHANG sample.
+- **Budget.** 10 min, no GPU
+
+**Probe:**
+
+```console
+$ PYTHONPATH=<worktree> python /tmp/kilo/probe_b297.py  (calls CO.verify_one on a child doing os.close(1); sleep(0.4); os._exit(4))
+speaks_mcp= False
+detail= `[REDACTED:path]` closed its output without answering `initialize`.
+```
+
+## Does a failing check on the base after a merge become a deduped bug plus fix task, and does the hook's failure become an event?
+
+**Verdict: CONFIRMED** · item `B-ci-main-check`
+
+- **Claim.** check_after_merge on a failing base files exactly one Bci-<check> bug and fix task, a repeat files none, and the pre-push hook records ci.result with the failing check ids
+- **Mechanism.** merge calls CI.run on the base; failures go to bug_found with a stable id; the hook pipes pre-commit through tee and calls ddflow ci record
+- **Falsifier.** a second failing merge files a second bug, or the hook exits 0 / records nothing on a failing hook
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_ci_main_check.py
+10 passed (dedupe, fixed-then-failing-again, off, unknown mode, no command, fast skip, ci record, merge verb, pre-push hook end to end)
+```
+
+## Can one command make 'passed its gates' mean 'would pass pre-push'?
+
+**Verdict: CONFIRMED** · item `B-ci-gate`
+
+- **Claim.** A scratch worktree of the branch merged with the base, running the project's own pre-push stage, catches both whole-tree lint/format/bandit failures and interactions between parallel merges that no single branch shows; unavailable (no pre-commit, nothing configured) is never a pass
+- **Mechanism.** services/ci.py merge_tree + run; gate ci = ddflow ci run with unavailable_exits [2]; resolves HEAD in the directory it runs in; opt-in via [gates].task_pipeline
+- **Falsifier.** an interaction failure passes on the branch alone and on the merge result, or an absent tool is recorded as a pass
+
+**Probe:**
+
+```console
+$ tests/test_ci_gate.py (12) with a fake pre-commit: interaction caught only with the merge; mutation: skipping the merge makes the interaction test pass wrongly (fails the test); real run on this repo
+12 passed; real 'ddflow ci run' on this repo: 8 checks (ruff check, ruff format, wheel build, bandit, dependency allowlist, gitleaks, tests+scenarios, workflow validation) passed in 2m on the merge of the branch with main; found and fixed a real defect: the CLI resolved HEAD in the primary checkout instead of the item worktree
+```
+
+## How should event-triggered remediation be designed, and are rules the right home?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Triggers must be a separate executable-policy kind, not an on: clause on the advisory rules: rules are persuasion text (Cursor/AGENTS.md style) with no state, cooldown or audit, and a rule edit must not silently arm automation. Good practice (PagerDuty event orchestration dedup_key, GitHub workflow_run 3-level chain cap, Dagster sensor run_key, Renovate/Dependabot open-PR caps): every trigger carries event, condition, N-in-T threshold, debounce, dedupe key, action, concurrency cap, cooldown, circuit breaker and an escalation path; the ACTION creates a queued item that the existing lease, gate and cross-family review pipeline works (never runs an agent directly); storms are capped at three levels (one open remediation per dedupe key, a global hourly cap, a hop limit); every evaluation including suppressed ones is logged as an event; a trigger must not read its own output as a source
+- **Mechanism.** research agent: PagerDuty Event Orchestration, GitHub events docs (workflow_run) fetched; Rundeck/StackStorm/Argo Events/Sentry/Renovate/Dependabot/CodeQL/Drools ECA and flaky-quarantine practice from memory; repo: core/model.py HANDLERS, core/progress.py loop findings (repeat_claims, gate_flapping, repeated_failure, reopened, duplicate_work, no_progress, dependency_cycle) computed on demand not stored, services/rules.py has no rule.* event kinds and no trigger fields
+- **Falsifier.** rules already fold from the log and carry actions, or a trigger can safely run an agent directly
+
+**Probe:**
+
+```console
+$ repo read; NOT verified: external.observed schema, Rundeck/StackStorm/Argo/Sentry/Dagster details
+usable trigger sources today: gate.*, lease.expired, item.blocked/reopened/abandoned, worktree.merged, bug.found/fixed/invalid, pr.*, gate.out_of_order, review.triaged, cadence.ran, job.*, session.*, loop findings. MISSING: ci/pre-push result, crash report, test regression on main, dependency/security advisory, flaky signal, tool-unavailable. Proposed defaults: ci.failed on main -> bug+fix task; pre-push failing twice in 24h -> ci gate task; merge then main check fails -> revert-or-fix task; same gate failing 3x in 2h -> escalate/split task; 3 bugs in the same globs in 7d -> whole-area review; 3 lease expiries in 24h -> block and notify; gate_flapping -> flaky quarantine; high/critical advisory -> bump task; weekly -> whole-codebase bug scan
+```
+
+## How do comparable tools run recurring and scheduled work, and what is ddflow missing?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** ddflow has counters, not a scheduler: cadence is a count/day 'due' evaluated only when an agent or hook calls ddflow (no daemon, cron, systemd or headless-agent launcher exists), and ddflow job tracks long-running processes an item waits on, not recurring work. Comparable tools: GitHub Actions schedule (5-minute floor, delays, default-branch only, auto-disabled after 60 days of inactivity in public repos), GitHub Agentic Workflows (read-only agent, separate safe-outputs job, staged preview, max-turns and daily credit caps), Claude Code /loop and CronCreate (session-scoped, 7-day expiry, no catch-up), Claude routines (cloud, 1-hour minimum, run limits, green status means no infrastructure error not task success), Renovate (prConcurrentLimit, grouping, dependency dashboard, minimumReleaseAge), Dependabot (open-pull-requests-limit 5, cooldown), pre-commit.ci autoupdate weekly. Missing in ddflow: job definitions beyond a name (scope, prompt, mode, budget, needs), dependency semantics with cycle check, conflict detection via scope globs and a concurrency group, run keys for idempotency and run history with outcome and cost, missed-run policy and jitter, a --due entry point plus crontab/systemd/CI/routine snippet emitters, report-only vs fix mode with staged preview, per-job and per-period budgets and quota awareness, caps on open job-created items, circuit breaker, human-escalation state, shipped default templates, flaky-test quarantine lane with age-based escalation
+- **Mechanism.** WebFetch/WebSearch of GitHub Actions events docs, gh-aw, Claude Code scheduled-tasks and routines docs, Renovate and Dependabot option references, pre-commit.ci, Sentry Seer docs, Airflow dag-run docs, a flaky-quarantine write-up; repo survey of cadence (services/cadence.py, api/operations.py), jobs (api/jobs.py, services/jobs.py), config.py CadenceConfig
+- **Falsifier.** a daemon-less scheduler cannot work, or an existing ddflow mechanism already covers job definitions with dependencies
+
+**Probe:**
+
+```console
+$ NOT verified: OpenHands/Devin/Copilot coding-agent scheduling, CodeQL/SonarQube scheduled scans, systemd timer semantics (man page 403), Dagster/Prefect/Temporal behaviour (from memory); no API for remaining subscription quota was found
+design: ddflow stays the due-state authority; the trigger is pluggable (due-on-session today, OS cron/systemd, CI schedule, Claude routine, /loop) via 'schedule due --run' and snippet emitters; missed policy skip|once (catch-up is usually wrong for 'audit now'); needs means the upstream job's latest run succeeded since this job's last run; run key = job + commit sha + scope hash
+```
+
+## Why does the pre-push CI keep failing on main although every task passed its gates?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** The per-task gates and the pre-push hook run different commands: the standards gate has no command (prompt+evidence only), .ddflow/config.toml wires no ruff/format/bandit command into any gate, unit_tests runs pytest only, and nothing re-tests the merge result or main after a merge; so lint, format, bandit, wheel-build, deps-allowlist and gitleaks first run at push time, in a batch. About 66 of 1777 commits on main (2026-09-24..10-04) were lint/format/CI-green fixes. This session's push failed on 39 ruff errors, 4 unformatted files and one bandit B302
+- **Mechanism.** repo reading by a research agent: .pre-commit-config.yaml and scripts/ci/pre-push (run in a scratch worktree of the pushed commit), services/gates.py:215-230 DEFAULT_GATES standards, services/enforce.py (lease and trailer checks only), merge path services/flow.py appends worktree.merged and runs no check; git log grep of lint/ruff/format/CI-green commits; parallel branches merged into a state no branch tested
+- **Falsifier.** a task that passed all its gates can still fail pre-push for a reason other than a different command set or an untested merge result
+
+**Probe:**
+
+```console
+$ fixed this session by B-ci-lint-clean: ruff check ., ruff format --check ., bandit -ll all pass on main 079b7ccd; the same three checks were never part of any gate
+mechanisms proposed: a ci gate running the exact pre-push command set in a scratch worktree of branch+main; a post-merge main check that records ci.failed and files a bug and fix task; a periodic main-health job; ci.result events from the hook
+```
+
+## What fails the pre-push CI and is it all mechanical?
+
+**Verdict: CONFIRMED** · item `B-ci-lint-clean`
+
+- **Claim.** The three failing checks (ruff lint, ruff format, bandit) are lint/format debt plus one checksum-verified marshal.loads, fixable without changing behaviour; the full suite is the proof
+- **Mechanism.** ruff --fix + hand edits for the rules feature, helpers to bring claim() and review() under C901, a nosec B302 with the reason on the verified snapshot read
+- **Falsifier.** any test changes result, or CI still fails
+
+**Probe:**
+
+```console
+$ ruff check ., ruff format --check ., bandit -ll all pass locally; related suites run
+ruff clean; format clean except tests/test_flow.py (another agent's lease); bandit exit 0
+```
+
+## Can the verify flags reach agents over MCP without a new tool or byte-budget breakage?
+
+**Verdict: CONFIRMED** · item `B-verify-reopen-mcp`
+
+- **Claim.** One ddflow_verify tool with nine optional properties and a single api.verify_tool router refuses mixed modes (sweep args with an id, one-task args without) exactly as the CLI does, with the byte budget kept by terse property text
+- **Mechanism.** api/verify.py verify_tool routes to verify_sweep / verify (reopen) / pack / judge; mcp.py entry maps arguments; temporary FLAG_EXEMPTIONS removed so the parity ratchet enforces every CLI flag
+- **Falsifier.** a CLI verify flag is unreachable over MCP, the budget test fails, or a mixed-mode call is silently accepted
+
+**Probe:**
+
+```console
+$ pytest test_mcp_parity, test_mcp_tool_budget, test_mcp_tool_tiers, test_layering, test_api_layer, test_verify_reopen, test_verify_pack, test_verify_sweep
+441 passed
+```
+
+## Do the verify docs describe what the commands do?
+
+**Verdict: CONFIRMED** · item `B-verify-docs`
+
+- **Claim.** A help topic, driver note and README row that name the seven claims and every flag stay true only if a test reads them against the code: flags in the topic must exist in ddflow verify --help, the listed claims must equal the claims the service produces, both driver copies must agree
+- **Mechanism.** tests/test_verify_docs.py reads help/verify.md, verify --help, services/verify.py, both drivers and the README; TOPICS entry; docscheck and readme-catchup ratchets
+- **Falsifier.** a bogus flag or a renamed claim in the docs passes the tests
+
+**Probe:**
+
+```console
+$ added '--bogus-flag' to help/verify.md and ran the flag test
+test failed with the bogus flag, passes after restore; 5 docs tests + help/readme/docscheck suites green
+```
+
+## Can a different-family reviewer judge whether a done task met its requirement from bounded evidence?
+
+**Verdict: CONFIRMED** · item `B-verify-agent-pack`
+
+- **Claim.** The mechanical check cannot tell whether a requirement was met in spirit; a reviewer given the requirement (fenced as DATA), the recorded and reconstructed landing, the diff stat, the gate history including skips and force, and the mechanical findings can: findings are requirement clauses not shown as met, so ddflow's existing review machinery (rounds, triage, recording, unavailable-not-pass) is reused through gate 'verify' and review --commit
+- **Mechanism.** services/verifypack.py pack(); api.verify.judge -> api.review(gate=verify, commit=<landing>, intent=<requirement>, context=<pack>); DEFAULT_GATES['verify'] optional, not in any pipeline
+- **Falsifier.** an instruction inside the requirement escapes its fence, the pack is unbounded, or an absent reviewer records a pass
+
+**Probe:**
+
+```console
+$ pytest tests/test_verify_pack.py (9): fence cannot be closed by the requirement text, pack < 12k chars for a 5000-line body, no reviewer -> unavailable gate record
+9 passed; fake cross-family reviewer receives requirement + pack and its finding records gate verify=failed
+```
+
+## Does a pre-commit check on [flow].environments branches refuse direct commits without refusing promotion merges?
+
+**Verdict: CONFIRMED** · item `B182`
+
+- **Claim.** check_commit refuses a non-merge commit whose HEAD branch is an environment, and passes merge commits (MERGE_HEAD/GITHEAD/squash) and ddflow-only commits
+- **Mechanism.** symbolic-ref HEAD vs cfg.flow.environments; _merged_in(tree) identifies merges
+- **Falsifier.** a real 'git merge --no-ff main' on production being refused, or a direct commit being allowed
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_enforce_env_branch.py (real git repo + real hook)
+6 passed; the 2 knob cases (off/warn) fail only because [enforce].environment_commits is not yet a config key (config.py held by B174)
+```
+
+## Can a false 'done' be undone and a missed one adopted, with the reason kept?
+
+**Verdict: CONFIRMED** · item `B-verify-reopen`
+
+- **Claim.** An item.reopened event (DONE -> OPEN, gates cleared, lease dropped, reason and failed claims appended to Item.reopened) plus the brief showing it at the top gives a durable false-positive remedy; the false-negative side needs no new state: verify on an open task names a landing found by backfill and points at complete --force --sha, whose override is already recorded
+- **Mechanism.** core/model.py _h_reopened + HANDLERS; ledger.build returns None after a reopen until completed again; api.verify(reopen/reason/force); brief block
+- **Falsifier.** a reopened item still verifies as completed, keeps old gates, or loses the reason
+
+**Probe:**
+
+```console
+$ pytest tests/test_verify_reopen.py (7)
+caught a real bug on the way: ledger.build treated the pre-reopen completion event as current, so verify T1 on a reopened task reported a completion; fixed and tested
+```
+
+## Can the 340-odd pre-ledger completions be verified?
+
+**Verdict: CONFIRMED** · item `B-verify-backfill`
+
+- **Claim.** Many pre-ledger completions can be located after the fact from git: the item's merged_sha in the log, else a commit on the default branch whose subject starts with the item id (merge <ID>: ...), matched exactly so T10 is not T1; the result is reconstructed evidence and must be flagged, never written into the log
+- **Mechanism.** services/backfill.find_commit + apply: fills a reconstructed ledger's sha and git facts and marks backfill{sha,how}; verify turns the ledger claim into a warning that names how the commit was found
+- **Falsifier.** backfill moves most completions off cannot-tell, or it writes to the log, or a body mention counts as a landing
+
+**Probe:**
+
+```console
+$ verify_sweep over this repo before/after backfill
+holds with notes 1 -> 15; cannot tell 346 -> 332; the remaining 332 are imported tasks closed in BACKLOG.md with no commit to find; tests: exact id, longer id, body mention, no-commit, never writes the log, stored ledger never replaced
+```
+
+## Skills context, ddflow's own pack, onboarding, docs: what actually works?
+
+**Verdict: CONFIRMED** · item `B-skills-ddflow-pack`
+
+- **Claim.** Skills are NOT a safe place for ddflow's invariants: Vercel's evals found a compressed 8KB docs index in AGENTS.md passed 100% of cases while a skill passed 53% (never invoked in 56% of runs; 79% with explicit 'use the skill' wording, which was brittle). So ddflow's always-needed rules (brief first, claim before edit, the four enforced rules) stay in always-on context, and skills carry CONDITIONAL procedures (onboarding, review triage, verification, import). Measured: managed AGENTS.md block ~2,485 chars (~620 tokens, already a pointer, can shrink ~300 tokens at most); mcp_instructions.md ~19,849 chars (~5,000 tokens, injected on every connect, the real cost, with conditional sections that could move); implement-phase driver ~18,290 chars (~4,600 tokens); four skill descriptions would cost ~400 tokens always-on to buy on-demand loading of the driver and onboarding
+- **Mechanism.** Vercel agents-md-outperforms-skills evals; agentskills.io progressive disclosure; Claude Code skills/plugins-reference/mcp docs; MCP SEP-2640 Skills Extension (skills over MCP Resources as skill://<path>/SKILL.md with skills/list and skills/get; hosts must namespace and must not let an MCP skill shadow a local one); Cursor rules (.mdc: always/intelligent/glob/manual); repo: services/adopt.py:244-297 _SECTION, services/prompts.py:70-100 MCP prompts, views/markdown.py:609 _brief_skills, services/rules.py:35 Rule, services/export/registry.py:52-100 DocKind, tests/test_readme_catchup.py:118-130, tests/test_help.py, tests/test_prompts_cli_parity.py, adopt.py:861 MANAGED_MARK
+- **Falsifier.** ddflow's own workflow skills are invoked reliably enough to carry its invariants
+
+**Probe:**
+
+```console
+$ research agent: WebFetch/WebSearch plus repo measurement (chars/4). NOT verified: the official page for Claude's listing budget (snippets say ~1% of context, 8,000-char fallback, rarely-used descriptions dropped first), per-agent skill dirs outside Claude, Cline/Kilo/Windsurf semantics, whether any real client implements SEP-2640, and ddflow-specific adherence numbers (needs an A/B eval)
+recommendation: keep rules and skills as SEPARATE record types (skills are files the agents own; ddflow must not copy their content into the log) and unify only the 'what applies' view: one bounded block ranking rules, decisions and skills together by glob and BM25, shared by brief, claim and the gate/reviewer prompts (_brief_skills is the seed); the rule manifest may export a rule as a skill or .mdc one-way. Sequence: ddflow-pack + validator + drift check first, then context, then onboard/export/acceptance, plugin last. Plugin name must not start with claude-; a CLAUDE.md at plugin root is not loaded
+```
+
+## Skills sync, install and distribution: symlinks, manifests, lock formats, translation fidelity, clobber-safety
+
+**Verdict: CONFIRMED** · item `B-skills-sync`
+
+- **Claim.** Claude Code is the only major agent that needs a derived target: Cursor, Gemini, Copilot and Codex already read .agents/skills natively, and Cursor/Copilot also read .claude/skills (so a naive sync double-lists). Symlinks are unreliable (Codex #11314 symlinked .agents/skills dir not discovered; Cursor forum reports; Antigravity does not follow), so the default sync mode should be COPY with drift detection and symlink opt-in. For install and lock, be compatible instead of inventing: vercel skills-lock.json {version, skills{name:{source, sourceType, skillPath, computedHash}}} is the de facto format (but its hash omits dotfiles/metadata and differs across Windows line endings: skills#806, #781), gh skill writes repository/ref/tree-SHA into SKILL.md frontmatter and installs project scope into .agents/skills, npx skills add handles ~75 agents with archive limits 10 MiB/25 MiB/1000 files. Claude plugin.json needs only name; marketplace.json sources: relative, github{repo,ref,sha}, url, git-subdir, npm, archive{url,sha256}, command; team distribution = extraKnownMarketplaces + enabledPlugins in .claude/settings.json, and external-source plugins still need per-contributor install
+- **Mechanism.** agent docs (Claude plugins/plugins-reference/marketplace-reference/cli-reference/org, Cursor skills+rules, Gemini skills, Copilot about-agent-skills, Cline rules, gh skill manual); repo read: infra/worktree.py git()/git_paths(), infra/forge.py _run() three-state, services/companions.py is_installed() True/False/None, services/export/write.py write_whole/write_region/safe_target (file-only: refuses symlinks, cannot do directory trees), services/skills.py:96 scans only .claude/skills
+- **Falsifier.** a symlinked canonical store works on every agent, or an installer lock format is documented and stable
+
+**Probe:**
+
+```console
+$ research agent WebFetch/WebSearch of the cited docs, issues and repos. NOT verified: skills.sh registry API, exact gh skill frontmatter keys, Codex $skill-installer, whether Cursor/Gemini symlink bugs are fixed in current releases, Cline skill support, Windows/git symlink behaviour (from general knowledge only)
+translation: Cursor .mdc maps description->Apply Intelligently, paths->globs, disable-model-invocation->manual; Cline only has paths; AGENTS.md has no per-section triggers so a skill becomes an always-on pointer region; lost everywhere: progressive disclosure, allowed-tools, hooks, context:fork, model, argument-hint, scripts semantics; cleanest generated form is a stub rule with the description plus 'read .agents/skills/<n>/SKILL.md' and a do-not-edit banner with source-sha. Marker design: per-skill-dir .ddflow-managed sidecar {source, sha256, mode}; states ok/stale/edited/foreign; a dir without the sidecar is foreign and never overwritten; adopt-in-place writes the sidecar only if content matches canonical
+```
+
+## Skills doctor and security: what is the attack surface, what can be checked offline, what can be measured?
+
+**Verdict: CONFIRMED** · item `B-skills-doctor`
+
+- **Claim.** A static offline audit catches a minority of malicious skills (Cisco's own docs: rules alone ~7.7% at HIGH with 4% false positives; Pretext paper: up to 97% evasion by moving payloads into prose and splitting across files), so ddflow's strongest signals are structural, not semantic: digest drift of the WHOLE directory tree plus file modes against a recorded pin, symlinks escaping the skill dir, hidden unicode (Tag chars U+E0000-E007F, zero-width, bidi), frontmatter hooks, pipe-to-shell, credential paths combined with a network sink, ! dynamic-injection lines, bare Bash in allowed-tools; the report must say 'static checks only: no findings is not safe'. 'Unused' may only be claimed from recorded usage data with a window; Claude hooks give transcript_path and UserPromptExpansion, no documented skill telemetry for Codex/Gemini/Cursor/Copilot
+- **Mechanism.** Claude Code skills docs: allowed-tools pre-approves for the turn (grants, does not restrict); disallowed-tools removes; disableSkillShellExecution; frontmatter hooks persist for the session; synced claude.ai skills never run injected commands. Snyk ToxicSkills (13.4% of 3,984 skills critical, 76 confirmed malicious, 91% also prompt-injecting); CSA research note on SKILL.md context poisoning; Cisco skill-scanner; arXiv Pretext. Repo: reporting.py:607-790 problems/notes shape, core/provenance.py fence() clean() escape() DATA_RULE, core/textsim.py tokens/vector/cosine, services/skills.py _frontmatter and truncation traps
+- **Falsifier.** a regex/structure audit alone is sufficient, or usage can be inferred without telemetry
+
+**Probe:**
+
+```console
+$ research agent: WebFetch of Claude skills docs, CSA note, Snyk, Cisco scanner repo, Pretext paper; repo read. NOT verified: Trail of Bits, Invariant, Anthropic security notes, Claude Enterprise scanning, Codex 2%/8,000-char budget, a Skill tool matcher for PreToolUse/PostToolUse hooks
+budgets: Claude 1% of context, 1,536 chars/entry (name kept when descriptions are dropped); Codex ~2% or 8,000 chars (unverified); Gemini consent prompt on activate_skill; Copilot caps description at 1,024. Severity table drafted: errors (invalid name/desc, dir mismatch, >1024, broken link, symlink escape, hidden unicode, pipe-to-shell, credential+network, frontmatter hooks, digest drift, same-name conflict changing the winner); warnings (no 'when', >1,536, >500 lines, over budget, bare Bash, ! injection, network in scripts, executable/binary files, near-duplicates, typosquat-like names, injection prose); info (skill-vs-rule overlap, no usage data)
+```
+
+## Skill model, events and authoring: what do the spec, the agents and the ddflow codebase require?
+
+**Verdict: CONFIRMED** · item `B-skills-model`
+
+- **Claim.** A skill record needs a real YAML parser with a colon-quote fallback (services/skills.py _frontmatter is line-based and loses block scalars and nested metadata); the event vocabulary is HANDLERS in core/model.py, so skill.recorded/removed/synced must be registered in the same change as the first writer or a strict fold on an older ddflow refuses the log; add-time dedupe needs a 'skill' branch in api/_dedupe.py kind_of/record_state/extendable and DEDUPE_KINDS in config.py; one MCP tool with an action argument follows ddflow_export; skills-ref REJECTS any frontmatter field outside {name, description, license, allowed-tools, metadata, compatibility} while Claude Code, Codex and Cursor tolerate extras, so lint must say 'tolerated by agents, rejected by skills-ref'
+- **Mechanism.** spec at agentskills.io/specification and client guide agentskills.io/client-implementation/adding-skills-support; Claude Code docs; Codex and Cursor skill docs; repo reading: services/skills.py:44,97,119; core/model.py HANDLERS ~2081, _h_lesson ~1655, fold ~2175; api/_dedupe.py; config.py:663; surfaces/mcp.py ddflow_export ~1734; tests/test_mcp_tool_budget.py
+- **Falsifier.** an agent rejects a spec-valid skill, or the skills directory matrix does not match the docs
+
+**Probe:**
+
+```console
+$ WebFetch of the cited docs plus repo read by a research agent; Copilot and Gemini frontmatter handling, and symlink support for Gemini/Cursor/Copilot, could NOT be verified
+matrix: Claude reads .claude/skills (+nested, plugin) and NOT .agents/skills; Codex .agents/skills up the tree; Cursor .agents + .cursor + .claude + .codex; Copilot .github + .claude + .agents; Gemini .gemini or .agents (.agents wins). Cursor and Copilot also read .claude/skills, so a naive sync creates duplicates there. Cost: ~100 tokens/skill catalog; Claude caps each entry at 1,536 chars and the list at ~1% of context; Codex 2% or 8,000 chars; others publish no budget. Eval guidance: ~20 queries, half should-not-trigger, 3 runs each, 0.5 threshold, 60/40 train/validation
+```
+
+## How can ddflow record, cooperate with, manage and distribute agent skills?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** SKILL.md (the Agent Skills open spec, agentskills.io) is now the cross-agent format: Claude Code, Copilot, Codex, Cursor, Gemini CLI, Windsurf and 20+ more read it from their own directories (.claude/skills, .github/skills, .agents/skills, .cursor/skills, .gemini/skills, .windsurf/skills; user-level [REDACTED:path]<agent>/skills). No tool manages skills ACROSS agents with dedupe, provenance, budget awareness and recorded history; that is ddflow's gap, not a new format
+- **Mechanism.** Facts verified from agentskills.io/specification and code.claude.com/docs/en/skills + plugins: frontmatter name (<=64, lowercase-hyphen, = dir name) and description (<=1024, what+when) required, optional license/compatibility/metadata/allowed-tools; Claude Code adds disable-model-invocation, user-invocable, paths, context:fork, agent, model, arguments, hooks; progressive disclosure (metadata ~100 tokens at startup, body on activation, resources on demand); Claude listing budget ~1% of context with 1,536 chars per skill; precedence enterprise>personal>project, nested dirs, plugin skills namespaced plugin:skill; distribution = commit to repo, plugins + marketplaces (.claude-plugin/plugin.json, marketplace.json), npx skills registry, gh skill publish; validation = skills-ref validate; allowed-tools waives prompts but does not restrict; scripts are executable code
+- **Falsifier.** an agent that reads SKILL.md needs a ddflow-private skill format, or an existing tool already dedupes, records and syncs skills across agents
+
+**Probe:**
+
+```console
+$ WebFetch agentskills.io/specification, code.claude.com/docs/en/skills, code.claude.com/docs/en/plugins, agent-skills-101 survey; repo survey: services/skills.py (read-only inventory + BM25, merged), services/rules.py, import/adopt
+format is one spec across agents with per-agent directories; ddflow today only DISCOVERS skills for the brief (names + paths); nothing records, validates, dedupes, syncs, installs or audits them
+```
+
+## Can an agent answer and resolve review threads?
+
+**Verdict: CONFIRMED** · item `B176`
+
+- **Claim.** feedback is text only: no thread ids, no reply, no resolve
+- **Mechanism.** Forge has no thread verbs; pr has no threads command
+- **Falsifier.** pr threads lists ids and reply/resolve reach the forge
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_threads.py on unfixed code
+no pr threads command / no A.pr_threads: all fail
+```
+
+## Why does verify call B7 and B-rules-storage false?
+
+**Verdict: CONFIRMED** · item `fix-B4437036cd5`
+
+- **Claim.** declared_files uses git ls-files only: an untracked file that exists on disk and a declared directory are reported never created
+- **Mechanism.** tracked is the only existence test
+- **Falsifier.** the real sweep still accuses B7 (.mcp.json exists untracked) after the fix
+
+**Probe:**
+
+```console
+$ ls .mcp.json .ddflow/rules in the primary checkout; test_an_untracked_file_and_a_declared_directory... fails before the fix with 'declared but never created: .mcp.json, local-dir/'
+both exist; test failed before fix, passes after
+```
+
+## Does version cut bump version files?
+
+**Verdict: CONFIRMED** · item `B174`
+
+- **Claim.** it tags and writes notes only; the tagged commit still carries the old version
+- **Mechanism.** no code reads a version file list
+- **Falsifier.** git show vX:pyproject.toml shows the new version after a cut
+
+**Probe:**
+
+```console
+$ pytest tests/test_version_files.py on unfixed code
+9 failed, 1 passed (the no-knob control)
+```
+
+## Does a rebase-merge record the whole range?
+
+**Verdict: CONFIRMED** · item `B178`
+
+- **Claim.** merge_sha^1 is the second-to-last rebased commit, so landed_before is wrong for a rebase
+- **Mechanism.** _settle_merged took merge_sha^1 unconditionally
+- **Falsifier.** landed_before..landed_after covers all N commits of a rebase-merged request
+
+**Probe:**
+
+```console
+$ pytest tests/test_rebase_landing.py on unfixed code
+3 failed: only c.py in the range
+```
+
+## Does a sweep over this project's own completions find real false positives?
+
+**Verdict: CONFIRMED** · item `B-verify-sweep`
+
+- **Claim.** Running the check over all done tasks separates honest, imported and false completions; the false ones are few and nameable
+- **Mechanism.** check() per done task with git ls-files read once; imported completions are cannot-tell; failing claims weigh 100
+- **Falsifier.** the sweep marks most completions as failing, or cannot name a specific false one
+
+**Probe:**
+
+```console
+$ verify_sweep over this repo (331 completions, 59s)
+21 do not hold (landed under rewritten hashes, never-created declared file, gates never run), 310 cannot tell, none hold: after softening gate rules and rewritten-hash twins
+```
+
+## Does ddflow report merge-queue state?
+
+**Verdict: CONFIRMED** · item `B172`
+
+- **Claim.** a queued request is indistinguishable from any waiting one: no position, no ejection
+- **Mechanism.** PRInfo carries no queue field; gh pr view has no queue JSON
+- **Falsifier.** pr sync reports queued / queue_ejected for a fake merge-queue forge
+
+**Probe:**
+
+```console
+$ pytest tests/test_merge_queue.py on unfixed code
+3 failed (no queued/queue_ejected change, no queue columns), landing test passes
+```
+
+## Can a done mark be re-derived from the log and git?
+
+**Verdict: CONFIRMED** · item `B-verify-check`
+
+- **Claim.** A completion whose declared file never existed, whose commit is not on main, or whose gate was skipped without a reason is detectable mechanically from the ledger plus git
+- **Mechanism.** compare ledger facts with git ls-files, merge-base --is-ancestor and the folded gate records
+- **Falsifier.** a completion false in one of those ways is reported as holding
+
+**Probe:**
+
+```console
+$ pytest tests/test_verify_check.py
+11 passed; each false completion yields a fail claim, an honest one holds
+```
+
+## Is a hotfix back-merge tracked?
+
+**Verdict: CONFIRMED** · item `B171`
+
+- **Claim.** after the item completes nothing re-checks the production->develop request
+- **Mechanism.** _back_merge reports a Change and records nothing
+- **Falsifier.** pr status lists the back-merge and a later sync reports its outcome
+
+**Probe:**
+
+```console
+$ pytest tests/test_back_merge_tracked.py on unfixed code
+3 failed: KeyError back_merges / nothing is in review
+```
+
+## Can what was required and what landed be rebuilt for a finished task?
+
+**Verdict: CONFIRMED** · item `B-verify-ledger`
+
+- **Claim.** Requirement, gates (with skips), changelog and amendments are all in the event log; only git facts (files/tests changed) are missing, so one optional ledger key on item.completed completes it with no new event kind
+- **Mechanism.** fold the log prefix up to item.completed; later task.updated events are amendments
+- **Falsifier.** a done task's ledger cannot show its files, or an edit after completion overwrites the original requirement
+
+**Probe:**
+
+```console
+$ pytest tests/test_verify_ledger.py
+7 passed; requirement body_chars unchanged after an amendment
+```
+
+## Can status say what is live?
+
+**Verdict: CONFIRMED** · item `B183`
+
+- **Claim.** promote status knows only the last promotion completion, not a deploy
+- **Mechanism.** no event records a deployed sha
+- **Falsifier.** status rows already carry a deployed sha
+
+**Probe:**
+
+```console
+$ pytest tests/test_environments.py -k deploy on unfixed code
+2 failed (no 'promote deployed' subcommand)
+```
+
+## Can a follow-up fix reuse the lines of the original?
+
+**Verdict: CONFIRMED** · item `B180`
+
+- **Claim.** without --port-of a follow-up needs the user to restate --lines; the API has no way to derive them
+- **Mechanism.** task_add only reads line/lines
+- **Falsifier.** task add FIX2 --port-of FIX succeeds before the change
+
+**Probe:**
+
+```console
+$ pytest tests/test_lines.py -k port_of on unfixed code
+2 failed (flag unrecognised)
+```
+
+## Can a cold CLI read skip most of the parse safely?
+
+**Verdict: CONFIRMED** · item `B166`
+
+- **Claim.** A snapshot of parsed events (marshal tuples) plus the merged order, in .ddflow/local, trusted per shard only when sha256 of the consumed prefix matches and the payload checksum/format/version/fields verify, makes a cold 100k read ~2x cheaper without changing output
+- **Mechanism.** Cold cost is json.loads+Event construction per line (505 of ~700 ms at 100k); marshal.loads of tuples + Event(*t) is ~215 ms; prefix hashing binds the snapshot to the bytes
+- **Falsifier.** any damaged/stale/altered snapshot changes read_all output vs the independent reference, or cold read with snapshot is not faster
+
+**Probe:**
+
+```console
+$ tests/test_log_snapshot.py (21 tests incl. parametrized damage, mutation of digest/checksum/version/verify checks each caught) + tests/bench_log_read.py
+100k cold: no snapshot ~650-710 ms, snapshot ~280-400 ms (1.8-2.3x, machine noisy); 20k: 118-129 -> 54-59 ms; output identical to reference in all tests
+```
+
+## Can a server-side ref create give cross-machine claim exclusion with no server?
+
+**Verdict: CONFIRMED** · item `B192`
+
+- **Claim.** Pushing a unique empty-tree commit to refs/ddflow/claims/<id> is rejected for a second claimant, and a lapsed claim is replaceable by --force-with-lease
+- **Mechanism.** unrelated commits are non-fast-forward; expiry rides in the commit message
+- **Falsifier.** two clones both claim successfully against one bare remote
+
+**Probe:**
+
+```console
+$ pytest tests/test_remote_claims.py against a local bare remote
+second clone refused naming agent-a (6 tests)
+```
+
+## Can planning tell an item takes no tree?
+
+**Verdict: CONFIRMED** · item `B52`
+
+- **Claim.** No: --no-worktree is a claim flag, so a full worktree cap withholds an item that would take no tree
+- **Mechanism.** plan() computes one slots number
+- **Falsifier.** with worktree.max_parallel=1 held, a no-tree item is still offered
+
+**Probe:**
+
+```console
+$ pytest tests/test_notree_tag.py before the change
+ready: [] while REVIEW would take no tree
+```
+
+## Is warm read_all linear in the log because of sort/dedupe?
+
+**Verdict: CONFIRMED** · item `B169`
+
+- **Claim.** Maintaining the sorted order incrementally cuts warm read cost; remaining cost is the O(prefix) read+sha256 verify
+- **Mechanism.** sort_key called per event per read; dedupe hashes every id
+- **Falsifier.** sort_key calls per warm read stay ~n after one append
+
+**Probe:**
+
+```console
+$ tests/test_log_merged_order.py::test_a_warm_read_after_one_append_does_not_re_key_the_log against old code
+old code: 3001 sort_key calls for one appended event over 3000; new: <50. bench 100k warm 75.9 -> 19.5 ms
+```
+
+## Does ddflow review ever log gate.started?
+
+**Verdict: CONFIRMED** · item `B-af-review-started`
+
+- **Claim.** No: only command gates do, so reviewer_latency_ratio has no pairs on a real log
+- **Mechanism.** api/review.review records an outcome via G.record but never appends gate.started
+- **Falsifier.** a review run on a fake reviewer leaves gate.started in the log
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_gate_started.py before the fix
+AssertionError: 'gate.started' not in ['gate.failed']
+```
+
+## Why does main fail 9 tests and does workflow state work at all?
+
+**Verdict: CONFIRMED** · item `fix-B761288d48f`
+
+- **Claim.** workflow_state was written with hasattr guesses against State and crashes on a real project; the rule tools shipped without their CLI
+- **Mechanism.** st.phases is a method; commands/rules.py never existed
+- **Falsifier.** ddflow workflow state runs on this repo and rule parity tests pass without a CLI
+
+**Probe:**
+
+```console
+$ ddflow --json workflow state (TypeError: 'method' object is not iterable); ddflow rule list (invalid choice)
+both failed before the fix
+```
+
+## Can brief rank project skills against task text without copying content?
+
+**Verdict: CONFIRMED** · item `B-brief-skills`
+
+- **Claim.** In-memory BM25 over name+description+body head returns the matching skill and nothing for unrelated text
+- **Mechanism.** tokenise, BM25 k1=1.5 b=.75, drop zero scores
+- **Falsifier.** an unrelated task returns a skill, or body text appears in output
+
+**Probe:**
+
+```console
+$ pytest tests/test_brief_skills.py
+5 passed
+```
+
+## Can one tool carry all viewers inside the tools/list budget?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** A single ddflow_list tool (12 args) costs ~1.3KB and is offset by shortening the as_agent description repeated on every tool
+- **Falsifier.** tools/list stays over budget after both changes
+
+**Probe:**
+
+```console
+$ tools/list byte count via Server.handle
+before 93,491 main; with tool 91,345 after as_agent trim
+```
+
+## How should ddflow manage project-specific rules, merge agent rules, and preserve session context?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Project rules enable shared enforcement patterns; session memory preserves context across compaction; agent rule merging reduces onboarding friction.
+- **Mechanism.** Rules live in .ddflow/rules/ and DDFLOW.md; context-aware discovery ranks them by task/gate; sessions are summarized on compaction.
+
+**Probe:**
+
+```console
+$ Current gaps: no project rules storage, no agent rule merging, no session summaries, no conflict detection on onboarding.
+```
+
+## How does a bug become a queue item without a new event kind, and what does the shipped default break?
+
+**Verdict: CONFIRMED** · item `B-bugs-as-items`
+
+- **Claim.** bug.found gains an optional fix_task field and task.added an optional fixes list; a fix task fix-<bug> filed in the same transaction (tagged bugfix, item's phase/globs/priority/line) is offered first by bugs_first and holds its globs against features; complete blocks via services.completion on open bugs whose fix_task is the item and --regression-test closes them through bug_fixed; older ddflow folds both events unchanged
+- **Mechanism.** Bug.fix_task merged in _h_bug_found (never blanked), Item.fixes in _apply_definition; bug_items() counts fix_task; verdict() adds one blocker; migration bug file-tasks appends partial bug.found events
+- **Falsifier.** default on breaks the suite widely, or tools/list exceeds 93500 bytes
+
+**Probe:**
+
+```console
+$ draft clone of main 9863ac6 with the change: pytest -n 48 -> 10 collateral failures, all count/seed-based (3 test files seeded bugs and counted tasks; show regex; parity leaf join with hyphen; README knob count; wire-shape row; layering: api.lifecycle must import api.knowledge not api); tools/list 94153 -> 93333 after shortening import_verify and gate_verify descriptions
+after fixes: 4751 passed, 1 skipped; ruff clean; tools/list 93333 <= 93500
+```
+
+## Does a pre-commit hook whose recorded ddflow is gone block every commit?
+
+**Verdict: CONFIRMED** · item `B-fix-dangling-hook`
+
+- **Claim.** The legacy hook execs an absolute path; with it gone git commit exits non-zero with not found
+- **Mechanism.** exec of a missing path in a sh hook returns 127 and git aborts the commit
+- **Falsifier.** a commit succeeds with the legacy hook and a dead path
+
+**Probe:**
+
+```console
+$ tests/test_dangling_hook.py::test_a_legacy_hook_with_a_dead_path_blocks_the_commit_today
+commit exits non-zero, stderr says not found; 11 of 19 new tests fail against main's code (fail-open, PATH fallback, doctor, hooks status, claude, mcp)
+```
+
+## Does a delta re-review by default keep findings triaged and fall back safely after a rebase?
+
+**Verdict: CONFIRMED** · item `B-review-delta-default`
+
+- **Claim.** A plain review of a gate with a recorded REVIEWED review can use the existing --delta machinery; a non-ancestor reviewed head must fall back to full
+- **Mechanism.** reviewed_head evidence (from B-review-budget-rounds) + git merge-base --is-ancestor; triage is keyed by finding digest so merging by digest keeps verdicts
+- **Falsifier.** a rebased branch producing a delta, or a merged record losing a triage
+
+**Probe:**
+
+```console
+$ tests/test_review_delta.py (rebase, amend, merge, triage cases)
+failed first (20 failed), then 25 passed
+```
+
+## Can a user regex hang ddflow search?
+
+**Verdict: CONFIRMED** · item `B-view-search`
+
+- **Claim.** Python re backtracks exponentially on nested repeats and cannot be interrupted, so a pre-check must refuse them
+- **Mechanism.** (a+)+$ on a-run plus b
+- **Falsifier.** the unguarded pattern returns fast
+
+**Probe:**
+
+```console
+$ python3 -c re.match((a+)+$, a*27+b)
+7.3s for 27 chars (doubles per char); guard refuses it
+```
+
+## Does a real project log carry the events the five signals read?
+
+**Verdict: REFUTED** · item `B-af-log-signals`
+
+- **Claim.** gate.started precedes every review gate outcome, so reviewer latency is derivable
+- **Falsifier.** review gate outcome events with no gate.started for rubber_duck/critic
+
+**Probe:**
+
+```console
+$ count gate.started by gate and review outcomes in this project's log
+gate.started: 128 all unit_tests; review outcomes ~600; flowsignals on the real log: latency None, gate_failure_rate 0.29, merge 0.0, loops 6, independent_ready 24
+```
+
+## Does plan() offer two overlapping items when slots allow?
+
+**Verdict: CONFIRMED** · item `B-af-offer`
+
+- **Claim.** ready[:slots] is cut by priority only, so A(p1,a.py) and B(p2,a.py) are both offered with slots 2 and C(c.py) is skipped
+- **Mechanism.** plan() trims p.ready to the free slots without comparing offered items' globs
+- **Falsifier.** plan() offering A,C
+
+**Probe:**
+
+```console
+$ pytest tests/test_schedule_offer.py on unfixed schedule.py
+test_an_overlapping_item_yields_its_slot_to_an_independent_one FAILED; test_spare_slots_do_not_offer_overlapping... FAILED (offered [A,B,C])
+```
+
+## Does an AIMD controller with 3-of-4 evidence, cooldown and quiet period avoid one-sample reactions and oscillation?
+
+**Verdict: CONFIRMED** · item `B-af-core`
+
+- **Claim.** A single bad sample never changes the limit and a 30-minute square wave lowers it at most once per period
+- **Mechanism.** decrease needs need_bad of window samples; cooldown spaces decreases; quiet period forbids increases after one
+- **Falsifier.** a one-spike series changes the limit, or a periodic wave yields two decreases in one period
+
+**Probe:**
+
+```console
+$ pytest tests/test_flowcontrol.py
+31 passed; against an empty module stub every test fails at import (ImportError: cannot import name Decision)
+```
+
+## Does a gate stay unbounded in review rounds on a fresh project?
+
+**Verdict: CONFIRMED** · item `B-review-budget-rounds`
+
+- **Claim.** Without a [review] knob nothing counts or refuses full rounds; with the dataclass default 2 the third full round is refused
+- **Mechanism.** api.review runs a reviewer per call and records the gate, never counting prior rounds
+- **Falsifier.** tests/test_review_budget.py passes against the unfixed code
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_budget.py with ddflow/ and README stashed
+17 failed, 1 passed (the one pass is the unknown-knob test); with the change 18 passed
+```
+
+## What happens to a ddflow-managed project when ddflow is upgraded (data, config, instructions, features, safety), and what is missing for a safe general upgrade path?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Upgrade is safe for the derived index and for reading old logs (fold is non-strict, index SCHEMA is part of staleness) but there is NO project version stamp, NO skew guard, NO changelog/what-changed view, NO versioned data repairs, and instruction refresh is manual, whole-file and unbacked; so most upgrade effects are silent.
+- **Mechanism.** State is a pure fold over an append-only log (core/model.fold, strict=False on reads); Store.SCHEMA bump triggers rebuild; Event.schema is written (1) but never checked on read; config loader skips unknown sections with a warning; adopt --refresh-docs copies templates over driver docs; nothing records which ddflow version last wrote the project.
+- **Falsifier.** An old release failing to read a log written by new code, or new code mis-folding an old log, or a stamp/migration mechanism already present.
+
+**Probe:**
+
+```console
+$ Throwaway project in scratchpad/upgrade/proj built with ddflow-mcp 0.1.3 from PyPI (init, adopt claude,codex,gemini, phase + 3 tasks, claims, gates, forced complete, merge, decision, bug, lesson, session prompt/note). Then ran 0.1.10 (PyPI) and main (installed from a worktree) on it: status/doctor/brief/rebuild/config/adopt/adopt --refresh-docs/hooks status; main wrote export.enabled and 0.1.3/0.1.10 read it back; crafted torn line + schema:2 unknown kind + bad-id shard; dangling hook binary; config knob diff and known_kinds diff across the three versions.
+DATA: 0.1.10 and main read the 0.1.3 log with no error; doctor 'index: stale (auto-rebuilds)' (meta schema 8->9). No ddflow version in index meta, events, session.started or config. Event.schema=1 everywhere, never validated on read. Kinds 54 (0.1.3) -> 59 (0.1.10) -> 63 (main), none removed. NEW->OLD: 0.1.3 reads a log with export.enabled silently (status fine, doctor silent on skipped kinds); 0.1.10 doctor notes 'events from a newer ddflow ... skipped: export.enabled x1 (merge main, or run the newer ddflow)' (wrong advice for an installed user: should say upgrade ddflow-mcp). 0.1.3 happily WROTE task T9 into the newer log (no refusal). Config: main wrote [export]; 0.1.3 warns on every command and doctor rc=1 PROBLEM unknown config key; 0.1.3 'config --set' REFUSES ('would break the config: unknown section [export]') so an old agent cannot change config. Indexes rebuild back and forth between versions (harmless). Doctor silent on a FORCED completion (T1 forced over 2 unmet gates: 'Healthy'). Torn line / bad id: doctor PROBLEM forever, no repair verb; recover covers leases only. docs/RECOVERY.md s4: 'There is no migration path and none is needed'. CONFIG: 0.1.3->main: 0 changed defaults of existing knobs but +20 new knobs (14 by 0.1.10: dedupe.*, enforce.readme_*, lease.shared_globs, loops.max_repeated_failures, agent.routers; +6 on main: export.*, mcp.tools). Silent default-on behaviour for old projects: dedupe.on_match was 'warn' in 0.1.9, 'ask' in 0.1.10 (flipped between releases, applies where config.toml has no entry); enforce.readme_with_code=warn; stale_rules=block. `ddflow config` shows [file]/[default] source but no since/changed view; starter config.toml written once by init (stale comments stay). INSTRUCTIONS: doctor does note 'driver docs differ from templates ... adopt --refresh-docs' (byte compare) and 'CLAUDE.md section is from an older version'. adopt --refresh-docs OVERWROTE docs/ddflow/drivers/implement-phase.md (shutil.copy2): my appended local line destroyed, no backup, no dry-run, no consent; edit inside the CLAUDE.md managed block destroyed (documented), outside preserved. Driver docs and rules blocks carry NO version/hash header (export docs do: 'ddflow:generated doc= v= body-sha256='; ejected export templates carry a ddflow-shipped digest). Plain adopt re-run also rewrote .mcp.json/.gemini launch entries (path of this install, by design for non-index installs) and added the UserPromptSubmit hook 0.1.3 never installed: new hooks reach old projects only if someone re-runs adopt; hooks status/doctor do not flag missing SessionStart hook. .git/hooks/pre-commit hardcodes the absolute path of the ddflow binary that installed it: with the binary gone EVERY git commit fails 'exec: not found' and neither doctor nor hooks status notices. MCP server loads Config per call but code once; version only in initialize serverInfo; no stale-server detection. Brief staleness note concerns rulebook drift vs main (enforce.stale_rules), not ddflow version. No shipped changelog, but ddflow has the changelog export kind and complete --changelog fields: a ready producer. Past repairs were one-off verbs (session adopt-orphans) or hand data fixes (B-fix-migration-b12-b14); fold fixes repair derived state retroactively for free, wrong data inside events needs corrective events.
+```
+
+**Sources:** ddflow/core/events.py, ddflow/infra/store.py, ddflow/core/model.py, ddflow/services/adopt.py, ddflow/services/enforce.py, docs/RECOVERY.md, README.md
+
+## Can session list/show be built from the raw log without the fold, listing an adopted orphan once?
+
+**Verdict: CONFIRMED** · item `B-view-sessions`
+
+- **Claim.** Grouping session.* events by subject and skipping any event whose id is another event's adopted_from gives one entry per prompt, independent of the fold
+- **Mechanism.** adopt-orphans writes a copy with adopted_from=<orphan id> under the session; the id-less original has empty subject
+- **Falsifier.** show on a fixture with an orphan and its adopted copy prints the text twice
+
+**Probe:**
+
+```console
+$ pytest tests/test_view_sessions.py::test_show_lists_prompts_and_notes_in_order_redacted_orphan_once
+9 passed (before the fix: 9 failed, no list/show subcommand)
+```
+
+## Are finding bodies lost when ddflow_review outlives its caller?
+
+**Verdict: CONFIRMED** · item `B206`
+
+- **Claim.** evidence kept only a 2000-char detail at the END of the run, and the MCP server sent no progress
+- **Mechanism.** recording happens after all chunks; no notifications/progress
+- **Falsifier.** a reviewer finding body present on disk before the run ends, and progress frames sent
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_findings_persisted.py on main without the fix
+2 failed, 1 passed (no output_file, no progress frames); with fix 3 passed
+```
+
+## Why did test_subtasks.py::test_splitting_finished_work_is_refused see no such item P1.T1 once under -n 48 (bug B6e7ea2eb23)?
+
+**Verdict: REFUTED** · item `B6e7ea2eb23`
+
+- **Claim.** Not reproducible; no race found in the log append/read/fold path
+
+**Probe:**
+
+```console
+$ 360 runs of the test and 1140 runs of all of tests/test_subtasks.py (-n 48 and -n 96, pytest-repeat) with 16-116 busy-loop CPU burners on a loaded 192-core host: 0 failures. Separate hammer: 64 processes x 40 appends over 8 shared shards, each followed by a fresh-process read_all: 0 of 2560 acknowledged events missing. Read: the CLI is a fresh process per call so the in-process parse cache never spans calls; ensure() folds read_all (the index only decides rebuild); append is flock+O_APPEND+fsync with lamport re-read inside the lock; Lamport sort is total. Ruled out: stale read cache (content-hash verified, per-process), mtime granularity (fingerprints use sizes), index staleness, shard creation, lamport ordering, pytest tmp cleanup (3h lock rule). Residual: the pre-hygiene _proj ignored init/phase/task add exit codes, so the original failure was most likely one of those setup commands failing under load, which the asserts added in 0fb2122 would now name.
+```
+
+## Does history already narrow by agent / tail?
+
+**Verdict: CONFIRMED** · item `B-view-log`
+
+- **Claim.** history has no --agent or --tail; JSON payloads unbounded
+- **Falsifier.** ddflow history --agent x accepted
+
+**Probe:**
+
+```console
+$ ddflow history --agent alpha
+tests/test_view_log.py failed 5/6 before the change (unrecognized --agent/--tail, no agent column, 5000-char payload emitted whole)
+```
+
+## Does export sessions list an adopted orphan twice?
+
+**Verdict: CONFIRMED** · item `B-fix-adopted-orphan-dup`
+
+- **Claim.** fold puts both the id-less original and adopted_from copy in sessions
+
+**Probe:**
+
+```console
+$ pytest tests/test_adopted_orphan_dedupe.py on main
+fold gives ['lost prompt','lost prompt']
+```
+
+## Does the init template mislead about where detect --write puts reviewers?
+
+**Verdict: CONFIRMED** · item `B-init-template-local`
+
+- **Claim.** template says detect --write fills this file
+- **Falsifier.** test asserting absence passes on old code
+
+**Probe:**
+
+```console
+$ pytest tests/test_init_template_local.py on unfixed adopt.py
+2 failed, 1 passed
+```
+
+## Can the list engine reuse the fold without new events, with owner/updated per kind?
+
+**Verdict: CONFIRMED** · item `B-view-list-core`
+
+- **Claim.** State has items/bugs/research/sessions with enough fields (lease.holder, created/completed/found/fixed/at, session agent) to derive owner and updated; bugs and research carry no agent or bug-tag, so those filters must be refused
+- **Falsifier.** a kind lacking any timestamp or id
+
+**Probe:**
+
+```console
+$ grep model.py for Item, Bug, ResearchNote, Session fields
+all five kinds have id, a state source and a timestamp; Bug/ResearchNote have no agent field
+```
+
+## Which supported agents expose a user-prompt hook ddflow can wire?
+
+**Verdict: CONFIRMED** · item `B-prompt-autocapture`
+
+- **Claim.** Claude Code (UserPromptSubmit) and Gemini CLI (BeforeAgent) take shell hooks in project settings.json with the prompt and session_id on stdin; Cursor (beforeSubmitPrompt, .cursor/hooks.json, conversation_id) does too but with a different file shape; Kilo/opencode use JS plugins, Codex unverified
+
+**Probe:**
+
+```console
+$ fetched geminicli.com hooks reference and cursor.com/docs/hooks
+Gemini BeforeAgent: prompt+session_id on stdin, stdout must be JSON. Cursor beforeSubmitPrompt: prompt+conversation_id, stdout JSON {continue:true}
+```
+
+## Does complete <phase> consult cadences?
+
+**Verdict: CONFIRMED** · item `B-cadence-phase-close`
+
+- **Claim.** complete never checks due cadences
+- **Mechanism.** lifecycle.complete -> completion.verdict has no cadence input
+- **Falsifier.** a phase with architecture_review due completes refused
+
+**Probe:**
+
+```console
+$ pytest tests/test_cadence_phase_close.py (before fix)
+assert (0 == 3): complete returned OK with architecture_review due; 1 failed
+```
+
+## Does 'review triage' without --gate apply to critic regardless of where the finding lives?
+
+**Verdict: CONFIRMED** · item `Bca71987363`
+
+- **Claim.** omitted --gate silently defaults to critic
+- **Mechanism.** api.triage gate='critic' default, cli.py rw --gate default='critic', mcp gate or 'critic'
+
+**Probe:**
+
+```console
+$ read ddflow/api/review.py triage signature + surfaces; new tests: two gates with findings, omitted --gate records a review.triaged on critic
+cli.py: rw.add_argument('--gate', default='critic'); api.triage(gate='critic'); mcp a.get('gate') or 'critic'
+```
+
+## Does block on an abandoned item revive it silently on main?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** block only guards DONE
+
+**Probe:**
+
+```console
+$ pytest tests/test_block_abandoned.py on main
+2 failed: block exits 0 and state becomes blocked
+```
+
+## Does MCP prompts/get hide why a [[macro]] config failed to load?
+
+**Verdict: CONFIRMED** · item `B-fix-prompts-macro-error`
+
+- **Claim.** prompts/get says only unknown prompt; CLI prompts show names the cause
+
+**Probe:**
+
+```console
+$ Server(repo).handle(prompts/get name=bad) with an unknown field in [[macro]]
+unknown prompt 'bad'. Known: all-tests, bug-hunt, code-clean, code-deduplication, implement, import-existing-project, install-companions, onboard, research-companions
+```
+
+## Does reviewers_detect --write record the connection identity instead of the per-call agent?
+
+**Verdict: CONFIRMED** · item `B-fix-detect-agent`
+
+- **Claim.** append_block is called without agent=, so reviewer.configured carries the derived identity
+- **Mechanism.** api/review.py reviewers_detect drops agent before append_block
+- **Falsifier.** reviewer.configured author equals the agent= passed
+
+**Probe:**
+
+```console
+$ pytest tests/test_reviewer_trust.py -k detect_write (before fix)
+FAILED: 'sub-9' missing from authors set
+```
+
+## Does ddflow mcp pass called_from, and does block refuse done items?
+
+**Verdict: CONFIRMED** · item `B-fix-claims-block-mcp`
+
+- **Claim.** cmd_mcp calls serve(c.repo) without called_from; block moves a done item to blocked silently
+
+**Probe:**
+
+```console
+$ tests/test_claims_cluster_fixes.py on the unfixed tree
+3 failed, 1 passed on unfixed tree; 4 passed fixed
+```
+
+## Do B1ed2b4fde6, B2bf4d38cc1, B1979dac602 reproduce on main?
+
+**Verdict: CONFIRMED** · item `B-fix-review-tooling-integrity`
+
+- **Claim.** all three reproduce
+- **Mechanism.** roborev HEAD resolution is outside ddflow; capture_diff adds untracked via intent-to-add; gate record writes --model straight into evidence.model
+
+**Probe:**
+
+```console
+$ tests/test_review_gate_integrity.py run on unfixed code
+7 of 8 tests failed on unfixed code: --reviewed-sha/--reviewer-model flags unknown, standards prompt lacks explicit sha, untracked draft present in reviewer prompt, author-family --model on critic recorded as passed (exit 0)
+```
+
+## Does test_splitting_finished_work_is_refused flake on main?
+
+**Verdict: THEORETICAL**
+
+
+**Probe:**
+
+```console
+$ 200 and 600 parametrised copies under pytest -n 48 / -n 150 (load avg ~98 on 192 cores)
+800/800 passed; failing step cannot be named from the original failure because _proj ignores exit codes; no shared path found (each run_cli is a fresh subprocess, log parse cache is process-local)
+```
+
+## Is a squash-landed gitflow hotfix counted shipped on develop?
+
+**Verdict: CONFIRMED** · item `B20d45f540c`
+
+- **Claim.** reached() returns empty: squash landing is one-parent, back-merge is another squash
+
+**Probe:**
+
+```console
+$ code read services/flow.reached plus worktree._merge_here (--squash commit) and lifecycle back-merge via merge_into
+neither merged_sha nor its parents are ancestors of develop
+```
+
+## Does companions add refresh a stale [mcp_servers.<id>] TOML table?
+
+**Verdict: CONFIRMED** · item `B662a1ace82`
+
+- **Claim.** register returns unchanged and leaves the stale command
+
+**Probe:**
+
+```console
+$ code read services/companions._toml_present: id entry that serves but not launches_as -> unchanged 'launches its own'
+no rewrite; JSON path place_server refreshes
+```
+
+## Does MCP prompts/get hide a broken [[macro]] config behind 'unknown prompt'?
+
+**Verdict: CONFIRMED** · item `B57fc667efc`
+
+- **Claim.** prompts/get answers unknown prompt without the load error
+
+**Probe:**
+
+```console
+$ all_commands on a repo whose config.toml has [[macro]] with an unknown field
+macro_problems reports 'unknown field(s) [bogus] ...' but all_commands lists only shipped commands; prompts/get name=x answers 'unknown prompt x. Known: <shipped>' with no cause
+```
+
+## Can the CLI tell a declared-identity parent's harness tree from a subagent's own?
+
+**Verdict: CONFIRMED** · item `Ba4fc918882`
+
+- **Claim.** Option A (use existing worktree.adopted events: path + adopter agent) identifies the owner with no new field and no log churn; covers a parent that has ever adopted the tree. Option B (marker file) = same coverage, not in the log, lost on clone, new file churn. Option C (harness session identity) not available to the CLI. Limit of A: a parent that has never claimed from its tree is still undetectable; an adopted item still open is already refused by the one-tree-one-item rule.
+
+**Probe:**
+
+```console
+$ test_a_declared_parent_identity_still_owns_its_tree: parent claims T0 (adopted), abandons; sub-1 claims T1 from the tree
+sub-1 ADOPTED parent-tree, branch parent-work
+```
+
+## Does reviewer.configured from configure/reviewers detect record the per-call agent?
+
+**Verdict: CONFIRMED** · item `B6dd8467780`
+
+- **Claim.** api.setup.configure and api.review.reviewers_detect drop agent= before the config write, so the event author is the connection identity
+
+**Probe:**
+
+```console
+$ tests/test_reviewer_trust.py per_call tests: configure(agent='sub-7') authors reviewer.configured as [REDACTED:hostname]-proj-...; expected sub-7
+2 failed: assert {'[REDACTED:hostname]-proj-3737b9'} == {'sub-7'}
+```
+
+## B7774c7e07b: roborev findings a-e on _refusal_body
+
+**Verdict: CONFIRMED**
+
+- **Claim.** (a) decision_show unknown id: content[0]=null; (b) exit-2 drops extra data keys; (c) heartbeat example unreal; (d) lead key refusal for exit 1/2; (e) data field refusal popped
+
+**Probe:**
+
+```console
+$ Server tools/call ddflow_decision_show id=D-nonexistent
+content[0].text is null, reason only in block 2, isError true
+```
+
+## B3da43a71bb: does md_escape escape intraword underscores?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** regex escapes every char of a fixed set incl underscore
+
+**Probe:**
+
+```console
+$ tests/test_export_core.py:496 and registry.md_escape source
+run_nemo_run becomes run backslash-underscore nemo...
+```
+
+## B1d72a8144c: ddflow_loops description mentions repeated_failure?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** No; tools/list is 93493 bytes vs budget 93500, so the clause must be offset by trimming the same description
+
+**Probe:**
+
+```console
+$ Server tools/list size and the ddflow_loops description
+no repeated_failure; size 93493
+```
+
+## Bbcca327127: does doctor note README.md for lack of merge strategy?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** findings notes any shared glob with no merge driver; merge=text is a built-in git driver that driver() already accepts but the note never says so
+
+**Probe:**
+
+```console
+$ ddflow doctor | grep 'merge strategy'
+note: [lease] shared_globs has README.md with no merge strategy in .gitattributes: parallel items will conflict
+```
+
+## Bc896ea5d16: does the board omit phase-less tasks?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** board iterates state.phases() only
+
+**Probe:**
+
+```console
+$ ddflow --json board task count vs ddflow --json status tasks.total
+board 298 tasks, status 422 total; grep of the board for a phaseless B-fix task -> 0
+```
+
+## Does decision add still crash with KeyError on a refused duplicate on main?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Fixed by B-add-dedupe-surfaces (343c8a9)
+
+**Probe:**
+
+```console
+$ git archive 8896a8a + tests/test_add_dedupe_cli.py; pytest test_without_a_terminal_a_duplicate_is_refused... on pre-fix
+pre-fix: KeyError: 'supersedes' (decision), KeyError: 'verdict' (research); on main all 56 tests in test_add_dedupe_cli.py pass, every add kind refused in text and --json with no traceback
+```
+
+## Is claim --globs ignored (Bb676a5d0b9)?
+
+**Verdict: REFUTED**
+
+- **Claim.** claim --globs is recorded on lease and item on CLI and MCP
+
+**Probe:**
+
+```console
+$ scratch repo: claim T1 --globs x.py --globs y.py; MCP ddflow_claim globs [m.py,n.py]; refused overlap then retry
+all lease.acquired events carry the --globs given
+```
+
+## Can the new version's section be rendered by the changelog kind before the tag exists?
+
+**Verdict: CONFIRMED** · item `B-export-version-cut`
+
+- **Claim.** With a temporary annotated tag at the release source the kind places Unreleased entries in the new version and builds the compare links; removing the tag afterwards leaves no trace
+- **Mechanism.** kind_changelog places entries by tags containing their merge commit; one tag at the release source makes it the new section
+- **Falsifier.** the rendered section lacks the entries, or the compare link, or the tag survives
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_version_cut.py (probe test_cut_with_changelog_moves_unreleased_into_the_new_section)
+9 passed; section holds both entries, [1.1.0]: .../compare/v1.0.0...v1.1.0, tag list is v1.0.0 v1.1.0 only
+```
+
+## Does export redact today?
+
+**Verdict: CONFIRMED** · item `B-export-redact-fence`
+
+- **Claim.** ops.render applies no redaction, so a LAN address, a .lan host and a home path in the fixture log appear verbatim in decisions, bugs and worklog
+- **Mechanism.** render goes straight to registry.render_document; Spec.redact is parsed and unused
+- **Falsifier.** any of them redacted on the unfixed tree
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_safe.py against HEAD~1 source
+11 failed, 1 passed: LAN/host/home path unredacted, no redacted= header, no fence, replay not specially refused
+```
+
+## Can merge include refreshed documents in the item's merge commit without a post-merge commit?
+
+**Verdict: CONFIRMED** · item `B-export-refresh`
+
+- **Claim.** Regenerating into the item's worktree and committing on its branch before W.merge lands them in the merge
+- **Mechanism.** log read from primary, files written under the worktree root; branch commit precedes the merge
+- **Falsifier.** ROADMAP.md on main still stale after merge
+
+**Probe:**
+
+```console
+$ tests/test_export_refresh.py::test_refresh_merge_updates_a_stale_roadmap_in_the_merge
+fails on unfixed code (KeyError export_refresh), passes with fix
+```
+
+## Does check_views refuse a stale staged export target, and do targets escape stale_docs/docscheck?
+
+**Verdict: CONFIRMED** · item `B-export-enforce`
+
+- **Claim.** Before the change a stale/hand-edited staged exported doc commits clean and doctor is silent
+- **Mechanism.** check_views only looks at VIEWS names with the render GENERATED marker
+- **Falsifier.** the new tests pass on unmodified source
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_enforce.py with enforce/reporting/shared_files/docscheck reverted
+7 failed, 5 passed (stale block/warn, hand-edited, log-staged, doctor x2, docscheck/stale_docs exclusion all fail unfixed)
+```
+
+## Does the guarded config write take export.documents and export.<doc>.path, and can an event-recorded agent enable be told from an operator's?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** _write_config upserts export.documents as a list and export.<doc>.path/mode as [export.<doc>] keys, and agent_marker separates an agent CLI call from a person's
+- **Falsifier.** Config.check rejects the edit, or an --agent call is not refused for --lock
+
+**Probe:**
+
+```console
+$ ddflow --agent bot export enable status --mode region --path docs/S.md; ddflow --agent bot export disable roadmap --lock
+enabled status -> docs/S.md (by bot); locking a document is the operator's veto ... exit 3; operator (no marker) lock accepted, later agent enable exit 3
+```
+
+## Why does the bugs export test fail?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** default scope project is rendered on every bug line
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_docs_a.py
+1 failed: [project] tag after title
+```
+
+## Can [export.<doc>] sub-tables load forward-compatibly through the flat knob loader, and can selected targets join the lease shared set without core importing services?
+
+**Verdict: CONFIRMED** · item `B-export-surfaces`
+
+- **Claim.** A nested table under a section is moved into one dict knob in _apply; unknown keys inside it are recorded in unknown_knobs when read from a file and refused by Config.check; a static default-target table in config plus Config.export.targets() lets core.schedule.shared_globs include selected targets
+- **Mechanism.** _apply_export_tables splits dict values off the [export] knobs
+- **Falsifier.** an unknown key in [export.roadmap] raises when loaded from a file, or Config.check accepts it
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_ops.py -k 'tables_load or written_export_config or shared_paths or default_targets'
+4 passed
+```
+
+## Does an extra optional key on item.completed/bug.fixed break older folds?
+
+**Verdict: CONFIRMED** · item `B-export-changelog-data`
+
+- **Claim.** Folds read event data by .get, so an unknown key is ignored and an absent key leaves the new field empty
+- **Mechanism.** _h_state/_h_bug_fixed use ev.data.get; no schema bump
+- **Falsifier.** an item.completed with changelog garbage or without it fails or changes fold
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_changelog_data.py (old shape, garbage shape, round-trip)
+19 passed
+```
+
+## Are auto ids (core/ids.auto_id) deterministic for identical text, as knowledge.py bug_found and the ids.py docstring claim?
+
+**Verdict: CONFIRMED** · item `B-fix-autoid-comment`
+
+- **Claim.** No, and that is intended: auto_id seeds blake2b with time_ns on purpose, so two real reports of identical text stay two records; the duplicate check (B-add-checks-duplicates) auto-links exact copies. The comments in ids.py and knowledge.py are wrong.
+
+**Probe:**
+
+```console
+$ python: auto_id('B','s','i') twice
+two different ids; test_add_dedupe.test_exact_refiling_is_linked_without_asking shows the dedupe path. Importer ids derive from source (README Idempotent), not auto_id; explicit-id re-report merge is bug_found id=X (test_bug_invalid)
+```
+
+## Why do ddflow tasks and agents take 2h or more, and what would shorten them?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Time goes to repeated full-diff review rounds and to serial holds on hot files, not to implementation.
+- **Mechanism.** failed reviews do not block completion (D-failed-critic-not-blocking) so nothing ends the loop; each round re-reviews the whole diff; leases span the reviews.
+- **Falsifier.** Implementation or tests dominating the in-lease time.
+
+**Probe:**
+
+```console
+$ Measured 2026-10-02 over 87 tasks completed since 2026-10-01 (research R-task-time): lease->complete median 40 min, p90 91; ~72% of in-lease gate time is rubber_duck+critic, 12% unit_tests, 11.5% roborev; a task gets 2-8 review rounds per reviewer (median 3), each round 3.5-14+ min on the shared reviewer and a full re-review of the whole diff; B-export-core spent 3 min implementing and 127 min in 8 review rounds, each finding rarer than the last, while three agents waited for its merge. Hot files are serial resources held ~44 min per lease: mcp.py 743 min over 17 leases, cli.py 535/12, config.py 484/11, api/lifecycle.py 452/13, core/model.py 422/9. The review budget was introduced as PROSE in the shared agent instructions; the operator asked whether it should be a general feature of the workflow. Prose is not enforced: an agent that ignores it loops again, and other harnesses/projects do not get it.
+```
+
+## Can a 31-name core tier plus setup list at most 40 KB, with standard strictly between core and all?
+
+**Verdict: CONFIRMED** · item `B-mcp-tool-tiers`
+
+- **Claim.** core <= 40000 B compact tools/list, standard between
+- **Mechanism.** tools/list size is the sum of per-tool name+description+schema JSON
+- **Falsifier.** core over 40000 B or standard not strictly between
+
+**Probe:**
+
+```console
+$ tests/test_mcp_tool_tiers.py::test_sizes_core_under_budget_standard_between
+core 32 tools 39142 B; standard 63 tools 66787 B; all 90 tools 91743 B
+```
+
+## Do roadmap/bugs/status render fast, deterministically, and with useful lanes from ddflow's own 9.7k-event log via the export core?
+
+**Verdict: CONFIRMED** · item `B-export-docs-bugs-roadmap-status`
+
+- **Claim.** Lane assignment from state plus inherited deps, bug filters and a clock-free status render in under 100 ms each, with the unfiltered bugs document near 63 KB
+- **Mechanism.** Query single-pass children index plus schedule.inherited_deps; ages measured to the newest event
+- **Falsifier.** any render over 200 ms, bytes differing between runs, or a task in the wrong lane
+
+**Probe:**
+
+```console
+$ python /tmp/probe.py [REDACTED:path] roadmap bugs status
+roadmap 17273 B 58ms; bugs 62907 B 38ms; status 1117 B 62ms; filtered bugs status=open 4 KB
+```
+
+## Can a pure kind(Query,Filters) render RULES.md with the workflow, which lives in config and not the log?
+
+**Verdict: CONFIRMED** · item `B-export-rules`
+
+- **Claim.** Yes if Query carries the project root (set by load) and the kind reads Config via services.workflow.describe; in-memory Queries just omit the section; unreadable config is exit 2
+- **Mechanism.** describe() already yields gates and RULE_KEYS rules; drop reviewers/hook/stats (machine state)
+- **Falsifier.** A repo with a broken config.toml renders a document with no workflow section instead of exit 2
+
+**Probe:**
+
+```console
+$ tests/test_export_rules.py::test_unreadable_config_is_could_not_run_not_an_empty_section
+passes; fails with the kind file removed
+```
+
+## Do the worklog, sessions and decisions kinds avoid the research data traps (import-day dating, per-event lines, untitled research lines, session summary missing from the fold)?
+
+**Verdict: CONFIRMED** · item `B-export-worklog-sessions`
+
+- **Claim.** Dating by data.at (ts fallback), coalescing per (day, subject), reading titles from state.research and reading session.ended summaries from events each fix one trap; undoing any one breaks exactly one test
+- **Mechanism.** Query.events_of + Query.state; session.note carries data.at/source; Session has no summary field so it is read from session.ended events
+- **Falsifier.** A mutation that dates by ts, drops coalescing or blanks the research title leaves the tests green
+
+**Probe:**
+
+```console
+$ mutate kind_worklog.py three ways and run tests/test_export_docs_b.py
+date-by-ts: 4 failed; no coalescing: 1 failed (test_worklog_coalesces_one_item_into_one_line); research title blank: 1 failed; unmutated: 19 passed. This repo's own log has 0 imported journal notes, so the import-day shape is covered by a synthetic 1758-note fixture (12 months, none on the import day).
+```
+
+## Does a no-op lock let a concurrent append or a hand edit slip through the writer?
+
+**Verdict: CONFIRMED** · item `B-export-write`
+
+- **Claim.** removing the tomlcfg.locked critical section makes the concurrent-append, hand-edit/lock and symlink-swap tests fail
+- **Falsifier.** those tests still pass with the lock replaced by a no-op
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_write.py with W.tomlcfg.locked monkeypatched to a no-op context manager
+3 failed (test_concurrent_appenders_lose_nothing, test_hand_edit_check_and_write_share_one_critical_section, test_path_swapped_for_a_symlink_before_the_lock_is_caught_inside_it), 44 passed
+```
+
+## Do old events and an old ddflow survive new optional bug fields and a new event kind?
+
+**Verdict: CONFIRMED** · item `B-bug-scope-event`
+
+- **Claim.** Optional event fields fold to defaults; new kind is reported by skipped-kinds
+- **Falsifier.** an old event fails to fold or sets a non-empty new field
+
+**Probe:**
+
+```console
+$ pytest tests/test_bug_scope.py tests/test_skipped_kinds.py
+passed
+```
+
+## Does an existing tags field carry a tier hint to next/brief without a new field?
+
+**Verdict: CONFIRMED** · item `B-model-tier-hint`
+
+- **Claim.** Item.tags already flows to plain() so the MCP next body already carries tags; only rendering and validation are missing
+- **Falsifier.** ddflow --json next on a tagged item lacks tags
+
+**Probe:**
+
+```console
+$ ddflow --json next | ready[0].tags
+tags key present in plain() output (core/plain.py serialises the dataclass); text next/brief showed no tier before this change
+```
+
+## Does a single-pass parent->children index make phase->tasks lookup fast enough on a 5,632-item state?
+
+**Verdict: CONFIRMED** · item `B-export-core`
+
+- **Claim.** A dict built once in one pass over state.items answers tasks_of/tasks_under for 5,632 items in well under 100 ms
+- **Falsifier.** index plus lookups for all phases take >=100 ms
+
+**Probe:**
+
+```console
+$ pytest tests/test_export_core.py::test_index_5632_items_under_100ms
+passed (index+lookups under 100 ms; asserted in the test)
+```
+
+## How can ddflow generate and update LOG/SESSION/CHANGELOG/ROADMAP/RULES/BUGS style documents from the data it already holds?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Most documents are derivable today with a single-pass query layer + Jinja2 templates; a safe update model (body-digest header, marker regions, append-only) makes them reviewable; the changelog needs one optional field.
+- **Mechanism.** Pure (state, events, filters) -> data functions per document kind, presentation in templates, an exact regenerate-and-compare check.
+- **Falsifier.** A document kind whose output is unusable on real logs even filtered, or a write mode that can overwrite a hand edit silently.
+
+**Probe:**
+
+```console
+$ Research (2026-10-02, R-export): ddflow already renders 4 views (render: QUEUE.md board, LESSONS.md, LESSONS-SUMMARY.md, RESEARCH.md to docs/ddflow/, protected by [enforce].generated_views check_views), replay builds a reconstruction brief, version cut builds changelog-shaped release notes into the tag (no CHANGELOG.md written), the importer reads TODO/LOG/ADR/CHANGELOG-shaped files, Jinja2 is an allowed dependency; nothing renders sessions, bugs, a roadmap, a work log or rules. Prototypes on three real logs (ddflow 9.7k events/452 items/251 bugs, run_nemo_run 14k/5.6k/13, home-simulator 1.8k/73/14): load+fold 0.03-0.27 s, each document 0-14 ms with a single-pass parent->children index (the naive phase->tasks lookup took 6.6 s on run_nemo_run's 5,632 items); output is byte-deterministic. Quality today: ROADMAP, STATUS, RULES, decisions index good; BUGS useful only filtered (230 of 251 fixed = noise; bugs have no title (213/251 ids are hashes) or severity); WORKLOG needs --since and per-item coalescing; SESSION weak (ddflow's own prompts are mostly subagent briefs, 24/34 sessions have a summary); CHANGELOG not user-grade without data (56/84 recent lines land under Fixed; 3 tasks tagged feature; merged_sha on 144/275 done tasks). Imported journal notes must be ordered by data.at not ts (all 1758 share the import day). Generated BUGS.md/RULES.md/WORKLOG contain private IPv4 + a hostname: redaction (services/redact_report.py) takes 6-45 ms; replay carries paths/addresses and takes 5.5 s: not an export kind. A log digest in the header would report stale constantly (41% of events are lease heartbeats): use a body digest + regenerate-and-compare. Report and prototypes: /tmp/claude-1001/-home-delian-src-ddflow--claude-worktrees-bridge-cse-015NbhRCT5XtidHYRvkjBCLK/e0567917-2370-56c0-a094-caf440a8b983/scratchpad/export/
+```
+
+## Can recorded text or a diff escape its delimiter and pose as tool output or a verdict?
+
+**Verdict: CONFIRMED** · item `B-security-provenance`
+
+- **Claim.** Yes: review_user.md fences the diff in a fixed triple backtick, so a diff line of backticks closes it and a following STATUS: NO FINDINGS reads as prompt text; brief/recall print decision, lesson and memory bodies unfenced and without their author
+- **Mechanism.** fixed delimiter plus no provenance on records folded from a union-merged unsigned log
+- **Falsifier.** the new tests pass against the unfixed code
+
+**Probe:**
+
+```console
+$ run tests/test_provenance_fencing.py against HEAD~ with only the helper present
+12 failed, 6 passed (brief, recall, import preview, diff fence run>=3, instruction lines, doctor note all fail on the unfixed code)
+```
+
+## Does a prefilled issue URL stay under 8 KB for every real bug text, and can a send be gated purely on a digest-bound consent object?
+
+**Verdict: CONFIRMED** · item `B-upstream-delivery`
+
+- **Claim.** Percent-encoding the rendered bundle (1 KB env block) of every real bug.found text fits URL_MAX=8000; send_gh calls no runner unless consent.digest == bundle.digest, unexpired, unused
+- **Mechanism.** bundle size is bounded by the field caps in bugreport.py; consent is checked before any runner call
+- **Falsifier.** any corpus text yields a URL > 8000 bytes, or a refused send records a runner call
+
+**Probe:**
+
+```console
+$ pytest tests/test_upstream_delivery.py
+23 passed (corpus test over all bug.found texts; five refusal cases record zero runner calls)
+```
+
+## Do compact JSON, projection and per-list bounds cut the five biggest MCP reads by at least 50% on this repository?
+
+**Verdict: CONFIRMED** · item `B-mcp-payload-bound`
+
+- **Claim.** Projection and bounds win by an order of magnitude; compact separators alone save 10-37%
+- **Mechanism.** MCP bodies are indent=2 JSON of whole records: next lists every blocked item, recall carries each hit's raw record, progress and decision_list every row, show every gate's tree-id evidence
+- **Falsifier.** after the change, show of a finished gated task is not under half its pre-change bytes
+
+**Probe:**
+
+```console
+$ scratchpad measure.py: Server(repo).handle tools/call on ddflow_next/show/recall/decision_list/progress/status, before (main) vs after (branch)
+before/after bytes: next 33075->2604, show(B-fix-status-bound) 8859->4176, recall 49059->4918, decision_list 43610->15690, progress 152333->8405
+```
+
+## Does a reworded 'update --globs does not widen the lease' filing score >= 0.55 against its siblings through similar.build, with unrelated issues present?
+
+**Verdict: CONFIRMED** · item `B-upstream-dedupe`
+
+- **Claim.** Yes: TF-IDF cosine over title+body scores the real reworded filings 0.54-0.68
+- **Mechanism.** shared content words (update, globs, widen, lease, hook)
+- **Falsifier.** score < 0.55 for the siblings against a corpus with unrelated issues
+
+**Probe:**
+
+```console
+$ similar.build over the filings + unrelated, query B5d98a4da0a
+B78324ec086 0.629, Bbbcb91599c 0.607, B3eda99e0fe(vs B5d98) 0.543: two of three clear 0.55; one pair does not, so the test pins the two that do
+```
+
+## Does the log hold enough to detect the same gate failing with the same output N times in a row?
+
+**Verdict: CONFIRMED** · item `B-repeated-failure-detector`
+
+- **Claim.** gate.failed events carry evidence.output_digest and tree_sha (gate run), so a trailing streak of identical digests is derivable from events alone
+- **Mechanism.** progress.work folds gate events; digest and tree_sha are in data.evidence
+- **Falsifier.** failed gate.run events lacking output_digest
+
+**Probe:**
+
+```console
+$ pytest tests/test_repeated_failure.py (3 real gate runs of a failing command, then ddflow loops)
+12 passed; 6 failed against the unfixed code before the change
+```
+
+## Does the external DDFlow extension research propose features ddflow should add?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Mostly generic and already covered; the real gaps are tool-surface token cost, MCP payload size, untrusted-data provenance, a model-tier hint and a repeated-failure detector.
+- **Mechanism.** Measured ddflow's tools/list and read payloads in-process and compared each proposal against README, decisions and the queue.
+- **Falsifier.** A proposal ddflow lacks that the measurements or the queue do not already cover.
+
+**Probe:**
+
+```console
+$ Research (2026-10-02, R-extres-evaluation) of an externally produced 'DDFlow MCP Extension Research' document against ddflow main. Verdict: a generic survey written from three Glama tool pages; ~2/3 of its proposals already exist in stronger form, ~1/4 conflict with ddflow's design (remote multi-tenant server, SSE/event bus, background LLM consolidation, tree-sitter/LSP/sqlite-vec/ONNX against the dependency allowlist, per-step full suite against the operator's batch-integration request); its load-bearing numbers (60-95% from tool consolidation, 70-85% from Markdown) rest on vendor/forum posts and could not be verified. Real gaps, MEASURED: (1) tools/list is 90 tools, 119 KB (~30k tokens) + 12 KB handshake text; the as_agent description repeats on 89 tools = 27 KB (22.7%); merging tools would save only ~5%; a 28-tool core set is 44 KB; (2) MCP read payloads are 28-35x their prose rendering: next 35 KB vs 1.2 KB CLI text, show 11 KB vs 1 KB, recall 32 KB, decision_list 40 KB, progress 150 KB; compact JSON alone saves only 10-37%; (3) no untrusted-data fencing or provenance: channels are PR-added event-log lines (merge=union, no signatures), imported ADRs becoming accepted decisions, agent-written records re-injected, PR review text, the reviewer diff in a single fence; (4) no model-tier hint on tasks; (5) no detector for the same gate failing the same way repeatedly; (6) ddflow_configure can set a non-human gate command to 'true' locally.
+```
+
+## Does anything build a sanitized, digest-bound bug-report bundle today?
+
+**Verdict: CONFIRMED** · item `B-upstream-bundle`
+
+- **Claim.** No: bug text is stored raw; install info and redact_report exist but nothing composes them
+- **Falsifier.** an existing bundle builder
+
+**Probe:**
+
+```console
+$ grep -rn bugreport ddflow tests; ls ddflow/services
+no services/bugreport.py; redact_report.py and install_info.py are the building blocks (both merged)
+```
+
+## Can one __init__.py literal drive wheel, banner, server.json and uv.lock?
+
+**Verdict: CONFIRMED** · item `B-single-version-source`
+
+- **Claim.** hatch dynamic version from ddflow/__init__.py makes uv.lock record no project version, so a version-only edit keeps uv lock --check green; server.json renders from a template
+- **Mechanism.** uv records dynamic-version projects without a version field
+- **Falsifier.** uv lock --check fails after editing only __init__.py
+
+**Probe:**
+
+```console
+$ edit __init__ to 0.1.10, render, uv lock --check; test_editing_only_init_py_moves_the_version_everywhere builds a 9.8.7 wheel
+Resolved 13 packages; LOCKOK; wheel ddflow_mcp-9.8.7 built
+```
+
+## Does the current tree leave private text in bug summaries?
+
+**Verdict: CONFIRMED** · item `B-upstream-redact`
+
+- **Claim.** No redaction pass exists for report text; services/sessions.py redact covers secrets only, so private addresses, home paths, hostnames, emails and project names survive
+- **Falsifier.** redact_report module exists / tests pass without it
+
+**Probe:**
+
+```console
+$ uv run pytest -q tests/test_redact_report.py (before the module)
+ImportError: cannot import name 'redact_report' from 'ddflow.services'
+```
+
+## Does a public install-info helper exist, and can adopt/enforce's private logic be factored into it?
+
+**Verdict: CONFIRMED** · item `B-upstream-install-info`
+
+- **Claim.** No public helper exists on main; adopt._own_distribution/_installed_from_index and enforce._running_from_source duplicate logic
+- **Falsifier.** an existing public function returning kind/commit
+
+**Probe:**
+
+```console
+$ grep for install_info; pytest tests/test_install_info.py on main
+ModuleNotFoundError: ddflow.services.install_info (collection error); two private copies of running_from_source found
+```
+
+## What does the registry enforce per registryType, and does the published JSON schema express the OCI no-version rule?
+
+**Verdict: CONFIRMED** · item `B-registry-oci-version`
+
+- **Claim.** The schema allows version on any package (only registryType, identifier, transport required); the rule lives in the registry's Go code ValidateOCI: no registryBaseUrl, no version, no fileSha256; identifier a canonical ref on an allowlisted registry. pypi: version required, no fileSha256, baseUrl must be https://pypi.org. nuget: version required, no fileSha256. mcpb: fileSha256 required, no registryBaseUrl, https URL containing 'mcp' on GitHub/GitLab release assets. Server: version not 'latest' or a range, name namespace/name pattern, repo URL valid for source, stdio url empty.
+
+**Probe:**
+
+```console
+$ curl static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json (definitions.Package) and raw.githubusercontent.com/modelcontextprotocol/registry/main/internal/validators/{validators.go,registries/{oci,pypi,nuget,mcpb}.go}
+oci.go ValidateOCI returns exactly the publish #40 message when pkg.Version != ''; schema Package.version is a plain optional string
+```
+
+**Sources:** https://github.com/modelcontextprotocol/registry/blob/main/internal/validators/registries/oci.go
+
+## On a terminal does input(prompt) show its prompt when stderr is redirected?
+
+**Verdict: CONFIRMED** · item `B-add-dedupe-surfaces`
+
+- **Claim.** input() with tty stdin and stdout writes the prompt to stderr, so a user with stderr redirected would be asked nothing
+- **Mechanism.** PyOS_Readline writes the prompt to stderr when both ends are ttys
+- **Falsifier.** pty with stdout a tty and stderr a pipe still shows the menu text in stdout
+
+**Probe:**
+
+```console
+$ pty.openpty as stdin/stdout, stderr=PIPE, run ddflow task add on a duplicate with prompt via input(menu)
+menu text never appeared on the pty master (hung 60s); after writing the prompt with sys.stdout.write+flush and calling input() bare, 5 pty tests pass
+```
+
+## How can ddflow or an agent report a suspected ddflow bug upstream, or propose a fix, safely and with the operator's consent?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** A sanitized, digest-bound report built from allowlisted fields, delivered as a local file + prefilled issue URL (and gh when present), with an operator-held credential for every send, covers the need without leaking private project data; mechanical detectors alone find only ~9% so the agent's judgement is the main trigger.
+- **Mechanism.** ddflow builds the bundle itself (agent supplies only a short title and expectation); redaction + preview + digest-bound consent make an agent-written public post safe.
+- **Falsifier.** A real bug text or traceback from the logs surviving redaction with a LAN address/home path/project name; or a send path that an agent can complete without an operator-held credential.
+
+**Probe:**
+
+```console
+$ Research (2026-10-02, R-upstream-reporting): 249 bug.found events in this log (median 416 chars) carry only item+summary; the 21 cross-project reports (home-simulator) had a REPRO block 21/21 but no ddflow version, install source, commit, python/os, session or traceback 0/21, and the item field empty 21/21. No ddflow message anywhere tells an agent to report a ddflow defect upstream (onboard.md:92 files them into the MANAGED project's own log). Hand classification of the 249: mechanical-at-failure detectors (traceback, remedy naming a missing command, version-skew refusal, refusal-reported-as-success) would have caught ~9%; offline-mechanical (tests/CI) ~15%; ~75% needed an agent's or person's judgement - the agent is the primary source. Redaction corpus: private IPv4 in 22 events, /home/<user> in 759 events, project names in 47 bug summaries; bug text is not redacted today (sessions.redact covers session prompt/note and secrets only). A prefilled issue URL fits every real report (median 1.5 KB, max 3 KB with environment block; limit ~8 KB). gh, glab, tokens and ssh keys are absent on this machine; upstream delian/ddflow-mcp has 0 issues. forge.py already separates ForgeUnavailable from ForgeError. Install source/commit are derivable from PEP 610 direct_url.json (adopt.py already reads it privately).
+```
+
+## FIFO queue for glob-refused claims
+
+**Verdict: THEORETICAL** · item `B-fix-claim-fairness`
+
+- **Claim.** Reuse the wait registry; a woken waiter keeps a deadline-only reservation since its wait process exits before it claims. Early glob release before merge is unsafe so holder side is advice only.
+
+## q
+
+**Verdict: THEORETICAL**
+
+
+## Does 'review <id> --finding N --refuted --probe' without the triage verb start a reviewer run?
+
+**Verdict: CONFIRMED** · item `B-fix-review-triage-flags`
+
+- **Claim.** yes: the flags are accepted on the shared review parser and ignored
+
+**Probe:**
+
+```console
+$ ddflow review nosuch --gate critic --finding 3 --refuted --probe x
+proceeds into the review path (Empty diff... Recording UNAVAILABLE, exit 2) instead of refusing; MCP ddflow_review already rejects unknown args
+```
+
+## Per-task README check: a real task gate, or a completion check with a severity?
+
+**Verdict: CONFIRMED** · item `B-docs-per-task`
+
+- **Claim.** A completion check with [enforce].readme_with_code (off|warn|block, default warn) beats a task gate
+- **Mechanism.** The phase docs gate is a pipeline step recorded by assertion. A docs step in task_pipeline would be demanded of EVERY task under require_outcome (test-only, docs-only, housekeeping) with only an assertion as evidence; whether README moved is a fact about the diff (landed_before..landed_after, or worktree vs base). 'docs' is already a known gate id, so gate skip/record docs on a task is accepted as the recorded reason without joining its pipeline.
+- **Falsifier.** gate skip <task> docs refused for a gate outside the task pipeline; or a landed task not measurable after its worktree is gone
+
+**Probe:**
+
+```console
+$ tests/test_docs_per_task.py: skip reason accepted, landed diff measured after merge removed the worktree; same tests fail on main
+5 failed, 3 passed on main; 8 passed on the branch
+```
+
+## Which mechanical checks can make ddflow's documentation stage guarantee a managed project's docs are current, in sync and clean?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** A mechanical report (referenced things exist, local links/anchors resolve, new public surface documented via configured extractors, opt-in counts, configured lint) attached as evidence to the existing docs gate catches real drift with tolerable noise, if scoped to an explicit doc allowlist.
+- **Mechanism.** Drift is a diff between what docs name and what the code/tree contains; both are enumerable by stdlib scans at <2.5 s.
+- **Falsifier.** Precision below ~50% for identifier/link checks on real projects, or runtime beyond a few seconds.
+
+**Probe:**
+
+```console
+$ Research (2026-10-02, R-docs-stage): measured on ddflow's, run_nemo_run's and home-simulator's own docs (read-only). Identifier/flag/tool references checked against tracked code: ~70-100% precise once history docs are excluded (ddflow: 2 real misses: `ddflow_research` should be ddflow_research_add, `ddflow setup` is the MCP tool not a CLI verb; run_nemo_run: 25 hits, several real). Path-like inline code: only 10-30% precise (runtime/generated paths, illustrative paths) -> notes only with an ignore list. Relative links/anchors (stdlib, <1 s): ~90% precise, real breakage found (run_nemo_run: 4 broken links, >=1 broken anchor; home-simulator: 1+1). Diff-vs-docs coverage via configured extractors replayed on ddflow since 10-01: 7 undocumented new flags/tools/knobs found (exactly what B-readme-catchup fixes). Counts need explicit markers (generic regex is noise). Age/co-change staleness is a prioritiser only (ARCHITECTURE.md: 557 code commits since last edit). No markdown linter is installed: lint must be a project-configured command, 'unavailable' when absent; ddflow adds no dependency.
+```
+
+## Does the README still match the CLI and MCP surface after the 2026-10-01 merges?
+
+**Verdict: CONFIRMED** · item `B-readme-catchup`
+
+- **Claim.** The pre-catch-up README names 6 CLI commands never, 1 nonexistent command and 1 nonexistent MCP tool
+- **Mechanism.** 75 merges landed, README changed in 9 commits
+- **Falsifier.** tests/test_readme_catchup.py passes on the old README
+
+**Probe:**
+
+```console
+$ git stash README; pytest tests/test_readme_catchup.py
+3 failed: commands never named ['resolve','abandon','remove','cleanup','pins','precommit']; 'ddflow setup' not a command; 'ddflow_research' not a tool
+```
+
+## Are the deepseek/roborev findings on d2b337f real?
+
+**Verdict: CONFIRMED** · item `B-review-findings-triage`
+
+- **Claim.** Real and fixed (5528393): a positional digest suffix for duplicate findings moves a triage to the wrong copy when an earlier chunk is re-reviewed (3 reviewers) -- dropped; identical findings are one claim, triaged together. Weak test of the chunk re-run and an always-true assert -- strengthened/removed. Refuted: (1) 'A.triage vs _api().review_triage is an AttributeError' -- A is the ddflow.api.review submodule (function triage), _api() the package (re-export review_triage); test_the_cli_verb_* and test_the_mcp_tool_* run both. (2) '--chunk prints per-run #N, not the merged record's' -- merge_rerun replaces res.findings with the merged list before printing; the strengthened test asserts #1,#2 after re-running one chunk of two. Kept as documented limitation: with several reviewers, triage addresses the recorded reviewer's findings (the output's last line names it; MCP description says so).
+- **Falsifier.** the CLI or MCP triage raises AttributeError, or a chunk re-run prints #1 for a finding that is #2 in the record
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_triage.py (CLI subprocess + MCP spec['api'] + chunk rerun)
+14 passed on 5528393; full suite 3480 passed
+```
+
+## Does an additive event kind survive any fold order, and is an unknown kind visible to an older ddflow?
+
+**Verdict: THEORETICAL** · item `B-link-events`
+
+- **Claim.** Keying extensions/links by event id in dicts, sorted at read time, makes the fold commutative; removing the kinds from HANDLERS yields skipped_kinds that B168's doctor note names
+- **Falsifier.** a permutation of two record.extended events changes State, or an older fold shows no skipped kinds
+
+**Probe:**
+
+```console
+$ tests/test_link_events.py (written first)
+to be shown
+```
+
+## Are the overruled review findings on c459c09 real?
+
+**Verdict: REFUTED** · item `B-review-findings-triage`
+
+- **Claim.** Refuted: (1) 'review triage --gate G <id> (item after the flag) fails to parse' -- true of the documented-order-only form and of every ddflow verb (gate record, research add): the usage is 'review triage <id> --flags'; 'review --gate critic T1' still parses (probed, main vs branch). (2) 'both verdicts must exit REFUSED' -- every refusal of triage, the CLI's included, is exit 1 (O.failed); the both-verdicts check agrees, tests assert FAIL for all four. Confirmed and fixed: per-reviewer numbering (output names whose findings triage addresses) and identical findings sharing a digest (-2 suffix), d2b337f.
+- **Falsifier.** review --gate critic T1 stops parsing, or triage exits differently per refusal
+
+**Probe:**
+
+```console
+$ build_parser().parse_args on main and branch; tests/test_review_triage.py::test_the_cli_verb_and_an_item_named_triage
+['review','--gate','critic','T1'] -> ['T1'] on both; the 4 CLI refusals all exit 1
+```
+
+## Does anything record what became of a review's findings, short of re-recording the gate? (B9d8bd466c3 part 2)
+
+**Verdict: CONFIRMED** · item `B-review-findings-triage`
+
+- **Claim.** No: findings live only as titles[:10] and the transcript; a refuted finding can only be answered by a failed->passed re-record
+- **Falsifier.** ddflow review --help or the evidence names a triage
+
+**Probe:**
+
+```console
+$ tests/test_review_triage.py against main
+11 failed, 1 passed (the guard): no api.triage, no review.triaged event, no gate-status line
+```
+
+## Does the similarity engine find >=60 of home-simulator's 86 LS-* summary lessons as repeats of L* lessons at the default ask threshold?
+
+**Verdict: CONFIRMED** · item `B-importer-dedupe`
+
+- **Claim.** Weighing each summary-born lesson against the corpus lessons of the same import with similar.assess reports >=60 of 86
+- **Falsifier.** fewer than 60 reported
+
+**Probe:**
+
+```console
+$ copy of home-simulator docs/ + *.md into a scratch git repo; IM.plan_import(repo, None); count plan.duplicates with LS- ids
+86 LS lessons: 68 reported as duplicates (scores 0.55-0.83, e.g. LS-correctness-bug-hunt-14 ~ L107 0.82), 18 imported
+```
+
+## Is skipped_kinds read anywhere?
+
+**Verdict: CONFIRMED** · item `B168`
+
+- **Claim.** grep finds only the write; doctor/status are silent on a newer log
+- **Falsifier.** a reader of skipped_kinds exists
+
+**Probe:**
+
+```console
+$ grep -rn skipped_kinds ddflow
+model.py:587 field, model.py:1812 write; no reader
+```
+
+## Do the three help gaps reproduce on main?
+
+**Verdict: CONFIRMED** · item `B-fix-gate-reason-help`
+
+- **Claim.** gate record --help lacks the reason requirement; next --help/driver omit exit 1; ddflow_show description omits bug ids
+
+**Probe:**
+
+```console
+$ ddflow gate record --help; ddflow next --phase nosuchphase; grep ddflow_show mcp.py
+gate record --help: --reason/--outcome carry no help; next --phase nosuchphase exits 1 while help/driver list only 0/2; ddflow_show description says 'one phase or task'
+```
+
+## Do brief --phase and board --phase accept an unknown id? (Bc2acd426f4)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Neither checks the phase id: brief exits 0 with a normal brief, board prints '_No phases yet_'
+- **Falsifier.** a refusal from either
+
+**Probe:**
+
+```console
+$ fresh repo: ddflow brief --phase ZZZ; ddflow board --phase ZZZ; and tests/test_phase_arg_unknown.py on main
+brief exit 0 with the usual brief; board '_No phases yet_'; 4 of 6 tests failed (CLI exit 0, MCP not isError)
+```
+
+**Sources:** ddflow/api/lifecycle.py, ddflow/api/reporting.py
+
+## Are the deepseek re-review findings on f41925e real?
+
+**Verdict: REFUTED** · item `B-fix-review-rechunk`
+
+- **Claim.** (1) HIGH 'rules is unbound -> NameError' (both gates): refuted -- the render takes rev.extra_rules.strip(); the line using rules went with it. (2) MEDIUM 'rules carried a chunk directive': refuted -- rules was only reviewer + caller extra_rules; chunk scoping is which chunks are SENT. (3) positional extra_rules bound to only: refuted -- keyword-only (*). (4) MEDIUM ERROR with an empty reason recorded: confirmed in principle, fixed 3398d47 (refusal keyed on status).
+- **Falsifier.** a full review raises NameError or omits [[reviewer]].extra_rules
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_chunks.py::test_extra_rules_reach_the_reviewers_system_prompt tests/test_review_rechunk.py; full suite
+pass; full suite 3402 passed on 3398d47; test_an_errored_rerun_with_no_reason_is_still_refused fails on f41925e, passes on 3398d47
+```
+
+## Are the overruled deepseek findings on a041f4d real?
+
+**Verdict: REFUTED** · item `B-fix-review-rechunk`
+
+- **Claim.** Refuted: (1) 'reads chunk_chars but the record stores max_chunk_chars' and 'findings vs chunk_findings' -- writer and reader used the same keys (chunk_chars, chunk_findings); the reviewers compared against the task prose. Renamed the key to max_chunk_chars anyway to match the prose. (2) MCP 'chunks' vs 'chunk' -- the property is 'chunk' because tests/test_mcp_parity.py requires the CLI flag's name; body updated. (3) diff_sha over the unstripped diff -- diff_digest strips itself. (4) removing review(extra_rules=) breaks callers -- no caller passes it (grep), and it was keyword-only. (5) test message assertions vs the prose -- the tests assert the implemented messages. Confirmed and fixed: an ERROR re-run was recorded over the prior evidence (465d0f5).
+- **Falsifier.** a full review followed by --chunk N on the same diff is refused, or keeps no earlier finding
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_rechunk.py (end to end through api.review and the CLI)
+12 passed on f41925e: test_a_rerun_chunk_completes_the_recorded_review, test_findings_of_the_chunks_not_rerun_are_kept and test_the_cli_takes_chunk_numbers merge for real; grep -rn 'extra_rules=' ddflow -> only the template render
+```
+
+## Does critical_path ignore an umbrella's sub-tasks? (B79c2f6e17a)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** longest() walks inherited_deps only, so T2 needs T1 (umbrella of T1a) reports ['T1','T2']
+- **Falsifier.** ['T1a','T1','T2']
+
+**Probe:**
+
+```console
+$ tests/test_critical_path_umbrella.py on main
+assert ['P1.T1', 'P1.T2'] == ['P1.T1a', 'P1.T1', 'P1.T2'] (3 failed)
+```
+
+**Sources:** ddflow/core/schedule.py
+
+## Can one chunk of a recorded review be re-reviewed and merged? (Bd2332f8f2a part 2)
+
+**Verdict: CONFIRMED** · item `B-fix-review-rechunk`
+
+- **Claim.** No: ddflow review has no --chunk/--paths, evidence keeps no per-chunk record (only titles[:10]), so nothing could be merged
+- **Falsifier.** ddflow review --help lists a chunk option or evidence carries per-chunk findings
+
+**Probe:**
+
+```console
+$ tests/test_review_rechunk.py against main (before a041f4d)
+8 failed: api.review() got an unexpected keyword argument 'chunks'; CLI --chunk unrecognized
+```
+
+## Does the FTS5 top-50-per-kind shortlist + TF-IDF rerank give the same answers as an exact TF-IDF cosine, and what does each cost per add at 6k records?
+
+**Verdict: CONFIRMED** · item `B-similar-engine`
+
+- **Claim.** An exact TF-IDF cosine over an inverted index stored in index.db (postings packed per term; df = postings length) is both faster and exact; the FTS5 shortlist changes the top-3 above the show floor for ~5% of queries, so 'same results without FTS5' cannot hold for it. The engine uses no FTS5.
+- **Mechanism.** BM25 and TF-IDF cosine rank differently; a record with a high cosine can fall outside BM25's top 50 of its kind. FTS5 also scores every matching row before LIMIT, so the shortlist saves little. Packed postings make a query read only its own terms' rows.
+- **Falsifier.** Shortlist disagreement 0/300, or exact-index p95 above 50 ms at 6k records.
+
+**Probe:**
+
+```console
+$ scratchpad eng/proto.py, proto2.py, lat.py on run_nemo_run's log (6,201-6,248 records, read-only copy)
+FTS5 pool50/kind + rerank: median 14.7 ms, p95 44.8 ms; top-3>=0.35 differs from exact on 16/300 queries. SQL row postings + Python: p95 27 ms. Packed-blob postings: median 0.8 ms, p95 5.6 ms. Final engine: warm store query median 1.8 / p95 9.5 ms; cold open+query (per add) median 13.8 / p95 31.6 ms; in memory p95 8.0 ms; store vs memory identical result lists 300/300. Cost: Store.rebuild on rnr 0.46-0.54 s -> 0.98 s (median of 7) for tokenizing and weighing 6.2k records. Fixture: engine dup_r3 0.976 rel_r5 0.957 lenient_p 0.824 hard_above 0.15 dup_asked 0.488 (reference 0.951/0.957/0.824/0.15/0.463); on 5 random half splits (duplicate clusters kept whole) the engine is >= the reference on every half.
+```
+
+**Sources:** research R-dedupe-matchers; tests/test_dedupe_eval.py; [REDACTED:path]
+
+## Why does every completed task report commits 2 in ddflow progress?
+
+**Verdict: CONFIRMED** · item `B08c0ec5dc8`
+
+- **Claim.** progress._fold appends d['sha'] for worktree.merged and again for item.completed; after B-fix-merge-report both carry the merge commit, so the list holds the same sha twice
+- **Falsifier.** the two events carry different shas, or the commits list is deduped
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_scenarios.py -m slow -k mcp-orchestration; grep progress.py for commits.append
+step 24 fails: P1.T1..T3 attempts 1 completed_times 1 commits 2; progress.py lines 226 and 234 both append
+```
+
+## Does B-fix-merge-report drop a gitflow hotfix from develop's version plan? (B9a337697c0)
+
+**Verdict: CONFIRMED** · item `B-fix-merged-sha-lines`
+
+
+**Probe:**
+
+```console
+$ tests/test_merged_sha_lines.py::test_a_back_merged_hotfix_ships_on_develop on main: gitflow repo, hotfix H1 claimed, committed, ddflow merge (main + back-merge into develop), complete, version show --json
+items [] with reasons only 'patch: fix: the outage'; merged_sha = main's merge commit, branch head an ancestor of develop
+```
+
+**Sources:** roborev job 924; services/flow.py merge-base --is-ancestor merged_sha ref
+
+## Do R-dedupe-matchers' labels hold on today's log, what was added since, and is the bar reachable on a redacted snapshot?
+
+**Verdict: CONFIRMED** · item `B-dedupe-evalset`
+
+- **Claim.** All 75 research labels name records still in the log and read as labelled; 9 new pairs since (1 duplicate, 6 related, 2 hard negatives); after redaction the research TF-IDF still meets every bar on the 634-record snapshot.
+- **Mechanism.** Labels re-read against bug.found/task.added bodies and closure reasons; new pairs found from task.removed/bug.invalid 'duplicate' reasons and the matcher's top unlabelled pairs dated 2026-10-01. Redaction masks only IPs, versioned model names, host name and home dir, which are rare tokens shared by few pairs.
+- **Falsifier.** A labelled id missing from the corpus, a pair whose texts describe something other than its label, or the reference matcher below any bar after redaction.
+
+**Probe:**
+
+```console
+$ python tests/fixtures/dedupe/build_fixture.py --check --events .ddflow/events; pytest tests/test_dedupe_eval.py; evaluate(_reference_scorer())
+634 records (checked); 7 passed, 1 xfailed (ModuleNotFoundError ddflow.services.similar); reference: dup_r3 0.951 rel_r5 0.957 lenient_p 0.824 hard_above 0.15 dup_asked 0.463. Re-verified: B5fde61b8a9~B9aeb141b9a kept duplicate (same report; the first was later closed invalid as a lapsed lease); Bbd07ab69fd~Bc5aec031b3 kept duplicate (one root cause, different words). Added: B203~B-semantic-recall dup; Bc50bc7fb58~B9b57176aac, B198~B-dupes-sweep, B198~B-add-checks-duplicates, Bbbcb91599c~Bd8038b08a1, B-fix-hooks-*-precommit, Bc496508f6b~B7f8060f2f5 related; B-late-renewal-overjoin~B-resolve-cannot-keep-holder, B-mcp-registry-504~B-mcp-registry-ownership hard negatives.
+```
+
+**Sources:** research R-dedupe-matchers labels.py; .ddflow/events
+
+## Does a refused MCP call lead with nulls, and which tools can return that shape? (B9cf58aaeaa)
+
+**Verdict: CONFIRMED** · item `B-fix-mcp-refusal-nulls`
+
+- **Claim.** Every MCP tool result goes through surfaces/mcp.py::_outcome_result. For a non-zero exit it still serialises the tool's SUCCESS projection (Outcome.body(payload)), whose .get() pads every projected key absent from data with null, and appends the reason as a second block. So any tool with a tuple payload that refuses or fails with less data than its success shape leads with nulls, and data outside the projection (claim's 'alternatives', 'id') is dropped.
+- **Mechanism.** Outcome.body(tuple) = {k: data.get(k)}; _outcome_result json-dumps that into content[0]; reason only in content[1]. Test-suite probe of non-zero outcomes reaching it: item.claimed 3, worktree.merged 3, gate.record 3, gate.verify 1/3, bug.invalid 3, bug.fixed 1, workflow.gate/pipeline 1, workflow.drop 2, lease.renewed 2 (all tuple projections); arrays (loops 1, recover/jobs/hits 2) and text documents are real results.
+
+**Probe:**
+
+```console
+$ Server(repo).handle tools/call ddflow_claim T2 overlapping T1 held by alpha, as_agent beta
+content[0] = {item:null, holder:null, worktree:null, branch:null, base:null, rebound:null, here:null, port:null, port_advice:null}; content[1] = 'T2 writes a.py which overlaps ...'; isError false; _meta.exit 3
+```
+
+## Does a plain import leave a finished, needed phase empty and open?
+
+**Verdict: CONFIRMED** · item `B-fix-import-needed-phase`
+
+- **Claim.** plan_import keeps a phase open work needs (live_phases |= needs) but a plain import leaves its ticked tasks out and never settles phases, so the phase lands EMPTY and OPEN and the dependent is never ready
+- **Falsifier.** after a plain 'import --apply' of '## Phase 3: - [ ] 3.B Needs: P5' and '## P5: - [x] P5.A, - [x] P5.B', 'ddflow next' offers 3.B
+
+**Probe:**
+
+```console
+$ that docs/todo.md; ddflow import --apply; ddflow next; tests/test_import_needed_phase.py on unfixed code
+main: 'Nothing actionable (0 ready, 0 running, 1 blocked). 3.B: deps -- phase P5 has no open tasks but is not marked done', rc=2; 2 regression tests fail unfixed. Fixed: P5 done ('every task under it is done or closed in the source (2 done, 0 closed)'), next offers 3.B
+```
+
+## Does the D-reviewer-trust design close B3f9b8a4ac0 without un-counting operators' existing reviewers?
+
+**Verdict: CONFIRMED** · item `B-reviewer-trust`
+
+- **Claim.** Re2a7e01d8e reproduced the fabrication through configure. With the module present but unwired, 13 of 17 new tests fail (configure accepts the command reviewer, no reviewer.configured, no digest stamped, no approve command); the 4 passing are the back-compat cases (hand-written HTTP and command reviewers, pre-digest evidence, no MCP approve tool), which must hold before and after. Back-compat is by construction: trust is withdrawn only from a digest that has a reviewer.configured event, and no such event exists for any entry written before this change.
+- **Falsifier.** a back-compat test fails after the change, or the reproduction still records a counted cross-family pass
+
+**Probe:**
+
+```console
+$ env -u PYTHONPATH -u DDFLOW_AGENT uv run pytest -q tests/test_reviewer_trust.py (module unwired, then wired)
+unwired: 13 failed, 4 passed; wired: 17 passed
+```
+
+## Can ddflow detect a duplicate bug/task/lesson at add time without an LLM, and which matcher?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** A stdlib TF-IDF cosine over FTS5 candidates finds the existing record in the top 3 for >=95% of real duplicates at a few ms per add; no score threshold can decide duplicate vs same-function-different-bug, so a human/agent answer is required.
+- **Mechanism.** Duplicates share rare domain terms (event kinds, function names, flags); TF-IDF weights them; hard negatives share the same terms, so scores overlap.
+- **Falsifier.** R@3 < 0.9 on the labelled set, or a threshold separating duplicates from hard negatives with precision >= 0.9 and recall >= 0.8.
+
+**Probe:**
+
+```console
+$ Benchmarked 13 matchers on 40 dup / 17 related / 18 hard-negative pairs + 98,345 negatives (ddflow log) and speed on run_nemo_run (6,100 records). TF-IDF+light stemmer: AP 0.537, R@1 0.68, R@3 0.95, R@5 0.975, lenient P 0.81 at 0.56; hard negatives 0.07-0.64; one same-root-cause pair at 0.14. FTS5 top-50 + rerank: 2.5/5.2 ms. rapidfuzz AP <= 0.29, MinHash 0.27, difflib 0.18, sklearn char TF-IDF 0.46 (203 MB), NLTK Porter 0.531 (no gain).
+```
+
+**Sources:** scratchpad dedup/bench_out.md, top_pairs.json
+
+## Are the overruled review findings on B-fix-review-chunks (both deepseek gates, re-review of fe13d9e) real?
+
+**Verdict: REFUTED** · item `B-fix-review-chunks`
+
+- **Claim.** Three findings are wrong: (1) HIGH 'truncation guard inverted' -- parse() returns (findings, on_contract: bool), so 'not parse(text)[1]' means NO STATUS block; (2) 'retry forwards on_settled with part indices' -- the retry gets only a wrapped on_tick naming the retried chunks, never on_settled; (3) '0-based vs 1-based off by one' -- _Progress takes 0-based indices and prints i+1, consistently
+- **Falsifier.** a complete reply at the token cap is discarded, or a retried chunk 3/3 is labelled chunk 2
+
+**Probe:**
+
+```console
+$ pytest tests/test_review_chunks.py -k 'token_cap or retry_names' on d85112c, and on 14ca4ce
+d85112c: all 7 pass (verdict at the cap reviewed on openai/anthropic/gemini; retry tick 'on retry (3)', settled line 'chunk 3/3 ... on retry'). 14ca4ce: verdict-at-cap passes too, cut-off cases fail as off-contract -- the guard polarity is right
+```
+
+## Are hyphenated lesson/research ids imported as slugs on main?
+
+**Verdict: CONFIRMED** · item `B-fix-import-hyphen-ids`
+
+- **Claim.** _LESSON_HEAD/_CITES match L\d+ only and research ids are always slugged, so '## L-12 — ...' imports as L-l-12-..., '## R-7 — ...' as R-r-7-..., and a summary bullet citing (L-12) becomes a separate summary lesson
+- **Falsifier.** ddflow import on a corpus with '## L-12 — ...' proposes the id L-12
+
+**Probe:**
+
+```console
+$ fixture docs/lessons.md (L-12, L-13), docs/lessons-summary.md '(L-12)', docs/RESEARCH.md (R-7); ddflow import on main; tests/test_import_hyphen_ids.py on unfixed code
+main: L-l-12-agent-branches-must-be-reba, L-l-13-never-force, LS-item-rebase-agent-branches (the bullet as its own lesson), R-r-7-does-x-work; NOTE '0 bullet(s) became the summary'. tests: 2 failed on unfixed code. Fixed tree over a log imported by main: import --verify 'Consistent', import 'Nothing to import'
+```
+
+## Why does 'ddflow decision list' crash with KeyError 'live' (Bb177c2e0e9)?
+
+**Verdict: CONFIRMED** · item `B-fix-decision-list-live`
+
+- **Claim.** api.decisions.decision_list rows are core.plain.plain(d), which carries dataclass fields only; Decision.live is a property, and surfaces/commands/decisions.py:_decision_list reads d['live']
+- **Falsifier.** the new test passes on unfixed main
+
+**Probe:**
+
+```console
+$ env -u PYTHONPATH -u DDFLOW_AGENT uv run pytest -q tests/test_decision_list_human.py on unfixed tree
+2 failed: CLI exit 1 with KeyError: 'live'; JSON rows have no 'live' key
+```
+
+## Which stage runs ddflow-check-commit during git merge in a pre-commit-framework repo, and is MERGE_HEAD visible there?
+
+**Verdict: CONFIRMED** · item `B-fix-merge-primary`
+
+
+**Probe:**
+
+```console
+$ scratch repo, pre-commit install with default_install_hook_types [pre-commit, commit-msg, post-commit] (run_nemo_run's), a local always_run hook with no stages printing MERGE_HEAD and GITHEAD_*, then git merge --no-ff b
+hook ran at the commit-msg stage of git merge: 'HOOK-RAN ... 1cc32001...' (MERGE_HEAD set), GITHEAD_1cc32001...=b; exit 1 -> 'Not committing merge; use git commit to complete the merge.' rc=1, 'A b2' left staged in the primary. A plain shell pre-commit hook is NOT run by git merge (no output, merge made).
+```
+
+**Sources:** run_nemo_run .pre-commit-config.yaml ddflow-check-commit has no stages:
+
+## Did the backlog migration (6be308a) close B14 on B12's evidence?
+
+**Verdict: CONFIRMED** · item `B-fix-migration-b12-b14`
+
+- **Claim.** docs/BACKLOG.md@6be308a puts the 'CLOSED -- the cross-family critic ran on every pass since; B57-B61, B76, B77 came from it (R10-R12)' paragraph under B14 (clock skew, THEORETICAL), though it describes B12 (cross-family review); the migration completed B14 and left B12 open
+- **Falsifier.** the paragraph sits under B12 in the source, or B14's completion evidence cites something about clock skew
+
+**Probe:**
+
+```console
+$ git show 6be308a:docs/BACKLOG.md | sed -n 284,300p; grep '"subject":"B14"' .ddflow/events/*.jsonl; ddflow show B12/B14/B13
+paragraph follows B14's THEORETICAL text and names the cross-family critic; B14 item.completed by backlog-migration evidence 'marked closed in docs/BACKLOG.md:291'; B12 open; sibling B13 (Windows, THEORETICAL) was imported BLOCKED 'THEORETICAL: ... no probe run'; R10-R12 exist in docs/RESEARCH.md@6be308a (R10 'a cross-family critic run')
+```
+
+## Why does the commit hook refuse ddflow merge's own merge commit in the primary, and what can it check instead? (B9b57176aac, Bc50bc7fb58)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** check_commit judges a clean merge commit's staged paths against the committing identity's leases, read from an event log pre-commit may have stashed; but a commit whose index equals the automatic merge of HEAD and the merged commit adds nothing not already committed (and lease-checked) on a parent
+- **Mechanism.** during git merge the pre-merge-commit hook has no MERGE_HEAD; git exports GITHEAD_<sha>=<name> for the merged commit, so the hook can compute git merge-tree --write-tree HEAD <sha> and compare it with git write-tree
+- **Falsifier.** MERGE_HEAD present during pre-merge-commit, or no GITHEAD_ env var
+
+**Probe:**
+
+```console
+$ scratch repo, pre-merge-commit hook printing env and .git contents, git merge --no-ff b
+no MERGE_HEAD in .git during the hook (AUTO_MERGE, ORIG_HEAD only); env: GITHEAD_af36e8e9...=b, GIT_REFLOG_ACTION=merge b; hook exit 1 -> 'Not committing merge' and the index left staged (B6926ec1ad9 family)
+```
+
+**Sources:** ddflow/services/enforce.py check_commit; git merge behaviour probed on git 2.43
+
+## Why does test_a_job_is_launched_detached_watched_and_its_exit_code_collected flake under load? (Bba19573760)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** The job 'sleep 1.5; echo done; exit 3' must still be running across two CLI subprocesses (job list, job end); when they take >1.5 s under -n 48 load the job has exited and 'job end' succeeds
+- **Falsifier.** the test still passing with a 2 s pause injected before the first 'job end'
+
+**Probe:**
+
+```console
+$ scratchpad copy of tests/test_jobs.py with time.sleep(2) before the first 'job end', pytest -k launched_detached against main
+AssertionError: a running job was recorded as ended / assert 0 == 3 -- the exact failure in the bug report
+```
+
+**Sources:** tests/test_jobs.py
+
+## Why does test_a_job_is_launched_detached_watched_and_its_exit_code_collected flake under load? (Bba19573760)
+
+**Verdict: THEORETICAL**
+
+- **Claim.** The job is 'sleep 1.5; echo done; exit 3' and the test needs it still running across two CLI subprocesses (job list, job end); under -n 48 load those take >1.5 s, the job has exited, and 'job end' succeeds (the reported failure)
+- **Falsifier.** the test still passing with a 2 s pause injected before 'job end'
+
+**Probe:**
+
+```console
+$ copy of the test with time.sleep(2) inserted before the first 'job end' (scratchpad), run with pytest
+see task B-fix-flaky-job-test implement evidence
+```
+
+**Sources:** tests/test_jobs.py
+
+## Does a dict[str,str] knob from the environment str()-cast non-string JSON values (B7506c1124a)?
+
+**Verdict: CONFIRMED** · item `B-fix-env-json-cast`
+
+- **Claim.** Yes: config._coerce_dict returns {str(k): str(v)} for dict[str, str], so DDFLOW_AGENT_FAMILIES='{"core": null}' loads {'core': 'None'}; _coerce's list branch does [str(x) for x in parsed], so [null] -> ['None'].
+- **Falsifier.** tests/test_env_json_values.py passes at 573104a-era main (b2aa17b)
+
+**Probe:**
+
+```console
+$ env -u PYTHONPATH -u DDFLOW_AGENT uv run pytest -q tests/test_env_json_values.py on the unfixed tree
+7 failed, 1 passed: map null/1/list refused x3, Config.load env null, list [null]/["a",2]/[["a"]] x3
+```
+
+## Does doctor notice an adopted project's driver docs lagging the templates the running ddflow ships, and is there a refresh that leaves MCP launches alone?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** No: doctor checks the rules blocks (rules_status) but never compares docs/ddflow/drivers/*.md with templates/drivers; the only refresh is a full 'ddflow adopt', which also rewrites every agent's MCP launch, hooks and command files.
+- **Falsifier.** doctor on a project whose implement-phase.md and deltas/claude-code.md lost lines reports them
+
+**Probe:**
+
+```console
+$ fresh repo; ddflow adopt --agents claude --launch python; commit; delete the 'ddflow wait' lines from implement-phase.md and deltas/claude-code.md; commit; ddflow doctor
+Healthy. (exit 0) -- no driver finding
+```
+
+**Sources:** ddflow/api/reporting.py:doctor, ddflow/services/adopt.py:adopt, rules_status
+
+## Does one [[macro]] named like a shipped command hide every macro on main?
+
+**Verdict: CONFIRMED** · item `B-fix-macro-clash-silent`
+
+- **Claim.** load_macros raises on the clash, macro_commands swallows it to {}, so valid macros vanish from prompts list/show and MCP prompts/list, and doctor stays at 0
+- **Falsifier.** with macros code-clean + bug-hunting, 'ddflow prompts show bug-hunting' prints the macro
+
+**Probe:**
+
+```console
+$ fresh repo; [[macro]] code-clean, bug-hunting, fileish(prompt_file); main: ddflow prompts show bug-hunting; ddflow doctor; tests/test_macro_clash.py on unfixed tree
+main: "unknown prompt 'bug-hunting'" (exit 1), doctor rc=0, nothing about macros; test_macro_clash.py 7 failed on unfixed code
+```
+
+## Is a wrong worktree binding sticky, and does merge land an empty bound branch as the item?
+
+**Verdict: CONFIRMED** · item `B-fix-sticky-binding`
+
+- **Claim.** Yes
+- **Mechanism.** claim's recorded-tree branch rebinds to item.worktree wherever the caller stands; _what_to_land refuses --branch for an item with its own tree; nothing checks the landed branch has commits ahead of the target
+
+**Probe:**
+
+```console
+$ scratchpad probe_sticky.py on main 92a49f9 (bridge/real trees, see task body)
+reclaim -> 'the item's own tree ... cd bridge'; merge --branch real-work -> 3; merge -> 0 'merged T1', 0 commits ahead, main has a.py: NO
+```
+
+## Does the global --agent flag fail after the subcommand?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Yes: --agent/--repo/--json are defined only on the top-level parser
+- **Mechanism.** build_parser adds them to the root ArgumentParser only; argparse subparsers reject unknown options
+
+**Probe:**
+
+```console
+$ ddflow brief --agent x --item foo
+ddflow: error: unrecognized arguments: --agent x (exit 2); 'ddflow --agent x brief --item foo' exits 0
+```
+
+## Does hooks install, refusing over a pre-commit-framework hook, advise editing the generated file?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Yes: _install_one's refusal says 'Add this line to it yourself' for any foreign hook, including one with the 'File generated by pre-commit' header, which pre-commit rewrites on the next install; it also refuses when ddflow's checks are already armed through .pre-commit-config.yaml.
+- **Falsifier.** hooks install over a framework-generated .git/hooks/pre-commit names .pre-commit-config.yaml rather than the hook file
+
+**Probe:**
+
+```console
+$ git init; write pre-commit 4.6 generated .git/hooks/pre-commit; ddflow init; ddflow hooks install
+REFUSED: .../.git/hooks/pre-commit already exists and is not managed by ddflow. Add this line to it yourself: PYTHONPATH=... -m ddflow hooks check-commit "$@" || exit 1 (exit 1)
+```
+
+**Sources:** ddflow/services/enforce.py:_install_one
+
+## Does adopt run from inside a linked worktree write the project's tracked files into the primary checkout?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Yes: Ctx.repo is repo_root (--git-common-dir parent), and api.setup/adopt write every file under it; the caller's own tree (--show-toplevel) gets nothing.
+- **Falsifier.** after 'ddflow adopt --agents claude --launch python' run in a linked worktree, the primary's git status is clean and the worktree's is not
+
+**Probe:**
+
+```console
+$ fresh repo prim + 'git worktree add -b wt ../wt'; cd wt; python -m ddflow adopt --agents claude --launch python; git -C ../prim status --short; git status --short
+primary: ?? .claude/ .ddflow/ .gitattributes .gitignore .mcp.json AGENTS.md CLAUDE.md docs/ ; worktree: (clean)
+```
+
+**Sources:** ddflow/surfaces/commands/setup.py:cmd_adopt, ddflow/api/setup.py:setup, ddflow/infra/worktree.py:repo_root
+
+## Does resolve --keep X widen X's window over claims still on record without re-checking them? (B6805b48aca) And what should the window be?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** On main (after B-fix-contest-gaps / B-fix-renewal-overjoin) _h_resolved sets the kept lease's renewed_at = max(renewed_at, at) and never weighs the widened window against the record: A(1150,300) E(1200,300) C(150,150) D(250,50), resolve keep=D at 5000 -> contest [], displaced [A], lease D (250..5050) although A's 1150..1450 lies inside it. All 24 fold orders agree.
+- **Mechanism.** Two readings disagree: (a) re-check after widening -> A joins a contest with D, the item is blocked 'contested' again right after the operator settled it, and every resolve of a long-lapsed claim re-creates a contest with whatever took over in the gap (a resolve that cannot finish in one step). (b) widening is the modelling error: D held 250..300 and nothing until the resolution at 5000; A's claim in the gap was a legitimate TTL takeover, not a double claim. Under (b) the resolution's sign of life starts a NEW window [at, at+ttl] when the kept claim had lapsed by 'at' (keep the original claim's window on record for pairwise reads), and only claims overlapping that new window are re-checked -- normally none, since resolve released them. (c) re-check and auto-release the newly-overlapped claims as decided by the resolution: releases a claim nobody chose to release.
+- **Falsifier.** the contest/displaced lists after resolve already holding A in a contest with D
+
+**Probe:**
+
+```console
+$ python3 scratchpad probe using tests/test_lease_contest._folded over all 24 permutations, releasing lease_losers(D) then item.resolved claim=D at=5000
+24x ('A','C','D','E') ([], ['A'], 'D', ['C','E']) -> contest [], displaced [A], displayed D, released C,E
+```
+
+**Sources:** ddflow/core/model.py, tests/test_lease_contest.py
+
+## Why do reviews run in waves (B289bf87e8d) and why do reasoning-model reviewer chunks come back TRUNCATED (B568e9def3b, B769704d1dc)?
+
+**Verdict: CONFIRMED** · item `B-fix-reviewer-defaults`
+
+- **Claim.** (1) Reviewer.max_concurrency defaults to 4 and _race caps the pool at it, so chunks x hedge > 4 runs in waves. (2) Reviewer.temperature defaults to 0.3 and is always sent; lesson Lf3feebf5d3 measured DeepSeek at 0.3 looping to 64000 reasoning tokens on every reasoning_effort while 1.0 reviewed the same diff fully; the operator's home-simulator and run_nemo_run reviewer entries carry no temperature, so they run at 0.3 (ddflow's own local entry sets 1.0). (3) A chunk whose every copy truncates is reported lost with no second draw, though thinking length is random per call (Rfa535c6747: one call in four never answers on a hard diff).
+- **Mechanism.** default knob values in services/review.py Reviewer; _race pool size; review() absorbs settled failures directly
+- **Falsifier.** new tests pass at 4d0b180 (peak in flight 10 for 5x2, no temperature in the request body, truncated chunk retried)
+
+**Probe:**
+
+```console
+$ env -u PYTHONPATH -u DDFLOW_AGENT uv run pytest -q tests/test_reviewer_defaults.py at 4d0b180 (unfixed); grep temperature in the operator's three local reviewer files (values not recorded)
+8 failed, 1 passed: test_an_unset_temperature_is_not_sent test_other_backends_omit_an_unset_temperature[anthropic] test_other_backends_omit_an_unset_temperature[gemini] test_truncated_names_temperature_as_a_remedy test_by_default_every_chunk_and_copy_goes_out_in_one_wave test_the_one_wave_is_bounded - Attrib... test_a_chunk_that_truncated_on_every_copy_is_retried_in_halves test_a_retry_that_truncates_again_stays_unreviewed_and_says_why ; temperature set only in ddflow's local reviewers.toml, absent in home-simulator and run_nemo_run
+```
+
+## Can parallel items share append-only/generated files (CHANGELOG, RESEARCH, README, a regenerated config) without colliding on leases (B07878037ab)?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Not today: glob_clash treats every live lease's globs as exclusive and there is no shared class; but git's merge=union merges two branches' CHANGELOG prepends without conflict, so an exempt 'shared' class backed by a merge driver is workable for append-only files. Generated files cannot use union (it interleaves); they must be regenerated at merge or kept out of items' globs
+- **Falsifier.** two branches each prepending a line to CHANGELOG.md with merge=union in .gitattributes conflict on the second merge
+
+**Probe:**
+
+```console
+$ scratch repo: CHANGELOG.md merge=union; branches a and b each insert '- from a'/'- from b' above '- old'; git merge a; git merge --no-edit b
+merge exit 0; file = '- from a', '- from b', '- old' (both kept, no conflict). grep: no shared_globs in ddflow; merge=union used only for .ddflow/events/*.jsonl (services/adopt.py UNION_MERGE_LINE)
+```
+
+**Sources:** gitattributes(5) merge=union; ddflow/services/leases.py glob_clash; ddflow/services/enforce.py check_commit
+
+## B9d8bd466c3 part 2: should 'ddflow review' record a gate 'failed' the moment a reviewer reports findings, before the author triages them?
+
+**Verdict: THEORETICAL**
+
+- **Claim.** Today api.review records failed whenever an on-contract review has >=1 finding; refuting them leaves a failed->passed flip that reads like a fix. D-failed-critic-not-blocking (operator, 2026-09-30) made 'failed' a non-blocking outcome and says audit the evidence, not the mark -- it does not settle WHEN failed is recorded. Options: (A) keep as is; (B) a new outcome 'findings' (pending triage) that complete refuses until each finding is resolved confirmed/refuted with a probe -- cleanest meaning, but a new outcome in the vocabulary every gate rule, render and complete reads, and it re-opens the 'do not block' decision; (C) keep 'failed', add 'ddflow review triage <id> --gate G --finding N --refuted|--confirmed --probe ...' that records a triage event per finding, and render a gate whose findings are all refuted as 'failed -> triaged: all refuted' so the flip reads as triage. Recommendation: C -- no new outcome, consistent with the decision, and the log says what happened.
+- **Falsifier.** a decision already says when a review records failed
+
+**Probe:**
+
+```console
+$ grep decision.recorded for critic/finding/triage in .ddflow/events
+only D-failed-critic-not-blocking (failed does not block complete); nothing on when failed is recorded
+```
+
+## Does an id entry holding junk count as a registered companion on main?
+
+**Verdict: CONFIRMED** · item `B-fix-companions-id-entry`
+
+- **Claim.** _registered_name accepts any non-null value under the id, so {} / 'x' / 5 / [] make the companion registered and its gate covered
+- **Falsifier.** a fresh repo with .mcp.json {context7: {}} where ddflow companions reports context7 as not registered
+
+**Probe:**
+
+```console
+$ for v in {} '"x"' 5 []: .mcp.json {mcpServers:{context7:v}}; ddflow --json companions -> state; plus tests/test_companions_id_entry.py on 573104a
+each value: ('context7','registered',['claude']); new test file: 8 failed, 7 passed on unfixed code; 15 passed after fix
+```
+
+## Do ddflow's long commands renew the caller's lease? (Bc6ec4fd40d, Bf0cccb8fb1)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** gate run renews (api.gates._lease_keeper, since a9a7cce); review does not
+- **Falsifier.** run_nemo_run 159.A.8 shows lease.renewed events during its reviews
+
+**Probe:**
+
+```console
+$ grep 159.A.8 in run_nemo_run/.ddflow/events: lease.renewed and gate events timeline
+gate.started unit_tests 14:42:01, lease.renewed 14:47:02 14:52:02 14:57:02, gate.failed unit_tests 15:00:12 (1089 s): renewed. gate.partial rubber_duck 15:03:28 (1301 s) and critic 15:06:12 (1465 s): no renewal from 14:57:02 to 15:32:18 -- the review is the gap
+```
+
+## Do reviews show per-chunk progress, and is extra_rules reachable? (B9d8bd466c3, Bbeb0c7542f)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** api.review calls services.review.review without on_chunk, so nothing is printed between the start line and the summary; extra_rules has no caller and no config key
+- **Falsifier.** grep finds a caller passing on_chunk or extra_rules
+
+**Probe:**
+
+```console
+$ grep -rn 'extra_rules\|on_chunk' ddflow (excluding templates)
+only services/review.py's own parameter defaults and uses; no caller
+```
+
+## Does the same PARTIAL review exit differently by gate? (B091993a9fc)
+
+**Verdict: REFUTED**
+
+- **Claim.** api.review maps PARTIAL to exit 3 by status alone; the gate does not enter the mapping
+- **Falsifier.** ddflow review T1 --gate rubber_duck and --gate critic on the same partial diff exit differently
+
+**Probe:**
+
+```console
+$ bash /tmp/claude-1001/-home-delian-src-ddflow--claude-worktrees-bridge-cse-015NbhRCT5XtidHYRvkjBCLK/e0567917-2370-56c0-a094-caf440a8b983/scratchpad/probe_exit.sh (command reviewer serving both gates, one chunk off contract)
+gate rubber_duck exit=3; gate critic exit=3. run_nemo_run/home-simulator logs record both as partial; the 0 is most likely the shell (a pipe's exit status) -- not reproducible from ddflow
+```
+
+## Is a chunk whose request outlives timeout_s reported as an endpoint problem? (B338a8bb598)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** a read timeout after the request was accepted surfaces as 'unreachable: timed out' -- same text as a dead endpoint
+- **Falsifier.** the reason distinguishes a timed-out generation from a connect failure
+
+**Probe:**
+
+```console
+$ uv run python /tmp/claude-1001/-home-delian-src-ddflow--claude-worktrees-bridge-cse-015NbhRCT5XtidHYRvkjBCLK/e0567917-2370-56c0-a094-caf440a8b983/scratchpad/probe_timeout.py (server accepts, sleeps 3 s; timeout_s=1)
+UNAVAILABLE | chunk 1/1: unreachable: timed out
+```
+
+## Does review name every unreviewed chunk, and can one chunk be re-reviewed? (Bd2332f8f2a)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** _absorb_chunk keeps only the FIRST failure (res.reason = res.reason or ...), names no files, and the CLI has no --chunk/--paths option
+- **Falsifier.** a review with two failing chunks names both
+
+**Probe:**
+
+```console
+$ bash /tmp/claude-1001/-home-delian-src-ddflow--claude-worktrees-bridge-cse-015NbhRCT5XtidHYRvkjBCLK/e0567917-2370-56c0-a094-caf440a8b983/scratchpad/probe_exit.sh + a 2nd BADCHUNK file; ddflow review T1 --gate critic; ddflow review --help | grep chunk
+PARTIAL: 1 finding(s), 5/7 chunk(s) reviewed, 2 off-contract -- chunk 4 came back OFF CONTRACT (only chunk 4 named, no files); help has no chunk option (grep exit 1)
+```
+
+## Does claim copy [worktree].local_files into a tree it binds without W.create?
+
+**Verdict: CONFIRMED** · item `B-local-files-adopted-trees`
+
+- **Claim.** No: only W.create calls copy_local_files; the W.current adoption and the recorded-tree rebind in api/lifecycle.claim never do.
+- **Falsifier.** the new tests (harness tree adopted via called_from; re-claim rebind after the file was removed) pass on unfixed main
+
+**Probe:**
+
+```console
+$ pytest tests/test_worktree_local_files.py -k 'harness or reclaim' on the unfixed branch
+2 failed: FileNotFoundError harness/.roborev.toml and .ddflow-worktrees/T1/.roborev.toml
+```
+
+**Sources:** ddflow/api/lifecycle.py:claim, ddflow/infra/worktree.py:create
+
+## Does update --resources on a claimed item reach lease.resources (Bc496508f6b)?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** No: items._record_update retargets the lease only for globs; resources land on item.resources, while resource_shortfall reads lease.resources
+- **Falsifier.** after claim then update --resources gpu:2, lease.resources == ['gpu:2']
+
+**Probe:**
+
+```console
+$ scratch repo: task add T1; --agent x claim T1 --no-worktree; --agent x update T1 --resources gpu:2; fold
+item ['gpu:2'] lease []
+```
+
+## Does an any-wait whose blockers all need an operator sleep to its timeout (B02e99efc75)?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Yes: _judge_any refuses at once only when no other agent holds anything; with any unrelated lease it returns blocked over every lease, even when every blocked item is in a cycle or behind an expired lease
+- **Falsifier.** wait (no item) with a 2-cycle and one unrelated lease returns in < 2 s
+
+**Probe:**
+
+```console
+$ pytest test_an_any_wait_on_a_cycle_alone_does_not_sleep on main 590d813 (timeout 5 s)
+slept 5.0 s, then exit 2 'Still blocked'
+```
+
+## Does wait --item judge the globs the next claim will take (B7036cf788c)?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** No: _claim_blocker checks glob_clash on it.globs (stored) and wait has no --globs, so READY can precede a refused claim --globs
+- **Falsifier.** wait accepts the claim's globs
+
+**Probe:**
+
+```console
+$ pytest test_wait_judges_the_globs_the_claim_will_take on main
+TypeError: wait() got an unexpected keyword argument 'globs'
+```
+
+## Does ddflow --json board ignore --json? (B1f1d4f9f54)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** cmd_board prints the markdown text unconditionally
+- **Falsifier.** JSON on stdout
+
+**Probe:**
+
+```console
+$ temp repo: ddflow --json board | head -1
+<!-- GENERATED by `ddflow render`. Do not edit ...
+```
+
+**Sources:** ddflow/surfaces/commands/reporting.py
+
+## Does update --globs silently drop a claimed item's earlier globs (Bd8038b08a1), and does show print lease globs?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** update --globs replaces item and lease globs (by design: a field set; the implement gate text from B-fix-bad-mentions already says it replaces) but the CLI prints only 'updated: globs', naming nothing dropped; show prints item globs and lease holder, never lease globs
+- **Falsifier.** update output names the dropped glob
+
+**Probe:**
+
+```console
+$ pytest test_update_globs_names_what_it_dropped, test_show_prints_the_lease_globs on main
+stdout 'T1 updated: globs'; show: 'lease agent-holder (1800s left)' with no globs
+```
+
+## Does ddflow show <bug id> answer no such item? (B-show-bug-id)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** api.reporting.show looks only in st.items
+- **Falsifier.** show printing the bug record
+
+**Probe:**
+
+```console
+$ temp repo: ddflow bug found --summary 'a bug' -> Bb251ec3d2f-like id; ddflow show <it>
+no such item 'B60f226ce2c' exit 1
+```
+
+**Sources:** ddflow/api/reporting.py
+
+## Why does a lease.renewed reset claim --globs to the item's stored globs (Bbd07ab69fd)?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** claim --globs writes lease.globs only; heartbeat's _catch_up_globs (api/lifecycle.py, added for Bb21d338f26) retargets the lease to item.globs whenever they differ, so the first heartbeat undoes the claim's globs
+- **Falsifier.** after claim --globs X (item globs Y) and a heartbeat, lease globs are still X
+
+**Probe:**
+
+```console
+$ pytest test_a_heartbeat_keeps_the_globs_the_claim_took on main 590d813
+lease globs ['src/shared.py','src/stored.py'] (the item's) instead of the claimed ['src/new.py','src/stored.py']
+```
+
+## Does next --phase <unknown id> answer 'Nothing actionable'? (Bde0c6e9fad)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** next_ never checks the phase id exists
+- **Falsifier.** an error for an unknown phase
+
+**Probe:**
+
+```console
+$ temp repo: ddflow next --phase 159
+Nothing actionable (0 ready, 0 running, 0 blocked). exit 2
+```
+
+**Sources:** ddflow/api/lifecycle.py
+
+## Do repeated or JSON-array --globs reach the lease intact (Bdc85898c40, Bb3cb64444e)?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** No: cli.py declares --globs with plain store on claim/update/task add/phase add, so a repeated flag keeps the last value; api claim splits a JSON array string on commas, keeping brackets and quotes
+- **Mechanism.** argparse store + csv_list split
+- **Falsifier.** claim with three --globs flags records all three in lease.acquired
+
+**Probe:**
+
+```console
+$ pytest test_claim_globs.py on main 590d813: test_a_repeated_globs_flag_claims_every_value, test_a_json_array_of_globs_is_read_as_a_list_not_split_into_junk
+lease globs ['docs/c.md'] for three flags; lease globs ['"config/speaker.py"]', '["src/speaker.py"'] for a JSON array; the 'ten flags, no globs' case is Bbd07ab69fd: the first heartbeat reset the lease to the item's empty stored globs
+```
+
+## Is MCP ddflow_status unbounded? (Bd6aa9ffde9)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** api.reporting.status lists every done task in completed_tasks with no cap or flag
+- **Falsifier.** a cap or budget in status()
+
+**Probe:**
+
+```console
+$ read ddflow/api/reporting.py status(): completed_tasks = [... for t in done]; MCP ddflow_status properties {}
+no bound, no parameter
+```
+
+**Sources:** ddflow/api/reporting.py, ddflow/surfaces/mcp.py
+
+## Do status counts drop items held back only by max_parallel_tasks? (Bdcce70d036)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** status counts blocked as reason=='deps' only, so cap-held (reason state) items are in no bucket
+- **Falsifier.** tasks.total == done+running+ready+blocked
+
+**Probe:**
+
+```console
+$ same temp repo; ddflow --json status
+{'total': 4, 'done': 0, 'running': 1, 'ready': 1, 'blocked': 0} -- U3,U4 in no bucket
+```
+
+**Sources:** ddflow/api/reporting.py
+
+## Does plan say 'parallelism cap reached' while a slot is free? (B40386f7a40)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** with in_flight < max_parallel_tasks the items ranked past the free slots get 'cap reached'
+- **Falsifier.** a different message when slots > 0
+
+**Probe:**
+
+```console
+$ temp repo, max_parallel_tasks=2, U1..U4, a1 claims U1; ddflow --json next
+ready ['U2']; U3,U4: state 'parallelism cap reached (schedule.max_parallel_tasks=2); 1 in flight across the queue'
+```
+
+**Sources:** ddflow/core/schedule.py
+
+## Does schedule.critical_path(state, phase) drop sub-tasks nested under a task? (B13ed484062)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** critical_path slices by direct parentage, so a phase whose chain lives under a task reports only the phase
+- **Falsifier.** critical_path(st,'P') returning the S1>S2>S3 chain
+
+**Probe:**
+
+```console
+$ temp repo: P > T > S1, S2 needs S1, S3 needs S2; critical_path(st,'P'), critical_path(st)
+cp P ['P'] cp all ['S1', 'S2', 'S3']
+```
+
+**Sources:** ddflow/core/schedule.py
+
+## Does the review diff carry git's hunk-header funcname text, which is not part of the hunk? (Bbf41d8f07f)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** git diff appends a funcname guess after the closing @@; for non-code files the default xfuncname picks the nearest preceding line starting with a letter, which can lie outside the hunk and belong to another block
+- **Falsifier.** the @@ line of a TOML diff carries no text, or only text inside the hunk
+
+**Probe:**
+
+```console
+$ git init; c.toml with [a] default=true ... [memory] default=false m0..m9; change m5; git diff | grep ^@@
+@@ -27,7 +27,7 @@ m1 = 1  (m1 is line 25: outside the hunk)
+```
+
+## Does split_diff emit a header-only chunk for one file larger than max_chunk_chars? (B779270c994)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** header = f.split('\n@@')[0] leaves the remainder starting with '\n'; re.split on ^(?=@@ ) yields '\n' first, so current != header and the header alone is flushed before the first hunk
+- **Falsifier.** first chunk of a 10 KB single-file new-file diff at max_chars=5000 contains a hunk
+
+**Probe:**
+
+```console
+$ uv run python /tmp/claude-1001/-home-delian-src-ddflow--claude-worktrees-bridge-cse-015NbhRCT5XtidHYRvkjBCLK/e0567917-2370-56c0-a094-caf440a8b983/scratchpad/probe_split.py (200-line new file, split_diff(diff, 5000))
+10208 [100, 10207]; FIRST CHUNK HAS HUNK: False; chunk 0 ends at '+++ b/new.py\n'
+```
+
+## Does gate run keep the full output so its recorded output_digest can be checked (bug Bac392907b1)?
+
+**Verdict: CONFIRMED**
+
+
+**Probe:**
+
+```console
+$ read services/gates.py run_command_gate
+ev = {output_digest: digest(out), output_bytes, tail: out[-2000:]}; out is not written anywhere, so the digest names bytes nobody kept, and a summary line before the last 2 KB (first pass '115 failed') is lost
+```
+
+**Sources:** ddflow/services/gates.py run_command_gate
+
+## Does 'gate record --help' say --reason is required for failed/unavailable/partial (bug Be097545791)?
+
+**Verdict: CONFIRMED**
+
+
+**Probe:**
+
+```console
+$ ddflow gate record --help
+--reason REASON (no help text); services.gates.record raises "outcome 'partial' must carry a --reason"; the MCP schema already says 'Required for failed/unavailable/partial/skipped.'
+```
+
+**Sources:** ddflow/surfaces/cli.py gate record parser
+
+## Does complete's 'passed on a different tree' NOTE fire after an ordinary merge whose landed tree is identical to the tested one? (bugs Bd86b05a8f8, Ba84119f707, B613cb67194)
+
+**Verdict: CONFIRMED**
+
+- **Claim.** yes: completion.verdict fingerprints W.load_path(it.worktree) or repo; merge removed the worktree, so it fingerprints the PRIMARY checkout (HEAD = main/merge commit), and tree_fingerprint is '<HEAD12>+<dirt>', a commit id, so any other HEAD reads stale
+
+**Probe:**
+
+```console
+$ fresh repo; command gate unit_tests=true; claim T1, commit a.py in the worktree, gate run unit_tests (clean, on the branch head), merge (worktree removed), record other gates, complete
+merged T1 (65b8bd36) into main / NOTE: unit_tests passed on a different tree than the one you are completing
+```
+
+**Sources:** ddflow/services/completion.py verdict; ddflow/services/gates.py stale_evidence, tree_fingerprint
+
+## Can an agent fabricate an independent review through ddflow_configure (B3f9b8a4ac0), and which remedy fits?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Yes on main 028b910: api.setup.configure(local=True, append_toml=[[reviewer]] kind='command' command=printf 'STATUS: NO FINDINGS' model='gemini-2.5-pro' family='google') is accepted with no operator gate; ddflow review then records critic=passed (reviewer indep, family google), which reviewer_independence counts as cross-family. No existing decision settles who may write reviewer entries: D-no-own-services-local-dir only says WHERE they live, and 4dd7b3e (operator, 2026-10-01) made ddflow_configure's description point agents AT the [[reviewer]] form, so refusing it would reverse a fresh operator choice. Options: (A) configure/_append_config/_write_config refuse [[reviewer]] and reviewer.* over every agent surface, as they refuse gate.<id>.human ('set it in a file no tool writes'); reviewers detect --write keeps writing http entries for servers it actually probed, never kind=command; operator hand-writes command reviewers. (B) provenance: every tool write of a reviewer entry emits a reviewer.configured event (agent, digest of the entry); ddflow review stamps the entry digest into evidence; reviewer_independence refuses evidence from an entry an AGENT wrote until the operator runs a human-only 'ddflow reviewers approve <name>' (mirrors ddflow approve / human:true). (C) both: A for kind=command (arbitrary code, trivially fakeable), B for http entries. Recommendation: C. Neither stops an agent with a shell editing .ddflow/local/*.toml by hand (same limit as human gates: make forgery visible, not impossible); B is what makes it visible.
+- **Falsifier.** configure refuses the append, or review does not record critic passed with family google
+
+**Probe:**
+
+```console
+$ temp repo: configure(ConfigEdit(local=True, append_toml=command reviewer)); claim T1; commit; ddflow review T1 --gate critic
+0 appended to .ddflow/local/config.toml; '→ indep (google) reviewing 113 chars'; 'recorded T1.critic = passed (reviewer indep, family google)'
+```
+
+## Does B8f153072c9 (companion under another server key reported unregistered) still reproduce on main?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Already fixed on main by 622a254: registrations() matches by launch (launches_as), not only by key
+- **Falsifier.** ddflow companions on a repo whose .mcp.json has only 'coding-guides' launching docker run --rm -i docker.io/delian/codeguide-mcp prints codeguide as not registered
+
+**Probe:**
+
+```console
+$ fresh repo, .mcp.json {coding-guides: docker run --rm -i docker.io/delian/codeguide-mcp}; ddflow companions; and tests/test_companions_stale.py::test_a_server_under_another_name_with_the_same_launch_is_registered at 622a254^ vs main
+main: '[x] codeguide ... registered for: claude (as `coding-guides`)'; test FAILS at 622a254^ (AssertionError line 83), passes on main
+```
+
+## Does ddflow merge leave the primary checkout mid-merge on a conflict, unnoticed by doctor? (B6926ec1ad9)
+
+**Verdict: CONFIRMED**
+
+
+**Probe:**
+
+```console
+$ scratch repo: T1 branch and main both change c.txt; ddflow merge T1 from the primary
+CONFLICT (content): Merge conflict in c.txt; rc=1; git status: UU c.txt; .git/MERGE_HEAD present; ddflow doctor: Healthy.
+```
+
+**Sources:** ddflow/infra/worktree.py _merge_here: git merge with no abort on failure
+
+## Are B1c4a2346a9 / B74362ff685 (unknown knob in shared config crashes older code) still live on main?
+
+**Verdict: REFUTED**
+
+- **Claim.** Already fixed on main by 81a52e3 (file knobs lenient, recorded in cfg.unknown_knobs, doctor names them) and 9daffa8 (B-fix-config-forward-compat: every command names the unknown knob); they duplicate Bcfc0d22a09/B9cb7dd1c3b. Strictness kept on write paths (Config.check, env vars).
+- **Falsifier.** tests/test_config_newer_than_code.py passes at 81a52e3^ or fails on main
+
+**Probe:**
+
+```console
+$ git worktree add pre 81a52e3^; copy tests/test_config_newer_than_code.py; pytest there; pytest test_config_newer_than_code.py test_config_forward_compat.py on main
+81a52e3^: 2 failed (test_a_knob_this_code_does_not_know_is_skipped_and_the_rest_applies, test_every_command_still_runs_and_doctor_names_the_key); main: 9 passed
+```
+
+**Sources:** 81a52e3, 9daffa8, R-config-forward-compat
+
+## Does reviewer_independence still ignore the family declared on the [[reviewer]] (B4179f28f46)?
+
+**Verdict: REFUTED**
+
+- **Claim.** Already fixed on main by B-fix-declared-family (merge 223d493, bug B6ed8b9edb8, same report): _declared_family() prefers evidence['family'] that ddflow review recorded; tests/test_declared_reviewer_family.py covers the alias-names-the-author's-family case.
+- **Falsifier.** test_declared_reviewer_family passes at 223d493^1, or fails on main
+
+**Probe:**
+
+```console
+$ checkout 223d493^1 + that test file: pytest tests/test_declared_reviewer_family.py; same on main 573104a
+parent: 4 failed, 4 passed (test_a_review_recorded_family_wins_over_the_served_name, test_a_declared_family_equal_to_the_authors_is_not_independent, ...); main: 8 passed
+```
+
+## Do MCP tools other than claim, and a CLI claim with --agent, still resolve a subagent's work to its parent's harness tree?
+
+**Verdict: CONFIRMED** · item `B-fix-asagent-tree`
+
+- **Claim.** Yes on main 539586f: gate_run/merge/tests under a foreign as_agent use the connection's called_from; CLI claim --agent X adopts any linked tree it is run from
+- **Mechanism.** Server.handle swaps called_from for the primary only for tools flagged adopts_callers_tree (claim); api gate_run/_item_tree, merge/_branch_to_land, review.diff_for, relevant_tests/_caller_tree fall back to callers_tree(called_from) for an item with no tree. cmd_claim passes c.called_from regardless of --agent.
+
+**Probe:**
+
+```console
+$ draft tests/test_asagent_tree.py against main: no-worktree T1 claimed as_agent=sub-1 on a Server(called_from=parent-tree); parent-tree carries a.py
+gate_run exit 0 passed (parent's a.py); merge exit 0 landed parent-work as T1; tests diffed parent-tree; CLI --agent sub-1 claim from parent-tree (parent identity has written events) adopted parent-work. Controls (own identity / named agent alone in a harness tree) adopt.
+```
+
+## Did the commit hook warn 'no live lease' on B-local-config-surfaces because it resolved the wrong identity (B5fde61b8a9)?
+
+**Verdict: REFUTED**
+
+- **Claim.** No. The lease was bound to the very tree the commit was made in, so check_commit's same_tree rule would have counted it; the lease had EXPIRED. Its last clock-moving renewal was 14:13:52 (the update --globs renewals at 14:15/14:22/14:28 carry no 'at' and do not move renewed_at); commit 4dd7b3e at 15:00:03 is 46 min later, past ttl_s 1800 + grace_s 120; the agent heartbeated at 15:00:06, 3 s after the commit. The hook's message was true but misleading: 'You hold: (no live lease)' plus 'claim the work' instead of 'your lease in this tree lapsed, heartbeat it'.
+- **Mechanism.** services/enforce.check_commit only iterates active_leases; an expired lease bound to this tree is invisible, so the message cannot say it lapsed. DDFLOW_AGENT is already honoured (api.setup.hooks -> _load resolves it into cfg.agent.id).
+- **Falsifier.** If the lease folded at 15:00:03 were live, or bound to a different tree than the committing one, identity would be the cause.
+
+**Probe:**
+
+```console
+$ fold(events with ts <= 2026-10-01T15:00:03Z).items['B-local-config-surfaces'].lease
+holder local-config-surfaces, worktree .claude/worktrees/bridge-cse_015NbhRCT5XtidHYRvkjBCLK, branch worktree-bridge-cse_015NbhRCT5XtidHYRvkjBCLK (the branch 4dd7b3e was committed on), renewed_at 14:13:52.43, expired(15:00:03, grace 120) = True
+```
+
+**Sources:** ddflow/services/enforce.py check_commit; ddflow/core/model.py _h_lease_renewed; .ddflow/events lease.* for B-local-config-surfaces; git log c5f6483..4dd7b3e
+
+## Does ddflow merge run from inside the item's worktree exit 1?
+
+**Verdict: CONFIRMED** · item `B-fix-merge-report`
+
+- **Claim.** the exit 1 is ddflow's
+- **Mechanism.** worktree removal deletes the caller's cwd; the harness Bash tool runs pwd after every command
+
+**Probe:**
+
+```console
+$ bash -c 'cd tree; python -m ddflow merge T1; echo rc=$?' vs the same as the last command of a Claude Code Bash call
+plain bash: 'merged T1 (ce4d4aa0) into main' rc=0. As the harness's last command: 'merged T2 (688013dc) into main' + '[REDACTED:secret] retrieving current directory: getcwd' Exit code 1. ddflow exits 0; the caller's post-command pwd fails in the deleted directory.
+```
+
+**Sources:** reproduced in scratch repo
+
+## Does ddflow merge report the branch head instead of the merge commit?
+
+**Verdict: CONFIRMED** · item `B-fix-merge-report`
+
+- **Claim.** merge's sha is W.head_sha(worktree), captured before the merge
+
+**Probe:**
+
+```console
+$ scratch repo: claim T1, commit, ddflow merge T1 from the tree
+merged T1 (ce4d4aa0) into main; git log main: befb7d5 merge T1, ce4d4aa a -- the report names the branch head, not the merge commit befb7d5
+```
+
+**Sources:** ddflow/api/lifecycle.py merge(): sha = W.head_sha(wt.path); services/flow.py records info.merge_sha for PR merges
+
+## Does complete ignore the author model the agent declared at session start?
+
+**Verdict: CONFIRMED** · item `B-fix-agent-defaults`
+
+- **Claim.** api.complete passes model='' to reviewer_independence when --model is absent; nothing reads the agent's session.started model
+- **Falsifier.** complete without --model after session start --model claude-opus reports independence by family
+
+**Probe:**
+
+```console
+$ fresh repo: --agent impl session start --model claude-opus; claim T2; gate record rubber_duck --model gpt-5; --agent impl complete T2
+reviewer independence not satisfied: the author's model '' is not in [agent].families
+```
+
+**Sources:** ddflow/api/lifecycle.py complete(), ddflow/services/gates.py reviewer_independence, ddflow/surfaces/mcp.py initialize (clientInfo is a harness label, not a model)
+
+## Does 'ddflow --agent X brief' show an item X never claimed as Current?
+
+**Verdict: CONFIRMED** · item `B-fix-agent-defaults`
+
+- **Claim.** api.brief falls back to plan.ready[0] whenever --item is absent, ignoring the agent's own live lease, and renders it as Current
+- **Falsifier.** brief under the claiming agent headed with the claimed item
+
+**Probe:**
+
+```console
+$ fresh repo: task add C11, T2; --agent impl claim T2; --agent impl brief | grep Current
+## Current: C11 — first ready
+```
+
+**Sources:** ddflow/api/lifecycle.py brief(), ddflow/views/markdown.py _brief_current
+
+## Does bug fixed --regression-test accept several tests?
+
+**Verdict: CONFIRMED** · item `B-fix-regression-tests-arg`
+
+- **Claim.** Only a comma-separated value: ';' joins are resolved as one node id and refused as missing as a whole, and a repeated flag silently keeps only the last test
+- **Falsifier.** 'a;b' closes the bug, or a repeated flag records both
+
+**Probe:**
+
+```console
+$ scratch repo with tests/test_x.py defining test_a,test_b: ddflow bug fixed B1 --regression-test 'tests/test_x.py::test_a;tests/test_x.py::test_b'; ddflow bug fixed B2 --regression-test tests/test_x.py::test_a --regression-test tests/test_x.py::test_b
+B1: exit 1 '--regression-test names a test that exists in no worktree of this repository: tests/test_x.py::test_a;tests/test_x.py::test_b'. B2: exit 0, event data regression_test='tests/test_x.py::test_b' (test_a dropped)
+```
+
+**Sources:** ddflow/api/knowledge.py:_unresolved_tests, _split_outside_brackets; ddflow/surfaces/cli.py bx.add_argument('--regression-test')
+
+## Why does the ddflow_companions CLI/MCP parity test fail intermittently?
+
+**Verdict: CONFIRMED** · item `B-fix-flaky-companions-parity`
+
+- **Claim.** The two surfaces disagree only when the first (CLI) probe is inconclusive: an inconclusive result is never cached, so the MCP call re-probes live and can get a conclusive answer; a conclusive CLI result is cached (TTL 300s) and the MCP call reads it, so they agree.
+- **Mechanism.** companions.scan caches only inst is not None; is_installed returns None on timeout or spawn failure
+- **Falsifier.** A companion whose probe is conclusive on the CLI call and different on the MCP call making the unseeded test fail; or a CLI-inconclusive/MCP-conclusive companion NOT making it fail
+
+**Probe:**
+
+```console
+$ 1) flip companion with sh -c probe that succeeds once then fails: unseeded test PASSED (cache hit, as claimed). 2) flip companion whose probe cannot be spawned (exec format error) during the CLI call and exits 0 during the MCP call: unseeded test FAILED with flipflop state unknown vs installed, matching the pre-push failure (context7 unknown vs installed). With the cache seeded for every companion: 43/43 parity tests pass.
+```
+
+## How must publish.yml retry mcp-publisher publish across a transient registry 504, and is a re-run of the failed jobs safe?
+
+**Verdict: CONFIRMED** · item `B-fix-registry-504`
+
+- **Claim.** Registry JWTs from mcp-publisher login last 5 minutes, so a retry window of ~15 min must re-login per attempt; a duplicate version answers HTTP 400 'invalid version: cannot publish duplicate version'; GET /v0.1/servers/<urlencoded name>/versions/<v> answers 200 for a listed version and 404 otherwise (ddflow 0.1.0-0.1.6 all 404); mcp-publisher's http.Client has no timeout, so each call needs an external bound; GitHub 'Re-run failed jobs' reuses successful jobs' outputs and keeps GITHUB_SHA, so gate is not re-run and no version is minted
+- **Mechanism.** registry internal/auth/jwt.go tokenDuration=5*time.Minute; internal/service/registry_service.go wraps database.ErrInvalidVersion; handlers/v0/publish.go maps CreateServer errors to 400; cmd/publisher/commands/publish.go client := &http.Client{}
+- **Falsifier.** a token lifetime >= the retry window, a duplicate answering 2xx/409, or GET 200 for an unpublished ddflow version
+
+**Probe:**
+
+```console
+$ git clone --depth 1 modelcontextprotocol/registry (bf4e88c, 2026-09-22); grep tokenDuration/ErrInvalidVersion/http.Client; curl -w %{http_code} registry .../io.github.delian%2Fddflow-mcp/versions/{0.1.0..0.1.3,0.1.6}; same for ac.inference.sh/mcp 1.0.0
+jwt.go:69 tokenDuration: 5 * time.Minute; database.go:19 ErrInvalidVersion = 'invalid version: cannot publish duplicate version'; publish.go:66 huma.Error400BadRequest; publish.go client := &http.Client{} (no Timeout); ddflow 0.1.0/0.1.1/0.1.2/0.1.3/0.1.6 -> 404 404 404 404 404; ac.inference.sh/mcp 1.0.0 -> 200 in 0.38s. GitHub docs: re-run 'uses the same GITHUB_SHA and GITHUB_REF of the original event', up to 30 days, max 50 times; re-run failed jobs: 'outputs for any successful jobs in the previous workflow run will be used for the re-run'
+```
+
+**Sources:** https://github.com/modelcontextprotocol/registry, https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs, https://github.com/actions/runner/issues/2598
+
+## Why does an as_agent claim over MCP bind the subagent's item to the parent's harness worktree?
+
+**Verdict: CONFIRMED** · item `B-fix-asagent-claim`
+
+- **Claim.** The MCP dispatcher passes the connection's called_from (the server's start tree = parent's harness worktree) to api.claim for every caller; claim's adopt_existing branch then W.current(called_from) adopts it regardless of the per-call identity.
+- **Mechanism.** surfaces/mcp.py Server.handle: spec wants_called_from -> called_from=self.called_from; api/lifecycle.py claim: adopted = W.current(called_from or repo) if cfg.worktree.adopt_existing
+- **Falsifier.** A claim with as_agent='sub-1' from Server(repo, called_from=<linked tree>) on unfixed main records adopted=False
+
+**Probe:**
+
+```console
+$ PYTHONPATH=<main> pytest tests/test_asagent_claim.py (against main bbbe066 and again on the branch with mcp.py reverted)
+FAILED test_a_subagents_claim_does_not_adopt_the_parents_tree: AssertionError: sub-1's item adopted the parent's tree ../parent-tree; 1 failed, 4 passed
+```
+
+**Sources:** ddflow/surfaces/mcp.py, ddflow/api/lifecycle.py, ddflow/infra/worktree.py
+
+## Critic (DeepSeek) finding on B-fix-renewal-overjoin: the new assert in test_the_contest_is_exactly_the_claims_with_an_overlap_partner compares a list (_holders) with a set (want), so it is always false when its guard is entered and cannot catch the old behaviour
+
+**Verdict: REFUTED** · item `B-fix-renewal-overjoin`
+
+- **Claim.** False: in that test want = sorted(w for w in names if partners[w]) (line 203) is a list, so the comparison is list == list; the guard is entered and the assertion discriminates
+- **Falsifier.** the assertion fails on the fixed code, or passes with lease_losers' new branch removed
+
+**Probe:**
+
+```console
+$ uv run --with pytest-xdist pytest -n 48 -q tests/test_lease_contest.py -k overlap_partner, on the branch and with the displayed-non-contestant branch of lease_losers removed (mutation M2)
+branch: 40 passed; M2: 10 of 40 seeds fail (seeds 6,7,12,13,14,15,20,24,25,27) on that assertion
+```
+
+## Does removing the displayed-lease join from _late_renewal make 'resolve --keep <current holder>' impossible, and does the over-join make it possible today?
+
+**Verdict: CONFIRMED** · item `B-fix-renewal-overjoin`
+
+- **Claim.** The over-join does not make it possible: on main, keeping a displayed holder that overlapped no one settles nothing (exit 0, contest unchanged) when it was over-joined, and is refused when it was not. The fix belongs in resolve (accept the displayed lease; when it met none of the contest, every contestant ended before it took the item and is released), after which _late_renewal can join pairwise overlaps only.
+- **Falsifier.** On main, resolve --keep carol on _three_hops(1500) leaves an empty contest with carol holding
+
+**Probe:**
+
+```console
+$ probe.py on an export of main bbbe066: fold _three_hops(1500) and a double-claim-then-takeover log (alice 1000, bob 1500, carol 9000, ttl 1800), items.resolve keep in alice/bob/carol on a real log each
+three_hops contest [alice,bob,carol] lease carol; keep carol exit 0 released [] -> contest [alice,bob] lease carol. double_then_takeover contest [alice,bob] lease carol; keep carol exit 1 'names none of T's contestants'; keep alice releases bob AND carol, hands item back to lapsed alice
+```
+
+## Critic/rubber-duck (DeepSeek) findings on B-fix-contest-gaps 32d2535: (1) same-holder overlapping re-acquire becomes a contest; (2) a late renewal no longer contests a displaced claim with its since-released displacer; (3) a renewal after a same-holder re-claim should widen the FIRST claim
+
+**Verdict: REFUTED** · item `B-fix-contest-gaps`
+
+- **Claim.** (1) false: _clashing excludes same-holder claims; (2) true as a behaviour change but main's behaviour was the bug: it revived a released claim into a contest with no displayed lease, and only when the release folded first (filed+fixed B-late-renewal-revives-release); (3) false by design: a holder id is one clone's, so a renewal at 14 after its own re-claim at 12 renews the re-claim (main attributes it the same way)
+- **Falsifier.** the reviewers' folds produce a contest naming same-holder claims only (1), or a contest between unreleased claims missing (2), or a renewal from H's clone that cannot belong to H's latest claim (3)
+
+**Probe:**
+
+```console
+$ triage.py folds of each reviewer scenario on main (b6a424a) and on the branch; tests test_a_holders_own_overlapping_reclaim_is_not_a_contest, test_a_released_claim_is_not_revived_by_a_late_renewal_of_its_rival[release-first|renewal-first], test_a_renewal_belongs_to_the_holders_latest_claim_before_it
+c1: contest [] on both. c2 (h2 displaces h1, h2 released, h1 late renewal): main contest [h1,h2] lease None; branch contest [] h1 displaced; renewal-first order: [] on both. duck: contest [G,H(second claim)] on both.
+```
+
+## Do all three reported gaps (same-holder re-claim, >8 handovers, renewal by an undisplayed contestant) lose a real overlap on current main?
+
+**Verdict: CONFIRMED** · item `B-fix-contest-gaps`
+
+- **Claim.** Yes: on b6a424a, folds of the three repros leave an overlapping claim out of lease_contest, and a property test (holders re-claiming, renewals folded anywhere after their claim, random interleavings) finds missing claims in most seeds
+- **Mechanism.** _h_lease_acquired's not-live branch (same holder or recorded expiry) calls _hold and forgets cur; _displace truncates to MAX_DISPLACED=8; _late_renewal only searches it.displaced, so a contestant's renewal is dropped
+- **Falsifier.** the four targeted tests and the property test pass against main's model.py
+
+**Probe:**
+
+```console
+$ git show HEAD:ddflow/core/model.py > ddflow/core/model.py; uv run --with pytest-xdist pytest -n 48 -q tests/test_lease_contest.py
+100 failed, 257 passed: test_a_holders_own_reclaim_keeps_its_first_claim_on_record, test_a_holders_own_reclaim_contests_both_of_its_claims_with_a_rival, test_a_claim_nine_handovers_back_is_still_weighed, test_a_renewal_by_a_contestant_that_is_not_displayed_widens_its_window, 96 property cases (test_no_claim_that_overlapped_another_is_ever_missing_from_the_contest)
+```
+
+## Do the four KNOWN_OPEN mentions still exist on main b6a424a, and what are the real replacements?
+
+**Verdict: CONFIRMED** · item `B-fix-bad-mentions`
+
+- **Claim.** All four still exist: companions.py 'ddflow companions show' (companions has only list/add, and nothing prints a paste-ready entry), gates.py 'ddflow item update' (real: ddflow update <id> --globs, which also retargets a live lease per api/items.py), mcp_instructions.md 'ddflow_prompts_show' (real: ddflow_prompts action=show name=...), research-companions.md 'ddflow_decision' (real: ddflow_decision_add)
+- **Falsifier.** With KNOWN_OPEN emptied, test_every_command_printed_advice_names_exists passes on unfixed main
+
+**Probe:**
+
+```console
+$ KNOWN_OPEN={} on b6a424a; uv run --with pytest-xdist pytest -n 8 tests/test_remedy_texts.py; ddflow companions --help; ddflow update --help
+1 failed: companions.py:672 companions show; gates.py:164 item update; research-companions.md:70 ddflow_decision; mcp_instructions.md:141 ddflow_prompts_show. companions subcommands {list,add}; update has --globs
+```
+
+**Sources:** ddflow/services/companions.py, ddflow/services/gates.py, ddflow/api/items.py, ddflow/surfaces/mcp.py
+
+## Which writers put operator-specific values in the committed config, and can a local-layer write reuse the existing validation?
+
+**Verdict: CONFIRMED** · item `B-local-config-surfaces`
+
+- **Claim.** Four writers target only the committed .ddflow/config.toml: configwrite._write_config (config --set, workflow edits), api.setup.configure append_toml (config --append-toml, ddflow_configure toml), api.review.reviewers_detect(write) and commands/review._reviewers_add. The readers already layer .ddflow/local/{config,<own>}.toml last (Config.load, tomlcfg.config_paths), and load_gates re-asserts human=true from committed files, so a local writer only has to validate the MERGED committed+local result (schema, workflow coherence, human gates still in the pipeline).
+- **Mechanism.** Config.load applies local/config.toml with source 'local' after the file layer; overlay_array reads config_paths in order so a [[reviewer]] in local/reviewers.toml overrides by name.
+- **Falsifier.** A local human=false overriding a committed human gate in load_gates, or a writer outside the four found by grep.
+
+**Probe:**
+
+```console
+$ grep -rn 'config.toml' ddflow/api ddflow/surfaces/commands ddflow/services/configwrite.py; scratch repo with gates.toml [gate.plan_ok] human=true and local/config.toml human=false -> load_gates(...)['plan_ok'].human
+writers: api/review.py:184, commands/review.py:98, api/setup.py:262, configwrite.py _write_config; load_gates human -> True
+```
+
+## Does a git install of ddflow-mcp carry a PEP 610 direct_url.json that adopt can read, and does auto launch still register uvx for it?
+
+**Verdict: CONFIRMED** · item `B-fix-adopt-launcher`
+
+- **Claim.** uv pip install git+... writes ddflow_mcp-*.dist-info/direct_url.json with vcs_info; adopt --agents claude (auto) from that install writes {command: uvx, args: [ddflow-mcp]}
+- **Falsifier.** no direct_url.json in the installed dist-info, or .mcp.json not naming uvx
+
+**Probe:**
+
+```console
+$ uv venv gv; VIRTUAL_ENV=gv uv pip install git+file://[REDACTED:path]; cat gv/.../ddflow_mcp-*.dist-info/direct_url.json; in a fresh git repo: PATH=gv/bin:$PATH ddflow adopt --agents claude; cat .mcp.json
+{"url":"file://[REDACTED:path]","vcs_info":{"vcs":"git",...}}; .mcp.json: {"mcpServers":{"ddflow":{"command":"uvx","args":["ddflow-mcp"]}}}
+```
+
+**Sources:** https://packaging.python.org/en/latest/specifications/direct-url/, ddflow/services/adopt.py
+
+## Why does mcp-publisher publish reject ddflow-mcp?
+
+**Verdict: CONFIRMED** · item `B-fix-mcp-registry-ownership`
+
+- **Claim.** The registry verifies package ownership: PyPI long description must contain 'mcp-name: <server name>' (pypi.go containsMCPNameToken on info.description), OCI image config must carry label io.modelcontextprotocol.server.name (oci.go); README.md and the Dockerfile had neither
+- **Falsifier.** README.md or the built wheel's METADATA already contains the mcp-name line
+
+**Probe:**
+
+```console
+$ grep mcp-name README.md; uv build --wheel and read METADATA; publish #36 log
+no mcp-name before the fix; publish #36: 400 'must appear as mcp-name: io.github.delian/ddflow-mcp in the package README'; after: METADATA line 24 carries it
+```
+
+**Sources:** publish #36 log; modelcontextprotocol/registry docs package-types.mdx, pypi.go, oci.go
+
+## Why did publish #34's mcp-registry job fail, and which server.json limits does the registry enforce?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** The registry rejected description (251 chars) against ServerDetail.description maxLength 100; no other server.json field breaks a schema string limit
+- **Falsifier.** The 2025-12-11 schema allows >100, or title/name violate their limits
+
+**Probe:**
+
+```console
+$ curl the $schema URL and list maxLength/minLength/pattern; measure server.json fields
+description maxLength 100 (ours 251); title 1..100 (6); name 3..200 + ^[a-zA-Z0-9.-]+/[a-zA-Z0-9._-]+$ (io.github.delian/ddflow-mcp, 27)
+```
+
+**Sources:** https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json
+
+## Which provider families does Copilot HydraFusion route a task across, and how should ddflow model a router author's family set?
+
+**Verdict: CONFIRMED** · item `B-mixed-family-author`
+
+- **Claim.** GitHub publishes no fixed HydraFusion roster, so ddflow cannot ship a default family set: hydrafusion ships as a router with NO members and refuses until the operator fills [agent].routers.
+- **Mechanism.** The launch post names only the benchmark models Claude Opus 5 (Anthropic) and GPT-5.6 Sol (OpenAI), and says new Copilot models are incorporated into its model pool. The official announcement (community discussion #206492) says: 'The lineup shifts as new models ship and our evals show what performs best, so we don't publish a fixed roster.' Copilot also serves Gemini (Google) models, so a guessed {anthropic, openai} could wrongly pass a google reviewer as independent. Design: a NEW knob [agent].routers (dict[str, list[str]], model-name substring -> set of families), not list values in [agent].families: families is dict[str,str] with a k=v env notation and is read by reviewer-side code (services/review.py) where a model must have ONE family; widening its value type would make every family_for consumer handle sets. _coerce_dict already supports dict[str, list[str]] (JSON from env), so the knob fits the idiom. Independence for a set author: the reviewer family must be outside the whole set; an empty set is never independent and the refusal names [agent].routers.
+- **Falsifier.** A GitHub source publishing HydraFusion's complete provider roster would let the default carry members.
+
+**Probe:**
+
+```console
+$ Fetched the launch post and community discussion #206492; searched for any published HydraFusion roster
+post: models named only as benchmark baselines (Claude Opus 5, GPT-5.6 Sol); pool grows as Copilot adds models. discussion #206492 FAQ: 'We don't publish a fixed roster. The point is that you get the right model without choosing one.' No source lists the providers.
+```
+
+**Sources:** https://github.blog/ai-and-ml/github-copilot/project-hydrafusion-frontier-quality-via-multi-model-orchestration/ ; https://github.com/orgs/community/discussions/206492 ; https://www.marktechpost.com/2026/09/05/github-introduces-project-hydrafusion-runtime-multi-model-orchestration-that-builds-a-workflow-per-coding-task-in-copilot-cli/ ; https://docs.github.com/en/copilot/reference/ai-models/model-hosting
+
+## Can ddflow drive an agent that runs GitHub Copilot CLI's HydraFusion multi-model mode?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Yes via the existing copilot target (MCP .github/mcp.json, AGENTS.md, github-copilot delta), but completion fails reviewer independence: an author model named 'hydrafusion' resolves to no family, and HydraFusion mixes families per task so no single author family exists
+- **Falsifier.** family_for('hydrafusion') returns a family, or Copilot CLI with HydraFusion cannot call MCP tools
+
+**Probe:**
+
+```console
+$ family_of() over 'hydrafusion','HydraFusion','copilot/hydrafusion' with this repo's Config; read github.blog HydraFusion post
+all three -> '' (unrecognised); post: CLI-only research preview via /experimental, selected like a model, patterns single/cascade/critique (critique uses a different-family reviewer, tool-less), best on first-turn single-prompt tasks, multi-turn still in development; no mention of MCP/AGENTS.md
+```
+
+**Sources:** https://github.blog/ai-and-ml/github-copilot/project-hydrafusion-frontier-quality-via-multi-model-orchestration/
+
+## Why did test_a_command_reviewers_losing_copy_is_killed read an empty pid file?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** The test races itself: the loser truncates the pid file before writing it while the winner answers immediately, so the review can return and cancel the loser in between; the product behaviour is correct
+- **Falsifier.** The old script still passes with a 0.5 s delay before the pid write, or the fixed one fails
+
+**Probe:**
+
+```console
+$ pytest the old script parametrized slow_pid_write=[0,0.5]; then the fixed one with --count 40 -n 48
+old: 1 failed ([0.5]: empty/missing pid), 1 passed; fixed: 80 passed in 5.79s
+```
+
+## Does cleanup apply's merge step (outside the log lock) let cleanup act on a live-leased item?
+
+**Verdict: CONFIRMED** · item `B-fix-cleanup-claimed-tree`
+
+- **Claim.** Yes, narrowly: the merge is checked under the lock but W.merge runs after it is released, so a --force re-claim of a DONE item landing in that gap sees its branch merged into the base. No tree is lost: the removal re-enters the lock and keeps it. Left as is: holding events.lock across a git merge would block every claim for the merge's duration and deadlock (until lock timeout) any hook the merge runs that appends to the log.
+- **Mechanism.** apply: with unless_claimed(): kept(); then W.merge() unlocked; removal re-checks under log.transaction()
+- **Falsifier.** a tree or uncommitted edit lost through the merge window
+
+**Probe:**
+
+```console
+$ code reading of ddflow/services/cleanup.py apply() at f4b4c78; critic round 3 finding
+merge window exists; removal is re-checked under the lock (test_a_claim_racing_the_removal_itself_keeps_its_tree)
+```
+
+**Sources:** ddflow/services/cleanup.py
+
+## Can cleanup's non-strict re-fold (fold strict=False) drop a concurrent claim and let apply remove a leased tree?
+
+**Verdict: THEORETICAL** · item `B-fix-cleanup-claimed-tree`
+
+- **Claim.** Not via a torn write: since a6e3c20 the re-fold runs inside EventLog.transaction(), and every append happens under that same flock, so no half-written claim is visible to it. Only a record this build cannot parse (foreign schema, corruption) would be dropped -- the same exposure the survey, recover and claim itself already have, since all fold strict=False.
+- **Mechanism.** fold(strict=False) skips unparseable records; appends are serialised by fcntl.flock on .ddflow/events.lock
+- **Falsifier.** a claim appended by a same-version ddflow while cleanup holds the transaction that the re-fold does not see
+
+**Probe:**
+
+```console
+$ tests/test_cleanup_respects_leases.py::test_a_claim_racing_the_removal_itself_keeps_its_tree
+passes with the lock (claim blocks until removal completes, then recreates the tree); fails without it
+```
+
+**Sources:** ddflow/services/cleanup.py, ddflow/infra/log.py
+
+## Does cleanup --apply remove a live-leased or adopted clean worktree, and what notion of live/adopted does recover use?
+
+**Verdict: CONFIRMED** · item `B-fix-cleanup-claimed-tree`
+
+- **Claim.** services/cleanup.survey classifies purely from git (dirty/ahead) and matches items by branch only; a freshly claimed tree (clean, 0 ahead) is 'merged' with action remove, and an adopted tree is removed the same way. recover (services/leases.scan) uses state.active_leases(now, cfg.lease.grace_s) for live and Item.adopted for adopted.
+- **Mechanism.** survey sets t.action='remove' for any clean non-ahead tree without consulting item.lease or item.adopted; stale_branches likewise get delete_branch with no lease check
+- **Falsifier.** tests/test_cleanup_respects_leases.py passing on unfixed main
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_cleanup_respects_leases.py on unfixed code
+4 failed, 1 passed: 'removed worktree T1' (live lease), 'removed worktree harness-tree' (adopted, prefix and empty-prefix), 'deleted branch ddflow/T1' (leased branch, no tree); the free merged tree control passed
+```
+
+**Sources:** ddflow/services/cleanup.py, ddflow/services/leases.py, ddflow/core/model.py
+
+## Does api.setup.setup (the ddflow_setup MCP path) write .ddflow/config.toml, .ddflow/.gitignore, the root .gitignore and .gitattributes on a fresh repo?
+
+**Verdict: CONFIRMED** · item `B-fix-mcp-setup-init`
+
+- **Claim.** No: those four writes live only in surfaces/commands/setup.py cmd_init, which only the CLI adopt/init call; services.adopt.adopt never writes them
+- **Mechanism.** cmd_adopt calls A.setup then cmd_init; the MCP tool calls api.adopt_project (= api.setup.setup) -> services.adopt.adopt only
+- **Falsifier.** Any of the four files exists after api.adopt_project on a fresh git init
+
+**Probe:**
+
+```console
+$ git init tmp; uv run python -c 'api.adopt_project(tmp, api.Adoption(agents="claude"))'; check each file
+exit 0; .ddflow/config.toml False, .ddflow/.gitignore False, .gitignore False, .gitattributes False
+```
+
+**Sources:** ddflow/surfaces/commands/setup.py:cmd_init, cmd_adopt; ddflow/api/setup.py:setup; ddflow/services/adopt.py:adopt; ddflow/surfaces/mcp.py ddflow_setup
+
+## Where does a command gate's definition come from vs where does it run, and where can drift be detected within ddflow/services/gates.py?
+
+**Verdict: CONFIRMED** · item `B-fix-gate-config-drift`
+
+- **Claim.** api/gates.run builds gdef from load_gates(repo=PRIMARY) (the primary's .ddflow/config.toml + gates.toml + local layer) and passes it to run_command_gate(gdef, cwd=item worktree), which runs it against the branch's own pyproject/uv.lock. run_command_gate knows cwd, so it can read the TREE's committed gate table and the primary's (infra.worktree.repo_root(cwd)) itself and compare the execution fields when the command fails.
+- **Mechanism.** load_gates(root) reads tomlcfg.config_paths(root); committed layers are [:2]; the local layer is git-ignored and exists only in the primary, so only committed layers can be compared tree-vs-primary.
+- **Falsifier.** If run_command_gate were passed a gdef built from the tree, or api/gates reloaded gates per worktree, there would be no drift; grep shows load_gates(repo, cfg) at api/gates.py:103 and _resolve, run_command_gate(gdef, cwd) at api/gates.py:326.
+
+**Probe:**
+
+```console
+$ grep -n 'load_gates(\|run_command_gate(' ddflow/api/gates.py; sed -n 311,358p ddflow/services/gates.py; sed -n 106,120p ddflow/infra/worktree.py
+load_gates(repo, cfg) at 77,103 (+_resolve); run_command_gate(gdef, cwd, ...) at 326 with cwd from _where_to_run -> _item_tree; repo_root uses --git-common-dir
+```
+
+## Why are the cross-family reviews (critic, rubber_duck, roborev) slow, and what would make them faster?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Review time is the reviewer's reasoning length, which is random per call, multiplied by sequentially-sent chunks; the LAN vLLM server is idle and has capacity for many parallel requests
+- **Mechanism.** DeepSeek-V4.1-Flash decodes ~10 ms/[REDACTED:secret] (vLLM metrics: ITL 11 ms, TTFT 0.1 s, queue 3 ms); one review chunk generates 6k-42k reasoning tokens at temperature 1.0; ddflow sends chunks of max_chunk_chars=5000 one after another; roborev (kilo agent loop) spends most of a job in one final reasoning call
+- **Falsifier.** server queueing or prefill dominating; or reasoning length stable across runs of the same input; or throughput collapsing under concurrency
+
+**Probe:**
+
+```console
+$ vLLM /metrics averages over 425k requests; concurrency sweep 1/4/8/16 with fixed 1500-token generations; the same 3,128-char diff (d525bad) sent 8x concurrently with ddflow's prompts and production settings; roborev job logs 817-854 split into model steps
+queue 0.003 s, prefill 0.08 s; per-request 128/110/92/74 tok/s at 1/4/8/16 concurrent, aggregate 128/440/739/1174 tok/s; same diff: 64,168,242,244,255,298,355,391 s = 5.9k..41.6k tokens, findings in 2 of 8 runs; roborev #836: 24 steps 1288 s of which one step 906 s, #854: 627 of 801 s; reasoning_effort=low 13.8 s vs 18.1 s but lost the one MEDIUM finding; medium -> HTTP 400
+```
+
+## Do launch lines written from a linked ddflow worktree point into that worktree?
+
+**Verdict: CONFIRMED** · item `B-fix-adopt-worktree-path`
+
+- **Claim.** Yes: adopt and hooks install embed package_parent() (the worktree) and sys.executable; the worktree is removed on merge
+- **Falsifier.** PYTHONPATH=<ddflow worktree> ddflow adopt in a fresh repo writes a non-worktree path
+
+**Probe:**
+
+```console
+$ PYTHONPATH=<worktree> python -m ddflow adopt --agents claude in /tmp repo; grep PYTHONPATH .mcp.json .git/hooks/pre-commit
+both contain [REDACTED:path]
+```
+
+## Does GitHub render Mermaid in README.md, and do the three diagrams parse?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** GitHub renders ```mermaid fences in Markdown files; the three flowcharts are valid Mermaid and match the shipped defaults in config.py GatesConfig
+- **Falsifier.** Mermaid validator rejects a diagram, or GatesConfig task_pipeline/phase_pipeline/required differ from what the diagrams show
+
+**Probe:**
+
+```console
+$ Mermaid Chart validate_and_render on each diagram; sed -n 305,345p ddflow/config.py
+valid=True flowchart x3; task_pipeline research..merge (10), phase_pipeline research,tasks,unit_tests,bug_hunt,dedupe,live_test,corrections,docs,merge; required implement,unit_tests,merge
+```
+
+**Sources:** https://docs.github.com/en/get-started/writing-on-github/working-with-advanced-formatting/creating-diagrams
+
+## Is the git-ignored .ddflow/local/ layer already read, and is .ddflow/gates.toml's ignore what hides human gates from other clones?
+
+**Verdict: CONFIRMED** · item `B-fix-local-layer`
+
+- **Claim.** Yes: tomlcfg.config_paths reads local/{config,gates,reviewers}.toml last; this repo's root .gitignore ignored .ddflow/gates.toml, the only place human=true gates are declared; init's .gitignore never ignored reviewers.toml
+- **Falsifier.** git check-ignore .ddflow/gates.toml fails in this repo, or init's .gitignore ignores reviewers.toml
+
+**Probe:**
+
+```console
+$ git check-ignore -q .ddflow/gates.toml; ddflow init in a temp repo then git check-ignore -q .ddflow/reviewers.toml
+gates.toml ignored (rc 0); a fresh init's reviewers.toml NOT ignored (rc 1)
+```
+
+## Why is CI red on main (run 36694543037)?
+
+**Verdict: CONFIRMED** · item `B-fix-ci-red`
+
+- **Claim.** Two independent causes: quota.py is not ruff-formatted, and the two scenarios close P1 without an outcome for the phase 'docs' gate 8aa8170 added
+- **Mechanism.** tests/quality jobs stop at 'ruff format --check'; ddflow complete P1 refuses (exit 3) with 'gate(s) never run and never skipped: docs'
+- **Falsifier.** the unfixed tree passes ruff format --check or the two scenarios locally
+
+**Probe:**
+
+```console
+$ restore HEAD's quota.py and demos; ruff format --check; pytest tests/test_scenarios.py -m slow -k 'mcp-orchestration or full-lifecycle'
+unfixed: 1 file would be reformatted; 2 failed in 222s. fixed: 6 passed (scenarios), 10 passed (load)
+```
+
+## Does the research gate's own instruction name a command the CLI accepts?
+
+**Verdict: CONFIRMED** · item `B-fix-research-add`
+
+- **Claim.** No: gates.py:140 says 'ddflow research add --verdict ...' and argparse rejects 'add'
+- **Falsifier.** ddflow research add --question q --verdict THEORETICAL exits 0
+
+**Probe:**
+
+```console
+$ ddflow research add --question q --verdict CONFIRMED
+ddflow: error: unrecognized arguments: add
+```
+
+## Does the importer's done-marker flag prose headings as finished?
+
+**Verdict: CONFIRMED** · item `B-fix-shipped-prose`
+
+- **Claim.** Yes: the case-insensitive word match flags 'beyond the shipped two' and 14 other prose headings in run_nemo_run+home-simulator
+- **Falsifier.** no heading in those corpora matches old but not a status-only rule
+
+**Probe:**
+
+```console
+$ python3 scratchpad/marker.py run_nemo_run home-simulator (old vs new over every todo heading)
+old-only: 15 headings, all prose (36.5 beyond the shipped two; 146-148 Definition of done; NOT shipped in 137.E; ...); new-only: 0
+```
+
+## Why does a nested harness worktree run its own ddflow code against the primary's config, and what fix keeps it working without dropping a knob silently?
+
+**Verdict: CONFIRMED** · item `B-fix-config-forward-compat`
+
+- **Claim.** Code comes from cwd via PYTHONPATH=':' ; config from repo_root (git common dir parent). 81a52e3 already made file knobs lenient, but only doctor names them; a typo in the primary is now silent for every command.
+- **Mechanism.** The ddflow launcher is the primary's .venv (editable .pth -> primary). The shell exports PYTHONPATH=':' whose empty entries mean cwd, placed before site-packages, so a tree's own ddflow/ package shadows the install whenever cwd is a tree root. Ctx resolves repo via git rev-parse --git-common-dir -> the primary, and Config.load reads <primary>/.ddflow/config.toml. Option (b), config from the code's tree, is rejected: config is shared policy for one event log, and an installed ddflow (other projects) has no tree.
+- **Falsifier.** env -u PYTHONPATH ddflow status in bridge-cse_01C1TEJNQxh6UgFfDYxifnmU would still fail
+
+**Probe:**
+
+```console
+$ cd .claude/worktrees/bridge-cse_01C1TEJNQxh6UgFfDYxifnmU; echo $PYTHONPATH; python -c 'import ddflow; print(ddflow.__file__)'; ddflow status; env -u PYTHONPATH ddflow status
+PYTHONPATH=':'; ddflow.__file__ = the tree's own package; ddflow status -> ValueError unknown knob enforce.forbidden_trailers (exit 1); with PYTHONPATH unset -> runs (exit 0, primary code)
+```
+
+**Sources:** ddflow/infra/worktree.py:repo_root, ddflow/surfaces/context.py:Ctx, ddflow/config.py:_apply, 81a52e3
+
+## Does companions miss a server registered under another name with the same launch, and would register() then write a duplicate? Is optmem still a shipped default?
+
+**Verdict: CONFIRMED** · item `B-fix-companions-stale`
+
+- **Claim.** registered_in matches by name only: a .mcp.json entry 'coding-guides' with codeguide's exact docker launch reads as unregistered, register(dry_run) reports 'written' (a duplicate under 'codeguide'), and the shipped optmem is default=true
+- **Mechanism.** registered_in calls get_server(data, shape, cid) and the TOML branch tests the substring [mcp_servers.<cid>]; register only compares the entry stored under c.id
+- **Falsifier.** registered_in returns ['claude'] for that file, or register dry-run returns 'unchanged', or optmem.default is False
+
+**Probe:**
+
+```console
+$ PYTHONPATH=. python probe.py (tmp repo, .mcp.json with coding-guides -> docker run --rm -i docker.io/delian/codeguide-mcp)
+registered_in: [] / register dry: written / optmem default: True
+```
+
+**Sources:** ddflow/services/companions.py, ddflow/services/adopt.py, [REDACTED:path]
+
+## Critic finding: does staged_bytes reading the committing tree's index make check_views block a worktree commit that stages only its own files, because a tracked log file differs between primary and worktree?
+
+**Verdict: REFUTED** · item `B-fix-staged-paths-worktree`
+
+- **Claim.** No. staged_paths is 'git diff --cached --name-only' -- it lists paths whose INDEX differs from HEAD, not every tracked file; and check_views returns (0, '') before any log probe unless a file named like a view is staged. A worktree commit staging only its own files never reaches staged_bytes or _unstaged_under. Before this change a real hook already read the worktree's index (GIT_INDEX_FILE) for staged_bytes, so no agreement was lost.
+- **Falsifier.** diff --cached listing an unmodified tracked file; or check_views refusing in a worktree whose primary log differs when only a non-view file is staged
+
+**Probe:**
+
+```console
+$ scratch repo: commit .ddflow/log/x.json, stage only b, git diff --cached --name-only; tests/test_staged_paths_worktree.py::test_a_view_the_branch_committed_earlier_is_not_checked_again (worktree behind main, primary log differs from the branch's, only mine.txt staged) and test_a_worktree_behind_main_stages_only_its_own_file
+diff --cached lists: b ; the two tests pass on the fix (check_views == (0, ''), staged_paths == ['mine.txt'])
+```
+
+**Sources:** local probe; tests/test_staged_paths_worktree.py
+
+## Rubber-duck findings on B-fix-staged-paths-worktree: should check_views judge a view staged in a linked worktree against that worktree's own log (index) instead of the primary's log on disk, and does _unstaged_under's primary-files/worktree-index pairing create a false block or false pass?
+
+**Verdict: REFUTED** · item `B-fix-staged-paths-worktree`
+
+- **Claim.** No. ddflow render renders from EventLog(repo), the PRIMARY's log, and writes the views into the PRIMARY checkout even when run from a linked worktree; so a ddflow-produced view always describes the primary's log, and the view check correctly requires that log to be what the commit records. The worktree's own working copy of the log is read by neither side. The pairing is also exactly what a real hook in a linked worktree already computed before this change (git exports GIT_DIR, -C <primary> makes the primary the work tree); the change only makes a hand-run check agree with it.
+- **Falsifier.** ddflow render run in a linked worktree writing QUEUE.md into that worktree, or rendering from the worktree's log copy
+
+**Probe:**
+
+```console
+$ scratch repo: claim P1.T1 (worktree), add task P1.T9 on main after the branch point, run 'ddflow render' from the worktree; check where QUEUE.md landed and what it mentions; GIT_DIR=<wt gitdir> git -C <primary> rev-parse --show-toplevel
+render wrote prim/docs/ddflow/{QUEUE,LESSONS,LESSONS-SUMMARY,RESEARCH}.md; prim QUEUE.md mentions P1.T9; the worktree's docs/ddflow has no view (only drivers/). show-toplevel with the worktree's GIT_DIR and -C primary prints the primary.
+```
+
+**Sources:** local probes; ddflow/services/enforce.py check_views; tests/test_staged_paths_worktree.py view tests
+
+## Does a REAL git commit in a linked worktree trigger Bba366d9893, and what environment does git hand the pre-commit hook?
+
+**Verdict: CONFIRMED** · item `B-fix-staged-paths-worktree`
+
+- **Claim.** A real git commit in a linked worktree (git 2.55, plain hook and via the pre-commit framework) exports BOTH GIT_INDEX_FILE and GIT_DIR (the worktree gitdir), so git -C <primary> diff --cached already reads the worktree's HEAD and the bug does NOT fire; it fires when GIT_DIR is absent (a hook runner that drops it, or a check run by hand from the worktree, which then reads the PRIMARY's index). In the primary git exports a RELATIVE GIT_INDEX_FILE=.git/index and no GIT_DIR; commit -a / commit <paths> export a temporary absolute index (index.lock, next-index-*.lock).
+- **Falsifier.** A real git commit in a worktree behind main, under block, refused for shared.txt; or the hook env lacking GIT_DIR in a worktree
+
+**Probe:**
+
+```console
+$ scratch repo: pre-commit hook printing env + git -C <primary> diff --cached, commits normal/-a/partial in primary and worktree; pre-commit framework local hook printing env; e2e ddflow adopt+claim+block, main edits shared.txt, worktree commits mine.txt
+wt normal: GIT_INDEX_FILE=<prim>/.git/worktrees/wt/index GIT_DIR=<prim>/.git/worktrees/wt, -C primary: A mine.txt. primary: GIT_INDEX_FILE=.git/index GIT_DIR=(unset). -a: .../index.lock; partial: .../next-index-NNN.lock. pre-commit framework: same GIT_DIR+GIT_INDEX_FILE passed through, -C primary: A mine2.txt. e2e real commit via ddflow hook: [ddflow/P1.T1 1bce210] mine (rc 0). Same tree, GIT_INDEX_FILE only: staged_paths(primary) = ['mine.txt', 'shared.txt']
+```
+
+**Sources:** git 2.55.0 local probes; pre_commit/git.py no_git_env (not applied to hook env)
+
+## Can a recorded bug be closed today other than as fixed, and which readers decide 'open'?
+
+**Verdict: CONFIRMED** · item `B-bug-invalid`
+
+- **Claim.** No: the fold has only bug.found/bug.fixed handlers and Bug.open is 'not fixed_at', so a false finding (B97355c6d15) stays OPEN and counts in status open_bugs; schedule.bug_items and the bug_fixed hint test fixed_at directly, and the recall label reads fixed_at from the sqlite bugs table
+- **Mechanism.** model.HANDLERS; Bug.open; store.summarise_row; schedule.bug_items; obligations open_bug
+- **Falsifier.** a handler other than bug.fixed that sets a closed state, or B97355c6d15 not counted open
+
+**Probe:**
+
+```console
+$ uv run python -c 'from ddflow.core.model import HANDLERS; print(sorted(k for k in HANDLERS if k.startswith("bug.")))'; ddflow --json status | jq .open_bugs; ddflow recall 'cap-blocked item refused as hopeless' --sources bugs
+['bug.fixed', 'bug.found']; open_bugs 42; [B97355c6d15] wait: an item blocked by a full parallelism cap is refused as hopeless ... [OPEN]
+```
+
+## Does the importer (main 1bdefdf) import home-simulator's open work faithfully?
+
+**Verdict: CONFIRMED** · item `B-fix-import-dispositions`
+
+- **Claim.** No: it renames Phase 40 to 34, drops 38.9/38.10 under a (not started) sub-heading, drops P42.8 future work, and holds C11 for the word 'deferred' in its title
+- **Falsifier.** a dry run on a clone of home-simulator at 181cd1a importing 38.9, 38.10, C11 live and phase 40
+
+**Probe:**
+
+```console
+$ ddflow --json import in a clone of home-simulator 181cd1a; plus scan_todos over run_nemo_run + home-simulator old vs new (scratchpad disp.py)
+main: phase '34' for 34.6e..34.10f; 38.9/38.10 closed; P42.8.* closed; C11 hold. branch: phase 40; 38.9/38.10 live; P42.8.* hold; C11 live; run_nemo_run: only 4.2.1 and 5.2.4 (archived, held) change id of 1,215 open boxes
+```
+
+**Sources:** home-simulator docs/todo.md + docs/HANDOFF.md §3-4
+
+## Does the importer ever complete a phase, and how does a re-run decide 'already in the queue, left alone'?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** plan_import skips any id already in state (f.ident in known -> skipped_existing) and apply_import writes phase.added only, never a phase completion; tasks re-run under an existing phase land with parent=phase id because scan ids are stable. With include_done every phase of the fixture imports open; a plain import brings in a finished phase that open work needs (P5) EMPTY and OPEN, so its dependent is stuck.
+- **Falsifier.** Any phase in the fixture's --include-done plan with done=True, or a completion written for an existing phase on re-run.
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_import_done_phases.py (new regression test) against unfixed main code
+5 failed, 1 passed: include-done plan phases {'1': False, '2': False, '3': False, 'P5': False}; re-run completions set() != {'P5'}; plain note says 'pass include_done' but never '--include-done' nor per-phase counts
+```
+
+**Sources:** ddflow/services/importer.py:1650-1787, 2134-2211; ddflow/api/operations.py:203-257; ddflow/surfaces/commands/operations.py:131-190; [REDACTED:path]
+
+## Critic (DeepSeek, d011213): should a markdown link target with NESTED parentheses, [a](docs/a(b(c)).md), be read as its target?
+
+**Verdict: CONFIRMED** · item `B-fix-import-verify-prose`
+
+- **Claim.** Not worth a parser: such a source is counted in the 'prose ... not checked' note, so the outcome is a disclosed unchecked source, never a crash or a false vanished finding; one level of balanced parens is supported
+
+**Probe:**
+
+```console
+$ _MD_LINK.match('[a](docs/a(b(c)).md)') and the note count path in _memory_sources
+no match -> _path_shaped False -> prose += 1 -> note '... not checked for a vanished file'
+```
+
+**Sources:** ddflow/services/importer.py
+
+## Does check-msg accept a Phase trailer naming no item, and what does loading the queue cost per commit in run_nemo_run?
+
+**Verdict: CONFIRMED** · item `B-fix-trailer-names-item`
+
+- **Claim.** check_item_trailer accepts any non-empty value (Phase: NOPE.99 exits 0 in run_nemo_run). hooks() already reads+folds the whole log via _load before check-msg: of ~0.52 s per check-msg, ~105 ms is parsing 4851 events and ~16 ms folding; a fresh index.db answers 'select id from items' (removed items excluded by Store.rebuild) in ~7 ms, but the index is often stale during active work, so the fallback is read+fold. check-msg needs only Config.load (choices.overlay touches flow.* only), so skipping _load and loading ids lazily (only when a non-waiver trailer is present) is no slower than today.
+- **Falsifier.** check-msg exits non-zero on 'Phase: NOPE.99' in run_nemo_run, or the index items table includes removed items
+
+**Probe:**
+
+```console
+$ printf 'subject\n\nPhase: NOPE.99\n' > msg; python -m ddflow --repo run_nemo_run hooks check-msg msg (x3, /usr/bin/time); a profiling script timing Config.load, EventLog.read_all, fold, Store.stale and the items query
+0.52 s exit 0 (x3); import 0.130 cfg 0.002 read 0.105 fold 0.016 stale 0.011 (True) query 0.007 n_ids 1432 n_items(not removed) 1433 events 4851
+```
+
+**Sources:** ddflow/services/enforce.py check_item_trailer; ddflow/api/_base.py _load; ddflow/infra/store.py rebuild/stale; ddflow/services/choices.py overlay
+
+## Critic (DeepSeek, ba8c0f6): does _path_shaped drop item/note/memory sources with spaces, so a vanished 'docs/my file.md' goes unreported?
+
+**Verdict: REFUTED** · item `B-fix-import-verify-prose`
+
+- **Claim.** No: _path_shaped is applied only inside _memory_sources, whose loop covers lessons.seen_in, research.sources and decisions.sources; item sources are collected in _scan_queue and notes in _note_sources without it
+- **Falsifier.** _scan_queue on a state with an item whose source is 'docs/my file.md:3' returns paths without that key
+
+**Probe:**
+
+```console
+$ python -c: _scan_queue(state with item source 'docs/my file.md:3')
+{'docs/my file.md': ['T1']}
+```
+
+**Sources:** ddflow/services/importer.py
+
+## Does ddflow (main 1bdefdf) give an agent attached over MCP one path that covers preflight, cutover of the rulebook, freezing imported files and end-to-end verification?
+
+**Verdict: CONFIRMED** · item `B-onboard-command`
+
+- **Claim.** No: the unadopted handshake offers ddflow_setup and ddflow_import separately, and no shipped prompt mentions merged-branch checks, freezing, harness server enablement or rulebook cutover
+- **Falsifier.** any shipped prompt or the handshake naming is-ancestor / freeze / enabledMcpjsonServers / rulebook
+
+**Probe:**
+
+```console
+$ grep -liE 'is-ancestor|freeze|enabledMcpjsonServers|rulebook' ddflow/templates/prompts/commands/*.md ddflow/templates/prompts/mcp_instructions.md
+no match (exit 1); import-existing-project.md mentions worktrees 0 times
+```
+
+**Sources:** home-simulator cutover 189362d; run_nemo_run cutover e48636ad
+
+## Does a generated .pre-commit-config.yaml carrying ddflow's checks as repo: local hooks run them at the right stages with the right arguments?
+
+**Verdict: CONFIRMED** · item `B-precommit-companion`
+
+- **Claim.** pre-commit accepts the generated config, runs ddflow-check-commit at pre-commit with no filenames and ddflow-check-msg at commit-msg with the message file as its only argument (what 'ddflow hooks check-msg msg_file' needs); builds on Rb5e33fdbf9 (local hooks are the clean end state)
+- **Mechanism.** pass_filenames=false + always_run for check-commit; commit-msg stage passes the message filename to the entry
+- **Falsifier.** validate-config rejects the file, or check-msg is invoked without the message path, or check-commit receives filenames
+
+**Probe:**
+
+```console
+$ scratch repo (app.py + Dockerfile); PC.propose(ddflow_cmd='echo DDFLOW'); pre-commit validate-config full.yaml; pre-commit run -c local.yaml --hook-stage commit-msg --commit-msg-filename m.txt ddflow-check-msg -v; pre-commit run -c local.yaml ddflow-check-commit -v
+validate EXIT 0; check-msg output 'DDFLOW hooks check-msg m.txt' Passed; check-commit output 'DDFLOW hooks check-commit' Passed (no filenames)
+```
+
+**Sources:** pre-commit 4.6.1; research Rb5e33fdbf9, Rb5432fc845; ddflow/surfaces/cli.py hooks check-msg msg_file
+
+## Does _duplicate_work flag same-glob items that needs already orders, and which dependency graph orders items for the scheduler?
+
+**Verdict: CONFIRMED** · item `B-fix-dup-work-deps`
+
+- **Claim.** _duplicate_work ignores needs entirely: A and B with B needs A are flagged. The scheduler orders by schedule.inherited_deps (own + ancestors' needs), and a dependency on a phase is unmet while any of its tasks is open, so a needs edge onto D orders the item after D and all of D's descendants.
+- **Mechanism.** progress._duplicate_work groups by tuple(sorted(globs)) only; schedule.dep_status returns unmet for a phase with open tasks; inherited_deps adds ancestor needs
+- **Falsifier.** B needs A not flagged on current code, or E (in phase R needs Q) not blocked by Q's open task C
+
+**Probe:**
+
+```console
+$ python3 scratchpad/probe.py: P{A x, B x needs A}, Q{C y}, P{D y}, R needs Q {E y}; detect(); inherited_deps(E); dep_status(Q)
+dup findings: [('A', '2 open items ... (x): A, B'), ('C', '3 open items ... (y): C, D, E')]; inherited E: [('R', 'Q')]; dep_status Q: (False, 'phase Q has 1 open task(s)')
+```
+
+**Sources:** ddflow/core/progress.py:412, ddflow/core/schedule.py:230-298, ddflow/core/model.py:564
+
+## How does a pre-commit-framework hook decide which configured hooks run at a stage, and can ddflow read .pre-commit-config.yaml with what it already depends on?
+
+**Verdict: CONFIRMED** · item `B-fix-hooks-status-precommit`
+
+- **Claim.** (1) pyyaml is NOT a ddflow dependency (pyproject lists only jinja2; the venv has no yaml module; adopt.py already edits YAML as text for the same reason), so the config must be parsed with a stdlib-only reader. (2) pre-commit 4.6.1: the generated hook carries '# File generated by pre-commit' and ARGS=(hook-impl --config=<path> --hook-type=<name>); a hook runs at stage S iff S is in its stages, which default to top-level default_stages, which default to ALL stages; legacy names commit/push/merge-commit map to pre-commit/pre-push/pre-merge-commit; an executable <name>.legacy in the hook dir is also run. (3) current enforce.installed only greps HOOK_MARKER, so run_nemo_run reports both hooks NOT installed, exit 2.
+- **Falsifier.** yaml importable from ddflow's venv, or pre-commit's clientlib defaulting stages to something other than default_stages/STAGES, or hooks status on run_nemo_run printing installed.
+
+**Probe:**
+
+```console
+$ python -c 'import yaml' (ddflow venv); grep default_stages/STAGES/_STAGES pre_commit/clientlib.py + repository.py:123; read install_uninstall.py + hook_impl._run_legacy; ddflow --repo run_nemo_run hooks status
+ModuleNotFoundError: No module named 'yaml'; clientlib: STAGES=(*HOOK_TYPES,'manual'), StagesMigration('default_stages', STAGES), _STAGES={'commit':'pre-commit','merge-commit':'pre-merge-commit','push':'pre-push'}; repository.py:123 'if not ret[stages]: ret[stages]=root_config[default_stages]'; hook_impl: legacy_hook=<hook_dir>/<type>.legacy run if os.access X_OK; status: 'pre-commit hook: NOT installed ... commit-msg hook: NOT installed -- but ... NOTHING checks it' exit 2
+```
+
+**Sources:** [REDACTED:path], pre_commit/repository.py, pre_commit/commands/install_uninstall.py, pre_commit/commands/hook_impl.py, ddflow pyproject.toml
+
+## Why does import --verify crash in run_nemo_run, and does Path.is_file raise rather than return False on an over-long name?
+
+**Verdict: CONFIRMED** · item `B-fix-import-verify-prose`
+
+- **Claim.** verify_import stats an imported lesson's prose seen_in (accepted by _memory_sources because it contains '/'); on Python 3.13 Path.is_file raises OSError ENAMETOOLONG for a path component >255 bytes instead of returning False (a NUL byte returns False)
+- **Mechanism.** _memory_sources: looks_like_a_path = '/' in rel or rel.endswith('.md'); verify_import: (repo/rel).is_file() unguarded
+- **Falsifier.** import --verify on run_nemo_run completes, or Path('/tmp','a'*300+'/x.md').is_file() returns False
+
+**Probe:**
+
+```console
+$ ddflow --repo [REDACTED:path] import --verify; python3.13 -c "Path('/tmp','a'*300+'/x.md').is_file()"
+OSError: [Errno 36] File name too long: '/ai/delian/src/run_nemo_run/2026-08-21 Phase 136, roborev 414-D4 (and its earlier duplicate filing ...'; probe: 'a'*300+'/x.md' -> OSError 36, 'a\x00b' -> False, 'x'*5000 -> OSError 36
+```
+
+**Sources:** ddflow/services/importer.py
+
+## Are the second critic pass's four findings on tests/test_readme_agent_reader.py real?
+
+**Verdict: CONFIRMED** · item `B-readme-agent-reader`
+
+- **Claim.** All four are real test blind spots: a bad command in a fenced block, a TOC line moved out of the TOC, a '## ' inside a fence truncating the section, and a driver path adopt does not write — each passed the old test.
+- **Falsifier.** Any of the four mutations failing the old test.
+
+**Probe:**
+
+```console
+$ sed/python mutations of README.md against the old and the new test; plus `ddflow adopt --agents claude --launch python` in a fresh git repo to check the driver claim
+Old test: F2 6 passed, F3 6 passed, F4 6 passed (all mutations undetected). adopt in /tmp/adopt-probe wrote docs/ddflow/drivers/implement-phase.md (README claim true). New test (c7eaf76): F2 2 failed, F3 1 failed, F4 2 failed, F1 (driver renamed in README) 1 failed; real README 6 passed.
+```
+
+**Sources:** tests/test_readme_agent_reader.py, README.md
+
+## Can reviewer_independence trust the family in gate evidence without letting an agent vouch for itself?
+
+**Verdict: CONFIRMED** · item `B-fix-declared-family`
+
+- **Claim.** Only ddflow review writes a 'family' key into gate evidence (api/review.py data from the operator's reviewer entry, alongside 'reviewer'); api.gates.record builds evidence from note/command/exit/model/output_file only, so an agent-recorded gate cannot carry one. Trusting evidence['family'] when 'reviewer' is present fixes the served-name mislabel without opening a hole.
+- **Falsifier.** A gate-record path that lets an agent set evidence['reviewer'] and evidence['family'].
+
+**Probe:**
+
+```console
+$ grep evidence construction in api/gates.py record and api/review.py; pytest tests/test_declared_reviewer_family.py on unfixed main
+api/gates.py record: ev keys note, command, exit, model, output_digest/bytes/tail only; api/review.py data carries reviewer + family; 2 of 6 new tests failed on 218a681 (declared alibaba read as google; declared anthropic rescued by the served name)
+```
+
+**Sources:** ddflow/services/gates.py, ddflow/api/gates.py, ddflow/api/review.py
+
+## Critic finding 1: does a released claim stay in it.displaced and become a phantom rival of a later claim?
+
+**Verdict: REFUTED** · item `B-fix-contest-overjoin`
+
+- **Claim.** No: _h_lease_gone removes the released claim from displaced (by event, or the holder's latest) before withdrawing it from the contest; in all 6 orders of H,R,D then release D then N, N never contests D
+- **Falsifier.** Any fold order where N's contest includes D after release(D)
+
+**Probe:**
+
+```console
+$ fold H(4000,1000) R(1000,800) D(1500,1000) in all 6 orders, release D, acquire N(2000,200)
+all orders: lease_contest [] and D absent from displaced; orders RDH/DRH lose R instead (the forgetting in finding 2)
+```
+
+## Does every command, flag and MCP tool the agent-reader section names exist, and does onboarding really work the way the section says?
+
+**Verdict: CONFIRMED** · item `B-readme-agent-reader`
+
+- **Claim.** All named commands parse, all named tools are in mcp.TOOLS, adopt installs the commit hook by default and writes docs/ddflow/drivers/implement-phase.md, and the test catches a misspelt command, tool, flag or a missing TOC entry.
+- **Mechanism.** tests/test_readme_agent_reader.py reads the section from README.md and parses each complete `ddflow …` span with cli.build_parser(), checks `ddflow_*` names against mcp.TOOLS; services/adopt.py:540 installs the hook when install_hooks (default True); cli adopt --docs defaults to docs/ddflow.
+- **Falsifier.** A mutated README (companionz / ddflow_gate_state / --launch pythn / --aply / --sett / TOC entry removed) still passes the test.
+
+**Probe:**
+
+```console
+$ sed each mutation into README.md, run pytest tests/test_readme_agent_reader.py, restore
+real README: 6 passed. Every mutation: 1 failed, 5 passed. The first version of the flag test hard-coded its argv and let '--launch pythn' pass; rewritten to parse the README's own spans, it then caught `ddflow phase add` written without its required id (README fixed to `ddflow phase add …`).
+```
+
+**Sources:** README.md, ddflow/surfaces/cli.py, ddflow/surfaces/mcp.py, ddflow/services/adopt.py
+
+## Does anything stop an attribution trailer that is not written through a Claude Code Bash command?
+
+**Verdict: CONFIRMED** · item `B-forbid-trailers`
+
+- **Claim.** No: [REDACTED:path] (PreToolUse) reads only the command string, so 'git commit -F <file>', the editor and non-Claude agents bypass it; ddflow's commit-msg hook checks only the Item trailer
+- **Falsifier.** plain git commit -F with the trailer in the file is refused
+
+**Probe:**
+
+```console
+$ hook fed {command: 'git commit -F /tmp/msg.txt'}; scratch repo git commit -F msg-with-trailer
+hook: allowed; git: exit 0
+```
+
+## Does ddflow answer searches over a 100,000-event log in milliseconds?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** The FTS5/BM25 index query is milliseconds-scale at 100k events, but an end-to-end command is not: every call re-reads and re-folds the whole log first.
+- **Mechanism.** Store.search is one SQLite FTS5 bm25 query; the CLI/MCP paths call read_all + fold before answering (fold is O(events), read_all is O(bytes) cold, cached-by-digest warm).
+- **Falsifier.** A new-process `ddflow recall` on the 100k log returning in under ~100 ms.
+
+**Probe:**
+
+```console
+$ synthetic /tmp/bench100k: 50k lesson.recorded + 50k task.added (61 MB, one shard); timed CLI recall/lesson search, then Store.stale, read_all, fold, Store.search in-process
+recall cold (builds index) 6.76 s; recall warm, new process 3.98 s; lesson search 3.96 s. In-process: stale() 1.9 ms; read_all cold 1139 ms, warm 190 ms; fold 1065 ms; FTS5 search 46-55 ms for 5 hits; importing the CLI 0.19 s.
+```
+
+**Sources:** ddflow/infra/store.py, ddflow/infra/log.py, ddflow/core/model.py
+
+## Can ddflow track agent token/session usage per window (5h, day, week, month, total) and pause work at 80% of a limit until the window resets or the operator says continue?
+
+**Verdict: CONFIRMED**
+
+- **Claim.** Yes, with two sources. Claude Code subscriptions expose the vendor's own utilization + resets_at for five_hour and seven_day (and per-model weekly) windows: headless stream-json rate_limit_event, the statusline stdin rate_limits, and a stale cache in [REDACTED:path] cachedUsageUtilization. Everything else (Kilo kilo.db, vLLM usage/metrics, Claude transcripts, Gemini/API keys) gives token counts only, so day/month/total limits and non-Claude agents need operator-declared budgets. ddflow has no quota/pause today; the natural enforcement is next/claim returning REFUSED (exit 3) with resume_at and no alternatives, computed in the api layer, with usage kept in machine-local state, not the committed log.
+- **Mechanism.** Vendor % is account-wide and weighted (model, cache), so local token sums cannot reproduce it: prefer vendor %, fall back to declared budgets. implement.md treats next exit 2 as Done and exit 3 as take-an-alternative, so a quota pause needs its own rule (ScheduleWakeup until resume_at). core may not read files (layering), so the quota is computed in api and passed in. High-frequency usage events in the log would trip loops._no_progress.
+- **Falsifier.** No local signal carries a limit percentage or reset time for any installed agent
+
+**Probe:**
+
+```console
+$ [REDACTED:path] cachedUsageUtilization read (redacted); strings of claude 2.1.283 binary for rate_limit_event/unifiedWindows/allowed_warning/surpassedThreshold; kilo.db session/message token columns; vLLM /v1 usage + /metrics; roborev reviews.db token_usage; ddflow grep for quota/pause/budget; implement.md stop rules; claudehooks install
+cachedUsageUtilization: five_hour 3% resets 2026-09-28T16:10Z, seven_day 53% resets 2026-10-01T10:00Z, fetched 2026-09-28 15:05Z (stale); tier default_claude_max_20x. Binary: rate_limit_event 16x, unifiedWindows 11x, allowed_warning 23x, surpassedThreshold 18x. kilo.db 88 sessions with tokens_* columns, cost 0. vLLM usage per response, server-wide counters only. roborev token_usage empty in 839 jobs. Codex/Gemini/ccusage not installed. ddflow: no quota/pause/throttle; only SessionStart hook; implement.md: next exit 2 = Done, exit 3 = take an alternative.
+```
+
+**Sources:** [REDACTED:path], [REDACTED:path], [REDACTED:path], http://[REDACTED:ipv4]:8000/metrics, [REDACTED:path], ddflow/api/lifecycle.py, ddflow/core/schedule.py, ddflow/services/claudehooks.py, ddflow/templates/prompts/commands/implement.md, ddflow/core/progress.py
+
+## Which model does roborev use, and can it reach the LAN Qwen at [REDACTED:ipv4]?
+
+**Verdict: CONFIRMED** · item `B-roborev-lan-qwen`
+
+- **Claim.** roborev runs agent=kilo with model='' (kilo's default); kilo lists the LAN host as lanqwen/google/gemma-4-31B-it; with that model roborev's default reasoning 'thorough' is rejected by the server (400: only xhigh|medium|low)
+- **Falsifier.** roborev review --agent kilo --model lanqwen/... completes with the default reasoning
+
+**Probe:**
+
+```console
+$ kilo models | grep lanqwen; roborev review 7b5602f --agent kilo --model lanqwen/google/gemma-4-31B-it --local
+lanqwen/google/gemma-4-31B-it listed; review failed: APIError 400 'Unexpected reasoning effort high. Supported types are xhigh (default), medium, and low' from http://[REDACTED:ipv4]:8000/v1/chat/completions
+```
+
+## Is an agent blocked on another agent's lease (glob conflict or dependency) ever notified when the holder merges/completes/releases, and is the holder ever told someone waits?
+
+**Verdict: CONFIRMED** · item `B-wait-wake`
+
+- **Claim.** No: on main 5d71829 ddflow has no notification, wait or subscription path. A blocked agent learns of a release only by re-asking (next/claim); the only guidance is a blind timed wake-up (implement.md: 'a delayed wake-up, not a stop'; Claude Code delta: sleep 600 + ScheduleWakeup). Nothing records who waits, so the holder is never told.
+- **Mechanism.** Leases are events; release/complete append lease.released/item.completed to .ddflow/events and return. No code reads the log on behalf of a waiter, and there is no waiter registry.
+- **Falsifier.** Any verb or MCP tool that blocks until a lease/dependency clears, or any code path that pushes to/records a waiting agent.
+
+**Probe:**
+
+```console
+$ git grep -niE 'notif|wake|waiter|wait_for|subscribe' main -- ddflow (minus MCP notifications/initialized); ddflow --help | grep wait
+Only hits: claude-code.md delta (ScheduleWakeup / sleep 600 heartbeat) and implement.md ('waiting on another agent's lease ... a delayed wake-up, not a stop'). No verb matches 'wait' except 'job' help text. leases.release appends lease.released and returns.
+```
+
+## After the B190 upgrade, does this clone still own a lease it claimed under its bare derived id?
+
+**Verdict: CONFIRMED** · item `B205`
+
+- **Claim.** No: every holder comparison sees the bare id as a stranger, so heartbeat says 'no lease held' and re-claim is refused as held by someone else. Re-homing the lease once (release by bare, acquire by suffixed, same worktree/branch/globs) in api._load fixes every comparison without touching them.
+- **Mechanism.** default_agent_id appends _clone_suffix once .ddflow/local/clone-id exists; leases.renew/_transition, gates._lease_keeper, jobs, lifecycle compare lease.holder == log.agent_id. The fold treats acquire-over-a-live-foreign-lease as a B191 contest, so the release must come first.
+- **Falsifier.** heartbeat under the suffixed derived id succeeds on a lease acquired by the bare id before clone-id existed, on unfixed code
+
+**Probe:**
+
+```console
+$ pytest tests/test_identity_upgrade.py -q (unfixed code)
+3 failed, 3 passed: heartbeat 'no lease held T1'; re-claim 'T1 is held by [REDACTED:hostname]-proj for another 1800s'; no re-homed note. Negative cases (bare lease after the suffix existed, explicit/env identity, once-only) pass trivially. Release was NOT a discriminator: release is open to anyone by design.
+```
+
+**Sources:** ddflow/infra/log.py, ddflow/api/_base.py, ddflow/core/model.py, ddflow/services/leases.py
+
+## What exists for branch staleness, and what is missing?
+
+**Verdict: CONFIRMED** · item `B23`
+
+- **Claim.** The INFORMING half exists: api/setup.py _worktree_drift (session-start hook) reports commits behind the default branch and changed rulebooks (AGENTS.md, CLAUDE.md, CLAUDE.local.md, .ddflow/config.toml), always exit 0. The BLOCKING half does not: the pre-commit check-commit chain (enforce.check_commit, check_views, check_docs) has no staleness check, and the rulebook list omits every other agent's native rules file (adopt.NATIVE_RULES) and the driver docs
+- **Falsifier.** a pre-commit check refuses a commit on a branch whose base changed a rulebook since fork
+
+**Probe:**
+
+```console
+$ grep -rn behind ddflow; read api/setup.py _worktree_drift + hooks check-commit chain; this session's own SessionStart output ('This worktree is 8 commit(s) behind main')
+only _worktree_drift (setup.py:295) computes drift; check-commit runs check_commit/check_views/check_docs only; _RULEBOOKS = 4 Claude/ddflow paths
+```
+
+## Do recovery remedies (services/leases.py _measure) and complete's coverage note name real commands and real outcomes?
+
+**Verdict: CONFIRMED** · item `B-fix-remedy-texts`
+
+- **Claim.** leases._measure prints `ddflow lease release` / `ddflow worktree remove` (argparse: invalid choice; real verbs are `release <id> [--note]` and `cleanup [--apply]`) and advises release even for orphan_worktree where the lease is None; completion.verdict builds coverage_note from GateStatus.unavailable, which gates.status fills with BOTH unavailable and partial outcomes, so a PARTIAL critic (evidence.coverage '3/6 chunk(s) reviewed', from review.ReviewResult.evidence) is reported 'never ran'.
+- **Mechanism.** One f-string for all gaps in services/completion.py:143-146; unconditional release text in leases._measure for every Recovery kind.
+- **Falsifier.** If the advice strings resolved in build_parser() and the orphan advice omitted release, and a partial critic's note said partial with coverage, the new tests would pass on unfixed code.
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_remedy_texts.py -q on unfixed 5d71829
+7 failed, 13 passed: orphan/expired advice contains ['worktree remove','lease release'] unresolved; orphan advice advises release with lease None; note 'rubber_duck, critic never ran'; ratchet lists leases.py:560,581,588. Probe test for the scanner passes. Ratchet scan of all ddflow/*.py strings also found companions.py 'companions show' (B67ba6899c7) and gates.py 'item update' (B84b48b9f71); mcp_instructions.md 'ddflow_prompts_show' (B237495b8a5).
+```
+
+## Does bug fixed accept an unknown bug id and a nonexistent regression test, and can existence be checked without running tests?
+
+**Verdict: CONFIRMED** · item `B-fix-bug-fixed-refuses-unknown`
+
+- **Claim.** Yes to both bugs (6 of 8 new tests fail on main 5d71829). A static check suffices for existence: a pytest node id resolves when its file exists in ANY git worktree (the fix branch, before merge) and defines each ::segment (params stripped); non-Python references cannot be resolved and must be reported unchecked, not refused. Every recorded regression_test in this project's log is a comma-separated list of node ids, so the check fits real use.
+- **Falsifier.** A real recorded regression_test in the log that is not a node id list, or the new tests passing on unfixed code.
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_bug_fixed_refuses_unknown.py (unfixed); fold st.bugs regression_test values
+6 failed, 2 passed (unfixed). All 40 recorded regression_test values are 'tests/<file>.py::<name>[, ...]'.
+```
+
+**Sources:** ddflow/api/knowledge.py, ddflow/core/model.py _h_bug_fixed, ddflow/infra/worktree.py list_worktrees
+
+## Does _h_lease_acquired join a claim into a lease contest with claims it never overlapped?
+
+**Verdict: CONFIRMED** · item `B-fix-contest-overjoin`
+
+- **Claim.** Yes: a claim overlapping any contestant is joined into the whole contest; in 4 of 6 fold orders of alice(1000+1000)/bob(1900+1000)/carol(1200+100) the contest names carol alongside bob, and resolve --keep bob releases carol
+- **Falsifier.** All six fold orders leave lease_contest == {alice, bob} and resolve --keep bob releases only alice
+
+**Probe:**
+
+```console
+$ uv run pytest tests/test_lease_contest.py -q
+5 failed, 4 passed: overlaps[alice-bob-carol], [alice-carol-bob], [bob-alice-carol], [carol-alice-bob] fail; resolve released ['alice','carol'] != ['alice']
+```
+
 ## Where is the suite still run serially after B-parallel-tests?
 
 **Verdict: CONFIRMED** · item `B-adopt-parallel-tests`
@@ -281,7 +4913,7 @@ codeguide: installed ([); memory/sequential: installed (npm warn Unknown user co
 
 ```console
 $ pytest tests/test_log_lamport_merge.py (bare remote, two clones, DDFLOW_AGENT=sameid, git pull --no-rebase with merge=union) on unfixed code; timing script: 20k-event shard, _highest_lamport vs max over _read_shard events x50
-5 failed, 3 passed: title 'v4' == 'v5' fails; fresh append lamport 2 != 5 after a stray lamport-1 tail; doctor text only 'index is stale'; 'Monster3-proj' != 'Monster3-proj' for x/proj vs y/proj; worktree id 'Monster3-wt-one' has no clone suffix. Timing: tail 0.04 ms, warm scan 7.47 ms, cold scan 122.9 ms.
+5 failed, 3 passed: title 'v4' == 'v5' fails; fresh append lamport 2 != 5 after a stray lamport-1 tail; doctor text only 'index is stale'; '[REDACTED:hostname]-proj' != '[REDACTED:hostname]-proj' for x/proj vs y/proj; worktree id '[REDACTED:hostname]-wt-one' has no clone suffix. Timing: tail 0.04 ms, warm scan 7.47 ms, cold scan 122.9 ms.
 ```
 
 **Sources:** ddflow/infra/log.py, ddflow/infra/worktree.py repo_root, gitattributes(5) merge=union
@@ -301,7 +4933,7 @@ $ python3 /tmp/probe_pins.py ddflow/templates/prompts/commands/implement.md; ...
 implement.md 7869 flattened bytes, pinned 512, needles 27: includes all 5 parametrized pins of test_implement_command.py ('exactly FOUR cases', 'never a terminal stop', 'disarm it before any deliberate stop', 'Termination checklist', 'ddflow_recover') plus 'No scope was named', 'Do not ask which'. implement-phase.md 9775 B, pinned 582, 31 needles: includes "No\nreviewer sees another's verdict" (whitespace-flattened), 'may never **promote**', 'wait for every one to report', '`implement` workflow command'. AGENTS.md 2481 B pinned 271. Noise: tool-name literals like 'ddflow_brief' (test_api_layer.py maps) also count as pins; this only errs toward pinned.
 ```
 
-**Sources:** /home/delian/src/run_nemo_run/scripts/pin_coverage.py, tests/test_implement_command.py, docs/BACKLOG.md:408
+**Sources:** [REDACTED:path], tests/test_implement_command.py, docs/BACKLOG.md:408
 
 ## Can the ddflow log live in the repo so a fresh clone continues, and does it merge safely across users/agents?
 
@@ -313,7 +4945,7 @@ implement.md 7869 flattened bytes, pinned 512, needles 27: includes all 5 parame
 
 ```console
 $ scratchpad two-clone probes with a bare remote: same id added in both, same item claimed in both, DDFLOW_AGENT=sameid in both, then git pull --no-rebase
-no conflict markers; T2 kept BOB only; T1 lease Monster3-bob only; shared shard lamports [1,2,3,4,1] and newest update lost; doctor Healthy in all
+no conflict markers; T2 kept BOB only; T1 lease [REDACTED:hostname]-bob only; shared shard lamports [1,2,3,4,1] and newest update lost; doctor Healthy in all
 ```
 
 **Sources:** ddflow/infra/log.py, ddflow/core/events.py, .gitattributes, .ddflow/.gitignore, docs/BACKLOG.md B111
@@ -366,4 +4998,4 @@ $ initialize + prompts/list + prompts/get bug-hunt scope=B17 over python3 -m ddf
 prompts/list: all-tests, bug-hunt, code-clean, code-deduplication, import-existing-project, research-companions; prompts/get bug-hunt -> 'Hunt bugs in B17, and fix what you find'
 ```
 
-**Sources:** ddflow/surfaces/mcp.py, ddflow/services/prompts.py, /home/delian/src/run_nemo_run/.claude/commands/implement.md
+**Sources:** ddflow/surfaces/mcp.py, ddflow/services/prompts.py, [REDACTED:path]
