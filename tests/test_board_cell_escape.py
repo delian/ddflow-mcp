@@ -34,5 +34,6 @@ def test_a_pipe_or_newline_in_a_title_does_not_break_the_board_table(repo):
     assert len(body) == 1, board
     assert len(_cells(body[0])) == len(_cells(header)) == 7, body[0]
     assert "\r" not in body[0], repr(body[0])
-    assert "pick a \\| b second line, c\\\\\\|d third fourth \\\\*e\\\\ |" in body[0], body[0]
+    # only the pipe and the backslashes before it are escaped: `\\*e\\` is the author's
+    assert "pick a \\| b second line, c\\\\\\|d third fourth \\*e\\ |" in body[0], body[0]
     assert "`src/a\\|b\\x.py`" in body[0], body[0]
