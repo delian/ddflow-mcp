@@ -17,13 +17,14 @@ similarity. This module is the foundation that other Phase 1 tasks build on.
 
 from __future__ import annotations
 
-import json
 import re
 import tomllib
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from ..infra.tomlcfg import basic_string
 
 _FRONTMATTER_PARTS = 2  # frontmatter + content, split on the first blank line
 _MIN_TOKEN_LEN = 2  # tokens this short are noise
@@ -224,13 +225,8 @@ class Rule:
 
 
 def _toml_str(value: str) -> str:
-    """`value` as a TOML basic string, escaped so any text round-trips (B28cab0652a).
-
-    `json.dumps` escapes quotes, backslashes and control characters the way TOML does,
-    but with `ensure_ascii` it writes a non-BMP character as a surrogate pair, which TOML
-    refuses; and without it, it leaves U+007F raw, which TOML also refuses.
-    """
-    return json.dumps(str(value), ensure_ascii=False).replace("\x7f", "\\u007f")
+    """`value` as a TOML basic string (B28cab0652a): the shared writer."""
+    return basic_string(value)
 
 
 def _is_valid_rule_id(rule_id: str) -> bool:

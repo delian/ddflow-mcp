@@ -11,7 +11,6 @@ rather than the project's.
 
 from __future__ import annotations
 
-import json
 import sys
 
 # The SUBMODULE. `from ...api import review` would bind the re-exported function; this
@@ -136,18 +135,16 @@ def _reviewers_presets(_a, _c: Ctx) -> int:
 
 
 def _toml_value(v) -> str:
-    """A TOML literal for a preset value.
+    """A TOML literal for a preset value: `tomlcfg.value`, the shared serialiser.
 
     `json.dumps` is TOML for strings, numbers and lists of them, but NOT for a dict:
     `launch = {"command": ...}` is JSON, the file stopped parsing, and every later
-    command reading reviewers failed (bug B-reviewers-add-launch-json). A dict becomes
-    an inline table.
+    command reading reviewers failed (bug B-reviewers-add-launch-json); and it wrote an
+    emoji as a surrogate pair TOML refuses (Bb11e7a8186).
     """
-    if isinstance(v, dict):
-        return "{ " + ", ".join(f"{k} = {_toml_value(x)}" for k, x in v.items()) + " }"
-    if isinstance(v, (list, tuple)):
-        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
-    return json.dumps(v)
+    from ...infra.tomlcfg import value
+
+    return value(v)
 
 
 def _reviewers_add(a, c: Ctx) -> int:
@@ -169,7 +166,7 @@ def _reviewers_add(a, c: Ctx) -> int:
     preset.setdefault("family", R.family_of(preset.get("model", "")))
     if a.no_launch:
         preset.pop("launch", None)
-    body = [f'\n[[reviewer]]\nname = "{name}"']
+    body = [f"\n[[reviewer]]\nname = {_toml_value(name)}"]
     launch = preset.pop("launch", None)
     for k, v in preset.items():
         body.append(f"{k} = {_toml_value(v)}")
