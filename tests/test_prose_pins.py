@@ -293,6 +293,9 @@ def test_repo_relative_is_the_one_inside_the_repository_decision(repo, tmp_path)
     assert repo_relative(repo, repo / "docs" / "R.md", as_given=True) == "docs/R.md"
     assert repo_relative(repo, repo / "inner" / "x.py", as_given=True) == "inner/x.py"
     assert repo_relative(repo, repo / "docs" / "R.md") is None
+    # `..` escapes the repository even when the text starts with it (critic #2)
+    assert repo_relative(repo, repo / ".." / "secret.md", as_given=True) is None
+    assert repo_relative(repo, repo / "sub" / ".." / "R.md", as_given=True) == "R.md"
     # store_path and enforce._rel agree with it inside, and keep their own fallbacks
     assert store_path(link, repo / "sub") == _rel(link, repo / "sub") == "sub"
     assert store_path(repo, tmp_path / "elsewhere") == "../elsewhere"

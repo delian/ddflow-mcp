@@ -724,7 +724,8 @@ def repo_relative(repo: Path, path: Path | str, *, as_given: bool = False) -> st
     if as_given:
         p = Path(path)
         for base in (Path(repo), root):
-            if p.is_relative_to(base):
+            # `..` is not collapsed lexically: `repo/../x` lies outside, so resolve it
+            if p.is_relative_to(base) and ".." not in p.relative_to(base).parts:
                 return p.relative_to(base).as_posix()
     try:
         return Path(path).resolve().relative_to(root).as_posix()
