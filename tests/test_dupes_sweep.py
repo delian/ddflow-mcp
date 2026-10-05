@@ -45,9 +45,10 @@ def _found_ls(rows: list[dict]) -> set[str]:
 
 
 def test_the_sweep_finds_B203_as_a_duplicate_of_B_semantic_recall():
-    """On ddflow's own log (the redacted corpus fixture, B-dedupe-evalset). B203 was
-    REMOVED as a duplicate of B-semantic-recall, so the sweep must weigh records the
-    ordinary index drops -- this is what `_sweep_records` adds on top of it."""
+    """On ddflow's own log (the redacted corpus snapshot, B-dedupe-evalset): the engine
+    pairs B203 with B-semantic-recall. The fixture carries every record the sweep weighs,
+    so this pins the SCORES; the removed-record RECOVERY (`_sweep_records`) is pinned end
+    to end by `test_a_removed_item_is_still_swept_end_to_end`."""
     floor = Config.load().dedupe.show_floor
     rows = K.pair_records(_records("dedupe/corpus.jsonl"), floor=floor)
     assert any({r["a"], r["b"]} == {"B203", "B-semantic-recall"} for r in rows), (
@@ -110,6 +111,73 @@ def test_open_only_drops_a_closed_record_but_the_full_sweep_keeps_it(repo):
     run_cli(repo, "bug", "invalid", "B1", "--reason", "not a real bug")
     assert run_cli(repo, "dupes", "--open-only")[0] == 2, "a closed record was swept as live"
     assert run_cli(repo, "dupes")[0] == 0, "the closed record is out of the history sweep"
+
+
+HOOK_TEXT = (
+    "The commit hook refuses a commit that touches a path no live lease of yours covers, "
+    "so widen the item's globs before writing outside them."
+)
+
+
+def test_a_removed_item_is_still_swept_end_to_end(repo):
+    """The recovery `_sweep_records` exists for, reached through the real command.
+
+    `similar_records` drops a REMOVED item; the sweep adds it back so a pair whose
+    duplicate was taken back (B203's case) is still found. A test that feeds
+    `pair_records` a fixture bypasses `_sweep_records` entirely and cannot see this.
+    """
+    run_cli(repo, "init")
+    run_cli(repo, "phase", "add", "P1", "--title", "P")
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T1",
+        "--phase",
+        "P1",
+        "--title",
+        "Hook refuses uncovered paths",
+        "--body",
+        HOOK_TEXT,
+    )
+    run_cli(
+        repo,
+        "task",
+        "add",
+        "T2",
+        "--phase",
+        "P1",
+        "--title",
+        "Commit hook path not in a lease",
+        "--body",
+        HOOK_TEXT,
+    )
+    assert run_cli(repo, "dupes")[0] == 0
+    run_cli(repo, "remove", "T1", "--reason", "superseded by T2")
+    assert run_cli(repo, "dupes", "--open-only")[0] == 2, "a removed item was swept as live"
+    code, out, err = run_cli(repo, "dupes")
+    assert code == 0, f"the removed item dropped out of the sweep: {out}{err}"
+    assert "T1" in out and "T2" in out
+    # A pair `dupes` shows must be settleable, removed item included.
+    code, out, err = run_cli(repo, "link", "T1", "--distinct", "T2", "--reason", "different work")
+    assert code == 0, err
+    assert run_cli(repo, "dupes")[0] == 2, "a pair involving a removed item could not be settled"
+
+
+MEMORY_TEXT = "vLLM serves the fleet on ports 8000 to 8007 and the load balancer fronts them."
+
+
+def test_a_forgotten_memory_is_still_swept_end_to_end(repo):
+    """The memory half of `_sweep_records`: a forgotten memory is out of the index, but
+    the sweep must still weigh it, or a pair two agents recorded and one retracted is
+    never offered."""
+    run_cli(repo, "init")
+    run_cli(repo, "memory", "add", MEMORY_TEXT, "--id", "M1")
+    run_cli(repo, "memory", "add", MEMORY_TEXT, "--id", "M2")
+    assert run_cli(repo, "dupes", "--kind", "memory")[0] == 0
+    run_cli(repo, "memory", "forget", "M1", "--reason", "wrong machine")
+    assert run_cli(repo, "dupes", "--kind", "memory", "--open-only")[0] == 2
+    assert run_cli(repo, "dupes", "--kind", "memory")[0] == 0, "the forgotten memory vanished"
 
 
 def test_linking_two_lessons_merges_them(repo):

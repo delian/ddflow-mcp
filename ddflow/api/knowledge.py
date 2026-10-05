@@ -449,6 +449,7 @@ def pair_records(
     *,
     floor: float,
     settled: Any = None,
+    stop_after: int = 0,
 ) -> list[dict[str, Any]]:
     """The pairs among ``records`` (id, kind, title, body) scoring at least ``floor``.
 
@@ -456,7 +457,9 @@ def pair_records(
     turn; a canonical (a, b) key keeps each pair once, at its best score. Pure function
     of the records, so the sweep over a folded State and a sweep over a fixture are the
     SAME code -- which is how the acceptance set is checked without rebuilding a log.
-    ``settled(a, b)`` asks whether the pair has already been answered.
+    ``settled(a, b)`` asks whether the pair has already been answered. ``stop_after``
+    (> 0) stops as soon as that many pairs are found, for a caller that only needs a
+    bounded count (the doctor note) and must not pay for a dense log's full sweep.
     """
     from ..services import similar as sim
 
@@ -477,7 +480,14 @@ def pair_records(
                 best[key]["score"] = max(best[key]["score"], score)
                 continue
             best[key] = {"score": score, "a": key[0], "b": key[1]}
+            if stop_after and len(best) >= stop_after:
+                rows = sorted(best.values(), key=lambda x: (-x["score"], x["a"], x["b"]))
+                return _titled(rows, by_id)
     rows = sorted(best.values(), key=lambda x: (-x["score"], x["a"], x["b"]))
+    return _titled(rows, by_id)
+
+
+def _titled(rows: list[dict[str, Any]], by_id: dict[str, dict]) -> list[dict[str, Any]]:
     for row in rows:
         row["a_kind"] = by_id[row["a"]]["kind"]
         row["b_kind"] = by_id[row["b"]]["kind"]
@@ -494,6 +504,7 @@ def pairs_from(
     open_only: bool = False,
     floor: float | None = None,
     limit: int = 0,
+    stop_after: int = 0,
 ) -> list[dict[str, Any]]:
     """The near-duplicate pairs in the log that nobody has settled.
 
@@ -508,7 +519,9 @@ def pairs_from(
     records = [r for r in _sweep_records(st) if r["kind"] in scope]
     if open_only:
         records = [r for r in records if _is_open(st, r)]
-    rows = pair_records(records, floor=fl, settled=lambda a, b: _settled(st, a, b))
+    rows = pair_records(
+        records, floor=fl, settled=lambda a, b: _settled(st, a, b), stop_after=stop_after
+    )
     return rows[:limit] if limit else rows
 
 
@@ -560,6 +573,26 @@ def dupes(
     return O.ok("dupes", **data)
 
 
+def _record_kind(st, rid: str) -> str:
+    """The kind of a record the SWEEP can see, live or not.
+
+    `_dedupe.kind_of` answers for LIVE records and returns "" for a removed item or a
+    forgotten memory. The sweep deliberately weighs those (B203 was removed as a
+    duplicate), so `ddflow link` must be able to settle the pairs `dupes` shows: this
+    resolves a removed item and a forgotten memory too.
+    """
+    kind = DD.kind_of(st, rid)
+    if kind:
+        return kind
+    it = st.items.get(rid)
+    if it is not None and it.removed:
+        return it.kind
+    m = st.memories.get(rid)
+    if m is not None:
+        return "memory"
+    return ""
+
+
 def link_record(
     repo: Path,
     subject: str,
@@ -597,7 +630,7 @@ def link_record(
             "link.recorded", "a record cannot link to itself", subject=subject, target=target
         )
     log, cfg, st = _load(repo, agent)
-    skind, tkind = DD.kind_of(st, subject), DD.kind_of(st, target)
+    skind, tkind = _record_kind(st, subject), _record_kind(st, target)
     for rid, kind in ((subject, skind), (target, tkind)):
         if not kind:
             return O.refused(

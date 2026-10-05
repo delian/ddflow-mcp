@@ -872,27 +872,51 @@ def _untitled(st) -> list[str]:
     ]
 
 
+#: The inline duplicate count is bounded on purpose. The sweep is all-pairs, so its cost
+#: grows with the log (measured: ~0.6 s at 640 records, ~3 s at ddflow's own 1559); a
+#: `doctor` that pays seconds at every session start is one people stop running. Above
+#: this many records `doctor` says so and points at `ddflow dupes` instead.
+_DOCTOR_SWEEP_MAX = 1000
+#: Stop the count once this many pairs are found; the note then says "at least".
+_DOCTOR_PAIR_CAP = 200
+
+
 def _dupe_note(st, cfg) -> list[str]:
     """How many near-duplicate pairs the log holds that nobody has settled (B-dupes-sweep).
 
     A NOTE, never a problem: below the ask threshold a score is a prompt to LOOK, not a
     verdict (R-dedupe-matchers), so failing `doctor` on one would be failing it on a
-    question. The sweep itself is `ddflow dupes`; this only counts. `off` skips it -- a
-    project that switched the check off does not want its cost on every doctor run.
+    question. Counted at the ASK threshold -- the actionable "likely duplicate" band,
+    not the wide show floor -- and bounded by record count and pair cap so `doctor`
+    stays fast; above the bound the note names `ddflow dupes` rather than paying the
+    sweep. `off` skips it: a project that switched the check off does not want its cost.
     """
     if cfg.dedupe.on_match == "off":
         return []
     try:
-        from .knowledge import pairs_from
+        from .knowledge import _sweep_records, pairs_from
 
-        n = len(pairs_from(st, cfg))
+        n_records = sum(1 for r in _sweep_records(st) if r["kind"] in cfg.dedupe.kinds)
+        if n_records > _DOCTOR_SWEEP_MAX:
+            return [
+                f"{n_records} records: the inline near-duplicate count is skipped above "
+                f"{_DOCTOR_SWEEP_MAX} — `ddflow dupes` lists the pairs"
+            ]
+        rows = pairs_from(
+            st,
+            cfg,
+            floor=cfg.dedupe.ask_threshold,
+            limit=_DOCTOR_PAIR_CAP,
+            stop_after=_DOCTOR_PAIR_CAP,
+        )
     except Exception as exc:  # an unreadable index must not take the report down
         return [f"near-duplicate sweep could not run ({type(exc).__name__}: {exc})"]
-    if not n:
+    if not rows:
         return []
+    n = f"at least {_DOCTOR_PAIR_CAP}" if len(rows) >= _DOCTOR_PAIR_CAP else str(len(rows))
     return [
-        f"{n} unsettled near-duplicate pair(s) at the show floor — `ddflow dupes` lists "
-        f"them; `ddflow link A --duplicate-of B` settles one (or `--distinct` to dismiss it)"
+        f"{n} unsettled near-duplicate pair(s) at the ask threshold — `ddflow dupes` "
+        f"lists them; `ddflow link A --duplicate-of B` settles one (or `--distinct`)"
     ]
 
 
