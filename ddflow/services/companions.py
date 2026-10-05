@@ -48,6 +48,7 @@ from pathlib import Path
 
 from ..infra import paths
 from ..infra import proc as P
+from ..infra.tomlcfg import basic_string
 from .adopt import (
     AGENT_TARGETS,
     SHAPE_TOML,
@@ -943,7 +944,7 @@ def _toml(value: object) -> str:
     an argument produced invalid TOML, silently, for anyone whose path has one.
     """
     if isinstance(value, str):
-        return json.dumps(value)  # TOML basic strings and JSON strings escape alike
+        return basic_string(value)  # json.dumps wrote an emoji as a surrogate pair (Bb11e7a8186)
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, (int, float)):
@@ -952,7 +953,7 @@ def _toml(value: object) -> str:
         return "[" + ", ".join(_toml(v) for v in value) + "]"
     if isinstance(value, dict):
         return "{" + ", ".join(f"{k} = {_toml(v)}" for k, v in value.items()) + "}"
-    return json.dumps(str(value))
+    return basic_string(str(value))
 
 
 def _launched_elsewhere(read: tuple[dict, str] | None, c: Companion, rel: str) -> str:

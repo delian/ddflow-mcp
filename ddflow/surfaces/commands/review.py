@@ -147,6 +147,10 @@ def _toml_value(v) -> str:
         return "{ " + ", ".join(f"{k} = {_toml_value(x)}" for k, x in v.items()) + " }"
     if isinstance(v, (list, tuple)):
         return "[" + ", ".join(_toml_value(x) for x in v) + "]"
+    if isinstance(v, str):
+        from ...infra.tomlcfg import basic_string
+
+        return basic_string(v)  # not json.dumps: an emoji became a surrogate pair (Bb11e7a8186)
     return json.dumps(v)
 
 
