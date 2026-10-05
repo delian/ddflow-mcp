@@ -15,7 +15,10 @@ B-arch-doc-stale caught that the first draft of this file only covered one:
   a bare `enforce.py` inherits the layer from the path before it.
 
 Both are parsed here: the layer is remembered across continuation lines and across the
-comma-list of a table cell, so every module token is checked as `<layer>/<token>`.
+comma-list of a table cell, so every module token is checked as `<layer>/<token>`; a
+top-level line such as `config.py` is checked at the package root. (A cross-family
+reviewer caught the first of these gaps -- the layer map was not parsed at all; a second
+found the package-root module was not either.)
 """
 
 from __future__ import annotations
@@ -60,10 +63,12 @@ def _add(refs: set[str], layer: str | None, token: str) -> str | None:
     return layer
 
 
-def _from_layer_maps(text: str) -> set[str]:
+def _from_layer_maps(text: str) -> tuple[set[str], set[str]]:
     """Parse every fenced layer map. A layer line sets the current layer; the indented
-    lines after it are continuations of that layer's module column."""
+    lines after it are continuations of that layer's module column. A line at column 0
+    that is not a layer line names a package-root module (`config.py`)."""
     refs: set[str] = set()
+    roots: set[str] = set()
     for block in re.findall(r"```[^\n]*\n(.*?)```", text, re.S):
         if not _LAYER_LINE.search(block):
             continue
@@ -75,11 +80,15 @@ def _from_layer_maps(text: str) -> set[str]:
                 column = line[m.end() :]
             elif line[:1].isspace() and line.strip():
                 column = line  # a continuation row of the current layer
+            elif line[:1] and not line[:1].isspace():
+                # `config.py   read by every layer` -- a package-root module, no layer.
+                roots.update(t for t in _tokens(line) if _MOD_PY.match(t))
+                continue
             else:
-                continue  # `config.py` (no layer prefix, not indented) or a blank line
+                continue  # a blank line
             for token in _tokens(column):
                 layer = _add(refs, layer, token)
-    return refs
+    return refs, roots
 
 
 def _from_tables(text: str) -> set[str]:
@@ -98,14 +107,25 @@ def _from_tables(text: str) -> set[str]:
 
 def _named_modules(text: str) -> set[str]:
     contiguous = {f"{a}/{b}.py" for a, b in _REF.findall(text)}
-    return contiguous | _from_layer_maps(text) | _from_tables(text)
+    layer_refs, _ = _from_layer_maps(text)
+    return contiguous | layer_refs | _from_tables(text)
+
+
+def _root_modules(text: str) -> set[str]:
+    _, roots = _from_layer_maps(text)
+    return roots
 
 
 def test_every_module_named_in_the_architecture_doc_exists():
-    named = _named_modules(DOC.read_text(encoding="utf-8"))
+    text = DOC.read_text(encoding="utf-8")
+    named = _named_modules(text)
     assert named, "ARCHITECTURE.md names no module paths -- the extraction has drifted"
     missing = sorted(ref for ref in named if not (ROOT / "ddflow" / ref).is_file())
     assert not missing, f"ARCHITECTURE.md names module paths that do not exist: {missing}"
+    root_missing = sorted(n for n in _root_modules(text) if not (ROOT / "ddflow" / n).is_file())
+    assert not root_missing, (
+        f"ARCHITECTURE.md names top-level modules that do not exist: {root_missing}"
+    )
 
 
 def test_the_architecture_doc_describes_the_api_layer():
