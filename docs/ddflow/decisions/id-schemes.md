@@ -36,7 +36,13 @@ must never rewrite a recorded id.
 
    Templates are validated when the config is written. Every token must be known, and
    the result must be a valid id (characters, length). A template must contain a
-   source of uniqueness: `{seq}`, `{hash}`, or `{time}` together with `{pid}`.
+   source of uniqueness: `{seq}`, `{hash}`, or `{time}` together with `{pid}`. These
+   tokens express intent; they do not guarantee uniqueness on their own. The id
+   service checks every key it mints against every id and key of every kind in the
+   folded log, under the log lock, before recording it. A key that is already taken
+   gets `-2`, `-3`, and so on. This covers two records minted in the same second by
+   one process, and two kinds both configured as `{seq}`. Keys share one namespace
+   across kinds, because `show` and every other command accept any id.
    Otherwise it must declare `stable = true`. A stable template maps the same content
    to the same id on purpose, so filing it again extends the existing record instead
    of creating a new one. To guarantee that in both directions, a stable template
@@ -52,16 +58,19 @@ must never rewrite a recorded id.
    produces the record's KEY, which is what people see and type and what ddflow
    prints. Commands and MCP accept a key and resolve it to the internal id before
    anything is recorded. For kinds without `{seq}`, the key is the internal id, which
-   is today's behaviour. `{seq}` is the highest number already used for that kind in
-   the folded log, plus one, taken under the log lock. All agents on one machine share
-   the log, so a key is unique there. Two clones minting offline can pick the same
-   number. When their logs meet, the record earlier in the fold order keeps
-   `BUG-123`, and the later record's key is shown as `BUG-123.<clone suffix>` (for
-   example `BUG-123.b`). Both keys then resolve to exactly one record each. No event
-   changes, and nothing is renumbered or renamed. Doctor reports the clash, and
-   `show` explains both keys. A reference to the bare key written in free text on the
-   other clone before the merge (a commit message, a note) cannot be fixed afterwards;
-   doctor lists these references as ambiguous. Ids that the caller names explicitly
+   is today's behaviour. `{seq}` is the highest number already used for that kind in the folded log, plus
+   one, taken under the log lock and checked like any key. All agents on one machine
+   share the log, so a key is unique there. Two clones minting offline can pick the
+   same number. When their logs meet, both records keep the key they were minted with
+   in their events: no event changes, and nothing is renumbered. From then on the bare
+   key is ambiguous. A command given `BUG-123` refuses (exit 3) and lists both
+   candidates. Both records are printed with a clone suffix (`BUG-123.a`,
+   `BUG-123.b`), and each suffixed form resolves to exactly one record. This is the
+   one case where the printed form changes. It is deliberate and symmetric, so a bare
+   reference can never resolve silently to the other clone's record. Doctor reports
+   the clash, and `show` explains it. References to the bare key written in free
+   text before the merge (a commit message, a note) are listed by doctor as
+   ambiguous. Ids that the caller names explicitly
    (tasks, phases) keep the existing rival-add flow: a clash is CONTESTED until
    `ddflow resolve` settles it.
 
@@ -84,9 +93,10 @@ must never rewrite a recorded id.
 ## Consequences
 
 - One id service (B-id-generator) mints every id, so no call site formats ids itself.
-- `{seq}` needs the folded state at mint time, which is cheap because the fold is
-  cached. An offline clash gives the later record a suffixed key, not a silent
-  duplicate. Keys are a lookup layer over internal ids, the same mechanism as aliases
+- `{seq}` and the taken-key check read the folded state at mint time, which is cheap
+  because the fold is cached. An offline clash makes the bare key ambiguous and is
+  shown with suffixes, never as a silent duplicate. Only the printed form changes;
+  no recorded id or key does. Keys are a lookup layer over internal ids, the same mechanism as aliases
   (B-id-aliases).
 - The vocabulary work (B-id-terms) also covers command and tool aliases. The parity
   test must treat an alias as the canonical command.
