@@ -691,9 +691,16 @@ def _append_config(
         prev = path.read_text("utf-8") if path.exists() else ""
         merged = (prev.rstrip() + "\n\n" if prev.strip() else "") + toml_text.strip() + "\n"
         try:
-            Config.check(tomllib.loads(merged))
+            result = tomllib.loads(merged)
+            Config.check(result)
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"appending this would break the config: {exc}", Path()
+        # `[gate.a.b]` is bare in every segment, so the plain-key check passes it -- and
+        # it nests a table every later command refuses to load. Judged as `_write_config`
+        # judges `--set`: only NEW gate-table problems (roborev on a1c614f4).
+        if new := _gate_table_problems(result) - _gate_table_problems(_parsed(prev)):
+            first = sorted(new)[0]
+            return _render_gate_problem(*first), Path()
         removed = sorted(
             _guarded_human_gates(repo, prev, local=local)
             - _guarded_human_gates(repo, merged, local=local)

@@ -181,3 +181,16 @@ def test_workflow_drop_describes_every_pipeline():
 
     desc = TOOLS["ddflow_workflow_drop"]["description"]
     assert "both pipelines" not in desc and "promotion" in desc, desc
+
+
+@pytest.mark.parametrize(
+    "block", ['[gate.a.b]\ncommand = "echo hi"\n', '[gate.x.prompt]\ncommand = "y"\n']
+)
+def test_an_appended_dotted_gate_id_is_refused(repo, block):
+    """roborev on a1c614f4: every segment of `[gate.a.b]` is bare, so the plain-key check
+    passed it -- and it nested a table that every later command refused to load."""
+    run_cli(repo, "init")
+    before = (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    code, out, err = run_cli(repo, "config", "--append-toml", block)
+    assert code == REFUSED and "cannot be a gate id" in err, (code, out, err)
+    assert (repo / ".ddflow" / "config.toml").read_text("utf-8") == before
