@@ -1689,8 +1689,10 @@ class Config:
         for i, entry in enumerate(self.unknown_knobs):
             if entry.startswith(f"{key} = ") and mark in entry:
                 self.unknown_knobs[i] = (
-                    entry.split(mark)[0] + " (not a value this ddflow knows; "
-                    f"overridden by the {source} value {value!r})"
+                    # rpartition: the bad value itself may contain the mark.
+                    entry.rpartition(mark)[0]
+                    + mark
+                    + f"overridden by the {source} value {value!r})"
                 )
 
     def _apply_export_tables(
