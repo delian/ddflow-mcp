@@ -118,10 +118,14 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             )
             gates = "".join(OUTCOME_MARK.get(t.gate_outcome(g), " ") for g in pipeline)
             indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * _depth(state, t, root)
+            # Every free-text cell goes through _cell (B2eaa1e5e8e): a `|` in a title
+            # invented a column and a newline split the row.
+            needs = ", ".join(_cell(n, cfg) for n in t.needs) or "—"
+            globs = ", ".join(f"`{_cell(g, cfg)}`" for g in t.globs) or "—"
+            owner = _cell(t.lease.holder, cfg) if t.lease else "—"
             out.append(
-                f"| [{mark}] | {indent}**{t.id}** {t.title} | {t.state} | "
-                f"{', '.join(t.needs) or '—'} | {', '.join(f'`{g}`' for g in t.globs) or '—'} | "
-                f"`{gates}` | {t.lease.holder if t.lease else '—'} |"
+                f"| [{mark}] | {indent}**{_cell(t.id, cfg)}** {_cell(t.title, cfg)} | "
+                f"{t.state} | {needs} | {globs} | `{gates}` | {owner} |"
             )
         out.append("")
         caption = " · ".join(
