@@ -164,3 +164,19 @@ def test_derived_and_hand_written_checks_never_share_a_key() -> None:
 def test_the_scanner_reads_a_parenthesised_run() -> None:
     assert _alternatives("(block | warn | off)") == ("block", "warn", "off")
     assert _alternatives("off | fast (lint, format) | full") == ("off", "fast", "full")
+
+
+def test_the_modules_that_use_an_enum_take_its_values_from_config() -> None:
+    # One declaration per value set: a consumer's own copy drifts from what `check` allows.
+    from ddflow.core import flow as F
+    from ddflow.services import ci as CI
+    from ddflow.services import progress_line as PL
+
+    choices = C.KNOB_CHOICES
+    assert CI.ON_MERGE_MODES is choices["ci.on_merge"]
+    assert PL.MODES is choices["session.progress_after_complete"]
+    assert F.MODELS is choices["flow.model"] and F.FORGES is choices["flow.forge"]
+    assert F.INTEGRATIONS is choices["flow.integration"]
+    assert F.PR_MERGE is choices["flow.pr_merge"]
+    assert F.ON_CHANGES is choices["flow.on_changes_requested"]
+    assert F.PORT_STRATEGIES is choices["flow.port_strategy"]
