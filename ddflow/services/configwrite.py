@@ -30,6 +30,7 @@ the file editable at all.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import re
 from pathlib import Path
@@ -321,7 +322,15 @@ def _guarded_human_gates(repo: Path, text: str, *, local: bool = False) -> set[s
         for gid, spec in (data.get("gate") or {}).items():
             if gid in gates and isinstance(spec, dict) and "human" in spec:
                 gates[gid].human = bool(spec["human"])
-        in_pipeline = set(cfg.gates.task_pipeline) | set(cfg.gates.phase_pipeline)
+        # Every `gates.*_pipeline`, derived rather than listed: naming task and phase
+        # missed `promotion_pipeline` -- where a deploy sign-off belongs -- and a list
+        # would miss the next pipeline the same way.
+        in_pipeline = {
+            g
+            for f in dataclasses.fields(cfg.gates)
+            if f.name.endswith("_pipeline")
+            for g in getattr(cfg.gates, f.name) or ()
+        }
         return {g for g in in_pipeline if g in gates and gates[g].is_human_gate}
     except Exception:
         return set()
