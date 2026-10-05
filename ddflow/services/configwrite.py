@@ -351,7 +351,7 @@ def _plain_spelling(dotted: str) -> str:
     # Never name a key that would itself be refused: a dotted gate id (`"gate".a.b.command`),
     # a single segment (`"gate"`), which is not <section>.<key> (roborev on babe29ff), or a
     # gate's operator-owned `human` flag (roborev on c077d794).
-    human = path[0] == "gate" and path[-1] == "human"
+    human = len(path) >= _GATE_KEY_PARTS and path[0] == "gate" and path[-1] == "human"
     return "" if "." not in plain or human or _gate_key_problem([(plain, "")]) else plain
 
 
