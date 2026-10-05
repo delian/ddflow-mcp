@@ -271,6 +271,45 @@ def _item_tree(repo: Path, cfg, st, it, called_from: Path | None) -> tuple[Path 
     return repo, ""
 
 
+def _measure(repo: Path, it, wt: Path | None) -> dict:
+    """What ddflow measures for a recorded gate: the item's tree. Once the item has
+    landed and its tree was kept, a tree that differs from what landed ONLY by untracked
+    files (scratch that never landed) is measured as what landed: those files made every
+    gate recorded after the merge read as stale at complete (Bb47a48b173). Any other
+    difference -- work committed or edited after the landing -- is kept, so complete
+    still reports it."""
+    if not wt:
+        return {}
+    measured = {
+        "tree_sha": G.tree_fingerprint(wt),
+        "source_tree": G.source_tree(wt),
+        "diff_stat": G.diff_stat(wt),
+    }
+    measured.update(_landed_if_only_untracked_differs(repo, it, wt, measured["source_tree"]))
+    return measured
+
+
+def _landed_if_only_untracked_differs(repo: Path, it, wt: Path, here: str) -> dict:
+    """`tree_sha`/`source_tree` of the landed commit when ``wt`` holds exactly that content
+    plus untracked files; {} otherwise (not landed, the same already, or a real change)."""
+    from ..services.completion import _tree_being_completed
+
+    if not (it.landed_after or it.merged_sha):
+        return {}
+    _cwd, landed = _tree_being_completed(repo, it)
+    source = G.commit_source_tree(repo, landed) if landed else ""
+    if not source or source == here:
+        return {}
+    entries = G.worktree_entries(wt)
+    if entries is None:
+        return {}
+    untracked = set(G._untracked_paths(wt))
+    tracked_only = {p: e for p, e in entries.items() if p not in untracked}
+    if G.content_id(tracked_only) != source:
+        return {}  # the tree changed beyond scratch: let complete say so
+    return {"tree_sha": f"{landed[:12]}+clean", "source_tree": source}
+
+
 def _where_to_run(repo: Path, cfg, st, it, gdef, called_from: Path | None):
     """(the directory a command gate runs in, or None; whose tree the caller is in)."""
     return (repo, "") if gdef.cwd != "worktree" else _item_tree(repo, cfg, st, it, called_from)
@@ -669,15 +708,7 @@ def record(
         # MEASURED, and passed apart from what the caller supplied: merged into `ev`
         # they made every bare pass look evidenced (bug Bbc9a7ee3f2). Nothing, rather
         # than another item's tree, when the caller stands in one.
-        measured = (
-            {
-                "tree_sha": G.tree_fingerprint(wt),
-                "source_tree": G.source_tree(wt),
-                "diff_stat": G.diff_stat(wt),
-            }
-            if wt
-            else {}
-        )
+        measured = _measure(repo, it, wt)
     else:
         measured = {}
 

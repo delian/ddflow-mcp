@@ -18,7 +18,8 @@ NEXT_SHOWN = 3
 
 
 def _pct(done: int, total: int) -> str:
-    return f"{done}/{total} ({round(100 * done / total) if total else 100}%)"
+    # Floor, never round: 306/307 is 99%, not a 100% that claims nothing is left.
+    return f"{done}/{total} ({100 * done // total if total else 100}%)"
 
 
 def _live(st: State):

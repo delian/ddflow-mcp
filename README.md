@@ -794,7 +794,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 165 knobs.
+cadences, and the rest of the 166 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -3442,7 +3442,8 @@ tasks existed is upgraded once with `ddflow bug file-tasks` (`--dry-run` lists; 
 would have filed it. It also refiles an open bug left on a finished task that will not
 fix it: a DONE task it was only reported against, or an ABANDONED one -- its own
 `fix-<bug>` included, which nothing revives, so the new task is `fix-<bug>-2` (then `-3`)
-(a done task's own bug is `verify --reopen`'s). `[bugs] file_task = false`
+(a done task's own bug is `verify --reopen`'s). Each line names the task: `Bx -> fix-Bx-2`
+for one filed, `By -> fix-By (done)` for one linked, with that task's state. `[bugs] file_task = false`
 returns to flat bug records.
 
 ### Listing tasks, phases, bugs and research
@@ -4116,7 +4117,7 @@ declared once and persists — see
 
 ## Configuration
 
-165 knobs across 25 sections, every one documented in place:
+166 knobs across 25 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
