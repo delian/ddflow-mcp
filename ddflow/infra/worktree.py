@@ -708,22 +708,26 @@ def diff_covers_everything(
     return (not missing), missing
 
 
-def repo_relative(repo: Path, path: Path | str, *, resolve_leaf: bool = True) -> str | None:
+def repo_relative(repo: Path, path: Path | str, *, as_given: bool = False) -> str | None:
     """`path` relative to `repo` as a POSIX string, or None when it lies outside it.
 
-    Both sides are resolved first, so a repo reached through a symlink and a path that
-    was resolved (or the other way round) still compare equal. The one place the
-    "is this inside the repository, and as what" decision is made: `store_path` and
-    every report that prints a repo path use it.
+    Both sides are resolved, so a repo reached through a symlink and a path that was
+    resolved (or the other way round) still compare equal. `store_path`, `enforce._rel`
+    and the pins report make their "inside the repository, and as what" decision here.
 
-    `resolve_leaf=False` resolves only the directories above `path` and keeps its own
-    name: a report naming a file the operator listed (a symlinked suite, a document)
+    `as_given=True` first tries `path` exactly as written, against `repo` as written and
+    as resolved, and resolves only when neither holds it: a report naming a file the
+    operator listed (a symlinked suite or document, or one under a symlinked directory)
     prints that name, not wherever the link points.
     """
-    p = Path(path)
-    p = p.resolve() if resolve_leaf else p.parent.resolve() / p.name
+    root = Path(repo).resolve()
+    if as_given:
+        p = Path(path)
+        for base in (Path(repo), root):
+            if p.is_relative_to(base):
+                return p.relative_to(base).as_posix()
     try:
-        return p.relative_to(Path(repo).resolve()).as_posix()
+        return Path(path).resolve().relative_to(root).as_posix()
     except ValueError:
         return None
 

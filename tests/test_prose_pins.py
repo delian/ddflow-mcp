@@ -257,6 +257,19 @@ def test_a_repo_reached_through_a_symlink_still_reports_repo_relative_paths(repo
     assert out.data["pins"][0]["tests"] == ["tests/test_a.py"]
 
 
+def test_a_document_under_a_symlinked_directory_is_reported_by_its_listed_name(repo, tmp_path):
+    """critic on B-relpath-helper: resolving the document's directories reported
+    docs/RULES.md (docs -> outside the repo) as an absolute path."""
+    _project(repo, {"test_a.py": "X = 'Claim before you edit'\n"})
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "RULES.md").write_text(RULEBOOK)
+    (repo / "docs").symlink_to(shared, target_is_directory=True)
+    out = pins(repo, "docs/RULES.md")
+    assert out.exit == OK, out
+    assert out.data["document"] == "docs/RULES.md"
+
+
 def test_repo_relative_is_the_one_inside_the_repository_decision(repo, tmp_path):
     from ddflow.infra.worktree import repo_relative, store_path
     from ddflow.services.enforce import _rel
@@ -268,9 +281,18 @@ def test_repo_relative_is_the_one_inside_the_repository_decision(repo, tmp_path)
     assert repo_relative(link, repo / "sub") == "sub"
     assert repo_relative(repo, link / "sub") == "sub"
     assert repo_relative(repo, tmp_path / "elsewhere") is None
-    # the leaf's own name is kept only when asked
+    # the name as written is kept only when asked: a symlinked leaf, a path under a
+    # symlinked directory (critic, B-relpath-helper), and one under the linked repo
     assert repo_relative(repo, repo / "sub" / "alias.md") == "target.md"
-    assert repo_relative(repo, link / "sub" / "alias.md", resolve_leaf=False) == "sub/alias.md"
+    assert repo_relative(repo, repo / "sub" / "alias.md", as_given=True) == "sub/alias.md"
+    assert repo_relative(link, link / "sub" / "alias.md", as_given=True) == "sub/alias.md"
+    assert repo_relative(link, repo / "sub" / "alias.md", as_given=True) == "sub/alias.md"
+    (tmp_path / "shared").mkdir()
+    (repo / "docs").symlink_to(tmp_path / "shared", target_is_directory=True)
+    (repo / "inner").symlink_to(repo / "sub", target_is_directory=True)
+    assert repo_relative(repo, repo / "docs" / "R.md", as_given=True) == "docs/R.md"
+    assert repo_relative(repo, repo / "inner" / "x.py", as_given=True) == "inner/x.py"
+    assert repo_relative(repo, repo / "docs" / "R.md") is None
     # store_path and enforce._rel agree with it inside, and keep their own fallbacks
     assert store_path(link, repo / "sub") == _rel(link, repo / "sub") == "sub"
     assert store_path(repo, tmp_path / "elsewhere") == "../elsewhere"
