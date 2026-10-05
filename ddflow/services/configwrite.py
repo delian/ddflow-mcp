@@ -31,7 +31,6 @@ the file editable at all.
 from __future__ import annotations
 
 import dataclasses
-import json
 import re
 from pathlib import Path
 
@@ -114,7 +113,7 @@ def _toml_literal(value: str) -> str:
     """A TOML literal for `value`, quoting it unless it already is one."""
     if re.fullmatch(r"(true|false|-?\d+(\.\d+)?|\[.*\]|\{.*\})", value.strip()):
         return value
-    return json.dumps(value)  # quote + escape as a TOML basic string
+    return TC.basic_string(value)  # quote + escape as a TOML basic string (Bb11e7a8186)
 
 
 def _is_header(line: str, header: str) -> bool:
