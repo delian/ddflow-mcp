@@ -1867,9 +1867,7 @@ def _export_tables_problem(v: Any) -> str:
 #: load and by `Config.check`, so `config set` refuses the value instead of writing it.
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
-_KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
-    # First, so a hand-written check below for the same key would win over the derived one.
-    **{key: _one_of(allowed) for key, allowed in KNOB_CHOICES.items()},
+_VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
     "export.tables": _export_tables_problem,
     "export.max_bytes": lambda v: (
         "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else "must be an integer >= 0"
@@ -1909,6 +1907,14 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
         'to stop the check set [dedupe].on_match = "off"'
     ),
 }  # fmt: skip
+
+#: Every check: one derived from each KNOB_CHOICES entry, and the hand-written ones above.
+#: The two never share a key (`tests/test_config_enum_knobs.py` asserts it), so neither can
+#: silently shadow the other.
+_KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+    **{key: _one_of(allowed) for key, allowed in KNOB_CHOICES.items()},
+    **_VALUE_CHECKS,
+}
 
 
 def csv_list(raw: str | None) -> list[str]:

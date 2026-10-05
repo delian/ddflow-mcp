@@ -24,7 +24,8 @@ _ALTS = r"[\w-]+(?:\s*\|\s*[\w-]+)+"
 
 
 def _alternatives(text: str) -> tuple[str, ...] | None:
-    """The `a | b | c` run in `text`, ignoring parenthesised asides between the words."""
+    """The `a | b | c` run in `text`: read with parenthesised asides between the words
+    removed (`off | fast (lint, ...) | full`), else from the raw text (`(a | b)`)."""
     for candidate in (re.sub(r"\s*\([^)]*\)", "", text), text):
         if m := re.search(_ALTS, candidate):
             return tuple(re.split(r"\s*\|\s*", m.group(0)))
@@ -145,12 +146,19 @@ def test_a_freshly_initialised_config_is_valid(repo: Path) -> None:
 
 
 def test_every_declared_choice_is_named_in_the_knobs_doc() -> None:
-    # The other direction: a value declared for a knob that its doc never mentions is a
-    # value nobody can find out about, or one the doc dropped.
+    # The other direction: each declared value is named AS A VALUE in its knob's doc --
+    # quoted ('x', `x`, "x") or inside its `a | b` run -- so a value nobody can find out
+    # about, or one the doc dropped, fails here.
     for key, allowed in C.KNOB_CHOICES.items():
         doc = KNOB_DOCS[key]
-        missing = [v for v in allowed if not re.search(rf"(?<![\w-]){re.escape(v)}(?![\w-])", doc)]
-        assert not missing, f"{key}: the doc does not name {missing}"
+        run = set(_alternatives(doc) or ())
+        quoted = set(re.findall(r"""['`"]([\w-]+)['`"]""", doc))
+        missing = [v for v in allowed if v not in run | quoted]
+        assert not missing, f"{key}: the doc does not name {missing} as a value"
+
+
+def test_derived_and_hand_written_checks_never_share_a_key() -> None:
+    assert not set(C.KNOB_CHOICES) & set(C._VALUE_CHECKS)
 
 
 def test_the_scanner_reads_a_parenthesised_run() -> None:
