@@ -1909,17 +1909,26 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
 #: The value each enum knob takes when a config FILE gives it one this code does not know
 #: (decision D-enum-fallback-strict, superseding the fall-back-to-default part of
 #: D9b8061fd38): its STRICTEST allowed value, so a typo in a deliberately tightened
-#: setting can only make ddflow more careful, never quietly loosen it. For a knob with
-#: no safety dimension the "strictest" is the value that does the most checking or
-#: changes least; the reason is appended to each knob's doc below.
-#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key.
+#: setting makes ddflow more careful. For a knob with no safety dimension the "strictest"
+#: is the value that does the most checking or changes least; the reason is appended to
+#: each knob's doc below. One rule outranks strictness: never a value that acts outside
+#: this clone (`KNOB_OUTWARD`; D-fallback-no-remote). Where the two conflict -- `pr`
+#: waits for approval but pushes, `remote` claims exclusively but writes remote refs --
+#: the fallback stays local, and a typo there loosens approval or exclusivity until fixed.
+#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key here
+#: and in `KNOB_OUTWARD`, and that no fallback is an outward value.
 KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "lease.reclaim_policy": ("report", "never steals a lease, so a crashed agent's work survives"),
     "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
     "flow.model": ("trunk", "no safety dimension; the plain model, which moves no branches"),
-    "flow.integration": ("pr", "a merge waits for approval on the forge, not landing locally"),
+    # D-fallback-no-remote: a typo never makes ddflow push, open a pull request or write
+    # remote refs; outward behaviour happens only when someone sets it correctly.
+    "flow.integration": ("merge", "a typo never pushes or opens a pull request; lands locally"),
     "flow.forge": ("auto", "no safety dimension; reads the forge from the remote URL"),
-    "flow.claims": ("remote", "one clone wins a claim; an unreachable remote refuses it"),
+    "flow.claims": (
+        "local",
+        "a typo never writes claim refs to the remote; claims stay in this clone",
+    ),
     "flow.pr_merge": ("human", "ddflow never merges; a person does"),
     "flow.on_changes_requested": ("block", "the item is parked for a person"),
     "flow.port_strategy": ("forward-merge", "no safety dimension; the least bookkeeping"),
@@ -1944,6 +1953,45 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "mcp.tools": ("all", "no safety dimension; every tool advertised, as without the knob"),
     "ci.on_merge": ("full", "the whole CI command runs after a merge"),
     "export.refresh": ("off", "no safety dimension; ddflow writes no document by itself"),
+}
+
+#: Each enum knob's values that make ddflow act OUTSIDE this clone: a push, a pull
+#: request, remote claim refs, a merge on the forge. No `KNOB_STRICTEST` fallback may be
+#: one (D-fallback-no-remote): outward behaviour happens only when someone sets it
+#: correctly, on purpose. Written out for EVERY KNOB_CHOICES key, empty when none, and
+#: the test requires the two key sets to match: a new knob fails it until its author
+#: answers the question here (a seeded default would answer it for them).
+KNOB_OUTWARD: dict[str, frozenset[str]] = {
+    "lease.reclaim_policy": frozenset(),
+    "worktree.merge_strategy": frozenset(),
+    "flow.model": frozenset(),
+    "flow.integration": frozenset({"pr"}),  # pushes the branch, opens a pull request
+    "flow.forge": frozenset(),
+    "flow.claims": frozenset({"remote"}),  # writes refs/ddflow/claims/<id> on the remote
+    "flow.pr_merge": frozenset({"on_approval", "auto"}),  # a merge on the forge
+    "flow.on_changes_requested": frozenset(),
+    "flow.port_strategy": frozenset(),
+    "gates.enforce_order": frozenset(),
+    "lessons.search_backend": frozenset(),
+    "session.progress_after_complete": frozenset(),
+    "schedule.ready_policy": frozenset(),
+    "schedule.cycle_policy": frozenset(),
+    "schedule.unknown_dep_policy": frozenset(),
+    "schedule.empty_phase": frozenset(),
+    "dedupe.on_match": frozenset(),
+    "enforce.commit_without_lease": frozenset(),
+    "enforce.generated_views": frozenset(),
+    "enforce.stale_docs": frozenset(),
+    "enforce.environment_commits": frozenset(),
+    "enforce.stale_rules": frozenset(),
+    "enforce.readme_with_code": frozenset(),
+    "enforce.behind": frozenset(),
+    "loops.on_detect": frozenset(),
+    "review.on_exceed": frozenset(),
+    "upgrade.skew": frozenset(),
+    "mcp.tools": frozenset(),
+    "ci.on_merge": frozenset(),
+    "export.refresh": frozenset(),
 }
 
 for _key, (_value, _why) in KNOB_STRICTEST.items():
