@@ -79,30 +79,60 @@ def status(repo: Path) -> O.Outcome:
     return O.failed("onboard.status", "; ".join(c.name for c in report.problems), **data)
 
 
-def legacy(repo: Path, *, apply: bool = False) -> O.Outcome:
-    """Rulebook cutover proposals; `apply` freezes what was imported."""
+def legacy(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.Outcome:
+    """Rulebook cutover proposals; `apply` freezes the imported files the operator approved.
+
+    The report names the freeze CANDIDATES (the files the import consumed): with no
+    `accept`, apply approves that whole list; with names, only those, and a name that is
+    not an imported file is refused rather than silently dropped (reviews on 2130b17).
+    """
     _log, _cfg, state = _load(repo)
     imported = LG.imported_files(state)
     proposals = LG.scan(repo, imported)
     text = LG.render(proposals)
-    data = {"proposals": [p.__dict__ for p in proposals], "text": text}
+    if imported:
+        text = f"{text}\nfreeze candidates ({len(imported)}): {', '.join(imported)}"
+    data = {
+        "proposals": [p.__dict__ for p in proposals],
+        "freeze_candidates": imported,
+        "text": text,
+    }
     if not apply:
-        if not proposals:
+        if not proposals and not imported:
             return O.nothing("onboard.legacy", text, **data)
         return O.ok("onboard.legacy", **data)
-    actions = LG.freeze(repo, imported)
-    return O.ok("onboard.legacy", **data, actions=actions)
+    wanted = set(accept)
+    refused = [
+        {"name": n, "kind": "file", "outcome": "refused", "detail": "not an imported file"}
+        for n in accept
+        if n not in imported
+    ]
+    chosen = [n for n in imported if n in wanted] if wanted else imported
+    if not chosen:
+        if not refused:
+            return O.nothing("onboard.legacy", "nothing was imported to freeze", **data)
+        return O.refused(
+            "onboard.legacy", "nothing approved to freeze", **data, refused=refused
+        )
+    actions = LG.freeze(repo, chosen)
+    return O.ok("onboard.legacy", **data, actions=actions, refused=refused)
 
 
-def memory(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.Outcome:
-    """Harness-memory facts: the offer; `apply` records the approved ones, once."""
-    log, cfg, state = _load(repo)
+def memory(
+    repo: Path, *, apply: bool = False, accept: Sequence[str] = (), agent: str = ""
+) -> O.Outcome:
+    """Harness-memory facts: the offer; `apply` records the approved ones, once.
+
+    `accept` matches a fact's ident or its source file; a name that matches nothing is
+    refused and, when that leaves nothing approved, the outcome is REFUSED -- a typo
+    must not read as a successful import (reviews on 2130b17).
+    """
+    log, cfg, state = _load(repo, agent)
     scan, kept, duplicates = MH.propose(repo, state=state, cfg=cfg)
     text = MH.render(scan, kept, duplicates)
     data = {
         "kept": [
-            {"ident": f.ident, "title": f.title, "source": f.source, "body": f.body}
-            for f in kept
+            {"ident": f.ident, "title": f.title, "source": f.source, "body": f.body} for f in kept
         ],
         "duplicates": [
             {"ident": d.found.ident, "of": d.of, "identical": d.identical} for d in duplicates
@@ -114,19 +144,35 @@ def memory(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.
         if not kept and not duplicates and not scan.problems:
             return O.nothing("onboard.memory", text, **data)
         return O.ok("onboard.memory", **data)
-    approved = kept
-    if accept:
-        wanted = set(accept)
-        approved = [f for f in kept if f.ident in wanted or f.source in wanted]
-    actions = MH.apply(log, approved, state=state, cfg=cfg)
-    return O.ok("onboard.memory", **data, approved=[f.ident for f in approved], actions=actions)
+    wanted = set(accept)
+    matched = [f for f in kept if f.ident in wanted or f.source in wanted] if wanted else kept
+    keys = {f.ident for f in matched} | {f.source for f in matched}
+    refused = [
+        {"name": n, "kind": "fact", "outcome": "refused", "detail": "no offered fact has this name"}
+        for n in accept
+        if n not in keys
+    ]
+    if wanted and not matched:
+        return O.refused("onboard.memory", "nothing approved to record", **data, refused=refused)
+    actions = MH.apply(log, matched, state=state, cfg=cfg)
+    return O.ok(
+        "onboard.memory",
+        **data,
+        approved=[f.ident for f in matched],
+        actions=actions,
+        refused=refused,
+    )
 
 
 def test_gate(repo: Path) -> O.Outcome:
     """How the project tests itself, measured in a detached clean tree; propose only."""
     report = OT.propose(repo)
     text = OT.render(report)
-    data = {"text": text, "notes": list(report.notes), "known_failures": list(report.known_failures)}
+    data = {
+        "text": text,
+        "notes": list(report.notes),
+        "known_failures": list(report.known_failures),
+    }
     if report.runner is None:
         return O.nothing("onboard.test-gate", text, **data)
     return O.ok("onboard.test-gate", **data)
@@ -161,9 +207,9 @@ def onboard(
     if stage == "preflight":
         return preflight(repo, apply=apply, only=accept)
     if stage == "legacy":
-        return legacy(repo, apply=apply)
+        return legacy(repo, apply=apply, accept=accept)
     if stage == "memory":
-        return memory(repo, apply=apply, accept=accept)
+        return memory(repo, apply=apply, accept=accept, agent=agent)
     if stage == "test-gate":
         return test_gate(repo)
     if stage == "verify":
