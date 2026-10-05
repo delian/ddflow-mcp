@@ -8,7 +8,7 @@ Record the operator's words as you go (`ddflow_session_start`, then `ddflow_sess
 
 ## 0. Preflight: what is already in flight
 
-Before anything is written, find the work that exists only in git:
+Before anything is written, find the work that exists only in git. `ddflow onboard preflight` reports it and proposes; what it proves, so you can explain every refusal:
 
 - `git worktree list`, `git branch --format='%(refname:short)'` (LOCAL branches), `git stash list` in the primary checkout.
 - **Never the default branch itself**: it is its own ancestor, so the check below calls it "merged". Remote-tracking branches (`git branch -r`) are not yours to delete either: report the ones not in the default branch, and leave them.
@@ -17,7 +17,7 @@ Before anything is written, find the work that exists only in git:
 - **Holding unique work** → it is not yours to delete. Show the operator the commits (`git log <default>..<branch>`) and the uncommitted files, and ask: land it, import it as an item (`ddflow_import` proposes unmerged branches), or leave it.
 - Stashes are shared by every worktree: never pop or drop one you did not create.
 
-**Ask:** "these N are merged, remove them? these M hold work, what are they?" Remove only what they approved.
+**Ask:** "these N are merged, remove them? these M hold work, what are they?" Remove only what they approved: `ddflow onboard preflight --apply --accept NAME ...` (no `--accept` removes everything the report marked safe; a name it did not mark is refused).
 
 ## 1. Setup, from the durable place
 
@@ -37,8 +37,7 @@ Before anything is written, find the work that exists only in git:
 
 Until `unit_tests` has a command, it reports `unavailable`, honestly, and blocks every completion.
 
-- Find how the project runs its tests (its CI config, `pyproject.toml`, `package.json`, `Makefile`, the rulebook).
-- Measure a **baseline** in a tree nobody is editing — a fresh clone or a detached worktree of the default branch — never in the one you are changing: how many pass, how many fail, how long it takes.
+`ddflow onboard test-gate` detects the runner from the project's own files and measures a **baseline** in a tree nobody is editing — a detached worktree of the default branch, never the one you are changing — with the pass/fail counts and the failing ids. It proposes the command, the worker line and the smoke run; check its reasoning against what you know:
 - A suite over a minute or two runs in parallel (`pytest-xdist` and `-n <workers>` for Python; size the workers so several agents can run the gate at once — `auto` on a many-core machine is usually slower). A worker count sized to one machine goes in `.ddflow/local/gates.toml`, which wins over the committed `gate.unit_tests.command`; `.ddflow/gates.toml` is for what every clone shares, `human = true` checkpoints included. Adding a dev dependency changes the project: ask.
 - Tests already failing at the baseline would make the gate red for every item for reasons no item caused. Propose a shrink-only known-failures list, tracked as its own phase, rather than a gate everyone learns to ignore.
 - A phase-end `live_test`: the smallest real end-to-end run of the project's own entry point (a few seconds), as a script that fails when it produces nothing.
@@ -58,30 +57,29 @@ Then `ddflow_next` must offer the item the team would start with. If it does not
 
 ## 4. Cut the old workflow over
 
-The imported files are about to become history, and the project's rulebook still tells every agent to write them.
+Stage 4's scan is `ddflow onboard legacy`: it reads the rulebooks, the slash commands and the named handoff docs and proposes the replacement per line; you and the operator apply what is accepted. Read its proposals knowing what each duty should become:
 
-- Find every instruction that writes a now-imported surface: in `CLAUDE.md`, `AGENTS.md`, `CLAUDE.local.md`, the harness's slash commands (`.claude/commands/`), prompt files, and any handoff document. Grep for the file names (`todo.md`, `lessons`, `LOG.md`, the memory store) and for the duties ("tick the checkbox", "STATUS line", "append to the journal").
+- Every instruction that writes a now-imported surface: in `CLAUDE.md`, `AGENTS.md`, `CLAUDE.local.md`, the harness's slash commands (`.claude/commands/`), prompt files, and any handoff document. It greps for the file names (`todo.md`, `lessons`, `LOG.md`, the memory store) and for the duties ("tick the checkbox", "STATUS line", "append to the journal"). Name any prompt or rulebook file it did not scan so it is added to the report.
 - For each, propose the ddflow replacement, and keep everything else the operator wrote: the checkbox and STATUS discipline becomes claimed items whose gates carry outcomes (`ddflow_complete` refuses a silent gate); "update lessons.md" becomes `ddflow_lesson_add` with a one-line summary; the journal becomes `ddflow_session_note`; "check the lessons first" becomes `ddflow_recall`; a research log's verdicts become `ddflow_research_add` (the citations document itself usually stays live); the worktree procedure becomes `ddflow_claim` → `ddflow_merge` → `ddflow_complete`.
 - Rulebook conventions that ddflow can enforce become config, not prose: a "never add Co-Authored-By" rule is `[enforce] forbidden_trailers` (the commit-msg hook refuses it); a weekly bug hunt or dedupe pass is `[cadence] every_days`; a commit-trailer convention is `item_trailer_keys`; a sibling repository this one waits on is `[schedule] repos`.
 - A file that is not committed (`CLAUDE.local.md` is often git-ignored) has no history to fall back on: keep a copy before editing it, somewhere outside the working tree, and tell the operator where.
-- The harness's own per-project memory (Claude Code keeps it under `~/.claude/projects/<project>/memory/`) holds operational facts: offer to record each still-true one with `ddflow_memory_add`.
+- The harness's own per-project memory (Claude Code keeps it under `~/.claude/projects/<project>/memory/`) holds operational facts: `ddflow onboard memory` offers each still-true one as a `memory.recorded` candidate, deduplicated against what is already remembered; `--apply --accept ID-OR-FILE` records the approved ones (a name that matches nothing is refused, never silently skipped).
 
 **Ask:** show the proposed rulebook diff before applying it; this is the operator's text.
 
 ## 5. Freeze what was imported
 
-An edit to an imported file after the cutover reaches no agent and silently forks the record — a ticked box that leaves the ddflow item open. Make it fail:
+An edit to an imported file after the cutover reaches no agent and silently forks the record. Make it fail. `ddflow onboard legacy --apply` writes the ratchet itself: a `pre-commit` `language: fail` hook over those paths where the framework is used, otherwise a test that pins each file's hash so the `unit_tests` gate goes red. It lists the freeze candidates (the files the import consumed) and freezes the whole list, or only the names you pass with `--accept FILE`; a ratchet it could not arm is reported as a failure, not a success.
 
-- where the project uses the `pre-commit` framework, a local hook with `language: fail` over those paths;
-- otherwise a test that pins each file's hash, so the `unit_tests` gate goes red. Mutation-check it: change a byte, watch it fail, restore.
+**Ask:** show the freeze candidate list before applying it — a bare `--apply` freezes everything listed.
 
-State in the rulebook and in the ratchet's own message what to do instead.
+What is left to you: mutation-check the ratchet (change a byte, watch it fail, restore) and state the replacement in the project's rulebook.
 
 ## 6. Verify, end to end, and commit
 
-Nothing here is done because a command exited 0. Prove each:
+Nothing here is done because a command exited 0. `ddflow onboard verify` runs most of this as one report — the registered entry really answers an MCP `initialize`, the hooks are armed and the commit-msg hook refuses a forbidden trailer, `brief`/`next` answer, the freeze ratchet holds and the suite is green in a detached tree — and `ddflow onboard status` is the standing drift report you can re-run any day. Prove what it cannot:
 
-- **The MCP server starts from the entry that was registered** — spawn exactly that command with exactly that environment and complete an `initialize` handshake; a tool call (`ddflow_next`) answers from this project's queue.
+- **The MCP server starts from the entry that was registered** — `ddflow onboard verify` spawns exactly that command with exactly that environment and completes an `initialize` handshake; a tool call (`ddflow_next`) answers from this project's queue.
 - `ddflow_hooks` (`action: status`): pre-commit, commit-msg and the SessionStart hook installed; if a trailer is forbidden, feed the commit-msg hook a message carrying it and see it refused.
 - `ddflow_brief` and `ddflow_next` offer the work the team would start with; `ddflow_doctor` is healthy; `ddflow_import_verify` has nothing left owed that you did not report.
 - The whole suite passes with the gate's own command, including the freeze ratchet.
