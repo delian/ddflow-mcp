@@ -18,10 +18,17 @@ What must happen next, in order:
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
 from harness import Scenario
+
+#: The lease TTL the scenario runs under: short, so expiry is observable inside a test.
+TTL_S = 8
+#: How many times the "still claimed" checks are re-observed when the machine was too
+#: slow to finish them inside one lease (B11e64b1e8c).
+LIVE_ATTEMPTS = 6
 
 SCAFFOLD = {
     "README.md": "# feedparse\n",
@@ -44,9 +51,9 @@ def run(sc: Scenario) -> None:
     sc.git("-c", "user.email=a@b", "-c", "user.name=t", "commit", "-qm", "ddflow: adopt")
     sc.write(
         ".ddflow/config.toml",
-        """
+        f"""
         [lease]
-        ttl_s = 8
+        ttl_s = {TTL_S}
         grace_s = 0
         heartbeat_s = 1
 
@@ -114,22 +121,43 @@ def run(sc: Scenario) -> None:
         and (wt / "feedparse/rss_dates.py").exists(),
     )
 
-    # A live agent heartbeats; this is DELTA's last one. The "still claimed" checks below
-    # run inside the lease's 8 s from here, a margin a heavily loaded machine needs: with
-    # a 2 s TTL the lease expired before them at load average ~140 (Bdc7fe4dbbb).
-    sc.ddflow("heartbeat", "P1.T1", agent="delta")
-    sc.step("DELTA is killed — no release, no final heartbeat, nothing")
+    sc.step("DELTA heartbeats one last time, then is killed — no release, nothing")
     sc.note(
         "Simulated exactly as a real kill would leave things: the process simply "
         "stops. No cleanup code runs, because in a real crash none does."
     )
 
     sc.step("Immediately after the crash, the item is still CLAIMED")
-    code, _, err = sc.ddflow("claim", "P1.T1", agent="epsilon", expect=3)
-    sc.check("another agent is refused while the lease is still live", code == 3)
+    # Judged against the LEASE'S OWN CLOCK, not a margin. The checks must run inside the
+    # TTL from DELTA's last heartbeat; at load average 100-190 the processes alone could
+    # outlive it, and the scenario failed on a correct answer (B11e64b1e8c, after
+    # Bdc7fe4dbbb widened the margin once). So the window is measured: the checks count
+    # only when they FINISHED before the lease could expire -- an upper bound on when
+    # each one looked -- and otherwise DELTA's last heartbeat is re-taken and they are
+    # observed again. A wrong answer inside the window still fails.
+    for attempt in range(1, LIVE_ATTEMPTS + 1):
+        # A live agent heartbeats; this is DELTA's last one.
+        sc.ddflow("heartbeat", "P1.T1", agent="delta")
+        renewed = sc.jddflow("show", "P1.T1")["lease"]["renewed_at"]
+        claim_code, _, err = sc.ddflow("claim", "P1.T1", agent="epsilon", expect=None)
+        recover_code = sc.ddflow("recover", expect=None)[0]
+        if time.time() - renewed < TTL_S:
+            break
+        sc.note(
+            f"attempt {attempt}: the checks finished {time.time() - renewed:.1f}s after "
+            f"the heartbeat, past the {TTL_S}s lease, so they did not observe the live "
+            "window; heartbeat again and re-observe"
+        )
+    else:
+        sc.check(
+            f"the live window was observed within {LIVE_ATTEMPTS} attempts",
+            False,
+            f"every attempt outlived the {TTL_S}s lease (load average {os.getloadavg()})",
+        )
+    sc.check("another agent is refused while the lease is still live", claim_code == 3, err)
     sc.check(
         "recover reports nothing yet — a dead agent looks like a slow one",
-        sc.ddflow("recover", expect=2)[0] == 2,
+        recover_code == 2,
     )
     sc.note(
         "This is deliberate. Treating a momentarily-quiet agent as dead is how two "
@@ -139,7 +167,7 @@ def run(sc: Scenario) -> None:
     sc.step("Wait for the lease to expire, then run recovery")
     # Poll rather than sleep a fixed time: expiry is wall-clock, and how long the steps
     # above took varies with the machine's load.
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + TTL_S + 120
     while sc.ddflow("recover", expect=None)[0] != 0 and time.monotonic() < deadline:
         time.sleep(0.5)
     found = sc.jddflow("recover")
