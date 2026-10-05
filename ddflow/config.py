@@ -1538,10 +1538,13 @@ class Config:
     rules: RulesConfig = field(default_factory=RulesConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
-    #: where each knob's final value came from -- "default" | "file" | "local" | "env"
+    #: where each knob's final value came from -- "default" | "file" | "local" | "env",
+    #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong
     sources: dict[str, str] = field(default_factory=dict, repr=False)
-    #: Keys a config FILE carried that this code does not know -- "sec.knob", or "[sec]"
-    #: for a whole section. Skipped, not fatal: see `_apply`.
+    #: What a config FILE carried that this code does not know: a key -- "sec.knob", or
+    #: "[sec]" for a whole section -- skipped, not fatal; or an enum value, whose note says
+    #: the strictest value was APPLIED instead, or which later layer overrode it
+    #: (`fallback_entries` tells the two kinds apart). See `_apply`.
     unknown_knobs: list[str] = field(default_factory=list, repr=False)
 
     #: For each enum knob that fell back to its strictest value, the (index in
@@ -1706,8 +1709,9 @@ class Config:
                 self.sources[f"{sec}.{knob}"] = source
 
     def fallback_entries(self) -> set[str]:
-        """The `unknown_knobs` entries that are strictest-fallback notes -- APPLIED values,
-        not skipped keys -- read from the bookkeeping, never from the notes' text."""
+        """The `unknown_knobs` entries that are strictest-fallback notes -- a value applied
+        (the strictest, or a later layer's override, as the note says), never a skipped
+        key -- read from the bookkeeping, never from the notes' text."""
         return {self.unknown_knobs[i] for notes in self._fallback_notes.values() for i, _ in notes}
 
     def _forget_fallback(self, key: str, by: str) -> None:
@@ -1804,7 +1808,8 @@ _WARNED: set[tuple[str, str]] = set()
 def _warn_unknown(
     keys: list[str], root: Path, fallbacks: set[str] | frozenset[str] = frozenset()
 ) -> None:
-    """Say, on stderr, which config keys this code skipped.
+    """Say, on stderr, which config keys this code skipped, and which unknown enum values
+    it replaced (each note names the value in effect: the strictest, or a later layer's).
 
     Skipping without a word is the silent-knob-drop class: 81a52e3 made an unknown key
     load-and-skip so an older tree keeps working, but only `doctor` mentioned it, so
@@ -1823,7 +1828,7 @@ def _warn_unknown(
     if skipped:
         what.append(f"{', '.join(skipped)}, which this ddflow does not know; skipped")
     if fell_back:
-        what.append(f"{', '.join(fell_back)}; each such knob takes the value named")
+        what.append(f"{', '.join(fell_back)}; each such knob takes the value its note names")
     print(
         f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
         f"{'. It sets '.join(what)}. (This ddflow: {_CODE_TREE}.) The config is newer "
