@@ -171,16 +171,20 @@ def test_only_identifier_shaped_tokens_count(line, want):
     assert set(D.TOKEN.findall(line)) == want
 
 
+def _doc_globs_agree_with_git(repo: Path, globs: list[str]) -> set[str]:
+    """Python's idea of a doc must be exactly the set git grep searched. Returns git's set."""
+    git = set(_git(repo, "ls-files", "--", *(f":(glob){g}" for g in globs)).stdout.split())
+    ours = {p for p in _git(repo, "ls-files").stdout.split() if D.is_doc(p, globs)}
+    assert ours == git
+    return git
+
+
 def test_the_doc_globs_mean_what_git_means_by_them(repo):
-    """Python's idea of a doc must be exactly the set git grep searched."""
     for p in ("README.md", "docs/a.md", "docs/sub/b.rst", "src/x.py", "notes.txt", "a/b.txt"):
         (repo / p).parent.mkdir(parents=True, exist_ok=True)
         (repo / p).write_text("x\n")
     _git(repo, "add", "-A")
-    globs = ["**/*.md", "docs/**", "*.txt"]
-    git = set(_git(repo, "ls-files", "--", *(f":(glob){g}" for g in globs)).stdout.split())
-    ours = {p for p in _git(repo, "ls-files").stdout.split() if D.is_doc(p, globs)}
-    assert ours == git
+    _doc_globs_agree_with_git(repo, ["**/*.md", "docs/**", "*.txt"])
 
 
 def test_many_removed_names_are_all_checked_for_liveness(repo):
@@ -275,3 +279,64 @@ def test_a_long_flag_is_found_by_a_word_grep(adopted):
     (adopted / "src" / "cli.py").write_text("ARGS = []\n")
     r = _commit(adopted, "src")
     assert r.returncode != 0 and "docs/cli.md:1" in r.stderr, r.stderr
+
+
+# -- Mutation cadence (2026-09-28): five mutants of services/docsync.py survived
+# tests/test_doc_sync.py. One test each, below; every one FAILS with its mutant applied
+# and passes on the real code (the mutation is what the test is built to catch).
+
+
+def test_a_question_mark_in_a_doc_glob_matches_exactly_one_character(repo):
+    """Mutant: the `?` branch of glob_regex disabled. `?` then becomes a literal, so a glob
+    like `docs/?.md` stops being the set of paths git grep searched as docs."""
+    for p in ("docs/a.md", "docs/ab.md", "docs/deep/x.md"):
+        (repo / p).parent.mkdir(parents=True, exist_ok=True)
+        (repo / p).write_text("x\n")
+    _git(repo, "add", "-A")
+    assert _doc_globs_agree_with_git(repo, ["docs/?.md"]) == {"docs/a.md"}
+
+
+def test_a_header_path_is_unquoted_only_when_git_quoted_it():
+    """Mutant: the `_unquote` guard disabled. git C-quotes a name holding a backslash even
+    with core.quotepath=false, and the quoted form carries an escape the path does not --
+    but an unquoted path must NOT be run through the escaper (`\\b` is a backspace to it)."""
+    assert D._unquote('"src/a\\\\b.py"') == "src/a\\b.py"  # quoted: decode git's escape
+    assert D._unquote("src/a\\b.py") == "src/a\\b.py"  # unquoted: left alone
+
+
+def test_dev_null_in_a_diff_header_is_not_a_deleted_path(adopted):
+    """Mutant: `_header_path`'s `/dev/null` -> None disabled. A deleted page's own header is
+    `+++ /dev/null`; read as a path it makes the DOC look like code, so the page's
+    identifier-shaped stem is announced as a removed CODE name and another page that merely
+    names it is reported stale. Deleting a page changes docs; it removes no code name."""
+    assert D._header_path("+++ /dev/null", "b/") is None  # the mechanism, pinned
+    (adopted / "docs" / "probe_runner.md").write_text("# Probe runner\n")
+    (adopted / "docs" / "notes.md").write_text("See `probe_runner` for details.\n")
+    _git(adopted, "add", "-A")
+    _git(adopted, "commit", "-qm", "page", "--no-verify")
+    _git(adopted, "rm", "-q", "docs/probe_runner.md")
+    r = _git(adopted, "commit", "-m", "drop page")
+    assert r.returncode == 0, r.stderr
+
+
+def test_renaming_a_file_the_docs_cite_is_refused(adopted):
+    """Mutant: the rename from/to buckets swapped. A pure rename has only `rename from` and
+    `rename to` lines, so swapping them makes the OLD name read as added and the NEW name as
+    removed -- the stale citation of the old name is then never reported."""
+    (adopted / "src" / "probe_runner.py").write_text("print('hi')\n")
+    (adopted / "docs" / "probes.md").write_text("Run `src/probe_runner.py`.\n")
+    _git(adopted, "add", "-A")
+    _git(adopted, "commit", "-qm", "probe", "--no-verify")
+    _git(adopted, "mv", "src/probe_runner.py", "src/runner_probe.py")
+    r = _git(adopted, "commit", "-m", "rename probe")
+    assert r.returncode != 0, "a pure rename leaving a stale doc line was committed"
+    assert "docs/probes.md:1" in r.stderr and "probe_runner" in r.stderr, r.stderr
+
+
+def test_a_real_git_diff_failure_is_not_a_pass(tmp_path):
+    """Mutant: staged_diff's own `returncode != 0 -> None` removed. test_git_failing_is_not
+    _a_pass monkeypatches staged_diff itself, so the real failure path is never exercised:
+    make git actually fail and require the detector to say 'could not tell', never 'clean'."""
+    missing = tmp_path / "not-a-repo"
+    assert D.staged_diff(missing) is None
+    assert D.stale_mentions(missing, DOC_GLOBS, []) is None
