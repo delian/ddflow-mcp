@@ -82,8 +82,6 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "tag": ("string", "Filter by this tag.", False),
             "scope": ("string", "Filter by this scope.", False),
-            "limit": ("integer", "Maximum results (default 100).", False),
-            "json": ("boolean", "JSON array.", False),
         },
         "api": lambda repo, a, agent: _api().rule_list(
             repo,
@@ -177,10 +175,12 @@ TOOLS: dict[str, dict[str, Any]] = {
         "payload": ("id",),
     },
     "ddflow_rule_remove": {
-        "description": ("Delete a rule from the manifest; the removal is logged as an event."),
+        "description": (
+            "Delete a rule and regenerate the DDFLOW.md manifest. Rules are files, not "
+            "log records: the removal leaves no record and takes no reason."
+        ),
         "properties": {
             "id": ("string", "Rule id to remove.", True),
-            "reason": ("string", "Why it is removed (recorded).", False),
         },
         "api": lambda repo, a, agent: _api().rule_remove(
             repo,
