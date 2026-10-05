@@ -156,16 +156,19 @@ existed only in prose — two `family_of` implementations, three TOML overlay lo
 dependency graph.
 
 ```
-surfaces/   cli.py, mcp.py              argparse and JSON-RPC. No policy.
-views/      human.py, markdown.py       one renderer per result kind.
-services/   queue, gates, review,       the application layer. Both surfaces call it.
-            knowledge, sessions,        Nothing here prints.
-            leases, health, setup
-infra/      log, worktree, proc,        disk, git, sqlite, subprocess, containers, TOML
-            store, container, tomlcfg
-core/       events, model, schedule,    PURE. No disk, no network, no subprocess.
-            progress
-config.py                               read by every layer; imports none of them
+surfaces/   cli.py, mcp.py                 argparse and JSON-RPC. No policy.
+api/        lifecycle.py, items.py,        the application layer: ONE typed entry
+            gates.py, knowledge.py         point per operation. Both surfaces call it.
+services/   gates.py, leases.py,           the domain. Every operation returns an
+            review.py, flow.py,            Outcome. Nothing here prints.
+            sessions.py, importer.py
+views/      human.py, markdown.py          one renderer per result kind. PEERS with
+                                           services: one layer split by role (below).
+infra/      log.py, worktree.py,           disk, git, sqlite, subprocess, containers,
+            proc.py, store.py, tomlcfg.py  TOML.
+core/       events.py, model.py,           PURE. No disk, no network, no subprocess.
+            schedule.py, progress.py
+config.py                                  read by every layer; imports none of them
 ```
 
 **`core` is pure, and that is load-bearing.** `fold`, the scheduler, the loop detectors
@@ -202,7 +205,8 @@ layer split by role, and saying so is more honest than an exemption list that gr
 | `infra/store.py` | SQLite projection + BM25 retrieval (disposable) |
 | `infra/container.py` | container detection, loopback rewriting |
 | `infra/tomlcfg.py` | one TOML overlay loader, one unknown-key policy |
-| `services/queue.py` | the work queue: add, claim, complete, merge |
+| `api/__init__.py` | the typed operation surface: one entry point per operation, called by both surfaces |
+| `api/lifecycle.py` | the work queue: claim, complete, merge, next, wait, and worktree adoption |
 | `services/leases.py` | acquire/renew/release, crash scanning, salvage advice |
 | `services/gates.py` | gate definitions, execution, evidence, independence |
 | `services/flow.py` | open a request, `pr sync` (merged / changes requested / closed / approved), version plans and cuts ([R16](RESEARCH.md)) |
