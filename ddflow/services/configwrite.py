@@ -348,9 +348,11 @@ def _plain_spelling(dotted: str) -> str:
     plain = ".".join(path)
     if node != 0 or not all(_BARE.fullmatch(k) for k in path):
         return ""
-    # Never name a key that would itself be refused: a dotted gate id (`"gate".a.b.command`)
-    # or a single segment (`"gate"`), which is not <section>.<key> (roborev on babe29ff).
-    return "" if "." not in plain or _gate_key_problem([(plain, "")]) else plain
+    # Never name a key that would itself be refused: a dotted gate id (`"gate".a.b.command`),
+    # a single segment (`"gate"`), which is not <section>.<key> (roborev on babe29ff), or a
+    # gate's operator-owned `human` flag (roborev on c077d794).
+    human = path[0] == "gate" and path[-1] == "human"
+    return "" if "." not in plain or human or _gate_key_problem([(plain, "")]) else plain
 
 
 def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:

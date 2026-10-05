@@ -86,7 +86,7 @@ def test_a_quoted_human_key_is_refused_as_not_plain_exit_3(repo):
     assert code == REFUSED and "refusing" in err, (code, out, err)
 
 
-@pytest.mark.parametrize("key", ['"gate".a.b.command', '"gate"'])
+@pytest.mark.parametrize("key", ['"gate".a.b.command', '"gate"', 'gate.unit_tests."human"'])
 def test_no_unusable_plain_spelling_is_suggested(repo, key):
     """roborev on 04ffcb6e and babe29ff: the suggested spelling was itself refused -- a
     dotted gate id (`gate.a.b.command`) or a single segment (`gate`)."""
