@@ -699,8 +699,10 @@ def _append_config(
         # it nests a table every later command refuses to load. Judged as `_write_config`
         # judges `--set`: only NEW gate-table problems (roborev on a1c614f4).
         if new := _gate_table_problems(result) - _gate_table_problems(_parsed(prev)):
-            first = sorted(new)[0]
-            return _render_gate_problem(*first), Path()
+            said = sorted(_render_gate_problem(*p) for p in new)
+            # Every problem at once, as `--set` says them; a key refusal keeps exit 3.
+            refused = any(isinstance(m, KeyRefused) for m in said)
+            return (KeyRefused if refused else str)("; ".join(said)), Path()
         removed = sorted(
             _guarded_human_gates(repo, prev, local=local)
             - _guarded_human_gates(repo, merged, local=local)
