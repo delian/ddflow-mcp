@@ -131,6 +131,7 @@ def _render_workflow(v) -> str:
         *_gate_lines(v),
         "",
         f"A phase passes through: {', '.join(v.phase_pipeline)}",
+        f"A promotion passes through: {', '.join(v.promotion_pipeline)}",
         "",
         "## The rules, and where each came from",
         "",
