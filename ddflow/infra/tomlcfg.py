@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import json
 import os
 import sys
 import tempfile
@@ -151,6 +152,18 @@ def locked(path: Path) -> Iterator[None]:
         with contextlib.suppress(OSError):
             fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
+
+
+def basic_string(value: str) -> str:
+    """`value` as a TOML basic string, escaped so any text round-trips through tomllib.
+
+    The one writer for every hand-built TOML file (B28cab0652a, Bb11e7a8186). `json.dumps`
+    escapes quotes, backslashes and control characters the way TOML does, but with its
+    default `ensure_ascii` it writes a character outside the BMP (an emoji) as a UTF-16
+    surrogate pair, which TOML refuses -- a `\\u` escape must be a Unicode scalar value;
+    and without `ensure_ascii` it leaves U+007F raw, which TOML also refuses.
+    """
+    return json.dumps(str(value), ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
 def atomic_write(path: Path, text: str) -> None:
