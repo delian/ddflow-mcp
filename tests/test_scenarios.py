@@ -161,19 +161,21 @@ def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(tm
     import scenario_crash_recovery as S
     from harness import Scenario
 
-    slow = S.TTL_S / 2 + 1
+    slow = S.TTL_S / 2 + 0.5  # two of these outlive the lease; one leaves 3.5 s
 
     class Loaded(Scenario):
+        slowed: frozenset = frozenset()
+
         def ddflow(self, *argv, **kw):
-            if argv == ("recover",) or (argv[:1] == ("claim",) and kw.get("expect") is None):
+            # The two live-window checks: `recover`, and the claim whose answer is read.
+            if argv[:1] == ("recover",) or (argv[:1] == ("claim",) and kw.get("expect") is None):
+                self.slowed = self.slowed | {argv[0]}
                 time.sleep(slow)
             return super().ddflow(*argv, **kw)
 
     sc = Loaded("crash-recovery-loaded", tmp_path / "loaded")
-    S.LIVE_ATTEMPTS, saved = 2, S.LIVE_ATTEMPTS
     try:
         S.run(sc)
     except AssertionError as exc:
         pytest.fail(f"crash-recovery under sustained load: {exc}")
-    finally:
-        S.LIVE_ATTEMPTS = saved
+    assert sc.slowed == {"recover", "claim"}, f"load was not injected: {sc.slowed}"
