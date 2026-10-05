@@ -15,7 +15,8 @@ from conftest import run_cli
 
 
 @pytest.mark.parametrize(
-    "gid", ["ship🚀", "two words", "a.b", "x]", "x.command", "a.human", "a b.c", "a🚀.b"]
+    "gid",
+    ["ship🚀", "two words", "a.b", "x]", "x.command", "a.human", "a b.c", "a🚀.b", "ship.env"],
 )
 def test_a_gate_id_that_is_not_a_bare_key_is_refused_plainly(repo, gid):
     run_cli(repo, "init")
@@ -91,3 +92,14 @@ def test_an_existing_quoted_id_does_not_mask_a_new_nested_block(repo):
     code, out, err = run_cli(repo, "config", "--set", '"\\u0067ate".a.b.command', "y")
     assert code != 0, (out, err)
     assert cfg.read_text("utf-8") == before
+
+
+@pytest.mark.parametrize(
+    "key", ['gate.unit_tests."\\u0063ommand"', 'gate."\\u0075nit_tests".command']
+)
+def test_an_escaped_spelling_of_a_valid_gate_key_is_accepted(repo, key):
+    """roborev on 57c524b7: the per-segment check refused an escaped segment that decodes
+    to a valid key; the decoded result is what is judged."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config", "--set", key, "echo hi")
+    assert code == 0, (out, err)
