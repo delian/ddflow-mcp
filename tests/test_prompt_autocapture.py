@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
@@ -134,6 +136,10 @@ def test_the_same_hook_firing_twice_records_once(repo):
     assert len(_events(repo, "session.prompt")) == 1
 
 
+@pytest.mark.skipif(
+    not Path("/proc/self/stat").exists(),
+    reason="the hook's start is read from /proc; elsewhere it falls back to now",
+)
 def test_a_copy_slow_to_start_is_still_the_same_firing(repo, tmp_path):
     """B7e6f1998c8: the window is measured from when the hook was FIRED. The second copy
     here takes longer than the window to start (a loaded machine did that to the test
