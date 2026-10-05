@@ -234,7 +234,7 @@ def flow_choose(
         return O.failed("flow.chosen", bad, knob=knob, value=value, in_effect=False)
     CH.choose(log, knob, value, reason=reason)
     source = cfg.sources.get(f"flow.{knob}", "default")
-    overridden = source in ("file", "env")
+    overridden = CH.config_wins(source)
     from ..core.model import REVIEW, RUNNING
 
     in_flight = [i.id for i in _st.items.values() if i.state in (RUNNING, REVIEW)]

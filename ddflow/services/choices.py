@@ -6,7 +6,8 @@ project uses is the operator's call, or the agent's where the operator lets it d
 never ddflow's by silence (RESEARCH R17). So every such decision is a `core.flow.Choice`,
 and its value comes from, in order:
 
-1. **the config** (`.ddflow/config.toml` or env) -- the operator's file, which always wins;
+1. **the config** (`.ddflow/config.toml`, the machine-local `.ddflow/local/config.toml`,
+   or env) -- any config layer, which always wins (`config_wins`);
 2. **a recorded choice** -- `flow choose`, by an agent or a person, attributed in the log;
 3. **the default** -- which is RECORDED the first time it matters (`adopt_defaults`), so
    the project keeps following it even if a later ddflow ships a different default, and
@@ -29,11 +30,18 @@ from ..infra.log import EventLog
 EXPLICIT, DEFAULT = "explicit", "default"
 
 
+def config_wins(source: str) -> bool:
+    """Does a CONFIG layer (file, local, env, ...) set this knob, so a recorded choice is
+    not applied? The one rule `overlay`, `report` and `flow choose` share: each once spelled
+    it separately, and `("file", "env")` missed the local layer (B025c8de942)."""
+    return source != "default" and not source.startswith("log:")
+
+
 def overlay(cfg: Config, st: State) -> None:
-    """Apply recorded choices to ``cfg`` wherever the config file left the knob at default."""
+    """Apply recorded choices to ``cfg`` wherever no config layer set the knob."""
     for knob, rec in st.flow_choices.items():
         key = f"flow.{knob}"
-        if knob in F.CHOICES and cfg.sources.get(key, "default") == "default":
+        if knob in F.CHOICES and not config_wins(cfg.sources.get(key, "default")):
             setattr(cfg.flow, knob, F.choice_value(knob, rec.get("value", "")))
             cfg.sources[key] = f"log:{rec.get('by', EXPLICIT)}"
 
@@ -59,7 +67,7 @@ def report(cfg: Config, st: State) -> list[dict[str, Any]]:
             "decided": source != "default",
             "recorded": dict(rec),
         }
-        if source in ("file", "env") and rec and _shown(rec.get("value")) != value:
+        if config_wins(source) and rec and _shown(rec.get("value")) != value:
             # Visible, not resolved silently: the file wins, and whoever recorded the
             # other value should know their choice is not in effect.
             row["overridden"] = (
