@@ -51,7 +51,8 @@ def _while_live(sc: Scenario, check):
     """
     for attempt in range(1, LIVE_ATTEMPTS + 1):
         sc.ddflow("heartbeat", "P1.T1", agent="delta")  # DELTA's last one
-        # Read BEFORE the check, so nothing the check does can move the bound.
+        # Read BEFORE the check, so nothing the check does can move the bound. Defensive:
+        # neither a refused claim nor a read-only recover renews the lease today.
         lease = sc.jddflow("show", "P1.T1")["lease"]
         sc.check("the live lease is DELTA's", lease["holder"] == "delta", json.dumps(lease))
         renewed = lease["renewed_at"]
