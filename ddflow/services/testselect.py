@@ -242,8 +242,12 @@ def run_command(configured: str, tests: list[str], root: Path) -> str:
     arguments are replaced by the selected files. `-n auto` is added when the command
     chose no worker count and the project declares pytest-xdist. "" when the project
     does not run pytest: the files are the answer then.
+
+    An entry may be a test FILE or a pytest NODE ID (`tests/x.py::test_y`), so callers
+    that name one test (`bug fixed --regression-test`, B-bugfix-verified) can run it
+    through the project's own runner prefix rather than a second command.
     """
-    py_tests = [t for t in tests if t.endswith(".py")]
+    py_tests = [t for t in tests if t.endswith(".py") or "::" in t]
     if not py_tests:
         return ""
     try:

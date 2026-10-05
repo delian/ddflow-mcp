@@ -386,6 +386,8 @@ def cmd_bug(a, c: Ctx) -> int:
         lesson_title=getattr(a, "lesson_title", "") or "",
         lesson_rule=getattr(a, "lesson_rule", "") or "",
         changelog=getattr(a, "changelog", "") or "",
+        verify_regression=not getattr(a, "skip_verify", False),
+        verify_reason=getattr(a, "verify_reason", "") or "",
         agent=c.requested_agent,
     )
     # Every non-OK exit, not just 1: checking only FAIL let a REFUSED unknown id print
@@ -393,7 +395,12 @@ def cmd_bug(a, c: Ctx) -> int:
     if out.exit != OK:
         print(out.reason, file=sys.stderr)
         return out.exit
-    c.out(f"bug {a.id} closed (regression: {out.data['regression_test']})", out.body(("id",)))
+    verified = out.data.get("regression_verified", "")
+    tail = f" [{verified}]" if verified else ""
+    c.out(
+        f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}",
+        out.body(("id", "regression_verified")),
+    )
     return OK
 
 
