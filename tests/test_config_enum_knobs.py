@@ -25,8 +25,10 @@ _ALTS = r"[\w-]+(?:\s*\|\s*[\w-]+)+"
 
 def _alternatives(text: str) -> tuple[str, ...] | None:
     """The `a | b | c` run in `text`, ignoring parenthesised asides between the words."""
-    m = re.search(_ALTS, re.sub(r"\s*\([^)]*\)", "", text))
-    return tuple(re.split(r"\s*\|\s*", m.group(0))) if m else None
+    for candidate in (re.sub(r"\s*\([^)]*\)", "", text), text):
+        if m := re.search(_ALTS, candidate):
+            return tuple(re.split(r"\s*\|\s*", m.group(0)))
+    return None
 
 
 def _section_of_class() -> dict[str, str]:
@@ -140,3 +142,17 @@ def test_a_freshly_initialised_config_is_valid(repo: Path) -> None:
     code, _out, err = run_cli(repo, "init")
     assert code == 0, err
     Config.check(tomllib.loads((repo / ".ddflow" / "config.toml").read_text("utf-8")))
+
+
+def test_every_declared_choice_is_named_in_the_knobs_doc() -> None:
+    # The other direction: a value declared for a knob that its doc never mentions is a
+    # value nobody can find out about, or one the doc dropped.
+    for key, allowed in C.KNOB_CHOICES.items():
+        doc = KNOB_DOCS[key]
+        missing = [v for v in allowed if not re.search(rf"(?<![\w-]){re.escape(v)}(?![\w-])", doc)]
+        assert not missing, f"{key}: the doc does not name {missing}"
+
+
+def test_the_scanner_reads_a_parenthesised_run() -> None:
+    assert _alternatives("(block | warn | off)") == ("block", "warn", "off")
+    assert _alternatives("off | fast (lint, format) | full") == ("off", "fast", "full")

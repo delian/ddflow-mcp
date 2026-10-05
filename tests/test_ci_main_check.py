@@ -104,7 +104,7 @@ def test_an_unknown_on_merge_mode_is_said_not_ignored(repo, fake_precommit):
     assert "ci.on_merge = 'sometimes'" in cfg.unknown_knobs and cfg.ci.on_merge == "fast"
     with pytest.raises(ValueError, match="off, fast, full"):
         Config.check({"ci": {"on_merge": "sometimes"}})
-    assert A.check_after_merge(repo, sha=sha).get("status") != "unavailable"
+    assert A.check_after_merge(repo, sha=sha)["status"] == "passed"
 
 
 def test_a_project_without_a_ci_command_is_left_alone(repo):

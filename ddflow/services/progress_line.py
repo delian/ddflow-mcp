@@ -8,11 +8,11 @@ and the next items the scheduler would offer.
 
 from __future__ import annotations
 
-from ..config import Config
+from ..config import PROGRESS_MODES, Config
 from ..core import schedule as S
 from ..core.model import ABANDONED, DONE, State
 
-MODES = ("on", "phase", "off")
+MODES = PROGRESS_MODES  # declared beside the knob, where `Config.check` holds it
 #: How many ready items the report names as next.
 NEXT_SHOWN = 3
 
