@@ -81,7 +81,8 @@ def test_the_trailer_probe_requires_a_refusal(repo):
 
 
 def test_the_freeze_ratchet_must_exist_and_hold(repo):
-    assert _check(V.verify(repo, suite=False), "freeze ratchet").outcome == "failed"
+    # No import here, so no ratchet is EXPECTED: unavailable, not failed.
+    assert _check(V.verify(repo, suite=False), "freeze ratchet").outcome == "unavailable"
     _write(repo, "todo.md", "the old backlog\n")
     L.write_manifest(repo, ["todo.md"])
     report = V.verify(repo, suite=False)
@@ -124,6 +125,13 @@ def test_the_configured_suite_command_is_found_and_run(repo):
     )
     check = _check(V.verify(repo), "suite green")
     assert check.outcome == "passed", check.detail
+
+
+def test_an_import_without_a_ratchet_is_failed_not_hidden(repo, monkeypatch):
+    """The unfrozen branch must fire when imports exist (roborev on c61278a4)."""
+    monkeypatch.setattr(V.L, "imported_files", lambda state: ["todo.md"])
+    check = _check(V.verify(repo, suite=False), "freeze ratchet")
+    assert check.outcome == "failed" and "unfrozen" in check.detail
 
 
 def test_the_report_says_what_did_not_pass(repo):

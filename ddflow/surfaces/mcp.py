@@ -1039,6 +1039,32 @@ TOOLS: dict[str, dict[str, Any]] = {
         "api": lambda repo, a, agent: _api().cleanup(repo, apply=bool(a.get("apply")), agent=agent),
         "payload": ("trees", "stale_branches"),
     },
+    "ddflow_onboard": {
+        "description": (
+            "The onboarding stages in one call: status (standing drift report), preflight, legacy, memory, test-gate, verify. Propose by default; apply=true acts on the safe/approved items and accepts names."
+        ),
+        "properties": {
+            "stage": (
+                "string",
+                "A stage name: status (the drift report, default), preflight, legacy, memory, test-gate or verify.",
+                False,
+            ),
+            "apply": ("boolean", "Act on the proposal (preflight/legacy/memory).", False),
+            "accept": (
+                "array",
+                "Names to approve (preflight leftovers, memory facts); empty = everything the report marked safe.",
+                False,
+            ),
+        },
+        "api": lambda repo, a, agent: _api().onboard_run(
+            repo,
+            stage=str(a.get("stage") or "status"),
+            apply=bool(a.get("apply")),
+            accept=tuple(a.get("accept") or ()),
+            agent=agent,
+        ),
+        "payload": "",
+    },
     "ddflow_recall": {
         "description": (
             "'HAVE WE BEEN HERE BEFORE?' -- one search across everything this project remembers: decisions, lessons, research verdicts, operational memories, past bugs, similar tasks and the operator's earlier prompts. CALL THIS BEFORE STARTING ANY NON-TRIVIAL WORK, so nothing is said or learned twice. Results are labelled by kind (a binding decision, a transferable lesson and an old prompt change what you do differently); a superseded decision names its replacement -- follow that."
@@ -2866,7 +2892,7 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
-        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify ci"
+        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify ci onboard"
     ).split()
 )
 

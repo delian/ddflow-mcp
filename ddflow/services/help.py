@@ -68,6 +68,7 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "prompts",
             "adopt",
             "identify",
+            "onboard",
             "rule",
         ),
     ),
