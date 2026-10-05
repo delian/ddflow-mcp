@@ -39,6 +39,8 @@ def test_an_ordinary_gate_id_is_still_accepted(repo):
         "gate.🚀.prompt",
         '"gate".a.b.command',
         "'gate'.a.b.command",
+        '"\\u0067ate".a.b.command',
+        '"\\U00000067ate".a.b.command',
     ],
 )
 def test_config_set_refuses_a_gate_key_whose_id_is_not_a_bare_key(repo, key):
@@ -57,3 +59,18 @@ def test_a_quoted_bare_gate_id_is_still_accepted(repo):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "config", "--set", 'gate."unit_tests".command', "echo hi")
     assert code == 0, (out, err)
+
+
+def test_a_gate_env_entry_is_still_accepted(repo):
+    """`env` is the one table-valued gate field: `gate.<id>.env.<VAR>` has four parts and
+    must not be read as a dotted gate id."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config", "--set", "gate.unit_tests.env.FOO", "bar")
+    assert code == 0, (out, err)
+    assert run_cli(repo, "brief")[0] in (0, 2)
+
+
+def test_a_misspelt_gate_field_is_refused_not_written(repo):
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config", "--set", "gate.unit_tests.comand", "x")
+    assert code != 0 and "comand" in out + err, (out, err)
