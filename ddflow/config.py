@@ -1807,6 +1807,7 @@ def _unit_interval(v: Any) -> str:
 #: this table does not cover.
 _BLOCK_WARN_OFF = ("block", "warn", "off")
 PROGRESS_MODES = ("on", "phase", "off")
+CI_ON_MERGE_MODES = ("off", "fast", "full")
 KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "lease.reclaim_policy": ("report", "auto"),
     "worktree.merge_strategy": ("no-ff", "ff-only", "squash"),
@@ -1836,7 +1837,7 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "review.on_exceed": ("refuse", "warn"),
     "upgrade.skew": UPGRADE_SKEW_POLICIES,
     "mcp.tools": MCP_TOOL_TIERS,
-    "ci.on_merge": ("off", "fast", "full"),
+    "ci.on_merge": CI_ON_MERGE_MODES,
     "export.refresh": EXPORT_REFRESH_MODES,
 }
 
