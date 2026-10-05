@@ -1911,15 +1911,23 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
 #: D9b8061fd38): its STRICTEST allowed value, so a typo in a deliberately tightened
 #: setting can only make ddflow more careful, never quietly loosen it. For a knob with
 #: no safety dimension the "strictest" is the value that does the most checking or
-#: changes least; the reason is appended to each knob's doc below.
-#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key.
+#: changes least; the reason is appended to each knob's doc below. Never a value that acts
+#: outside this clone -- a push, a pull request, remote claim refs, a forge merge
+#: (D-fallback-no-remote): those happen only when someone sets them correctly.
+#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key, and
+#: that none of them is one of its OUTWARD values.
 KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "lease.reclaim_policy": ("report", "never steals a lease, so a crashed agent's work survives"),
     "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
     "flow.model": ("trunk", "no safety dimension; the plain model, which moves no branches"),
-    "flow.integration": ("pr", "a merge waits for approval on the forge, not landing locally"),
+    # D-fallback-no-remote: a typo never makes ddflow push, open a pull request or write
+    # remote refs; outward behaviour happens only when someone sets it correctly.
+    "flow.integration": ("merge", "a typo never pushes or opens a pull request; lands locally"),
     "flow.forge": ("auto", "no safety dimension; reads the forge from the remote URL"),
-    "flow.claims": ("remote", "one clone wins a claim; an unreachable remote refuses it"),
+    "flow.claims": (
+        "local",
+        "a typo never writes claim refs to the remote; claims stay in this clone",
+    ),
     "flow.pr_merge": ("human", "ddflow never merges; a person does"),
     "flow.on_changes_requested": ("block", "the item is parked for a person"),
     "flow.port_strategy": ("forward-merge", "no safety dimension; the least bookkeeping"),

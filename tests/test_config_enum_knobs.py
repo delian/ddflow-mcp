@@ -251,15 +251,15 @@ def test_a_typo_in_a_flow_knob_fails_closed_over_a_recorded_choice(repo: Path) -
     from ddflow.services import choices as CH
 
     assert run_cli(repo, "init")[0] == 0
-    assert run_cli(repo, "flow", "choose", "integration", "merge", "--reason", "local")[0] == 0
+    assert run_cli(repo, "flow", "choose", "integration", "pr", "--reason", "review")[0] == 0
     cfg_path = repo / ".ddflow" / "config.toml"
     cfg_path.write_text(cfg_path.read_text("utf-8") + '\n[flow]\nintegration = "merg"\n')
     cfg = Config.load(repo, env={})
     st = fold(EventLog(repo, "reader").read_all(), strict=False)
     CH.overlay(cfg, st)
-    assert cfg.flow.integration == "pr"
+    assert cfg.flow.integration == "merge"  # D-fallback-no-remote: never the forge
     (row,) = [r for r in CH.report(cfg, st) if r["knob"] == "integration"]
-    assert "overridden" in row and "'pr'" in row["overridden"]
+    assert "overridden" in row and "'merge'" in row["overridden"]
     assert "integration" not in [ch.knob for ch in CH.pending(cfg)]
 
 
@@ -385,3 +385,35 @@ def test_the_modules_that_use_an_enum_take_its_values_from_config() -> None:
     assert F.PR_MERGE is choices["flow.pr_merge"]
     assert F.ON_CHANGES is choices["flow.on_changes_requested"]
     assert F.PORT_STRATEGIES is choices["flow.port_strategy"]
+
+
+#: Values that make ddflow act OUTSIDE this clone: push, remote claim refs, a pull request
+#: or a forge-side merge. A typo must never switch one on (D-fallback-no-remote): outward
+#: behaviour happens only when someone sets it correctly, on purpose. A new enum knob with
+#: an outward value belongs here.
+OUTWARD = {
+    "flow.integration": {"pr"},  # pushes the branch and opens a pull request
+    "flow.claims": {"remote"},  # writes refs/ddflow/claims/<id> on the remote
+    "flow.pr_merge": {"on_approval", "auto"},  # ddflow (or the forge) merges on the forge
+}
+
+
+def test_no_strictest_value_contacts_the_remote_or_the_forge() -> None:
+    for key, values in OUTWARD.items():
+        assert values <= set(C.KNOB_CHOICES[key]), key  # the table names real values
+        assert C.strictest(key) not in values, f"{key} falls back to {C.strictest(key)!r}"
+
+
+@pytest.mark.parametrize(
+    ("toml", "attr", "expected"),
+    [
+        ('[flow]\nintegration = "pull"\n', ("flow", "integration"), "merge"),
+        ('[flow]\nclaims = "remot"\n', ("flow", "claims"), "local"),
+        ('[flow]\npr_merge = "x"\n', ("flow", "pr_merge"), "human"),
+    ],
+)
+def test_a_bad_file_value_for_an_outward_knob_stays_local(
+    tmp_path: Path, toml: str, attr: tuple[str, str], expected: str
+) -> None:
+    cfg = _load_file(tmp_path, toml)
+    assert getattr(getattr(cfg, attr[0]), attr[1]) == expected
