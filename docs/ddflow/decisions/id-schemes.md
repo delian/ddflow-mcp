@@ -24,17 +24,24 @@ must never rewrite a recorded id.
    sees no change, and existing logs replay byte-identically.
 
 2. **Tokens: the full set.** `{prefix}` `{seq}` `{date}` `{slug}` `{hash}`
-   `{parent}` `{phase}` `{env}` `{user-text}`. Two more tokens are needed so that
-   today's defaults can be written as templates: `{time}` (UTC timestamp, second
-   resolution) and `{pid}`, for session ids `s{time}-{pid}`. `{hash}` is the salted hash
-   of `auto_id`, so the same text filed twice gets two ids. `{digest}` is a
-   deterministic content digest: CI failure bugs use `Bci-{slug}-{digest}` on
-   purpose, so the same failing check maps to the same bug. Templates are validated
-   when the config is written. Every token must be known, and the result must be a
-   valid id (characters, length). A template must also contain at least one source of
-   uniqueness: `{seq}`, `{hash}`, `{digest}` (deliberately stable), or `{time}` together
-   with `{pid}`. A template with none of these is refused. Each shipped default passes
-   this rule.
+   `{parent}` `{phase}` `{env}` `{user-text}`, plus three tokens needed so that
+   today's defaults can be written as templates:
+   - `{time}`: UTC timestamp, second resolution.
+   - `{pid}`: the process id. Session ids are `s{time}-{pid}`.
+   - `{digest}`: a deterministic content digest. CI failure bugs use
+     `Bci-{slug}-{digest}` so that the same failing check maps to the same bug.
+
+   `{hash}` is the salted hash of `auto_id`, so the same text filed twice gets two
+   ids.
+
+   Templates are validated when the config is written. Every token must be known, and
+   the result must be a valid id (characters, length). A template must contain a
+   source of uniqueness: `{seq}`, `{hash}`, or `{time}` together with `{pid}`.
+   Otherwise it must declare `stable = true`. A stable template maps the same content
+   to the same id on purpose, so filing it again extends the existing record instead
+   of creating a new one. `{digest}` is allowed only in stable templates. The only
+   shipped stable default is the CI failure bug. Each shipped default passes this
+   rule.
 
 3. **Sequential numbers: next free number, suffix on clash.** Every record keeps an
    internal id, minted exactly as today. Events reference records by this id, so the
