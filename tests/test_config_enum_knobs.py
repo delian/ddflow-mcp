@@ -191,6 +191,16 @@ def test_an_env_value_overrides_a_bad_file_value_and_the_note_says_so(tmp_path: 
     assert "in effect" not in entry and "env value 'off'" in entry, entry
 
 
+def test_the_note_follows_every_later_layer_not_only_the_first(tmp_path: Path) -> None:
+    _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text('[enforce]\nstale_docs = "warn"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_ENFORCE_STALE_DOCS": "off"})
+    assert cfg.enforce.stale_docs == "off"
+    (entry,) = cfg.unknown_knobs
+    assert entry.endswith("overridden by the env value 'off')"), entry
+
+
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
     cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
     assert cfg.sources["enforce.stale_docs"] == "file (strictest fallback)"
