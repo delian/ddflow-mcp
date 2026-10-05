@@ -37,3 +37,11 @@ def test_a_pipe_or_newline_in_a_title_does_not_break_the_board_table(repo):
     # only the pipe and the backslashes before it are escaped: `\\*e\\` is the author's
     assert "pick a \\| b second line, c\\\\\\|d third fourth \\*e\\ |" in body[0], body[0]
     assert "`src/a\\|b\\x.py`" in body[0], body[0]
+
+
+def test_an_id_with_a_backslash_or_star_keeps_the_bold_span_closed(repo):
+    run_cli(repo, "init")
+    assert run_cli(repo, "task", "add", "T*1\\", "--title", "t")[0] == 0
+    board = run_cli(repo, "render", "--show", "board")[1]
+    row = next(ln for ln in board.split("\n") if ln.startswith("| [ ]"))
+    assert "**T\\*1\\\\** t |" in row, row

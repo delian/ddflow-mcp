@@ -125,7 +125,7 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             globs = ", ".join(f"`{_cell(g, cfg)}`" for g in t.globs) or "—"
             owner = _cell(t.lease.holder, cfg) if t.lease else "—"
             out.append(
-                f"| [{mark}] | {indent}**{_cell(t.id, cfg)}** {_cell(t.title, cfg)} | "
+                f"| [{mark}] | {indent}**{_id_cell(t.id, cfg)}** {_cell(t.title, cfg)} | "
                 f"{t.state} | {needs} | {globs} | `{gates}` | {owner} |"
             )
         out.append("")
@@ -229,6 +229,15 @@ def _cell(text: str, cfg: Config | None = None) -> str:
     """
     folded = re.sub(r"\r\n?|\n", " ", _redact(text, cfg))
     return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", folded).strip()
+
+
+def _id_cell(text: str, cfg: Config | None = None) -> str:
+    """An item id for the board, where the row wraps it in `**...**`. An id is a literal
+    name, not markdown: a backslash or `*` in it closed or broke the bold span and
+    re-parsed the rest of the row (roborev on ded56144), so those, backticks and the
+    pipe are all escaped."""
+    folded = re.sub(r"\r\n?|\n", " ", _redact(text, cfg))
+    return re.sub(r"([\\*`|])", r"\\\1", folded).strip()
 
 
 def bugs_md(state: State, cfg: Config | None = None) -> str:
