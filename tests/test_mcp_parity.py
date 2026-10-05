@@ -360,6 +360,16 @@ FLAG_EXEMPTIONS: dict[tuple[str, str], str] = {
         )
         for flag in ("--new", "--extends", "--duplicate-of", "--related", "--check")
     },
+    # `ddflow link` picks ONE relation with a flag; over MCP that is `relation` (a single
+    # string) plus `target`, exactly as the add tools fold the mutually exclusive answer
+    # flags into `relation`. One relation per call, whichever surface it comes from.
+    **{
+        (
+            "ddflow_link",
+            flag,
+        ): "the relation is MCP `relation` + `target`, not one flag per relation"
+        for flag in ("--extends", "--duplicate-of", "--related", "--distinct")
+    },
     ("ddflow_bisect", "--glob"): (
         "where candidates come from stays the default tests/**/test_*.py over MCP; an agent "
         "names `candidates` when the suite lives elsewhere (tools/list byte budget)"

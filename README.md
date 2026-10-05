@@ -206,6 +206,8 @@ the same implementation, so neither drifts from the other.
 | **search everything the project remembers** | `ddflow recall '<regex>'` | `ddflow_recall` |
 | **search for people**: tasks, bugs, research, decisions, lessons, sessions, prompts, log | `ddflow search '<text>' [--exact\|--regex] [--kind K] [--state S] [--phase P] [--owner A] [--since D] [--limit N] [--json]` -- see [Searching everything](#searching-everything) | `ddflow_list` `kind=search` (`query`, `mode`, `sources`) |
 | **check a text against what is already filed** (read-only) | `ddflow similar '<text>' [--kind bug,task,...] [--json]` -- exit 0 with candidates, 2 with none | `ddflow_similar` |
+| **find records filed twice** | `ddflow dupes [--kind bug,task,...] [--open-only] [--floor F] [--limit N] [--json]` -- exit 0 with pairs, 2 with none | `ddflow_dupes` |
+| **settle a near-duplicate pair** | `ddflow link <a> --duplicate-of\|--extends\|--related\|--distinct <b> [--reason ...]` | `ddflow_link` |
 | **record what happened this session** | `ddflow session start\|prompt\|note\|end` | `ddflow_session_*` |
 | **list tasks / phases / bugs / research** | `ddflow task\|phase\|bug\|research list [--state S] [--phase P] [--tag T] [--owner A] [--since D] [--limit N] [--json]` -- see [Listing](#listing-tasks-phases-bugs-and-research); `bug list` shows open bugs unless `--all` | `ddflow_list` (`kind`, `state`, `phase`, `tag`, `owner`, `since`, `limit`, `all`) |
 | **read the engineering log** | `ddflow history [--item X] [--kind K] [--agent A] [--tail N] [--json]` -- compact line per event (time, agent, subject, verb, summary); `--agent` keeps one agent's shard, `--tail N` the last N oldest-first, `--json` cuts payload strings over 500 chars and marks the event `truncated` | `ddflow_history` |
@@ -260,6 +262,7 @@ fine"* are different facts, and an agent that cannot tell them apart invents wor
 - [Architectural decisions](#architectural-decisions)
 - [Recall — "have we been here before?"](#recall--have-we-been-here-before)
   - [Similar — "is this already filed?"](#similar--is-this-already-filed)
+  - [Dupes and link — settling a pair already in the log](#dupes-and-link--settling-a-pair-already-in-the-log)
 - [Status, progress, and loops](#status-progress-and-loops)
 - [The task pipeline](#the-task-pipeline)
   - [Proving a gate can fail at all](#proving-a-gate-can-fail-at-all)
@@ -1979,6 +1982,39 @@ the same list of candidates, and an empty list when there are none. It uses the
 when `[dedupe].on_match` is `off`, since that setting governs what an *add* does. A score
 is a prompt to look, not a verdict: two bugs in one function score high and are different.
 
+### Dupes and link — settling a pair already in the log
+
+`similar` weighs one text you are about to file. `dupes` sweeps the records the log
+**already holds** against each other:
+
+```sh
+ddflow dupes                     # every unsettled pair at the show floor
+ddflow dupes --open-only         # only pairs where both records are still live
+ddflow dupes --kind lesson --json
+ddflow link B198 --duplicate-of B-dupes-sweep   # a duplicate
+ddflow link B2 --distinct B1      # "I looked: different" -- never asked again
+```
+
+`ddflow dupes` (MCP: `ddflow_dupes`) lists each pair with both ids and kinds, their
+titles and the score, and **skips pairs already answered** — a recorded link
+(`extends` / `duplicate_of` / `related`) or a `distinct` dismissal, in either direction,
+or one lesson superseding the other. So a pair marked `distinct` never returns. It weighs
+records the ordinary index drops, too: a removed item or a closed bug (B203 was removed as
+a duplicate of B-semantic-recall, and the sweep still finds that pair). Exit codes: **0**
+with pairs, **2** with none; `--floor` overrides the floor (default `[dedupe].show_floor`).
+
+`ddflow link` (MCP: `ddflow_link`) settles one: `--duplicate-of` / `--extends` link the
+subject to the target, `--related` links them, `--distinct` dismisses the pair for good.
+Two **lessons** linked `--duplicate-of` / `--extends` are **merged**: the target keeps both
+texts' `tags` and `seen_in`, and the duplicate is superseded by it — the same mechanism as
+`lesson add --supersedes`, so a lesson is retired one way, not two. Nothing else is closed
+here: a duplicate **bug** is closed only once its original is fixed, with that original's
+regression test (`ddflow bug fixed`), not by linking.
+
+`ddflow doctor` notes how many pairs are unsettled, and the `dedupe_sweep` workflow
+command (MCP prompt `dedupe_sweep`) runs `ddflow dupes --open-only` as the periodic pass
+the `[cadence] dedupe_sweep_every_tasks` knob schedules.
+
 ### The check every add runs
 
 Every add — task, phase, bug, lesson, decision, research and memory; never a session
@@ -3322,7 +3358,9 @@ score), and a later `link.recorded` is a link or a `distinct` dismissal. Both ac
 keyed by event: two additions made at once by two clones both survive in any fold order,
 and an addition never replaces the record's own text (a bug's summary stays as written).
 `ddflow replay` renders both. The add paths write `record.extended` and the `related`
-back-link (see "The check every add runs"); no command writes a bare `link.recorded` yet.
+back-link (see "The check every add runs"); `ddflow link` writes a bare `link.recorded`
+for `extends`, `duplicate_of`, `related` and `distinct` (and, for two lessons, the
+supersession that merges them).
 
 ### The compaction that was declined
 

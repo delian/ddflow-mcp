@@ -105,7 +105,18 @@ _GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Landing it", ("merge", "pr", "version", "promote", "cleanup")),
     (
         "What the project remembers",
-        ("recall", "similar", "memory", "lesson", "decision", "research", "bug", "session"),
+        (
+            "recall",
+            "similar",
+            "dupes",
+            "link",
+            "memory",
+            "lesson",
+            "decision",
+            "research",
+            "bug",
+            "session",
+        ),
     ),
     (
         "Looking at it",
