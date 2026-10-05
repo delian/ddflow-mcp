@@ -1198,6 +1198,10 @@ def _register_mcp(
             f"\n[mcp_servers.ddflow]\ncommand = {toml_value(entry['command'])}\n"
             f"args = {toml_value(list(entry.get('args', [])))}\n"
         )
+        # The env too: a source-checkout or `--launch python` entry carries PYTHONPATH,
+        # and without it the server cannot import ddflow (roborev on 5282d8d8).
+        if entry.get("env"):
+            block += f"env = {toml_value(dict(entry['env']))}\n"
         path.write_text(text.rstrip() + "\n" + block if text.strip() else block.lstrip(), "utf-8")
         return f"registered ddflow in {rel}"
 

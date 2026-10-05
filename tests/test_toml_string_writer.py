@@ -111,7 +111,11 @@ def test_adopt_codex_writes_a_launch_entry_that_parses(repo, monkeypatch):
     unguarded: a quote or a backslash in the path broke every MCP server in the file."""
     from ddflow.services import adopt as A
 
-    entry = {"command": 'C:\\tools\\uv "x".exe', "args": ["--dir", "D:\\repo 🚀"]}
+    entry = {
+        "command": 'C:\\tools\\uv "x".exe',
+        "args": ["--dir", "D:\\repo 🚀"],
+        "env": {"PYTHONPATH": '/src/dd "flow"'},
+    }
     monkeypatch.setattr(A, "_launch_entry", lambda *a, **k: dict(entry))
     A._register_mcp(repo, "codex")
     data = tomllib.loads((repo / A.AGENT_TARGETS["codex"].config).read_text("utf-8"))
