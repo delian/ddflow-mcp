@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 
 from conftest import run_cli
@@ -91,9 +92,12 @@ def test_the_pre_push_hook_warns_from_a_linked_worktree(repo, tmp_path):
     wt = tmp_path / "linked"
     _git(repo, "worktree", "add", "-q", "-b", "side", str(wt))
     hook = Path(__file__).resolve().parents[1] / "scripts" / "ci" / "pre-push"
+    # Without pre-commit on PATH, as on the CI runner (B97908cc3c7): the warning must
+    # not depend on it.
+    env = {**os.environ, "PATH": "/usr/bin:/bin"}
     p = subprocess.run(
         ["bash", str(hook), "origin"], input="", cwd=wt, capture_output=True, text=True,
-        check=False,
+        check=False, env=env,
     )  # fmt: skip
     assert "event shard(s) in .ddflow/events are not committed" in p.stderr, p.stderr
 
