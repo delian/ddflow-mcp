@@ -40,12 +40,39 @@ def add_onboard_parser(sub) -> None:
 
 
 def cmd_onboard(a, c: Ctx) -> int:
-    out = onboard_run(c.repo, stage=a.stage, apply=bool(a.apply), accept=tuple(a.accept or ()))
+    out = onboard_run(
+        c.repo,
+        stage=a.stage,
+        apply=bool(a.apply),
+        accept=tuple(a.accept or ()),
+        agent=c.requested_agent,
+    )
+    text = out.data.get("text") or out.reason
+    acted = _result_lines(out.data)
+    if acted:
+        # The report was rendered BEFORE apply ran; a person at a terminal must see
+        # what the apply DID, not only the offer it came from (roborev on c61278a4).
+        text = f"{text}\n{acted}"
     if c.json:
         print(json.dumps(out.body(""), indent=2, default=str))
     elif out.exit in (1, 3):
-        print(out.data.get("text") or out.reason, file=sys.stderr)
+        print(text, file=sys.stderr)
     else:
         # Exit 2 is "nothing to do", a REPORT: it belongs on stdout like a success.
-        print(out.data.get("text") or out.reason)
-    return out.exit
+        print(text)
+
+
+def _result_lines(data: dict) -> str:
+    lines: list[str] = []
+    for outcome in data.get("removed") or []:
+        lines.append(f"removed: {outcome.get('name')}")
+    for outcome in data.get("failed") or []:
+        lines.append(f"failed: {outcome.get('name')}: {outcome.get('detail')}")
+    for outcome in data.get("refused") or []:
+        lines.append(f"refused: {outcome.get('name')}: {outcome.get('detail')}")
+    for action in data.get("actions") or []:
+        lines.append(str(action))
+    approved = data.get("approved") or []
+    if approved:
+        lines.append("recorded: " + ", ".join(approved))
+    return "\n".join(lines)

@@ -53,6 +53,17 @@ def test_preflight_still_reports_nothing_on_a_clean_repo(repo):
     assert out.exit == 2 and "nothing left behind" in out.data["text"]
 
 
+def test_legacy_reports_a_refused_freeze_as_failure(repo, monkeypatch):
+    """freeze() can REFUSE to arm the ratchet; mixing that into the actions as a
+    success line was the bug (roborev on c61278a4)."""
+    from ddflow.services.adopt import Refused
+
+    monkeypatch.setattr(A.LG, "imported_files", lambda state: ["todo.md"])
+    monkeypatch.setattr(A.LG, "freeze", lambda repo_, chosen: [Refused("cannot arm the hook")])
+    out = A.onboard(repo, stage="legacy", apply=True)
+    assert out.exit == 1 and "cannot arm" in out.reason
+
+
 def test_legacy_apply_without_imports_writes_nothing(repo):
     """Apply on a repo with nothing imported is a no-op, not an empty freeze."""
     out = A.onboard(repo, stage="legacy", apply=True)

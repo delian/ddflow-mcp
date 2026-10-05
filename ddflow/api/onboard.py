@@ -17,6 +17,7 @@ from ..services import legacy as LG
 from ..services import onboard as ON
 from ..services import onboard_tests as OT
 from ..services import onboard_verify as OV
+from ..services.adopt import Refused
 from ._base import _load
 
 #: The stages in the prompt's own order; the CLI choices and MCP enum come from here.
@@ -111,10 +112,16 @@ def legacy(repo: Path, *, apply: bool = False, accept: Sequence[str] = ()) -> O.
     if not chosen:
         if not refused:
             return O.nothing("onboard.legacy", "nothing was imported to freeze", **data)
-        return O.refused(
-            "onboard.legacy", "nothing approved to freeze", **data, refused=refused
-        )
+        return O.refused("onboard.legacy", "nothing approved to freeze", **data, refused=refused)
     actions = LG.freeze(repo, chosen)
+    refused_actions = [str(a) for a in actions if isinstance(a, Refused)]
+    if refused_actions:
+        # freeze() can REFUSE to arm the ratchet (a malformed marker block, YAML that
+        # will not parse, a foreign generated test). That is a failure, not a success
+        # line to mix into the actions (roborev on c61278a4).
+        return O.failed(
+            "onboard.legacy", "; ".join(refused_actions), **data, actions=actions, refused=refused
+        )
     return O.ok("onboard.legacy", **data, actions=actions, refused=refused)
 
 

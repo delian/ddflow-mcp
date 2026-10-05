@@ -1046,7 +1046,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "properties": {
             "stage": (
                 "string",
-                "One of: status, preflight, legacy, memory, test-gate, verify (default status).",
+                "A stage name: status (the drift report, default), preflight, legacy, memory, test-gate or verify.",
                 False,
             ),
             "apply": ("boolean", "Act on the proposal (preflight/legacy/memory).", False),
