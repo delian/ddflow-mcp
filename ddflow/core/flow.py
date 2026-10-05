@@ -26,19 +26,30 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from ..config import Config
+from ..config import (
+    FLOW_CLAIMS,
+    FLOW_FORGES,
+    FLOW_INTEGRATIONS,
+    FLOW_MODELS,
+    FLOW_ON_CHANGES,
+    FLOW_PORT_STRATEGIES,
+    FLOW_PR_MERGE,
+    Config,
+)
 from .model import REVIEW, Item, State
 
-TRUNK, GITFLOW = "trunk", "gitflow"
-MODELS = (TRUNK, GITFLOW)
-INTEGRATIONS = ("merge", "pr")
-PR_MERGE = ("on_approval", "auto", "human")
-ON_CHANGES = ("reopen", "block")
-FORGES = ("auto", "github", "gitlab")
+# The value sets are declared in config.py beside the knobs, where `Config.check` refuses
+# anything else; these are the names this module has always used for them.
+MODELS = FLOW_MODELS
+TRUNK, GITFLOW = MODELS
+INTEGRATIONS = FLOW_INTEGRATIONS
+PR_MERGE = FLOW_PR_MERGE
+ON_CHANGES = FLOW_ON_CHANGES
+FORGES = FLOW_FORGES
 
 FEATURE, BUGFIX, HOTFIX = "feature", "bugfix", "hotfix"
-FORWARD_MERGE, CHERRY_PICK = "forward-merge", "cherry-pick"
-PORT_STRATEGIES = (FORWARD_MERGE, CHERRY_PICK)
+PORT_STRATEGIES = FLOW_PORT_STRATEGIES
+FORWARD_MERGE, CHERRY_PICK = PORT_STRATEGIES
 
 
 @dataclass(frozen=True)
@@ -146,7 +157,7 @@ def problems(cfg: Config) -> list[str]:
         ("pr_merge", fc.pr_merge, PR_MERGE),
         ("on_changes_requested", fc.on_changes_requested, ON_CHANGES),
         ("forge", fc.forge, FORGES),
-        ("claims", fc.claims, ("local", "remote")),
+        ("claims", fc.claims, FLOW_CLAIMS),
     ):
         if value not in allowed:
             out.append(f"[flow].{knob} = {value!r} is not one of {', '.join(allowed)}")

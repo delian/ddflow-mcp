@@ -162,6 +162,17 @@ _doc(
 )
 
 
+#: `[flow]`'s enumerated values. Declared here, beside the knobs, so `Config.check`
+#: refuses a value outside them; `core/flow.py` imports them rather than keeping a copy.
+FLOW_MODELS = ("trunk", "gitflow")
+FLOW_INTEGRATIONS = ("merge", "pr")
+FLOW_FORGES = ("auto", "github", "gitlab")
+FLOW_CLAIMS = ("local", "remote")
+FLOW_PR_MERGE = ("on_approval", "auto", "human")
+FLOW_ON_CHANGES = ("reopen", "block")
+FLOW_PORT_STRATEGIES = ("forward-merge", "cherry-pick")
+
+
 @dataclass
 class FlowConfig:
     """Branching model, pull-request integration and version tags (RESEARCH R16)."""
@@ -1788,14 +1799,58 @@ def _unit_interval(v: Any) -> str:
     return "" if ok else "must be a number between 0 and 1"
 
 
-#: Knobs whose TYPE is not the whole contract: "" means valid, else why not. Checked on
-#: load and by `Config.check`, so `config set` refuses the value instead of writing it.
-#: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
-#: silent-knob-drop class -- when `behind = "off"` already says it plainly.
-#: Knobs whose VALUE set can grow in a later release (an enum), so a config FILE carrying a
+#: Every ENUM knob and the values it may hold (bug Beea0744a7b). Each entry gets its check
+#: in `_KNOB_CHECKS` from here, so a knob whose choices lived only in a comment
+#: (`# block | warn | off`) can no longer take a typo that quietly behaves as some other
+#: value. A new enum knob is declared here, not in a comment;
+#: `tests/test_config_enum_knobs.py` finds any comment or knob doc listing `a | b` that
+#: this table does not cover.
+_BLOCK_WARN_OFF = ("block", "warn", "off")
+PROGRESS_MODES = ("on", "phase", "off")
+CI_ON_MERGE_MODES = ("off", "fast", "full")
+KNOB_CHOICES: dict[str, tuple[str, ...]] = {
+    "lease.reclaim_policy": ("report", "auto"),
+    "worktree.merge_strategy": ("no-ff", "ff-only", "squash"),
+    "flow.model": FLOW_MODELS,
+    "flow.integration": FLOW_INTEGRATIONS,
+    "flow.forge": FLOW_FORGES,
+    "flow.claims": FLOW_CLAIMS,
+    "flow.pr_merge": FLOW_PR_MERGE,
+    "flow.on_changes_requested": FLOW_ON_CHANGES,
+    "flow.port_strategy": FLOW_PORT_STRATEGIES,
+    "gates.enforce_order": ("warn", "block", "off"),
+    "lessons.search_backend": ("fts5", "like"),
+    "session.progress_after_complete": PROGRESS_MODES,
+    "schedule.ready_policy": ("deps_and_lease", "deps_only"),
+    "schedule.cycle_policy": ("error", "warn"),
+    "schedule.unknown_dep_policy": ("block", "warn"),
+    "schedule.empty_phase": ("note", "problem", "off"),
+    "dedupe.on_match": DEDUPE_ON_MATCH,
+    "enforce.commit_without_lease": _BLOCK_WARN_OFF,
+    "enforce.generated_views": _BLOCK_WARN_OFF,
+    "enforce.stale_docs": _BLOCK_WARN_OFF,
+    "enforce.environment_commits": _BLOCK_WARN_OFF,
+    "enforce.stale_rules": _BLOCK_WARN_OFF,
+    "enforce.readme_with_code": _BLOCK_WARN_OFF,
+    "enforce.behind": _BLOCK_WARN_OFF,
+    "loops.on_detect": ("warn", "block"),
+    "review.on_exceed": ("refuse", "warn"),
+    "upgrade.skew": UPGRADE_SKEW_POLICIES,
+    "mcp.tools": MCP_TOOL_TIERS,
+    "ci.on_merge": CI_ON_MERGE_MODES,
+    "export.refresh": EXPORT_REFRESH_MODES,
+}
+
+#: Knobs whose VALUE set can grow in a later release (every enum, and `export.tables`, whose
+#: sub-tables carry enums of their own), so a config FILE carrying a
 #: value this version does not know is skipped with a warning rather than refused; the
 #: write paths (`config --set`, `ddflow_configure`) still refuse it.
-_TOLERANT_VALUES = frozenset({"mcp.tools", "export.refresh", "export.tables"})
+_TOLERANT_VALUES = frozenset({*KNOB_CHOICES, "export.tables"})
+
+
+def _one_of(allowed: tuple[str, ...]) -> Callable[[Any], str]:
+    """The check for an enum knob: "" for a declared value, else the list it must be in."""
+    return lambda v: "" if v in allowed else f"must be one of {', '.join(allowed)}"
 
 
 def _export_tables_problem(v: Any) -> str:
@@ -1809,22 +1864,17 @@ def _export_tables_problem(v: Any) -> str:
     return ""
 
 
-_KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+#: Knobs whose TYPE is not the whole contract: "" means valid, else why not. Checked on
+#: load and by `Config.check`, so `config set` refuses the value instead of writing it.
+#: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
+#: silent-knob-drop class -- when `behind = "off"` already says it plainly.
+_VALUE_CHECKS: dict[str, Callable[[Any], str]] = {
     "export.tables": _export_tables_problem,
-    "export.refresh": lambda v: (
-        "" if v in EXPORT_REFRESH_MODES else f"must be one of {', '.join(EXPORT_REFRESH_MODES)}"
-    ),
     "export.max_bytes": lambda v: (
         "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else "must be an integer >= 0"
     ),
     "export.documents": lambda v: (
         "" if isinstance(v, list) and all(isinstance(x, str) for x in v) else "must be a list of document names"
-    ),
-    "upgrade.skew": lambda v: (
-        "" if v in UPGRADE_SKEW_POLICIES else f"must be one of {', '.join(UPGRADE_SKEW_POLICIES)}"
-    ),
-    "mcp.tools": lambda v: (
-        "" if v in MCP_TOOL_TIERS else f"must be one of {', '.join(MCP_TOOL_TIERS)}"
     ),
     # TOML arrives typed and `_coerce` passes it through untouched, so a string where a
     # list belongs (`hydrafusion = "openai"`) would iterate as letters: a set of nonsense
@@ -1842,9 +1892,6 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
         else 'must be an integer >= 1; to disable the check set [enforce].behind = "off"'
     ),
     "enforce.trailer_waivers": _waivers_problem,
-    "dedupe.on_match": lambda v: (
-        "" if v in DEDUPE_ON_MATCH else f"must be one of {', '.join(DEDUPE_ON_MATCH)}"
-    ),
     "dedupe.show_floor": _unit_interval,
     "dedupe.ask_threshold": _unit_interval,
     "dedupe.max_candidates": lambda v: (
@@ -1861,6 +1908,14 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
         'to stop the check set [dedupe].on_match = "off"'
     ),
 }  # fmt: skip
+
+#: Every check: one derived from each KNOB_CHOICES entry, and the hand-written ones above.
+#: The two never share a key (`tests/test_config_enum_knobs.py` asserts it), so neither can
+#: silently shadow the other.
+_KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+    **{key: _one_of(allowed) for key, allowed in KNOB_CHOICES.items()},
+    **_VALUE_CHECKS,
+}
 
 
 def csv_list(raw: str | None) -> list[str]:
