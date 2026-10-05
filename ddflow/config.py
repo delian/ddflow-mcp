@@ -1556,7 +1556,7 @@ class Config:
         default_factory=dict, repr=False, compare=False
     )
     #: Indices in unknown_knobs of the OTHER entries for a known key with a value this
-    #: code does not know (skipped, not replaced): `invalid_value_entries` reads them, so
+    #: code does not know (skipped, not replaced): `invalid_value_indices` reads them, so
     #: doctor never calls such a key unknown (Bf3566bbacd). Shared shallowly, as above.
     _bad_values: list[int] = field(default_factory=list, repr=False, compare=False)
 
