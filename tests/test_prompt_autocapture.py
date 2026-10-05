@@ -15,14 +15,25 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from conftest import run_cli
 
 SECRET = "sk-abcdefghijklmnop1234567890"
 
 
-def _hook(repo: Path, payload, *extra: str, raw: str | None = None, agent: str = ""):
-    env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[1])}
+def _hook(
+    repo: Path,
+    payload,
+    *extra: str,
+    raw: str | None = None,
+    agent: str = "",
+    first_on_path: Path | None = None,
+):
+    root = str(Path(__file__).resolve().parents[1])
+    path = os.pathsep.join([str(first_on_path), root]) if first_on_path else root
+    env = {**os.environ, "PYTHONPATH": path}
     args = [sys.executable, "-m", "ddflow", "--repo", str(repo)]
     if agent:
         args += ["--agent", agent]
@@ -122,6 +133,26 @@ def test_the_same_hook_firing_twice_records_once(repo):
     run_cli(repo, "init")
     _hook(repo, {"session_id": "s1", "prompt": "go"})
     _hook(repo, {"session_id": "s1", "prompt": "go"})
+    assert len(_events(repo, "session.prompt")) == 1
+
+
+@pytest.mark.skipif(
+    not Path("/proc/self/stat").exists(),
+    reason="the hook's start is read from /proc; elsewhere it falls back to now",
+)
+def test_a_copy_slow_to_start_is_still_the_same_firing(repo, tmp_path):
+    """B7e6f1998c8: the window is measured from when the hook was FIRED. The second copy
+    here takes longer than the window to start (a loaded machine did that to the test
+    above at random), and counting its startup against the window recorded it twice."""
+    from ddflow.services.sessions import DOUBLE_FIRE_S
+
+    run_cli(repo, "init")
+    _hook(repo, {"session_id": "s1", "prompt": "go"})
+    slow = tmp_path / "slow-start"
+    slow.mkdir()
+    (slow / "sitecustomize.py").write_text(f"import time\ntime.sleep({DOUBLE_FIRE_S + 1})\n")
+    code, _o, err = _hook(repo, {"session_id": "s1", "prompt": "go"}, first_on_path=slow)
+    assert code == 0, err
     assert len(_events(repo, "session.prompt")) == 1
 
 

@@ -803,7 +803,15 @@ def _capture_prompt(repo: Path, stdin: str, agent: str) -> O.Outcome:
         )
         sid = str(payload.get("session_id") or payload.get("conversation_id") or "")
         result = S.capture_prompt(
-            log, cfg, sid, text, model=str(payload.get("model") or ""), tool="hook"
+            log,
+            cfg,
+            sid,
+            text,
+            model=str(payload.get("model") or ""),
+            tool="hook",
+            # This runs in the process the harness started for the hook: its start is
+            # the firing, and the imports and log read since are its own delay.
+            fired_at=S.process_started_at(),
         )
         return O.ok("hooks", message="", result=result)
     except Exception as exc:  # a hook must not break the prompt it observes
