@@ -42,9 +42,12 @@ must never rewrite a recorded id.
    tokens express intent; they do not guarantee uniqueness on their own. The id
    service checks every key it mints against every id, key and alias of every kind in the
    folded log, under the log lock, before recording it. A key that is already taken
-   gets `-2`, `-3`, and so on. A stable template is the one exception: there, a
-   taken key IS the expected match, so the filing extends that record. A stable key
-   held by a record of another kind is refused rather than extended. This covers two records minted in the same second by
+   gets `-2`, `-3`, and so on. A stable template is the one exception, and only for
+   one kind of collision. If the taken key is the minted KEY of a record of the same
+   kind, it is the expected match and the filing extends that record. If the key is
+   taken in any other way (an alias, an id, or a key of another kind), the filing is
+   refused and the existing holder is named. A stable filing never extends a record
+   it matched only through an alias, and never silently gets a suffix. This covers two records minted in the same second by
    one process, and two kinds both configured as `{seq}`. Keys share one namespace
    across kinds, because `show` and every other command accept any id.
    Otherwise it must declare `stable = true`. A stable template maps the same content
@@ -83,7 +86,7 @@ must never rewrite a recorded id.
    labels), accepted everywhere an id is accepted (B-id-aliases). Ids, keys and aliases
    share one namespace. An alias that is already an id, key or alias is refused when
    it is added. A minted key that collides with an existing alias gets a suffix, like
-   any taken key. If logs from two clones still bring two identical names together, the
+   any taken key, except for stable templates (see 2). If logs from two clones still bring two identical names together, the
    bare name is ambiguous and is refused with every candidate listed, the same as a
    key clash. There is no bulk
    migration that aliases every old record.
