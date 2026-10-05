@@ -1547,7 +1547,8 @@ class Config:
     #: For each enum knob that fell back to its strictest value, the (index in
     #: unknown_knobs, "key = 'bad'") of each note, so a later layer's value rewrites the
     #: note from its parts, never by parsing text that holds the user's own value. A
-    #: field so `dataclasses.replace` carries it with `unknown_knobs`.
+    #: field, so `dataclasses.replace` carries it alongside `unknown_knobs` -- both
+    #: shallowly, like `sources`: the copy shares them with the original.
     _fallback_notes: dict[str, list[tuple[int, str]]] = field(
         default_factory=dict, repr=False, compare=False
     )
@@ -1586,7 +1587,7 @@ class Config:
         if envdata:
             cfg._apply(envdata, "env")
         if root is not None:
-            _warn_unknown(cfg.unknown_knobs, Path(root))
+            _warn_unknown(cfg.unknown_knobs, Path(root), cfg.fallback_entries())
         return cfg
 
     @classmethod
@@ -1704,6 +1705,11 @@ class Config:
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
 
+    def fallback_entries(self) -> set[str]:
+        """The `unknown_knobs` entries that are strictest-fallback notes -- APPLIED values,
+        not skipped keys -- read from the bookkeeping, never from the notes' text."""
+        return {self.unknown_knobs[i] for notes in self._fallback_notes.values() for i, _ in notes}
+
     def _forget_fallback(self, key: str, by: str) -> None:
         """A later layer set `key`: an earlier layer's strictest-fallback note must stop
         claiming its value is in effect, or doctor reports `block` while `warn` runs.
@@ -1795,7 +1801,9 @@ def _is_code_tree(root: Path) -> bool:
 _WARNED: set[tuple[str, str]] = set()
 
 
-def _warn_unknown(keys: list[str], root: Path) -> None:
+def _warn_unknown(
+    keys: list[str], root: Path, fallbacks: set[str] | frozenset[str] = frozenset()
+) -> None:
     """Say, on stderr, which config keys this code skipped.
 
     Skipping without a word is the silent-knob-drop class: 81a52e3 made an unknown key
@@ -1809,9 +1817,8 @@ def _warn_unknown(keys: list[str], root: Path) -> None:
     _WARNED.update((str(root), k) for k in new)
     # An enum knob's unknown value is not skipped: it is APPLIED as the knob's strictest
     # value (D-enum-fallback-strict), and saying "skipped" would read as "no effect".
-    marker = " (not a value this ddflow knows; "
-    fell_back = [k for k in new if marker in k]
-    skipped = [k for k in new if marker not in k]
+    fell_back = [k for k in new if k in fallbacks]
+    skipped = [k for k in new if k not in fallbacks]
     what = []
     if skipped:
         what.append(f"{', '.join(skipped)}, which this ddflow does not know; skipped")
