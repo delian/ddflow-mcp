@@ -176,16 +176,35 @@ def _trailer_refused(repo: Path) -> Check:
     hook = _hooks_dir(repo) / "commit-msg"
     if not hook.is_file():
         return Check("trailer refused", "unavailable", "no commit-msg hook to probe")
-    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
-        handle.write(_VIOLATION)
-        message = handle.name
     try:
-        done = P.run([str(hook), message], cwd=repo, capture_output=True, text=True, timeout=60)
-        if done.returncode == 0:
+        bad = _run_hook(hook, repo, _VIOLATION)
+        if bad.returncode == 0:
             return Check("trailer refused", "failed", "the hook accepted a forbidden trailer")
-        return Check("trailer refused", "passed", f"the hook refused it (exit {done.returncode})")
+        # A CONTROL message must be ACCEPTED: a hook that fails everything (missing
+        # ddflow on PATH, bad shebang, exit 127) was reported as enforcing before
+        # (roborev on 079824c6).
+        clean = _run_hook(hook, repo, "onboard verify probe, no trailer\n")
+        if clean.returncode != 0:
+            return Check(
+                "trailer refused",
+                "failed",
+                f"the hook refuses even a clean message (exit {clean.returncode}); it is broken, not enforcing",
+            )
+        return Check(
+            "trailer refused",
+            "passed",
+            f"refused the trailer (exit {bad.returncode}) and accepted a clean message",
+        )
     except (OSError, subprocess.TimeoutExpired) as exc:
         return Check("trailer refused", "unavailable", f"the hook could not be probed: {exc}")
+
+
+def _run_hook(hook: Path, repo: Path, text: str) -> subprocess.CompletedProcess:
+    with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as handle:
+        handle.write(text)
+        message = handle.name
+    try:
+        return P.run([str(hook), message], cwd=repo, capture_output=True, text=True, timeout=60)
     finally:
         Path(message).unlink(missing_ok=True)
 
@@ -246,11 +265,20 @@ def _frozen(repo: Path) -> Check:
     return Check("freeze ratchet", "passed", f"{len(manifest)} frozen file(s) unchanged")
 
 
-def _suite_command(cfg: Config) -> str:
-    """The configured unit_tests command, however the config table is shaped."""
-    gate = getattr(cfg, "gate", None)
-    entry = gate.get("unit_tests") if isinstance(gate, dict) else getattr(gate, "unit_tests", None)
-    return str(getattr(entry, "command", "") or "")
+def _suite_command(repo: Path, cfg: Config) -> str:
+    """The configured unit_tests command, through the loader the WORKFLOW uses.
+
+    `Config` has no `gate` attribute and gate definitions live in `.ddflow/gates.toml`;
+    the earlier lookup always answered "none", so the configured suite never ran
+    (roborev on 079824c6).
+    """
+    from .gates import load_gates
+
+    try:
+        gate = load_gates(Path(repo), cfg).get("unit_tests")
+    except Exception:
+        return ""
+    return str(getattr(gate, "command", "") or "")
 
 
 def _suite(repo: Path, command: str, timeout: int) -> Check:
@@ -276,7 +304,9 @@ def verify(
 ) -> VerifyReport:
     """Run every probe and return the one report; `suite=False` skips the full run."""
     repo = Path(repo)
-    cfg_command = suite_command if suite_command is not None else _suite_command(Config.load(repo))
+    cfg_command = (
+        suite_command if suite_command is not None else _suite_command(repo, Config.load(repo))
+    )
     checks = [
         _handshake(repo, H.registered_entry(repo)),
         _hooks(repo),
