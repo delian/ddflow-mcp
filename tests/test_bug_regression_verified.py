@@ -204,13 +204,12 @@ def test_a_test_that_fails_on_the_fixed_tree_is_refused(repo):
 def test_an_unrecognized_verification_status_is_recorded_not_verified(repo, monkeypatch):
     """The dispatch names ONE success status; anything else must not fall through to
     `verified` (rubber_duck #1)."""
-    _case(repo)
-    run_cli(repo, "bug", "found", "--id", "B6", "--summary", "bogus status")
+    _case(repo)  # B1's fix task IS claimed in a worktree, so control reaches the patch
     monkeypatch.setattr(
         "ddflow.services.gates.verify_regression_test",
         lambda *a, **k: ("some-future-status", {}),
     )
-    out = api.bug_fixed(repo, "B6", regression_test="tests/test_f.py::test_f")
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_f.py::test_f")
     assert out.exit == OK, out.reason
     assert out.data["regression_verified"] == "could-not-run", out.data
 
