@@ -15,6 +15,7 @@ costs. It is retrieval, budgeted, with the budget enforced rather than hoped for
 
 from __future__ import annotations
 
+import re
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -118,10 +119,14 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             )
             gates = "".join(OUTCOME_MARK.get(t.gate_outcome(g), " ") for g in pipeline)
             indent = "&nbsp;&nbsp;&nbsp;&nbsp;" * _depth(state, t, root)
+            # Every free-text cell goes through _cell (B2eaa1e5e8e): a `|` in a title
+            # invented a column and a newline split the row.
+            needs = ", ".join(_cell(n, cfg) for n in t.needs) or "—"
+            globs = ", ".join(f"`{_cell(g, cfg)}`" for g in t.globs) or "—"
+            owner = _cell(t.lease.holder, cfg) if t.lease else "—"
             out.append(
-                f"| [{mark}] | {indent}**{t.id}** {t.title} | {t.state} | "
-                f"{', '.join(t.needs) or '—'} | {', '.join(f'`{g}`' for g in t.globs) or '—'} | "
-                f"`{gates}` | {t.lease.holder if t.lease else '—'} |"
+                f"| [{mark}] | {indent}**{_id_cell(t.id, cfg)}** {_cell(t.title, cfg)} | "
+                f"{t.state} | {needs} | {globs} | `{gates}` | {owner} |"
             )
         out.append("")
         caption = " · ".join(
@@ -211,10 +216,32 @@ def lessons_md(state: State, cfg: Config | None = None) -> str:
     return "\n".join(out)
 
 
+def _fold(text: str, cfg: Config | None = None) -> str:
+    """Redacted, with every CommonMark line ending (LF, CR, CRLF) folded to a space: the
+    part of a table cell's escaping every cell shares."""
+    return re.sub(r"\r\n?|\n", " ", _redact(text, cfg))
+
+
 def _cell(text: str, cfg: Config | None = None) -> str:
-    """One markdown table cell: redacted, newlines folded, `|` escaped so a title cannot
-    split the row into extra columns."""
-    return _redact(text, cfg).replace("\n", " ").replace("|", "\\|").strip()
+    """One markdown table cell: redacted, line breaks folded, `|` escaped so a title
+    cannot split the row into extra columns (B2eaa1e5e8e).
+
+    Every CommonMark line ending is folded -- a lone CR is one too, and a raw one split
+    the row just like LF. A GFM row splitter reads a doubled backslash as an escaped
+    backslash, so the backslashes right before a `|` are doubled too: `a\\|b` written as
+    `a\\\\|b` left the pipe a delimiter again (roborev on fix-B2eaa1e5e8e). Nothing else
+    is escaped: a title is markdown (its backticks are meant), and escaping every
+    backslash turned an author's `\\*x\\*` into emphasis (roborev on 72565c2d).
+    """
+    return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", _fold(text, cfg)).strip()
+
+
+def _id_cell(text: str, cfg: Config | None = None) -> str:
+    """An item id for the board, where the row wraps it in `**...**`. An id is a literal
+    name, not markdown: a backslash or `*` in it closed or broke the bold span and
+    re-parsed the rest of the row (roborev on ded56144), so those, backticks and the
+    pipe are all escaped."""
+    return re.sub(r"([\\*`|])", r"\\\1", _fold(text, cfg)).strip()
 
 
 def bugs_md(state: State, cfg: Config | None = None) -> str:
