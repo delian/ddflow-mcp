@@ -16,10 +16,6 @@ from ..infra.log import EventLog
 from ..views.markdown import may_hold_work
 from ._base import _load
 
-#: A `Config.unknown_knobs` entry for a KNOWN knob whose value is not: `sec.knob = 'v'`
-#: (and its note). An unknown key is `sec.knob` or `[sec]`.
-_KNOWN_KEY_BAD_VALUE = re.compile(r"[\w.-]+ = ")
-
 
 def loops(repo: Path) -> O.Outcome:
     """Circular references and runtime loops. Reads only.
@@ -693,10 +689,13 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         notes.append("index is stale; it rebuilds automatically on next read")
     notes += _loose_shards(repo)
     # Loaded past, not refused (config._apply) -- so this is where a typo still surfaces.
-    # A known knob with a value this code does not know (`key = 'value'`, its note naming
-    # the value in effect) is an INVALID VALUE, not an unknown key (Bf3566bbacd).
+    # A KNOWN knob with a value this code does not know (`key = 'value'`, its note naming
+    # the value in effect) is an INVALID VALUE, not an unknown key (Bf3566bbacd). Known
+    # is asked of the schema, not of the entry's text, which holds the user's own spelling
+    # (a quoted `"foo = bar"` key is still unknown; roborev on 183bcf03).
+    known = {key for key, *_ in cfg.explain()}
     problems += [
-        f"{'invalid value for' if _KNOWN_KEY_BAD_VALUE.match(k) else 'unknown config key'} "
+        f"{'invalid value for' if k.split(' = ', 1)[0] in known else 'unknown config key'} "
         f"{k} in .ddflow/config.toml: a typo, or written by a newer ddflow than this "
         "checkout runs (merge main)"
         for k in cfg.unknown_knobs

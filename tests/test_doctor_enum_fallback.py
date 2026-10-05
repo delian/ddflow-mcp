@@ -17,7 +17,7 @@ def test_a_bad_enum_value_is_an_invalid_value_not_an_unknown_key(repo):
     local = repo / ".ddflow" / "local"
     local.mkdir(exist_ok=True)
     (local / "config.toml").write_text(
-        '[enforce]\nstale_docs = "blok"\n[lease]\nbogus_knob = 1\n', "utf-8"
+        '[enforce]\nstale_docs = "blok"\n[lease]\nbogus_knob = 1\n"foo = bar" = 1\n', "utf-8"
     )
     _code, out, err = run_cli(repo, "doctor")
     text = out + err
@@ -25,3 +25,5 @@ def test_a_bad_enum_value_is_an_invalid_value_not_an_unknown_key(repo):
     assert "invalid value for enforce.stale_docs = 'blok'" in text, text
     assert "in effect: 'block'" in text, text
     assert "unknown config key lease.bogus_knob" in text, text
+    # An unknown key spelled like a value is still an unknown key (roborev on 183bcf03).
+    assert "unknown config key lease.foo = bar" in text, text
