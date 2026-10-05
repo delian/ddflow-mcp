@@ -24,7 +24,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..config import Config
+from ..config import CI_ON_MERGE_MODES, Config
 from ..infra import proc as P
 from ..infra import worktree as W
 
@@ -210,7 +210,7 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
 
 #: Hooks `[ci].on_merge = "fast"` leaves out of the default pre-commit command: the suites.
 FAST_SKIP = "tests,scenarios"
-ON_MERGE_MODES = ("off", "fast", "full")
+ON_MERGE_MODES = CI_ON_MERGE_MODES  # declared beside the knob, where `Config.check` holds it
 
 
 def main_command(repo: Path, cfg: Config) -> tuple[str, str]:
