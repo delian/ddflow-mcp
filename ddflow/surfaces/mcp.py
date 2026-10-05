@@ -915,6 +915,18 @@ TOOLS: dict[str, dict[str, Any]] = {
             ),
             "lesson": ("string", "Id of an EXISTING lesson this bug belongs to.", False),
             "changelog": ("string", "Optional 'Fixed: text' (any category), or skip.", False),
+            "verify_regression": (
+                "boolean",
+                "Whether to run the named test on the pre-fix tree (default true). The "
+                "test must FAIL there and PASS with the fix; false needs verify_reason.",
+                False,
+            ),
+            "verify_reason": (
+                "string",
+                "Why the pre-fix regression check is skipped (recorded). Required when "
+                "verify_regression is false.",
+                False,
+            ),
         },
         "api": lambda repo, a, agent: _api().bug_fixed(
             repo,
@@ -924,9 +936,11 @@ TOOLS: dict[str, dict[str, Any]] = {
             lesson_title=a.get("lesson_title", "") or "",
             lesson_rule=a.get("lesson_rule", "") or "",
             changelog=a.get("changelog", "") or "",
+            verify_regression=a.get("verify_regression", True),
+            verify_reason=a.get("verify_reason", "") or "",
             agent=agent,
         ),
-        "payload": ("id",),
+        "payload": ("id", "regression_verified"),
     },
     "ddflow_bug_invalid": {
         "description": (

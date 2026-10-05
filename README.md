@@ -3424,6 +3424,15 @@ and names it; `complete fix-Bx --regression-test tests/test_parser.py::test_last
 closes the bug through the same path as `bug fixed` (the test must be named and must
 exist; write it first and watch it FAIL on the unfixed code), then completes. Closing the
 bug first with `bug fixed` and completing afterwards is the same thing in two steps.
+
+The named test is RUN, not just named: `bug fixed` (and `complete --regression-test`) runs
+it on the **pre-fix source** -- the fix task's base with the new test file -- and on the
+fixed tree, and **refuses** when it passes on the pre-fix tree (it does not catch the bug)
+or fails on the fixed one. The pre-fix run needs the fix task working in a worktree, the
+project's `gate.unit_tests` runner and a base ref; when the comparison cannot be made the
+check is recorded `regression_verified = could-not-run`, never `verified`.
+`--skip-regression-verify --verify-reason "<why>"` (MCP `verify_regression` /
+`verify_reason`) records the override instead, and the reason is required.
 A completion closes only the bugs the task was **filed to fix** (its `fixes`, or the
 bug a hand-filed `fix-<bug>` names) -- never a bug merely reported against it with
 `--item`, a `scope = ddflow` report or a bug with a fix task of its own. Those stay
