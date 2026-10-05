@@ -1669,14 +1669,29 @@ class Config:
                             self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
                             continue
                         bad, value = value, strictest(f"{sec}.{knob}")
+                        self._forget_fallback(f"{sec}.{knob}", source, value)
                         self.unknown_knobs.append(
                             f"{sec}.{knob} = {bad!r} (not a value this ddflow knows; "
                             f"in effect: {value!r}, the strictest)"
                         )
-                    else:
-                        raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
+                        setattr(target, knob, value)
+                        self.sources[f"{sec}.{knob}"] = f"{source} (strictest fallback)"
+                        continue
+                    raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
+                self._forget_fallback(f"{sec}.{knob}", source, value)
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
+
+    def _forget_fallback(self, key: str, source: str, value: Any) -> None:
+        """A later layer set `key`: an earlier layer's strictest-fallback note must stop
+        claiming its value is in effect, or doctor reports `block` while `warn` runs."""
+        mark = " (not a value this ddflow knows; in effect: "
+        for i, entry in enumerate(self.unknown_knobs):
+            if entry.startswith(f"{key} = ") and mark in entry:
+                self.unknown_knobs[i] = (
+                    entry.split(mark)[0] + " (not a value this ddflow knows; "
+                    f"overridden by the {source} value {value!r})"
+                )
 
     def _apply_export_tables(
         self, values: dict[str, Any], lenient: bool, source: str

@@ -175,7 +175,25 @@ def test_a_valid_later_layer_still_wins_over_a_bad_file_value(tmp_path: Path) ->
     assert cfg.upgrade.skew == "refuse"
     (tmp_path / ".ddflow" / "local").mkdir()
     (tmp_path / ".ddflow" / "local" / "config.toml").write_text('[upgrade]\nskew = "warn"\n')
-    assert Config.load(tmp_path, env={}).upgrade.skew == "warn"
+    cfg = Config.load(tmp_path, env={})
+    assert cfg.upgrade.skew == "warn"
+    # ...and the note doctor prints must not still claim the fallback is in effect.
+    (entry,) = cfg.unknown_knobs
+    assert "in effect" not in entry and "'warn'" in entry, entry
+    assert cfg.sources["upgrade.skew"] == "local"
+
+
+def test_an_env_value_overrides_a_bad_file_value_and_the_note_says_so(tmp_path: Path) -> None:
+    _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_ENFORCE_STALE_DOCS": "off"})
+    assert cfg.enforce.stale_docs == "off"
+    (entry,) = cfg.unknown_knobs
+    assert "in effect" not in entry and "env value 'off'" in entry, entry
+
+
+def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
+    cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    assert cfg.sources["enforce.stale_docs"] == "file (strictest fallback)"
 
 
 def test_config_set_still_refuses_a_bad_value(repo: Path) -> None:
