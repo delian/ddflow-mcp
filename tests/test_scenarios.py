@@ -22,6 +22,7 @@ demos by hand.
 from __future__ import annotations
 
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -119,3 +120,62 @@ def test_ci_checks_every_push_not_only_a_release_tag():
         if "pull_request" in w.read_text() or "branches:" in w.read_text()
     ]
     assert on_push, "every workflow is tag-triggered; nothing checks ordinary commits"
+
+
+@pytest.mark.slow
+@pytest.mark.scenarios
+@pytest.mark.timeout(1800)
+def test_crash_recovery_survives_a_check_slower_than_the_lease(tmp_path):
+    """B11e64b1e8c: crash-recovery asserted "recover reports nothing yet" inside the 8 s
+    lease measured from a heartbeat, so at load average 100-190 the check itself outlived
+    the lease and the scenario failed. Simulated here by one `recover` that starts later
+    than the TTL -- exactly what a slow process start under load does. The scenario must
+    tell an observation made after the lease ran out from a wrong answer, not fail."""
+    import scenario_crash_recovery as S
+    from harness import Fail, Scenario
+
+    class SlowOnce(Scenario):
+        delayed = False
+
+        def ddflow(self, *argv, **kw):
+            if argv == ("recover",) and not self.delayed:
+                self.delayed = True
+                time.sleep(S.TTL_S + 1)
+            return super().ddflow(*argv, **kw)
+
+    sc = SlowOnce("crash-recovery-slow", tmp_path / "slow")
+    try:
+        S.run(sc)
+    except Fail as exc:
+        pytest.fail(f"crash-recovery under a slow check: {exc}")
+    assert sc.delayed, "the slow check was never injected: the scenario changed shape"
+
+
+@pytest.mark.slow
+@pytest.mark.scenarios
+@pytest.mark.timeout(1800)
+def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(tmp_path):
+    """B11e64b1e8c, sustained load: every `claim` and every `recover` is slow enough that
+    the two together outlive the lease but each alone does not. Observing both in one
+    window failed every attempt; each check gets its own window."""
+    import scenario_crash_recovery as S
+    from harness import Scenario
+
+    slow = S.TTL_S / 2 + 0.5  # two of these outlive the lease; one leaves 3.5 s
+
+    class Loaded(Scenario):
+        slowed: frozenset = frozenset()
+
+        def ddflow(self, *argv, **kw):
+            # The two live-window checks: `recover`, and the claim whose answer is read.
+            if argv[:1] == ("recover",) or (argv[:1] == ("claim",) and kw.get("expect") is None):
+                self.slowed = self.slowed | {argv[0]}
+                time.sleep(slow)
+            return super().ddflow(*argv, **kw)
+
+    sc = Loaded("crash-recovery-loaded", tmp_path / "loaded")
+    try:
+        S.run(sc)
+    except AssertionError as exc:
+        pytest.fail(f"crash-recovery under sustained load: {exc}")
+    assert sc.slowed == {"recover", "claim"}, f"load was not injected: {sc.slowed}"
