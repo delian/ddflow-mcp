@@ -2708,6 +2708,26 @@ refuses at once rather than sleeping to its timeout.
 
 ---
 
+### Adaptive parallelism: host signals
+
+The adaptive parallelism controller steers by the host as well as by the log.
+`ddflow/infra/signals.py` samples three host signals with the standard library only; each
+one a platform cannot supply is **unavailable** (`None`), never `0`, because a zero would
+read as a real measurement. An unavailable signal is neutral: it never lowers the limit
+and never justifies raising it, and with no host signal at all the limit holds at its
+start value. A sampler that raises or times out is unavailable too, with a one-line reason.
+
+| Signal | Linux | macOS | Windows | Elsewhere |
+|---|---|---|---|---|
+| `load` (1-minute load average per core) | `os.getloadavg()[0] / os.cpu_count()` | same | unavailable (no `getloadavg`) | same as Linux where `getloadavg` exists |
+| `memory_free_frac` (available / total memory) | `MemAvailable / MemTotal` from `/proc/meminfo` | `vm_stat` (free + inactive + speculative pages) over `sysctl -n hw.memsize`, each with a 2 s timeout | `GlobalMemoryStatusEx` | unavailable |
+| `disk_free_bytes`, `disk_free_frac` | `shutil.disk_usage` of the worktree root, falling back to the repository root | same | same | same |
+
+The controller reads them as `load_per_core`, `memory_pressure` (`1 - memory_free_frac`) and
+`disk_pressure` (`1 - disk_free_frac`), so that for every signal it sees higher is worse.
+`ddflow doctor` names each host signal that is unavailable on this machine, with its reason,
+as a note, not a problem.
+
 ### Log-derived flow signals
 
 Besides the host, the adaptive parallelism controller takes what the project's own event
