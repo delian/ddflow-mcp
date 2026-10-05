@@ -4193,8 +4193,14 @@ by a newer ddflow does not stop an older checkout, but it warns on every command
 main). An enumerated knob (`[enforce].stale_docs = block | warn | off`, `[flow].model`,
 `[lease].reclaim_policy` and every other one whose doc lists `a | b`) is held to its
 declared values (`KNOB_CHOICES` in `ddflow/config.py`): a value outside them in a file is
-skipped and reported the same way, the knob keeping its default, and from the
-environment it is refused. `ddflow config --set` refuses an unknown knob or an invalid
+warned about and reported the same way, and the knob takes its **strictest** allowed value
+(`KNOB_STRICTEST`), not its default, so a typo can only make ddflow more careful —
+`stale_docs = "blok"` acts as `block`, `[upgrade].skew = "refusee"` as `refuse`. Each
+knob's doc (`ddflow config --explain`) names its fallback and why; where a knob has no
+safety dimension the fallback is the value that does the most checking or changes least
+(`[ci].on_merge` → `full`, `[mcp].tools` → `all`, `[export].refresh` → `off`), and the
+`doctor` line names the value in effect. From the environment it is refused, and so
+is a typo in ddflow's own source tree, where the config and the code are one commit. `ddflow config --set` refuses an unknown knob or an invalid
 value outright, before writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
 refuses a non-string element instead of casting it (`null` is not the string `"None"`).
 A test asserts every knob carries documentation, so the reference cannot rot.
