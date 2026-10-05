@@ -101,14 +101,16 @@ def run_shell(
     ``on_tick`` is called every ``tick_s`` seconds while the command runs, on THIS
     thread (a long gate renews its lease that way; see `gates._run_ticking`).
     Output is captured unless ``capture_output=False`` or ``stdout``/``stderr`` say
-    otherwise; the other keywords go to `popen`.
+    otherwise; the other keywords go to `popen` (stdin stays /dev/null). There is no
+    ``input=``: no caller feeds one, and resuming a write across ticks is not supported.
+    On timeout the TimeoutExpired carries everything the command wrote, as
+    `subprocess.run`'s does (a resumed `communicate` returns all it accumulated).
     """
+    if on_tick is not None and tick_s <= 0:
+        raise ValueError("run_shell: on_tick needs tick_s > 0, or it would never be called")
     if kwargs.pop("capture_output", True):
         kwargs.setdefault("stdout", PIPE)
         kwargs.setdefault("stderr", PIPE)
-    data = kwargs.pop("input", None)
-    if data is not None:
-        kwargs["stdin"] = PIPE
     if os.name == "posix":
         kwargs["start_new_session"] = True
     p = popen(command, shell=True, **kwargs)  # nosec B604 - callers pass their operator's line
@@ -116,15 +118,14 @@ def run_shell(
     try:
         while True:
             wait = None if deadline is None else max(0.0, deadline - time.monotonic())
-            if on_tick is not None and tick_s > 0:
+            if on_tick is not None:
                 wait = tick_s if wait is None else min(tick_s, wait)
             try:
-                out, err = p.communicate(input=data, timeout=wait)
+                out, err = p.communicate(timeout=wait)
                 return subprocess.CompletedProcess(command, p.returncode, out, err)
             except subprocess.TimeoutExpired:
                 if deadline is not None and time.monotonic() >= deadline:
                     raise
-                data = None  # already written: communicate keeps feeding the rest
                 if on_tick is not None:
                     on_tick()
     except subprocess.TimeoutExpired:
@@ -138,8 +139,9 @@ def run_shell(
 
 
 def _drain(p: subprocess.Popen) -> tuple[Any, Any]:
-    """What ``p`` wrote before it was killed, and ``p`` reaped. Bounded: a grandchild that
-    left the group (its own `setsid`) can hold the pipes open forever."""
+    """Everything ``p`` wrote (including what an earlier, timed-out `communicate` had
+    read), and ``p`` reaped. Bounded: a grandchild that left the group (its own `setsid`)
+    can hold the pipes open forever."""
     try:
         return p.communicate(timeout=10)
     except subprocess.TimeoutExpired:

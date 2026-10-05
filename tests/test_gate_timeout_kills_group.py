@@ -40,12 +40,13 @@ def _alive(pid: int) -> bool:
         os.kill(pid, 0)
     except ProcessLookupError:
         return False
-    # A zombie still answers kill(0); it is dead for our purposes.
-    try:
-        state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
-    except OSError:
-        return False
-    return state != "Z"
+    # A zombie still answers kill(0); it is dead for our purposes. `ps` reads the state
+    # on any POSIX system, procfs or not (a missing /proc must not read as "dead").
+    p = subprocess.run(
+        ["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, check=False
+    )
+    state = p.stdout.strip()
+    return bool(state) and not state.startswith("Z")
 
 
 def _gone(pidfile: Path, within_s: float = 3.0) -> bool:
@@ -107,6 +108,17 @@ def test_run_shell_returns_like_run_when_the_command_finishes(tmp_path):
 
 def test_run_shell_raises_timeout_after_killing_the_group(tmp_path):
     pidfile = tmp_path / "child.pid"
-    with pytest.raises(P.TimeoutExpired):
-        P.run_shell(_command(pidfile), cwd=tmp_path, timeout=1, text=True)
+    with pytest.raises(P.TimeoutExpired) as exc:
+        P.run_shell(f"echo partial; {_command(pidfile)}", cwd=tmp_path, timeout=1, text=True)
+    assert exc.value.output == "partial\n", "the output written before the timeout is kept"
     assert _gone(pidfile)
+
+
+def test_run_shell_keeps_stdin_detached(tmp_path):
+    p = P.run_shell("cat; echo done", cwd=tmp_path, timeout=10, text=True)
+    assert p.stdout == "done\n", "cat must read EOF from /dev/null, never our stdin"
+
+
+def test_run_shell_refuses_a_tick_that_would_never_fire(tmp_path):
+    with pytest.raises(ValueError):
+        P.run_shell("true", cwd=tmp_path, timeout=10, on_tick=lambda: None)
