@@ -115,6 +115,7 @@ from .lifecycle import next_ as next_item
 from .lifecycle import release as release_item
 from .lifecycle import remove as remove_item
 from .lifecycle import wait as wait_item
+from .onboard import onboard
 from .operations import (
     cadence,
     cleanup,

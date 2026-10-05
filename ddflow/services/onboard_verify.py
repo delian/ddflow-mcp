@@ -253,7 +253,10 @@ def _has_imports(repo: Path) -> bool:
         from ..core.model import fold
         from ..infra.log import EventLog
 
-        state = fold(EventLog(repo, "onboard-verify").read_all(), strict=False)
+        state = fold(
+            EventLog(repo, "onboard-verify", log_cfg=Config.load(repo).log).read_all(),
+            strict=False,
+        )
     except Exception:
         return False
     for records in (
