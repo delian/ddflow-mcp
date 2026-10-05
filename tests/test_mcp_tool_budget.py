@@ -16,7 +16,10 @@ from ddflow.surfaces.mcp import ADD_TOOLS, TOOLS, Server, _schema
 # parity ratchet needs every `ddflow export` filter flag reachable; main sat at 91,958.
 # 91_500: ddflow_list (B-view-mcp-list) is ONE tool for the six viewers (~1.3 KB); the
 # shared `as_agent` description, repeated on every tool, went from 113 to 66 characters (-4 KB).
-TOOLS_LIST_BUDGET = 91_500
+# 93_500 (raised, B-dupes-sweep): ddflow_dupes + ddflow_link settle near-duplicate pairs
+# already in the log; together ~1.3 KB. The cheaper alternative (one tool with a mode
+# argument) would still carry most of the text and need the same flag exemptions.
+TOOLS_LIST_BUDGET = 93_500
 SHARED_DESCRIPTION_MAX = 200
 
 

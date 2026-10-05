@@ -796,6 +796,7 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
         ):
             notes.append(f"worktree {path} exists but no item claims it")
     notes += _untitled(st)
+    notes += _dupe_note(st, cfg)
 
     data: dict[str, Any] = {
         "problems": problems,
@@ -868,6 +869,30 @@ def _untitled(st) -> list[str]:
     return [
         f"{len(ids)} item(s) have no title of their own, only the id: {shown} — "
         f"`ddflow update <id> --title ...`"
+    ]
+
+
+def _dupe_note(st, cfg) -> list[str]:
+    """How many near-duplicate pairs the log holds that nobody has settled (B-dupes-sweep).
+
+    A NOTE, never a problem: below the ask threshold a score is a prompt to LOOK, not a
+    verdict (R-dedupe-matchers), so failing `doctor` on one would be failing it on a
+    question. The sweep itself is `ddflow dupes`; this only counts. `off` skips it -- a
+    project that switched the check off does not want its cost on every doctor run.
+    """
+    if cfg.dedupe.on_match == "off":
+        return []
+    try:
+        from . import knowledge as K
+
+        n = len(K.pairs_from(st, cfg))
+    except Exception as exc:  # an unreadable index must not take the report down
+        return [f"near-duplicate sweep could not run ({type(exc).__name__}: {exc})"]
+    if not n:
+        return []
+    return [
+        f"{n} unsettled near-duplicate pair(s) at the show floor — `ddflow dupes` lists "
+        f"them; `ddflow link A --duplicate-of B` settles one (or `--distinct` to dismiss it)"
     ]
 
 

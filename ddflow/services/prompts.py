@@ -136,6 +136,15 @@ COMMANDS: dict[str, tuple[str, str, list[str]]] = {
         "duplicate over guarding it twice.",
         ["scope"],
     ),
+    "dedupe_sweep": (
+        "Settle near-duplicate records already in the log",
+        "The knowledge-dedupe cadence pass: run `ddflow dupes --open-only`, read each "
+        "pair, and settle it with `ddflow link <a> --duplicate-of <b>` (a duplicate, and "
+        "for two lessons a merge), `--related`, or `--distinct` when the pair is really "
+        "different — a dismissed pair never returns. Record the pass with "
+        "`ddflow cadence --ran dedupe_sweep`.",
+        [],
+    ),
     "code-clean": (
         "Land everything in flight and leave the tree clean",
         "Classify every worktree and branch, deal with dirty trees by hand, land the "

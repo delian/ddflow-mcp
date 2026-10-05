@@ -260,6 +260,67 @@ def cmd_similar(a, c: Ctx) -> int:
     return OK
 
 
+def cmd_dupes(a, c: Ctx) -> int:
+    """Near-duplicate pairs already in the log. Exit 0 with pairs, 2 with none."""
+    out = A.dupes(
+        c.repo,
+        kinds=a.kind or "",
+        open_only=a.open_only,
+        floor=a.floor,
+        limit=a.limit,
+        agent=c.requested_agent,
+    )
+    keys = ("pairs", "count", "kinds", "open_only", "floor", "limit")
+    if c.json:
+        print(json.dumps(out.body(keys), indent=2, default=str))
+        return out.exit
+    if out.exit != OK:
+        print(out.reason)
+        return out.exit
+    for p in out.data["pairs"]:
+        print(f"{p['score']:.2f}  {p['a']} ({p['a_kind']}) ~ {p['b']} ({p['b_kind']})")
+        print(f"      {p['a_title']}")
+        print(f"      {p['b_title']}")
+    print(
+        f"{out.data['count']} unsettled pair(s) at floor {out.data['floor']:g}. Settle each: "
+        f"`ddflow link <a> --duplicate-of <b>` (or --extends/--related), or "
+        f"`--distinct` to dismiss it for good."
+    )
+    return OK
+
+
+#: The `ddflow link` relations, in the order the parser declares them.
+LINKS = ("extends", "duplicate_of", "related", "distinct")
+
+
+def cmd_link(a, c: Ctx) -> int:
+    """Say how one record relates to another, settling a near-duplicate pair."""
+    relation, target = "", ""
+    for rel in LINKS:
+        target = getattr(a, rel, "") or ""
+        if target:
+            relation = rel
+            break
+    out = A.link_record(
+        c.repo,
+        a.subject,
+        relation,
+        target,
+        reason=a.reason or "",
+        agent=c.requested_agent,
+    )
+    if out.exit != OK:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    merged = out.data.get("merged") or {}
+    tail = f"; {merged['superseded']} superseded by {merged['by']}" if merged else ""
+    c.out(
+        f"{a.subject} {relation} {target}{tail}",
+        out.body(("subject", "relation", "target", "merged")),
+    )
+    return OK
+
+
 def cmd_research(a, c: Ctx) -> int:
     out = D.run(
         a,
