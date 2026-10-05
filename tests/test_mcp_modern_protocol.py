@@ -88,6 +88,14 @@ def test_a_malformed_modern_notification_gets_no_reply(repo):
     assert call(repo, msg) is None
 
 
+def test_a_modern_notification_is_never_answered_even_by_discover(repo):
+    """Review finding: `server/discover` sent without an id got a result with id null."""
+    for method in ("server/discover", "tools/list", "notifications/cancelled"):
+        msg = req(method)
+        del msg["id"]
+        assert call(repo, msg) is None, method
+
+
 def test_modern_tools_list_is_the_same_list_with_cache_hints(repo):
     legacy = call(repo, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]
     modern = call(repo, req("tools/list"))["result"]
