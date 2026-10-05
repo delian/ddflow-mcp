@@ -166,7 +166,7 @@ def _reviewers_add(a, c: Ctx) -> int:
     preset.setdefault("family", R.family_of(preset.get("model", "")))
     if a.no_launch:
         preset.pop("launch", None)
-    body = [f'\n[[reviewer]]\nname = "{name}"']
+    body = [f"\n[[reviewer]]\nname = {_toml_value(name)}"]
     launch = preset.pop("launch", None)
     for k, v in preset.items():
         body.append(f"{k} = {_toml_value(v)}")

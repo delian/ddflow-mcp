@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
+from ..infra import tomlcfg as TC
 from ..infra import worktree as W
 from ._base import _load
 
@@ -480,10 +481,17 @@ def reviewers_detect(
         for m in models:
             fam = R.family_of(m)
             rows.append({"url": url, "label": label, "model": m, "family": fam})
+            # tomlcfg.value, not "{m}": a model name is whatever the endpoint reported,
+            # and a quote in it broke the block (Bb11e7a8186).
+            entry = {
+                "name": m.split("/")[-1].lower(),
+                "base_url": url,
+                "model": m,
+                "family": fam,
+                "gates": ["critic"],
+            }
             blocks.append(
-                f'\n[[reviewer]]\nname = "{m.split("/")[-1].lower()}"\n'
-                f'base_url = "{url}"\nmodel = "{m}"\nfamily = "{fam}"\n'
-                f'gates = ["critic"]\n'
+                "\n[[reviewer]]\n" + "".join(f"{k} = {TC.value(v)}\n" for k, v in entry.items())
             )
     written = ""
     if write:
