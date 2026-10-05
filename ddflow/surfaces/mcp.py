@@ -1063,7 +1063,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             accept=tuple(a.get("accept") or ()),
             agent=agent,
         ),
-        "payload": ("text",),
+        "payload": "",
     },
     "ddflow_recall": {
         "description": (
