@@ -1118,6 +1118,72 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "payload": "candidates",
     },
+    "ddflow_dupes": {
+        "description": (
+            "'IS ANYTHING FILED TWICE?' -- the near-duplicate PAIRS already in the log, "
+            "skipping pairs already linked or dismissed (a `distinct` verdict never "
+            "returns). Read-only. Each pair carries both ids and kinds, their titles and "
+            "the score (0-1). A score is a prompt to LOOK, not a verdict; settle a pair "
+            "with ddflow_link. Nothing close: exit 2."
+        ),
+        "properties": {
+            "kind": (
+                "string",
+                "Comma-separated subset of the configured kinds: bug,task,phase,lesson,"
+                "decision,research,memory. Default: all of them.",
+                False,
+            ),
+            "open_only": (
+                "boolean",
+                "Only pairs where both records are still live (the dedupe_sweep pass).",
+                False,
+            ),
+            "floor": (
+                "number",
+                "Minimum score to report (default: [dedupe].show_floor).",
+                False,
+            ),
+            "limit": ("integer", "At most N pairs (0 = all).", False),
+        },
+        "api": lambda repo, a, agent: _api().dupes(
+            repo,
+            kinds=a.get("kind", "") or "",
+            open_only=bool(a.get("open_only")),
+            floor=a.get("floor"),
+            limit=int(a.get("limit") or 0),
+            agent=agent,
+        ),
+        "payload": ("pairs", "count", "kinds", "open_only", "floor", "limit"),
+    },
+    "ddflow_link": {
+        "description": (
+            "Settle a near-duplicate pair: say how record `subject` relates to record "
+            "`target`. `duplicate_of` / `extends` link them -- and MERGE two lessons (the "
+            "target keeps both texts' tags and seen_in; the duplicate is superseded by it); "
+            "`related` links both ways; `distinct` records a DISMISSAL ('I looked, these "
+            "are different') so the pair never returns. One relation per call. Nothing is "
+            "closed here except a merged lesson."
+        ),
+        "properties": {
+            "subject": ("string", "The record being related (the duplicate, for a merge).", True),
+            "relation": (
+                "string",
+                "extends | duplicate_of | related | distinct.",
+                True,
+            ),
+            "target": ("string", "The record it is related to.", True),
+            "reason": ("string", "Why, recorded with the link.", False),
+        },
+        "api": lambda repo, a, agent: _api().link_record(
+            repo,
+            a.get("subject", "") or "",
+            a.get("relation", "") or "",
+            a.get("target", "") or "",
+            reason=a.get("reason", "") or "",
+            agent=agent,
+        ),
+        "payload": ("subject", "relation", "target", "merged"),
+    },
     "ddflow_status": {
         "description": (
             "The state of the whole project in one answer: how many tasks are done and "
@@ -2892,7 +2958,8 @@ STANDARD_EXTRA_TOOLS = frozenset(
         "decision_applicable decision_list decision_show decision_supersede lesson_search "
         "flow_show pr_status pr_threads reviewers_list version_show research_add phase_add split resolve "
         "remove tests review_triage memory_add memory_list history cleanup render list "
-        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify ci onboard"
+        "rule_add rule_list rule_search rule_edit rule_remove rule_show workflow_state verify ci onboard "
+        "dupes link"
     ).split()
 )
 

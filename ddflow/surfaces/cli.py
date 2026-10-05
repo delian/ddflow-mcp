@@ -47,9 +47,11 @@ from .commands.flow import cmd_flow, cmd_pr, cmd_promote, cmd_version
 from .commands.gates import cmd_gate
 from .commands.knowledge import (
     cmd_bug,
+    cmd_dupes,
     cmd_history,
     cmd_job,
     cmd_lesson,
+    cmd_link,
     cmd_memory,
     cmd_recall,
     cmd_research,
@@ -927,6 +929,51 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         "bug,task,phase,lesson,decision,research,memory (default: all of them)",
     )
     sm.set_defaults(fn=cmd_similar)
+
+    dp = s.add_parser(
+        "dupes",
+        help="'is anything filed twice?' -- the near-duplicate PAIRS already in the log, "
+        "skipping pairs already linked or dismissed (read-only; exit 2 when none)",
+    )
+    dp.add_argument(
+        "--kind",
+        default="",
+        help="comma-separated subset of [dedupe].kinds: "
+        "bug,task,phase,lesson,decision,research,memory (default: all of them)",
+    )
+    dp.add_argument(
+        "--open-only",
+        action="store_true",
+        help="only pairs where both records are still live (the dedupe_sweep pass)",
+    )
+    dp.add_argument(
+        "--floor",
+        type=float,
+        default=None,
+        help="minimum score to report (default: [dedupe].show_floor)",
+    )
+    dp.add_argument("--limit", type=int, default=0, help="at most N pairs (0 = all)")
+    dp.set_defaults(fn=cmd_dupes)
+
+    lk = s.add_parser(
+        "link",
+        help="settle a near-duplicate pair: say how one record relates to another",
+    )
+    lk.add_argument("subject", help="the record being related (the duplicate, for a merge)")
+    lg = lk.add_mutually_exclusive_group(required=True)
+    lg.add_argument("--extends", metavar="ID", default="", help="subject adds to ID")
+    lg.add_argument(
+        "--duplicate-of", metavar="ID", default="", help="subject is the same thing as ID"
+    )
+    lg.add_argument("--related", metavar="ID", default="", help="subject is related to ID")
+    lg.add_argument(
+        "--distinct",
+        metavar="ID",
+        default="",
+        help="subject is NOT a duplicate of ID: dismiss the pair for good",
+    )
+    lk.add_argument("--reason", default="", help="why, recorded with the link")
+    lk.set_defaults(fn=cmd_link)
 
     dc = s.add_parser("decision", help="architectural decisions: record and consult")
     dc_s = dc.add_subparsers(dest="decision_cmd", required=False)
