@@ -24,7 +24,6 @@ the commit.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import tomllib
 from collections.abc import Iterable
@@ -32,7 +31,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from ..infra.tomlcfg import atomic_write
+from ..infra.tomlcfg import atomic_write, basic_string
 from .adopt import BEGIN, END, NATIVE_RULES, Refused
 from .enforce import UnreadableYaml, read_precommit_yaml
 
@@ -296,7 +295,10 @@ def write_manifest(repo: Path, paths: Iterable[str]) -> str:
         "# operator to unfreeze (remove it here and update the ratchet).",
         "[frozen]",
     ]
-    body += [f"{json.dumps(rel)} = {json.dumps(digest)}" for rel, digest in sorted(frozen.items())]
+    # basic_string, not json.dumps: an emoji in a path became a surrogate pair (Bb11e7a8186)
+    body += [
+        f"{basic_string(rel)} = {basic_string(digest)}" for rel, digest in sorted(frozen.items())
+    ]
     atomic_write(repo / MANIFEST_REL, "\n".join(body) + "\n")
     return f"wrote {MANIFEST_REL} with {len(frozen)} frozen file(s)"
 

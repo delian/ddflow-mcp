@@ -14,13 +14,13 @@ or an MCP tool, and a rule enforced in three places is a rule enforced in two.
 
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
 from ..core.plain import plain as _plain
+from ..infra.tomlcfg import value as toml_value
 from ..services.configwrite import _write_config
 from ._base import _load
 
@@ -114,7 +114,7 @@ def pipeline(repo: Path, which: str, gates: str, *, dry_run: bool = False) -> O.
             unknown=unknown,
         )
     key = f"gates.{which}_pipeline"
-    err, _text = _write_config(repo, [(key, json.dumps(ids))], dry_run=dry_run)
+    err, _text = _write_config(repo, [(key, toml_value(ids))], dry_run=dry_run)
     if err:
         return O.failed("workflow.pipeline", err, key=key, gates=ids, applied=False)
     return O.ok("workflow.pipeline", key=key, gates=ids, applied=not dry_run)
@@ -207,9 +207,9 @@ def gate(repo: Path, edit: GateEdit, *, dry_run: bool = False) -> O.Outcome:
                     )
                 at = current.index(edit.after) + 1
             current.insert(at, edit.id)
-            pairs.append((f"gates.{which}_pipeline", json.dumps(current)))
+            pairs.append((f"gates.{which}_pipeline", toml_value(current)))
     if edit.required:
-        pairs.append(("gates.required", json.dumps(sorted({*cfg.gates.required, edit.id}))))
+        pairs.append(("gates.required", toml_value(sorted({*cfg.gates.required, edit.id}))))
 
     err, _text = _write_config(repo, pairs, dry_run=dry_run)
     if err:
@@ -239,10 +239,10 @@ def drop(repo: Path, item: str, *, dry_run: bool = False) -> O.Outcome:
         current = list(getattr(cfg.gates, f"{which}_pipeline"))
         if item in current:
             current.remove(item)
-            pairs.append((f"gates.{which}_pipeline", json.dumps(current)))
+            pairs.append((f"gates.{which}_pipeline", toml_value(current)))
             removed.append(which)
     if item in cfg.gates.required:
-        pairs.append(("gates.required", json.dumps([g for g in cfg.gates.required if g != item])))
+        pairs.append(("gates.required", toml_value([g for g in cfg.gates.required if g != item])))
         removed.append("required")
     if not pairs:
         return O.nothing(

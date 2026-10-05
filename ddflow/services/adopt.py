@@ -1190,8 +1190,18 @@ def _register_mcp(
         text = path.read_text("utf-8") if path.exists() else ""
         if "[mcp_servers.ddflow]" in text:
             return f"{rel} already registers ddflow"
-        args = ", ".join(f'"{a}"' for a in entry.get("args", []))
-        block = f'\n[mcp_servers.ddflow]\ncommand = "{entry["command"]}"\nargs = [{args}]\n'
+        # tomlcfg.value, not '"{a}"': a quote or backslash in a path wrote an agent
+        # config no TOML parser reads, taking every server in it down (Bb11e7a8186).
+        from ..infra.tomlcfg import value as toml_value
+
+        block = (
+            f"\n[mcp_servers.ddflow]\ncommand = {toml_value(entry['command'])}\n"
+            f"args = {toml_value(list(entry.get('args', [])))}\n"
+        )
+        # The env too: a source-checkout or `--launch python` entry carries PYTHONPATH,
+        # and without it the server cannot import ddflow (roborev on 5282d8d8).
+        if entry.get("env"):
+            block += f"env = {toml_value(dict(entry['env']))}\n"
         path.write_text(text.rstrip() + "\n" + block if text.strip() else block.lstrip(), "utf-8")
         return f"registered ddflow in {rel}"
 
