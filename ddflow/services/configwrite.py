@@ -329,8 +329,8 @@ def plain_key_problem(dotted: str) -> str:
         return ""
     plain = _plain_spelling(dotted)
     return KeyRefused(
-        f"{dotted!r} is not a plain key: each dot-separated part must be ASCII letters, "
-        f"digits, `_` or `-` (D-plain-keys)" + (f" -- use {plain}" if plain else "")
+        f"refusing {dotted!r}: not a plain key -- each dot-separated part must be ASCII "
+        f"letters, digits, `_` or `-` (D-plain-keys)" + (f"; use {plain}" if plain else "")
     )
 
 
@@ -345,7 +345,11 @@ def _plain_spelling(dotted: str) -> str:
         key = next(iter(node))
         path.append(key)
         node = node[key]
-    return ".".join(path) if node == 0 and all(_BARE.fullmatch(k) for k in path) else ""
+    plain = ".".join(path)
+    if node != 0 or not all(_BARE.fullmatch(k) for k in path):
+        return ""
+    # Never name a key that would itself be refused (`"gate".a.b.command` -> a dotted id).
+    return "" if _gate_key_problem([(plain, "")]) else plain
 
 
 def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
@@ -498,6 +502,12 @@ def _write_config(
         and pp[0] == "gate"
         and pp[-1] == "human"
     ]
+    # The key itself first: plain keyboard keys only (D-plain-keys), exit 3 -- so the exit
+    # code says "not a plain key" whatever field the key names.
+    problem = next((plain_key_problem(k) for k, _v in pairs if plain_key_problem(k)), "")
+    problem = problem or _gate_key_problem(pairs)
+    if problem:
+        return problem, ""
     if blocked:
         return (
             f"refusing to edit {', '.join(blocked)}: whether a gate is a human "
@@ -505,11 +515,6 @@ def _write_config(
             f"Set `human` in .ddflow/gates.toml, which no tool writes.",
             "",
         )
-    # Then the key itself: plain keyboard keys only (D-plain-keys), exit 3.
-    problem = next((plain_key_problem(k) for k, _v in pairs if plain_key_problem(k)), "")
-    problem = problem or _gate_key_problem(pairs)
-    if problem:
-        return problem, ""
 
     from . import workflow as WF
 

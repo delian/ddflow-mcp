@@ -76,3 +76,19 @@ def test_a_hand_written_quoted_key_is_still_read(repo):
     cfg = repo / ".ddflow" / "config.toml"
     cfg.write_text(cfg.read_text("utf-8") + '\n[gate."unit_tests"]\ntimeout_s = 77\n', "utf-8")
     assert run_cli(repo, "brief")[0] in (0, 2)
+
+
+def test_a_quoted_human_key_is_refused_as_not_plain_exit_3(repo):
+    """roborev on 04ffcb6e: the human-flag guard ran first and answered exit 1; the exit
+    code says 'not a plain key' whatever field the key names."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config", "--set", 'gate.unit_tests."human"', "false")
+    assert code == REFUSED and "refusing" in err, (code, out, err)
+
+
+def test_no_unusable_plain_spelling_is_suggested(repo):
+    """roborev on 04ffcb6e: `"gate".a.b.command` suggested `gate.a.b.command`, which is
+    itself refused (a dotted gate id)."""
+    run_cli(repo, "init")
+    code, out, err = run_cli(repo, "config", "--set", '"gate".a.b.command', "x")
+    assert code == REFUSED and "use gate.a.b.command" not in err, (code, out, err)
