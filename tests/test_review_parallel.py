@@ -44,6 +44,12 @@ class _Fake:
     def __init__(self) -> None:
         self.calls: dict[str, int] = {}
         self.hung_up = 0  # connections the client closed while we were still working
+        #: `in_flight`/`peak` count the requests being WORKED ON (their DELAY), not the
+        #: open sockets. The two differ by the response write: the client starts the next
+        #: sequential chunk the instant it reads the previous response, so a count kept
+        #: until after `wfile.write` can overlap with the next request when this thread is
+        #: descheduled -- under load a max_concurrency=1 run then read `peak == 2`
+        #: (bug B32e97ebbb8). `in_flight` is released the moment the work is over, below.
         self.in_flight = 0
         self.peak = 0
         self.lock = threading.Lock()
@@ -62,11 +68,16 @@ class _Fake:
                     nth = fake.calls[key]
                     fake.in_flight += 1
                     fake.peak = max(fake.peak, fake.in_flight)
+                released = False
                 try:
                     delay = float(m.group(1)) if (m := re.search(r"DELAY=([\d.]+)", text)) else 0
                     if "STALL_FIRST" in text and nth == 1:
                         delay = 60
-                    if fake._wait_or_hangup(self.connection, delay):
+                    hung = fake._wait_or_hangup(self.connection, delay)
+                    with fake.lock:  # the work is done: leave `in_flight` BEFORE responding
+                        fake.in_flight -= 1
+                    released = True
+                    if hung:
                         return
                     if "OFF_CONTRACT" in text:
                         reply = "I thought about it at length and have nothing to add."
@@ -83,8 +94,9 @@ class _Fake:
                     self.end_headers()
                     self.wfile.write(out)
                 finally:
-                    with fake.lock:
-                        fake.in_flight -= 1
+                    if not released:
+                        with fake.lock:
+                            fake.in_flight -= 1
 
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), H)
         self.server.daemon_threads = True
