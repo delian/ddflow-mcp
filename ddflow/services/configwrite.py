@@ -310,27 +310,59 @@ def _key_parts(k: str) -> list[str]:
     return [seg.strip().strip("\"'") for seg in k.split(".")]
 
 
-def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
-    """A plain refusal for a `gate.*` key whose gate id is not a bare key (B72b8adba30).
+class KeyRefused(str):
+    """A key refused under D-plain-keys: the caller answers exit 3 (refused), not 1."""
 
-    The id is the segment after `gate.`, except that `gate.<id>.env.<VAR>` -- `env` is
-    the one table-valued gate field -- is the only four-part shape; any other longer key
-    is a dotted id (`gate.x.command.command` names `x.command`). Every segment must be a
-    bare key too: `_toml_upsert` writes them unquoted, so `gate.a b.c.command` would
-    otherwise fail as a raw TOML parse error. A segment carrying a string escape
-    (`"\\u0063ommand"`) is not judged here: it is only readable decoded, so the parsed
-    RESULT judges it, in `_gate_table_problems` (roborev on 57c524b7).
+
+_BARE = re.compile(r"[A-Za-z0-9_-]+")
+
+
+def plain_key_problem(dotted: str) -> str:
+    """Why ``dotted`` is not a key a CLI or MCP surface accepts, or "" (D-plain-keys).
+
+    A key is typed from a normal keyboard: dot-separated TOML bare-key segments, ASCII
+    letters, digits, `_` and `-`. A quoted segment, a string escape, whitespace or
+    non-ASCII is refused -- with the plain spelling named when the key has one, so no
+    user is ever told to type an escape. Hand-written TOML files are still read as TOML.
+    """
+    if all(_BARE.fullmatch(seg) for seg in dotted.split(".")):
+        return ""
+    plain = _plain_spelling(dotted)
+    return KeyRefused(
+        f"{dotted!r} is not a plain key: each dot-separated part must be ASCII letters, "
+        f"digits, `_` or `-` (D-plain-keys)" + (f" -- use {plain}" if plain else "")
+    )
+
+
+def _plain_spelling(dotted: str) -> str:
+    """The bare spelling of a quoted or escaped key, as TOML reads it, or ""."""
+    try:
+        node: object = tomllib.loads(f"{dotted} = 0")
+    except tomllib.TOMLDecodeError:
+        return ""
+    path: list[str] = []
+    while isinstance(node, dict) and len(node) == 1:
+        key = next(iter(node))
+        path.append(key)
+        node = node[key]
+    return ".".join(path) if node == 0 and all(_BARE.fullmatch(k) for k in path) else ""
+
+
+def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
+    """A plain refusal for a `gate.*` key that names a dotted gate id (B72b8adba30).
+
+    Run after `plain_key_problem`, so every segment is already bare. The id is the
+    segment after `gate.`, except that `gate.<id>.env.<VAR>` -- `env` is the one
+    table-valued gate field -- is the only four-part shape; any other longer key is a
+    dotted id (`gate.x.command.command` names `x.command`) and would nest a table.
     """
     for k, _v in pairs:
-        pp = _key_parts(k)
-        if pp[0] != "gate" or len(pp) < _GATE_KEY_PARTS:
+        pp = k.split(".")
+        if pp[0] != "gate" or len(pp) <= _GATE_KEY_PARTS:
             continue
-        env_entry = len(pp) == _GATE_KEY_PARTS + 1 and pp[2] == "env"
-        gid = pp[1] if len(pp) == _GATE_KEY_PARTS or env_entry else ".".join(pp[1:-1])
-        plain = [seg for seg in (gid, *pp[1:]) if "\\" not in seg]
-        problem = next((gate_id_problem(seg) for seg in plain if gate_id_problem(seg)), "")
-        if problem:
-            return problem
+        if len(pp) == _GATE_KEY_PARTS + 1 and pp[2] == "env":
+            continue
+        return gate_id_problem(".".join(pp[1:-1]))
     return ""
 
 
@@ -383,11 +415,11 @@ def gate_id_problem(gid: str) -> str:
     for a dot, nests a table -- `gate.a.b.command` wrote `[gate.a.b]`, exit 0, and
     every later command refused to load it.
     """
-    if re.fullmatch(r"[A-Za-z0-9_-]+", gid):
+    if _BARE.fullmatch(gid):
         return ""
-    return (
+    return KeyRefused(
         f"{gid!r} cannot be a gate id: use only ASCII letters, digits, `_` and `-` "
-        f"(it names the [gate.<id>] section of the config)."
+        f"(it names the [gate.<id>] section of the config; D-plain-keys)."
     )
 
 
@@ -466,9 +498,6 @@ def _write_config(
         and pp[0] == "gate"
         and pp[-1] == "human"
     ]
-    problem = _gate_key_problem(pairs)
-    if problem:
-        return problem, ""
     if blocked:
         return (
             f"refusing to edit {', '.join(blocked)}: whether a gate is a human "
@@ -476,6 +505,11 @@ def _write_config(
             f"Set `human` in .ddflow/gates.toml, which no tool writes.",
             "",
         )
+    # Then the key itself: plain keyboard keys only (D-plain-keys), exit 3.
+    problem = next((plain_key_problem(k) for k, _v in pairs if plain_key_problem(k)), "")
+    problem = problem or _gate_key_problem(pairs)
+    if problem:
+        return problem, ""
 
     from . import workflow as WF
 

@@ -196,9 +196,9 @@ def cmd_config(a, c: Ctx) -> int:
         ),
         agent=c.requested_agent,
     )
-    if out.exit == FAIL:
+    if out.exit != OK:
         print(out.reason, file=sys.stderr)
-        return FAIL
+        return out.exit
     # What `[lease] append_only_globs` just made ddflow write (D-shared-globs): a tracked
     # file changed, and the operator commits it with the config.
     added = "".join(
