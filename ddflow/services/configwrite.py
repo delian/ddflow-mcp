@@ -398,7 +398,9 @@ def _write_config(
         and pp[-1] == "human"
     ]
     for k, _v in pairs:
-        pp = [seg.strip() for seg in k.split(".")]
+        # Normalised like the human guard: `"gate".a.b.command` is the same TOML key, and
+        # `gate."unit_tests".command` names the bare id unit_tests (roborev on 6a91557b).
+        pp = _key_parts(k)
         if pp[0] == "gate" and len(pp) > 1:
             # Everything between `gate.` and the field is the id: `gate.a.b.command`
             # names the id `a.b`, which is refused, not silently nested.
