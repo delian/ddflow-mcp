@@ -2919,7 +2919,10 @@ auto_promote = ["pre-production"]   # optional: continuous delivery to staging
   branch with the upstream branch already merged in (a conflict is left for the agent,
   like a port's). It runs `gates.promotion_pipeline` — `unit_tests` and `merge` by
   default, since what it carries already passed its own pipeline; add a human gate there
-  for a person's sign-off on each deploy. It needs no cross-family reviewer: it authors
+  for a person's sign-off on each deploy, and name it in `gates.required` to make that
+  sign-off mandatory (every `gates.*_pipeline` counts, so a gate only the promotion
+  pipeline runs is not an inert requirement). `ddflow workflow` lists the promotion
+  pipeline beside the task and phase ones. It needs no cross-family reviewer: it authors
   nothing.
 * **With `integration = "pr"`** the promotion lands through a merge request into the
   environment branch — the approval *is* the deploy approval — and `pr sync` completes it.
