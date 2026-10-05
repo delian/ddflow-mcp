@@ -339,13 +339,16 @@ def cmd_hooks(a, c: Ctx) -> int:
         msg_file=getattr(a, "msg_file", "") or "",
         agent=c.requested_agent,
         gemini=bool(getattr(a, "gemini", False)),
-        stdin=_hook_stdin() if a.hooks_cmd == "prompt" else "",
+        stdin=_hook_stdin() if a.hooks_cmd in ("prompt", "pre-compact", "session-start") else "",
     )
     if a.hooks_cmd == "prompt":
         # Gemini CLI insists on JSON on stdout; Claude Code would add ANY stdout to the
         # model's context. So: `{}` for one, nothing for the other. Always exit 0.
         if getattr(a, "gemini", False):
             print("{}")
+        return OK
+    if a.hooks_cmd == "pre-compact":
+        # Silent and always 0: PreCompact output can only block, never inform (B195).
         return OK
     if a.hooks_cmd == "session-start":
         # Claude Code puts this STDOUT into the session's context. Always exit 0: a hook

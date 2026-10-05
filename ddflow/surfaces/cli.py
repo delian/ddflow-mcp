@@ -1579,6 +1579,12 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="(invoked by the Claude Code SessionStart hook) print the brief; always exit 0",
     ).set_defaults(fn=cmd_hooks)
 
+    hk_s.add_parser(
+        "pre-compact",
+        help="(invoked by the Claude Code PreCompact hook) record what the session was doing "
+        "before compaction; always exit 0",
+    ).set_defaults(fn=cmd_hooks)
+
     hkp = hk_s.add_parser(
         "prompt",
         help="(invoked by the UserPromptSubmit / BeforeAgent hook) record the prompt on stdin; "

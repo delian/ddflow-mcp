@@ -527,8 +527,15 @@ class SessionConfig:
     replay_verify_diffs: bool = True
     #: The progress block `complete` adds: on | phase | off (see services/progress_line).
     progress_after_complete: str = "on"
+    #: Characters of transcript the PreCompact hook keeps as a session note (0 = off).
+    compaction_digest_chars: int = 2000
 
 
+_doc(
+    "session",
+    "compaction_digest_chars",
+    "Before Claude Code compacts the context, the PreCompact hook (`ddflow hooks install --claude`) records the last turns of the transcript -- the operator's words and the agent's answers, no tool traffic, secrets redacted -- as a session note of at most this many characters, and the SessionStart hook hands it back after compaction. The hook gets no summary from Claude Code, so this digest is the record of what the session was doing. 0 turns it off.",
+)
 _doc(
     "session",
     "progress_after_complete",
