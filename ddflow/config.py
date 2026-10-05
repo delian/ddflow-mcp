@@ -1862,7 +1862,7 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "lease.reclaim_policy": ("report", "never steals a lease, so a crashed agent's work survives"),
     "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
     "flow.model": ("trunk", "no safety dimension; the plain model, which moves no branches"),
-    "flow.integration": ("pr", "a merge waits for approval on the forge instead of landing locally"),
+    "flow.integration": ("pr", "a merge waits for approval on the forge, not landing locally"),
     "flow.forge": ("auto", "no safety dimension; reads the forge from the remote URL"),
     "flow.claims": ("remote", "one clone wins a claim; an unreachable remote refuses it"),
     "flow.pr_merge": ("human", "ddflow never merges; a person does"),
