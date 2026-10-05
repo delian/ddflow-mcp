@@ -682,6 +682,11 @@ def doctor(repo: Path, *, agent: str = "") -> O.Outcome:
 
     notes.extend(export_select.doctor_notes(repo, cfg, st))
     notes.extend(_export_target_notes(repo, cfg))
+    from ..infra import signals as SIG
+
+    # A NOTE: a host signal this platform cannot supply only narrows what adaptive
+    # parallelism steers by; it is never a failure.
+    notes.extend(SIG.doctor_notes(SIG.HostSignals(repo)))
     if not (repo / ".ddflow").exists():
         problems.append("no .ddflow directory — run `ddflow init`")
     _primary_mid_merge(repo, problems, notes)
