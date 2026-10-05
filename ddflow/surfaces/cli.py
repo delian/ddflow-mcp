@@ -70,6 +70,7 @@ from .commands.lifecycle import (
     cmd_unblock,
     cmd_wait,
 )
+from .commands.onboard import add_onboard_parser
 from .commands.operations import (
     cmd_cadence,
     cmd_cleanup,
@@ -1018,6 +1019,7 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
 
     add_verify_parser(s)
     add_ci_parser(s)
+    add_onboard_parser(s)
 
     stt = s.add_parser("status", help="one answer to 'what is the state of this project?'")
     stt.set_defaults(fn=cmd_status)
