@@ -1806,6 +1806,7 @@ def _unit_interval(v: Any) -> str:
 #: `tests/test_config_enum_knobs.py` finds any comment or knob doc listing `a | b` that
 #: this table does not cover.
 _BLOCK_WARN_OFF = ("block", "warn", "off")
+PROGRESS_MODES = ("on", "phase", "off")
 KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "lease.reclaim_policy": ("report", "auto"),
     "worktree.merge_strategy": ("no-ff", "ff-only", "squash"),
@@ -1818,7 +1819,7 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "flow.port_strategy": FLOW_PORT_STRATEGIES,
     "gates.enforce_order": ("warn", "block", "off"),
     "lessons.search_backend": ("fts5", "like"),
-    "session.progress_after_complete": ("on", "phase", "off"),
+    "session.progress_after_complete": PROGRESS_MODES,
     "schedule.ready_policy": ("deps_and_lease", "deps_only"),
     "schedule.cycle_policy": ("error", "warn"),
     "schedule.unknown_dep_policy": ("block", "warn"),
@@ -1867,6 +1868,8 @@ def _export_tables_problem(v: Any) -> str:
 #: `max_behind = 0` read as "never warn" would be a switch hidden in a threshold -- the
 #: silent-knob-drop class -- when `behind = "off"` already says it plainly.
 _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
+    # First, so a hand-written check below for the same key would win over the derived one.
+    **{key: _one_of(allowed) for key, allowed in KNOB_CHOICES.items()},
     "export.tables": _export_tables_problem,
     "export.max_bytes": lambda v: (
         "" if isinstance(v, int) and not isinstance(v, bool) and v >= 0 else "must be an integer >= 0"
@@ -1905,7 +1908,6 @@ _KNOB_CHECKS: dict[str, Callable[[Any], str]] = {
         else f"must be a non-empty list drawn from {', '.join(DEDUPE_KINDS)}; "
         'to stop the check set [dedupe].on_match = "off"'
     ),
-    **{key: _one_of(allowed) for key, allowed in KNOB_CHOICES.items()},
 }  # fmt: skip
 
 
