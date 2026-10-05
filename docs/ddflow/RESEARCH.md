@@ -1993,8 +1993,8 @@ sub-1 ADOPTED parent-tree, branch parent-work
 **Probe:**
 
 ```console
-$ tests/test_reviewer_trust.py per_call tests: configure(agent='sub-7') authors reviewer.configured as [REDACTED:hostname]-proj-...; expected sub-7
-2 failed: assert {'[REDACTED:hostname]-proj-3737b9'} == {'sub-7'}
+$ tests/test_reviewer_trust.py per_call tests: configure(agent='sub-7') authors reviewer.configured as Monster3-proj-...; expected sub-7
+2 failed: assert {'Monster3-proj-3737b9'} == {'sub-7'}
 ```
 
 ## B7774c7e07b: roborev findings a-e on _refusal_body
@@ -4573,7 +4573,7 @@ Only hits: claude-code.md delta (ScheduleWakeup / sleep 600 heartbeat) and imple
 
 ```console
 $ pytest tests/test_identity_upgrade.py -q (unfixed code)
-3 failed, 3 passed: heartbeat 'no lease held T1'; re-claim 'T1 is held by [REDACTED:hostname]-proj for another 1800s'; no re-homed note. Negative cases (bare lease after the suffix existed, explicit/env identity, once-only) pass trivially. Release was NOT a discriminator: release is open to anyone by design.
+3 failed, 3 passed: heartbeat 'no lease held T1'; re-claim 'T1 is held by Monster3-proj for another 1800s'; no re-homed note. Negative cases (bare lease after the suffix existed, explicit/env identity, once-only) pass trivially. Release was NOT a discriminator: release is open to anyone by design.
 ```
 
 **Sources:** ddflow/infra/log.py, ddflow/api/_base.py, ddflow/core/model.py, ddflow/services/leases.py
@@ -4913,7 +4913,7 @@ codeguide: installed ([); memory/sequential: installed (npm warn Unknown user co
 
 ```console
 $ pytest tests/test_log_lamport_merge.py (bare remote, two clones, DDFLOW_AGENT=sameid, git pull --no-rebase with merge=union) on unfixed code; timing script: 20k-event shard, _highest_lamport vs max over _read_shard events x50
-5 failed, 3 passed: title 'v4' == 'v5' fails; fresh append lamport 2 != 5 after a stray lamport-1 tail; doctor text only 'index is stale'; '[REDACTED:hostname]-proj' != '[REDACTED:hostname]-proj' for x/proj vs y/proj; worktree id '[REDACTED:hostname]-wt-one' has no clone suffix. Timing: tail 0.04 ms, warm scan 7.47 ms, cold scan 122.9 ms.
+5 failed, 3 passed: title 'v4' == 'v5' fails; fresh append lamport 2 != 5 after a stray lamport-1 tail; doctor text only 'index is stale'; 'Monster3-proj' != 'Monster3-proj' for x/proj vs y/proj; worktree id 'Monster3-wt-one' has no clone suffix. Timing: tail 0.04 ms, warm scan 7.47 ms, cold scan 122.9 ms.
 ```
 
 **Sources:** ddflow/infra/log.py, ddflow/infra/worktree.py repo_root, gitattributes(5) merge=union
@@ -4945,7 +4945,7 @@ implement.md 7869 flattened bytes, pinned 512, needles 27: includes all 5 parame
 
 ```console
 $ scratchpad two-clone probes with a bare remote: same id added in both, same item claimed in both, DDFLOW_AGENT=sameid in both, then git pull --no-rebase
-no conflict markers; T2 kept BOB only; T1 lease [REDACTED:hostname]-bob only; shared shard lamports [1,2,3,4,1] and newest update lost; doctor Healthy in all
+no conflict markers; T2 kept BOB only; T1 lease Monster3-bob only; shared shard lamports [1,2,3,4,1] and newest update lost; doctor Healthy in all
 ```
 
 **Sources:** ddflow/infra/log.py, ddflow/core/events.py, .gitattributes, .ddflow/.gitignore, docs/BACKLOG.md B111
