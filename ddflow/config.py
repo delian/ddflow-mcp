@@ -1958,13 +1958,40 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
 #: Each enum knob's values that make ddflow act OUTSIDE this clone: a push, a pull
 #: request, remote claim refs, a merge on the forge. No `KNOB_STRICTEST` fallback may be
 #: one (D-fallback-no-remote): outward behaviour happens only when someone sets it
-#: correctly, on purpose. Every KNOB_CHOICES key has an entry, empty when none, so a new
-#: knob cannot skip the question.
+#: correctly, on purpose. Written out for EVERY KNOB_CHOICES key, empty when none, and
+#: the test requires the two key sets to match: a new knob fails it until its author
+#: answers the question here (a seeded default would answer it for them).
 KNOB_OUTWARD: dict[str, frozenset[str]] = {
-    **{key: frozenset() for key in KNOB_CHOICES},
+    "lease.reclaim_policy": frozenset(),
+    "worktree.merge_strategy": frozenset(),
+    "flow.model": frozenset(),
     "flow.integration": frozenset({"pr"}),  # pushes the branch, opens a pull request
+    "flow.forge": frozenset(),
     "flow.claims": frozenset({"remote"}),  # writes refs/ddflow/claims/<id> on the remote
     "flow.pr_merge": frozenset({"on_approval", "auto"}),  # a merge on the forge
+    "flow.on_changes_requested": frozenset(),
+    "flow.port_strategy": frozenset(),
+    "gates.enforce_order": frozenset(),
+    "lessons.search_backend": frozenset(),
+    "session.progress_after_complete": frozenset(),
+    "schedule.ready_policy": frozenset(),
+    "schedule.cycle_policy": frozenset(),
+    "schedule.unknown_dep_policy": frozenset(),
+    "schedule.empty_phase": frozenset(),
+    "dedupe.on_match": frozenset(),
+    "enforce.commit_without_lease": frozenset(),
+    "enforce.generated_views": frozenset(),
+    "enforce.stale_docs": frozenset(),
+    "enforce.environment_commits": frozenset(),
+    "enforce.stale_rules": frozenset(),
+    "enforce.readme_with_code": frozenset(),
+    "enforce.behind": frozenset(),
+    "loops.on_detect": frozenset(),
+    "review.on_exceed": frozenset(),
+    "upgrade.skew": frozenset(),
+    "mcp.tools": frozenset(),
+    "ci.on_merge": frozenset(),
+    "export.refresh": frozenset(),
 }
 
 for _key, (_value, _why) in KNOB_STRICTEST.items():
