@@ -552,6 +552,9 @@ All four reach MCP — `ddflow_workflow`, `ddflow_workflow_pipeline`,
 Nothing is written until it is checked, and the order is the point: compose the change,
 validate the **result**, then replace the file atomically.
 
+- **A gate id is ASCII letters, digits, `_` and `-`**: it names the `[gate.<id>]`
+  section, so `workflow gate` refuses anything else up front (a dot would nest a table:
+  `a.b` defined gate `a`).
 - **A pipeline naming an undefined gate is refused**, naming the near miss. That one is
   otherwise silent and permanent: the outcome folds to empty, completion refuses it
   forever, and `gate record` rejects the id as unknown — so the item can never be
