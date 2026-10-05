@@ -552,10 +552,13 @@ All four reach MCP — `ddflow_workflow`, `ddflow_workflow_pipeline`,
 Nothing is written until it is checked, and the order is the point: compose the change,
 validate the **result**, then replace the file atomically.
 
-- **A gate id is ASCII letters, digits, `_` and `-`**: it names the `[gate.<id>]`
-  section, so `workflow gate` and `config --set gate.<id>.<field>` refuse anything else
-  up front (a dot would nest a table:
-  `a.b` defined gate `a`).
+- **Keys are plain keyboard keys** (decision D-plain-keys). Every key `config --set`,
+  `ddflow_configure` and the `workflow` commands accept is dot-separated ASCII letters,
+  digits, `_` and `-`; a quoted segment, a `\uXXXX` escape, whitespace or non-ASCII is
+  refused with exit 3, naming the plain spelling when there is one (`use
+  gate.unit_tests.command`). A gate id follows the same rule -- it names the
+  `[gate.<id>]` section, and a dot in it would nest a table (`a.b` defined gate `a`).
+  Hand-written TOML files are still read as TOML.
 - **A pipeline naming an undefined gate is refused**, naming the near miss. That one is
   otherwise silent and permanent: the outcome folds to empty, completion refuses it
   forever, and `gate record` rejects the id as unknown — so the item can never be

@@ -326,7 +326,13 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     An append is validated against the MERGED text — see the module docstring for why
     validating what is already on disk checks nothing.
     """
-    from ..services.configwrite import _append_config, _toml_literal, _write_config, config_file
+    from ..services.configwrite import (
+        KeyRefused,
+        _append_config,
+        _toml_literal,
+        _write_config,
+        config_file,
+    )
 
     edit = edit or ConfigEdit()
     _log, cfg, _st = _load(repo, agent)
@@ -335,7 +341,9 @@ def configure(repo: Path, edit: ConfigEdit | None = None, *, agent: str = "") ->
     if edit.set:
         err, _text = _write_config(repo, [(edit.set, edit.value)], local=edit.local, agent=agent)
         if err:
-            return O.failed("config", err, key=edit.set, value=edit.value, rows=[], text="")
+            # A key that is not plain (D-plain-keys) is refused, not failed: exit 3.
+            done = O.refused if isinstance(err, KeyRefused) else O.failed
+            return done("config", err, key=edit.set, value=edit.value, rows=[], text="")
         added = [] if edit.local else _sync_attributes(repo)
         return O.ok(
             "config",

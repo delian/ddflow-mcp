@@ -61,10 +61,11 @@ def test_config_set_refuses_a_gate_key_whose_id_is_not_a_bare_key(repo, key):
     assert run_cli(repo, "brief")[0] in (0, 2)
 
 
-def test_a_quoted_bare_gate_id_is_still_accepted(repo):
+def test_a_quoted_bare_gate_id_is_refused_naming_the_plain_key(repo):
+    """D-plain-keys: a quoted spelling is refused, with the plain one named."""
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "config", "--set", 'gate."unit_tests".command', "echo hi")
-    assert code == 0, (out, err)
+    assert code == 3 and "use gate.unit_tests.command" in err, (code, out, err)
 
 
 def test_a_gate_env_entry_is_still_accepted(repo):
@@ -97,9 +98,9 @@ def test_an_existing_quoted_id_does_not_mask_a_new_nested_block(repo):
 @pytest.mark.parametrize(
     "key", ['gate.unit_tests."\\u0063ommand"', 'gate."\\u0075nit_tests".command']
 )
-def test_an_escaped_spelling_of_a_valid_gate_key_is_accepted(repo, key):
-    """roborev on 57c524b7: the per-segment check refused an escaped segment that decodes
-    to a valid key; the decoded result is what is judged."""
+def test_an_escaped_spelling_of_a_valid_gate_key_is_refused_naming_the_plain_one(repo, key):
+    """D-plain-keys (operator, replacing roborev's 'TOML allows escaped keys' on
+    57c524b7): an escape is never accepted; the refusal names the plain spelling."""
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "config", "--set", key, "echo hi")
-    assert code == 0, (out, err)
+    assert code == 3 and "use gate.unit_tests.command" in err, (code, out, err)
