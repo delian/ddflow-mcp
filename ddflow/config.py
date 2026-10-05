@@ -1090,7 +1090,7 @@ class McpConfig:
 _doc(
     "mcp",
     "tools",
-    "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). An unrecognised value is refused on write; in a config file it is skipped with a warning (a newer release's tier) and `all` applies.",
+    "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). A newer release's tier in a config file is tolerated (see below).",
 )
 
 
@@ -1506,6 +1506,10 @@ _doc(
 )
 
 
+#: `Config` fields that are bookkeeping, not `[section]`s.
+_NOT_SECTIONS = ("sources", "unknown_knobs", "_fallback_notes")
+
+
 @dataclass
 class Config:
     lease: LeaseConfig = field(default_factory=LeaseConfig)
@@ -1534,11 +1538,23 @@ class Config:
     rules: RulesConfig = field(default_factory=RulesConfig)
     agent: AgentConfig = field(default_factory=AgentConfig)
 
-    #: where each knob's final value came from -- "default" | "file" | "local" | "env"
+    #: where each knob's final value came from -- "default" | "file" | "local" | "env",
+    #: or "<layer> (strictest fallback)" for an enum value a file layer had wrong
     sources: dict[str, str] = field(default_factory=dict, repr=False)
-    #: Keys a config FILE carried that this code does not know -- "sec.knob", or "[sec]"
-    #: for a whole section. Skipped, not fatal: see `_apply`.
+    #: What a config FILE carried that this code does not know: a key -- "sec.knob", or
+    #: "[sec]" for a whole section -- skipped, not fatal; or an enum value, whose note says
+    #: the strictest value was APPLIED instead, or which later layer overrode it
+    #: (`fallback_entries` tells the two kinds apart). See `_apply`.
     unknown_knobs: list[str] = field(default_factory=list, repr=False)
+
+    #: For each enum knob that fell back to its strictest value, the (index in
+    #: unknown_knobs, "key = 'bad'") of each note, so a later layer's value rewrites the
+    #: note from its parts, never by parsing text that holds the user's own value. A
+    #: field, so `dataclasses.replace` carries it alongside `unknown_knobs` -- both
+    #: shallowly, like `sources`: the copy shares them with the original.
+    _fallback_notes: dict[str, list[tuple[int, str]]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
 
     # -- loading ------------------------------------------------------------------
     @classmethod
@@ -1574,7 +1590,7 @@ class Config:
         if envdata:
             cfg._apply(envdata, "env")
         if root is not None:
-            _warn_unknown(cfg.unknown_knobs, Path(root))
+            _warn_unknown(cfg.unknown_knobs, Path(root), cfg.fallback_entries())
         return cfg
 
     @classmethod
@@ -1593,7 +1609,7 @@ class Config:
         cls()._apply(data, "check")
 
     def _sections(self) -> list[str]:
-        return [f.name for f in fields(self) if f.name not in ("sources", "unknown_knobs")]
+        return [f.name for f in fields(self) if f.name not in _NOT_SECTIONS]
 
     #: Top-level TOML tables that are NOT config sections and must not be treated as
     #: typos. They are consumed by other loaders: `[gate.*]` by gates.load_gates,
@@ -1662,12 +1678,48 @@ class Config:
                     if lenient and f"{sec}.{knob}" in _TOLERANT_VALUES:
                         # A value this code does not know, in a file that may be NEWER
                         # than the code (a later release's tier): recorded like an unknown
-                        # knob and left at its default, so no command stops loading config.
-                        self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
+                        # knob, so no command stops loading config -- and an enum knob
+                        # takes its STRICTEST value, not its default, so a typo in a
+                        # tightened setting fails closed (D-enum-fallback-strict).
+                        if f"{sec}.{knob}" not in KNOB_STRICTEST:
+                            self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
+                            continue
+                        bad, value = value, strictest(f"{sec}.{knob}")
+                        # an earlier layer's note names what THIS layer wrote, not the
+                        # fallback; each bad value stays its own (true) report
+                        self._forget_fallback(
+                            f"{sec}.{knob}",
+                            f"the {source} value {bad!r}, itself unknown: "
+                            f"{strictest(f'{sec}.{knob}')!r} is in effect",
+                        )
+                        head = f"{sec}.{knob} = {bad!r}"
+                        self._fallback_notes.setdefault(f"{sec}.{knob}", []).append(
+                            (len(self.unknown_knobs), head)
+                        )
+                        self.unknown_knobs.append(
+                            f"{head} (not a value this ddflow knows; "
+                            f"in effect: {value!r}, the strictest)"
+                        )
+                        setattr(target, knob, value)
+                        self.sources[f"{sec}.{knob}"] = f"{source} (strictest fallback)"
                         continue
                     raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
+                self._forget_fallback(f"{sec}.{knob}", f"the {source} value {value!r}")
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
+
+    def fallback_entries(self) -> set[str]:
+        """The `unknown_knobs` entries that are strictest-fallback notes -- a value applied
+        (the strictest, or a later layer's override, as the note says), never a skipped
+        key -- read from the bookkeeping, never from the notes' text."""
+        return {self.unknown_knobs[i] for notes in self._fallback_notes.values() for i, _ in notes}
+
+    def _forget_fallback(self, key: str, by: str) -> None:
+        """A later layer set `key`: an earlier layer's strictest-fallback note must stop
+        claiming its value is in effect, or doctor reports `block` while `warn` runs.
+        `by` names what overrode it -- and, when that is itself unknown, what runs."""
+        for i, head in self._fallback_notes.get(key, []):
+            self.unknown_knobs[i] = f"{head} (not a value this ddflow knows; overridden by {by})"
 
     def _apply_export_tables(
         self, values: dict[str, Any], lenient: bool, source: str
@@ -1706,6 +1758,7 @@ class Config:
     def as_dict(self) -> dict[str, Any]:
         out = dataclasses.asdict(self)
         out.pop("sources", None)
+        out.pop("_fallback_notes", None)
         return out
 
     def explain(self) -> list[tuple[str, Any, str, str]]:
@@ -1752,8 +1805,11 @@ def _is_code_tree(root: Path) -> bool:
 _WARNED: set[tuple[str, str]] = set()
 
 
-def _warn_unknown(keys: list[str], root: Path) -> None:
-    """Say, on stderr, which config keys this code skipped.
+def _warn_unknown(
+    keys: list[str], root: Path, fallbacks: set[str] | frozenset[str] = frozenset()
+) -> None:
+    """Say, on stderr, which config keys this code skipped, and which unknown enum values
+    it replaced (each note names the value in effect: the strictest, or a later layer's).
 
     Skipping without a word is the silent-knob-drop class: 81a52e3 made an unknown key
     load-and-skip so an older tree keeps working, but only `doctor` mentioned it, so
@@ -1764,11 +1820,20 @@ def _warn_unknown(keys: list[str], root: Path) -> None:
     if not new:
         return
     _WARNED.update((str(root), k) for k in new)
+    # An enum knob's unknown value is not skipped: it is APPLIED as the knob's strictest
+    # value (D-enum-fallback-strict), and saying "skipped" would read as "no effect".
+    fell_back = [k for k in new if k in fallbacks]
+    skipped = [k for k in new if k not in fallbacks]
+    what = []
+    if skipped:
+        what.append(f"{', '.join(skipped)}, which this ddflow does not know; skipped")
+    if fell_back:
+        what.append(f"{', '.join(fell_back)}; each such knob takes the value its note names")
     print(
         f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
-        f"{', '.join(new)}, which this ddflow ({_CODE_TREE}) does not know; skipped. The "
-        "config is newer than this code: merge main into this tree (or, if it is a "
-        "typo, fix it; `ddflow doctor` lists each).",
+        f"{'. It sets '.join(what)}. (This ddflow: {_CODE_TREE}.) The config is newer "
+        "than this code: merge main into this tree (or, if it is a typo, fix it; "
+        "`ddflow doctor` lists each).",
         file=sys.stderr,
     )
 
@@ -1841,10 +1906,66 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "export.refresh": EXPORT_REFRESH_MODES,
 }
 
+#: The value each enum knob takes when a config FILE gives it one this code does not know
+#: (decision D-enum-fallback-strict, superseding the fall-back-to-default part of
+#: D9b8061fd38): its STRICTEST allowed value, so a typo in a deliberately tightened
+#: setting can only make ddflow more careful, never quietly loosen it. For a knob with
+#: no safety dimension the "strictest" is the value that does the most checking or
+#: changes least; the reason is appended to each knob's doc below.
+#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key.
+KNOB_STRICTEST: dict[str, tuple[str, str]] = {
+    "lease.reclaim_policy": ("report", "never steals a lease, so a crashed agent's work survives"),
+    "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
+    "flow.model": ("trunk", "no safety dimension; the plain model, which moves no branches"),
+    "flow.integration": ("pr", "a merge waits for approval on the forge, not landing locally"),
+    "flow.forge": ("auto", "no safety dimension; reads the forge from the remote URL"),
+    "flow.claims": ("remote", "one clone wins a claim; an unreachable remote refuses it"),
+    "flow.pr_merge": ("human", "ddflow never merges; a person does"),
+    "flow.on_changes_requested": ("block", "the item is parked for a person"),
+    "flow.port_strategy": ("forward-merge", "no safety dimension; the least bookkeeping"),
+    "gates.enforce_order": ("block", "a gate recorded out of order is refused"),
+    "lessons.search_backend": ("like", "no safety dimension; works on every SQLite build"),
+    "session.progress_after_complete": ("on", "no safety dimension; reports the most"),
+    "schedule.ready_policy": ("deps_and_lease", "an item another agent leased is not offered"),
+    "schedule.cycle_policy": ("error", "a dependency cycle refuses scheduling"),
+    "schedule.unknown_dep_policy": ("block", "a dependency on an unknown id stays unmet"),
+    "schedule.empty_phase": ("problem", "an open phase with no task fails doctor"),
+    "dedupe.on_match": ("ask", "a likely duplicate is refused until answered"),
+    "enforce.commit_without_lease": ("block", "the hook refuses"),
+    "enforce.generated_views": ("block", "the hook refuses"),
+    "enforce.stale_docs": ("block", "the hook refuses"),
+    "enforce.environment_commits": ("block", "the hook refuses"),
+    "enforce.stale_rules": ("block", "the hook refuses"),
+    "enforce.readme_with_code": ("block", "complete refuses"),
+    "enforce.behind": ("block", "the hook refuses"),
+    "loops.on_detect": ("block", "claim refuses an item that is looping"),
+    "review.on_exceed": ("refuse", "a round past the budget is refused"),
+    "upgrade.skew": ("refuse", "an older ddflow's write is refused"),
+    "mcp.tools": ("all", "no safety dimension; every tool advertised, as without the knob"),
+    "ci.on_merge": ("full", "the whole CI command runs after a merge"),
+    "export.refresh": ("off", "no safety dimension; ddflow writes no document by itself"),
+}
+
+for _key, (_value, _why) in KNOB_STRICTEST.items():
+    KNOB_DOCS[_key] = (
+        f"{KNOB_DOCS[_key]} An unrecognised value in a config file is warned about, reported "
+        f"by `doctor` and falls back to '{_value}', the strictest ({_why}); `config --set`, "
+        "`ddflow_configure` and the environment refuse it, and so does loading ddflow's own "
+        "source tree, where the file and the code are one commit."
+    )
+del _key, _value, _why
+
+
+def strictest(key: str) -> str:
+    """The value enum knob `key` takes when a config file gives it an unknown one."""
+    return KNOB_STRICTEST[key][0]
+
+
 #: Knobs whose VALUE set can grow in a later release (every enum, and `export.tables`, whose
-#: sub-tables carry enums of their own), so a config FILE carrying a
-#: value this version does not know is skipped with a warning rather than refused; the
-#: write paths (`config --set`, `ddflow_configure`) still refuse it.
+#: sub-tables carry enums of their own), so a config FILE carrying a value this version
+#: does not know is tolerated with a warning rather than refused -- an enum knob then
+#: takes its strictest value (`KNOB_STRICTEST`); the write paths (`config --set`,
+#: `ddflow_configure`) and the environment still refuse it.
 _TOLERANT_VALUES = frozenset({*KNOB_CHOICES, "export.tables"})
 
 

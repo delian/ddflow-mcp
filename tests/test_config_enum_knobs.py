@@ -118,14 +118,201 @@ def test_the_declared_choices_are_the_listed_ones_and_hold_the_default() -> None
         assert getattr(getattr(cfg, sec), knob) in allowed, key
 
 
+def _load_file(tmp_path: Path, text: str) -> Config:
+    (tmp_path / ".ddflow").mkdir(exist_ok=True)
+    (tmp_path / ".ddflow" / "config.toml").write_text(text)
+    return Config.load(tmp_path, env={})
+
+
 def test_a_file_with_an_unknown_value_still_loads_and_names_it(tmp_path: Path) -> None:
     # A config FILE may be newer than the code (a later release's value): it is recorded
-    # and reported, never fatal, and the knob keeps its default -- like an unknown knob.
-    (tmp_path / ".ddflow").mkdir()
-    (tmp_path / ".ddflow" / "config.toml").write_text('[enforce]\nstale_docs = "blok"\n')
+    # and reported, never fatal -- and the knob takes its STRICTEST value, not its default
+    # (decision D-enum-fallback-strict): a typo can only make ddflow more careful.
+    cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    assert cfg.enforce.stale_docs == "block"
+    (entry,) = cfg.unknown_knobs
+    assert entry.startswith("enforce.stale_docs = 'blok'")
+    # The note doctor prints names the value actually in effect.
+    assert "'block'" in entry and "in effect" in entry
+
+
+def test_every_enum_knob_declares_its_strictest_value() -> None:
+    assert set(C.KNOB_STRICTEST) == set(C.KNOB_CHOICES)
+    for key, allowed in C.KNOB_CHOICES.items():
+        assert C.strictest(key) in allowed, key
+        assert C.KNOB_STRICTEST[key][1], f"{key}: say why that value is the strictest"
+
+
+def test_config_explain_names_each_knobs_fallback_once() -> None:
+    # What the operator reads (`config --explain`), not the table the sentence is built
+    # from: each enum knob's doc names its fallback exactly once.
+    docs = {key: doc for key, _v, _s, doc in Config().explain()}
+    for key in C.KNOB_STRICTEST:
+        assert docs[key].count(f"falls back to '{C.strictest(key)}'") == 1, key
+        assert docs[key].count("falls back to") == 1, key
+
+
+@pytest.mark.parametrize(
+    ("toml", "attr", "expected"),
+    [
+        ('[enforce]\nstale_docs = "blok"\n', ("enforce", "stale_docs"), "block"),
+        ('[enforce]\ncommit_without_lease = "x"\n', ("enforce", "commit_without_lease"), "block"),
+        ('[upgrade]\nskew = "refusee"\n', ("upgrade", "skew"), "refuse"),
+        ('[review]\non_exceed = "wran"\n', ("review", "on_exceed"), "refuse"),
+        ('[gates]\nenforce_order = "x"\n', ("gates", "enforce_order"), "block"),
+        ('[loops]\non_detect = "x"\n', ("loops", "on_detect"), "block"),
+        ('[ci]\non_merge = "x"\n', ("ci", "on_merge"), "full"),
+        ('[schedule]\nempty_phase = "x"\n', ("schedule", "empty_phase"), "problem"),
+    ],
+)
+def test_a_bad_file_value_takes_the_strictest(
+    tmp_path: Path, toml: str, attr: tuple[str, str], expected: str
+) -> None:
+    cfg = _load_file(tmp_path, toml)
+    assert getattr(getattr(cfg, attr[0]), attr[1]) == expected
+
+
+def test_a_valid_later_layer_still_wins_over_a_bad_file_value(tmp_path: Path) -> None:
+    # The fallback applies to the layer that carried the typo; a valid value in the
+    # machine-local layer, read after it, still sets the knob as before.
+    cfg = _load_file(tmp_path, '[upgrade]\nskew = "of"\n')
+    assert cfg.upgrade.skew == "refuse"
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text('[upgrade]\nskew = "warn"\n')
     cfg = Config.load(tmp_path, env={})
-    assert cfg.enforce.stale_docs == "warn"
-    assert "enforce.stale_docs = 'blok'" in cfg.unknown_knobs
+    assert cfg.upgrade.skew == "warn"
+    # ...and the note doctor prints must not still claim the fallback is in effect.
+    (entry,) = cfg.unknown_knobs
+    assert "in effect" not in entry and "'warn'" in entry, entry
+    assert cfg.sources["upgrade.skew"] == "local"
+
+
+def test_an_env_value_overrides_a_bad_file_value_and_the_note_says_so(tmp_path: Path) -> None:
+    _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_ENFORCE_STALE_DOCS": "off"})
+    assert cfg.enforce.stale_docs == "off"
+    (entry,) = cfg.unknown_knobs
+    assert "in effect" not in entry and "env value 'off'" in entry, entry
+
+
+def test_the_note_follows_every_later_layer_not_only_the_first(tmp_path: Path) -> None:
+    _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text('[enforce]\nstale_docs = "warn"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_ENFORCE_STALE_DOCS": "off"})
+    assert cfg.enforce.stale_docs == "off"
+    (entry,) = cfg.unknown_knobs
+    assert entry.endswith("overridden by the env value 'off')"), entry
+
+
+def test_a_bad_value_holding_the_notes_own_words_survives_the_rewrite(tmp_path: Path) -> None:
+    bad = "a (not a value this ddflow knows; b"
+    _load_file(tmp_path, f'[ci]\non_merge = "{bad}"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_CI_ON_MERGE": "off"})
+    (entry,) = cfg.unknown_knobs
+    assert (
+        entry
+        == f"ci.on_merge = {bad!r} (not a value this ddflow knows; overridden by the env value 'off')"
+    )
+
+
+def test_two_layers_with_bad_values_each_name_what_their_file_wrote(tmp_path: Path) -> None:
+    _load_file(tmp_path, '[upgrade]\nskew = "of"\n')
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text('[upgrade]\nskew = "zzz"\n')
+    cfg = Config.load(tmp_path, env={})
+    assert cfg.upgrade.skew == "refuse"
+    assert cfg.unknown_knobs == [
+        "upgrade.skew = 'of' (not a value this ddflow knows; overridden by the local value "
+        "'zzz', itself unknown: 'refuse' is in effect)",
+        "upgrade.skew = 'zzz' (not a value this ddflow knows; in effect: 'refuse', the strictest)",
+    ]
+
+
+def test_a_later_bad_value_holding_the_notes_words_survives_a_third_layer(
+    tmp_path: Path,
+) -> None:
+    bad = "a (not a value this ddflow knows; b"
+    _load_file(tmp_path, '[upgrade]\nskew = "of"\n')
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text(f'[upgrade]\nskew = "{bad}"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_UPGRADE_SKEW": "warn"})
+    assert cfg.upgrade.skew == "warn"
+    tail = "(not a value this ddflow knows; overridden by the env value 'warn')"
+    assert cfg.unknown_knobs == [f"upgrade.skew = 'of' {tail}", f"upgrade.skew = {bad!r} {tail}"]
+
+
+def test_a_typo_in_a_flow_knob_fails_closed_over_a_recorded_choice(repo: Path) -> None:
+    # The file layer meant to set the knob, so it still outranks a `flow choose` record
+    # (services/choices.config_wins) -- with the strictest value, and `flow show` says the
+    # recorded choice is overridden. Nor is the fallback adopted as the project's choice.
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import choices as CH
+
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "flow", "choose", "integration", "merge", "--reason", "local")[0] == 0
+    cfg_path = repo / ".ddflow" / "config.toml"
+    cfg_path.write_text(cfg_path.read_text("utf-8") + '\n[flow]\nintegration = "merg"\n')
+    cfg = Config.load(repo, env={})
+    st = fold(EventLog(repo, "reader").read_all(), strict=False)
+    CH.overlay(cfg, st)
+    assert cfg.flow.integration == "pr"
+    (row,) = [r for r in CH.report(cfg, st) if r["knob"] == "integration"]
+    assert "overridden" in row and "'pr'" in row["overridden"]
+    assert "integration" not in [ch.knob for ch in CH.pending(cfg)]
+
+
+def test_replace_keeps_the_notes_and_their_bookkeeping_together(tmp_path: Path) -> None:
+    # Shallow, like `sources` and `unknown_knobs`: the copy shares both with the original,
+    # and the bookkeeping still points at the right entry.
+    import dataclasses
+
+    cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    copy = dataclasses.replace(cfg)
+    assert copy._fallback_notes == cfg._fallback_notes
+    copy._apply({"enforce": {"stale_docs": "warn"}}, "env")
+    assert copy.unknown_knobs[0].endswith("overridden by the env value 'warn')")
+    assert "_fallback_notes" not in cfg.as_dict() and "_fallback_notes" not in cfg._sections()
+
+
+def test_the_warning_does_not_call_an_applied_fallback_skipped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    err = capsys.readouterr().err
+    assert "enforce.stale_docs = 'blok'" in err and "skipped" not in err, err
+    (tmp_path / ".ddflow" / "config.toml").write_text("[enforce]\nnot_a_knob = 1\n")
+    Config.load(tmp_path, env={})
+    err = capsys.readouterr().err
+    assert "enforce.not_a_knob" in err and "skipped" in err, err
+    # Classified from the bookkeeping, not the text: an unknown key that holds the note's
+    # own words is still "skipped", and nothing is said to take a value.
+    (tmp_path / ".ddflow" / "config.toml").write_text(
+        '[enforce]\n"x (not a value this ddflow knows; y" = 1\n'
+    )
+    Config.load(tmp_path, env={})
+    err = capsys.readouterr().err
+    assert "skipped" in err and "takes the value" not in err, err
+    # An overridden fallback is still not "skipped": its note names the value in effect.
+    (tmp_path / ".ddflow" / "config.toml").write_text('[enforce]\ngenerated_views = "blok"\n')
+    Config.load(tmp_path, env={"DDFLOW_ENFORCE_GENERATED_VIEWS": "warn"})
+    err = capsys.readouterr().err
+    assert "overridden by the env value 'warn'" in err and "skipped" not in err, err
+
+
+def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
+    cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    assert cfg.sources["enforce.stale_docs"] == "file (strictest fallback)"
+
+
+def test_config_set_still_refuses_a_bad_value(repo: Path) -> None:
+    code, _out, err = run_cli(repo, "init")
+    assert code == 0, err
+    before = (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    code, _out, err = run_cli(repo, "config", "--set", "enforce.stale_docs", "blok")
+    assert code != 0 and "enforce.stale_docs" in err
+    assert (repo / ".ddflow" / "config.toml").read_text("utf-8") == before
 
 
 def test_an_env_value_outside_the_choices_is_refused(tmp_path: Path) -> None:
@@ -139,10 +326,28 @@ def test_this_projects_config_is_still_valid() -> None:
             Config.check(tomllib.loads(path.read_text("utf-8")))
 
 
-def test_a_freshly_initialised_config_is_valid(repo: Path) -> None:
+def _loads_unchanged(tmp_path: Path, text: str) -> None:
+    """The file loads with no fallback: every enum knob it sets holds the value written."""
+    cfg = _load_file(tmp_path, text)
+    assert cfg.unknown_knobs == []
+    for sec, values in tomllib.loads(text).items():
+        if not isinstance(values, dict) or sec in Config._FOREIGN_TABLES:
+            continue
+        for knob, value in values.items():
+            if f"{sec}.{knob}" in C.KNOB_CHOICES:
+                assert getattr(getattr(cfg, sec), knob) == value, f"{sec}.{knob}"
+
+
+def test_this_projects_config_loads_unchanged(tmp_path: Path) -> None:
+    _loads_unchanged(tmp_path, (ROOT / ".ddflow" / "config.toml").read_text("utf-8"))
+
+
+def test_a_freshly_initialised_config_is_valid(repo: Path, tmp_path: Path) -> None:
     code, _out, err = run_cli(repo, "init")
     assert code == 0, err
-    Config.check(tomllib.loads((repo / ".ddflow" / "config.toml").read_text("utf-8")))
+    text = (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    Config.check(tomllib.loads(text))
+    _loads_unchanged(tmp_path, text)
 
 
 def test_every_declared_choice_is_named_in_the_knobs_doc() -> None:

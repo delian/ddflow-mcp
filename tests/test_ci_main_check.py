@@ -98,10 +98,11 @@ def test_an_unknown_on_merge_mode_is_said_not_ignored(repo, fake_precommit):
     sha = _project(repo)
     (repo / ".ddflow" / "config.toml").write_text('[ci]\non_merge = "sometimes"\n')
     # An enum knob's unknown value is named when the FILE loads -- on stderr, in
-    # `unknown_knobs`, by `doctor` -- and the knob keeps its default (Beea0744a7b); a
-    # write of it is refused outright.
+    # `unknown_knobs`, by `doctor` -- and the knob takes its strictest value, the one
+    # that checks most (D-enum-fallback-strict); a write of it is refused outright.
     cfg = Config.load(repo)
-    assert "ci.on_merge = 'sometimes'" in cfg.unknown_knobs and cfg.ci.on_merge == "fast"
+    (entry,) = [k for k in cfg.unknown_knobs if k.startswith("ci.on_merge = 'sometimes'")]
+    assert "'full'" in entry and cfg.ci.on_merge == "full"
     with pytest.raises(ValueError, match="off, fast, full"):
         Config.check({"ci": {"on_merge": "sometimes"}})
     assert A.check_after_merge(repo, sha=sha)["status"] == "passed"
