@@ -1909,13 +1909,14 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
 #: The value each enum knob takes when a config FILE gives it one this code does not know
 #: (decision D-enum-fallback-strict, superseding the fall-back-to-default part of
 #: D9b8061fd38): its STRICTEST allowed value, so a typo in a deliberately tightened
-#: setting can only make ddflow more careful, never quietly loosen it. For a knob with
-#: no safety dimension the "strictest" is the value that does the most checking or
-#: changes least; the reason is appended to each knob's doc below. Never a value that acts
-#: outside this clone -- a push, a pull request, remote claim refs, a forge merge
-#: (D-fallback-no-remote): those happen only when someone sets them correctly.
-#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key, and
-#: that none of them is one of its OUTWARD values.
+#: setting makes ddflow more careful. For a knob with no safety dimension the "strictest"
+#: is the value that does the most checking or changes least; the reason is appended to
+#: each knob's doc below. One rule outranks strictness: never a value that acts outside
+#: this clone (`KNOB_OUTWARD`; D-fallback-no-remote). Where the two conflict -- `pr`
+#: waits for approval but pushes, `remote` claims exclusively but writes remote refs --
+#: the fallback stays local, and a typo there loosens approval or exclusivity until fixed.
+#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key here
+#: and in `KNOB_OUTWARD`, and that no fallback is an outward value.
 KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "lease.reclaim_policy": ("report", "never steals a lease, so a crashed agent's work survives"),
     "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
@@ -1952,6 +1953,18 @@ KNOB_STRICTEST: dict[str, tuple[str, str]] = {
     "mcp.tools": ("all", "no safety dimension; every tool advertised, as without the knob"),
     "ci.on_merge": ("full", "the whole CI command runs after a merge"),
     "export.refresh": ("off", "no safety dimension; ddflow writes no document by itself"),
+}
+
+#: Each enum knob's values that make ddflow act OUTSIDE this clone: a push, a pull
+#: request, remote claim refs, a merge on the forge. No `KNOB_STRICTEST` fallback may be
+#: one (D-fallback-no-remote): outward behaviour happens only when someone sets it
+#: correctly, on purpose. Every KNOB_CHOICES key has an entry, empty when none, so a new
+#: knob cannot skip the question.
+KNOB_OUTWARD: dict[str, frozenset[str]] = {
+    **{key: frozenset() for key in KNOB_CHOICES},
+    "flow.integration": frozenset({"pr"}),  # pushes the branch, opens a pull request
+    "flow.claims": frozenset({"remote"}),  # writes refs/ddflow/claims/<id> on the remote
+    "flow.pr_merge": frozenset({"on_approval", "auto"}),  # a merge on the forge
 }
 
 for _key, (_value, _why) in KNOB_STRICTEST.items():
