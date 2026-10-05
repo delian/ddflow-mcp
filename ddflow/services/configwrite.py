@@ -317,8 +317,9 @@ def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
     the one table-valued gate field -- is the only four-part shape; any other longer key
     is a dotted id (`gate.x.command.command` names `x.command`). Every segment must be a
     bare key too: `_toml_upsert` writes them unquoted, so `gate.a b.c.command` would
-    otherwise fail as a raw TOML parse error. Spellings this cannot see (an escaped
-    segment) are judged on the parsed RESULT by `_gate_table_problems`.
+    otherwise fail as a raw TOML parse error. A segment carrying a string escape
+    (`"\\u0063ommand"`) is not judged here: it is only readable decoded, so the parsed
+    RESULT judges it, in `_gate_table_problems` (roborev on 57c524b7).
     """
     for k, _v in pairs:
         pp = _key_parts(k)
@@ -326,9 +327,8 @@ def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
             continue
         env_entry = len(pp) == _GATE_KEY_PARTS + 1 and pp[2] == "env"
         gid = pp[1] if len(pp) == _GATE_KEY_PARTS or env_entry else ".".join(pp[1:-1])
-        problem = gate_id_problem(gid) or next(
-            (gate_id_problem(seg) for seg in pp[1:] if gate_id_problem(seg)), ""
-        )
+        plain = [seg for seg in (gid, *pp[1:]) if "\\" not in seg]
+        problem = next((gate_id_problem(seg) for seg in plain if gate_id_problem(seg)), "")
         if problem:
             return problem
     return ""
