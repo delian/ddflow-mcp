@@ -122,7 +122,12 @@ def test_every_module_named_in_the_architecture_doc_exists():
     assert named, "ARCHITECTURE.md names no module paths -- the extraction has drifted"
     missing = sorted(ref for ref in named if not (ROOT / "ddflow" / ref).is_file())
     assert not missing, f"ARCHITECTURE.md names module paths that do not exist: {missing}"
-    root_missing = sorted(n for n in _root_modules(text) if not (ROOT / "ddflow" / n).is_file())
+    # The root-module check is vacuously satisfiable when the extraction finds nothing
+    # (the `config.py` line reformatted, indented, or its fence lost) -- the vacuous-pass
+    # class this project calls its defining defect. Guard the evidence, like `named` above.
+    roots = _root_modules(text)
+    assert roots, "ARCHITECTURE.md names no package-root modules -- the extraction has drifted"
+    root_missing = sorted(n for n in roots if not (ROOT / "ddflow" / n).is_file())
     assert not root_missing, (
         f"ARCHITECTURE.md names top-level modules that do not exist: {root_missing}"
     )
