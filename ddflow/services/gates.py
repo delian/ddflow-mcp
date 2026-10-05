@@ -653,24 +653,31 @@ def _what_differs(cwd: Path, base: str, dirt: str, now: TreeEntries | None, labe
     return f"the content it ran on is not the content of {label}"
 
 
-def pipelines(cfg: Config) -> dict[str, list[str]]:
+def pipelines(cfg: Config, *, running: bool = False) -> dict[str, list[str]]:
     """Every gate pipeline, by name (`task`, `phase`, `promotion`, ...).
 
     Derived from the `gates.*_pipeline` fields rather than listed: naming task and phase
     missed `promotion_pipeline` -- where a deploy sign-off belongs -- so a gate required
     only there read as "in neither pipeline" (B7f0b7c8839, and Be14f271da8 before it),
     and a list would miss the next pipeline the same way.
+
+    ``running`` keeps only the pipelines items here can actually run: the promotion
+    pipeline runs only where `flow.environments` exist, so without any a gate only it
+    names enforces nothing (roborev on fix-B7f0b7c8839).
     """
-    return {
+    out = {
         f.name.removesuffix("_pipeline"): list(getattr(cfg.gates, f.name) or ())
         for f in fields(cfg.gates)
         if f.name.endswith("_pipeline")
     }
+    if running and not cfg.flow.environments:
+        out.pop("promotion", None)
+    return out
 
 
-def pipelined(cfg: Config) -> set[str]:
-    """Every gate id some pipeline runs."""
-    return {g for ids in pipelines(cfg).values() for g in ids}
+def pipelined(cfg: Config, *, running: bool = False) -> set[str]:
+    """Every gate id some pipeline names (``running``: some pipeline actually runs)."""
+    return {g for ids in pipelines(cfg, running=running).values() for g in ids}
 
 
 def inert_requirements(cfg: Config) -> list[str]:
@@ -686,7 +693,7 @@ def inert_requirements(cfg: Config) -> list[str]:
     Reported rather than raised at load time, because a config that is wrong in one
     field should still let `ddflow doctor` run and explain itself.
     """
-    return sorted(set(cfg.gates.required) - pipelined(cfg))
+    return sorted(set(cfg.gates.required) - pipelined(cfg, running=True))
 
 
 @dataclass
