@@ -711,14 +711,17 @@ def diff_covers_everything(
 def repo_relative(repo: Path, path: Path | str, *, as_given: bool = False) -> str | None:
     """`path` relative to `repo` as a POSIX string, or None when it lies outside it.
 
-    Both sides are resolved, so a repo reached through a symlink and a path that was
-    resolved (or the other way round) still compare equal. `store_path`, `enforce._rel`
-    and the pins report make their "inside the repository, and as what" decision here.
+    By default both sides are resolved, so a repo reached through a symlink and a path
+    that was resolved (or the other way round) still compare equal, and "outside" means
+    the real file is outside. `store_path`, `enforce._rel` and the pins report make
+    their "inside the repository, and as what" decision here.
 
-    `as_given=True` first tries `path` exactly as written, against `repo` as written and
-    as resolved, and resolves only when neither holds it: a report naming a file the
-    operator listed (a symlinked suite or document, or one under a symlinked directory)
-    prints that name, not wherever the link points.
+    `as_given=True` is for REPORTS: "inside" then also means "named inside". It first
+    tries `path` exactly as written, against `repo` as written and as resolved, and
+    resolves only when neither holds it, so a file the operator listed (a symlinked
+    suite or document, or one under a symlinked directory, even one pointing out of the
+    repo) prints by that name, not wherever the link points. A `path` containing `..`
+    is never taken as written, since `..` can leave the repository: it is resolved.
     """
     root = Path(repo).resolve()
     if as_given:
