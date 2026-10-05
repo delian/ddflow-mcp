@@ -8,11 +8,11 @@ and the next items the scheduler would offer.
 
 from __future__ import annotations
 
-from ..config import Config
+from ..config import PROGRESS_MODES, Config
 from ..core import schedule as S
 from ..core.model import ABANDONED, DONE, State
 
-MODES = ("on", "phase", "off")
+MODES = PROGRESS_MODES  # declared beside the knob, where `Config.check` holds it
 #: How many ready items the report names as next.
 NEXT_SHOWN = 3
 
@@ -39,7 +39,9 @@ def report(st: State, cfg: Config, item: str = "", *, mode: str = "") -> str:
         return ""
     lines: list[str] = []
     if mode not in MODES:  # a typo must not silently turn the report off
-        lines.append(f"(session.progress_after_complete = {mode!r} is not one of on|phase|off)")
+        lines.append(
+            f"(session.progress_after_complete = {mode!r} is not one of {'|'.join(MODES)})"
+        )
         mode = "on"
     items = _live(st)
     cur = st.items.get(item)
