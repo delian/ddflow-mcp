@@ -960,10 +960,10 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="settle a near-duplicate pair: say how one record relates to another",
     )
     lk.add_argument("subject", help="the record being related (the duplicate, for a merge)")
-    # One flag per relation, DECLARED from LINK_RELATIONS: the parser, the API's accepted
-    # set and `cmd_link`'s lookup are then the same list, so a relation added to the model
-    # cannot be accepted over MCP and rejected by argparse (`--duplicate_of` -> the flag
-    # `--duplicate-of`, argparse's own dest rule).
+    # One flag per relation, DECLARED from LINK_RELATIONS, so the parser's accepted set,
+    # the API's and `cmd_link`'s lookup are one list: a relation added to the model cannot
+    # be accepted over MCP and rejected by argparse (`--duplicate_of` -> the flag
+    # `--duplicate-of`, argparse's own dest rule). Help text is cosmetic and falls back.
     _link_help = {
         "extends": "subject adds to ID",
         "duplicate_of": "subject is the same thing as ID",
@@ -977,7 +977,9 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
             metavar="ID",
             default="",
             dest=_rel,
-            help=_link_help[_rel],
+            # `.get`, not `[...]`: a relation added to the model then still parses (with a
+            # generic help), instead of `build_parser()` raising KeyError on every command.
+            help=_link_help.get(_rel, f"subject {_rel.replace('_', ' ')} ID"),
         )
     lk.add_argument("--reason", default="", help="why, recorded with the link")
     lk.set_defaults(fn=cmd_link)
