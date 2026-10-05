@@ -413,13 +413,13 @@ def _is_open(st, rec: dict) -> bool:
         return bool(it and not it.removed and it.state not in (DONE, ABANDONED))
     if kind == "bug":
         b = st.bugs.get(rid)
-        return bool(b and not b.resolution)
+        return bool(b and b.open)
     if kind == "lesson":
         ls = st.lessons.get(rid)
         return bool(ls and not ls.superseded_by)
     if kind == "decision":
         d = st.decisions.get(rid)
-        return bool(d and not d.superseded_by and d.status in ("", "accepted", "proposed"))
+        return bool(d and d.live)
     if kind == "memory":
         m = st.memories.get(rid)
         return bool(m and m.live)
