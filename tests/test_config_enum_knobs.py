@@ -139,13 +139,13 @@ def test_a_file_with_an_unknown_value_still_loads_and_names_it(tmp_path: Path) -
 def test_every_enum_knob_declares_its_strictest_value() -> None:
     assert set(C.KNOB_STRICTEST) == set(C.KNOB_CHOICES)
     for key, allowed in C.KNOB_CHOICES.items():
-        assert C.KNOB_STRICTEST[key] in allowed, key
+        assert C.strictest(key) in allowed, key
+        assert C.KNOB_STRICTEST[key][1], f"{key}: say why that value is the strictest"
 
 
 def test_each_knob_doc_names_the_value_a_bad_file_value_falls_back_to() -> None:
-    for key, strictest in C.KNOB_STRICTEST.items():
-        doc = KNOB_DOCS[key]
-        assert f"falls back to '{strictest}'" in doc, key
+    for key in C.KNOB_STRICTEST:
+        assert f"falls back to '{C.strictest(key)}'" in KNOB_DOCS[key], key
 
 
 @pytest.mark.parametrize(

@@ -1090,7 +1090,7 @@ class McpConfig:
 _doc(
     "mcp",
     "tools",
-    "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). An unrecognised value is refused on write; in a config file it is skipped with a warning (a newer release's tier) and `all` applies.",
+    "Which tools `tools/list` advertises: `core` (the ~30 tools of the daily loop: brief, next, claim, gates, complete, merge, recall, bugs, lessons, decisions, sessions, setup, help), `standard` (core plus the commonly used rest) or `all` (default, every tool). A tool outside the tier is NOT removed: it stays callable by name, and `ddflow_help` and the connection instructions name what the tier hides. Read once at server start, so change it and restart the server; `listChanged` stays false. Set it to cut the ~90 KB tool list a client without deferred tool search pays in context every session (core is under 40 KB). A newer release's tier in a config file is tolerated (see below).",
 )
 
 
@@ -1662,10 +1662,19 @@ class Config:
                     if lenient and f"{sec}.{knob}" in _TOLERANT_VALUES:
                         # A value this code does not know, in a file that may be NEWER
                         # than the code (a later release's tier): recorded like an unknown
-                        # knob and left at its default, so no command stops loading config.
-                        self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
-                        continue
-                    raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
+                        # knob, so no command stops loading config -- and an enum knob
+                        # takes its STRICTEST value, not its default, so a typo in a
+                        # tightened setting fails closed (D-enum-fallback-strict).
+                        if f"{sec}.{knob}" not in KNOB_STRICTEST:
+                            self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
+                            continue
+                        bad, value = value, strictest(f"{sec}.{knob}")
+                        self.unknown_knobs.append(
+                            f"{sec}.{knob} = {bad!r} (not a value this ddflow knows; "
+                            f"in effect: {value!r}, the strictest)"
+                        )
+                    else:
+                        raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
 
@@ -1766,7 +1775,8 @@ def _warn_unknown(keys: list[str], root: Path) -> None:
     _WARNED.update((str(root), k) for k in new)
     print(
         f"ddflow: warning: {root / '.ddflow'}/config.toml or local/config.toml sets "
-        f"{', '.join(new)}, which this ddflow ({_CODE_TREE}) does not know; skipped. The "
+        f"{', '.join(new)}, which this ddflow ({_CODE_TREE}) does not know; skipped (an "
+        "unknown value of an enum knob takes the knob's strictest value, named above). The "
         "config is newer than this code: merge main into this tree (or, if it is a "
         "typo, fix it; `ddflow doctor` lists each).",
         file=sys.stderr,
@@ -1841,10 +1851,65 @@ KNOB_CHOICES: dict[str, tuple[str, ...]] = {
     "export.refresh": EXPORT_REFRESH_MODES,
 }
 
+#: The value each enum knob takes when a config FILE gives it one this code does not know
+#: (decision D-enum-fallback-strict, superseding the fall-back-to-default part of
+#: D9b8061fd38): its STRICTEST allowed value, so a typo in a deliberately tightened
+#: setting can only make ddflow more careful, never quietly loosen it. For a knob with
+#: no safety dimension the "strictest" is the value that does the most checking or
+#: changes least; the reason is appended to each knob's doc below.
+#: `tests/test_config_enum_knobs.py` requires an entry for every KNOB_CHOICES key.
+KNOB_STRICTEST: dict[str, tuple[str, str]] = {
+    "lease.reclaim_policy": ("report", "never steals a lease, so a crashed agent's work survives"),
+    "worktree.merge_strategy": ("no-ff", "keeps every commit and a merge commit; rewrites nothing"),
+    "flow.model": ("trunk", "no safety dimension; the plain model, which moves no branches"),
+    "flow.integration": ("pr", "a merge waits for approval on the forge instead of landing locally"),
+    "flow.forge": ("auto", "no safety dimension; reads the forge from the remote URL"),
+    "flow.claims": ("remote", "one clone wins a claim; an unreachable remote refuses it"),
+    "flow.pr_merge": ("human", "ddflow never merges; a person does"),
+    "flow.on_changes_requested": ("block", "the item is parked for a person"),
+    "flow.port_strategy": ("forward-merge", "no safety dimension; the least bookkeeping"),
+    "gates.enforce_order": ("block", "a gate recorded out of order is refused"),
+    "lessons.search_backend": ("like", "no safety dimension; works on every SQLite build"),
+    "session.progress_after_complete": ("on", "no safety dimension; reports the most"),
+    "schedule.ready_policy": ("deps_and_lease", "an item another agent leased is not offered"),
+    "schedule.cycle_policy": ("error", "a dependency cycle refuses scheduling"),
+    "schedule.unknown_dep_policy": ("block", "a dependency on an unknown id stays unmet"),
+    "schedule.empty_phase": ("problem", "an open phase with no task fails doctor"),
+    "dedupe.on_match": ("ask", "a likely duplicate is refused until answered"),
+    "enforce.commit_without_lease": ("block", "the hook refuses"),
+    "enforce.generated_views": ("block", "the hook refuses"),
+    "enforce.stale_docs": ("block", "the hook refuses"),
+    "enforce.environment_commits": ("block", "the hook refuses"),
+    "enforce.stale_rules": ("block", "the hook refuses"),
+    "enforce.readme_with_code": ("block", "complete refuses"),
+    "enforce.behind": ("block", "the hook refuses"),
+    "loops.on_detect": ("block", "claim refuses an item that is looping"),
+    "review.on_exceed": ("refuse", "a round past the budget is refused"),
+    "upgrade.skew": ("refuse", "an older ddflow's write is refused"),
+    "mcp.tools": ("all", "no safety dimension; every tool advertised, as without the knob"),
+    "ci.on_merge": ("full", "the whole CI command runs after a merge"),
+    "export.refresh": ("off", "no safety dimension; ddflow writes no document by itself"),
+}
+
+for _key, (_value, _why) in KNOB_STRICTEST.items():
+    KNOB_DOCS[_key] = (
+        f"{KNOB_DOCS[_key]} An unrecognised value in a config file is warned about, reported "
+        f"by `doctor` and falls back to '{_value}', the strictest ({_why}); `config --set`, "
+        "`ddflow_configure` and the environment refuse it."
+    )
+del _key, _value, _why
+
+
+def strictest(key: str) -> str:
+    """The value enum knob `key` takes when a config file gives it an unknown one."""
+    return KNOB_STRICTEST[key][0]
+
+
 #: Knobs whose VALUE set can grow in a later release (every enum, and `export.tables`, whose
-#: sub-tables carry enums of their own), so a config FILE carrying a
-#: value this version does not know is skipped with a warning rather than refused; the
-#: write paths (`config --set`, `ddflow_configure`) still refuse it.
+#: sub-tables carry enums of their own), so a config FILE carrying a value this version
+#: does not know is tolerated with a warning rather than refused -- an enum knob then
+#: takes its strictest value (`KNOB_STRICTEST`); the write paths (`config --set`,
+#: `ddflow_configure`) and the environment still refuse it.
 _TOLERANT_VALUES = frozenset({*KNOB_CHOICES, "export.tables"})
 
 
