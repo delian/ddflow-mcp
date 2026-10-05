@@ -212,6 +212,18 @@ def test_a_bad_value_holding_the_notes_own_words_survives_the_rewrite(tmp_path: 
     )
 
 
+def test_two_layers_with_bad_values_each_name_what_their_file_wrote(tmp_path: Path) -> None:
+    _load_file(tmp_path, '[upgrade]\nskew = "of"\n')
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text('[upgrade]\nskew = "zzz"\n')
+    cfg = Config.load(tmp_path, env={})
+    assert cfg.upgrade.skew == "refuse"
+    assert cfg.unknown_knobs == [
+        "upgrade.skew = 'of' (not a value this ddflow knows; overridden by the local value 'zzz')",
+        "upgrade.skew = 'zzz' (not a value this ddflow knows; in effect: 'refuse', the strictest)",
+    ]
+
+
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
     cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
     assert cfg.sources["enforce.stale_docs"] == "file (strictest fallback)"

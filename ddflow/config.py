@@ -1669,7 +1669,9 @@ class Config:
                             self.unknown_knobs.append(f"{sec}.{knob} = {value!r}")
                             continue
                         bad, value = value, strictest(f"{sec}.{knob}")
-                        self._forget_fallback(f"{sec}.{knob}", source, value)
+                        # an earlier layer's note names what THIS layer wrote, not the
+                        # fallback; each bad value stays its own (true) report
+                        self._forget_fallback(f"{sec}.{knob}", source, bad)
                         self.unknown_knobs.append(
                             f"{sec}.{knob} = {bad!r} (not a value this ddflow knows; "
                             f"in effect: {value!r}, the strictest)"
