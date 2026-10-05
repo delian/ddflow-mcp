@@ -235,7 +235,7 @@ def bugs_md(state: State, cfg: Config | None = None) -> str:
         tests = ", ".join(_cell(t, cfg) for t in b.regression_tests) or "—"
         out.append(
             f"| {b.id} | {b.resolution or 'open'} | {_cell(b.title or b.summary, cfg)} | "
-            f"{b.item or '—'} | {tests} | {b.lesson or '—'} |"
+            f"{_cell(b.item, cfg) or '—'} | {tests} | {_cell(b.lesson, cfg) or '—'} |"
         )
     out.append("")
     return "\n".join(out)
