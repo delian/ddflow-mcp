@@ -34,7 +34,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from ..config import Config
+from ..config import Config, InvalidValue, parallel_range_problems
 from ..infra import tomlcfg as TC
 from . import reviewer_trust as RT
 
@@ -107,6 +107,25 @@ def _effective(repo: Path, text: str, local: bool):
     else:
         cfg._apply(data, "file")
     return data, cfg
+
+
+def _range_problems(repo: Path, text: str, local: bool) -> set[tuple[str, str]]:
+    """The auto range problems (`config.parallel_range_problems`) a candidate TEXT would
+    have, judged as `_effective` judges it. Only NEW ones are refused, so a project whose
+    range was already inconsistent can still make an unrelated edit, or the repair."""
+    try:
+        return set(parallel_range_problems(_effective(repo, text, local)[1]))
+    except Exception:  # a text that does not load is Config.check's to report
+        return set()
+
+
+def _range_refusal(problems: set[tuple[str, str]]) -> str:
+    said = "; ".join(f"invalid {key}: {why}" for key, why in sorted(problems))
+    return (
+        f"that edit would make the adaptive range inconsistent: {said}. In auto, "
+        "schedule.max_parallel_min <= schedule.max_parallel_tasks <= "
+        "schedule.max_parallel_max; change the bound first, or set schedule.parallel fixed."
+    )
 
 
 def _toml_literal(value: str) -> str:
@@ -630,8 +649,14 @@ def _write_config(
         try:
             result = tomllib.loads(text)
             Config.check(result)
+        except InvalidValue as exc:  # a known knob, a value it cannot take: refused
+            return KeyRefused(f"that edit would break the config: {exc}"), text
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"that edit would break the config: {exc}", text
+        if new_range := _range_problems(repo, text, local) - _range_problems(
+            repo, text_before, local
+        ):
+            return KeyRefused(_range_refusal(new_range)), text
         # `gate` is a foreign table to Config.check, so a gate block is judged here, on the
         # parsed result: `gate.a.b.command` (however spelled -- quoted, escaped) wrote
         # `[gate.a.b]`, exit 0, and every later command refused to load it (B72b8adba30).
@@ -710,8 +735,12 @@ def _append_config(
         try:
             result = tomllib.loads(merged)
             Config.check(result)
+        except InvalidValue as exc:
+            return KeyRefused(f"appending this would break the config: {exc}"), Path()
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"appending this would break the config: {exc}", Path()
+        if new_range := _range_problems(repo, merged, local) - _range_problems(repo, prev, local):
+            return KeyRefused(_range_refusal(new_range)), Path()
         # `[gate.a.b]` is bare in every segment, so the plain-key check passes it -- and
         # it nests a table every later command refuses to load. Judged as `_write_config`
         # judges `--set`: only NEW gate-table problems (roborev on a1c614f4).

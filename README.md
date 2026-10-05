@@ -527,6 +527,7 @@ $ ddflow workflow
 
   gates.require_outcome                  True              [default]
   gates.enforce_order                    block             [file]
+  schedule.parallel                      auto              [default]
   schedule.max_parallel_tasks            4                 [default]
 ```
 
@@ -809,7 +810,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 167 knobs.
+cadences, and the rest of the 174 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -2708,6 +2709,40 @@ refuses at once rather than sleeping to its timeout.
 
 ---
 
+### Adaptive parallelism: configuration
+
+How many items may be in flight adapts by default (decision D-adaptive-flow-accepted). In
+`[schedule]`:
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `parallel` | `auto` | `auto`: the limit adapts inside `[max_parallel_min, max_parallel_max]`; `fixed`: `max_parallel_tasks` is the number, exactly as before |
+| `max_parallel_tasks` | `4` | the start value in auto (the limit begins and resets here), the number in fixed |
+| `max_parallel_min` | `2` | the floor: auto never goes below it (at least 1) |
+| `max_parallel_max` | `8` | the ceiling: auto never exceeds it; machine sizing, so set it with `--local` |
+| `adapt_up_after_s` | `600` | healthy seconds, with the limit binding, before +1; no increase for twice this after a decrease |
+| `adapt_cooldown_s` | `300` | minimum seconds between two decreases |
+| `signal_interval_s` | `60` | seconds between two samples (taken by next, brief, claim and heartbeat; no daemon) |
+| `[schedule.signals]` | all enabled; `load_per_core` low 0.15, high 0.75 | `enabled = [...]` switches signals; per signal `low` / `high` / optional `critical` marks, higher worse |
+
+`worktree.max_parallel` defaults to `0`, which **follows the schedule limit** -- it is not
+unlimited; there is no unlimited setting, the ceiling always bounds it. A nonzero value stays
+an independent hard cap on worktrees. `ddflow init` and `adopt` no longer write the old
+explicit `max_parallel = 4` / `max_parallel_tasks = 4`; a project that still carries them
+loads unchanged (`parallel` absent means auto, and `max_parallel_tasks = 4` is then the
+start value), and `ddflow doctor` notes an explicit `worktree.max_parallel = 4` -- it caps
+auto at 4 worktrees -- with the remedy `ddflow config --set worktree.max_parallel 0`.
+
+Every knob is set from the CLI (`ddflow config schedule.parallel fixed`, `ddflow config
+--local --set schedule.max_parallel_max 6`) and MCP (`ddflow_configure`); the local layer
+wins over the committed one. A mark is a nested key: `ddflow config --set
+schedule.signals.load_per_core.high 0.8` keeps the `low` mark, because the table merges
+layer by layer, mark by mark. In auto the range must hold `max_parallel_min <=
+max_parallel_tasks <= max_parallel_max`: an edit that breaks it is refused (exit 3); a file
+that already breaks it still loads, the controller clamps it, and `doctor` says so. An
+unknown signal name is refused with the list of signals. A signal with no marks (all but
+`load_per_core`, as shipped) is read but never moves the limit until marks are set for it.
+
 ### Adaptive parallelism: host signals
 
 The adaptive parallelism controller steers by the host as well as by the log.
@@ -4200,7 +4235,7 @@ declared once and persists — see
 
 ## Configuration
 
-167 knobs across 25 sections, every one documented in place:
+174 knobs across 25 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -4230,8 +4265,8 @@ request or writes claim refs -- that happens only when someone sets it correctly
 rule outranks strictness: a typo in a deliberately set `pr` or `remote` loosens approval
 or claim exclusivity until it is fixed, and `doctor` names it (`KNOB_OUTWARD` lists each
 knob's outward values). From the environment it is refused, and so
-is a typo in ddflow's own source tree, where the config and the code are one commit. `ddflow config --set` refuses an unknown knob or an invalid
-value outright, before writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
+is a typo in ddflow's own source tree, where the config and the code are one commit. `ddflow config --set` refuses an unknown knob (exit 1) or an invalid
+value of a known one (exit 3, naming the key) outright, before writing. A map or list knob (`list[str]`, `dict[str, str]`) given by environment as JSON
 refuses a non-string element instead of casting it (`null` is not the string `"None"`).
 A test asserts every knob carries documentation, so the reference cannot rot.
 
