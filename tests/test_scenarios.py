@@ -149,3 +149,31 @@ def test_crash_recovery_survives_a_check_slower_than_the_lease(tmp_path):
     except Fail as exc:
         pytest.fail(f"crash-recovery under a slow check: {exc}")
     assert sc.delayed, "the slow check was never injected: the scenario changed shape"
+
+
+@pytest.mark.slow
+@pytest.mark.scenarios
+@pytest.mark.timeout(1800)
+def test_crash_recovery_under_load_where_only_each_check_alone_fits_the_lease(tmp_path):
+    """B11e64b1e8c, sustained load: every `claim` and every `recover` is slow enough that
+    the two together outlive the lease but each alone does not. Observing both in one
+    window failed every attempt; each check gets its own window."""
+    import scenario_crash_recovery as S
+    from harness import Scenario
+
+    slow = S.TTL_S / 2 + 1
+
+    class Loaded(Scenario):
+        def ddflow(self, *argv, **kw):
+            if argv == ("recover",) or (argv[:1] == ("claim",) and kw.get("expect") is None):
+                time.sleep(slow)
+            return super().ddflow(*argv, **kw)
+
+    sc = Loaded("crash-recovery-loaded", tmp_path / "loaded")
+    S.LIVE_ATTEMPTS, saved = 2, S.LIVE_ATTEMPTS
+    try:
+        S.run(sc)
+    except AssertionError as exc:
+        pytest.fail(f"crash-recovery under sustained load: {exc}")
+    finally:
+        S.LIVE_ATTEMPTS = saved

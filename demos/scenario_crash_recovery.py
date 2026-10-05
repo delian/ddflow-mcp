@@ -51,9 +51,12 @@ def _while_live(sc: Scenario, check):
     """
     for attempt in range(1, LIVE_ATTEMPTS + 1):
         sc.ddflow("heartbeat", "P1.T1", agent="delta")  # DELTA's last one
+        # Read BEFORE the check, so nothing the check does can move the bound.
+        lease = sc.jddflow("show", "P1.T1")["lease"]
+        sc.check("the live lease is DELTA's", lease["holder"] == "delta", json.dumps(lease))
+        renewed = lease["renewed_at"]
         result = check()
         done = time.time()
-        renewed = sc.jddflow("show", "P1.T1")["lease"]["renewed_at"]
         if done - renewed < TTL_S:
             return result
         sc.note(
@@ -156,8 +159,9 @@ def run(sc: Scenario) -> None:
     sc.note(
         "Simulated exactly as a real kill would leave things: the process simply "
         "stops. No cleanup code runs, because in a real crash none does. Each check "
-        "below starts from that last heartbeat, re-taken only when the machine was too "
-        "slow to finish the check inside the lease it started."
+        "below is one observation of the lease a fresh DELTA heartbeat starts: the "
+        "heartbeats printed below are the demo re-establishing that live window, not "
+        "DELTA surviving the crash."
     )
 
     sc.step("Immediately after the crash, the item is still CLAIMED")
