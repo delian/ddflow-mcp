@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 
 from ...services.configwrite import (  # noqa: F401  -- re-exported for cli.py
+    KeyRefused,
     _guarded_human_gates,
     _outside_quotes,
     _toml_literal,
@@ -24,7 +25,7 @@ from ...services.configwrite import (  # noqa: F401  -- re-exported for cli.py
     _workflow_problems,
     _write_config,
 )
-from ..context import FAIL, OK, Ctx
+from ..context import FAIL, OK, REFUSED, Ctx
 
 
 def _config_set(a, c: Ctx) -> int:
@@ -38,7 +39,7 @@ def _config_set(a, c: Ctx) -> int:
     err, _text = _write_config(c.repo, [(a.set, a.value)])
     if err:
         print(err, file=sys.stderr)
-        return FAIL
+        return REFUSED if isinstance(err, KeyRefused) else FAIL
     c.out(
         f"{a.set} = {_toml_literal(a.value)}",
         {"key": a.set, "value": a.value, "path": str(c.repo / ".ddflow" / "config.toml")},
