@@ -18,7 +18,7 @@ from pathlib import Path
 
 from ...api import setup as A
 from ...infra import worktree as W
-from ..context import FAIL, NOTHING, OK, REFUSED, Ctx, _wrap
+from ..context import FAIL, NOTHING, OK, Ctx, _wrap
 
 _MARKS = {"registered": "[x]", "installed": "[+]", "missing": "[ ]", "unknown": "[?]"}
 
@@ -196,7 +196,7 @@ def cmd_config(a, c: Ctx) -> int:
         ),
         agent=c.requested_agent,
     )
-    if out.exit in (FAIL, REFUSED):
+    if out.exit != OK:  # failed (1), nothing (2) or refused (3): never collapsed into 0
         print(out.reason, file=sys.stderr)
         return out.exit
     # What `[lease] append_only_globs` just made ddflow write (D-shared-globs): a tracked
