@@ -159,3 +159,33 @@ def test_a_different_launch_under_the_id_is_refreshed_not_claimed_as_the_registr
     status, msg = CO.register(tmp_path, c, "codex")
     assert status == "written" and "already registers" not in msg, msg
     assert "old-launcher" not in (tmp_path / ".codex" / "config.toml").read_text()
+
+
+def test_the_shared_name_search_skips_the_id_when_the_writer_asks():
+    """`_launched_name` answers two different questions of one table. `_registered_name`
+    wants any name (its id first); a `register` about to ADD an entry wants a name OTHER
+    than the id, because the id entry is the copy it is refreshing, not the second copy it
+    must not create. `skip_id` was previously a bare `name != c.id` inside that loop."""
+    c = CO.Companion(id="ctx", command="npx", args=["-y", "pkg"])
+    entry = {"command": "npx", "args": ["-y", "pkg"]}
+    servers = {"ctx": entry, "alias": entry}
+    assert CO._launched_name(servers, c) == "ctx"
+    assert CO._launched_name(servers, c, skip_id=True) == "alias"
+
+
+def test_a_second_name_for_the_same_launch_is_reported_not_taken_for_the_id(tmp_path):
+    """End to end: the id entry launches the server but with an extra argument, so `register`
+    reaches the second-copy check rather than the equality short-circuit. The launch already
+    runs as `ctx`, so the message must name `ctx` -- not the id, which is what skip_id keeps
+    the writer from reporting as 'another name'."""
+    c = {c.id: c for c in CO.load(tmp_path)}["context7"]
+    launch = c.entry()
+    _mcp_json(
+        tmp_path,
+        {
+            "context7": {"command": launch["command"], "args": [*launch["args"], "extra"]},
+            "ctx": launch,
+        },
+    )
+    status, msg = CO.register(tmp_path, c, "claude")
+    assert status == "unchanged" and "`ctx`" in msg, (status, msg)
