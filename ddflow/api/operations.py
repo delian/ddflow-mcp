@@ -318,7 +318,7 @@ def pins(
             f"{document} is pinned, so treat all of it as pinned.",
             document=document,
         )
-    rel = W.repo_relative(repo, path, resolve_leaf=False) or str(path)
+    rel = W.repo_relative(repo, path, as_given=True) or str(path)
     rep = PP.coverage(
         text,
         files,

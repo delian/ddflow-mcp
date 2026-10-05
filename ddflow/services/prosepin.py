@@ -201,7 +201,7 @@ def coverage(
     named: set[str] = set()
 
     for f in files:
-        rel = repo_relative(repo, f, resolve_leaf=False) or str(f)
+        rel = repo_relative(repo, f, as_given=True) or str(f)
         try:
             source = f.read_text(encoding="utf-8")
         # OSError: a dangling symlink or an unreadable file. One bad file must not hide
