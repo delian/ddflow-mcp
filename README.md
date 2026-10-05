@@ -2938,7 +2938,8 @@ ddflow supports several ways of working and never picks one silently. Each decis
 `model`, `integration`, `pr_merge`, `on_changes_requested`, `stack`, `port_strategy` — is a
 **choice**, and its value comes from, in order:
 
-1. **the operator's config** (`.ddflow/config.toml` or env), which always wins;
+1. **the operator's config** (`.ddflow/config.toml`, the machine-local
+   `.ddflow/local/config.toml`, or env), which always wins;
 2. **a recorded choice** — `ddflow flow choose port_strategy cherry-pick --reason "2.x has
    diverged"`, by the operator or by an agent the operator left it to, attributed in the log;
 3. **the default** — applied the first time the choice matters (the first claim, the
@@ -2949,8 +2950,8 @@ Until then, a relevant choice nobody made heads `ddflow brief` under *Open workf
 choices*, so an agent asks at the start rather than discovering at the end that the
 project wanted something else. `ddflow flow show` lists every choice with its value, its
 options, and who decided — config, a named agent or person with their reason, or "DEFAULT
-(nobody chose)". A recorded choice that the config file overrides is shown as such, never
-silently ignored.
+(nobody chose)". A recorded choice that any config layer overrides is shown as such — and `flow choose`
+answers `in_effect: false` naming that layer — never silently ignored.
 
 Research: [RESEARCH R17](docs/RESEARCH.md).
 

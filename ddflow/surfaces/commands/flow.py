@@ -6,6 +6,7 @@ import json
 import sys
 
 from ...api import flow as A
+from ...services.choices import config_wins
 from ..context import NOTHING, OK, Ctx
 
 
@@ -141,7 +142,7 @@ def cmd_version(a, c: Ctx) -> int:
 def _who(row) -> str:
     src = row["source"]
     rec = row["recorded"]
-    if src in ("file", "env"):
+    if config_wins(src):
         return f"set in the {src} config"
     if src.startswith("log:"):
         by = rec.get("agent") or rec.get("user") or "?"
