@@ -31,6 +31,7 @@ the file editable at all.
 from __future__ import annotations
 
 import re
+import tomllib
 from pathlib import Path
 
 from ..config import Config
@@ -303,6 +304,53 @@ def _workflow_problems(repo: Path, text: str, *, local: bool = False) -> set[str
 _GATE_KEY_PARTS = 3
 
 
+def _key_parts(k: str) -> list[str]:
+    """A dotted key's segments, normalised: `_toml_upsert` strips them, so whitespace and
+    quoting reach the same TOML key as the bare form."""
+    return [seg.strip().strip("\"'") for seg in k.split(".")]
+
+
+def _gate_key_problem(pairs: list[tuple[str, str]]) -> str:
+    """An early, plain answer for the common shape `gate.<id>.<field>` (B72b8adba30).
+    Any other spelling -- a nested key, an escaped segment -- is judged on the RESULT,
+    by `_gate_table_problems` (roborev on 6a91557b, 40a39e9f)."""
+    for k, _v in pairs:
+        pp = _key_parts(k)
+        if pp[0] == "gate" and len(pp) == _GATE_KEY_PARTS and gate_id_problem(pp[1]):
+            return gate_id_problem(pp[1])
+    return ""
+
+
+def _parsed(text: str) -> dict:
+    try:
+        return tomllib.loads(text)
+    except tomllib.TOMLDecodeError:
+        return {}
+
+
+def _gate_table_problems(data: dict) -> set[str]:
+    """What is wrong with the `[gate.*]` blocks of a parsed config: an id that is not a
+    bare key, or a field no gate has -- a nested table (`[gate.a.b]`) among them."""
+    from .gates import GateDef
+
+    known = set(GateDef.__dataclass_fields__)
+    out: set[str] = set()
+    for gid, spec in (data.get("gate") or {}).items():
+        if gate_id_problem(gid):
+            out.add(gate_id_problem(gid))
+            continue
+        if not isinstance(spec, dict):
+            continue
+        for field_name, value in spec.items():
+            if field_name in known:
+                continue
+            if isinstance(value, dict):  # a dotted id nested a table under this gate
+                out.add(gate_id_problem(f"{gid}.{field_name}"))
+            else:
+                out.add(f"[gate.{gid}] has no field {field_name!r}")
+    return out
+
+
 def gate_id_problem(gid: str) -> str:
     """Why ``gid`` cannot be a gate id, or "" when it can (B72b8adba30).
 
@@ -386,9 +434,6 @@ def _write_config(
     # Normalised, so whitespace and quoting cannot walk past the guard: `_toml_upsert`
     # strips the segments, so `" gate.x.human"` and `gate.x."human"` reach the same TOML
     # key as the bare form and must be refused the same way.
-    def _key_parts(k: str) -> list[str]:
-        return [seg.strip().strip("\"'") for seg in k.split(".")]
-
     blocked = [
         k
         for k, _v in pairs
@@ -397,17 +442,9 @@ def _write_config(
         and pp[0] == "gate"
         and pp[-1] == "human"
     ]
-    for k, _v in pairs:
-        # Normalised like the human guard: `"gate".a.b.command` is the same TOML key, and
-        # `gate."unit_tests".command` names the bare id unit_tests (roborev on 6a91557b).
-        pp = _key_parts(k)
-        if pp[0] == "gate" and len(pp) > 1:
-            # Everything between `gate.` and the field is the id: `gate.a.b.command`
-            # names the id `a.b`, which is refused, not silently nested.
-            gid = ".".join(pp[1:-1]) if len(pp) >= _GATE_KEY_PARTS else pp[1]
-            problem = gate_id_problem(gid)
-            if problem:
-                return problem, ""
+    problem = _gate_key_problem(pairs)
+    if problem:
+        return problem, ""
     if blocked:
         return (
             f"refusing to edit {', '.join(blocked)}: whether a gate is a human "
@@ -426,6 +463,7 @@ def _write_config(
         ensure_local_dir(repo)
     with TC.locked(path):
         text = path.read_text("utf-8") if path.exists() else ""
+        text_before = text
         before = _workflow_problems(repo, text, local=local) if check_workflow else set()
         human_before = _guarded_human_gates(repo, text, local=local)
         for dotted, value in pairs:
@@ -433,9 +471,17 @@ def _write_config(
                 return f"{dotted!r} is not <section>.<key>, e.g. gate.unit_tests.command", text
             text = _toml_upsert(text, dotted, _toml_literal(value))
         try:
-            Config.check(tomllib.loads(text))
+            result = tomllib.loads(text)
+            Config.check(result)
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"that edit would break the config: {exc}", text
+        # `gate` is a foreign table to Config.check, so a gate block is judged here, on the
+        # parsed result: `gate.a.b.command` (however spelled -- quoted, escaped) wrote
+        # `[gate.a.b]`, exit 0, and every later command refused to load it (B72b8adba30).
+        # Only NEW problems: an existing one must not stop the edit that repairs it.
+        new = _gate_table_problems(result) - _gate_table_problems(_parsed(text_before))
+        if new:
+            return "; ".join(sorted(new)), text
         # Refusing the FLAG was not enough. `workflow drop <human-gate>` took the
         # checkpoint out of the pipeline, exit 0, and `workflow pipeline task <list
         # without it>` does the same by omission — two ways to delete the operator's
