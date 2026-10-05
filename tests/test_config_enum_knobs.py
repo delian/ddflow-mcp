@@ -263,13 +263,16 @@ def test_a_typo_in_a_flow_knob_fails_closed_over_a_recorded_choice(repo: Path) -
     assert "integration" not in [ch.knob for ch in CH.pending(cfg)]
 
 
-def test_replace_carries_the_fallback_notes(tmp_path: Path) -> None:
+def test_replace_keeps_the_notes_and_their_bookkeeping_together(tmp_path: Path) -> None:
+    # Shallow, like `sources` and `unknown_knobs`: the copy shares both with the original,
+    # and the bookkeeping still points at the right entry.
     import dataclasses
 
     cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
     copy = dataclasses.replace(cfg)
+    assert copy._fallback_notes == cfg._fallback_notes
     copy._apply({"enforce": {"stale_docs": "warn"}}, "env")
-    assert "in effect" not in copy.unknown_knobs[0]
+    assert copy.unknown_knobs[0].endswith("overridden by the env value 'warn')")
     assert "_fallback_notes" not in cfg.as_dict() and "_fallback_notes" not in cfg._sections()
 
 
@@ -283,6 +286,14 @@ def test_the_warning_does_not_call_an_applied_fallback_skipped(
     Config.load(tmp_path, env={})
     err = capsys.readouterr().err
     assert "enforce.not_a_knob" in err and "skipped" in err, err
+    # Classified from the bookkeeping, not the text: an unknown key that holds the note's
+    # own words is still "skipped", and nothing is said to take a value.
+    (tmp_path / ".ddflow" / "config.toml").write_text(
+        '[enforce]\n"x (not a value this ddflow knows; y" = 1\n'
+    )
+    Config.load(tmp_path, env={})
+    err = capsys.readouterr().err
+    assert "skipped" in err and "takes the value" not in err, err
 
 
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
