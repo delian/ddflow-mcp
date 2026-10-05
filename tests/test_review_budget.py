@@ -374,9 +374,13 @@ def _configure(repo, **args):
     return json.dumps(reply)
 
 
-def test_a_quoted_table_header_is_still_reported_and_the_revert_names_the_knob(repo, tmp_path):
+def test_an_appended_review_table_is_reported_and_the_revert_names_the_knob(repo, tmp_path):
     _setup(repo, tmp_path)
-    reply = _configure(repo, toml='["review"]\nmax_rounds = 0\non_exceed = "warn"')
+    # D-plain-keys (B7a1ed66cb9): a quoted header is refused and changes nothing ...
+    quoted_header = _configure(repo, toml='["review"]\nmax_rounds = 0\non_exceed = "warn"')
+    assert "not a plain key" in quoted_header and "operator" not in quoted_header.lower()
+    # ... and the plain one is applied and reported to the operator.
+    reply = _configure(repo, toml='[review]\nmax_rounds = 0\non_exceed = "warn"')
     assert "operator" in reply.lower(), reply
     assert "review.max_rounds 2" in reply and "review.on_exceed" in reply and "refuse" in reply
     # D-plain-keys: the quoted spelling is refused, naming the plain key ...
