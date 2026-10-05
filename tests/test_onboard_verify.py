@@ -81,7 +81,8 @@ def test_the_trailer_probe_requires_a_refusal(repo):
 
 
 def test_the_freeze_ratchet_must_exist_and_hold(repo):
-    assert _check(V.verify(repo, suite=False), "freeze ratchet").outcome == "failed"
+    # No import here, so no ratchet is EXPECTED: unavailable, not failed.
+    assert _check(V.verify(repo, suite=False), "freeze ratchet").outcome == "unavailable"
     _write(repo, "todo.md", "the old backlog\n")
     L.write_manifest(repo, ["todo.md"])
     report = V.verify(repo, suite=False)

@@ -246,10 +246,36 @@ def _answers(repo: Path) -> Check:
     )
 
 
+def _has_imports(repo: Path) -> bool:
+    """Did anything ever come FROM a file here? A `<file>:<line>` origin means yes, and
+    an import without a freeze ratchet is a real gap; no imports is no ratchet expected."""
+    try:
+        from ..core.model import fold
+        from ..infra.log import EventLog
+
+        state = fold(EventLog(repo, "onboard-verify").read_all(), strict=False)
+    except Exception:
+        return False
+    for records in (
+        getattr(state, "items", {}),
+        getattr(state, "lessons", {}),
+        getattr(state, "bugs", {}),
+    ):
+        for record in records.values():
+            source = str(getattr(record, "source", "") or "")
+            if ":" in source and not source.startswith("git:"):
+                return True
+    return False
+
+
 def _frozen(repo: Path) -> Check:
     """The freeze ratchet exists, and every frozen file still has its bytes."""
     manifest = L.read_frozen(repo)
     if manifest is None:
+        if not _has_imports(repo):
+            return Check(
+                "freeze ratchet", "unavailable", "nothing was imported here; no ratchet expected"
+            )
         return Check("freeze ratchet", "failed", "no .ddflow/frozen.toml; the import is unfrozen")
     if not manifest:
         return Check(
