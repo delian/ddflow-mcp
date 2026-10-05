@@ -1400,29 +1400,17 @@ def _run_ticking(
     process-global and unlocked because nothing in this process was concurrent -- a
     renewal slower than the join timeout could race the caller's own write (roborev
     827). Polling keeps the process single-threaded. Raises TimeoutExpired like
-    `subprocess.run`, after killing the command.
+    `subprocess.run`, after killing the command's whole process group (Bed0f5b6d99).
     """
-    p = P.popen(
+    return P.run_shell(
         command,
-        # bandit B604: the same operator-written gate command `run_command_gate` runs.
-        shell=True,  # nosec B604
+        timeout=timeout_s,
+        on_tick=on_tick,
+        tick_s=tick_s,
         cwd=cwd,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
         text=True,
     )
-    deadline = time.time() + timeout_s
-    while True:
-        try:
-            out, err = p.communicate(timeout=max(0.05, min(tick_s, deadline - time.time())))
-            return subprocess.CompletedProcess(command, p.returncode, out, err)
-        except subprocess.TimeoutExpired:
-            if time.time() >= deadline:
-                p.kill()
-                p.communicate()
-                raise
-            on_tick()
 
 
 def run_command_gate(
@@ -1502,16 +1490,10 @@ def run_command_gate(
             if on_tick is not None and tick_s > 0:
                 p = _run_ticking(gdef.command, str(cwd), full_env, gdef.timeout_s, on_tick, tick_s)
             else:
-                p = P.run(
-                    gdef.command,
-                    # bandit B604: a command gate IS a shell command line the operator wrote
-                    # in gates.toml.
-                    shell=True,  # nosec B604
-                    cwd=str(cwd),
-                    env=full_env,
-                    capture_output=True,
-                    text=True,
-                    timeout=gdef.timeout_s,
+                # A command gate IS a shell command line the operator wrote in gates.toml;
+                # on timeout its whole process group dies, not just the shell (Bed0f5b6d99).
+                p = P.run_shell(
+                    gdef.command, timeout=gdef.timeout_s, cwd=str(cwd), env=full_env, text=True
                 )
         except subprocess.TimeoutExpired:
             return "unavailable", {

@@ -183,16 +183,9 @@ def run(repo: Path, cfg: Config, *, ref: str = "HEAD", base: str = "", command: 
             status = "failed" if "does not merge" in failure else "unavailable"
             return Result(status, command=cmd, sha=sha, reason=failure)
         try:
-            p = P.run(  # nosec B604 - the operator's own [ci].command, run as they wrote it
-                cmd,
-                shell=True,
-                cwd=tree,
-                capture_output=True,
-                text=True,
-                timeout=cfg.ci.timeout_s,
-                stdin=subprocess.DEVNULL,
-                check=False,
-            )
+            # The operator's own [ci].command, run as they wrote it; on timeout its whole
+            # process group dies, not just the shell (Bed0f5b6d99).
+            p = P.run_shell(cmd, timeout=cfg.ci.timeout_s, cwd=tree, text=True)
         except subprocess.TimeoutExpired:
             return Result(
                 "unavailable",
