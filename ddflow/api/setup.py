@@ -529,7 +529,63 @@ def _check_msg(repo: Path, cfg, msg_file: str) -> O.Outcome:
     return O.Outcome(kind="hooks", data=data, exit=code, reason=msg)
 
 
-def _session_start(repo: Path, agent: str) -> O.Outcome:
+def _record_compaction(repo: Path, stdin: str, agent: str) -> O.Outcome:
+    """What the PreCompact hook does (B195): record the transcript's last turns as a
+    session note. NEVER blocks or fails a compaction -- the exit is always 0 and nothing
+    is printed (a `decision` on stdout would block it)."""
+    import json
+
+    from ..config import Config
+    from ..core.model import fold
+    from ..infra.log import EventLog, resolve_agent_id
+    from ..services import compaction as CP
+
+    try:
+        payload = json.loads(stdin) if stdin.strip() else {}
+        if not isinstance(payload, dict):
+            raise ValueError("the hook's stdin is not a JSON object")
+        cfg = Config.load(repo)
+        resolved, _layer = resolve_agent_id(repo, cfg, agent)
+        log = EventLog(
+            repo, resolved, lock_timeout_s=min(cfg.lease.acquire_timeout_s, 3.0), log_cfg=cfg.log
+        )
+        st = fold(log.read_all(), strict=False)
+        held = sorted(i.id for i in st.items.values() if i.lease and i.lease.holder == resolved)
+        return O.ok("hooks", message="", result=CP.record(log, cfg, payload, held))
+    except Exception as exc:  # a hook must never stand between the operator and /compact
+        return O.ok("hooks", message="", result="skipped", why=f"{type(exc).__name__}: {exc}")
+
+
+def _after_compaction(repo: Path, stdin: str) -> list[str]:
+    """The SessionStart lines for `source: compact`: the digest PreCompact recorded, or
+    a request to write one when none landed. [] for any other start or any problem."""
+    import json
+
+    from ..infra.log import EventLog
+    from ..services import compaction as CP
+
+    try:
+        payload = json.loads(stdin) if stdin.strip() else {}
+    except ValueError:
+        return []
+    if not isinstance(payload, dict) or payload.get("source") != "compact":
+        return []
+    from ..config import Config
+
+    log = EventLog(repo, log_cfg=Config.load(repo).log)
+    text = CP.latest(log, str(payload.get("session_id") or ""))
+    if text:
+        return ["## Before this compaction", "", text, ""]
+    return [
+        "## Before this compaction",
+        "",
+        "No record of what this session was doing reached ddflow. Write one now: "
+        '`ddflow session note --text "<what you were doing, what is next>"`.',
+        "",
+    ]
+
+
+def _session_start(repo: Path, agent: str, stdin: str = "") -> O.Outcome:
     """What the Claude Code SessionStart hook prints. ALWAYS exit 0.
 
     A hook that fails at session start blocks nothing useful and teaches the operator to
@@ -538,6 +594,10 @@ def _session_start(repo: Path, agent: str) -> O.Outcome:
     from .lifecycle import brief
 
     parts = ["# ddflow session start", ""]
+    try:
+        parts += _after_compaction(repo, stdin)
+    except Exception as exc:  # never fail a session start
+        parts += [f"_(compaction record unavailable: {exc})_", ""]
     try:
         drift = _worktree_drift(repo, Path.cwd())
         if drift:
@@ -654,6 +714,15 @@ def _prompt_hook_line(repo: Path) -> str:
     return "; ".join(parts)
 
 
+def _precompact_line(repo: Path) -> str:
+    from ..services import claudehooks as CH
+
+    on, why = CH.state(repo, event=CH.PRECOMPACT_EVENT, marker=CH.PRECOMPACT_MARKER)
+    if on is None:
+        return f"UNKNOWN -- {why}"
+    return "installed" if on else "not installed (`ddflow hooks install --claude`)"
+
+
 def _prompt_kw(CH, gemini: bool) -> dict[str, Any]:
     return {
         "event": CH.GEMINI_PROMPT_EVENT if gemini else CH.PROMPT_EVENT,
@@ -676,6 +745,12 @@ def _agent_hooks(repo: Path, action: str, *, claude: bool, gemini: bool) -> list
                 msgs.append(note)
         else:
             msgs.append(CH.uninstall(repo))
+        pre = {"event": CH.PRECOMPACT_EVENT, "marker": CH.PRECOMPACT_MARKER}
+        if action == "install":
+            line = E.command_line(CH.PRECOMPACT_MARKER, refresh="ddflow hooks install --claude")
+            msgs.append(CH.install(repo, line + " || true", matcher=None, **pre))
+        else:
+            msgs.append(CH.uninstall(repo, **pre))
     for want, kw in ((claude, _prompt_kw(CH, False)), (gemini, _prompt_kw(CH, True))):
         if not want:
             continue
@@ -782,6 +857,7 @@ def _hooks_status(repo: Path, cfg) -> O.Outcome:
         f"policy [enforce].commit_without_lease = {mode!r}{note}\n"
         f"{trailer_line}\n"
         f"Claude Code SessionStart hook: {session_line}\n"
+        f"Claude Code PreCompact hook: {_precompact_line(repo)}\n"
         f"prompt capture hook: {_prompt_hook_line(repo)}"
     )
     from ..services import launchers as LA
@@ -828,7 +904,9 @@ def hooks(
     from ..services import enforce as E
 
     if action == "session-start":
-        return _session_start(repo, agent)
+        return _session_start(repo, agent, stdin)
+    if action == "pre-compact":
+        return _record_compaction(repo, stdin, agent)
     if action == "prompt":
         return _capture_prompt(repo, stdin, agent)
     if action == "check-msg":

@@ -123,6 +123,10 @@ LEAF_NOT_EXPOSED: dict[tuple[str, ...], str] = {
         "a one-off backfill an operator runs after ddflow doctor names id-less prompts; "
         "agents record with ddflow_session_prompt, which never lacks a session now"
     ),
+    ("hooks", "pre-compact"): (
+        "invoked by Claude Code's own PreCompact hook with its JSON on stdin; an agent "
+        "never calls it, and the record it writes is a session note (ddflow_session_note)"
+    ),
     ("hooks", "prompt"): (
         "invoked BY the harness's prompt hook with the prompt's JSON on stdin; an agent "
         "records its own words with ddflow_session_prompt"

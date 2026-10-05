@@ -32,6 +32,10 @@ MARKER = "hooks session-start"
 #: The events Claude Code fires SessionStart for. `compact` matters most: it is the
 #: moment the model loses the rules it was given at the start.
 MATCHER = "startup|resume|clear|compact"
+#: The PreCompact hook: `ddflow hooks pre-compact` records what the session was doing
+#: before Claude Code compacts it (B195). No matcher: it fires for manual and auto alike.
+PRECOMPACT_MARKER = "hooks pre-compact"
+PRECOMPACT_EVENT = "PreCompact"
 #: The prompt-capture hook: runs `ddflow hooks prompt` with the harness's JSON on stdin.
 PROMPT_MARKER = "hooks prompt"
 #: Claude Code's event for "the user submitted a prompt", and Gemini CLI's equivalent.
