@@ -185,7 +185,7 @@ def check(cfg: Config, gates: dict[str, GateDef], root: Path | None = None) -> l
                 f"requirement quietly disappears rather than being enforced"
                 + (
                     " (the promotion pipeline runs only when flow.environments is set)."
-                    if gid in cfg.gates.promotion_pipeline and not cfg.flow.environments
+                    if gid in pipelines(cfg).get("promotion", ()) and not cfg.flow.environments
                     else "."
                 ),
             )
