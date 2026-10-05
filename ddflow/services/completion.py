@@ -206,8 +206,8 @@ def verdict(state: State, cfg: Config, item_id: str, *, repo: Path, model: str =
     if inert:
         v.blockers.append(
             f"[gates].required names {', '.join(inert)}, which no pipeline runs — "
-            f"so that requirement enforces nothing. Add it to task_pipeline or "
-            f"phase_pipeline, or drop it from required."
+            f"so that requirement enforces nothing. Add it to a pipeline (task_pipeline, "
+            f"phase_pipeline or promotion_pipeline), or drop it from required."
         )
 
     if cfg.gates.unavailable_is_failure and s.unavailable:

@@ -40,7 +40,7 @@ import tempfile
 import time
 import tomllib
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -653,6 +653,26 @@ def _what_differs(cwd: Path, base: str, dirt: str, now: TreeEntries | None, labe
     return f"the content it ran on is not the content of {label}"
 
 
+def pipelines(cfg: Config) -> dict[str, list[str]]:
+    """Every gate pipeline, by name (`task`, `phase`, `promotion`, ...).
+
+    Derived from the `gates.*_pipeline` fields rather than listed: naming task and phase
+    missed `promotion_pipeline` -- where a deploy sign-off belongs -- so a gate required
+    only there read as "in neither pipeline" (B7f0b7c8839, and Be14f271da8 before it),
+    and a list would miss the next pipeline the same way.
+    """
+    return {
+        f.name.removesuffix("_pipeline"): list(getattr(cfg.gates, f.name) or ())
+        for f in fields(cfg.gates)
+        if f.name.endswith("_pipeline")
+    }
+
+
+def pipelined(cfg: Config) -> set[str]:
+    """Every gate id some pipeline runs."""
+    return {g for ids in pipelines(cfg).values() for g in ids}
+
+
 def inert_requirements(cfg: Config) -> list[str]:
     """Gates named in ``gates.required`` that no pipeline actually runs.
 
@@ -666,8 +686,7 @@ def inert_requirements(cfg: Config) -> list[str]:
     Reported rather than raised at load time, because a config that is wrong in one
     field should still let `ddflow doctor` run and explain itself.
     """
-    pipelines = set(cfg.gates.task_pipeline) | set(cfg.gates.phase_pipeline)
-    return sorted(set(cfg.gates.required) - pipelines)
+    return sorted(set(cfg.gates.required) - pipelined(cfg))
 
 
 @dataclass
