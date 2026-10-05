@@ -293,6 +293,7 @@ def pins(
     sentence is of unknown status, and reporting it all as free is the failure this
     exists to prevent.
     """
+    from ..infra import worktree as W
     from ..services import prosepin as PP
 
     # `None` is "unset", never 0: using 0 for both made an explicit `--min-needle 0`
@@ -317,7 +318,7 @@ def pins(
             f"{document} is pinned, so treat all of it as pinned.",
             document=document,
         )
-    rel = path.relative_to(repo).as_posix() if path.is_relative_to(repo) else str(path)
+    rel = W.repo_relative(repo, path, as_given=True) or str(path)
     rep = PP.coverage(
         text,
         files,
