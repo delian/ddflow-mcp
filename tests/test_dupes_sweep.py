@@ -94,10 +94,14 @@ def test_dupes_lists_a_near_duplicate_pair_and_json_carries_it(repo):
 def test_a_pair_marked_distinct_never_returns(repo):
     _two_bugs(repo)
     assert run_cli(repo, "dupes")[0] == 0
-    code, out, err = run_cli(repo, "link", "B2", "--distinct", "B1")
+    code, out, err = run_cli(repo, "link", "B2", "--distinct", "B1", "--reason", "different defect")
     assert code == 0, err
     code, out, err = run_cli(repo, "dupes")
     assert code == 2, f"a dismissed pair came back: {out}{err}"
+    # The reason reaches a reader, not only the raw event: `show` renders the dismissal.
+    code, out, err = run_cli(repo, "show", "B2")
+    assert code == 0, err
+    assert "distinct" in out and "different defect" in out
 
 
 def test_a_related_link_also_settles_the_pair(repo):
@@ -178,6 +182,10 @@ def test_a_forgotten_memory_is_still_swept_end_to_end(repo):
     run_cli(repo, "memory", "forget", "M1", "--reason", "wrong machine")
     assert run_cli(repo, "dupes", "--kind", "memory", "--open-only")[0] == 2
     assert run_cli(repo, "dupes", "--kind", "memory")[0] == 0, "the forgotten memory vanished"
+    # The memory half of `_record_kind`: a pair the sweep shows must be settleable.
+    code, _out, err = run_cli(repo, "link", "M1", "--distinct", "M2")
+    assert code == 0, err
+    assert run_cli(repo, "dupes", "--kind", "memory")[0] == 2, "a forgotten-memory pair stayed"
 
 
 def test_linking_two_lessons_merges_them(repo):

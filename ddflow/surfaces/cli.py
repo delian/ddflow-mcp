@@ -27,7 +27,7 @@ from ..api import items as A_ITEMS
 from ..api import lifecycle as A_LIFECYCLE
 from ..api import reporting as A_REPORTING
 from ..core.events import SkewRefused
-from ..core.model import GATE_OUTCOMES, fold
+from ..core.model import GATE_OUTCOMES, LINK_RELATIONS, fold
 from ..infra import worktree as W
 from ..services import gates as G
 from ..services import leases as L
@@ -960,18 +960,25 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
         help="settle a near-duplicate pair: say how one record relates to another",
     )
     lk.add_argument("subject", help="the record being related (the duplicate, for a merge)")
+    # One flag per relation, DECLARED from LINK_RELATIONS: the parser, the API's accepted
+    # set and `cmd_link`'s lookup are then the same list, so a relation added to the model
+    # cannot be accepted over MCP and rejected by argparse (`--duplicate_of` -> the flag
+    # `--duplicate-of`, argparse's own dest rule).
+    _link_help = {
+        "extends": "subject adds to ID",
+        "duplicate_of": "subject is the same thing as ID",
+        "related": "subject is related to ID",
+        "distinct": "subject is NOT a duplicate of ID: dismiss the pair for good",
+    }
     lg = lk.add_mutually_exclusive_group(required=True)
-    lg.add_argument("--extends", metavar="ID", default="", help="subject adds to ID")
-    lg.add_argument(
-        "--duplicate-of", metavar="ID", default="", help="subject is the same thing as ID"
-    )
-    lg.add_argument("--related", metavar="ID", default="", help="subject is related to ID")
-    lg.add_argument(
-        "--distinct",
-        metavar="ID",
-        default="",
-        help="subject is NOT a duplicate of ID: dismiss the pair for good",
-    )
+    for _rel in LINK_RELATIONS:
+        lg.add_argument(
+            f"--{_rel.replace('_', '-')}",
+            metavar="ID",
+            default="",
+            dest=_rel,
+            help=_link_help[_rel],
+        )
     lk.add_argument("--reason", default="", help="why, recorded with the link")
     lk.set_defaults(fn=cmd_link)
 

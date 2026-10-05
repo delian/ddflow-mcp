@@ -316,6 +316,13 @@ def addenda(st, rid: str) -> dict[str, Any]:
         links.append(
             {**x, **{k: v for k, v in record_summary(st, x["target"]).items() if k != "text"}}
         )
+    # A `distinct` dismissal is an ANSWER about a pair, not a link, and `RecordLinks.links`
+    # deliberately excludes it. It is listed here too, or the reason a pair was dismissed
+    # (`ddflow link --distinct --reason`) would have no reader on any surface.
+    dismissals = [
+        {**x, **{k: v for k, v in record_summary(st, x["target"]).items() if k != "text"}}
+        for x in (mine.dismissals if mine else [])
+    ]
     out_related = {x["target"] for x in links if x["relation"] == "related"}
     inbound = []
     for src, rl in st.links.items():
@@ -331,6 +338,7 @@ def addenda(st, rid: str) -> dict[str, Any]:
     return {
         "additions": list(mine.extensions) if mine else [],
         "links": links,
+        "dismissals": dismissals,
         "linked_from": inbound,
     }
 
