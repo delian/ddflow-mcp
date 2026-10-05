@@ -708,6 +708,26 @@ def diff_covers_everything(
     return (not missing), missing
 
 
+def repo_relative(repo: Path, path: Path | str, *, resolve_leaf: bool = True) -> str | None:
+    """`path` relative to `repo` as a POSIX string, or None when it lies outside it.
+
+    Both sides are resolved first, so a repo reached through a symlink and a path that
+    was resolved (or the other way round) still compare equal. The one place the
+    "is this inside the repository, and as what" decision is made: `store_path` and
+    every report that prints a repo path use it.
+
+    `resolve_leaf=False` resolves only the directories above `path` and keeps its own
+    name: a report naming a file the operator listed (a symlinked suite, a document)
+    prints that name, not wherever the link points.
+    """
+    p = Path(path)
+    p = p.resolve() if resolve_leaf else p.parent.resolve() / p.name
+    try:
+        return p.relative_to(Path(repo).resolve()).as_posix()
+    except ValueError:
+        return None
+
+
 def store_path(repo: Path, path: Path | str) -> str:
     """How a worktree path is written INTO the event log: relative to the repo root.
 
@@ -720,14 +740,12 @@ def store_path(repo: Path, path: Path | str) -> str:
     repository tree AND `os.path.relpath` cannot express it portably. That case is
     reported by `ddflow doctor` rather than silently accepted.
     """
+    inside = repo_relative(repo, path)
+    if inside is not None:
+        return inside
     p = Path(path).resolve()
-    root = Path(repo).resolve()
     try:
-        return p.relative_to(root).as_posix()
-    except ValueError:
-        pass
-    try:
-        rel = os.path.relpath(p, root)
+        rel = os.path.relpath(p, Path(repo).resolve())
     except ValueError:  # different drive on Windows
         return str(p)
     return Path(rel).as_posix()
