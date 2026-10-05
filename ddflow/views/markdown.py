@@ -122,7 +122,7 @@ def board(state: State, cfg: Config | None = None, *, phase: str = "") -> str:
             # Every free-text cell goes through _cell (B2eaa1e5e8e): a `|` in a title
             # invented a column and a newline split the row.
             needs = ", ".join(_cell(n, cfg) for n in t.needs) or "—"
-            globs = ", ".join(f"`{_cell(g, cfg, code=True)}`" for g in t.globs) or "—"
+            globs = ", ".join(f"`{_cell(g, cfg)}`" for g in t.globs) or "—"
             owner = _cell(t.lease.holder, cfg) if t.lease else "—"
             out.append(
                 f"| [{mark}] | {indent}**{_cell(t.id, cfg)}** {_cell(t.title, cfg)} | "
@@ -216,21 +216,19 @@ def lessons_md(state: State, cfg: Config | None = None) -> str:
     return "\n".join(out)
 
 
-def _cell(text: str, cfg: Config | None = None, *, code: bool = False) -> str:
+def _cell(text: str, cfg: Config | None = None) -> str:
     """One markdown table cell: redacted, line breaks folded, `|` escaped so a title
     cannot split the row into extra columns (B2eaa1e5e8e).
 
     Every CommonMark line ending is folded -- a lone CR is one too, and a raw one split
-    the row just like LF. Backslashes are escaped before the pipe: a GFM row splitter
-    reads a doubled backslash as an escaped backslash, so `a\\|b` written as `a\\\\|b`
-    left the pipe a delimiter again (roborev on fix-B2eaa1e5e8e). ``code`` is for text
-    inside a code span, where a backslash escape is not unescaped: there only the
-    backslashes right before a pipe are doubled, so a glob keeps its own backslashes.
+    the row just like LF. A GFM row splitter reads a doubled backslash as an escaped
+    backslash, so the backslashes right before a `|` are doubled too: `a\\|b` written as
+    `a\\\\|b` left the pipe a delimiter again (roborev on fix-B2eaa1e5e8e). Nothing else
+    is escaped: a title is markdown (its backticks are meant), and escaping every
+    backslash turned an author's `\\*x\\*` into emphasis (roborev on 72565c2d).
     """
     folded = re.sub(r"\r\n?|\n", " ", _redact(text, cfg))
-    if code:
-        return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", folded).strip()
-    return folded.replace("\\", "\\\\").replace("|", "\\|").strip()
+    return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", folded).strip()
 
 
 def bugs_md(state: State, cfg: Config | None = None) -> str:
