@@ -39,10 +39,36 @@ def test_brief_for_an_item_reaches_its_own_section(repo):
     assert f"{STALE} more unended job(s)" in text and "ddflow job list" in text
 
 
-def test_brief_without_an_item_lists_a_bounded_number_of_stale_jobs(repo):
-    _project(repo)
-    text = lifecycle.brief(repo, agent="a1").data["text"]
-    listed = [ln for ln in text.splitlines() if ln.startswith("- **") and "`J" in ln]
-    assert 0 < len(listed) <= 5, listed
-    assert "more unended job(s)" in text and "ddflow job list" in text
-    assert "brief truncated" not in text, text[-400:]
+def _stale_state(repo: Path, n: int):
+    from ddflow.core.model import fold
+
+    log = EventLog(repo, "a1")
+    for i in range(n):
+        log.append("job.started", f"Jold{i:03d}", {"item": f"OTHER{i}", "command": "x", "pid": 0})
+    return fold(log.read_all(), strict=False)
+
+
+def test_a_brief_about_no_item_lists_the_newest_five(repo):
+    """The no-item branch, driven directly: `lifecycle.brief` picks the held or top ready
+    item whenever there is one, so through it this branch runs only on an empty queue."""
+    from ddflow.views import markdown as M
+
+    out: list[str] = []
+    M._brief_jobs(out, _stale_state(repo, STALE), "")
+    listed = [ln for ln in out if ln.startswith("- **")]
+    assert [ln.split("`")[1] for ln in listed] == [f"Jold{i:03d}" for i in range(35, 40)]
+    assert f"{STALE - 5} more unended job(s)" in "\n".join(out)
+
+
+def test_a_job_on_another_host_is_never_collapsed(repo, monkeypatch):
+    from ddflow.services import jobs as J
+    from ddflow.views import markdown as M
+
+    st = _stale_state(repo, 3)
+    st.jobs["Jold001"].host = "some-other-host"
+    monkeypatch.setattr(J, "host", lambda: "this-host")
+    out: list[str] = []
+    M._brief_jobs(out, st, "MINE")
+    text = "\n".join(out)
+    assert "Jold001" in text and "ELSEWHERE" in text
+    assert "Jold000" not in text and "2 more unended job(s)" in text

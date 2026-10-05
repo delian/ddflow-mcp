@@ -745,8 +745,9 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
             )
 
 
-#: Unended jobs of OTHER items that are not running, listed in full in a brief with no
-#: ``--item``; the rest collapse to one count line. With ``--item`` none are listed.
+#: Unended, not-running jobs of other items listed in full by a brief about NO item
+#: (nothing held, nothing ready); the rest collapse to one count line. A brief about an
+#: item -- named, held or suggested -- lists none of them.
 BRIEF_OTHER_JOBS = 5
 
 
@@ -757,8 +758,9 @@ def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
     accident, and one that died unrecorded is work to collect or redo -- both are what
     the next session must know before it picks anything up.
 
-    Bounded (B8114a8b531): a running job and every job of the item asked about are listed
-    in full, but exited or killed jobs of OTHER items -- dozens, in a long-lived project --
+    Bounded (B8114a8b531): a running job, one on another host (it may be running), and
+    every job of the item the brief is about are listed in full, but exited or killed
+    jobs of OTHER items -- dozens, in a long-lived project --
     collapse to one count line. Listed one by one they filled the whole token budget
     ahead of the item's own section, and the brief was cut before it said anything about
     the item.
@@ -772,7 +774,8 @@ def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
     others: list = []
     for j in sorted(pending, key=lambda x: x.started_at):
         s = J.status(j)
-        (shown if s.state == "running" or (item and j.item == item) else others).append((j, s))
+        live = s.state in ("running", "elsewhere")  # alive, or not checkable here
+        (shown if live or (item and j.item == item) else others).append((j, s))
     keep = 0 if item else BRIEF_OTHER_JOBS
     if keep:
         newest = sorted(others, key=lambda js: js[0].started_at)[-keep:]
@@ -790,7 +793,7 @@ def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
     if hidden:
         whose = "other items'" if item else "older"
         out.append(
-            f"- _{hidden} more unended job(s) ({whose}, not running): `ddflow job list` "
+            f"- _{hidden} more unended job(s) ({whose}, exited or killed): `ddflow job list` "
             "shows them; `ddflow job end` records each one collected._"
         )
     out.append("")
