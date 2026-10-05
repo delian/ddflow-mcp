@@ -15,6 +15,7 @@ costs. It is retrieval, budgeted, with the budget enforced rather than hoped for
 
 from __future__ import annotations
 
+import re
 import textwrap
 from collections.abc import Callable
 from pathlib import Path
@@ -217,8 +218,13 @@ def lessons_md(state: State, cfg: Config | None = None) -> str:
 
 def _cell(text: str, cfg: Config | None = None) -> str:
     """One markdown table cell: redacted, newlines folded, `|` escaped so a title cannot
-    split the row into extra columns."""
-    return _redact(text, cfg).replace("\n", " ").replace("|", "\\|").strip()
+    split the row into extra columns.
+
+    A GFM row splitter reads `\\\\` as an escaped backslash, so the backslashes right
+    before a `|` are doubled first: `a\\|b` written as `a\\\\|b` would leave the pipe a
+    delimiter again (roborev on fix-B2eaa1e5e8e)."""
+    folded = _redact(text, cfg).replace("\n", " ")
+    return re.sub(r"(\\*)\|", lambda m: m.group(1) * 2 + "\\|", folded).strip()
 
 
 def bugs_md(state: State, cfg: Config | None = None) -> str:
