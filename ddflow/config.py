@@ -1685,7 +1685,7 @@ class Config:
     def _forget_fallback(self, key: str, source: str, value: Any) -> None:
         """A later layer set `key`: an earlier layer's strictest-fallback note must stop
         claiming its value is in effect, or doctor reports `block` while `warn` runs."""
-        mark = " (not a value this ddflow knows; in effect: "
+        mark = " (not a value this ddflow knows; "  # in effect: ... | overridden by ...
         for i, entry in enumerate(self.unknown_knobs):
             if entry.startswith(f"{key} = ") and mark in entry:
                 self.unknown_knobs[i] = (
