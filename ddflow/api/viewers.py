@@ -21,13 +21,23 @@ def view_list(
     tag: str = "",
     agent: str = "",
     since: str = "",
+    item: str = "",
     limit: int = V.DEFAULT_LIMIT,
 ) -> O.Outcome:
-    """Filtered, bounded rows of `kind` (task|phase|bug|research|session)."""
+    """Filtered, bounded rows of `kind` (task|phase|bug|research|lesson|session)."""
     _log, cfg, st = _load(repo)
     try:
         view = V.list_view(
-            st, cfg, kind, state=state, phase=phase, tag=tag, agent=agent, since=since, limit=limit
+            st,
+            cfg,
+            kind,
+            state=state,
+            phase=phase,
+            tag=tag,
+            agent=agent,
+            since=since,
+            item=item,
+            limit=limit,
         )
     except V.ViewError as exc:
         return O.refused("view.list", str(exc), record_kind=kind)
@@ -61,14 +71,17 @@ def phase_progress(st: Any, phase_id: str) -> tuple[int, int]:
 _TAKES: dict[str, frozenset[str]] = {
     "task": frozenset({"phase", "tag"}),
     "phase": frozenset({"tag"}),
-    "bug": frozenset({"phase", "all"}),
+    "bug": frozenset({"phase", "all", "item"}),
     "research": frozenset({"phase", "tag"}),
+    "lesson": frozenset({"tag", "all"}),
     "session": frozenset({"id"}),
     "search": frozenset({"query", "mode", "sources", "phase"}),
 }
 
 #: What `view_read` answers: the list kinds, plus a text search.
-READ_KINDS = (*V.KINDS[:4], "session", "search")
+#: `V.KINDS[:4]` is task/phase/bug/research; lesson was inserted after research, so it is
+#: named explicitly rather than sliding the slice.
+READ_KINDS = ("task", "phase", "bug", "research", "lesson", "session", "search")
 
 
 def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
@@ -82,6 +95,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
     tag: str = "",
     owner: str = "",
     since: str = "",
+    item: str = "",
     limit: int = V.DEFAULT_LIMIT,
     all: bool = False,
     mode: str = "ranked",
@@ -102,6 +116,7 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         "mode": mode if mode != "ranked" else "",
         "sources": sources,
         "phase": phase,
+        "item": item,
     }
     stray = sorted(k for k, v in given.items() if v and k not in _TAKES[kind])
     if stray:
@@ -118,8 +133,20 @@ def view_read(  # noqa: PLR0913 -- one tool carries every viewer filter
         return _read_search(repo, query, mode, sources, state, phase, owner, since, limit)
     if kind == "bug" and not state and not all:
         state = "open"
+    if kind == "lesson" and not state and not all:
+        # Live lessons unless `all`: a superseded one is kept, not current, exactly as a
+        # fixed bug is. The same default the CLI applies, so both surfaces agree.
+        state = "live"
     out = view_list(
-        repo, kind, state=state, phase=phase, tag=tag, agent=owner, since=since, limit=limit
+        repo,
+        kind,
+        state=state,
+        phase=phase,
+        tag=tag,
+        agent=owner,
+        since=since,
+        item=item,
+        limit=limit,
     )
     if "filters" in out.data:
         out.data["filters"] = _filters(out.data["filters"])

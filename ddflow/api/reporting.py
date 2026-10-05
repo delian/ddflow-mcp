@@ -933,7 +933,17 @@ def board(repo: Path, *, phase: str = "", agent: str = "") -> O.Outcome:
 #: `--show` exists so the MCP `resources/read` handler can serve these through one code
 #: path like everything else. It used to fold the log itself -- a second data path in a
 #: module whose whole premise is "one implementation, two doors".
-_RENDERABLE = ("lessons", "lessons-summary", "research", "board")
+_RENDERABLE = (
+    "lessons",
+    "lessons-summary",
+    "research",
+    "board",
+    # The record kinds the MCP serves as `ddflow://bugs|decisions|sessions` (B196): a
+    # resource is one of these documents, served through this one code path.
+    "bugs",
+    "decisions",
+    "sessions",
+)
 
 #: Where `render` writes its views when no directory is given.
 DEFAULT_RENDER_DIR = "docs/ddflow"
@@ -964,6 +974,9 @@ def render(
             "lessons-summary": render_md.lessons_summary_md,
             "research": render_md.research_md,
             "board": render_md.board,
+            "bugs": render_md.bugs_md,
+            "decisions": render_md.decisions_md,
+            "sessions": render_md.sessions_md,
         }[show]
         # Every markdown renderer takes the config now (the views redact record text),
         # so this stays future-proof for one that does not. INSPECTED rather than

@@ -956,6 +956,10 @@ def build_parser() -> argparse.ArgumentParser:  # noqa: PLR0915
     dca.set_defaults(fn=cmd_decision)
     dcl = dc_s.add_parser("list")
     dcl.add_argument("--all", action="store_true")
+    dcl.add_argument(
+        "--since", default=None, help="only decisions recorded at or after this ISO date"
+    )
+    dcl.add_argument("--limit", type=int, default=None, help="the newest N (0 = all)")
     dcl.set_defaults(fn=cmd_decision)
     dcs = dc_s.add_parser("show")
     dcs.add_argument("id")
