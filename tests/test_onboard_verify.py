@@ -107,6 +107,25 @@ def test_without_a_command_the_suite_check_is_unavailable(repo):
     assert _check(V.verify(repo), "suite green").outcome == "unavailable"
 
 
+def test_a_hook_that_fails_everything_is_not_enforcement(repo):
+    """Exit 127 for every message used to read as 'refused the trailer' (roborev)."""
+    _hook(repo, "commit-msg", "exit 127\n")
+    check = _check(V.verify(repo, suite=False), "trailer refused")
+    assert check.outcome == "failed" and "clean message" in check.detail
+
+
+def test_the_configured_suite_command_is_found_and_run(repo):
+    """The lookup went through Config.gate, which does not exist; gates live in
+    .ddflow/gates.toml and load_gates is the workflow's reader (roborev)."""
+    _write(
+        repo,
+        ".ddflow/gates.toml",
+        "[gate.unit_tests]\ncommand = \"sh -c 'echo 1 passed in 0.1s'\"\n",
+    )
+    check = _check(V.verify(repo), "suite green")
+    assert check.outcome == "passed", check.detail
+
+
 def test_the_report_says_what_did_not_pass(repo):
     report = V.verify(repo, suite=False)
     assert not report.passed
