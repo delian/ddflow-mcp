@@ -69,12 +69,11 @@ Stage 4's scan is `ddflow onboard legacy`: it reads the rulebooks, the slash com
 
 ## 5. Freeze what was imported
 
-An edit to an imported file after the cutover reaches no agent and silently forks the record. Make it fail. Arm it with `ddflow onboard legacy --apply`: it lists the freeze candidates (the files the import consumed) and freezes the whole list, or only the names you pass with `--accept FILE`; it reports a ratchet it could not arm as a failure, not a success. The refinement it cannot make for you:
+An edit to an imported file after the cutover reaches no agent and silently forks the record. Make it fail. `ddflow onboard legacy --apply` writes the ratchet itself: a `pre-commit` `language: fail` hook over those paths where the framework is used, otherwise a test that pins each file's hash so the `unit_tests` gate goes red. It lists the freeze candidates (the files the import consumed) and freezes the whole list, or only the names you pass with `--accept FILE`; a ratchet it could not arm is reported as a failure, not a success.
 
-- where the project uses the `pre-commit` framework, a local hook with `language: fail` over those paths;
-- otherwise a test that pins each file's hash, so the `unit_tests` gate goes red. Mutation-check it: change a byte, watch it fail, restore.
+**Ask:** show the freeze candidate list before applying it — a bare `--apply` freezes everything listed.
 
-State in the rulebook and in the ratchet's own message what to do instead.
+What is left to you: mutation-check the ratchet (change a byte, watch it fail, restore) and state the replacement in the project's rulebook.
 
 ## 6. Verify, end to end, and commit
 
