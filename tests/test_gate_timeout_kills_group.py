@@ -114,9 +114,28 @@ def test_run_shell_raises_timeout_after_killing_the_group(tmp_path):
     assert _gone(pidfile)
 
 
-def test_run_shell_keeps_stdin_detached(tmp_path):
-    p = P.run_shell("cat; echo done", cwd=tmp_path, timeout=10, text=True)
-    assert p.stdout == "done\n", "cat must read EOF from /dev/null, never our stdin"
+def test_run_shell_keeps_stdin_detached():
+    """Run from a parent whose stdin is a REAL pipe with bytes on it (as an MCP server's
+    is): inside pytest fd 0 is already empty, and the check would pass either way
+    (see test_stdio_safety.test_the_guard_actually_detaches_stdin)."""
+    root = Path(__file__).resolve().parents[1]
+    parent = (
+        f"import sys; sys.path.insert(0, {str(root)!r});"
+        "from ddflow.infra import proc as P;"
+        "r = P.run_shell('cat; echo done', timeout=30, text=True);"
+        "print('CHILD_SAW=' + repr(r.stdout));"
+        "print('PARENT_KEPT=' + repr(sys.stdin.read()))"
+    )
+    p = subprocess.run(
+        [sys.executable, "-c", parent],
+        input="PROTOCOL-BYTES\n",
+        capture_output=True,
+        text=True,
+        timeout=90,
+    )
+    assert p.returncode == 0, p.stderr[-800:]
+    assert "CHILD_SAW='done\\n'" in p.stdout, p.stdout
+    assert "PARENT_KEPT='PROTOCOL-BYTES\\n'" in p.stdout, p.stdout
 
 
 def test_run_shell_refuses_a_tick_that_would_never_fire(tmp_path):
