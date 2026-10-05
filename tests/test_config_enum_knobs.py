@@ -143,9 +143,13 @@ def test_every_enum_knob_declares_its_strictest_value() -> None:
         assert C.KNOB_STRICTEST[key][1], f"{key}: say why that value is the strictest"
 
 
-def test_each_knob_doc_names_the_value_a_bad_file_value_falls_back_to() -> None:
+def test_config_explain_names_each_knobs_fallback_once() -> None:
+    # What the operator reads (`config --explain`), not the table the sentence is built
+    # from: each enum knob's doc names its fallback exactly once.
+    docs = {key: doc for key, _v, _s, doc in Config().explain()}
     for key in C.KNOB_STRICTEST:
-        assert f"falls back to '{C.strictest(key)}'" in KNOB_DOCS[key], key
+        assert docs[key].count(f"falls back to '{C.strictest(key)}'") == 1, key
+        assert docs[key].count("falls back to") == 1, key
 
 
 @pytest.mark.parametrize(
@@ -222,6 +226,19 @@ def test_two_layers_with_bad_values_each_name_what_their_file_wrote(tmp_path: Pa
         "upgrade.skew = 'of' (not a value this ddflow knows; overridden by the local value 'zzz')",
         "upgrade.skew = 'zzz' (not a value this ddflow knows; in effect: 'refuse', the strictest)",
     ]
+
+
+def test_a_later_bad_value_holding_the_notes_words_survives_a_third_layer(
+    tmp_path: Path,
+) -> None:
+    bad = "a (not a value this ddflow knows; b"
+    _load_file(tmp_path, '[upgrade]\nskew = "of"\n')
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text(f'[upgrade]\nskew = "{bad}"\n')
+    cfg = Config.load(tmp_path, env={"DDFLOW_UPGRADE_SKEW": "warn"})
+    assert cfg.upgrade.skew == "warn"
+    tail = "(not a value this ddflow knows; overridden by the env value 'warn')"
+    assert cfg.unknown_knobs == [f"upgrade.skew = 'of' {tail}", f"upgrade.skew = {bad!r} {tail}"]
 
 
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
