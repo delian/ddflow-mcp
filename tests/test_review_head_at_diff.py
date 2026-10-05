@@ -38,7 +38,11 @@ def _git(repo: Path, *args: str) -> str:
 
 def _setup(repo: Path, tmp_path: Path) -> Path:
     """A project whose reviewer, when `arm` exists, commits `late<N>.py` to the checked-out
-    branch mid-review (and disarms). Returns the marker path."""
+    branch mid-review (and disarms). Returns the marker path.
+
+    A late commit that FAILS fails the reviewer, so the review errors with git's own
+    words. Swallowed, it passed the review and surfaced one call later as "nothing
+    changed since the reviewed head", far from its cause (B067ea15820)."""
     arm = tmp_path / "arm"
     cli = tmp_path / "fake-reviewer"
     calls = tmp_path / "calls"
@@ -46,8 +50,9 @@ def _setup(repo: Path, tmp_path: Path) -> Path:
         f"#!/bin/sh\necho x >> '{calls}'\ncat >/dev/null\n"
         f"if [ -f '{arm}' ]; then n=$(cat '{arm}'); rm -f '{arm}'; "
         f"printf 'late = %s\\n' \"$n\" > '{repo}/late'$n'.py'; "
-        f"git -C '{repo}' add 'late'$n'.py' >/dev/null; "
-        f"git -C '{repo}' commit -qm \"late $n\" >/dev/null; fi\n"
+        f"git -C '{repo}' add 'late'$n'.py' >/dev/null && "
+        f"git -C '{repo}' commit -qm \"late $n\" >/dev/null "
+        "|| { echo 'the late commit failed' >&2; exit 1; }; fi\n"
         "echo 'STATUS: NO FINDINGS'\n"
     )
     cli.chmod(cli.stat().st_mode | stat.S_IXUSR)
@@ -122,3 +127,13 @@ def test_a_commit_made_while_a_delta_round_runs_is_not_skipped(repo, tmp_path):
     assert d2.exit == OK, d2.reason
     assert "nothing changed" not in (d2.reason or "")
     assert "delta review of 1 commit since " + taken[:10] in d2.data["text"], d2.data["text"]
+
+
+def test_a_late_commit_that_fails_fails_the_review_with_its_cause(repo, tmp_path):
+    """B067ea15820: the fixture's reviewer must not hide a commit it could not make."""
+    arm = _setup(repo, tmp_path)
+    (repo / ".git" / "index.lock").write_text("")  # git add/commit now refuse
+    arm.write_text("1")
+    out = _review(repo)
+    assert out.exit != OK, "a reviewer whose late commit failed passed the review"
+    assert "index.lock" in (out.reason or ""), out.reason
