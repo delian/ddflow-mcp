@@ -17,6 +17,7 @@ similarity. This module is the foundation that other Phase 1 tasks build on.
 
 from __future__ import annotations
 
+import json
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -148,18 +149,16 @@ class Rule:
         )
 
         lines = []
-        lines.append(f'id = "{self.id}"')
-        lines.append(f'title = "{self.title}"')
+        lines.append(f"id = {_toml_str(self.id)}")
+        lines.append(f"title = {_toml_str(self.title)}")
         if self.tags:
-            tags_str = ", ".join(f'"{t}"' for t in self.tags)
-            lines.append(f"tags = [{tags_str}]")
-        lines.append(f'scope = "{self.scope}"')
+            lines.append(f"tags = [{', '.join(_toml_str(t) for t in self.tags)}]")
+        lines.append(f"scope = {_toml_str(self.scope)}")
         lines.append(f"priority = {self.priority}")
         if self.globs:
-            globs_str = ", ".join(f'"{g}"' for g in self.globs)
-            lines.append(f"globs = [{globs_str}]")
-        lines.append(f'created = "{created_str}"')
-        lines.append(f'updated = "{updated_str}"')
+            lines.append(f"globs = [{', '.join(_toml_str(g) for g in self.globs)}]")
+        lines.append(f"created = {_toml_str(created_str)}")
+        lines.append(f"updated = {_toml_str(updated_str)}")
 
         frontmatter = "\n".join(lines)
         return f"{frontmatter}\n\n{self.content}"
@@ -222,6 +221,16 @@ class Rule:
 
 
 # -- Helpers ------------------------------------------------------------------
+
+
+def _toml_str(value: str) -> str:
+    """`value` as a TOML basic string, escaped so any text round-trips (B28cab0652a).
+
+    `json.dumps` escapes quotes, backslashes and control characters the way TOML does,
+    but with `ensure_ascii` it writes a non-BMP character as a surrogate pair, which TOML
+    refuses; and without it, it leaves U+007F raw, which TOML also refuses.
+    """
+    return json.dumps(str(value), ensure_ascii=False).replace("\x7f", "\\u007f")
 
 
 def _is_valid_rule_id(rule_id: str) -> bool:
