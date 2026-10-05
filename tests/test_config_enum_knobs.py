@@ -118,14 +118,73 @@ def test_the_declared_choices_are_the_listed_ones_and_hold_the_default() -> None
         assert getattr(getattr(cfg, sec), knob) in allowed, key
 
 
+def _load_file(tmp_path: Path, text: str) -> Config:
+    (tmp_path / ".ddflow").mkdir(exist_ok=True)
+    (tmp_path / ".ddflow" / "config.toml").write_text(text)
+    return Config.load(tmp_path, env={})
+
+
 def test_a_file_with_an_unknown_value_still_loads_and_names_it(tmp_path: Path) -> None:
     # A config FILE may be newer than the code (a later release's value): it is recorded
-    # and reported, never fatal, and the knob keeps its default -- like an unknown knob.
-    (tmp_path / ".ddflow").mkdir()
-    (tmp_path / ".ddflow" / "config.toml").write_text('[enforce]\nstale_docs = "blok"\n')
-    cfg = Config.load(tmp_path, env={})
-    assert cfg.enforce.stale_docs == "warn"
-    assert "enforce.stale_docs = 'blok'" in cfg.unknown_knobs
+    # and reported, never fatal -- and the knob takes its STRICTEST value, not its default
+    # (decision D-enum-fallback-strict): a typo can only make ddflow more careful.
+    cfg = _load_file(tmp_path, '[enforce]\nstale_docs = "blok"\n')
+    assert cfg.enforce.stale_docs == "block"
+    (entry,) = cfg.unknown_knobs
+    assert entry.startswith("enforce.stale_docs = 'blok'")
+    # The note doctor prints names the value actually in effect.
+    assert "'block'" in entry and "in effect" in entry
+
+
+def test_every_enum_knob_declares_its_strictest_value() -> None:
+    assert set(C.KNOB_STRICTEST) == set(C.KNOB_CHOICES)
+    for key, allowed in C.KNOB_CHOICES.items():
+        assert C.KNOB_STRICTEST[key] in allowed, key
+
+
+def test_each_knob_doc_names_the_value_a_bad_file_value_falls_back_to() -> None:
+    for key, strictest in C.KNOB_STRICTEST.items():
+        doc = KNOB_DOCS[key]
+        assert f"falls back to '{strictest}'" in doc, key
+
+
+@pytest.mark.parametrize(
+    ("toml", "attr", "expected"),
+    [
+        ('[enforce]\nstale_docs = "blok"\n', ("enforce", "stale_docs"), "block"),
+        ('[enforce]\ncommit_without_lease = "x"\n', ("enforce", "commit_without_lease"), "block"),
+        ('[upgrade]\nskew = "refusee"\n', ("upgrade", "skew"), "refuse"),
+        ('[review]\non_exceed = "wran"\n', ("review", "on_exceed"), "refuse"),
+        ('[gates]\nenforce_order = "x"\n', ("gates", "enforce_order"), "block"),
+        ('[loops]\non_detect = "x"\n', ("loops", "on_detect"), "block"),
+        ('[ci]\non_merge = "x"\n', ("ci", "on_merge"), "full"),
+        ('[schedule]\nempty_phase = "x"\n', ("schedule", "empty_phase"), "problem"),
+    ],
+)
+def test_a_bad_file_value_takes_the_strictest(
+    tmp_path: Path, toml: str, attr: tuple[str, str], expected: str
+) -> None:
+    cfg = _load_file(tmp_path, toml)
+    assert getattr(getattr(cfg, attr[0]), attr[1]) == expected
+
+
+def test_a_valid_later_layer_still_wins_over_a_bad_file_value(tmp_path: Path) -> None:
+    # The fallback applies to the layer that carried the typo; a valid value in the
+    # machine-local layer, read after it, still sets the knob as before.
+    cfg = _load_file(tmp_path, '[upgrade]\nskew = "of"\n')
+    assert cfg.upgrade.skew == "refuse"
+    (tmp_path / ".ddflow" / "local").mkdir()
+    (tmp_path / ".ddflow" / "local" / "config.toml").write_text('[upgrade]\nskew = "warn"\n')
+    assert Config.load(tmp_path, env={}).upgrade.skew == "warn"
+
+
+def test_config_set_still_refuses_a_bad_value(repo: Path) -> None:
+    code, _out, err = run_cli(repo, "init")
+    assert code == 0, err
+    before = (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    code, _out, err = run_cli(repo, "config", "--set", "enforce.stale_docs", "blok")
+    assert code != 0 and "enforce.stale_docs" in err
+    assert (repo / ".ddflow" / "config.toml").read_text("utf-8") == before
 
 
 def test_an_env_value_outside_the_choices_is_refused(tmp_path: Path) -> None:
@@ -139,10 +198,28 @@ def test_this_projects_config_is_still_valid() -> None:
             Config.check(tomllib.loads(path.read_text("utf-8")))
 
 
-def test_a_freshly_initialised_config_is_valid(repo: Path) -> None:
+def _loads_unchanged(tmp_path: Path, text: str) -> None:
+    """The file loads with no fallback: every enum knob it sets holds the value written."""
+    cfg = _load_file(tmp_path, text)
+    assert cfg.unknown_knobs == []
+    for sec, values in tomllib.loads(text).items():
+        if not isinstance(values, dict) or sec in Config._FOREIGN_TABLES:
+            continue
+        for knob, value in values.items():
+            if f"{sec}.{knob}" in C.KNOB_CHOICES:
+                assert getattr(getattr(cfg, sec), knob) == value, f"{sec}.{knob}"
+
+
+def test_this_projects_config_loads_unchanged(tmp_path: Path) -> None:
+    _loads_unchanged(tmp_path, (ROOT / ".ddflow" / "config.toml").read_text("utf-8"))
+
+
+def test_a_freshly_initialised_config_is_valid(repo: Path, tmp_path: Path) -> None:
     code, _out, err = run_cli(repo, "init")
     assert code == 0, err
-    Config.check(tomllib.loads((repo / ".ddflow" / "config.toml").read_text("utf-8")))
+    text = (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    Config.check(tomllib.loads(text))
+    _loads_unchanged(tmp_path, text)
 
 
 def test_every_declared_choice_is_named_in_the_knobs_doc() -> None:
