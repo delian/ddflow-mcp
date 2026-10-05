@@ -29,3 +29,16 @@ def test_an_ordinary_gate_id_is_still_accepted(repo):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "workflow", "gate", "deploy_check-2", "--prompt", "x")
     assert code == 0, (out, err)
+
+
+@pytest.mark.parametrize("key", ["gate.a.b.command", "gate.two words.command", "gate.🚀.prompt"])
+def test_config_set_refuses_a_gate_key_whose_id_is_not_a_bare_key(repo, key):
+    """roborev on 6eafc1f3: `config --set gate.a.b.command` exited 0 and wrote
+    `[gate.a.b]`, which every later command then refused to load."""
+    run_cli(repo, "init")
+    before = (repo / ".ddflow" / "config.toml").read_text("utf-8")
+    code, out, err = run_cli(repo, "config", "--set", key, "echo hi")
+    assert code != 0, (out, err)
+    assert "letters, digits" in out + err, (out, err)
+    assert (repo / ".ddflow" / "config.toml").read_text("utf-8") == before
+    assert run_cli(repo, "brief")[0] in (0, 2)
