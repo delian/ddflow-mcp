@@ -1286,9 +1286,15 @@ TOOLS: dict[str, dict[str, Any]] = {
         ),
         "properties": {
             "all": ("boolean", "Include superseded decisions.", False),
+            "since": ("string", "Only those recorded at or after this ISO date.", False),
             "limit": ("integer", "Newest decisions returned (default 25; 0 = all).", False),
         },
-        "api": lambda repo, a, agent: _api().decision_list(repo, all=bool(a.get("all"))),
+        "api": lambda repo, a, agent: _api().decision_list(
+            repo,
+            all=bool(a.get("all")),
+            since=a.get("since", "") or "",
+            limit=int(a["limit"]) if a.get("limit") else None,
+        ),
         "payload": "rows",
     },
     "ddflow_decision_applicable": {
@@ -1372,11 +1378,11 @@ TOOLS: dict[str, dict[str, Any]] = {
     "ddflow_list": {
         "description": (
             "Read-only lists, newest first, 25 rows unless `limit` (0 = the most: 1000, search 200); a cut says so. "
-            "`kind`: task|phase|bug|research|session|search. Bugs: open unless `all`/`state`. "
+            "`kind`: task|phase|bug|research|lesson|session|search. Bugs and lessons: the live ones unless `all`/`state`. "
             "History: ddflow_history."
         ),
         "properties": {
-            "kind": ("string", "task|phase|bug|research|session|search", True),
+            "kind": ("string", "task|phase|bug|research|lesson|session|search", True),
             "id": ("string", "kind=session: one session in full.", False),
             "query": ("string", "kind=search: text to find.", False),
             "state": ("string", "Only this state.", False),
@@ -1384,8 +1390,9 @@ TOOLS: dict[str, dict[str, Any]] = {
             "tag": ("string", "Only this tag.", False),
             "owner": ("string", "Only this agent's rows.", False),
             "since": ("string", "Changed at/after this ISO date.", False),
+            "item": ("string", "kind=bug: only bugs against this item.", False),
             "limit": ("integer", "Rows (default 25; 0 = the most: 1000, search 200).", False),
-            "all": ("boolean", "kind=bug: include fixed/invalid.", False),
+            "all": ("boolean", "kind=bug|lesson: include fixed/invalid/superseded.", False),
             "mode": ("string", "search: ranked|exact|regex.", False),
             "sources": ("string", "search: comma-separated record kinds.", False),
         },
@@ -1399,6 +1406,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             tag=a.get("tag", "") or "",
             owner=a.get("owner", "") or "",
             since=a.get("since", "") or "",
+            item=a.get("item", "") or "",
             limit=1000 if a.get("limit") == 0 else int(a.get("limit") or 25),
             all=bool(a.get("all")),
             mode=a.get("mode", "") or "ranked",
@@ -3743,6 +3751,24 @@ class Server:
                             "description": "Findings with verdicts and probes.",
                             "mimeType": "text/markdown",
                         },
+                        {
+                            "uri": "ddflow://bugs",
+                            "name": "Bugs",
+                            "description": "Every bug with its item, its regression tests and its lesson.",
+                            "mimeType": "text/markdown",
+                        },
+                        {
+                            "uri": "ddflow://decisions",
+                            "name": "Decisions",
+                            "description": "The architectural decisions in force.",
+                            "mimeType": "text/markdown",
+                        },
+                        {
+                            "uri": "ddflow://sessions",
+                            "name": "Sessions",
+                            "description": "The sessions, when they ran and what they were for.",
+                            "mimeType": "text/markdown",
+                        },
                     ]
                 },
             )
@@ -3767,6 +3793,11 @@ class Server:
                     _api().render(repo, show="lessons-summary").data["text"]
                 ),
                 "ddflow://research": lambda repo: _api().render(repo, show="research").data["text"],
+                "ddflow://bugs": lambda repo: _api().render(repo, show="bugs").data["text"],
+                "ddflow://decisions": lambda repo: (
+                    _api().render(repo, show="decisions").data["text"]
+                ),
+                "ddflow://sessions": lambda repo: _api().render(repo, show="sessions").data["text"],
             }.get(uri)
             if not cmd:
                 return _err(mid, -32602, f"unknown resource {uri!r}")
