@@ -217,6 +217,10 @@ def decision_list(
     into a lie about which ones were cut. `total`/`shown` let a surface say what it left
     out, exactly as the viewers do.
     """
+    if limit is not None and limit < 0:
+        # Refused, like the viewer engine's `limit < 1`: a negative cap silently emptying
+        # the list would report "no decisions match" for an argument that cannot mean that.
+        return O.refused("decision.list", f"limit must be 0 (all) or a positive count, got {limit}")
     _log, _cfg, st = _load(repo)
     live = [d for d in st.decisions.values() if d.live]
     dead = [d for d in st.decisions.values() if not d.live]

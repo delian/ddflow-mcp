@@ -117,12 +117,32 @@ def test_bug_list_item_filters_to_that_item(repo):
 
 
 def test_bug_rows_carry_the_regression_test_and_lesson_columns(repo):
-    """B196: `bug list` shows what guards the fix and the lesson the close recorded."""
+    """B196: `bug list` shows what guards the fix and the lesson the close recorded.
+
+    Populated on purpose: asserting only the empty defaults would pass for a row builder
+    that hardcoded `[]`/`""` for every bug (roborev on d2c05c21)."""
     run_cli(repo, "init")
+    _lesson(repo, "L1", "what the fix taught")
     _ok(repo, "bug", "found", "--id", "B1", "--summary", "a bug", "--no-task")
+    # `bug fixed` validates that the named test exists in a worktree of the repo, so the
+    # test file has to be real before the bug can be closed.
+    (repo / "tests").mkdir(exist_ok=True)
+    (repo / "tests" / "test_x.py").write_text("def test_y():\n    assert True\n", "utf-8")
+    _ok(
+        repo,
+        "bug",
+        "fixed",
+        "B1",
+        "--regression-test",
+        "tests/test_x.py::test_y",
+        "--lesson",
+        "L1",
+    )
     row = json.loads(_ok(repo, "--json", "bug", "list", "--all"))["rows"][0]
-    assert "regression_tests" in row and row["regression_tests"] == []
-    assert "lesson" in row and row["lesson"] == ""
+    assert row["regression_tests"] == ["tests/test_x.py::test_y"], row
+    assert row["lesson"] == "L1", row
+    human = _ok(repo, "bug", "list", "--all")
+    assert "lesson L1" in human and "1 test" in human, human
 
 
 # -- decision list ------------------------------------------------------------------------
@@ -151,6 +171,16 @@ def test_decision_list_since_keeps_only_recent(repo):
     _ok(repo, "decision", "add", "--id", "D1", "--title", "old", "--decision", "d")
     body = json.loads(_ok(repo, "--json", "decision", "list", "--since", "2000-01-01"))
     assert [r["id"] for r in body] == ["D1"]
+
+
+def test_decision_list_negative_limit_is_refused_not_a_misleading_empty(repo):
+    """roborev on d2c05c21: `--limit -1` emptied the list and reported NOTHING (2), which
+    reads as "no decisions match" for an argument that cannot mean that."""
+    run_cli(repo, "init")
+    _ok(repo, "decision", "add", "--id", "D1", "--title", "old", "--decision", "d")
+    code, out, err = run_cli(repo, "decision", "list", "--limit", "-1")
+    assert code == 3, (code, out, err)
+    assert "limit" in out + err, (out, err)
 
 
 # -- the MCP surface: ddflow_list kind=lesson, and the three resources --------------------
