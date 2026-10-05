@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import sys
 
-from ...api import onboard as onboard_stage
+from ...api import onboard_run
 from ...api.onboard import STAGES
 from ..context import Ctx
 
@@ -40,7 +40,7 @@ def add_onboard_parser(sub) -> None:
 
 
 def cmd_onboard(a, c: Ctx) -> int:
-    out = onboard_stage(c.repo, stage=a.stage, apply=bool(a.apply), accept=tuple(a.accept or ()))
+    out = onboard_run(c.repo, stage=a.stage, apply=bool(a.apply), accept=tuple(a.accept or ()))
     if c.json:
         print(json.dumps(out.body(""), indent=2, default=str))
     elif out.exit:

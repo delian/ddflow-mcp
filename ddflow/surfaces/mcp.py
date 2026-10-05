@@ -1056,7 +1056,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 False,
             ),
         },
-        "api": lambda repo, a, agent: _api().onboard(
+        "api": lambda repo, a, agent: _api().onboard_run(
             repo,
             stage=str(a.get("stage") or "status"),
             apply=bool(a.get("apply")),
