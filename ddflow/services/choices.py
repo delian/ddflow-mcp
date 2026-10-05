@@ -6,7 +6,8 @@ project uses is the operator's call, or the agent's where the operator lets it d
 never ddflow's by silence (RESEARCH R17). So every such decision is a `core.flow.Choice`,
 and its value comes from, in order:
 
-1. **the config** (`.ddflow/config.toml` or env) -- the operator's file, which always wins;
+1. **the config** (`.ddflow/config.toml`, the machine-local `.ddflow/local/config.toml`,
+   or env) -- any config layer, which always wins (`config_wins`);
 2. **a recorded choice** -- `flow choose`, by an agent or a person, attributed in the log;
 3. **the default** -- which is RECORDED the first time it matters (`adopt_defaults`), so
    the project keeps following it even if a later ddflow ships a different default, and
