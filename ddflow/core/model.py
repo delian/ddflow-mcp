@@ -672,6 +672,9 @@ class Session:
     ended_at: str = ""
     prompts: list[dict[str, Any]] = field(default_factory=list)
     notes: list[dict[str, Any]] = field(default_factory=list)
+    #: `session end --summary`: what the session did, in its own words (B194). The last
+    #: non-empty one wins, so a bare `session.ended` never blanks it.
+    summary: str = ""
 
 
 @dataclass
@@ -2014,7 +2017,9 @@ def _h_upgrade_applied(st: State, ev: Event) -> None:
 
 
 def _h_session_ended(st: State, ev: Event) -> None:
-    _session(st, ev).ended_at = ev.ts
+    sess = _session(st, ev)
+    sess.ended_at = ev.ts
+    sess.summary = (ev.data.get("summary") or "").strip() or sess.summary
 
 
 def _h_gate_out_of_order(st: State, ev: Event) -> None:
