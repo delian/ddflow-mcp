@@ -132,8 +132,8 @@ class Rule:
         scope = "project"
         priority = 75
         globs = ["**/*.py", "**/*.js"]
-        created = 2026-10-03T12:00:00
-        updated = 2026-10-03T12:00:00
+        created = "2026-10-03T12:00:00"
+        updated = "2026-10-03T12:00:00"
 
         Follow snake_case for Python functions...
         ```
