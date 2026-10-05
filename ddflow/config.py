@@ -1540,6 +1540,13 @@ class Config:
     #: for a whole section. Skipped, not fatal: see `_apply`.
     unknown_knobs: list[str] = field(default_factory=list, repr=False)
 
+    def __post_init__(self) -> None:
+        # Not a field (so not in `as_dict` or the sections): for each enum knob that fell
+        # back to its strictest value, the (index in unknown_knobs, "key = 'bad'") of each
+        # note, so a later layer's value rewrites the note from its parts, never by
+        # parsing text that holds the user's own value.
+        self._fallback_notes: dict[str, list[tuple[int, str]]] = {}
+
     # -- loading ------------------------------------------------------------------
     @classmethod
     def load(cls, root: Path | None = None, *, env: dict[str, str] | None = None) -> Config:
@@ -1672,8 +1679,12 @@ class Config:
                         # an earlier layer's note names what THIS layer wrote, not the
                         # fallback; each bad value stays its own (true) report
                         self._forget_fallback(f"{sec}.{knob}", source, bad)
+                        head = f"{sec}.{knob} = {bad!r}"
+                        self._fallback_notes.setdefault(f"{sec}.{knob}", []).append(
+                            (len(self.unknown_knobs), head)
+                        )
                         self.unknown_knobs.append(
-                            f"{sec}.{knob} = {bad!r} (not a value this ddflow knows; "
+                            f"{head} (not a value this ddflow knows; "
                             f"in effect: {value!r}, the strictest)"
                         )
                         setattr(target, knob, value)
@@ -1687,15 +1698,11 @@ class Config:
     def _forget_fallback(self, key: str, source: str, value: Any) -> None:
         """A later layer set `key`: an earlier layer's strictest-fallback note must stop
         claiming its value is in effect, or doctor reports `block` while `warn` runs."""
-        mark = " (not a value this ddflow knows; "  # in effect: ... | overridden by ...
-        for i, entry in enumerate(self.unknown_knobs):
-            if entry.startswith(f"{key} = ") and mark in entry:
-                self.unknown_knobs[i] = (
-                    # rpartition: the bad value itself may contain the mark.
-                    entry.rpartition(mark)[0]
-                    + mark
-                    + f"overridden by the {source} value {value!r})"
-                )
+        for i, head in self._fallback_notes.get(key, []):
+            self.unknown_knobs[i] = (
+                f"{head} (not a value this ddflow knows; overridden by the {source} value "
+                f"{value!r})"
+            )
 
     def _apply_export_tables(
         self, values: dict[str, Any], lenient: bool, source: str
