@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 
 from conftest import run_cli
@@ -93,11 +94,19 @@ def test_the_pre_push_hook_warns_from_a_linked_worktree(repo, tmp_path):
     _git(repo, "worktree", "add", "-q", "-b", "side", str(wt))
     hook = Path(__file__).resolve().parents[1] / "scripts" / "ci" / "pre-push"
     # Without pre-commit on PATH, as on the CI runner (B97908cc3c7): the warning must
-    # not depend on it.
-    env = {**os.environ, "PATH": "/usr/bin:/bin"}
+    # not depend on it. A PATH of links to only the tools the hook uses, so a system-wide
+    # pre-commit (e.g. /usr/bin/pre-commit) cannot be found either.
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    for name in ("git", "dirname", "tr", "grep", "head", "mktemp", "cat", "rm"):
+        found = shutil.which(name)
+        if found:
+            (tools / name).symlink_to(found)
+    assert shutil.which("pre-commit", path=str(tools)) is None
+    env = {**os.environ, "PATH": str(tools)}
     p = subprocess.run(
-        ["bash", str(hook), "origin"], input="", cwd=wt, capture_output=True, text=True,
-        check=False, env=env,
+        [shutil.which("bash"), str(hook), "origin"], input="", cwd=wt, capture_output=True,
+        text=True, check=False, env=env,
     )  # fmt: skip
     assert "event shard(s) in .ddflow/events are not committed" in p.stderr, p.stderr
 
