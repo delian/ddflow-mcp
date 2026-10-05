@@ -27,11 +27,12 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import subprocess
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+
+from . import proc as P
 
 #: Every name a :class:`SignalSource` returns, always all of them (``None`` = unavailable).
 SIGNALS = ("load", "memory_free_frac", "disk_free_bytes", "disk_free_frac")
@@ -94,8 +95,8 @@ def _linux_memory() -> float:
 
 def _run(cmd: list[str], timeout: float) -> str:
     try:
-        done = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
-    except subprocess.TimeoutExpired as exc:
+        done = P.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
+    except P.TimeoutExpired as exc:
         raise Unavailable(f"{cmd[0]} timed out after {timeout:g}s") from exc
     except OSError as exc:
         raise Unavailable(f"{cmd[0]} could not run: {exc}") from exc
