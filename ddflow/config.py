@@ -1678,7 +1678,11 @@ class Config:
                         bad, value = value, strictest(f"{sec}.{knob}")
                         # an earlier layer's note names what THIS layer wrote, not the
                         # fallback; each bad value stays its own (true) report
-                        self._forget_fallback(f"{sec}.{knob}", source, bad)
+                        self._forget_fallback(
+                            f"{sec}.{knob}",
+                            f"the {source} value {bad!r}, itself unknown: "
+                            f"{strictest(f'{sec}.{knob}')!r} is in effect",
+                        )
                         head = f"{sec}.{knob} = {bad!r}"
                         self._fallback_notes.setdefault(f"{sec}.{knob}", []).append(
                             (len(self.unknown_knobs), head)
@@ -1691,18 +1695,16 @@ class Config:
                         self.sources[f"{sec}.{knob}"] = f"{source} (strictest fallback)"
                         continue
                     raise ValueError(f"invalid {sec}.{knob} = {value!r}: {why}")
-                self._forget_fallback(f"{sec}.{knob}", source, value)
+                self._forget_fallback(f"{sec}.{knob}", f"the {source} value {value!r}")
                 setattr(target, knob, value)
                 self.sources[f"{sec}.{knob}"] = source
 
-    def _forget_fallback(self, key: str, source: str, value: Any) -> None:
+    def _forget_fallback(self, key: str, by: str) -> None:
         """A later layer set `key`: an earlier layer's strictest-fallback note must stop
-        claiming its value is in effect, or doctor reports `block` while `warn` runs."""
+        claiming its value is in effect, or doctor reports `block` while `warn` runs.
+        `by` names what overrode it -- and, when that is itself unknown, what runs."""
         for i, head in self._fallback_notes.get(key, []):
-            self.unknown_knobs[i] = (
-                f"{head} (not a value this ddflow knows; overridden by the {source} value "
-                f"{value!r})"
-            )
+            self.unknown_knobs[i] = f"{head} (not a value this ddflow knows; overridden by {by})"
 
     def _apply_export_tables(
         self, values: dict[str, Any], lenient: bool, source: str

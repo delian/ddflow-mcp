@@ -223,7 +223,8 @@ def test_two_layers_with_bad_values_each_name_what_their_file_wrote(tmp_path: Pa
     cfg = Config.load(tmp_path, env={})
     assert cfg.upgrade.skew == "refuse"
     assert cfg.unknown_knobs == [
-        "upgrade.skew = 'of' (not a value this ddflow knows; overridden by the local value 'zzz')",
+        "upgrade.skew = 'of' (not a value this ddflow knows; overridden by the local value "
+        "'zzz', itself unknown: 'refuse' is in effect)",
         "upgrade.skew = 'zzz' (not a value this ddflow knows; in effect: 'refuse', the strictest)",
     ]
 
@@ -239,6 +240,27 @@ def test_a_later_bad_value_holding_the_notes_words_survives_a_third_layer(
     assert cfg.upgrade.skew == "warn"
     tail = "(not a value this ddflow knows; overridden by the env value 'warn')"
     assert cfg.unknown_knobs == [f"upgrade.skew = 'of' {tail}", f"upgrade.skew = {bad!r} {tail}"]
+
+
+def test_a_typo_in_a_flow_knob_fails_closed_over_a_recorded_choice(repo: Path) -> None:
+    # The file layer meant to set the knob, so it still outranks a `flow choose` record
+    # (services/choices.config_wins) -- with the strictest value, and `flow show` says the
+    # recorded choice is overridden. Nor is the fallback adopted as the project's choice.
+    from ddflow.core.model import fold
+    from ddflow.infra.log import EventLog
+    from ddflow.services import choices as CH
+
+    assert run_cli(repo, "init")[0] == 0
+    assert run_cli(repo, "flow", "choose", "integration", "merge", "--reason", "local")[0] == 0
+    cfg_path = repo / ".ddflow" / "config.toml"
+    cfg_path.write_text(cfg_path.read_text("utf-8") + '\n[flow]\nintegration = "merg"\n')
+    cfg = Config.load(repo, env={})
+    st = fold(EventLog(repo, "reader").read_all(), strict=False)
+    CH.overlay(cfg, st)
+    assert cfg.flow.integration == "pr"
+    (row,) = [r for r in CH.report(cfg, st) if r["knob"] == "integration"]
+    assert "overridden" in row and "'pr'" in row["overridden"]
+    assert "integration" not in [ch.knob for ch in CH.pending(cfg)]
 
 
 def test_the_fallback_is_marked_in_the_knobs_source(tmp_path: Path) -> None:
