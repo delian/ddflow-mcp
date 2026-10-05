@@ -1178,13 +1178,18 @@ def _verify_regression(
     if not base:
         return "could-not-run", {"reason": "no base ref to build the pre-fix tree from"}
     status, ev = G.verify_regression_test(repo, cfg, tree=tree, base=base, tests=module_tests)
-    if status == G.REGRESSION_COULD_NOT_RUN:
-        return "could-not-run", ev
+    # Explicitly, ONE success status: an unrecognized status must never fall through to
+    # "verified" -- a bug whose test was never shown to fail-first would be recorded as
+    # verified, the vacuous pass this whole feature exists to prevent (rubber_duck #1).
+    if status == G.REGRESSION_VERIFIED:
+        return "verified", ev
     if status == G.REGRESSION_PASSES_ON_PREFIX:
         return "passed-on-prefix", ev
     if status == G.REGRESSION_FAILS_ON_FIX:
         return "failed-on-fix", ev
-    return "verified", ev
+    if status == G.REGRESSION_COULD_NOT_RUN:
+        return "could-not-run", ev
+    return "could-not-run", {**ev, "reason": f"unrecognized verification status {status!r}"}
 
 
 def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:

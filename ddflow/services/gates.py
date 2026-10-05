@@ -905,7 +905,18 @@ def verify_regression_test(
             dst = ptree / rel
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src, dst)
-        pre_outcome, pre_ev = run_command_gate(run, ptree)
+        # Rebuild the command FOR THE PRE-FIX TREE. Any root-relative resolution the
+        # builder does must resolve against `ptree`, not `tree`, or the "pre-fix" run
+        # would collect the fixed source and a genuinely failing-first test would read
+        # as passing on the pre-fix tree (rubber_duck finding #2).
+        pre_command = TS.run_command(defn.command if defn else "", tests, ptree)
+        if not pre_command:
+            return REGRESSION_COULD_NOT_RUN, {
+                **evidence,
+                "reason": "the pre-fix tree has no runnable pytest command",
+            }
+        pre_run = GateDef(id="regression_check", title="regression test", command=pre_command)
+        pre_outcome, pre_ev = run_command_gate(pre_run, ptree)
     evidence["prefix_outcome"] = pre_outcome
     if pre_outcome == "unavailable":
         return REGRESSION_COULD_NOT_RUN, {

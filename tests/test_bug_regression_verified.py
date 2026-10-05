@@ -35,6 +35,15 @@ FAILS_FIRST = (
 
 ALWAYS_PASSES = "def test_always():\n    assert True\n"
 
+#: Fails on BOTH trees (99 is never 1 or 2): a fix that did not work, or a broken test.
+FAILS_ALWAYS = (
+    "import pathlib, sys\n"
+    "sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))\n"
+    "from src import f\n\n\n"
+    "def test_never():\n"
+    "    assert f() == 99\n"
+)
+
 
 def _commit(tree: Path, msg: str) -> None:
     subprocess.run(["git", "-C", str(tree), "add", "-A"], check=True, capture_output=True)
@@ -180,6 +189,30 @@ def test_cli_skip_verify_requires_a_reason_then_records_the_override(repo):
     )
     assert code == OK, err
     assert "overridden" in out, out
+
+
+def test_a_test_that_fails_on_the_fixed_tree_is_refused(repo):
+    wt = _case(repo)
+    (wt / "tests" / "test_never.py").write_text(FAILS_ALWAYS)
+    _commit(wt, "a test that never passes")
+    out = api.bug_fixed(repo, "B1", regression_test="tests/test_never.py::test_never")
+    assert out.exit == REFUSED, out
+    assert "fixed tree" in out.reason, out.reason
+    assert not _fixed_events(repo)
+
+
+def test_an_unrecognized_verification_status_is_recorded_not_verified(repo, monkeypatch):
+    """The dispatch names ONE success status; anything else must not fall through to
+    `verified` (rubber_duck #1)."""
+    _case(repo)
+    run_cli(repo, "bug", "found", "--id", "B6", "--summary", "bogus status")
+    monkeypatch.setattr(
+        "ddflow.services.gates.verify_regression_test",
+        lambda *a, **k: ("some-future-status", {}),
+    )
+    out = api.bug_fixed(repo, "B6", regression_test="tests/test_f.py::test_f")
+    assert out.exit == OK, out.reason
+    assert out.data["regression_verified"] == "could-not-run", out.data
 
 
 def test_mcp_offers_the_verify_knobs():
