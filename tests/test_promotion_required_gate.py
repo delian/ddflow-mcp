@@ -117,3 +117,14 @@ def test_with_no_environments_a_promotion_only_requirement_is_still_inert(repo):
     cfg = Config.load(repo)
     cfg.gates.required = required
     assert G.inert_requirements(cfg) == ["deploy_signoff"]
+
+
+def test_workflow_names_the_promotion_pipeline_only_where_it_runs(repo):
+    """Bc0cd05d0c5: `ddflow workflow` printed 'A promotion passes through: ...' always,
+    though without `flow.environments` no promotion exists and that pipeline never runs."""
+    run_cli(repo, "init")
+    code, out, _err = run_cli(repo, "workflow")
+    assert code in (0, 1) and "A promotion passes through" not in out, out
+    assert run_cli(repo, "config", "--set", "flow.environments", '["staging"]')[0] == 0
+    out = run_cli(repo, "workflow")[1]
+    assert "A promotion passes through: unit_tests, merge" in out, out
