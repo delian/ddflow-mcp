@@ -298,14 +298,16 @@ def describe(
     v = WorkflowView(
         task_pipeline=list(cfg.gates.task_pipeline),
         phase_pipeline=list(cfg.gates.phase_pipeline),
-        promotion_pipeline=list(cfg.gates.promotion_pipeline),
+        # Only where it runs: without `flow.environments` no promotion exists, and naming
+        # the pipeline advertised gates nothing ever passes through (Bc0cd05d0c5).
+        promotion_pipeline=pipelines(cfg, running=True).get("promotion", []),
     )
     sources = {k: s for k, _val, s, _doc in cfg.explain()}
     values = {k: val for k, val, _s, _doc in cfg.explain()}
     v.rules = {k: (values.get(k), sources.get(k, "default")) for k in RULE_KEYS if k in values}
 
     seen: list[str] = []
-    for gid in (g for ids in pipelines(cfg).values() for g in ids):
+    for gid in (g for ids in pipelines(cfg, running=True).values() for g in ids):
         if gid not in seen:
             seen.append(gid)
     for gid in seen:
@@ -320,7 +322,7 @@ def describe(
             kind=_gate_kind(g),
             in_task=in_task,
             in_phase=gid in cfg.gates.phase_pipeline,
-            in_promotion=gid in cfg.gates.promotion_pipeline,
+            in_promotion=gid in v.promotion_pipeline,
             position=(cfg.gates.task_pipeline.index(gid) + 1) if in_task else 0,
             required=gid in cfg.gates.required,
             evidence=gid in cfg.gates.evidence_required,
