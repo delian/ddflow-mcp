@@ -883,9 +883,9 @@ def _dupe_note(st, cfg) -> list[str]:
     if cfg.dedupe.on_match == "off":
         return []
     try:
-        from . import knowledge as K
+        from .knowledge import pairs_from
 
-        n = len(K.pairs_from(st, cfg))
+        n = len(pairs_from(st, cfg))
     except Exception as exc:  # an unreadable index must not take the report down
         return [f"near-duplicate sweep could not run ({type(exc).__name__}: {exc})"]
     if not n:
