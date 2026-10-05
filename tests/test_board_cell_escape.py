@@ -21,17 +21,18 @@ def _cells(row: str) -> list[str]:
 def test_a_pipe_or_newline_in_a_title_does_not_break_the_board_table(repo):
     run_cli(repo, "init")
     assert run_cli(repo, "phase", "add", "P1", "--title", "Phase one")[0] == 0
-    title = "pick a | b\nsecond line, c\\|d"
+    title = "pick a | b\nsecond line, c\\|d\rthird\r\nfourth \\*e\\"
     assert (
         run_cli(
-            repo, "task", "add", "T1", "--phase", "P1", "--title", title, "--globs", "src/a|b.py"
+            repo, "task", "add", "T1", "--phase", "P1", "--title", title, "--globs", "src/a|b\\x.py"
         )[0]
         == 0
     )
     board = run_cli(repo, "render", "--show", "board")[1]
-    rows = [ln for ln in board.splitlines() if ln.startswith("|")]
+    rows = [ln for ln in board.split("\n") if ln.startswith("|")]  # a CR is a break too
     header, _sep, *body = rows
     assert len(body) == 1, board
     assert len(_cells(body[0])) == len(_cells(header)) == 7, body[0]
-    assert "pick a \\| b second line, c\\\\\\|d" in body[0], body[0]
-    assert "src/a\\|b.py" in body[0], body[0]
+    assert "\r" not in body[0], repr(body[0])
+    assert "pick a \\| b second line, c\\\\\\|d third fourth \\\\*e\\\\ |" in body[0], body[0]
+    assert "`src/a\\|b\\x.py`" in body[0], body[0]
