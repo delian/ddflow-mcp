@@ -916,6 +916,10 @@ def verify_regression_test(
                 "reason": "the pre-fix tree has no runnable pytest command",
             }
         pre_run = GateDef(id="regression_check", title="regression test", command=pre_command)
+        # Record the command ACTUALLY run on the pre-fix tree: it is rebuilt for `ptree`
+        # and can differ from the fixed-tree `command` (roborev LOW), so evidence that
+        # kept only `command` would misreport what the pre-fix run was.
+        evidence["prefix_command"] = pre_command
         pre_outcome, pre_ev = run_command_gate(pre_run, ptree)
     evidence["prefix_outcome"] = pre_outcome
     if pre_outcome == "unavailable":
