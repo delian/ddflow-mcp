@@ -884,7 +884,9 @@ def plan(
     with_trees = len([i for i in live_items if live[i].worktree])
     flight_slots = max(0, cfg.schedule.max_parallel_tasks - in_flight)
     if cfg.worktree.enabled:
-        tree_slots = max(0, cfg.worktree.max_parallel - with_trees)
+        # 0 (the default) FOLLOWS the schedule limit; it is not unlimited (B-af-config)
+        tree_cap = cfg.worktree.max_parallel or cfg.schedule.max_parallel_tasks
+        tree_slots = max(0, tree_cap - with_trees)
     else:
         tree_slots = flight_slots  # no trees are made, so no tree cap applies
     slots = min(flight_slots, tree_slots)
