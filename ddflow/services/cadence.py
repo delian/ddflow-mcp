@@ -16,6 +16,27 @@ import json
 from typing import Any
 
 
+def calendar(cfg) -> dict[str, float]:
+    """`[cadence] every_days` as name -> days. Raises ValueError naming the knob for an
+    entry that is not `name=<positive number>`: one typo raised a bare float() error,
+    and an entry without `=` was DROPPED -- a weekly pass never reported due, and
+    nothing said the knob was ignored (roborev 830)."""
+    out: dict[str, float] = {}
+    for spec in cfg.cadence.every_days:
+        name, sep, days = spec.partition("=")
+        try:
+            value = float(days) if sep and name.strip() else 0.0
+        except ValueError:
+            value = 0.0
+        if value <= 0:
+            raise ValueError(
+                f"[cadence] every_days entry {spec!r} is not `name=days` with a positive "
+                f'number of days (e.g. "bug_hunt=7")'
+            )
+        out[name.strip()] = value
+    return out
+
+
 def count_due(st, cfg, *, replaced: set[str] = frozenset()) -> list[dict[str, Any]]:
     """Passes due by COMPLETED WORK (tasks or phases). Needs nothing but the folded state
     and the config, so `complete <phase>` can ask it even when a calendar knob is malformed.
