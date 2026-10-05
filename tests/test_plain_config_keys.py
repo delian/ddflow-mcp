@@ -106,6 +106,9 @@ def test_no_unusable_plain_spelling_is_suggested(repo, key):
         ('[flow]\n"tag_prefix" = "v"\n', "flow.tag_prefix"),
         ('[gate."unit_tests"]\ntimeout_s = 5\n', "gate.unit_tests"),
         ('[[ "reviewer" . x ]]\nname = "r"\n', "reviewer.x"),
+        # A single-segment header has a plain spelling too (rubber_duck/critic on a1c614f4).
+        ('["flow"]\ntag_prefix = "v"\n', "[flow]"),
+        ("[['reviewer']]\nname = 'r'\n", "[[reviewer]]"),
         ('[flow]\n"\\u0074ag_prefix" = "v"\n', "flow.tag_prefix"),
         ("flow.'tag_prefix' = 'v'\n", "flow.tag_prefix"),
         ("flow . tag_prefix = 'v'\n", "flow.tag_prefix"),
@@ -121,9 +124,7 @@ def test_an_appended_block_with_a_quoted_key_is_refused_naming_the_plain_one(rep
     assert (repo / ".ddflow" / "config.toml").read_text("utf-8") == before
 
 
-@pytest.mark.parametrize(
-    "block", ['[gate."two words"]\nprompt = "x"\n', '["flow"]\ntag_prefix = "v"\n']
-)
+@pytest.mark.parametrize("block", ['[gate."two words"]\nprompt = "x"\n', '["two words"]\nx = 1\n'])
 def test_an_appended_key_with_no_plain_spelling_is_refused(repo, block):
     run_cli(repo, "init")
     code, out, err = run_cli(repo, "config", "--append-toml", block)

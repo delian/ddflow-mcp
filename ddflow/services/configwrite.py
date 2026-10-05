@@ -334,19 +334,25 @@ def plain_key_problem(dotted: str) -> str:
     )
 
 
-def _plain_spelling(dotted: str) -> str:
-    """The bare spelling of a quoted or escaped key, as TOML reads it, or ""."""
+def _bare_path(dotted: str) -> list[str]:
+    """The segments TOML reads a quoted or escaped key as, when every one is bare; else []."""
     try:
         node: object = tomllib.loads(f"{dotted} = 0")
     except tomllib.TOMLDecodeError:
-        return ""
+        return []
     path: list[str] = []
     while isinstance(node, dict) and len(node) == 1:
         key = next(iter(node))
         path.append(key)
         node = node[key]
+    return path if node == 0 and all(_BARE.fullmatch(k) for k in path) else []
+
+
+def _plain_spelling(dotted: str) -> str:
+    """The bare spelling of a quoted or escaped key, as TOML reads it, or ""."""
+    path = _bare_path(dotted)
     plain = ".".join(path)
-    if node != 0 or not all(_BARE.fullmatch(k) for k in path):
+    if not path:
         return ""
     # Never name a key that would itself be refused: a dotted gate id (`"gate".a.b.command`),
     # a single segment (`"gate"`), which is not <section>.<key> (roborev on babe29ff), or a
@@ -449,6 +455,17 @@ _TOKEN = re.compile(
 )
 
 
+def _with_header_spelling(problem: str, header: str, brackets: int) -> str:
+    """``problem``, naming the header's plain spelling when `plain_key_problem` named none:
+    a single segment (`["flow"]`) is no `<section>.<key>` for `--set`, but as a table
+    header it has one (`[flow]`)."""
+    # Only the single segment: a longer one `_plain_spelling` declined is a spelling that
+    # would itself be refused (a dotted gate id, a gate's `human`).
+    if "; use " in problem or len(path := _bare_path(header)) != 1:
+        return problem
+    return KeyRefused(f"{problem}; use {'[' * brackets}{'.'.join(path)}{']' * brackets}")
+
+
 def appended_key_problem(toml_text: str) -> str:
     """The D-plain-keys refusal for the first key of raw TOML not spelled plain, or "".
 
@@ -478,7 +495,7 @@ def appended_key_problem(toml_text: str) -> str:
                 k += 1
             header = raw(i + n, k - 1)
             if problem := plain_key_problem(header):
-                return problem
+                return _with_header_spelling(problem, header, n)
             i, at_key = k + n, False
             continue
         elif at_key and kind in ("word", "str"):
