@@ -20,37 +20,56 @@ from pathlib import Path
 from ddflow.api import setup as S
 from ddflow.services import companions as CO
 
-FAKE_SERVER = textwrap.dedent(
+
+def _server_script(
+    answer: str = "{}",
+    *,
+    error: bool = False,
+    preamble: str = "",
+    echo: bool = False,
+    delay_s: float = 0.0,
+) -> str:
+    """A stdio script that reads a request line and answers ``initialize``.
+
+    ``answer`` is the Python source of the JSON-RPC ``result`` (or of ``error``, with
+    ``error=True``); ``preamble`` runs once before the loop; ``echo`` writes each request
+    line back first (a logging server); ``delay_s`` sleeps before answering (a cold start).
+    Eight fixtures shared this skeleton. The ones whose TIMING or FORK behaviour is the
+    point -- a forking wrapper, a SIGTERM-ignoring grandchild -- stay written out in the
+    test itself: a factory that flattened them would take the teeth out of the test.
     """
-    import json, sys
-    for line in sys.stdin:
-        msg = json.loads(line)
-        if msg.get("method") == "initialize":
-            print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
-                "protocolVersion": "2025-03-26", "capabilities": {},
-                "serverInfo": {"name": "fake-mcp", "version": "9.9"}}}), flush=True)
-    """
+    lines = ["import json, sys" + (", time" if delay_s else "")]
+    if preamble:
+        lines.append(preamble)
+    lines.append("for line in sys.stdin:")
+    if echo:
+        lines.append("    sys.stdout.write(line); sys.stdout.flush()")
+    if delay_s:
+        lines.append(f"    time.sleep({delay_s!r})")
+    lines.append("    msg = json.loads(line)")
+    key = "error" if error else "result"
+    lines.append(
+        f'    print(json.dumps({{"jsonrpc": "2.0", "id": msg["id"], "{key}": {answer}}}), '
+        f"flush=True)"
+    )
+    return "\n".join(lines) + "\n"
+
+
+FAKE_SERVER = _server_script(
+    '{"protocolVersion": "2025-03-26", "capabilities": {}, '
+    '"serverInfo": {"name": "fake-mcp", "version": "9.9"}}'
 )
 
-ERROR_SERVER = textwrap.dedent(
-    """
-    import json, sys
-    for line in sys.stdin:
-        msg = json.loads(line)
-        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"],
-                          "error": {"code": -32601, "message": "nope"}}), flush=True)
-    """
-)
+ERROR_SERVER = _server_script('{"code": -32601, "message": "nope"}', error=True)
 
-CHATTY_SERVER = textwrap.dedent(
-    """
-    import json, sys
-    print("starting up...", flush=True)
-    print(json.dumps({"jsonrpc": "2.0", "method": "notifications/message", "params": {}}), flush=True)
-    for line in sys.stdin:
-        msg = json.loads(line)
-        print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
-    """
+CHATTY_SERVER = _server_script(
+    "{}",
+    preamble=(
+        'print("starting up...", flush=True)\n'
+        "print(json.dumps("
+        '{"jsonrpc": "2.0", "method": "notifications/message", "params": {}}'
+        "), flush=True)"
+    ),
 )
 
 NOISY_EXIT = "import sys; sys.stderr.write('boom: missing token\\n'); sys.exit(3)"
@@ -66,12 +85,28 @@ def _script(tmp_path: Path, name: str, body: str) -> list[str]:
     return [str(p)]
 
 
-def _alive(pid: int) -> bool:
-    """Running, not merely present: a killed orphan is a zombie until PID 1 reaps it, and a
-    container whose PID 1 never does would otherwise read as alive."""
+def _marker_code(marker: Path) -> str:
+    """A one-liner an interpreter runs to leave a file behind, proving it was launched."""
+    return f"open({str(marker)!r}, 'w').write('x')"
+
+
+def _pid_exists(pid: int) -> bool:
+    """Does the pid exist at all? True for a running process AND for an unreaped zombie --
+    the one question `os.kill(pid, 0)` answers. `_alive` and `_gone` are the two DIFFERENT
+    questions asked on top of it, and folding THEM together is a bug: a zombie must count as
+    dead for an orphan (nothing will reap it) and as not-gone for our own child (the pid is
+    only free once we reap it)."""
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
+        return False
+    return True
+
+
+def _alive(pid: int) -> bool:
+    """Running, not merely present: a killed orphan is a zombie until PID 1 reaps it, and a
+    container whose PID 1 never does would otherwise read as alive."""
+    if not _pid_exists(pid):
         return False
     try:
         state = Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0]
@@ -81,11 +116,8 @@ def _alive(pid: int) -> bool:
 
 
 def _gone(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except ProcessLookupError:
-        return True
-    return False
+    """The pid exists no more -- unlike `_alive`, a zombie still counts as present here."""
+    return not _pid_exists(pid)
 
 
 def _wait_dead(pid: int, *, reaped: bool = False, timeout_s: float = 5.0) -> bool:
@@ -142,30 +174,14 @@ def test_a_wrapper_that_forks_the_real_server_and_exits_is_still_verified(tmp_pa
 
 
 def test_a_slow_server_that_logs_the_request_and_answers_later_is_verified(tmp_path):
-    body = textwrap.dedent(
-        """
-        import json, sys, time
-        for line in sys.stdin:
-            sys.stdout.write(line); sys.stdout.flush()
-            time.sleep(2.5)  # a cold start, longer than any 'grace'
-            msg = json.loads(line)
-            print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
-        """
-    )
+    # a cold start, longer than any 'grace'
+    body = _server_script(echo=True, delay_s=2.5)
     v = CO.verify_one(_companion("slowlog", sys.executable, _script(tmp_path, "sl.py", body)))
     assert v.speaks_mcp is True, v.detail
 
 
 def test_a_server_that_logs_the_request_line_and_then_answers_is_verified(tmp_path):
-    body = textwrap.dedent(
-        """
-        import json, sys
-        for line in sys.stdin:
-            sys.stdout.write(line)  # debug: echo what arrived
-            msg = json.loads(line)
-            print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {}}), flush=True)
-        """
-    )
+    body = _server_script(echo=True)  # debug: echo what arrived
     v = CO.verify_one(_companion("logger", sys.executable, _script(tmp_path, "lg.py", body)))
     assert v.speaks_mcp is True, v.detail
 
@@ -343,15 +359,7 @@ def test_a_signal_killed_child_is_named_as_a_signal(tmp_path, monkeypatch):
 
 
 def test_the_companions_env_reaches_the_launched_server(tmp_path):
-    body = textwrap.dedent(
-        """
-        import json, os, sys
-        for line in sys.stdin:
-            msg = json.loads(line)
-            print(json.dumps({"jsonrpc": "2.0", "id": msg["id"], "result": {
-                "serverInfo": {"name": os.environ["VERIFY_ME"]}}}), flush=True)
-        """
-    )
+    body = _server_script('{"serverInfo": {"name": os.environ["VERIFY_ME"]}}', preamble="import os")
     c = _companion("env", sys.executable, _script(tmp_path, "v.py", body), env={"VERIFY_ME": "yes"})
     assert CO.verify_one(c).server["name"] == "yes"
 
@@ -413,7 +421,7 @@ def test_api_exit_codes_and_rows(repo, tmp_path):
 def test_api_default_launches_only_what_is_registered_or_installed(repo, tmp_path):
     good = _script(tmp_path, "g.py", FAKE_SERVER)
     marker = tmp_path / "launched"
-    spy = f"open({str(marker)!r}, 'w').write('x')"
+    spy = _marker_code(marker)
     _project(repo, tmp_path, good=(sys.executable, good), spy=(sys.executable, ["-c", spy]))
     out = S.companions_verify(repo)
     # Neither is registered in an agent config nor detected, so nothing is launched, and
@@ -495,7 +503,7 @@ def test_cli_companions_without_verify_launches_nothing(repo, tmp_path):
     """The default report (what the MCP handshake calls) must not spawn a server, even
     one that IS registered with an agent."""
     marker = tmp_path / "launched"
-    spy = f"open({str(marker)!r}, 'w').write('x')"
+    spy = _marker_code(marker)
     _project(repo, tmp_path, spy=(sys.executable, ["-c", spy]))
     (repo / ".mcp.json").write_text(
         json.dumps({"mcpServers": {"spy": {"command": sys.executable, "args": ["-c", spy]}}}),
@@ -513,7 +521,7 @@ def test_mcp_tool_verifies_and_the_handshake_does_not_launch(repo, tmp_path):
 
     good = _script(tmp_path, "g.py", FAKE_SERVER)
     marker = tmp_path / "launched"
-    spy = f"open({str(marker)!r}, 'w').write('x')"
+    spy = _marker_code(marker)
     _project(repo, tmp_path, good=(sys.executable, good), spy=(sys.executable, ["-c", spy]))
     srv = Server(repo)
     init = srv.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}})
