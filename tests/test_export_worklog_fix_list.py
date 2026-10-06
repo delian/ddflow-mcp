@@ -55,3 +55,6 @@ def test_a_hyphenated_id_holding_and_is_one_id():
     ]
     assert _fixed_bugs("x (fixes bugs A, B, and X)") == ["A", "B", "X"]
     assert _fixed_bugs("x (fixes bugs A and X)") == ["A", "X"]
+    # review of B7a5a58fb1d: no space between the comma and "and"
+    assert _fixed_bugs("x (fixes bugs A,B,and X)") == ["A", "B", "X"]
+    assert _fixed_bugs("x (fixes bugs A,and B-and-c)") == ["A", "B-and-c"]
