@@ -232,8 +232,8 @@ def _busy(log: Log, took: float, **kw: int) -> None:
 def test_a_large_diff_at_the_same_service_time_does_not_raise_the_ratio():
     log = Log()
     _baseline(log)
-    # 40 chunks go out in 3 waves of 16: 300 s of wall time is 100 s per request
-    _busy(log, 300, chunks=40)
+    # 70 chunks' first copies go out in 3 waves of 32: 300 s of wall time is 100 s each
+    _busy(log, 300, chunks=70)
     assert _signals(log).reviewer_latency_ratio == pytest.approx(1.0)
 
 
@@ -273,9 +273,11 @@ def test_a_triage_gap_before_a_hand_recorded_outcome_is_not_a_sample():
 def test_a_review_dated_after_now_is_neither_a_sample_nor_in_flight():
     log = Log()
     _baseline(log)
-    for i in range(5):  # one at a time: not busy
+    for i in range(5):  # two in flight at a time: one agent's pair, not a busy reviewer
         log.review(f"r{i}", "critic", 25 * MIN - i * 300, 300)
-    # a skewed clock: an outcome stamped in the future, "running" across every recent start
+        log.review(f"p{i}", "rubber_duck", 25 * MIN - i * 300 - 5, 300)
+    # a skewed clock: an outcome stamped in the future, "running" across every recent
+    # start -- counted, it would make three in flight and read as saturation
     log.review("skew", "critic", 30 * MIN, 30 * MIN + 60)
     assert _signals(log).reviewer_latency_ratio is None
 
@@ -304,3 +306,26 @@ def test_a_review_records_its_waves_for_the_signal():
     res = R.ReviewResult("lan", "m", "deepseek", waves=3)
     assert res.evidence()["waves"] == 3
     assert R.ReviewResult("lan", "m", "deepseek").evidence()["waves"] == 1
+
+
+def test_a_review_counts_its_waves_from_its_first_copies(monkeypatch):
+    """`_race` sends every chunk's first copy before any hedge copy: at a cap of 8 in
+    flight, 20 chunks answer in ceil(20 / 8) = 3 rounds, whatever the hedge."""
+    from ddflow.services import review as R
+
+    rev = R.Reviewer(name="lan", kind="openai", model="m", max_concurrency=8, hedge=2)
+    assert -(-20 // R._concurrency(rev, 20)) == 3
+    rev = R.Reviewer(name="lan", kind="openai", model="m", hedge=2)
+    assert -(-20 // R._concurrency(rev, 20)) == 1  # 32 in flight: one round
+
+
+def test_a_copied_review_without_a_reply_file_is_still_one_sample():
+    log = Log()
+    _baseline(log)
+    _busy(log, 100)
+    first = next(e for e in log.events if e.subject == "r0" and e.kind == "gate.passed")
+    evidence = {k: v for k, v in first.data["evidence"].items() if k != "output_file"}
+    evidence |= {"reviewed_head": "abc", "diff_sha": "d1"}
+    first.data["evidence"] = evidence
+    log.add("gate.passed", "r0", NOW - 30, gate="critic", evidence=dict(evidence))  # copied
+    assert len(FS._review_samples(log.events, NOW)) == 20 + 5 * 4

@@ -49,9 +49,10 @@ MIN_RECENT_REVIEWS = 5
 #: the model's, not a queue: one agent's rubber_duck and critic run as a pair.
 MIN_IN_FLIGHT = 3
 #: For a review recorded before its evidence carried `waves`: the chunks one wave holds
-#: at the defaults, `services.review.AUTO_CONCURRENCY_CEILING` (32) requests over a hedge
-#: of 2 copies. A recorded `waves` (the reviewer's own concurrency) always wins.
-WAVE_CHUNKS = 16
+#: at the defaults. `services.review` sends every chunk's FIRST copy before any hedge
+#: copy, up to `AUTO_CONCURRENCY_CEILING` (32) requests, so 32 chunks' answers arrive in
+#: one round. A recorded `waves` (the reviewer's own concurrency) always wins.
+WAVE_CHUNKS = 32
 MIN_BASELINE_REVIEWS = 20
 GATE_WINDOW_S = 60 * 60.0
 MIN_GATE_OUTCOMES = 10
@@ -112,7 +113,14 @@ def _review_samples(events: Sequence[Event], now: float) -> list[tuple[float, fl
             continue
         if end <= 0 or end > now:
             continue
-        same = evidence.get("output_file") or evidence.get("output_digest") or ev.lamport
+        # the review's own identity, which a `gate record` copies along with its evidence
+        same = (
+            evidence.get("output_file")
+            or evidence.get("output_digest")
+            or (evidence.get("reviewed_head"), evidence.get("diff_sha"))
+        )
+        if same == (None, None):
+            same = ev.lamport
         once = (ev.subject, _gate(ev), same, took)
         if once in seen:
             continue
