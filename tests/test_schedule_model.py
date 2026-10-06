@@ -456,3 +456,36 @@ def test_every_days_refuses_a_period_no_time_reaches(days):
     with pytest.raises(ValueError, match="every_days entry"):
         calendar(cfg)
     assert SV.from_cadence(cfg)[1]
+
+
+def test_phase_close_reads_every_days_with_the_same_parse(proj):
+    """roborev on B-sched-model: phase_overdue kept its own parse, which took inf as a
+    period, so a count pass it replaced stopped blocking the phase."""
+    from ddflow.services.cadence import phase_overdue
+
+    cfg = Config()
+    cfg.cadence.architecture_review_every_phases = 1
+    st = fold([_ev("phase.added", "P1", {"title": "p"}, 1), _ev("item.completed", "P1", {}, 2)])
+    assert any("architecture_review" in b for b in phase_overdue(st, cfg))
+    for bad in ("inf", "1e309", "nan"):
+        cfg.cadence.every_days = [f"architecture_review={bad}"]
+        assert any("architecture_review" in b for b in phase_overdue(st, cfg)), bad
+    cfg.cadence.every_days = ["architecture_review=7"]
+    assert not any("architecture_review" in b for b in phase_overdue(st, cfg))
+
+
+def test_search_carries_the_definition_problems(proj):
+    _file(proj, "x.toml", "cadence = { every_days = 1 }\nneeds = ['ghost']\n")
+    assert "x needs ghost, which is not a job" in A.schedule_search(proj, "x").data["errors"]
+    assert A.schedule_search(proj, "zzz").data["errors"]
+
+
+def test_list_defaults_are_the_same_with_or_without_the_verb():
+    p = cli.build_parser()
+    sub = next(a for a in p._actions if isinstance(a, argparse._SubParsersAction))
+    add_schedule_parser(sub)
+    for argv in (["schedule"], ["schedule", "list"]):
+        a = p.parse_args(argv)
+        assert (a.tag, a.enabled) == ("", False), argv
+    a = p.parse_args(["schedule", "list", "--enabled", "--tag", "x"])
+    assert (a.tag, a.enabled) == ("x", True)

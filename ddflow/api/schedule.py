@@ -7,6 +7,11 @@
 `schedule.*` events: each validates first and writes nothing when the definition is
 wrong -- a bad field, a needs naming no job, a needs cycle. They are the layer the
 authoring surfaces (duplicate check, enable/disable, MCP) are built on.
+
+The graph checks read the log, then append: two writers racing can each pass and
+together close a cycle (or remove a job the other just made a need). Nothing is lost --
+`definitions` reports the cycle on every read -- but the refusal is best-effort, not a
+lock; the last writer's definition stands.
 """
 
 from __future__ import annotations
@@ -67,9 +72,14 @@ def schedule_search(repo: Path, query: str, *, agent: str = "") -> O.Outcome:
     rows = [d.row() for d in SV.search(defs, query)]
     if not rows:
         return O.nothing(
-            "schedule.search", f"no job matches {query!r}", rows=[], count=0, query=query
+            "schedule.search",
+            f"no job matches {query!r}",
+            rows=[],
+            count=0,
+            query=query,
+            errors=defs.errors,
         )
-    return O.ok("schedule.search", rows=rows, count=len(rows), query=query)
+    return O.ok("schedule.search", rows=rows, count=len(rows), query=query, errors=defs.errors)
 
 
 def _graph_refusal(kind: str, jid: str, defs, job) -> O.Outcome | None:
