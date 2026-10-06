@@ -36,7 +36,9 @@ def _default(v: object) -> str:
     text = value(v)
     if len(text) > SHOWN:
         return "(long: see `ddflow config --explain`)"
-    return "`" + text.replace("|", "\\|") + "`"
+    text = text.replace("|", "\\|")
+    # A backtick inside would close a one-backtick code span early: fence it with two.
+    return f"`` {text} ``" if "`" in text else f"`{text}`"
 
 
 def render(cfg: Config | None = None, choices: dict[str, tuple[str, ...]] | None = None) -> str:
