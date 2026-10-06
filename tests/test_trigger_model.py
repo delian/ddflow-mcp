@@ -364,9 +364,12 @@ def test_a_suppression_keeps_the_events_that_met_the_condition():
     assert fold(evs).trigger_suppressed["t"][0]["events"] == ["e9"]
 
 
-def test_the_evaluator_decides_under_the_log_lock(proj, monkeypatch):
-    """rubber-duck and roborev on B-trigger-model: the read and the decision were taken
-    outside the lock, so two evaluators could both file for one key."""
+def test_the_evaluator_decides_outside_the_lock_and_again_under_it_if_the_log_grew(
+    proj, monkeypatch
+):
+    """rubber-duck and roborev on B-trigger-model: a decision from a log that another
+    writer appended to could file twice for one key; holding the lock across the whole
+    read instead stalls every other writer. Read outside, re-decide under it on growth."""
     from ddflow.infra import log as L
 
     seen = []
@@ -445,3 +448,15 @@ def test_the_limits_that_read_the_fire_tail_cannot_exceed_it():
     assert any("breaker must be" in e for e in errors)
     with pytest.raises(ValueError, match="max_per_hour"):
         TR.evaluate(fold([]), [], {}, T0, max_per_hour=TRIGGER_FIRES_KEPT + 1)
+
+
+def test_a_log_this_ddflow_cannot_read_is_refused_not_half_evaluated(proj):
+    """critic on B-trigger-model: a non-strict fold skipped what it could not read and
+    decided from a partial state."""
+    log = EventLog(proj, "t")
+    log.append("cadence.ran", "x", {})
+    for shard in (proj / ".ddflow" / "events").rglob("*.jsonl"):
+        shard.write_text(shard.read_text().replace('"cadence.ran"', '"from.the.future"'))
+    assert any(e.kind == "from.the.future" for e in log.read_all())
+    out = A.trigger_evaluate(proj)
+    assert out.exit == FAIL and "cannot read" in out.reason

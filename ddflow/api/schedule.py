@@ -227,7 +227,8 @@ def trigger_evaluate(
     reached, and both file (rubber-duck and roborev). The read and the fold happen
     OUTSIDE the append lock, as a claim's do (`leases._decide_from`); under the lock a
     few `stat` calls prove the log did not grow, and only if it did is everything read
-    and decided again -- with NOW taken again -- before anything is written."""
+    and decided again -- with NOW taken again -- before anything is written. A dry run
+    takes no lock: its answer is what a run would decide from the log as it was read."""
     log, cfg, _st = _load(repo, agent)
     given = TR.ts(now) if now else None
     if now and given is None:
@@ -235,19 +236,28 @@ def trigger_evaluate(
 
     def decide():
         events = log.read_all()
-        st = fold(events, strict=False)
+        # Strict: an event this ddflow cannot read could be the open remediation or the
+        # fire the cap must count; deciding without it could file twice (critic).
+        st = fold(events, strict=True)
         defs = SV.definitions(repo, cfg, st)
         trigs, errors = TR.load(repo, defs.jobs)
         at = given or datetime.now(UTC)
         return at, st, defs, trigs, errors, TR.evaluate(st, events, trigs, at)
 
     before = log.extent()
-    at, st, defs, trigs, errors, decisions = decide()
-    if not dry_run:
-        with log.transaction():
-            if log.extent() != before:
-                at, st, defs, trigs, errors, decisions = decide()
-            _apply(log, st, defs, trigs, decisions, at, errors)
+    try:
+        at, st, defs, trigs, errors, decisions = decide()
+        if not dry_run:
+            with log.transaction():
+                if log.extent() != before:
+                    at, st, defs, trigs, errors, decisions = decide()
+                _apply(log, st, defs, trigs, decisions, at, errors)
+    except ValueError as exc:  # the strict fold met an event or schema it does not know
+        return O.failed(
+            "trigger.evaluated",
+            f"the log holds what this ddflow cannot read ({exc}): nothing was evaluated; "
+            f"upgrade ddflow",
+        )
     fired = sum(1 for d in decisions if d.fire)
     data = {"decisions": [asdict(d) for d in decisions], "errors": errors, "fired": fired}
     if dry_run:
