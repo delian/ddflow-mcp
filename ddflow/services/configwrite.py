@@ -34,7 +34,7 @@ import re
 import tomllib
 from pathlib import Path
 
-from ..config import Config
+from ..config import Config, InvalidValue, parallel_range_problems
 from ..infra import tomlcfg as TC
 from . import reviewer_trust as RT
 
@@ -107,6 +107,49 @@ def _effective(repo: Path, text: str, local: bool):
     else:
         cfg._apply(data, "file")
     return data, cfg
+
+
+def _range_problems(repo: Path, text: str, local: bool) -> set[tuple[str, str]]:
+    """The auto range problems (`config.parallel_range_problems`) a candidate TEXT would
+    have, judged as `_effective` judges it. Raises what `_effective` raises."""
+    return set(parallel_range_problems(_effective(repo, text, local)[1]))
+
+
+def _new_range_problems(repo: Path, before: str, after: str, local: bool) -> set:
+    """Range problems the edit INTRODUCES. Only new ones are refused, so a project whose
+    range was already inconsistent can still make an unrelated edit, or the repair.
+
+    A local write is judged over the committed layer; when that layer cannot be read
+    (it does not parse, say -- the load path reports it), the edit is judged on its own
+    over the shipped defaults instead, so a broken sibling never switches the guard off;
+    and when the text BEFORE the edit does not load, only the problems the result has
+    beyond those the committed layer brings are the edit's (a repair is never refused).
+    """
+    unreadable = (tomllib.TOMLDecodeError, ValueError, OSError)
+
+    def judged(text: str, over_committed: bool) -> set | None:
+        try:
+            return _range_problems(repo, text, over_committed)
+        except unreadable:
+            return None
+
+    found = judged(after, local)
+    if found is None:  # the sibling layer is broken: judge the edit over the defaults
+        local = False
+        found = judged(after, False) or set()
+    had = judged(before, local)
+    if had is None:  # the text before the edit does not load: what it inherited stays
+        had = judged("", local) or set()
+    return found - had
+
+
+def _range_refusal(problems: set[tuple[str, str]]) -> str:
+    said = "; ".join(f"invalid {key}: {why}" for key, why in sorted(problems))
+    return (
+        f"that edit would make the adaptive range inconsistent: {said}. In auto, "
+        "schedule.max_parallel_min <= schedule.max_parallel_tasks <= "
+        "schedule.max_parallel_max; change the bound first, or set schedule.parallel fixed."
+    )
 
 
 def _toml_literal(value: str) -> str:
@@ -630,8 +673,12 @@ def _write_config(
         try:
             result = tomllib.loads(text)
             Config.check(result)
+        except InvalidValue as exc:  # a known knob, a value it cannot take: refused
+            return KeyRefused(f"that edit would break the config: {exc}"), text
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"that edit would break the config: {exc}", text
+        if new_range := _new_range_problems(repo, text_before, text, local):
+            return KeyRefused(_range_refusal(new_range)), text
         # `gate` is a foreign table to Config.check, so a gate block is judged here, on the
         # parsed result: `gate.a.b.command` (however spelled -- quoted, escaped) wrote
         # `[gate.a.b]`, exit 0, and every later command refused to load it (B72b8adba30).
@@ -710,8 +757,12 @@ def _append_config(
         try:
             result = tomllib.loads(merged)
             Config.check(result)
+        except InvalidValue as exc:
+            return KeyRefused(f"appending this would break the config: {exc}"), Path()
         except (tomllib.TOMLDecodeError, ValueError) as exc:
             return f"appending this would break the config: {exc}", Path()
+        if new_range := _new_range_problems(repo, prev, merged, local):
+            return KeyRefused(_range_refusal(new_range)), Path()
         # `[gate.a.b]` is bare in every segment, so the plain-key check passes it -- and
         # it nests a table every later command refuses to load. Judged as `_write_config`
         # judges `--set`: only NEW gate-table problems (roborev on a1c614f4).
