@@ -153,3 +153,42 @@ def test_ddflow_status_carries_the_line(repo) -> None:
     }
     r = Server(repo).handle(req)["result"]
     assert "parallel: 4 (auto" in json.dumps(r)
+
+
+def test_exactly_filling_the_limit_with_nothing_held_is_independent_work(repo) -> None:
+    st = _state(repo, 6)
+    p = plan(st, Config(), now=NOW, parallel=_auto(6))
+    assert len(p.ready) == 6 and p.capped == []
+    assert p.parallel_line.endswith("limited by independent work)")
+
+
+def test_an_underivable_limit_still_says_so(repo, monkeypatch) -> None:
+    from ddflow.core.model import State
+    from ddflow.services import flowstate as FL
+
+    def boom(ctx, source=None, clock=None):
+        raise RuntimeError("ring exploded")
+
+    monkeypatch.setattr(FL, "current_limit", boom)
+    d = FL.limit_for(repo, Config(), State())
+    assert d.limit == 4 and "ring exploded" in d.reason
+    p = plan(_state(repo, 2), Config(), now=NOW, parallel=d)
+    assert p.parallel_line.startswith("parallel: 4 (auto")
+
+
+def test_wait_plans_with_the_same_limit_as_next(repo, monkeypatch) -> None:
+    from ddflow.api import lifecycle
+    from ddflow.services import flowstate as FL
+
+    _ten(repo)
+    seen = []
+    real = FL.limit_for
+
+    def spy(repo_, cfg, st, events=()):
+        seen.append(callable(events) or bool(events))
+        return real(repo_, cfg, st, events)
+
+    monkeypatch.setattr(FL, "limit_for", spy)
+    lifecycle.next_(repo, agent="a1")
+    lifecycle.wait(repo, agent="a1", timeout_s=0)
+    assert seen and all(seen), seen  # every caller hands over the log
