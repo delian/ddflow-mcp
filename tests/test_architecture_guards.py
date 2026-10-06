@@ -435,11 +435,19 @@ def _contracts(
     return {name[len(prefix) :]: ini[name] for name in ini.sections() if name.startswith(prefix)}
 
 
+def _two_homes(contract: str) -> str:
+    return (
+        f".importlinter lists ignore_imports for {contract}: move them to "
+        f"{_baseline_path(f'importlinter-{contract}').relative_to(ROOT)}, their one home"
+    )
+
+
 def _joined_importlinter(directory: Path) -> Path:
     """`.importlinter` with each contract's allowlist joined back from its baseline file,
     written into `directory` for import-linter to read."""
     ini = _importlinter()
     for contract, section in _contracts(ini).items():
+        assert "ignore_imports" not in section, _two_homes(contract)
         entries = _allowlist(contract)
         if entries:
             section["ignore_imports"] = "\n" + "\n".join(entries)
@@ -589,7 +597,4 @@ def test_every_guard_has_its_own_baseline_file_and_nothing_else_is_there() -> No
     _kept_unreferenced()
     for contract, section in contracts.items():
         _allowlist(contract)
-        assert "ignore_imports" not in section, (
-            f".importlinter lists ignore_imports for {contract}: move them to "
-            f"{_baseline_path(f'importlinter-{contract}').relative_to(ROOT)}"
-        )
+        assert "ignore_imports" not in section, _two_homes(contract)
