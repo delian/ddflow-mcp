@@ -125,8 +125,8 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
     "ddflow_rule_edit": {
         "description": (
-            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest. "
-            "A new title or content is duplicate-checked against every record kind (answer new | related:ID)."
+            "Change fields of an existing rule; omitted fields stay. Recorded in the manifest; "
+            "new text is duplicate-checked."
         ),
         "properties": {
             "id": ("string", "Rule id to edit.", True),
@@ -136,8 +136,8 @@ TOOLS: dict[str, dict[str, Any]] = {
             "scope": ("string", "New scope.", False),
             "priority": ("integer", "New priority.", False),
             "globs": ("string", "Comma-separated globs.", False),
-            "new": ("boolean", "Dedup answer: a different record.", False),
-            "related": ("string", "Dedup answer: related to ID.", False),
+            "new": ("boolean", "Answer: different.", False),
+            "related": ("string", "Answer: related ID.", False),
         },
         "api": lambda repo, a, agent: _api().rule_update(
             repo,
