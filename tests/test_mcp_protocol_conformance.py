@@ -311,6 +311,11 @@ def test_the_vendored_schema_is_the_upstream_file_byte_for_byte(revision):
     assert hashlib.sha256(data).hexdigest() == MANIFEST["files"][revision]["sha256"]
 
 
+def test_the_vendored_licence_is_the_upstream_file():
+    data = (FIXTURES / "LICENSE").read_bytes()
+    assert hashlib.sha256(data).hexdigest() == MANIFEST["license_sha256"]
+
+
 def test_the_validator_can_fail():
     """A validator that accepts everything would make every test below vacuous."""
     rev = MODERN[0]
