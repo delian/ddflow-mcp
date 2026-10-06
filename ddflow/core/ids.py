@@ -292,8 +292,13 @@ def is_filing_of(rid: str, base: str) -> bool:
     failure's bug) or one of its re-filings (`refile`: seven hex digits). Only stable ids
     are re-filed, and no stable template holds `{seq}`, so a sequence number never follows
     a stable id; another stable id that merely starts with ``base`` ends in its own
-    ten-digit digest, which is not seven."""
-    return rid == base or re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
+    ten-digit digest, which is not seven. Enforced, not assumed: a ``base`` that does not
+    end in a ten-digit digest has no re-filings at all."""
+    if rid == base:
+        return True
+    if not re.search(r"-[0-9a-f]{10}$", base):
+        return False  # not a stable id (no trailing digest): it has no re-filings
+    return re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
 
 
 def confirm(cfg: Config, kind: str, minted: Minted, *, used: Any, **fields: Any) -> Minted:

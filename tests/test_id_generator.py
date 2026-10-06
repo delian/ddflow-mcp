@@ -289,3 +289,12 @@ def test_a_repeated_parent_token_reads_back() -> None:
     cfg.ids.fix_task = "{parent}-fix-{parent}"
     assert ids.bugs_named_by_fix_task(cfg, "B1-fix-B1")[0] == "B1"
     assert "B1" not in ids.bugs_named_by_fix_task(cfg, "B1-fix-B2")
+
+
+def test_a_sequence_numbered_id_is_never_a_refiling() -> None:
+    for rid, base in (
+        ("promote-prod-1234567", "promote-prod"),
+        ("fix-B1-1234567", "fix-B1"),
+        ("promote-prod-1234", "promote-prod"),
+    ):
+        assert not ids.is_filing_of(rid, base), rid
