@@ -291,3 +291,33 @@ def test_the_log_is_read_only_when_a_sample_is_due(repo):
     clock.t += 10
     F.sample_if_due(ctx, src, clock)
     assert len(calls) == n  # not due: the log was not read
+
+
+def test_the_ring_stays_valid_even_when_the_lock_lets_two_writers_in(repo, monkeypatch):
+    """The lock throttles; the file's safety does not depend on it (a racy stale-lock
+    takeover can admit two writers)."""
+    import contextlib
+
+    @contextlib.contextmanager
+    def no_lock(path):
+        yield True
+
+    monkeypatch.setattr(F, "_lock", no_lock)
+    F.sample_if_due(_ctx(repo), SIG.FakeSource(GOOD), Clock())
+    with F.ring_path(repo).open("a", encoding="utf-8") as fh:
+        fh.write("torn")  # every writer will take the rewrite branch at least once
+
+    def worker(n: int) -> None:
+        for i in range(1, 40):
+            F.sample_if_due(_ctx(repo), SIG.FakeSource(GOOD), Clock(T0 + 60 * i + n * 0.001))
+
+    threads = [threading.Thread(target=worker, args=(n,)) for n in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    rows = F.read_ring(repo)
+    assert rows
+    for line in F.ring_path(repo).read_text("utf-8").splitlines():
+        json.loads(line)  # no torn or interleaved line
+    assert not list(F.ring_path(repo).parent.glob("*.tmp"))

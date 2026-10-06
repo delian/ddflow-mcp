@@ -129,12 +129,16 @@ def in_flight(state: State, cfg: Config, now: float) -> int:
 
 @contextlib.contextmanager
 def _lock(path: Path) -> Iterator[bool]:
-    """A short exclusive lock by ``O_CREAT | O_EXCL`` (portable: no ``fcntl``). Yields
-    False when another sampler held it for the whole wait: that sample is skipped.
+    """A short lock by ``O_CREAT | O_EXCL`` (no ``fcntl``). Yields False when another
+    sampler held it for the whole wait: that sample is skipped.
 
-    The lock file carries a token, and only its owner removes it. A crashed sampler's
-    lock (older than ``STALE_LOCK_S``) is taken over by renaming it aside first: only
-    one taker's rename can succeed, so a fresh lock is never removed by mistake."""
+    It THROTTLES, it does not protect the file: the ring is safe without it, because
+    every append is one ``O_APPEND`` write of one line and every rewrite goes through a
+    temporary file of the writer's own and an atomic ``os.replace``. So the takeover of
+    a crashed sampler's lock (older than ``STALE_LOCK_S``) may race -- two takers can
+    both get in, and at worst the ring gains two samples in one interval or a rewrite
+    drops one -- but no interleaving tears a line. The token keeps a holder from
+    removing a lock that is no longer its own in the ordinary case."""
     lock = path.with_name(path.name + ".lock")
     token = f"{os.getpid()}-{time.time_ns()}".encode()
     deadline = time.monotonic() + LOCK_WAIT_S
@@ -164,6 +168,28 @@ def _lock(path: Path) -> Iterator[bool]:
         with contextlib.suppress(OSError):
             if lock.read_bytes() == token:
                 lock.unlink()
+
+
+def _append_line(path: Path, line: str) -> None:
+    """One ``O_APPEND`` write of one whole line: concurrent appenders never interleave
+    inside a line."""
+    fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o644)
+    try:
+        os.write(fd, line.encode("utf-8"))
+    finally:
+        os.close(fd)
+
+
+def _replace(path: Path, body: str) -> None:
+    """Write ``body`` to a temporary file of this writer's own, then rename it over
+    ``path`` atomically: a reader sees the old ring or the new one, never a mix."""
+    tmp = path.with_name(f"{path.name}.{os.getpid()}-{time.time_ns()}.tmp")
+    try:
+        tmp.write_text(body, "utf-8")
+        os.replace(tmp, path)
+    finally:
+        with contextlib.suppress(OSError):
+            tmp.unlink()
 
 
 def _samples(rows: Sequence[dict]) -> list[FC.Sample]:
@@ -260,13 +286,10 @@ def _sample_if_due(ctx: FlowCtx, source: SIG.SignalSource, clock: Clock) -> Samp
         kept = [r for r in rows if r["at"] >= now - KEEP_S]
         line = json.dumps(row, sort_keys=True) + "\n"
         if clean and len(kept) == len(rows) and path.exists():
-            with path.open("a", encoding="utf-8") as fh:
-                fh.write(line)
+            _append_line(path, line)
         else:  # trim, or repair a torn file: rewrite the kept window atomically
-            tmp = path.with_name(path.name + ".tmp")
             body = "".join(json.dumps(r, sort_keys=True) + "\n" for r in kept) + line
-            tmp.write_text(body, "utf-8")
-            os.replace(tmp, path)
+            _replace(path, body)
     return SampleResult(True)
 
 
