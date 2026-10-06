@@ -45,7 +45,10 @@ def _sources() -> str:
     return "\n".join(
         p.read_text("utf-8")
         for p in pkg.rglob("*.py")
-        if p.name != "config.py" and "__pycache__" not in str(p)
+        # The config's own definitions are not reads: config.py and its sections package.
+        if p.name != "config.py"
+        and "config_sections" not in p.parts
+        and "__pycache__" not in str(p)
     )
 
 
