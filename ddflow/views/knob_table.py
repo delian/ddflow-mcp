@@ -25,7 +25,7 @@ from ..infra.tomlcfg import value
 
 REGION = "README/knobs"
 END = f"<!-- ddflow:end {REGION} -->"
-_BEGIN = re.compile(rf"^<!-- ddflow:begin {REGION} sha=[0-9a-f]{{12}} -->$", re.M)
+_BEGIN = re.compile(rf"^<!-- ddflow:begin {re.escape(REGION)} sha=[0-9a-f]{{12}} -->$", re.M)
 _END = re.compile(rf"^{re.escape(END)}$", re.M)
 #: A default longer than this is not shown in a cell: `config --explain` prints it whole.
 SHOWN = 40
