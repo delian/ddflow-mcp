@@ -1,4 +1,4 @@
-"""Scheduled jobs: read the merged definitions, and record a definition (D-sched-no-daemon).
+"""Scheduled jobs and event triggers (D-sched-no-daemon, D-sched-triggers-separate).
 
 `schedule_list` / `schedule_show` / `schedule_search` read the merge of the event log,
 `.ddflow/schedules/*.toml` and `[cadence]` (`services.schedule.definitions`).
@@ -17,12 +17,14 @@ lock; the last writer's definition stands.
 from __future__ import annotations
 
 from dataclasses import asdict
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from ..core import outcome as O
-from ..core.model import SCHEDULE_FIELDS, Schedule
+from ..core.model import SCHEDULE_FIELDS, Schedule, fold
 from ..services import schedule as SV
+from ..services import triggers as TR
 from ._base import _load
 
 
@@ -160,3 +162,159 @@ def schedule_remove(repo: Path, jid: str, *, reason: str, agent: str = "") -> O.
         )
     log.append("schedule.removed", jid, {"reason": reason.strip()})
     return O.ok("schedule.removed", id=jid, why=reason.strip())
+
+
+# -- triggers (D-sched-triggers-separate, D-trigger-actions-create-items) --------------------
+
+
+def _triggers(repo: Path, agent: str = ""):
+    log, cfg, st, defs = _defs(repo, agent)
+    trigs, errors = TR.load(repo, defs.jobs)
+    return log, cfg, st, defs, trigs, errors
+
+
+def _trigger_row(st, t) -> dict[str, Any]:
+    fires = st.trigger_fires.get(t.id, [])
+    return {
+        **asdict(t),
+        "fires": len(fires),
+        "open": sorted(
+            i
+            for i, m in st.trigger_items.items()
+            if m.get("trigger") == t.id and TR.outcome(st, i) == "open"
+        ),
+        "held": TR._held(st, t) >= t.breaker,
+    }
+
+
+def trigger_list(repo: Path, *, agent: str = "") -> O.Outcome:
+    """Every trigger defined in `.ddflow/triggers/`, by id, and the files that are broken."""
+    _log, _cfg, st, _defs, trigs, errors = _triggers(repo, agent)
+    rows = [_trigger_row(st, t) for _tid, t in sorted(trigs.items())]
+    if not rows:
+        return O.nothing("trigger.list", "no triggers", rows=[], count=0, errors=errors)
+    return O.ok("trigger.list", rows=rows, count=len(rows), errors=errors)
+
+
+def trigger_show(repo: Path, tid: str, *, agent: str = "") -> O.Outcome:
+    """One trigger: its definition, fires, open remediations, whether its breaker holds,
+    and the last suppressions."""
+    _log, _cfg, st, _defs, trigs, errors = _triggers(repo, agent)
+    t = trigs.get(tid)
+    if t is None:
+        why = "; ".join(e for e in errors if f"/{tid}.toml" in e)
+        return O.failed(
+            "trigger.show", f"no such trigger {tid!r}" + (f": {why}" if why else ""), id=tid
+        )
+    return O.ok(
+        "trigger.show",
+        **_trigger_row(st, t),
+        history=list(st.trigger_fires.get(tid, [])),
+        suppressed=list(st.trigger_suppressed.get(tid, []))[-TR.SHOWN_SUPPRESSIONS :],
+    )
+
+
+class _Unreadable(Exception):
+    """The trigger evaluator met an event log it cannot fully read."""
+
+
+def trigger_evaluate(
+    repo: Path, *, now: str = "", dry_run: bool = False, agent: str = ""
+) -> O.Outcome:
+    """Evaluate every trigger against the log NOW and act: a met condition files its
+    remediation items (`trigger.fired` + `task.added`) or is recorded as suppressed with
+    the reason; the run itself is `trigger.evaluated`. `dry_run` writes nothing. Exit 2
+    when no condition is met (nothing recorded but the run).
+
+    Decided from a log nothing has appended to since: two evaluators started at once
+    would otherwise both see a key with no open remediation, or the hourly cap not yet
+    reached, and both file (rubber-duck and roborev). The read and the fold happen
+    OUTSIDE the append lock, as a claim's do (`leases._decide_from`); under the lock a
+    few `stat` calls prove the log did not grow, and only if it did is everything read
+    and decided again -- with NOW taken again -- before anything is written. A dry run
+    takes no lock: its answer is what a run would decide from the log as it was read."""
+    log, cfg, _st = _load(repo, agent)
+    given = TR.ts(now) if now else None
+    if now and given is None:
+        return O.failed("trigger.evaluated", f"--now {now!r} is not an ISO timestamp")
+
+    def decide():
+        events = log.read_all()
+        # An event this ddflow cannot read -- a kind or schema it does not know, or a line
+        # it cannot parse -- could be the open remediation or a fire the cap must count:
+        # deciding without it could file twice (critic, roborev). Refuse instead.
+        if log.skipped_lines:
+            raise _Unreadable(f"{log.skipped_lines} unparseable line(s)")
+        try:
+            st = fold(events, strict=True)
+        except ValueError as exc:
+            raise _Unreadable(str(exc)) from exc
+        defs = SV.definitions(repo, cfg, st)
+        trigs, errors = TR.load(repo, defs.jobs)
+        at = given or datetime.now(UTC)
+        return at, st, defs, trigs, errors, TR.evaluate(st, events, trigs, at)
+
+    before = log.extent()
+    try:
+        at, st, defs, trigs, errors, decisions = decide()
+        if not dry_run:
+            with log.transaction():
+                if log.extent() != before:
+                    at, st, defs, trigs, errors, decisions = decide()
+                _apply(log, st, defs, trigs, decisions, at, errors)
+    except _Unreadable as exc:  # raised before anything is written
+        return O.failed(
+            "trigger.evaluated",
+            f"the log holds what this ddflow cannot read ({exc}): nothing was evaluated "
+            f"or written. A newer ddflow wrote it (upgrade) or a line is damaged "
+            f"(`ddflow doctor`).",
+        )
+    fired = sum(1 for d in decisions if d.fire)
+    data = {"decisions": [asdict(d) for d in decisions], "errors": errors, "fired": fired}
+    if dry_run:
+        data["dry_run"] = True
+    if not decisions:
+        return O.nothing("trigger.evaluated", "no trigger condition is met", **data)
+    return O.ok("trigger.evaluated", **data)
+
+
+def _apply(log, st, defs, trigs, decisions, at, errors) -> None:
+    """Write what `decisions` decided: each fire's item and `trigger.fired`, each
+    suppression, then the run. The caller holds the log lock."""
+    taken = set(st.items)
+    for d in decisions:
+        if not d.fire:
+            log.append(
+                "trigger.suppressed",
+                d.trigger,
+                {"key": d.key, "reason": d.reason, "detail": d.detail, "events": d.events},
+            )
+            continue
+        trig = trigs[d.trigger]
+        item = TR.item_for(trig, defs.jobs[trig.action["job"]].job, d, taken, st)
+        taken.add(item["id"])
+        log.append("task.added", item["id"], item["data"])
+        log.append(
+            "trigger.fired",
+            d.trigger,
+            {
+                "key": d.key,
+                "items": [item["id"]],
+                "hop": d.hop,
+                "digest": trig.digest(),
+                "job": trig.action["job"],
+                "events": d.events,
+            },
+        )
+        d.items = [item["id"]]
+    log.append(
+        "trigger.evaluated",
+        "triggers",
+        {
+            "now": at.isoformat(),
+            "triggers": sorted(trigs),
+            "fired": sum(1 for d in decisions if d.fire),
+            "suppressed": sum(1 for d in decisions if not d.fire),
+            "errors": errors,
+        },
+    )
