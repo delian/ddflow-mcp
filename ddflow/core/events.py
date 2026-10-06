@@ -13,13 +13,14 @@ domain testable, and the layering test caught it the moment the layers were name
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
+
+from .digest import content_digest
 
 SCHEMA_VERSION = 1
 
@@ -242,7 +243,7 @@ def canonical_digest(obj: Any, *, size: int = 12) -> str:
     """blake2b (``size`` bytes, hex) of ``obj``'s `canonical` form: an event's id, and a
     definition record's content digest (`core.defs`). One hash for both, so the same
     content always reads as the same digest."""
-    return hashlib.blake2b(canonical(obj).encode(), digest_size=size).hexdigest()
+    return content_digest(canonical(obj), "blake2b", size=size)
 
 
 #: The keep-a-changelog categories an item.completed / bug.fixed `changelog` field may carry
