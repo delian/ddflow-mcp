@@ -111,7 +111,35 @@ def test_a_command_line_too_long_to_show_keeps_its_head_and_tail(tmp_path, monke
     note = L._describe_pid(4242)
     assert note.startswith("pid 4242 (python3 -m ddflow arg"), note
     assert note.endswith("--the-end)") and "..." in note, note
-    assert len(note) < 260, len(note)
+    assert len(note) == len("pid 4242 ()") + L._CMD_SHOWN + 3 + L._CMD_TAIL, len(note)
+
+
+def test_a_long_command_still_shows_everything_the_old_cut_showed(monkeypatch):
+    """The head is never shortened to make room for the tail: a name at offset 150 of a
+    long line was shown before the fix and must still be (critic, fix-B3a4bf051b4)."""
+    real = Path.read_bytes
+    code = b"#" * 140 + b" ddflow.infra.log " + b"y" * 300
+
+    def fake(self, *a, **k):
+        if str(self) == "/proc/4244/cmdline":
+            return b"python3\0-c\0" + code + b"\0/the/lock\0"
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", fake)
+    note = L._describe_pid(4244)
+    assert "ddflow.infra.log" in note and note.endswith("/the/lock)"), note
+
+
+def test_python_named_tools_keep_their_first_argument(monkeypatch):
+    real = Path.read_bytes
+
+    def fake(self, *a, **k):
+        if str(self) == "/proc/4245/cmdline":
+            return b"/usr/bin/python-lint\0/home/u/x.py\0"
+        return real(self, *a, **k)
+
+    monkeypatch.setattr(Path, "read_bytes", fake)
+    assert L._describe_pid(4245) == "pid 4245 (python-lint /home/u/x.py)"
 
 
 def test_the_script_an_interpreter_runs_is_named_but_arguments_keep_their_paths(monkeypatch):
