@@ -128,8 +128,9 @@ EXEMPT: dict[str, str] = {
     "session.note": "a journal entry of what happened, verbatim (D-no-duplicates)",
     **dict.fromkeys(
         ("schedule.defined", "schedule.updated", "schedule.removed"),
-        "a scheduled job's definition, keyed by its id and validated by api.schedule; the "
-        "duplicate check joins with job authoring (B-sched-author adds the kind to _dedupe)",
+        "a scheduled job's definition: a document keyed by its id (defining an id again "
+        "replaces it) and validated by api.schedule; the authoring surfaces that add a "
+        "duplicate check are B-sched-author",
     ),
     "record.extended": "the duplicate check's own answer: text added onto a checked record",
     "link.recorded": "the duplicate check's own answer: two records judged related or the same",
