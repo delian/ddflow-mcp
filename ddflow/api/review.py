@@ -848,8 +848,11 @@ def _delta_start(repo: Path, tip: str, head: str, base: str) -> str:
     the base's: a conflict it resolved its own way (overriding another item's change)
     is its decision and is reviewed; one where it took the base's side is not new code.
     Returns ``head`` when nothing came in, else the merged tree. When a merge cannot be
-    written (a delete/modify or rename conflict, say), ``head``: everything since the
-    reviewed head is sent, as before this fix -- more than the item's own, never less."""
+    written (a modify/delete or rename conflict, which ``-X theirs`` does not settle):
+    with one incoming base, that commit -- the item's whole own change on top of it, and
+    none of the base's; with several, ``head`` -- everything since the reviewed head, the
+    pre-fix range, since no single one of them excludes the others' work. More than the
+    item's own, never less."""
     found = W.git(repo, "merge-base", "--all", base, tip) if base and tip else None
     bases = found.out.split() if found is not None and found.ok else []
     came_in = sorted(
@@ -860,7 +863,7 @@ def _delta_start(repo: Path, tip: str, head: str, base: str) -> str:
         merged = W.git(repo, "merge-tree", "--write-tree", "-X", "theirs", start, commit)
         tree = merged.out.splitlines()[0].strip() if merged.ok and merged.out.strip() else ""
         if not tree:
-            return head
+            return came_in[0] if len(came_in) == 1 else head
         if i == len(came_in) - 1:
             return tree
         # Another base to merge: the tree as a commit merge-tree can take (unreferenced,

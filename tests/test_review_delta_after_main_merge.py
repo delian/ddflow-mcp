@@ -216,3 +216,22 @@ def test_the_worktree_delta_that_cannot_run_is_refused_not_empty(merged, monkeyp
     monkeypatch.setattr(RV.W, "git", failing)
     with pytest.raises(RuntimeError, match="simulated failure"):
         RV._delta_diff(repo, _item(tree), "", head)
+
+
+def test_a_merge_that_cannot_be_written_still_sends_none_of_mains_work(repo, tmp_path):
+    """Main deleted a file the reviewed head changed (modify/delete: `-X theirs` cannot
+    settle it). The delta falls back to the merged-in main commit: the item's own change
+    on top of main, without main's other work."""
+    tree = tmp_path / "item"
+    _commit(repo, "gone.py", "g = 0\n", "base")
+    _git(repo, "worktree", "add", "-q", "-b", "item", str(tree))
+    head = _commit(tree, "gone.py", "g = 'item'\n", "item: change gone.py")
+    _git(repo, "rm", "-q", "gone.py")
+    _git(repo, "commit", "-qm", "main: delete gone.py")
+    _commit(repo, "theirs.py", "unrelated = 1\n", "main: other item")
+    subprocess.run(["git", "-C", str(tree), "merge", "-q", "main"], capture_output=True)
+    _git(tree, "rm", "-q", "gone.py")
+    _git(tree, "commit", "-qm", "item: accept the deletion")
+    _commit(tree, "own.py", "x = 1\n", "item: more")
+    diff = RV._delta_diff(repo, _item(tree), "", head)
+    assert "theirs.py" not in diff and "+x = 1" in diff
