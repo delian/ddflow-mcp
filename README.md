@@ -491,6 +491,21 @@ second content block.
 Two tools exist so an agent can orient itself without being told: `ddflow_help` (what
 is this, what is the loop) and `ddflow_workflow` (what are the rules *here*).
 
+**Protocol versions: both eras.** A client that opens with `initialize` negotiates
+`2025-06-18`, `2025-03-26` or `2024-11-05` (an unknown version falls back to the newest)
+and is served exactly as before. A client on the stateless `2026-07-28` revision sends no
+`initialize`: each request carries `io.modelcontextprotocol/protocolVersion` and
+`io.modelcontextprotocol/clientCapabilities` in `params._meta`, and the server answers it
+on its own. `server/discover` returns the supported versions, capabilities and the same
+instructions `initialize` carries; a version not served per request is refused with
+`-32022` (`data.supported` lists every version), a missing required `_meta` field with
+`-32602`; every modern result carries `resultType: "complete"` and the server's identity
+in `_meta`, and `tools/list`, `resources/list`, `resources/read`, `prompts/list` and
+`server/discover` carry `ttlMs` and `cacheScope: "private"` (an hour for the two lists
+fixed for the life of the server, 0 for everything read from the repository's state).
+`ddflow_identify` still names the agent for the rest of the connection in both eras;
+`as_agent` is the per-call form.
+
 ### What goes in AGENTS.md / CLAUDE.md
 
 `ddflow adopt` writes it as a managed block between `<!-- DDFLOW:BEGIN -->` and
@@ -2093,6 +2108,24 @@ prompt or note — runs the same check against the log **before it writes**, wit
   result lists the candidates.
 - **Every answer is recorded** on the add event (`dedupe`: the answer, the score, the
   candidates shown), `new` included, and an automatic merge is marked `auto`.
+- **A lesson captured by `bug fixed --lesson-title`** runs the same check. Nobody can be
+  asked there (the bug is already closed), so the answer is automatic and marked `auto`:
+  identical text goes onto the open lesson it copies (no new id), and a lesson that merely
+  reads like one is filed **linked** to it (`related`), so the pair meets in the next sweep
+  rather than drifting apart. The result says which (`lesson_captured` names the lesson
+  that holds the text; `lesson_capture` has `captured`, `extended`, `related`, `candidates`,
+  and `dedupe_unavailable` when the check could not run -- the lesson is then filed
+  unchecked and the CLI says so), on the CLI line, in `--json` and over MCP.
+- **Rules** (`rule add`, `ddflow_rule_add`) are files, not log records, and run their own
+  check against the other rules: content against content, and title against title for
+  rules with no content (two title-only rules no longer read as copies of each other).
+  `--related ID` files the rule and reports `related` (a rule carries no link); `--check`
+  compares the title too.
+- **Where the check does not run, a test says why.** `tests/test_coherence_coverage.py`
+  classifies every event kind, every function that appends an add kind, and every CLI
+  verb and MCP tool that records text as checked or exempt with a reason (a split's parts,
+  a bug's own fix task, the importers' own check, the operator's verbatim words); a new add
+  path fails it until somebody decides.
 
 **Seeing what was added.** `ddflow show X` (an item or a bug id; `--json` carries the same
 data as `additions`, `links` and `linked_from`) lists the additions on X verbatim with who,
@@ -2162,7 +2195,12 @@ agent, the MCP server and a restarted remote-control service), and appends its e
 to its log so a run nobody watched still says how it ended. Liveness is computed, not
 stored: a zombie is not alive, and a reused pid is caught by the process start time.
 `ddflow job add --pid` registers a process started some other way. Every `brief` lists
-jobs not yet recorded as ended — "WAIT, do not start it again" for a running one.
+jobs not yet recorded as ended — "WAIT, do not start it again" for a running one. Running
+jobs and the jobs of the item a brief is about are listed in full; other items' jobs on
+another host (they may be running) up to the newest five; their exited or killed jobs
+collapse to one count line (a brief about an item -- named, held or suggested -- lists none
+of them; one about no item at all, the newest five). So a backlog of uncollected jobs never
+pushes the item's own section out of the token budget. `ddflow job list` shows them all.
 
 ## Dependencies on another repository
 

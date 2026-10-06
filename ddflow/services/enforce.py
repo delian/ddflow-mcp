@@ -1866,10 +1866,7 @@ def check_drift(
 
 
 def _rel(repo: Path, path: Path) -> str:
-    try:
-        return str(Path(path).resolve().relative_to(Path(repo).resolve()))
-    except ValueError:
-        return str(path)
+    return W.repo_relative(repo, path) or str(path)
 
 
 @dataclass(frozen=True)

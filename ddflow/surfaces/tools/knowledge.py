@@ -202,7 +202,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             verify_reason=a.get("verify_reason", "") or "",
             agent=agent,
         ),
-        "payload": ("id", "regression_verified"),
+        "payload": ("id", "regression_verified", "lesson_captured", "lesson_capture"),
     },
     "ddflow_bug_invalid": {
         "description": (

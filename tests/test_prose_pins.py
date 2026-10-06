@@ -243,6 +243,65 @@ def test_an_unreadable_test_file_is_admitted_and_the_rest_still_reported(repo):
     assert [p["needle"] for p in out.data["pins"]] == ["Claim before you edit"]
 
 
+def test_a_repo_reached_through_a_symlink_still_reports_repo_relative_paths(repo, tmp_path):
+    """B-relpath-helper: test_files() resolves the suite directory and the repo argument
+    was not, so a symlinked checkout reported every suite as an absolute path. The CLI
+    hid it by resolving --repo; the API did not."""
+    _project(repo, {"test_a.py": "X = 'Claim before you edit'\n"})
+    link = tmp_path / "link-to-repo"
+    link.symlink_to(repo, target_is_directory=True)
+    out = pins(link, "RULES.md")
+    assert out.exit == OK, out
+    assert out.data["document"] == "RULES.md"
+    assert out.data["tests"] == ["tests/test_a.py"]
+    assert out.data["pins"][0]["tests"] == ["tests/test_a.py"]
+
+
+def test_a_document_under_a_symlinked_directory_is_reported_by_its_listed_name(repo, tmp_path):
+    """critic on B-relpath-helper: resolving the document's directories reported
+    docs/RULES.md (docs -> outside the repo) as an absolute path."""
+    _project(repo, {"test_a.py": "X = 'Claim before you edit'\n"})
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    (shared / "RULES.md").write_text(RULEBOOK)
+    (repo / "docs").symlink_to(shared, target_is_directory=True)
+    out = pins(repo, "docs/RULES.md")
+    assert out.exit == OK, out
+    assert out.data["document"] == "docs/RULES.md"
+
+
+def test_repo_relative_is_the_one_inside_the_repository_decision(repo, tmp_path):
+    from ddflow.infra.worktree import repo_relative, store_path
+    from ddflow.services.enforce import _rel
+
+    link = tmp_path / "link"
+    link.symlink_to(repo, target_is_directory=True)
+    (repo / "sub").mkdir()
+    (repo / "sub" / "alias.md").symlink_to(repo / "target.md")
+    assert repo_relative(link, repo / "sub") == "sub"
+    assert repo_relative(repo, link / "sub") == "sub"
+    assert repo_relative(repo, tmp_path / "elsewhere") is None
+    # the name as written is kept only when asked: a symlinked leaf, a path under a
+    # symlinked directory (critic, B-relpath-helper), and one under the linked repo
+    assert repo_relative(repo, repo / "sub" / "alias.md") == "target.md"
+    assert repo_relative(repo, repo / "sub" / "alias.md", as_given=True) == "sub/alias.md"
+    assert repo_relative(link, link / "sub" / "alias.md", as_given=True) == "sub/alias.md"
+    assert repo_relative(link, repo / "sub" / "alias.md", as_given=True) == "sub/alias.md"
+    (tmp_path / "shared").mkdir()
+    (repo / "docs").symlink_to(tmp_path / "shared", target_is_directory=True)
+    (repo / "inner").symlink_to(repo / "sub", target_is_directory=True)
+    assert repo_relative(repo, repo / "docs" / "R.md", as_given=True) == "docs/R.md"
+    assert repo_relative(repo, repo / "inner" / "x.py", as_given=True) == "inner/x.py"
+    assert repo_relative(repo, repo / "docs" / "R.md") is None
+    # `..` escapes the repository even when the text starts with it (critic #2)
+    assert repo_relative(repo, repo / ".." / "secret.md", as_given=True) is None
+    assert repo_relative(repo, repo / "sub" / ".." / "R.md", as_given=True) == "R.md"
+    # store_path and enforce._rel agree with it inside, and keep their own fallbacks
+    assert store_path(link, repo / "sub") == _rel(link, repo / "sub") == "sub"
+    assert store_path(repo, tmp_path / "elsewhere") == "../elsewhere"
+    assert _rel(repo, tmp_path / "elsewhere") == str(tmp_path / "elsewhere")
+
+
 def test_an_explicit_floor_is_honoured_and_one_below_1_is_refused(proj):  # noqa: F811
     """`--min-needle 0` became the default 12 because 0 doubled as 'unset'
     (rubber-duck, B22-minzero): a lowered floor silently reported short pins free."""
