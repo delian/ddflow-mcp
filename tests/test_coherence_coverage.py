@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import re
 import sys
 from pathlib import Path
@@ -384,6 +385,7 @@ def test_a_lesson_captured_by_bug_fixed_that_copies_one_extends_it(proj):
     code, out, err = _fixed(proj, LESSON, "the helper ignored a failing git init in setup")
     assert code == 0, (code, out, err)
     assert set(_lessons(proj)) == {"L-old"}
+    assert "lesson added to L-old, which it copies" in out
 
 
 def test_a_lesson_captured_by_bug_fixed_that_reads_like_one_is_filed_linked(proj):
@@ -406,12 +408,55 @@ def test_a_lesson_captured_by_bug_fixed_that_reads_like_one_is_filed_linked(proj
     [new] = [i for i in st.lessons if i != "L-old"]
     assert st.links[new].linked("related") == {"L-old"}
     assert st.links[new].answer.get("auto") is True
+    assert f"lesson {new} captured, linked to L-old" in out
 
 
 def test_a_new_lesson_captured_by_bug_fixed_is_filed_as_before(proj):
     code, out, err = _fixed(proj, LESSON, "the helper ignored a failing git init in setup")
     assert code == 0, (code, out, err)
-    assert [i for i in _lessons(proj) if i.startswith("L-B")]
+    [new] = [i for i in _lessons(proj) if i.startswith("L-B")]
+    assert f"lesson {new} captured" in out
+
+
+def test_the_capture_reaches_json_and_mcp(proj):
+    """roborev on B-coh-coverage: the capture keys were projected away on both surfaces."""
+    from ddflow.surfaces.tools import TOOLS as T
+
+    assert "lesson_capture" in T["ddflow_bug_fixed"]["payload"]
+    code, out, err = run_cli(
+        proj,
+        "lesson",
+        "add",
+        "--id",
+        "L-old",
+        "--title",
+        LESSON,
+        "--rule",
+        "assert each setup step",
+    )
+    assert code == 0, (code, out, err)
+    code, out, err = run_cli(proj, "bug", "found", "--summary", "setup exit ignored", "--no-task")
+    bid = re.search(r"bug (B\w+) recorded", out).group(1)  # type: ignore[union-attr]
+    code, out, err = run_cli(
+        proj,
+        "--json",
+        "bug",
+        "fixed",
+        bid,
+        "--regression-test",
+        "tests/test_x.py",
+        "--skip-regression-verify",
+        "--verify-reason",
+        "t",
+        "--lesson-title",
+        LESSON,
+        "--lesson-rule",
+        "assert each setup step",
+    )
+    assert code == 0, (code, out, err)
+    body = json.loads(out)
+    assert body["lesson_capture"]["extended"] == "L-old"
+    assert body["lesson_capture"]["candidates"][0]["id"] == "L-old"
 
 
 def test_two_title_only_rules_are_compared_by_their_titles(proj):
@@ -424,6 +469,12 @@ def test_two_title_only_rules_are_compared_by_their_titles(proj):
         proj, R.Rule(id="r-three", title="Name tests after their behaviour", content="")
     )
     assert three.exit == 3 and "r-one" in three.reason
+    # the dry run each surface calls compares what the add compares (roborev)
+    assert R.rule_dedup_check_dry_run(proj, "", title="Pin every dependency version").exit == 2
+    code, out, err = run_cli(
+        proj, "rule", "add", "--id", "r-four", "--title", "Pin every dependency version", "--check"
+    )
+    assert code == 2, (code, out, err)
 
 
 def test_a_rule_answered_related_is_filed_and_says_so(proj):
@@ -432,9 +483,27 @@ def test_a_rule_answered_related_is_filed_and_says_so(proj):
     assert R.rule_add(proj, R.Rule(id="r-claim", title="Claim first", content=text)).exit == 0
     near = R.Rule(id="r-claim-2", title="Claim first", content=text + " please")
     assert R.rule_add(proj, near).exit == 3
-    out = R.rule_add(proj, near, dedup_answer=R.RuleDedupAnswer("related", "r-claim"))
+    code, out_, err = run_cli(
+        proj,
+        "rule",
+        "add",
+        "--id",
+        "r-claim-2",
+        "--title",
+        "Claim first",
+        "--content",
+        text + " please",
+        "--related",
+        "r-claim",
+    )
+    assert code == 0 and "added rule r-claim-2 (related to r-claim)" in out_, (code, out_, err)
+    out = R.rule_add(
+        proj,
+        R.Rule(id="r-claim-4", title="Claim first", content=text + " always"),
+        dedup_answer=R.RuleDedupAnswer("related", "r-claim"),
+    )
     assert out.exit == 0, out.reason
-    assert out.data["related"] == "r-claim"
+    assert out.body(("id", "candidates", "related"))["related"] == "r-claim"
     missing = R.rule_add(
         proj,
         R.Rule(id="r-claim-3", title="Claim first", content=text + " now"),

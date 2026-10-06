@@ -458,10 +458,27 @@ def cmd_bug(a, c: Ctx) -> int:
     verified = out.data.get("regression_verified", "")
     tail = f" [{verified}]" if verified else ""
     c.out(
-        f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}",
-        out.body(("id", "regression_verified")),
+        f"bug {a.id} closed (regression: {out.data['regression_test']}){tail}"
+        + _lesson_tail(out.data.get("lesson_capture") or {}),
+        out.body(("id", "regression_verified", "lesson_capture")),
     )
     return OK
+
+
+def _lesson_tail(cap: dict) -> str:
+    """What became of `--lesson-title`, said only when one was given."""
+    if not cap:
+        return ""
+    if cap.get("dedupe_unavailable"):
+        lead = f"\n  lesson {cap.get('captured')} filed UNCHECKED: the duplicate check could not run ({cap['dedupe_unavailable']})"
+    elif cap.get("extended"):
+        lead = f"\n  lesson added to {cap['extended']}, which it copies (no new lesson)"
+    elif cap.get("not_captured"):
+        return f"\n  lesson NOT captured: {cap['not_captured']}"
+    else:
+        lead = f"\n  lesson {cap.get('captured')} captured"
+    rel = cap.get("related")
+    return lead + (f", linked to {rel}, which it reads like" if rel else "")
 
 
 def _fix_task_tail(data: dict) -> str:

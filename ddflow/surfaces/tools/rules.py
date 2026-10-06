@@ -39,6 +39,7 @@ TOOLS: dict[str, dict[str, Any]] = {
             _api().rule_dedup_check_dry_run(
                 repo,
                 a.get("content", "") or "",
+                title=a.get("title", "") or "",
             )
             if bool(a.get("check"))
             else _api().rule_add(
@@ -73,7 +74,7 @@ TOOLS: dict[str, dict[str, Any]] = {
                 ),
             )
         ),
-        "payload": ("id", "candidates"),
+        "payload": ("id", "candidates", "related"),
     },
     "ddflow_rule_list": {
         "description": (
