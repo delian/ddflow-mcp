@@ -1255,9 +1255,9 @@ sees: a conflict resolved the item's own way (overriding another item's change) 
 reviewed, one where it took main's side is not. Criss-cross histories (more than one merge
 base) merge each base the reviewed head lacks. When that merge cannot be written (a
 modify/delete conflict, say), the delta is the item's whole own change on top of the
-merged-in main commit, or, with several merge bases, everything since the reviewed head; a
-diff that cannot be produced at all is refused with the reason, never reported as "nothing
-changed".
+merged-in main commit, or, with several merge bases, everything since the reviewed head. A
+delta of the item's tree or branch whose diff cannot be produced is refused with the
+reason, never reported as "nothing changed".
 
 **Delta re-reviews are the default.** Once a gate has a recorded review that reviewed the
 whole diff, a plain `ddflow review T1 --gate critic` is a delta: it reviews only the commits
