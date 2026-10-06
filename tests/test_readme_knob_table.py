@@ -1,0 +1,96 @@
+"""The README's knob table and every knob count it states match the config
+(B-uni-knobs-readme)."""
+
+from __future__ import annotations
+
+import re
+from dataclasses import fields
+from pathlib import Path
+
+import pytest
+
+from ddflow.config import KNOB_CHOICES, Config
+from ddflow.views import knob_table as KT
+
+README = Path(__file__).resolve().parents[1] / "README.md"
+
+
+def _readme() -> str:
+    return README.read_text("utf-8")
+
+
+def _counts() -> tuple[int, int]:
+    cfg = Config()
+    sections = list(cfg._sections())
+    return sum(len(fields(getattr(cfg, s))) for s in sections), len(sections)
+
+
+def test_the_readme_knob_table_is_what_the_declarations_render():
+    """The generated block is current. When this fails, a knob, its default or its values
+    changed: run `uv run python -m ddflow.views.knob_table README.md` and commit."""
+    readme = _readme()
+    assert readme.count(KT.BEGIN) == 1 and readme.count(KT.END) == 1
+    assert KT.replace(readme, KT.render()) == readme, (
+        "README.md's knob table is stale: `uv run python -m ddflow.views.knob_table README.md`"
+    )
+
+
+def test_the_table_has_one_row_per_knob_with_its_values():
+    block = KT.render()
+    knobs, sections = _counts()
+    rows = [line for line in block.splitlines() if line.startswith("| `")]
+    assert len(rows) == knobs
+    assert f"All {knobs} knobs across {sections} sections" in block
+    keys = [re.match(r"\| `([^`]+)`", r).group(1) for r in rows]
+    assert len(set(keys)) == knobs
+    for key, choices in KNOB_CHOICES.items():
+        row = rows[keys.index(key)]
+        assert row.endswith(" | " + " \\| ".join(f"`{c}`" for c in choices) + " |"), row
+
+
+def test_a_cell_escapes_a_pipe_and_points_a_long_default_at_explain():
+    assert KT._default("a|b") == '`"a\\|b"`'
+    assert KT._default(["x" * KT.SHOWN]) == "(long: see `ddflow config --explain`)"
+    assert KT._default({"k": 1}) == "`{k = 1}`"
+
+
+def test_replace_swaps_only_the_block_and_refuses_a_readme_without_one():
+    text = f"head\n{KT.BEGIN}\nold\n{KT.END}\ntail\n"
+    assert KT.replace(text, "NEW") == "head\nNEW\ntail\n"
+    with pytest.raises(ValueError):
+        KT.replace("no markers here", "NEW")
+    with pytest.raises(ValueError):
+        KT.replace(f"{KT.BEGIN} but no end", "NEW")
+
+
+def test_main_rewrites_a_stale_block_and_leaves_a_current_one(tmp_path, capsys):
+    path = tmp_path / "README.md"
+    path.write_text(f"x\n{KT.BEGIN}\nstale\n{KT.END}\n", "utf-8")
+    assert KT.main([str(path)]) == 0
+    assert path.read_text("utf-8") == f"x\n{KT.render()}\n"
+    assert KT.main([str(path)]) == 0
+    assert "already current" in capsys.readouterr().out
+
+
+def test_the_readme_knob_counts_match_the_config():
+    """Both numbers were stale when `[log]` was added — one said 58, the other "61
+    across 12 sections", and the truth was 70 across 15. Then "(5 of the 150)" survived
+    beside 189, because this ratchet only read "N knobs" (B55895bdfc7): it reads a count
+    phrased "knobs ... of the N" too.
+
+    Pinned rather than corrected-and-hoped: a hand-maintained count in prose drifts the
+    first time anyone adds a knob, and a reader who finds a wrong number trusts it.
+    """
+    knobs, sections = _counts()
+    readme = _readme()
+    claims = re.findall(r"(\d+) knobs(?: across (\d+) sections)?", readme)
+    claims += [(n, "") for n in re.findall(r"knobs[^.\n]{0,20}?\bof the (\d+)\b", readme)]
+    assert claims, "the README no longer states a knob count; this ratchet has gone blind"
+    for stated_knobs, stated_sections in claims:
+        assert int(stated_knobs) == knobs, (
+            f"README says {stated_knobs} knobs, the config has {knobs}"
+        )
+        if stated_sections:
+            assert int(stated_sections) == sections, (
+                f"README says {stated_sections} sections, the config has {sections}"
+            )

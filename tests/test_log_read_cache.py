@@ -837,33 +837,3 @@ def test_nothing_in_the_package_mutates_an_events_data_dict():
         "a shared, cached Event's data dict is being mutated (or a new Outcome receiver "
         f"needs allowlisting with its reason): {offenders}"
     )
-
-
-def test_the_readme_knob_counts_match_the_config():
-    """Both numbers were stale when `[log]` was added — one said 58, the other "61
-    across 12 sections", and the truth was 70 across 15.
-
-    Pinned rather than corrected-and-hoped: a hand-maintained count in prose drifts the
-    first time anyone adds a knob, and a reader who finds a wrong number trusts it.
-    """
-    import pathlib as _p
-    import re
-    from dataclasses import fields
-
-    from ddflow.config import Config
-
-    cfg = Config()
-    sections = list(cfg._sections())
-    knobs = sum(len(fields(getattr(cfg, s))) for s in sections)
-
-    readme = (_p.Path(__file__).resolve().parents[1] / "README.md").read_text("utf-8")
-    claims = re.findall(r"(\d+) knobs(?: across (\d+) sections)?", readme)
-    assert claims, "the README no longer states a knob count; this ratchet has gone blind"
-    for stated_knobs, stated_sections in claims:
-        assert int(stated_knobs) == knobs, (
-            f"README says {stated_knobs} knobs, the config has {knobs}"
-        )
-        if stated_sections:
-            assert int(stated_sections) == len(sections), (
-                f"README says {stated_sections} sections, the config has {len(sections)}"
-            )
