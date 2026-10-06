@@ -119,11 +119,13 @@ from .config_sections.rules import (
 from .config_sections.schedule import (  # noqa: F401
     FLOW_SIGNALS,
     SIGNAL_MARKS,
+    SIGNALS,
     ScheduleConfig,
     _number,
     _signals_problem,
     default_signals,
     merge_signals,
+    strictest_signals,
 )
 from .config_sections.session import (
     SessionConfig,
@@ -355,6 +357,11 @@ class Config:
                     # merged over the layers below, mark by mark (`merge_signals`)
                     value = merge_signals(getattr(target, knob), value)
                 check = _KNOB_CHECKS.get(f"{sec}.{knob}")
+                if check and (why := check(value)) and lenient and f"{sec}.{knob}" == SIGNALS:
+                    # A table, not an enum: its strictest fallback is computed from the
+                    # layers below (`strictest_signals`), never from the bad table's numbers.
+                    self._apply_signals_fallback(target, raw, why, source)
+                    continue
                 if check and (why := check(value)):
                     if lenient and f"{sec}.{knob}" in _TOLERANT_VALUES:
                         # A value this code does not know, in a file that may be NEWER
@@ -404,6 +411,22 @@ class Config:
         return {i for notes in self._fallback_notes.values() for i, _ in notes} | set(
             self._bad_values
         )
+
+    def _apply_signals_fallback(self, target: Any, raw: Any, why: str, source: str) -> None:
+        """A `[schedule.signals]` table a config file gives that is not valid: loading goes
+        on with the strictest table (D-enum-fallback-strict), reported like an enum's."""
+        fallback = strictest_signals(target.signals)
+        self._forget_fallback(
+            SIGNALS, f"the {source} value {raw!r}, itself invalid: the strictest is in effect"
+        )
+        head = f"{SIGNALS} = {raw!r}"
+        self._fallback_notes.setdefault(SIGNALS, []).append((len(self.unknown_knobs), head))
+        self.unknown_knobs.append(
+            f"{head} ({why}; in effect: the strictest -- every signal enabled, each mark the "
+            "lower of the layers below and the shipped one)"
+        )
+        target.signals = fallback
+        self.sources[SIGNALS] = f"{source} (strictest fallback)"
 
     def _forget_fallback(self, key: str, by: str) -> None:
         """A later layer set `key`: an earlier layer's strictest-fallback note must stop
