@@ -366,3 +366,21 @@ def test_a_rewrite_needs_no_fchmod(repo, monkeypatch):
     clock.t += 60
     assert F.sample_if_due(_ctx(repo), src, clock).written
     assert len(F.read_ring(repo)) == 2
+
+
+# -- bug B277cc2591b: a healthy signal is never named as the limit ----------------------
+
+
+def test_all_signals_healthy_and_not_binding_names_no_signal(repo):
+    """Observed: 'limited by disk pressure' at disk_pressure 0.74 against a low mark of
+    0.85, with everything healthy and 2 in flight under a limit of 3."""
+    clock, src = (
+        Clock(),
+        SIG.FakeSource({"load": 0.05, "memory_free_frac": 0.6, "disk_free_frac": 0.26}),
+    )
+    for _ in range(10):
+        F.sample_if_due(_ctx(repo), src, clock)
+        clock.t += 60
+    d = F.current_limit(_ctx(repo), None, clock)
+    assert d.limited_by not in ("disk_pressure", "memory_pressure", "load_per_core"), d
+    assert d.limited_by == "demand (0 in flight)", d
