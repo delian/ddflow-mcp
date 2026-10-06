@@ -924,6 +924,12 @@ def plan(
     return p
 
 
+#: `Decision.limited_by` when the adaptive limit could not be derived at all
+#: (`services/flowstate.limit_for`): the line says so, with the reason, and nothing
+#: overrides it.
+LIMIT_UNAVAILABLE = "unavailable"
+
+
 def _words(signal: str) -> str:
     """A controller's ``limited_by`` as people read it: ``load_per_core`` -> "load per
     core"; the controller's own phrases ("ceiling", "independent work") pass through."""
@@ -955,6 +961,10 @@ def parallel_line(
     the work is the work itself: "limited by independent work"."""
     if parallel.mode == "fixed":
         return f"parallel: {limit} (fixed)"
+    if parallel.limited_by == LIMIT_UNAVAILABLE:
+        return (
+            f"parallel: {limit} (auto: unavailable, holding the start value -- {parallel.reason})"
+        )
     from .flowparams import params
 
     ceiling = params(cfg).bounds()[2]
