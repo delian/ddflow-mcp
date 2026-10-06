@@ -65,50 +65,45 @@ def _looks_like_several(entry: str) -> bool:
     return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
 
 
-#: A next entry that is plainly a test path: `tests/x.py`, then `::`, a separator,
-#: whitespace or the end (never `]`: `t[a],b.py]` is one value).
-_NEXT_PATH = re.compile(r"\s*[\w./-]+\.py(?=::|[\s,;]|$)")
-
-
-def _closes_unopened(rest: str) -> bool:
-    """Whether `rest` closes a `]` it never opened: the separator before it was INSIDE a
-    parametrize id (`t[a],b]`), not between two entries."""
-    depth = 0
-    for ch in rest:
-        depth += {"[": 1, "]": -1}.get(ch, 0)
-        if depth < 0:
-            return True
-    return False
+def _malformed(entry: str) -> bool:
+    """An entry no list was written with: a `]` before any `[`, or brackets that do not
+    end it (a node id's parametrize part is its LAST part)."""
+    e = entry.strip()
+    if "]" in e and ("[" not in e or e.index("]") < e.index("[")):
+        return True
+    return "[" in e and not e.endswith("]")
 
 
 def _split_outside_brackets(spec: str) -> list[str]:
     """Entries separated by ',' or ';', ignoring both inside a parametrize id's brackets.
 
     ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
-    refused as a single missing test. Brackets cannot simply be counted: a parametrize
-    value may hold `]`, `[`, `,` and `;` (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`, `t[[a],b]`).
-    Counting drove the depth negative and swallowed every later separator, so a missing
-    second test was never resolved (Bfc9daca269). A node id's brackets END it, so once an
-    entry has opened a `[`, a separator ends it only right after a `]`, and only when a
-    test path follows or the rest closes no bracket it never opened. The one shape this
-    cannot tell apart, a command holding a stray `]` after a bracketed id, stays one entry.
+    refused as a single missing test. Brackets cannot be counted: a parametrize value may
+    hold `]`, `[`, `,` and `;` in any order (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`,
+    `t[a],b.py,c]`). Counting drove the depth negative and swallowed every later
+    separator, so a missing second test was never resolved (Bfc9daca269), and every local
+    rule tried after it had a counterexample. So the whole list is parsed at once: of all
+    the ways to cut it at its separators, the one with the fewest malformed entries
+    (`_malformed`), then the most cuts -- every separator is one unless cutting there
+    breaks an entry. A list nobody could have written well-formed (`t[x], pytest -k "a]b"`)
+    still gets its best cut.
     """
-    out, cur, bracketed = [], [], False
-    for i, ch in enumerate(spec):
-        if ch in ",;" and (
-            not bracketed
-            or (
-                "".join(cur).rstrip().endswith("]")
-                and (_NEXT_PATH.match(spec, i + 1) or not _closes_unopened(spec[i + 1 :]))
+    cuts = [-1, *(i for i, ch in enumerate(spec) if ch in ",;"), len(spec)]
+    # best[j] for spec[: cuts[j]]: (malformed entries, -cuts made, the cut before)
+    best: list[tuple[int, int, int]] = [(0, 0, -1)]
+    for j in range(1, len(cuts)):
+        best.append(
+            min(
+                (best[i][0] + _malformed(spec[cuts[i] + 1 : cuts[j]]), best[i][1] - 1, i)
+                for i in range(j)
             )
-        ):
-            out.append("".join(cur))
-            cur, bracketed = [], False
-            continue
-        bracketed = bracketed or ch == "["
-        cur.append(ch)
-    out.append("".join(cur))
-    return [e.strip() for e in out if e.strip()]
+        )
+    out, j = [], len(cuts) - 1
+    while j > 0:
+        i = best[j][2]
+        out.append(spec[cuts[i] + 1 : cuts[j]])
+        j = i
+    return [e.strip() for e in reversed(out) if e.strip()]
 
 
 def _inside(tree: Path, path: str) -> Path | None:
