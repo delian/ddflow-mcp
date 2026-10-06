@@ -45,8 +45,20 @@ def test_reviewer_gates_are_the_declared_ones(repo, log, cfg):
     names = G.reviewer_gates(gd)
     assert {"rubber_duck", "critic", "standards", "verify", "security_review"} <= set(names)
     assert "unit_tests" not in names and "research" not in names
-    # Without the definitions, the built-in set (what a caller with no repo can know).
-    assert set(G.reviewer_gates(None)) == set(G.REVIEWER_GATES)
+    # Without a project's definitions, the built-in ones decide -- verify included, as
+    # declared -- so a caller passing none reaches the same verdict on built-in gates.
+    assert set(G.reviewer_gates(None)) == {"rubber_duck", "critic", "standards", "verify"}
+    assert G.is_reviewer_gate("verify", None) and not G.is_reviewer_gate("unit_tests", None)
+
+
+def test_standards_is_the_one_undeclared_reviewer_gate():
+    """The contract's single exception, stated so it is not mistaken for drift: the
+    built-in `standards` declares no reviewer and still counts (roborev records the model
+    that reviewed); nothing else undeclared does."""
+    from ddflow.services.gates.defs import DEFAULT_GATES
+
+    undeclared = [g for g in G.reviewer_gates(None) if not DEFAULT_GATES[g].reviewer]
+    assert undeclared == ["standards"]
 
 
 def test_a_same_family_ok_gate_is_not_a_cross_family_reviewer_gate(repo, cfg):
