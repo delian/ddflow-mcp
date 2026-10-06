@@ -4402,11 +4402,17 @@ Tokens: `{prefix}` (the kind's letter), `{seq}`, `{date}`, `{time}`, `{pid}`, `{
 `{hash}`, `{parent}`, `{phase}`, `{env}`, `{user-text}`, `{digest}`. A template must hold a
 source of uniqueness -- `{seq}`, `{hash}`, or `{time}` with `{pid}` -- or `{digest}`, which
 makes it stable (the same content maps to the same id) and then allows only content
-tokens; outside its tokens it may hold ASCII letters, digits, `.`, `_` and `-` only, because
-an id is a file name, a branch name and a glob token. `ddflow config --set ids.bug
-"BUG-{seq}"` refuses an invalid template (exit 3); one in a file is warned about, named by
-`ddflow doctor`, and the default stays in effect. `[bugs].phase`, the one fixed id, is held
-to the same characters.
+tokens. Two kinds are exempt: `fix_task`, minted once per bug, is unique by its `{parent}`,
+and the imported kinds carry names the importer already makes unique. Outside its tokens a
+template may hold ASCII letters (either case), digits, `.`, `_` and `-` only, because an id
+is a file name, a branch name and a glob token. `ddflow config --set ids.bug "BUG-{seq}"`
+sets one; an invalid template (`BUG-{date}`: nothing makes it unique) is refused, exit 3;
+one in a file is warned about, named by `ddflow doctor`, and the default stays in effect.
+`[bugs].phase`, the one fixed id, is held to the same characters.
+
+_Rollout: the templates load, validate and render today; the one id service that every
+place minting an id goes through (so a changed template changes the ids minted) is the
+next id-scheme task. Until it lands every id is minted in today's default shape._
 
 ## What is automated, and what is not
 

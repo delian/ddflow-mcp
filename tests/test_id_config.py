@@ -42,10 +42,11 @@ def test_the_defaults_are_todays_shapes() -> None:
 
 
 @pytest.mark.parametrize(("kind", "letter"), sorted(C.ID_PREFIXES.items()))
-def test_a_hash_kind_renders_like_auto_id(kind: str, letter: str) -> None:
+def test_a_hash_kind_renders_like_auto_id(kind: str, letter: str, monkeypatch) -> None:
+    monkeypatch.setattr(ids.time, "time_ns", lambda: 1_700_000_000_000_000_000)  # the salt
     got = ids.render(Config(), kind, hash_parts=("title", "body"))
     assert re.fullmatch(f"{letter}[0-9a-f]{{10}}", got), got
-    assert re.fullmatch(f"{letter}[0-9a-f]{{10}}", ids.auto_id(letter, "title", "body"))
+    assert got == ids.auto_id(letter, "title", "body")
 
 
 def test_the_session_shape() -> None:
@@ -96,6 +97,7 @@ def test_a_missing_field_is_an_error_naming_the_token() -> None:
         ("bug", "BUG-{seq", "unbalanced"),
         ("bug", "-{seq}", "must not start"),
         ("bug", "BUG..{seq}", ".."),
+        ("bug", "{seq}..x", ".."),
         ("bug", "BUG-{date}", "source of uniqueness"),
         ("bug", "BUG-{slug}-{digest}-{seq}", "stable"),
         ("session", "{prefix}{hash}", "{prefix}"),
@@ -115,6 +117,8 @@ def test_an_invalid_template_is_refused(kind: str, template: str, why: str) -> N
         ("lesson", "LES-{time}-{pid}"),
         ("ci_bug", "CI-{slug}-{digest}"),
         ("decision", "ADR-{seq}"),
+        ("split_child", "{parent}.{seq}.x"),  # a token between dots is not '..'
+        ("lesson", "L.{seq}.{slug}"),
     ],
 )
 def test_a_valid_template_is_accepted(kind: str, template: str) -> None:
@@ -158,3 +162,7 @@ def test_config_explain_documents_every_kind(repo: Path) -> None:
 
 def test_every_kind_has_a_template_reader() -> None:
     assert set(ids.TEMPLATE_OF) == set(C.ID_KINDS)
+
+
+def test_a_given_prefix_wins() -> None:
+    assert ids.render(Config(), "bug", prefix="X", hash_parts=("a",)).startswith("X")

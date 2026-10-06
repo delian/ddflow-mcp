@@ -48,6 +48,8 @@ def _hash(parts: tuple[str, ...] | list[str]) -> str:
 
 
 def _token_value(kind: str, token: str, fields: dict[str, Any]) -> str:
+    if token == "prefix" and "prefix" in fields:
+        return str(fields["prefix"])
     if token == "prefix":
         if kind not in ID_PREFIXES:
             raise ValueError(f"{{prefix}} is not defined for {kind} ids")
