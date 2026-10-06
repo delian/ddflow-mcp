@@ -35,15 +35,31 @@ dependency nobody is working on), with what to do instead. The holder hears abou
 too: `heartbeat` lists who is waiting on its item, and `release` / `complete` name the
 agents they woke.
 
-Two caps, because they are two different statements:
+How many items may be in flight is the **parallelism limit**, set by `schedule.parallel`:
 
-- `schedule.max_parallel_tasks` — how many items may be in flight at once. Every live
-  lease counts, worktree or not: a review task occupies an agent just as a coding task
-  does.
-- `worktree.max_parallel` — how many worktrees may exist. A claim that made no tree
-  consumes no disk and does not count against it.
+- `auto` (the default) — the limit adapts between `schedule.max_parallel_min` (2) and
+  `schedule.max_parallel_max` (8), starting at `schedule.max_parallel_tasks` (4). It rises
+  by one after ten healthy minutes with the limit actually reached, and falls by a quarter
+  when a signal (load per core, memory or disk pressure, reviewer latency, gate or merge
+  failures) is bad on 3 of the last 4 samples. Samples are taken as commands run -- there
+  is no daemon -- and kept in the git-ignored `.ddflow/local/flow/`; the limit is derived
+  on this machine and never committed.
+- `fixed` — `schedule.max_parallel_tasks` is the limit, exactly as before auto existed.
 
-Both are counted across the WHOLE queue, not the slice you asked about.
+Every live lease counts, worktree or not: a review task occupies an agent just as a coding
+task does. A shrink never touches a running lease; it only stops new admissions.
+`worktree.max_parallel` caps how many worktrees may exist: 0 (the default) follows the
+limit -- it is not unlimited -- and a number is an independent cap. A claim that made no
+tree does not count against it. Both are counted across the WHOLE queue, not the slice you
+asked about.
+
+`ddflow status` and `ddflow brief` print the limit in force on one line: `parallel: 6
+(auto: ceiling 8; limited by load per core)` or `parallel: 4 (fixed)`. "limited by
+independent work" means every ready item that can run beside what is in flight is already
+offered: more agents would have nothing to do.
+
+    ddflow config schedule.parallel fixed                 back to a fixed number
+    ddflow config --local --set schedule.max_parallel_max 6   this machine's ceiling
 
 **What `next` offers never overlaps itself.** The free slots are filled in priority order,
 but an item whose globs overlap one already offered in the same answer is not offered with

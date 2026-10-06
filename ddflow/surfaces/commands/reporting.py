@@ -37,6 +37,8 @@ def _queue_lines(r) -> list[str]:
         out.append("Ready to start:")
         out += [f"  [ ] {t.id:<12} {t.title}" for t in r["ready"][:8]]
     out += [f"  INTERRUPTED: {note}" for note in r["interrupted"]]
+    if r.get("parallel"):
+        out += ["", r["parallel"]]
     if r["capped"]:
         out.append("")
         held = _first([t.id for t in r["capped"]])
