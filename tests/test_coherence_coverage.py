@@ -48,6 +48,13 @@ CHECKED: dict[str, str] = {
     "decision.recorded": "decisions.decision_add",
     "research.recorded": "knowledge.research_add",
     "memory.recorded": "knowledge.memory_add",
+    "def.recorded": "defs.def_record",
+}
+#: Checked kinds with no CLI add yet, and the test that files a near-copy through their API
+#: and expects the refusal (`test_add_dedupe_cli.ADDS` covers the others).
+API_ONLY_ADDS: dict[str, str] = {
+    "def": "tests/test_def_records.py::test_a_new_definition_that_repeats_a_record_is_refused_"
+    "until_answered (the record surface is B-uni-record-surface)",
 }
 
 _STATE = "a state change of a record that already exists; it adds no text to compare"
@@ -104,6 +111,10 @@ EXEMPT: dict[str, str] = {
             "bug.reported_upstream",
             "decision.superseded",
             "memory.forgotten",
+            "def.updated",
+            "def.retired",
+            "def.superseded",
+            "def.merged",
         ),
         _UPDATE,
     ),
@@ -346,7 +357,11 @@ def test_every_mcp_tool_that_records_text_is_classified_and_a_checked_one_takes_
 def test_every_checked_kind_has_a_behavioural_refusal_test():
     """`test_add_dedupe_cli` files a near-copy through each add command and expects the
     refusal; its table must cover exactly the checked kinds."""
-    assert {k.split(".")[0] for k in CHECKED} == set(ADDS)
+    assert {k.split(".")[0] for k in CHECKED} == set(ADDS) | set(API_ONLY_ADDS)
+    assert not set(ADDS) & set(API_ONLY_ADDS)
+    for where in API_ONLY_ADDS.values():
+        path, _, name = where.partition(" ")[0].partition("::")
+        assert f"def {name}(" in (PKG.parent / path).read_text("utf-8"), where
 
 
 # -- the gaps the audit closed -------------------------------------------------------------

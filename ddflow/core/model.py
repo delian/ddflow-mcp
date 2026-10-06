@@ -34,6 +34,7 @@ from .events import (
 from .handlers._common import (  # noqa: F401
     _item,
 )
+from .handlers.defs import DEF_HANDLERS
 from .handlers.exports import (
     _h_export_acknowledged,
     _h_export_disabled,
@@ -270,6 +271,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "export.enabled": _h_export_enabled,
     "export.disabled": _h_export_disabled,
     "export.acknowledged": _h_export_acknowledged,
+    # first writer: api/defs.py (record / update / retire / supersede / merge)
+    **DEF_HANDLERS,
     SEEN_KIND: _h_ddflow_seen,
     SKEW_OVERRIDDEN_KIND: _h_skew_overridden,
     UPGRADE_APPLIED_KIND: _h_upgrade_applied,
