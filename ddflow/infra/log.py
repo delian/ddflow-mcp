@@ -676,8 +676,9 @@ _LOCK_FIELDS = 6
 #: _CMD_SHOWN characters, as always, and past that its last _CMD_TAIL.
 _CMD_SHOWN = 200
 _CMD_TAIL = 60
-#: An interpreter whose first argument is the script it runs (`python3`, `python3.13`).
-_PYTHON = re.compile(r"python[0-9.]*")
+#: An interpreter whose first argument is the script it runs: `python3`, `python3.13`, and
+#: the build-suffixed `python3.13t` (free-threaded), `python3.13d`, `python3-dbg`.
+_PYTHON = re.compile(r"python[0-9.]*[a-z]?(-dbg)?")
 
 
 def _describe_pid(pid: int) -> str:
