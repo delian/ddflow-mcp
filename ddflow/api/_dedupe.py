@@ -1,6 +1,6 @@
 """The add-time duplicate check, shared by every add (decision D-no-duplicates).
 
-Each add path -- task, phase, bug, lesson, decision, research, memory; never a session
+Each add path -- task, phase, bug, lesson, decision, research, memory, rule; never a session
 prompt or note -- calls ``check_add`` BEFORE it writes, and applies what comes back:
 
 * a **refusal** (exit 3, "possible duplicate") carrying the candidates, when the text

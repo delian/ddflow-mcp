@@ -836,7 +836,7 @@ dutifully reviews nothing and reports no findings.
 
 The rest is TOML: gates and their pipelines (`[gate.*]`, `gates.task_pipeline`),
 reviewers (`[[reviewer]]`), companions (`[[companion]]`), enforcement (`[enforce]`),
-cadences, and the rest of the 188 knobs.
+cadences, and the rest of the 189 knobs.
 `ddflow config --set <key> <value>` edits one key in place, preserving comments.
 
 #### What is committed, and what stays on your machine
@@ -2132,7 +2132,18 @@ prompt or note — runs the same check against the log **before it writes**, wit
   check against the other rules: content against content, and title against title for
   rules with no content (two title-only rules no longer read as copies of each other).
   `--related ID` files the rule and reports `related` (a rule carries no link); `--check`
-  compares the title too.
+  compares the title too. A rule is ALSO checked against every other kind -- decisions,
+  lessons, research, tasks, bugs, memories -- by the same check every add runs (`rule` is
+  in `[dedupe].kinds`; remove it to stop): a rule restating a decision is refused with
+  the decision as the candidate. `--new` files it; `--related D` files it and reports
+  `related`; `--extends D` / `--duplicate-of D` put the rule's text on that record while it
+  is open (`record.extended`, no rule filed) and otherwise file the rule naming it;
+  `--check` lists both. `rule edit` (`ddflow_rule_edit`) runs it on a new title or
+  content and takes `--new` / `--related ID` (`new` / `related` over MCP; `ID` may be
+  another rule); an edit cannot be folded into another record. When the check cannot run
+  (an index that will not open), the rule is still filed and the result says so:
+  `dedupe_unavailable` in `--json` and over MCP, `filed UNCHECKED` on the CLI line; records
+  it merely resembles are listed after the line (`It reads like: ...`).
 - **Where the check does not run, a test says why.** `tests/test_coherence_coverage.py`
   classifies every event kind, every function that appends an add kind, and every CLI
   verb and MCP tool that records text as checked or exempt with a reason (a split's parts,
@@ -2658,7 +2669,14 @@ Keeping a claim releases every claim that overlapped it and starts the kept clai
 window **now**: a claim that had already lapsed is not stretched back over the gap, so a
 claim another agent legitimately made in the meantime is not retroactively contested. A
 holder's own lapsed claim, every displaced claim (no cap), and a contestant's late renewal
-are all kept in the record. `--keep` may also name the current holder when it met no part
+are all kept in the record. An unresolved contest always displays one of its claims (the
+latest, which may itself have lapsed -- `show` gives its time left): when a
+holder who took over one contestant's lapsed claim releases, that contestant is displayed
+again, and `show` (on its lease line) and `status` (on whichever list holds it -- usually
+`Blocked`, as a contested item) mark it `previously taken over, first by <holder>`; `status
+--json` lists it under `taken_over` (`id`, `holder`, `taken_over_by`, the first taker -- the
+record keeps one entry per claim, so a later takeover of the same claim is not named). Its
+holder may have moved on, so settle it with `resolve`. `--keep` may also name the current holder when it met no part
 of the contest. An item that is not contested is refused.
 
 **More than one person or clone: [the multi-user model](docs/ddflow/MULTI-USER.md).** The log
@@ -3811,8 +3829,11 @@ tags = ["ci"]                      # added to the items it files
 Every evaluation that finds a condition met is an event: `trigger.fired` (with the items
 it filed, the key, the hop and the definition's digest) or `trigger.suppressed` with the
 reason -- `disabled`, `debounce`, `cooldown`, `open` (the key's remediation is still open),
-`max_open`, `hop_limit`, `breaker` or `global_cap` (at most 10 fires an hour across every
-trigger) -- and each run is a `trigger.evaluated`. A trigger never counts `trigger.*` events
+`max_open`, `hop_limit`, `breaker` or `global_cap` (at most `[triggers].max_fires_per_hour`
+fires in any rolling hour across every trigger: default 10, an integer from 0 to 200, the
+fire history the log keeps; 0 stops every trigger without disabling one; a bad value in a
+config file falls back to 0, the strictest, and `config --set` refuses it) -- and each run
+is a `trigger.evaluated`. A trigger never counts `trigger.*` events
 or events about the items it filed itself, and a remediation's own failure can re-trigger
 only up to `hop_limit`. A remediation that was abandoned or removed, or finished without a
 merge, counts against the breaker; after `breaker` of them in a row the trigger is held
@@ -4214,8 +4235,18 @@ Returns, inside `session.brief_max_tokens` (default 1200): recoverable work firs
 the current item and its remaining gates, then what is ready, then why everything else is
 blocked, then the handful of past lessons **ranked against this task's text**.
 
-This *replaces* reading the project's rule and lesson corpora. The budget is enforced by
-truncating from the bottom, so the safety-critical head survives a squeeze — and a
+This *replaces* reading the project's rule and lesson corpora. When the whole does not
+fit, each section is cut to its share of the budget and ends with one line saying how much
+it left out and where the rest is (`ddflow recover`, `ddflow job list`, `ddflow next`,
+`ddflow decision applicable <id>`, `ddflow memory list`, `ddflow recall <topic>`); the
+decisions and lessons left out are named by id (the first six, then a count), and each
+decision is quoted up to 280
+characters (`ddflow decision show <id>` for the whole). What a short section does not use
+goes to the sections that need more, so the safety-critical head survives a squeeze and
+no long section ahead of them — other items' jobs, leftovers, blocked items — can cut the
+decisions, rules and lessons out. Long-running jobs: those running here, the item's own
+and the ones the brief's own agent started are listed in full (the item's first); other
+agents' exited or killed jobs collapse to one count line pointing at `ddflow job list`. A
 project's opening cost stays roughly constant as its lesson corpus grows.
 
 ---
@@ -4408,7 +4439,7 @@ declared once and persists — see
 
 ## Configuration
 
-188 knobs across 26 sections, every one documented in place:
+189 knobs across 27 sections, every one documented in place:
 
 ```console
 $ ddflow config --explain --filter lease
@@ -4427,7 +4458,8 @@ main). An enumerated knob (`[enforce].stale_docs = block | warn | off`, `[flow].
 declared values (`KNOB_CHOICES` in `ddflow/config.py`): a value outside them in a file is
 warned about and reported the same way, and the knob takes its **strictest** allowed value
 (`KNOB_STRICTEST`), not its default, so a typo makes ddflow more careful —
-`stale_docs = "blok"` acts as `block`, `[upgrade].skew = "refusee"` as `refuse`. Each
+`stale_docs = "blok"` acts as `block`, `[upgrade].skew = "refusee"` as `refuse`. A numeric limit can fail closed the same way: `[triggers].max_fires_per_hour = -1`
+(or `"ten"`) in a file acts as `0`, and no trigger fires until it is fixed. Each
 knob's doc (`ddflow config --explain`) names its fallback and why; where a knob has no
 safety dimension the fallback is the value that does the most checking or changes least
 (`[ci].on_merge` → `full`, `[mcp].tools` → `all`, `[export].refresh` → `off`), and the

@@ -50,6 +50,7 @@ def _trig(**kw) -> TR.Trigger:
 
 
 def _run(events: list[Event], trig: TR.Trigger, at: float, **kw) -> list[TR.Decision]:
+    kw.setdefault("max_per_hour", 10)  # the shipped [triggers].max_fires_per_hour
     return TR.evaluate(fold(events), events, {trig.id: trig}, T0 + timedelta(minutes=at), **kw)
 
 

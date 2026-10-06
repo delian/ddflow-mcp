@@ -712,6 +712,10 @@ def _brief_ready(out: list[str], plan: Plan) -> None:
         out += [f"- `{b.item}` — {b.reason}: {b.detail}" for b in blocked[:6]]
 
 
+#: How much of a decision's text the brief quotes; `ddflow decision show` has the rest.
+BRIEF_DECISION_CHARS = 280
+
+
 def _brief_decisions(out: list[str], decisions: list) -> None:
     """Architectural decisions governing the current item's files.
 
@@ -730,13 +734,21 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
         "its replacement — follow the replacement._",
         "",
     ]
+    if any(len(d.decision) > BRIEF_DECISION_CHARS for d in decisions):
+        out += [
+            f"_Each is cut at {BRIEF_DECISION_CHARS} characters: `ddflow decision show <id>` "
+            "for the whole of one._",
+            "",
+        ]
     for d in decisions:
         # The title and decision are somebody's words: fenced as data, with who recorded
         # them. A decision keeps its status whoever wrote it (D-lean-and-trusted, 3);
-        # `trust=` says whether that was the operator.
-        line = "- " + PV.fence(
-            "decision", d.id, f"**{d.title}** — {d.decision}", PV.decision_origin(d)
-        )
+        # `trust=` says whether that was the operator. Cut BEFORE fencing (B1472311a63):
+        # one decision ran to 2301 characters, half the whole brief's budget.
+        text = d.decision
+        if len(text) > BRIEF_DECISION_CHARS:
+            text = text[:BRIEF_DECISION_CHARS].rsplit(" ", 1)[0] + " …"
+        line = "- " + PV.fence("decision", d.id, f"**{d.title}** — {text}", PV.decision_origin(d))
         if d.superseded_by:
             line += f"  ⚠ SUPERSEDED by {d.superseded_by}"
         out.append(line)
@@ -754,15 +766,16 @@ def _brief_decisions(out: list[str], decisions: list) -> None:
 BRIEF_OTHER_JOBS = 5
 
 
-def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
+def _brief_jobs(out: list[str], state: State, item: str = "", agent: str = "") -> None:
     """Long-running jobs nobody has recorded as ended, with their LIVE status.
 
     Right after recovery: a job still running is the most expensive thing to restart by
     accident, and one that died unrecorded is work to collect or redo -- both are what
     the next session must know before it picks anything up.
 
-    Bounded (B8114a8b531): a job running here and every job of the item the brief is
-    about are listed in full. Other items' jobs on another host (they may be running,
+    Bounded (B8114a8b531): a job running here, every job of the item the brief is
+    about and every job the brief's own ``agent`` started (B1472311a63) are listed in
+    full. Other items' jobs on another host (they may be running,
     nothing here can tell) are listed up to ``BRIEF_OTHER_JOBS``, newest first; their
     exited or killed jobs -- dozens, in a long-lived project -- are listed only by a brief
     about no item, and the rest of each kind collapse to one count line. Listed one by
@@ -779,14 +792,22 @@ def _brief_jobs(out: list[str], state: State, item: str = "") -> None:
     stale: list = []  # other items' jobs that exited or were killed
     for j in sorted(pending, key=lambda x: x.started_at):
         s = J.status(j)
-        if s.state == "running" or (item and j.item == item):
+        if s.state == "running" or (item and j.item == item) or (agent and j.by == agent):
             shown.append((j, s))
         else:
             (remote if s.state == "elsewhere" else stale).append((j, s))
     keep_stale = 0 if item else BRIEF_OTHER_JOBS
     for bucket, keep in ((remote, BRIEF_OTHER_JOBS), (stale, keep_stale)):
         shown += bucket[len(bucket) - min(keep, len(bucket)) :]  # the newest `keep`
-    shown.sort(key=lambda js: js[0].started_at)
+    # The item's own jobs first, then the agent's own: when the section is cut to its
+    # share, the end goes first.
+    shown.sort(
+        key=lambda js: (
+            not (item and js[0].item == item),
+            not (agent and js[0].by == agent),
+            js[0].started_at,
+        )
+    )
     out += ["## Long-running jobs", ""]
     for j, s in shown:
         tail = {
@@ -861,6 +882,139 @@ def _brief_skills(out: list[str], skills: list) -> None:
     out += [e.line() for e in skills]
 
 
+#: Each section's share of the brief's budget, in the brief's order, when the whole does
+#: not fit (B1472311a63). Cutting from the bottom alone let any long section -- other
+#: items' jobs, leftovers, blocked items, eight decisions of 7309 characters -- take the
+#: space of everything after it, so the rules and lessons never reached the agent. A
+#: section that needs less leaves the rest to the sections that need more, in proportion
+#: to their shares.
+_SECTION_SHARE: dict[str, float] = {
+    "recovery": 0.10,
+    "jobs": 0.05,
+    "current": 0.20,
+    "ready": 0.12,
+    "decisions": 0.25,
+    "memories": 0.08,
+    "rules": 0.02,
+    "lessons": 0.15,
+    "skills": 0.03,
+}
+
+#: Where the rest of a trimmed section is.
+_SECTION_MORE: dict[str, str] = {
+    "recovery": "`ddflow recover`",
+    "jobs": "`ddflow job list`",
+    "current": "`ddflow show {item}`",
+    "ready": "`ddflow next`",
+    "decisions": "`ddflow decision applicable {item}`",
+    "memories": "`ddflow memory list`",
+    "rules": "the rules file",
+    "lessons": "`ddflow recall <topic>`",
+    "skills": "`ddflow recall <topic>`",
+}
+
+#: The words a trimmed section ends with.
+SECTION_TRIMMED = "cut to fit session.brief_max_tokens"
+
+#: The least a section is allowed when trimmed: its heading and a line or two.
+_SECTION_FLOOR = 160
+#: How many left-out records a trimmed section names; the rest are counted.
+_SECTION_NAMED = 6
+
+
+def _record_id(line: str) -> str:
+    """The id of the fenced record a brief line quotes, "" for none."""
+    m = re.search(rf'<{PV.TAG} kind="[^"]*" id="([^"]*)"', line)
+    return m.group(1) if m else ""
+
+
+def _trim_section(name: str, lines: list[str], room: int, item: str) -> list[str]:
+    """``lines`` cut at a line boundary to ``room`` characters, ending with one line that
+    says how much is missing and where it is. Records left out are NAMED: an agent may
+    not know a binding decision's text, but it must know the decision exists."""
+    where = _SECTION_MORE.get(name, "`ddflow brief`").format(item=item or "<id>")
+    kept: list[str] = []
+    used = 0
+    for i, line in enumerate(lines):
+        rest = lines[i:]
+        seen = {_record_id(k) for k in kept}
+        ids = list(dict.fromkeys(r for r in map(_record_id, rest) if r and r not in seen))
+        entries = sum(1 for ln in rest if ln.startswith("- ")) or len([ln for ln in rest if ln])
+        named = f": {', '.join(ids[:_SECTION_NAMED])}" if ids else ""
+        if len(ids) > _SECTION_NAMED:  # bounded: hundreds of ids would overrun the share
+            named += f" and {len(ids) - _SECTION_NAMED} more"
+        marker = f"- _[{entries} more {SECTION_TRIMMED}{named}; {where}]_"
+        # The heading (and the blank lines around it) stays: a section cut to nothing
+        # would read as a section with nothing in it.
+        heading = not any(k.startswith("#") for k in kept) and (
+            not line.strip() or line.startswith("#")
+        )
+        if used + len(line) + 1 + len(marker) + 1 > room and not heading:
+            if any(ln.strip() for ln in rest):
+                kept.append(marker)
+            return kept
+        kept.append(line)
+        used += len(line) + 1
+    return kept
+
+
+def _allowances(sections: list[tuple[str, list[str]]], sizes: list[int], room: int) -> list[int]:
+    """Each section's share of ``room``, raised to the floor, never more than it needs --
+    and never more than ``room`` in all (critic): what the floors add is taken back from
+    the sections above their floor, in proportion. Floors that cannot all fit fall back to
+    the plain shares, which sum to ``room``."""
+    want = [
+        min(size, max(int(room * _SECTION_SHARE.get(name, 0.05)), _SECTION_FLOOR))
+        for (name, _), size in zip(sections, sizes, strict=True)
+    ]
+    over = sum(want) - room
+    if over <= 0:
+        return want
+    spare = [w - min(size, _SECTION_FLOOR) for w, size in zip(want, sizes, strict=True)]
+    if sum(spare) < over:
+        return [
+            min(size, int(room * _SECTION_SHARE.get(name, 0.05)))
+            for (name, _), size in zip(sections, sizes, strict=True)
+        ]
+    total = sum(spare)
+    return [w - -(-over * sp // total) for w, sp in zip(want, spare, strict=True)]
+
+
+def _fit_sections(
+    sections: list[tuple[str, list[str]]], room: int, item: str
+) -> tuple[list[str], bool]:
+    """The sections joined, each trimmed to its share when the whole exceeds ``room``
+    characters. Returns the lines and whether anything was cut."""
+    sizes = [len("\n".join(lines)) + 1 if lines else 0 for _, lines in sections]
+    if sum(sizes) <= room:
+        return [line for _, lines in sections for line in lines], False
+    allow = _allowances(sections, sizes, room)
+    slack = room - sum(allow)
+    # What one section leaves goes to those that still want more, by share; a section
+    # that gets all it wants returns the rest to the pool for another pass.
+    while slack > 0:
+        wanting = [i for i, size in enumerate(sizes) if size > allow[i]]
+        if not wanting:
+            break
+        weight = sum(_SECTION_SHARE.get(sections[i][0], 0.05) for i in wanting)
+        given = 0
+        for i in wanting:
+            share = _SECTION_SHARE.get(sections[i][0], 0.05) / weight
+            extra = min(sizes[i] - allow[i], max(1, int(slack * share)), slack - given)
+            allow[i] += extra
+            given += extra
+        slack -= given
+    out: list[str] = []
+    trimmed = False
+    for (name, lines), size, room_i in zip(sections, sizes, allow, strict=True):
+        if size <= room_i:
+            out += lines
+        else:
+            out += _trim_section(name, lines, room_i, item)
+            trimmed = True
+    return out, trimmed
+
+
 def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/suggested decide the heading
     state: State,
     cfg: Config,
@@ -878,46 +1032,61 @@ def brief(  # noqa: PLR0913 -- each section's input, all keyword-only; held/sugg
     suggested: bool = False,
     reserve: int = 0,
     loops: list | None = None,
+    agent: str = "",
 ) -> str:
     """The session-start pack, under ``session.brief_max_tokens``.
 
     Ordered by what an agent must not miss: anything needing rescue first, then what
-    it is doing, then what it may do next, then the lessons that bear on it. The budget
-    is enforced by truncating from the BOTTOM, so the safety-critical head survives a
-    squeeze -- which is why the section order is a correctness property, not layout.
+    it is doing, then what it may do next, then the lessons that bear on it. When the
+    whole does not fit, each section is cut to its share of the budget
+    (``_SECTION_SHARE``, B1472311a63) and says what it left out and where it is; what a
+    short section does not use goes to the ones after it, head first, so the
+    safety-critical head still survives a squeeze -- and no section ahead of them can
+    cut the decisions, rules and lessons out. Cutting from the bottom remains only as
+    the backstop.
     """
-    out: list[str] = ["# ddflow brief", ""]
-    _brief_recovery(out, recovery or [])
-    _brief_jobs(out, state, item)
+    sections: list[tuple[str, list[str]]] = [(name, []) for name in _SECTION_SHARE]
+    part = dict(sections)
+    _brief_recovery(part["recovery"], recovery or [])
+    _brief_jobs(part["jobs"], state, item, agent)
     if item:
-        _brief_current(out, state, cfg, item, repo, held=held, suggested=suggested, loops=loops)
-    _brief_ready(out, plan)
-    _brief_decisions(out, decisions or [])
+        _brief_current(
+            part["current"], state, cfg, item, repo, held=held, suggested=suggested, loops=loops
+        )
+    _brief_ready(part["ready"], plan)
+    _brief_decisions(part["decisions"], decisions or [])
     # `memories` is every LIVE one, newest first; how many to show is this view's call.
     shown = (memories or [])[: cfg.memory.brief_items]
-    _brief_memories(out, shown)
+    _brief_memories(part["memories"], shown)
     if shown and len(memories or []) > len(shown):
-        out.append(
+        part["memories"].append(
             f"- _{len(memories or []) - len(shown)} more: `ddflow memory list`, or "
             f"`ddflow recall <topic>`._"
         )
     if rules:
-        out += ["", "## Project rules", "", rules.strip()]
-    _brief_lessons(out, cfg, lessons or [], state)
-    _brief_skills(out, skills or [])
+        part["rules"] += ["", "## Project rules", "", rules.strip()]
+    _brief_lessons(part["lessons"], cfg, lessons or [], state)
+    _brief_skills(part["skills"], skills or [])
 
-    if any(PV.TAG in line for line in out):
-        out[1:1] = [f"_{PV.DATA_RULE}_", ""]
-    text = "\n".join(out)
+    head: list[str] = ["# ddflow brief", ""]
+    if any(PV.TAG in line for _, lines in sections for line in lines):
+        head[1:1] = [f"_{PV.DATA_RULE}_", ""]
     # `reserve`: tokens a caller will PREPEND (the new-reports block), so the whole stays
     # inside the budget and it is the bottom that gives way.
     budget = max(1, cfg.session.brief_max_tokens - reserve)
-    if _approx_tokens(text) > budget:
-        text = text[: budget * 4].rsplit("\n", 1)[0]
-        text += (
-            f"\n\n_[brief truncated at {budget} tokens "
-            f"(session.brief_max_tokens); `ddflow show <id>` for detail]_"
-        )
+    note = (
+        f"\n\n_[brief truncated at {budget} tokens "
+        f"(session.brief_max_tokens); `ddflow show <id>` for detail]_"
+    )
+    room = budget * 4 - len("\n".join(head)) - len(note) - 1
+    body, trimmed = _fit_sections(sections, room, item)
+    text = "\n".join(head + body)
+    # The backstop, for a heading that alone overran its share: the note counts too.
+    if len(text) + (len(note) if trimmed else 0) > budget * 4:
+        text = text[: max(0, budget * 4 - len(note))].rsplit("\n", 1)[0]
+        trimmed = True
+    if trimmed:
+        text += note
     return text
 
 
