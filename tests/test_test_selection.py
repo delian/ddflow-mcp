@@ -308,3 +308,34 @@ def test_an_unreadable_test_names_nothing_and_does_not_fail_the_selection(data):
         }
     finally:
         locked.chmod(0o644)
+
+
+def test_a_farther_directory_alone_is_not_evidence(data):
+    """Rereview of B20b7744905: only the NEAREST directory stands in for a file name the
+    test builds at run time. `fixtures` is in every test that reads any fixture, and a
+    bare file name is in every test that writes one of its own."""
+    (data / "tests/fixtures/deep/report.json").parent.mkdir(parents=True)
+    (data / "tests/fixtures/deep/report.json").write_text("{}\n")
+    (data / "tests/other/COPYING").parent.mkdir(parents=True)
+    (data / "tests/other/COPYING").write_text("MIT\n")
+    (data / "tests/test_other_fixture.py").write_text('F = "fixtures/elsewhere.json"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "more data")
+    (data / "tests/fixtures/deep/report.json").write_text('{"x": 1}\n')
+    (data / "tests/other/COPYING").write_text("BSD\n")
+    assert _picked(data) == {}, "neither file is named with its directory, nor is `deep`"
+
+
+@pytest.mark.parametrize(
+    ("text", "word", "named"),
+    [
+        ('"fixtures/vendored-spec/spec.json"', "spec.json", True),
+        ('"old_spec.json"', "spec.json", False),
+        ('"spec.json.orig"', "spec.json", False),
+        ('tmp_path / "COPYING.txt"', "COPYING", False),
+        ("# the counts live in ratchet_counts.", "ratchet_counts", True),
+        ('ROOT / "ratchet_counts_old"', "ratchet_counts", False),
+    ],
+)
+def test_a_name_is_matched_whole_not_inside_a_longer_name(text, word, named):
+    assert T._names(text, word) is named
