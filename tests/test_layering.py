@@ -233,8 +233,11 @@ def test_no_fold_handler_reads_the_child_index():
     """
     import ast
 
-    src = (PKG / "core" / "model.py").read_text()
-    tree = ast.parse(src)
+    # The handlers live in core/handlers/ (B-split-model-handlers); model.py assembles them.
+    files = [PKG / "core" / "model.py", *sorted((PKG / "core" / "handlers").glob("*.py"))]
+    tree = ast.Module(
+        body=[n for f in files for n in ast.parse(f.read_text()).body], type_ignores=[]
+    )
     handlers = {
         n.name
         for n in ast.walk(tree)
