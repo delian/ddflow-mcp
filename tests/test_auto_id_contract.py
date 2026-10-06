@@ -63,13 +63,16 @@ def test_an_explicit_id_is_what_makes_a_re_report_merge(repo):
 FALSE_CLAIMS = [
     (Path("ddflow/core/ids.py"), r"stable for identical content"),
     (Path("ddflow/core/ids.py"), r"content-addressed instead"),
-    (Path("ddflow/api/knowledge.py"), r"same summary and item give the same auto id"),
+    (Path("ddflow/api/knowledge"), r"same summary and item give the same auto id"),
 ]
 
 
 @pytest.mark.parametrize("path,pattern", FALSE_CLAIMS, ids=str)
 def test_no_source_claims_auto_ids_are_deterministic(path, pattern):
-    assert not re.search(pattern, (ROOT / path).read_text(), re.I), (path, pattern)
+    files = sorted((ROOT / path).rglob("*.py")) if (ROOT / path).is_dir() else [ROOT / path]
+    assert files, path  # a moved file must not turn this into a check of nothing
+    for f in files:
+        assert not re.search(pattern, f.read_text(), re.I), (f, pattern)
 
 
 def test_the_auto_id_docstring_says_it_is_time_salted():

@@ -146,10 +146,10 @@ EXEMPT: dict[str, str] = {
 WRITERS_EXEMPT: dict[str, str] = {
     "api/items.py:split": "the parts of an item being split: their text is the parent's, "
     "which every part would match",
-    "api/knowledge.py:_file_fix_task": "the fix task of a bug that was itself just checked",
-    "api/knowledge.py:link_record": "merges a lesson INTO the one it duplicates: the answer "
+    "api/knowledge/bugs.py:_file_fix_task": "the fix task of a bug that was itself just checked",
+    "api/knowledge/pairs.py:link_record": "merges a lesson INTO the one it duplicates: the answer "
     "to a duplicate, not a new record",
-    "api/knowledge.py:bug_file_tasks": "attaches a fix task to an existing bug (same id)",
+    "api/knowledge/bugs.py:bug_file_tasks": "attaches a fix task to an existing bug (same id)",
     "api/bug_reopen.py:refile_reported": "attaches a fix task to an existing bug (same id)",
     "api/schedule.py:_apply": "a trigger's remediation item, generated from its job; "
     "de-duplicated by the trigger's dedupe key (one open remediation per key)",
@@ -293,7 +293,7 @@ def test_the_ratchet_can_fail():
     writers = _appenders()
     assert "services/promotions.py:add" in writers
     assert not _calls_check_add("services/promotions.py:add")
-    assert _calls_check_add("api/knowledge.py:memory_add")
+    assert _calls_check_add("api/knowledge/memory.py:memory_add")
 
 
 def _cli_leaves() -> list[tuple[str, ...]]:

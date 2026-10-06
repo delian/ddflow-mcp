@@ -116,7 +116,7 @@ def test_an_id_filed_after_the_state_was_read_is_still_refused(repo, monkeypatch
     from ddflow.api import knowledge as K
 
     run_cli(repo, "init")
-    real = K._load
+    real = K.research._load
 
     def stale_load(*a, **k):
         log, cfg, _ = real(*a, **k)
@@ -124,7 +124,7 @@ def test_an_id_filed_after_the_state_was_read_is_still_refused(repo, monkeypatch
 
     _add(repo, id="R1", question="first q", claim="c")
     before = len(EventLog(repo, "reader").read_all())
-    monkeypatch.setattr(K, "_load", stale_load)
+    monkeypatch.setattr(K.research, "_load", stale_load)
     out = _add(repo, id="R1", question="second q", claim="other")
     assert out.exit == REFUSED, out
     assert len(EventLog(repo, "reader").read_all()) == before
@@ -161,7 +161,7 @@ def test_another_kind_filed_after_the_state_was_read_is_still_refused(repo, monk
     from ddflow.api import knowledge as K
 
     run_cli(repo, "init")
-    real = K._load
+    real = K.research._load
 
     def stale_load(*a, **k):
         log, cfg, _ = real(*a, **k)
@@ -170,7 +170,7 @@ def test_another_kind_filed_after_the_state_was_read_is_still_refused(repo, monk
     rc, _, err = run_cli(repo, "phase", "add", "P7", "--title", "a phase")
     assert rc == 0, err
     before = len(EventLog(repo, "reader").read_all())
-    monkeypatch.setattr(K, "_load", stale_load)
+    monkeypatch.setattr(K.research, "_load", stale_load)
     out = _add(repo, id="P7", question="q", claim="c")
     assert out.exit == REFUSED and "phase" in out.reason, out
     assert len(EventLog(repo, "reader").read_all()) == before
