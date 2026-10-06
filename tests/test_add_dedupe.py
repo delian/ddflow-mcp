@@ -5,6 +5,7 @@ record every answer."""
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import shutil
 import subprocess
@@ -287,7 +288,7 @@ def test_the_check_is_callable_for_the_importer(filed):
     log, _cfg, st = A._load(filed, "a")
     rec = DD.Record(kind="bug", event_kind="bug.found", rid="Bimp", body=REPORT)
     assert DD.check_add(filed, log, cfg, st, rec).refusal.exit == 3
-    off = DD.with_check(cfg, on_match="off")
+    off = dataclasses.replace(cfg, dedupe=dataclasses.replace(cfg.dedupe, on_match="off"))
     assert DD.check_add(filed, log, off, st, rec).refusal is None
 
 

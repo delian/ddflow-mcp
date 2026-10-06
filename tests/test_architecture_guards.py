@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import ast
 import configparser
+import re
 import subprocess
 import sys
 import tomllib
@@ -60,6 +61,30 @@ BASELINE: dict[str, int] = {
     "complexity_d_or_worse": 112,
     # pylint duplicate-code (R0801) clusters, with DUPLICATE_ARGS below
     "duplicate_code_clusters": 6,
+    # module-level functions whose name nothing in ddflow/ mentions, less KEPT_UNREFERENCED
+    "unreferenced_functions": 6,
+}
+
+#: Unreferenced on purpose: the work that wires each in is planned (B-uni-dead-code). An
+#: entry leaves this list in the change that gives it a caller -- a test holds that -- and a
+#: new unreferenced function is either wired, deleted, or listed here with its task.
+#: (Not counted at all, so not listed: argparse `Action.__call__`'s `option_string`, which
+#: vulture reports at cli.py and is the protocol's signature, not dead code.)
+KEPT_UNREFERENCED: dict[str, str] = {
+    # The onboarding harness (B-onboard-harness) is what the onboard prompt's stage 2 does
+    # by hand: enabledMcpjsonServers, a sibling's machine-local config, a shell wrapper.
+    "ddflow/services/harness.py:enable_project_servers": "B-hx-onboard-generic",
+    "ddflow/services/harness.py:copy_local_configs": "B-onboard-harness-stage",
+    "ddflow/services/harness.py:install_shell_command": "B-onboard-harness-stage",
+    # Adaptive flow (D-adaptive-flow): the admission target and the doctor's
+    # too-little-history notes; the quota signal is the remaining wiring.
+    "ddflow/core/flowcontrol.py:decide_admission": "B-af-quota-signal",
+    "ddflow/core/flowsignals.py:history_notes": "B-af-quota-signal",
+    # Usage quotas (D-quotas): the api awaits its surfaces.
+    "ddflow/api/quota.py:quota_declare": "BL-quotas",
+    "ddflow/api/quota.py:quota_show": "BL-quotas",
+    "ddflow/api/quota.py:quota_list": "BL-quotas",
+    "ddflow/api/quota.py:quota_forget": "BL-quotas",
 }
 
 #: The one module each pattern belongs in. Sites there are the interface, not a violation.
@@ -234,6 +259,50 @@ def _ast_sites() -> dict[str, list[str]]:
     return out
 
 
+_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _unreferenced(sources: dict[str, str]) -> list[str]:
+    """`path:line name` of each module-level function whose name appears nowhere in
+    `sources` (path -> text) but its own `def`: not as a name, an attribute, an import,
+    or an identifier inside a string (`python -c "from m import f"`, a dispatch table).
+    By name, not by binding: a name used anywhere counts as used everywhere, so this
+    under-reports and never calls live code dead."""
+    defs: list[tuple[str, int, str]] = []
+    used: set[str] = set()
+    for path, text in sources.items():
+        tree = ast.parse(text, path)
+        defs += [
+            (path, n.lineno, n.name)
+            for n in tree.body
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
+        ]
+        for n in ast.walk(tree):
+            if isinstance(n, ast.Name):
+                used.add(n.id)
+            elif isinstance(n, ast.Attribute):
+                used.add(n.attr)
+            elif isinstance(n, ast.alias):
+                used.update(filter(None, (n.name.rpartition(".")[2], n.asname)))
+            elif isinstance(n, ast.Constant) and isinstance(n.value, str):
+                used.update(_IDENTIFIER.findall(n.value))
+    return [
+        f"{path}:{line} {name}"
+        for path, line, name in defs
+        if name not in used and not name.startswith("__")
+    ]
+
+
+def _unreferenced_functions() -> list[str]:
+    found = _unreferenced({str(p.relative_to(ROOT)): p.read_text("utf-8") for p in _modules()})
+    return [f for f in found if _kept_key(f) not in KEPT_UNREFERENCED]
+
+
+def _kept_key(site: str) -> str:
+    where, _, name = site.partition(" ")
+    return f"{where.rpartition(':')[0]}:{name}"
+
+
 _CACHE: dict[str, list[str]] = {}
 
 
@@ -299,6 +368,8 @@ def _measure(kind: str) -> list[str]:
         return _complex_functions()
     if kind == "duplicate_code_clusters":
         return _duplicate_clusters()
+    if kind == "unreferenced_functions":
+        return _unreferenced_functions()
     return _sites(kind)
 
 
@@ -439,3 +510,25 @@ def test_duplicate_parser_refuses_a_run_that_measured_nothing() -> None:
     )
     assert _parse_duplicates(8, sample) == ["a.b:[1:9] ~ a.c:[4:12]", "a.d:[1:9] ~ a.e:[2:10]"]
     assert _parse_duplicates(0, "") == []
+
+
+def test_kept_unreferenced_functions_are_still_defined_and_unreferenced() -> None:
+    """An entry is a function that exists and nothing calls yet. Wired, it leaves the list
+    (the ratchet would no longer see it, so a stale entry would hide the next one)."""
+    found = {
+        _kept_key(f)
+        for f in _unreferenced({str(p.relative_to(ROOT)): p.read_text("utf-8") for p in _modules()})
+    }
+    stale = sorted(set(KEPT_UNREFERENCED) - found)
+    assert not stale, (
+        f"no longer unreferenced (wired or gone): remove from KEPT_UNREFERENCED: {stale}"
+    )
+
+
+def test_the_unreferenced_census_counts_what_it_says() -> None:
+    sources = {
+        "a.py": "def used(): pass\ndef dead(): pass\ndef by_attr(): pass\ndef __dunder__(): pass\n"
+        "def in_string(): pass\nclass C:\n    def method_only(self): pass\n",
+        "b.py": "from a import used\nimport a\na.by_attr()\nCMD = 'from a import in_string as m; m()'\n",
+    }
+    assert _unreferenced(sources) == ["a.py:2 dead"]
