@@ -177,6 +177,25 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "loops": [f.__dict__ for f in findings],
         "recoverable": [plain(r) for r in rec if may_hold_work(r)],
     }
+    # D-contest-redisplay: a contestant displayed again after the claim that took it over
+    # was released. Listed here, and only when there is one, so the shape is otherwise
+    # unchanged.
+    # Every item still in the queue -- usually blocked (contested), but a late renewal or
+    # a contest that dissolved can leave it in flight or ready -- and the prose marks it
+    # in whichever list it lands, so the two always agree.
+    taken = {
+        t.id: (t.lease.holder, by)
+        for t in tasks
+        if t.lease is not None
+        and not t.removed
+        and t.state not in ("done", "abandoned", "review")
+        and (by := t.lease_taken_over_by())
+    }
+    if taken:
+        data["taken_over"] = [
+            {"id": i, "holder": holder, "taken_over_by": by}
+            for i, (holder, by) in sorted(taken.items())
+        ]
     if st.skipped_kinds:
         data["skipped_kinds"] = dict(st.skipped_kinds)
     if st.highest_version:
@@ -200,6 +219,7 @@ def status(repo: Path, *, agent: str = "", full: bool = False) -> O.Outcome:
         "cap": p.cap_note,
         "parallel": p.parallel_line,
         "blocked": blocked,
+        "taken_over": {i: by for i, (_holder, by) in taken.items()},
         "recoverable": rec,
         "findings": findings,
         "hours": hours,
