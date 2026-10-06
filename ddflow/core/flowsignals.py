@@ -15,8 +15,9 @@ Windows (all ending at ``now``):
   None under 10 outcomes.
 * ``gate_failure_ratio``: that rate divided by the project's own rate over the 7 days
   before the window, so its marks mean "N times the usual" (D-unify 8: shrink at 2x).
-  None under 10 recent or 20 baseline outcomes; a baseline with no failure counts as one,
-  the smallest rate it could have measured.
+  None under 10 recent or 20 baseline outcomes. The baseline rate is floored at 1/20 (one
+  failure in the minimum baseline), so a clean or near-clean week neither hides a burst nor
+  turns a single failure into a huge ratio.
 * ``merge_failure_rate``: failed merge-gate outcomes over merge attempts in the last
   2 hours. None with no attempt.
 * ``loop_findings``: how many findings the loops detector reports now.
@@ -44,6 +45,7 @@ MIN_BASELINE_REVIEWS = 20
 GATE_WINDOW_S = 60 * 60.0
 MIN_GATE_OUTCOMES = 10
 MIN_BASELINE_GATE_OUTCOMES = 20
+GATE_BASELINE_FLOOR = 1 / MIN_BASELINE_GATE_OUTCOMES
 MERGE_WINDOW_S = 120 * 60.0
 MERGE_GATE = "merge"
 
@@ -147,9 +149,11 @@ def gate_failure_ratio(events: Sequence[Event], now: float) -> float | None:
     b_passed, b_failed = _failure_rate(events, start, BASELINE_S, None)
     if b_passed + b_failed < MIN_BASELINE_GATE_OUTCOMES:
         return None
-    # A clean baseline counts as one failure, the smallest rate it could have measured:
-    # a ratio to zero says nothing, and a first burst of failures must still register.
-    return (failed / (passed + failed)) / (max(b_failed, 1) / (b_passed + b_failed))
+    # The baseline rate is floored at one failure in the minimum baseline: a ratio to a
+    # near-zero rate would make one failure after a clean busy week read as 100x, while a
+    # clean baseline must still let a burst register (2x the floor is 2 in 10 recent).
+    base = max(b_failed / (b_passed + b_failed), GATE_BASELINE_FLOOR)
+    return (failed / (passed + failed)) / base
 
 
 def merge_failure_rate(events: Sequence[Event], now: float) -> float | None:
