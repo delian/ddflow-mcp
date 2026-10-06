@@ -149,9 +149,13 @@ def test_a_missing_prompt_file_is_an_error_not_an_empty_body(repo):
         M.load_macros(repo)["gone"].body(repo)
 
 
-def test_an_unknown_key_in_a_macro_block_is_refused(repo):
+def test_an_unknown_key_in_a_macro_block_is_refused(repo, monkeypatch):
     """`overlay_array` validates against the dataclass, so a typo'd knob is named rather
-    than ignored — the silent-knob-drop class."""
+    than ignored — the silent-knob-drop class. In the code tree; elsewhere it is a newer
+    checkout's field, skipped with a warning (B0016a65167)."""
+    import ddflow.config as C
+
+    monkeypatch.setattr(C, "_CODE_TREE", repo.resolve())
     _with(repo, '\n[[macro]]\nname = "typo"\nprompt = "x"\ntoolz = ["a"]\n')
     with pytest.raises(ValueError, match="toolz"):
         M.load_macros(repo)
@@ -194,10 +198,13 @@ def test_the_tool_list_is_declarative_not_a_permission_boundary(repo):
 # -- one bad block must not take the list down ---------------------------------------------
 
 
-def test_a_malformed_macro_does_not_break_prompts_list(repo):
+def test_a_malformed_macro_does_not_break_prompts_list(repo, monkeypatch):
     """The shipped commands are still there, and asking for the broken one by name reports
     the error. Losing the whole list to one bad block is how a feature gets switched off."""
+    import ddflow.config as C
     from ddflow.surfaces.mcp import Server
+
+    monkeypatch.setattr(C, "_CODE_TREE", repo.resolve())  # strict here (B0016a65167)
 
     _with(repo, '\n[[macro]]\nname = "bad"\nprompt = "x"\nnope = 1\n')
     listed = Server(repo).handle({"jsonrpc": "2.0", "id": 1, "method": "prompts/list"})
