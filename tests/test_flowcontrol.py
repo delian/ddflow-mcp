@@ -339,6 +339,18 @@ def test_a_healthy_signal_is_never_named_however_close():
     assert fold(run, p).limited_by == "q"
 
 
+def test_a_blind_latest_sample_is_not_reported_as_health():
+    run = [Sample(i * STEP, dict(GOOD)) for i in range(5)]
+    run.append(Sample(5 * STEP, {}))  # every sampler failed this time
+    assert fold(run).limited_by == "start (no signals)"
+    assert fold(run, binding=False).limited_by == "start (no signals)"
+
+
+def test_at_the_ceiling_the_ceiling_is_named_not_a_growth_step():
+    p = params(start=4, ceiling=4)
+    assert fold(series([GOOD] * 30), p).limited_by == "ceiling"
+
+
 def test_a_blind_sample_breaks_the_healthy_streak():
     run = [Sample(i * STEP, dict(GOOD)) for i in range(10)]  # 540 s healthy
     run.append(Sample(600.0, {}))
