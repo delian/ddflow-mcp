@@ -431,3 +431,19 @@ def test_a_local_start_value_is_given_a_local_mode_remedy(repo: Path) -> None:
     ]
     assert "ddflow config --local --set schedule.parallel fixed" in f.detail
     assert ".ddflow/local/config.toml" in f.detail
+
+
+def test_a_repair_over_an_unloadable_local_file_is_not_blamed_for_the_committed_range(
+    repo: Path,
+) -> None:
+    from ddflow.services.configwrite import _new_range_problems
+
+    (repo / ".ddflow").mkdir()
+    (repo / ".ddflow" / "config.toml").write_text("[schedule]\nmax_parallel_min = 5\n")
+    before = '[schedule]\nadapt_up_after_s = "x"\n'  # the local file does not load
+    after = "[schedule]\nadapt_up_after_s = 30\n"
+    assert _new_range_problems(repo, before, after, True) == set()
+    worse = "[schedule]\nadapt_up_after_s = 30\nmax_parallel_max = 3\n"
+    assert {k for k, _ in _new_range_problems(repo, before, worse, True)} == {
+        "schedule.max_parallel_tasks"
+    }

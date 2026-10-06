@@ -277,10 +277,10 @@ def _in_local(cfg: Config, key: str) -> bool:
 
 
 def _set_cmd(cfg: Config, key: str, value: str, *, layer_of: str = "") -> str:
-    """The command that sets `key` in the layer the finding's value comes from
-    (`layer_of`, default `key` itself): a value in the local layer is overridden only
-    there, and a machine's own override must not be answered in the shared file."""
-    local = _in_local(cfg, layer_of or key)
+    """The command that sets `key` where it takes effect: the local layer when `key`
+    itself or the finding's value (`layer_of`) lives there -- a local value is overridden
+    only there, and a machine's own override must not be answered in the shared file."""
+    local = _in_local(cfg, key) or _in_local(cfg, layer_of or key)
     return f"`ddflow config{' --local' if local else ''} --set {key} {value}`"
 
 
