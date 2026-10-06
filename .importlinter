@@ -139,7 +139,6 @@ ignore_imports =
     ddflow.infra.fsio -> fcntl
     ddflow.api.operations -> tempfile
     ddflow.infra.forge -> tempfile
-    ddflow.infra.log -> fcntl
     ddflow.infra.worktree -> tempfile
     ddflow.services.changelog_cut -> tempfile
     ddflow.services.ci -> tempfile
@@ -166,7 +165,6 @@ ignore_imports =
     ddflow.core.events -> hashlib
     ddflow.core.ids -> hashlib
     ddflow.core.textsim -> hashlib
-    ddflow.infra.log -> hashlib
     ddflow.services.bugreport -> hashlib
     ddflow.services.ci -> hashlib
     ddflow.services.docscheck -> hashlib
