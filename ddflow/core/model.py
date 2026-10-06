@@ -34,6 +34,7 @@ from .events import (
 from .handlers._common import (  # noqa: F401
     _item,
 )
+from .handlers.approvals import APPROVAL_HANDLERS
 from .handlers.defs import DEF_HANDLERS
 from .handlers.exports import (
     _h_export_acknowledged,
@@ -266,6 +267,8 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "trigger.suppressed": _h_trigger_suppressed,
     "reviewer.configured": _h_reviewer_configured,
     "reviewer.approved": _h_reviewer_approved,
+    # first writer: services/approval.py grant / use
+    **APPROVAL_HANDLERS,
     "record.extended": _h_record_extended,
     "link.recorded": _h_link_recorded,
     "export.enabled": _h_export_enabled,

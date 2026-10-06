@@ -20,26 +20,23 @@ Like human gates, this makes tampering VISIBLE; it does not stop a shell edit of
 
 from __future__ import annotations
 
-import getpass
 import hashlib
-import os
-import socket
 from pathlib import Path
 from typing import Any
 
 from ..core.events import canonical
 from ..infra import tomlcfg as TC
 
+# The person-only checks are the approval primitive's (B-uni-approval); re-exported so
+# `reviewer_trust.agent_marker` and friends keep working.
+from . import approval as AP
+from .approval import HARNESS_MARKERS, agent_marker  # noqa: F401
+from .approval import os_user as _user
+
 #: The fields that decide WHO is reviewing and what it is called. A change to any of
 #: them is a different reviewer; a change to a tuning knob (max_tokens, hedge, gates)
 #: is not, so an operator's entry does not need re-approval when an agent tunes it.
 IDENTITY = ("name", "kind", "base_url", "model", "family", "command")
-
-#: Environment variables an agent harness sets in the shells it runs, so a command it
-#: runs is known not to come from a person at their own terminal. Only the ones known
-#: for certain: Claude Code exports CLAUDECODE=1. Another harness is recognised by
-#: `--agent` or `DDFLOW_AGENT`, which ddflow's own setup has it pass.
-HARNESS_MARKERS = ("CLAUDECODE",)
 
 
 class ReviewerRefused(ValueError):
@@ -65,23 +62,6 @@ def snapshot(repo: Path) -> dict[str, tuple[str, str]] | None:
 def digest_of(repo: Path, name: str) -> str:
     """The current digest of reviewer ``name``, or ``""``."""
     return (snapshot(repo) or {}).get(name, ("", ""))[0]
-
-
-def agent_marker(requested_agent: str = "") -> str:
-    """Why this invocation is an agent's, or ``""`` when nothing says it is.
-
-    An explicit `--agent`, `DDFLOW_AGENT`, or a harness's own marker. A person at their
-    own terminal sets none of them; an agent that unsets all three is the shell edit the
-    decision accepts it cannot stop.
-    """
-    if requested_agent:
-        return f"--agent {requested_agent}"
-    if os.environ.get("DDFLOW_AGENT"):
-        return f"DDFLOW_AGENT={os.environ['DDFLOW_AGENT']}"
-    for var in HARNESS_MARKERS:
-        if os.environ.get(var):
-            return f"{var} is set (an agent harness's shell)"
-    return ""
 
 
 def _files(repo: Path) -> tuple[Path, ...]:
@@ -171,13 +151,6 @@ def _unreadable(when: str) -> str:
     )
 
 
-def _user() -> str:
-    try:
-        return getpass.getuser()
-    except Exception:
-        return "unknown-user"
-
-
 def pending(repo: Path, st: Any) -> list[dict[str, Any]]:
     """Reviewers whose CURRENT entry a tool wrote and no person has approved."""
     out = []
@@ -207,19 +180,18 @@ def approve(repo: Path, name: str, *, requested_agent: str = "", note: str = "")
         known = ", ".join(sorted(revs)) or "none configured"
         raise ReviewerRefused(f"no reviewer named {name!r} ({known})")
     dig = digest(rev)
-    who = _user()
-    _log(Path(repo), "").append(
-        "reviewer.approved",
-        name,
-        {
-            "digest": dig,
-            "user": who,
-            "host": socket.gethostname().split(".")[0],
-            "note": note,
-            "human": True,
-            **{k: str(getattr(rev, k, "") or "") for k in IDENTITY},
-        },
-    )
+    try:
+        granted = AP.grant(
+            _log(Path(repo), ""),
+            "reviewer:" + name,
+            dig,
+            note=note,
+            requested_agent=requested_agent,
+            extra={k: str(getattr(rev, k, "") or "") for k in IDENTITY},
+        )
+    except AP.ApprovalRefused as exc:
+        raise ReviewerRefused(str(exc)) from exc
+    who = granted.actor.user
     where = rev.command if rev.kind == "command" else rev.base_url
     return (
         f"reviewer {name!r} approved by {who}: kind {rev.kind}, {where}, model "
