@@ -2650,8 +2650,8 @@ holder's own lapsed claim, every displaced claim (no cap), and a contestant's la
 are all kept in the record. An unresolved contest always displays one of its claims (the
 latest, which may itself have lapsed -- `show` gives its time left): when a
 holder who took over one contestant's lapsed claim releases, that contestant is displayed
-again, and `show` (on its lease line) and `status` (on its `Blocked` entry: a contested
-item is never in flight) mark it `previously taken over, first by <holder>`; `status
+again, and `show` (on its lease line) and `status` (on whichever list holds it -- usually
+`Blocked`, as a contested item) mark it `previously taken over, first by <holder>`; `status
 --json` lists it under `taken_over` (`id`, `holder`, `taken_over_by`, the first taker -- the
 record keeps one entry per claim, so a later takeover of the same claim is not named). Its
 holder may have moved on, so settle it with `resolve`. `--keep` may also name the current holder when it met no part

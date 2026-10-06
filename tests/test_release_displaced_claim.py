@@ -153,3 +153,17 @@ def test_a_second_takeover_of_the_same_claim_names_the_first_taker():
     it = fold(evs).items["T"]
     assert it.lease.holder == "A" and it.lease_taken_over_by() == "B"
     assert [e["by"]["holder"] for e in it.displaced] == ["B"]
+
+
+def test_status_marks_a_taken_over_item_in_flight_too():
+    """Critic: should the item land in flight (a late renewal made the claim live
+    again), the mark goes with it."""
+    from collections import defaultdict
+    from types import SimpleNamespace
+
+    from ddflow.surfaces.commands import reporting as R
+
+    t = SimpleNamespace(id="T", title="t", lease=SimpleNamespace(holder="B"))
+    render = defaultdict(list, {"running": [t], "parallel": "", "taken_over": {"T": "C"}})
+    lines = R._queue_lines(render)
+    assert any("— B (previously taken over, first by C)" in ln for ln in lines), lines
