@@ -26,6 +26,7 @@ def _project(repo: Path) -> None:
     assert run_cli(repo, "init")[0] == 0
     (repo / "CLAUDE.md").write_text("# rules\n")
     log = EventLog(repo, "a1")
+    others = EventLog(repo, "a2")  # the jobs are ANOTHER agent's, as in the report
     log.append(
         "task.added",
         "MINE",
@@ -36,7 +37,7 @@ def _project(repo: Path) -> None:
         # An exit line in its log and a dead pid: EXITED, and nobody recorded it ended.
         out = repo / f"job{i}.log"
         out.write_text("done\nddflow-job-exit: 0\n")
-        log.append(
+        others.append(
             "job.started",
             f"Jother{i:03d}",
             {"item": f"OTHER{i}", "command": "x", "pid": 0, "log": str(out)},
@@ -97,3 +98,28 @@ def test_a_brief_that_fits_is_not_trimmed(repo):
     text = lifecycle.brief(repo, item="T", agent="a1").data["text"]
     assert "brief truncated" not in text
     assert M.SECTION_TRIMMED not in text
+
+
+def test_the_agents_own_jobs_are_listed_in_full(repo):
+    """Only other agents' exited jobs collapse; the brief's own agent's are its to collect."""
+    _project(repo)
+    EventLog(repo, "a1").append(
+        "job.started", "Jmine-elsewhere", {"item": "OTHER3", "command": "x", "pid": 0}
+    )
+    text = lifecycle.brief(repo, item="MINE", agent="a1").data["text"]
+    assert "Jmine-elsewhere" in text and "Jother000" not in text
+
+
+def test_the_section_shares_never_overrun_the_room():
+    """Critic: floors taken before the shares pushed the total past the room, and then
+    nothing was trimmed. Nine sections each at their floor-raised allowance, 80 over."""
+    from ddflow.views import markdown as M
+
+    sizes = dict(zip(M._SECTION_SHARE, (480, 240, 960, 576, 1200, 384, 160, 720, 160), strict=True))
+    sections = [(n, ["x" * (sz - 1)]) for n, sz in sizes.items()]
+    body, trimmed = M._fit_sections(sections, 4800, "MINE")
+    assert trimmed
+    assert len("\n".join(body)) <= 4800
+    small = [(n, ["y" * 149]) for n in M._SECTION_SHARE]
+    body, trimmed = M._fit_sections(small, 1000, "MINE")
+    assert trimmed and len("\n".join(body)) <= 1000 + 9 * 160, "nine headings at most"
