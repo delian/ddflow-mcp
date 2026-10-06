@@ -950,9 +950,9 @@ def parallel_line(
     capped: list[str],
 ) -> str:
     """The one line `status` and `brief` print: "parallel: 4 (fixed)", or "parallel: 6
-    (auto: ceiling 8; limited by <what>)". When the offer already holds every
-    independent ready item and nothing is held by the cap, what limits the work is the
-    work itself: "limited by independent work"."""
+    (auto: ceiling 8; limited by <what>)". When nothing is held by the cap -- the offer
+    already holds every ready item that can run beside what is in flight -- what limits
+    the work is the work itself: "limited by independent work"."""
     if parallel.mode == "fixed":
         return f"parallel: {limit} (fixed)"
     from .flowparams import params
@@ -961,7 +961,7 @@ def parallel_line(
     by = parallel.limited_by
     if parallel.admit_paused:
         by = f"{by}: admission paused"
-    elif not capped and in_flight + offered < limit:
+    elif not capped and in_flight + offered <= limit:
         by = FC.INDEPENDENT
     return f"parallel: {limit} (auto: ceiling {ceiling}; limited by {_words(by)})"
 

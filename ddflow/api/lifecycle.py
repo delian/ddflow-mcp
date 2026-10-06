@@ -348,7 +348,15 @@ def _judge_any(
     from ..services.flowstate import limit_for
 
     # The same limit `next` plans with, so a waiter waits on the offer `next` would make.
-    parallel = limit_for(repo, cfg, st) if repo is not None else None
+    parallel = None
+    if repo is not None:
+        from ..infra.log import EventLog
+
+        # The log, read lazily as `next` reads it, so the rates are re-read here too.
+        def events():
+            return EventLog(repo, me, log_cfg=cfg.log).read_all()
+
+        parallel = limit_for(repo, cfg, st, events)
     p = plan(st, cfg, kind=kind, phase=phase, now=now, agent=me, hold=hold, parallel=parallel)
     out: dict[str, Any] = {
         "why": "",
