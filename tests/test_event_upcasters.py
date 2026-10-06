@@ -238,6 +238,8 @@ def test_a_line_whose_data_is_not_an_object_is_an_unreadable_line(tmp_path) -> N
 
     bad = '{"agent":"a","data":[1,2],"id":"ex","kind":"phase.added","lamport":1,"subject":"P0"}'
     assert _parse_event(bad) is None
+    for not_an_object in ("[1, 2]", '"x"', "42", "null"):  # critic #3: still one bucket
+        assert _parse_event(not_an_object) is None
     log = EventLog(tmp_path, agent_id="a1")
     log.append("phase.added", "P1", {"title": "t"})
     with log.shard.open("a", encoding="utf-8") as f:
