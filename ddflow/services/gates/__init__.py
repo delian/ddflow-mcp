@@ -33,17 +33,18 @@ treated as "no problem".
 # helper or a constant in a test, patch the module that defines it
 # (`gates.evidence.MAX_UNTRACKED_HASHED`), not this package.
 
+# `subprocess`, `tempfile` and `hashlib` are imported by the areas that use them and NOT
+# re-exported here: each is confined to its one home by .importlinter, and the package
+# importing them again would be one more violation (nothing reads `gates.subprocess`).
+
 from __future__ import annotations
 
 import getpass  # noqa: F401
-import hashlib  # noqa: F401
 import os  # noqa: F401
 import re  # noqa: F401
 import shlex  # noqa: F401
 import shutil  # noqa: F401
 import socket  # noqa: F401
-import subprocess  # noqa: F401
-import tempfile  # noqa: F401
 import time  # noqa: F401
 import tomllib  # noqa: F401
 from collections.abc import Callable, Iterable  # noqa: F401
