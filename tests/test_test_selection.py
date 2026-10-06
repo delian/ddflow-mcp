@@ -9,6 +9,7 @@ and leaves out the ones it cannot.
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -229,3 +230,161 @@ def test_a_name_match_is_a_whole_word_not_a_substring(tmp_path, repo):
     _git(repo, "commit", "-qm", "names")
     (repo / "pkg/cli.py").write_text("X = 2\n")
     assert _picked(repo) == {"tests/test_cli_parity.py": "named after cli"}
+
+
+@pytest.fixture
+def data(proj):
+    """Data files the tests read by path, never by import: a guard baseline whose name the
+    test builds at run time, a fixture tree, and a note outside any test directory."""
+    files = {
+        "tests/ratchet_counts/widgets.toml": "baseline = 2\n",
+        "tests/fixtures/vendored-spec/COPYING": "MIT\n",
+        "tests/fixtures/vendored-spec/v1/spec.json": "{}\n",
+        "docs/notes.md": "notes\n",
+        # reads COUNTS / f"{kind}.toml": only the directory is ever spelt out
+        "tests/test_guard.py": 'COUNTS = "ratchet_counts"\n\ndef test_g():\n    assert 1\n',
+        "tests/test_conformance.py": (
+            'SCHEMAS = ("fixtures/vendored-spec", "spec.json", "COPYING")\n\n'
+            "def test_s():\n    assert 1\n"
+        ),
+        # writes a COPYING of its own: the bare name is not evidence it reads this one
+        "tests/test_licence_writer.py": 'NAME = "COPYING"\n\ndef test_l():\n    assert 1\n',
+        "tests/test_prose.py": 'DOC = "notes.md"\n\ndef test_p():\n    assert 1\n',
+    }
+    for path, text in files.items():
+        (proj / path).parent.mkdir(parents=True, exist_ok=True)
+        (proj / path).write_text(text)
+    _git(proj, "add", "-A")
+    _git(proj, "commit", "-qm", "data files")
+    return proj
+
+
+def test_a_changed_baseline_selects_the_test_that_reads_its_directory(data):
+    """B20b7744905: lowering one guard baseline (a data-only change) selected nothing, so
+    the guard test that reads it never ran in the fast loop."""
+    (data / "tests/ratchet_counts/widgets.toml").write_text("baseline = 1\n")
+    assert _picked(data) == {
+        "tests/test_guard.py": "names data file tests/ratchet_counts/widgets.toml"
+    }
+
+
+def test_a_fixture_is_matched_by_its_name_with_its_directory_before_its_bare_name(data):
+    (data / "tests/fixtures/vendored-spec/COPYING").write_text("Apache-2.0\n")
+    (data / "tests/fixtures/vendored-spec/v1/spec.json").write_text('{"v": 1}\n')
+    assert _picked(data) == {
+        "tests/test_conformance.py": "names data file tests/fixtures/vendored-spec/COPYING"
+    }
+
+
+def test_a_data_file_outside_every_test_directory_selects_nothing_new(data):
+    (data / "docs/notes.md").write_text("changed\n")
+    assert _picked(data) == {}
+
+
+def test_a_changed_conftest_is_not_also_read_as_a_data_file(data):
+    """A conftest.py has its own rule (every test beneath it); a test that merely mentions
+    the name `conftest.py` does not read the one in tests/sub."""
+    (data / "tests/sub/conftest.py").write_text("import os\n")
+    (data / "tests/test_mentions.py").write_text('C = "conftest.py"\n')
+    _git(data, "add", "tests/test_mentions.py")
+    _git(data, "commit", "-qm", "mentions")
+    assert _picked(data) == {"tests/sub/test_deep.py": "under changed tests/sub/conftest.py"}
+
+
+def test_an_unreadable_test_names_nothing_and_does_not_fail_the_selection(data):
+    locked = data / "tests/test_locked.py"
+    locked.write_text('COUNTS = "ratchet_counts"\n')
+    _git(data, "add", "tests/test_locked.py")
+    _git(data, "commit", "-qm", "locked")
+    locked.chmod(0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("this user reads a mode-000 file (root): nothing to show")
+        (data / "tests/ratchet_counts/widgets.toml").write_text("baseline = 1\n")
+        # git cannot compare what it cannot read, so it lists test_locked as changed
+        assert _picked(data) == {
+            "tests/test_guard.py": "names data file tests/ratchet_counts/widgets.toml",
+            "tests/test_locked.py": "changed",
+        }
+    finally:
+        locked.chmod(0o644)
+
+
+def test_a_farther_directory_alone_is_not_evidence(data):
+    """Rereview of B20b7744905: only the NEAREST directory stands in for a file name the
+    test builds at run time; `fixtures` is in every test that reads any fixture."""
+    (data / "tests/fixtures/deep/report.json").parent.mkdir(parents=True)
+    (data / "tests/fixtures/deep/report.json").write_text("{}\n")
+    (data / "tests/test_other_fixture.py").write_text('F = "fixtures/elsewhere.json"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "more data")
+    (data / "tests/fixtures/deep/report.json").write_text('{"x": 1}\n')
+    assert _picked(data) == {}, "nothing names report.json or `deep`"
+
+
+def test_a_file_named_without_its_directory_is_still_read(data):
+    """`FIXTURES / "lines.ndjson"` with FIXTURES from a conftest: the test spells the
+    name and no directory, and still reads the file."""
+    (data / "tests/fixtures/sets/lines.ndjson").parent.mkdir(parents=True)
+    (data / "tests/fixtures/sets/lines.ndjson").write_text("{}\n")
+    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "corpus")
+    (data / "tests/fixtures/sets/lines.ndjson").write_text('{"x": 1}\n')
+    assert _picked(data) == {
+        "tests/test_run_time_path.py": "names data file tests/fixtures/sets/lines.ndjson"
+    }
+
+
+def test_without_name_and_directory_every_test_spelling_the_name_is_taken_by_choice(data):
+    """The cost of the fallback, pinned so it is a choice and not an accident: with no
+    test spelling name and directory, a test that only writes a file of the same name is
+    taken too. Text cannot tell it from the reader; one extra test is cheaper than a
+    missed one."""
+    (data / "tests/fixtures/sets/lines.ndjson").parent.mkdir(parents=True)
+    (data / "tests/fixtures/sets/lines.ndjson").write_text("{}\n")
+    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
+    (data / "tests/test_writes_own.py").write_text('(tmp_path / "lines.ndjson").write_text("")\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "corpus")
+    (data / "tests/fixtures/sets/lines.ndjson").write_text('{"x": 1}\n')
+    why = "names data file tests/fixtures/sets/lines.ndjson"
+    assert _picked(data) == {"tests/test_run_time_path.py": why, "tests/test_writes_own.py": why}
+
+
+def test_a_noisy_nearest_directory_does_not_hide_the_reader_that_spells_the_name(data):
+    """Rereview of B20b7744905: `fixtures` is in every test that reads any fixture; a
+    reader spelling only `FIXTURES / "lines.ndjson"` must still be taken."""
+    (data / "tests/fixtures/lines.ndjson").write_text("{}\n")
+    (data / "tests/test_run_time_path.py").write_text('C = FIXTURES / "lines.ndjson"\n')
+    (data / "tests/test_other_fixture.py").write_text('F = "fixtures/elsewhere.json"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "lines")
+    (data / "tests/fixtures/lines.ndjson").write_text('{"x": 1}\n')
+    got = _picked(data)
+    assert got["tests/test_run_time_path.py"] == "names data file tests/fixtures/lines.ndjson"
+    assert "tests/test_other_fixture.py" in got, "the nearest directory is taken as well"
+
+
+def test_a_data_file_directly_in_a_test_directory_is_matched_by_its_name(data):
+    (data / "tests/expected.json").write_text("{}\n")
+    (data / "tests/test_beside.py").write_text('E = HERE / "expected.json"\n')
+    _git(data, "add", "-A")
+    _git(data, "commit", "-qm", "expected")
+    (data / "tests/expected.json").write_text('{"x": 1}\n')
+    assert _picked(data) == {"tests/test_beside.py": "names data file tests/expected.json"}
+
+
+@pytest.mark.parametrize(
+    ("text", "word", "named"),
+    [
+        ('"fixtures/vendored-spec/spec.json"', "spec.json", True),
+        ('"old_spec.json"', "spec.json", False),
+        ('"spec.json.orig"', "spec.json", False),
+        ('tmp_path / "COPYING.txt"', "COPYING", False),
+        ("# the counts live in ratchet_counts.", "ratchet_counts", True),
+        ('ROOT / "ratchet_counts_old"', "ratchet_counts", False),
+    ],
+)
+def test_a_name_is_matched_whole_not_inside_a_longer_name(text, word, named):
+    assert T._names(text, word) is named
