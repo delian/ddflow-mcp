@@ -159,7 +159,9 @@ def def_update(
     prov = (
         {k: v for k, v in rec.provenance.items() if k != "by"} if provenance is None else provenance
     )
-    same_prov = {"by": cfg.agent.id, **prov} == rec.provenance
+    # Unnamed, it is no change of its own: an update that changes nothing else is exit 2
+    # whoever asks. Written, `by` is the author of this revision.
+    same_prov = provenance is None or {"by": cfg.agent.id, **prov} == rec.provenance
     if digest == rec.digest and (source is None or source == rec.source) and same_prov:
         return O.nothing("def.updated", f"{kind} {rid}: nothing changed", def_kind=kind, id=rid)
     data = _envelope(cfg, kind, rid, rec.source if source is None else source, prov)

@@ -110,6 +110,10 @@ def test_provenance_survives_a_field_edit_and_a_status_change(repo):
     rec = _state(repo).defs["skill:s"]
     assert rec.provenance == {"by": "b", "via": "import"}
     assert rec.history[-1]["by"] == "c"  # who changed the status is in the history
+    # an update by another agent that changes nothing is no revision of theirs
+    A.def_record(repo, "skill", "u", {"b": 5}, provenance={"via": "import"}, agent="a")
+    assert A.def_update(repo, "skill", "u", {"b": 5}, agent="z").exit == 2
+    assert _state(repo).defs["skill:u"].provenance == {"by": "a", "via": "import"}
 
 
 def test_a_provenance_only_update_is_written(repo):
