@@ -550,10 +550,7 @@ def rule_add(
             candidates=candidates,
         )
 
-    # Validate the answer
-    bad = dedup_answer.problem
-    if bad:
-        return O.failed("rule.added", bad, id=rule.id)
+    # The answer itself was validated up front (`_refused_up_front`).
 
     if dedup_answer.target and dedup_answer.target == rule.id:
         return O.failed("rule.added", "a rule cannot point at itself", id=rule.id)
