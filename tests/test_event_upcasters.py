@@ -267,6 +267,19 @@ def test_the_log_writes_a_kind_at_its_current_version(tmp_path, monkeypatch) -> 
     assert {"P1", "P2"} <= set(st.items)
 
 
+def test_the_logs_own_writes_carry_their_payload_version_too(tmp_path, monkeypatch) -> None:
+    """`ddflow.seen` is written by the log itself, past `append` (roborev on d3761dba)."""
+    from ddflow.core.events import SEEN_KIND
+    from ddflow.infra.log import EventLog
+
+    monkeypatch.setitem(U.PAYLOAD_VERSIONS, SEEN_KIND, 2)
+    monkeypatch.setitem(U.UPCASTERS, (SEEN_KIND, 1), lambda k, d: (k, dict(d)))
+    log = EventLog(tmp_path, agent_id="a1")
+    log.append("phase.added", "P1", {"title": "t"})
+    seen = [e for e in log.read_all() if e.kind == SEEN_KIND]
+    assert seen and all(e.data["v"] == 2 for e in seen)
+
+
 def test_the_fold_hands_handlers_the_upcast_shape(monkeypatch) -> None:
     monkeypatch.setitem(U.PAYLOAD_VERSIONS, "phase.added", 2)
     monkeypatch.setitem(

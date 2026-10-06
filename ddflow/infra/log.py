@@ -857,9 +857,7 @@ class EventLog:
             else _flock(self.lock_path, self.lock_timeout_s)
         )
         with ctx:
-            # The kind's payload version (`core.upcasters`): absent at version 1, so the
-            # bytes written are unchanged until a kind's shape changes.
-            payload = UP.stamp(kind, data or {})
+            payload = dict(data or {})
             if kind not in _STAMP_EXEMPT and self.stamp:
                 # The version stamp and the skew guard, in the same lock as the write: a
                 # refusal must not be raced past, and the stamp must precede the event
@@ -871,6 +869,10 @@ class EventLog:
         self, kind: str, subject: str, data: dict[str, Any], observed: Iterable[Event] = ()
     ) -> Event:
         """Write one event. The caller holds the lock."""
+        # The kind's payload version (`core.upcasters`), here where EVERY write passes --
+        # the version stamp and the skew override call this directly. Absent at version 1,
+        # so the bytes written are unchanged until a kind's shape changes.
+        data = UP.stamp(kind, data)
         # Re-read inside the lock: another agent may have advanced the clock.
         high = self._highest_lamport()
         for e in observed:
