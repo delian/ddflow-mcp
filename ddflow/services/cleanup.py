@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING
 
 from ..config import Config
 from ..core.flow import GITFLOW
-from ..core.model import DONE, State, fold
+from ..core.model import DONE, Item, State, fold
 from ..infra import worktree as W
 
 if TYPE_CHECKING:
@@ -174,6 +174,58 @@ def _ours(branch: str, prefixes: list[str]) -> bool:
     return any(not p or branch.startswith(p) for p in prefixes)
 
 
+def _measure(t: TreeState, wt: W.Worktree) -> str:
+    """Fill ``t``'s counts from git; why it could not be measured, or "" if it could.
+
+    Unknown is never clean: a tree git could not read, or whose commits could not be
+    counted, is not "fully merged" however empty it looks (B028b11b4cb).
+    """
+    dirty, ahead = W.dirty(wt), W.ahead(wt)
+    t.ahead = max(0, ahead)
+    t.behind = max(0, W.behind(wt))
+    if W.unreadable(dirty):
+        return dirty[0][len(W.UNREADABLE) :]
+    t.dirty_files = len(dirty)
+    return "" if ahead >= 0 else f"cannot count commits ahead of {wt.base}"
+
+
+def _classify(t: TreeState, item: Item | None, unknown: str, base: str, path: str) -> None:
+    """Kind, action and advice for a tree nobody holds or adopted cleanly."""
+    if unknown:
+        t.kind = "unreadable"
+        t.action = ""
+        t.done = (
+            f"LEAVE ALONE — could not measure it ({unknown[:120]}). "
+            f"Inspect first: `git -C {path} status` and `git -C {path} log {base}..HEAD`."
+        )
+    elif t.dirty_files:
+        t.kind = "dirty"
+        t.action = ""
+        t.done = (
+            f"LEAVE ALONE — inspect first: `git -C {path} diff {base}`. "
+            f"Uncommitted edits are the one thing that exists nowhere else."
+        )
+    elif t.ahead:
+        t.kind = "unmerged"
+        if item and item.state == DONE:
+            t.action = "merge"
+            t.done = (
+                f"the queue considers item {t.item} done but {t.ahead} commit(s) "
+                f"never landed — merge into {base}"
+            )
+        else:
+            t.action = ""
+            t.done = (
+                f"{t.ahead} commit(s) not on {base}, and item "
+                f"{t.item or '(none)'} is {t.item_state or 'unknown'}. "
+                f"Finish it, or merge deliberately."
+            )
+    else:
+        t.kind = "merged" if t.item else "orphan"
+        t.action = "remove"
+        t.done = f"fully merged into {base} — safe to remove"
+
+
 def survey(repo: Path, cfg: Config, state: State) -> Plan:
     """Classify every ddflow worktree and branch. Reads only; changes nothing."""
     root = W.repo_root(repo)
@@ -201,53 +253,15 @@ def survey(repo: Path, cfg: Config, state: State) -> Plan:
         if item:
             t.item, t.item_state = item.id, item.state
         wt = W.Worktree(item=t.item or t.name, path=Path(path), branch=branch, base=base)
-        dirty, ahead = W.dirty(wt), W.ahead(wt)
-        # Unknown is never clean: a tree git could not read, or whose commits could not
-        # be counted, is not "fully merged" however empty it looks (B028b11b4cb).
-        unknown = W.unreadable(dirty) or ahead < 0
-        t.dirty_files = 0 if W.unreadable(dirty) else len(dirty)
-        t.ahead = max(0, ahead)
-        t.behind = max(0, W.behind(wt))
+        unknown = _measure(t, wt)
 
         protected, reason = guard.why(path, branch)
         if protected == "held" or (protected and not t.dirty_files and not unknown):
             # A held tree's edits are its holder's work in progress, not a question for
             # a human; an adopted DIRTY tree stays `dirty` below, which is what it is.
             t.kind, t.action, t.done = protected, "", reason
-        elif unknown:
-            t.kind = "unreadable"
-            t.action = ""
-            why = dirty[0][len(W.UNREADABLE) :] if W.unreadable(dirty) else "no commit count"
-            t.done = (
-                f"LEAVE ALONE — could not measure it ({why[:120]}). "
-                f"Inspect first: `git -C {path} status` and `git -C {path} log {base}..HEAD`."
-            )
-        elif t.dirty_files:
-            t.kind = "dirty"
-            t.action = ""
-            t.done = (
-                f"LEAVE ALONE — inspect first: `git -C {path} diff {base}`. "
-                f"Uncommitted edits are the one thing that exists nowhere else."
-            )
-        elif t.ahead:
-            t.kind = "unmerged"
-            if item and item.state == DONE:
-                t.action = "merge"
-                t.done = (
-                    f"the queue considers item {t.item} done but {t.ahead} commit(s) "
-                    f"never landed — merge into {base}"
-                )
-            else:
-                t.action = ""
-                t.done = (
-                    f"{t.ahead} commit(s) not on {base}, and item "
-                    f"{t.item or '(none)'} is {t.item_state or 'unknown'}. "
-                    f"Finish it, or merge deliberately."
-                )
         else:
-            t.kind = "merged" if t.item else "orphan"
-            t.action = "remove"
-            t.done = f"fully merged into {base} — safe to remove"
+            _classify(t, item, unknown, base, path)
         plan.trees.append(t)
 
     for branch in W.branches(root):
