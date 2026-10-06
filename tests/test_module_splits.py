@@ -100,12 +100,17 @@ def test_no_name_the_single_module_defined_is_lost(pkg):
     assert not missing, missing
 
 
+#: Modules .importlinter confines to one home: an area that uses one imports it, and the
+#: package does not import it again just to re-export it.
+CONFINED = {"subprocess", "tempfile", "hashlib", "fcntl"}
+
+
 def test_every_name_an_area_binds_is_the_same_object_on_the_package(pkg):
     """Functions, constants and the modules an area imports alike: whatever an area binds
     is reachable as `<package>.<name>`, the same object (two areas binding one name would
     leave the package holding only one of them)."""
     for mod in _areas(pkg):
-        for name in _top_level_names(Path(mod.__file__)):
+        for name in _top_level_names(Path(mod.__file__)) - CONFINED:
             assert getattr(pkg, name, None) is getattr(mod, name), (
                 f"{pkg.__name__}.{name} is not {mod.__name__}.{name}"
             )
