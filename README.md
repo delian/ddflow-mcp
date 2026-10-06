@@ -3740,6 +3740,51 @@ are built with their parser (`surfaces/commands/schedule.py`) but not mounted ye
 disable). Until then they are `api.schedule.schedule_list`, `schedule_show` and
 `schedule_search`.
 
+### Event triggers
+
+A **trigger** turns events into work (decisions D-sched-triggers-separate,
+D-trigger-actions-create-items). It is defined in `.ddflow/triggers/<id>.toml`, one per
+file, reviewed in git like any config -- never an `on:` clause on a rule, so editing an
+advisory rule can never arm automation. When its condition is met it **files a queue item**
+from a scheduled job's template (the job's title, scope globs, prompt and mode); it never
+runs an agent, so the lease, gates and cross-family review apply to the remediation like
+any other item.
+
+```toml
+# .ddflow/triggers/red-gate.toml
+title = "A gate keeps failing on one item"
+event = "gate.failed"              # an event kind, or a glob over kinds; never trigger.*
+match = { subject = "B-*" }        # optional: subject / agent / kind / a data field -> glob
+count = 3                          # N matching events ...
+window = 120                       # ... within this many minutes (0: since the key last fired)
+key = "{subject}"                  # dedupe key: {subject} {agent} {kind} {data.X}; one open
+                                   # remediation per key ("" = one per trigger)
+debounce = 10                      # minutes of quiet before it fires
+cooldown = 60                      # minutes before the same key may fire again
+max_open = 3                       # open remediations of this trigger, at most
+hop_limit = 1                      # how deep a chain of remediations may go
+breaker = 3                        # consecutive failed or empty remediations that hold it
+action = { job = "bug-audit" }     # the scheduled job whose template the item is filed from
+                                   # (phase = "P-x" files it under a phase)
+enabled = true                     # a new trigger starts DISABLED until the operator says so
+```
+
+Every evaluation that finds a condition met is an event: `trigger.fired` (with the items
+it filed, the key, the hop and the definition's digest) or `trigger.suppressed` with the
+reason -- `disabled`, `debounce`, `cooldown`, `open` (the key's remediation is still open),
+`max_open`, `hop_limit`, `breaker` or `global_cap` (at most 10 fires an hour across every
+trigger) -- and each run is a `trigger.evaluated`. A trigger never counts `trigger.*` events
+or events about the items it filed itself, and a remediation's own failure can re-trigger
+only up to `hop_limit`. A remediation that was abandoned or removed, or finished without a
+merge, counts against the breaker; after `breaker` of them in a row the trigger is held
+until its definition changes. The items carry the tags `trigger:<id>`, `schedule:<job>` and
+`mode:<mode>`.
+
+The verbs are `trigger list`, `trigger show <id>` and `trigger evaluate [--now ISO]
+[--dry-run]` under the `schedule` group (`api.schedule.trigger_list`, `trigger_show`,
+`trigger_evaluate`), mounted with the rest of that group. Nothing runs the evaluator on its
+own: like a due job, it is started by whatever the project schedules (D-sched-no-daemon).
+
 ---
 
 ## Exporting documents

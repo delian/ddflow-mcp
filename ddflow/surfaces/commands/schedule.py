@@ -1,4 +1,5 @@
-"""`ddflow schedule list|show|search` -- the human surface for `api.schedule`.
+"""`ddflow schedule list|show|search` and `schedule trigger list|show|evaluate` -- the
+human surface for `api.schedule`.
 
 The parser is built here (`add_schedule_parser`) so the CLI module needs one line to
 mount it; the authoring verbs and the MCP tool come with the job-authoring work.
@@ -27,6 +28,17 @@ def add_schedule_parser(sub) -> None:
     sh.add_argument("id")
     se = verbs.add_parser("search", help="jobs matching every word of the query")
     se.add_argument("query")
+    tr = verbs.add_parser("trigger", help="event triggers: list, show, evaluate")
+    tr_s = tr.add_subparsers(dest="trigger_cmd")
+    tr_s.add_parser("list", help="every trigger in .ddflow/triggers/")
+    tr_show = tr_s.add_parser("show", help="one trigger: definition, fires, open, suppressions")
+    tr_show.add_argument("id")
+    tr_ev = tr_s.add_parser(
+        "evaluate", help="evaluate every trigger now: fire (file items) or record why not"
+    )
+    tr_ev.add_argument("--now", default="", help="ISO timestamp to evaluate at (default: now)")
+    tr_ev.add_argument("--dry-run", action="store_true", help="decide, write nothing")
+    tr.set_defaults(trigger_cmd="list", now="", dry_run=False)
     # `ddflow schedule` with no verb lists: its options need defaults on the group too.
     sc.set_defaults(fn=cmd_schedule, tag="", enabled=False)
 
@@ -78,8 +90,58 @@ def _show(d: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _decision(d: dict[str, Any]) -> str:
+    key = f" [{d['key']}]" if d.get("key") else ""
+    if d.get("fire"):
+        return f"FIRED      {d['trigger']}{key}: filed {', '.join(d.get('items') or [])}"
+    return f"suppressed {d['trigger']}{key}: {d['reason']} ({d['detail']})"
+
+
+def cmd_trigger(a, c: Ctx) -> int:
+    verb = a.trigger_cmd or "list"
+    if verb == "show":
+        out = A.trigger_show(c.repo, a.id)
+    elif verb == "evaluate":
+        out = A.trigger_evaluate(c.repo, now=a.now, dry_run=a.dry_run)
+    else:
+        out = A.trigger_list(c.repo)
+    if out.exit == FAIL:
+        print(out.reason, file=sys.stderr)
+        return out.exit
+    if c.json:
+        print(json.dumps(out.body("rows" if verb == "list" else ""), indent=2, default=str))
+        return out.exit
+    if verb == "evaluate":
+        lines = [_decision(d) for d in out.data.get("decisions", [])]
+        print("\n".join(lines) or out.reason)
+    elif verb == "show":
+        d = out.data
+        print(
+            f"{d['id']}  {d.get('title') or ''}\n  event {d['event']}  count {d['count']}"
+            f"  window {d['window']}m  key {d['key'] or '-'}  job {d['action'].get('job')}"
+            f"\n  {'enabled' if d['enabled'] else 'disabled'}  fires {d['fires']}"
+            f"  open {', '.join(d['open']) or '-'}{'  HELD by its breaker' if d['held'] else ''}"
+        )
+        for x in d.get("suppressed", []):
+            print(f"  suppressed {x['at']} {x['key'] or '-'}: {x['reason']}")
+    else:
+        rows = out.data.get("rows", [])
+        print(
+            "\n".join(
+                f"{r['id']:<22} {r['event']:<20} {'on ' if r['enabled'] else 'off'} fires {r['fires']}"
+                for r in rows
+            )
+            or out.reason
+        )
+    for e in out.data.get("errors", []):
+        print(f"problem: {e}", file=sys.stderr)
+    return out.exit
+
+
 def cmd_schedule(a, c: Ctx) -> int:
     verb = a.schedule_cmd or "list"
+    if verb == "trigger":
+        return cmd_trigger(a, c)
     if verb == "show":
         out = A.schedule_show(c.repo, a.id)
     elif verb == "search":

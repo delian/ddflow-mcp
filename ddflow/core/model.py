@@ -731,6 +731,18 @@ class State:
     #: job id -> its definition from `schedule.*` events (`services.schedule` merges the
     #: file and `[cadence]` sources over these).
     schedules: dict[str, Schedule] = field(default_factory=dict)
+    #: trigger id -> its fires, oldest first: {"at", "key", "items", "hop", "digest", "job",
+    #: "events"} (`trigger.fired`). What `services.triggers` reads for the cooldown, open
+    #: remediations, the breaker and the global hourly cap.
+    trigger_fires: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: trigger id -> its last TRIGGER_SUPPRESSIONS_KEPT suppressions: {"at", "key", "reason",
+    #: "detail"} (`trigger.suppressed`). Every one is in the log; the state keeps the tail.
+    trigger_suppressed: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: item id -> the fire that filed it: {"trigger", "key", "hop"}. How a trigger knows
+    #: its own output (never a source) and how deep a remediation chain has gone.
+    trigger_items: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: `trigger.evaluated`: the last TRIGGER_RUNS_KEPT evaluator runs, oldest first.
+    trigger_runs: list[dict[str, Any]] = field(default_factory=list)
     #: `repo:ID` -> what `ddflow external sync` last OBSERVED of an item in a sibling
     #: repository: {"state", "title", "repo", "at"}. Recorded in this log, so a
     #: dependency on another project is decided from a fact with a date on it, and the
@@ -2287,6 +2299,47 @@ def _h_schedule_removed(st: State, ev: Event) -> None:
     job.removed = ev.data.get("reason", "") or "removed"
 
 
+TRIGGER_SUPPRESSIONS_KEPT = 50
+TRIGGER_RUNS_KEPT = 20
+
+
+def _h_trigger_fired(st: State, ev: Event) -> None:
+    """One fire of a trigger and the items it filed (D-trigger-actions-create-items)."""
+    d = ev.data
+    fire = {
+        "at": ev.ts,
+        "key": str(d.get("key", "")),
+        "items": [str(i) for i in d.get("items", [])],
+        "hop": int(d.get("hop", 1) or 1),
+        "digest": str(d.get("digest", "")),
+        "job": str(d.get("job", "")),
+        "events": list(d.get("events", [])),
+    }
+    st.trigger_fires.setdefault(ev.subject, []).append(fire)
+    for item in fire["items"]:
+        st.trigger_items[item] = {"trigger": ev.subject, "key": fire["key"], "hop": fire["hop"]}
+
+
+def _h_trigger_suppressed(st: State, ev: Event) -> None:
+    tail = st.trigger_suppressed.setdefault(ev.subject, [])
+    tail.append(
+        {
+            "at": ev.ts,
+            "key": str(ev.data.get("key", "")),
+            "reason": str(ev.data.get("reason", "")),
+            "detail": str(ev.data.get("detail", "")),
+        }
+    )
+    del tail[:-TRIGGER_SUPPRESSIONS_KEPT]
+
+
+def _h_trigger_evaluated(st: State, ev: Event) -> None:
+    st.trigger_runs.append(
+        {"at": ev.ts, "by": ev.agent, **{k: ev.data.get(k) for k in ("now", "fired", "suppressed")}}
+    )
+    del st.trigger_runs[:-TRIGGER_RUNS_KEPT]
+
+
 HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "phase.added": _linking(lambda st, ev: _h_added(st, ev, "phase")),
     "task.added": _linking(lambda st, ev: _h_added(st, ev, "task")),
@@ -2354,6 +2407,10 @@ HANDLERS: dict[str, Callable[[State, Event], None]] = {
     "schedule.defined": _h_schedule_defined,
     "schedule.updated": _h_schedule_updated,
     "schedule.removed": _h_schedule_removed,
+    # first writer: api/schedule.py trigger_evaluate
+    "trigger.evaluated": _h_trigger_evaluated,
+    "trigger.fired": _h_trigger_fired,
+    "trigger.suppressed": _h_trigger_suppressed,
     "reviewer.configured": _h_reviewer_configured,
     "reviewer.approved": _h_reviewer_approved,
     "record.extended": _h_record_extended,
