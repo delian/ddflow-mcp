@@ -326,7 +326,7 @@ def fold(events: list[Event], *, strict: bool = True) -> State:
     handler cannot apply. Non-strict is for reading a log written by a NEWER ddflow than
     this one, where forward compatibility beats correctness of the unknown part -- but it
     counts what it skipped (`skipped_kinds`) and records what it could not apply
-    (`fold_problems`), so the caller can refuse to act and doctor can name it.
+    (`fold_problems`), which doctor names.
     """
     st = State()
     # An adopted orphan lives on as the copy under its session; the id-less original

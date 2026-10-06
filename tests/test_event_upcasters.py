@@ -52,6 +52,12 @@ def registered_steps() -> dict[str, list[int]]:
     return {k: sorted(vs) for k, vs in out.items()}
 
 
+def named(contract: str, kind: str, version: int) -> bool:
+    """Whether the contract names `kind`'s version `version` -- exactly: `k` v2 is not
+    named by an entry for `k` v20."""
+    return re.search(rf"`{re.escape(kind)}` v{version}(?!\d)", contract) is not None
+
+
 def json_type(value: Any) -> str:
     if value is None:
         return "null"
@@ -127,7 +133,7 @@ def drift(
         if now is None:
             if was["v"] not in steps.get(kind, []):
                 out.append(f"{kind}: kind removed without an upcaster from v{was['v']}")
-            if f"`{kind}` v{was['v'] + 1}" not in contract:
+            if not named(contract, kind, was["v"] + 1):
                 out.append(f"{kind}: removal (v{was['v'] + 1}) is not named in {CONTRACT.name}")
             continue
         if now["v"] < was["v"]:
@@ -136,7 +142,7 @@ def drift(
             missing = [v for v in range(was["v"], now["v"]) if v not in steps.get(kind, [])]
             if missing:
                 out.append(f"{kind}: v{now['v']} has no upcaster from v{missing[0]}")
-            if f"`{kind}` v{now['v']}" not in contract:
+            if not named(contract, kind, now["v"]):
                 out.append(f"{kind}: v{now['v']} is not named in {CONTRACT.name}")
             continue  # a declared bump may reshape the payload freely
         for field, types in sorted(was["fields"].items()):
@@ -223,6 +229,30 @@ def test_stamp_leaves_a_version_1_payload_byte_identical(monkeypatch) -> None:
     assert U.stamp("task.added", {"title": "t"}) == {"title": "t"}
     monkeypatch.setitem(U.PAYLOAD_VERSIONS, "task.added", 2)
     assert U.stamp("task.added", {"title": "t"}) == {"title": "t", "v": 2}
+
+
+def test_a_line_whose_data_is_not_an_object_is_an_unreadable_line(tmp_path) -> None:
+    """Every reader of a payload takes it as a mapping (the fold, doctor's orphan count, the
+    stamp guard): such a line is reported as unreadable instead of reaching them (roborev)."""
+    from ddflow.infra.log import EventLog, _parse_event
+
+    bad = '{"agent":"a","data":[1,2],"id":"ex","kind":"phase.added","lamport":1,"subject":"P0"}'
+    assert _parse_event(bad) is None
+    log = EventLog(tmp_path, agent_id="a1")
+    log.append("phase.added", "P1", {"title": "t"})
+    with log.shard.open("a", encoding="utf-8") as f:
+        f.write(bad + "\n")
+    assert [e.subject for e in log.read_all() if e.kind == "phase.added"] == ["P1"]
+
+
+def test_the_log_does_not_mutate_the_callers_payload(tmp_path, monkeypatch) -> None:
+    from ddflow.infra.log import EventLog
+
+    monkeypatch.setitem(U.PAYLOAD_VERSIONS, "phase.added", 2)
+    monkeypatch.setitem(U.UPCASTERS, ("phase.added", 1), lambda k, d: (k, dict(d)))
+    data = {"title": "t"}
+    EventLog(tmp_path, agent_id="a1").append("phase.added", "P1", data)
+    assert data == {"title": "t"}
 
 
 def test_the_log_writes_a_kind_at_its_current_version(tmp_path, monkeypatch) -> None:
@@ -345,7 +375,7 @@ def test_the_snapshot_records_every_kind_at_its_current_version() -> None:
     gone = sorted(
         k
         for k in set(snap) - known_kinds()
-        if snap[k]["v"] not in steps.get(k, []) or f"`{k}` v{snap[k]['v'] + 1}" not in contract
+        if snap[k]["v"] not in steps.get(k, []) or not named(contract, k, snap[k]["v"] + 1)
     )
     assert not gone, (
         f"kind(s) {gone} removed without an upcaster from their last version and an entry "
@@ -360,7 +390,7 @@ def test_every_version_bump_has_its_upcasters_and_a_contract_entry() -> None:
     steps = registered_steps()
     for kind, version in U.PAYLOAD_VERSIONS.items():
         assert [v for v in range(1, version) if v not in steps.get(kind, [])] == []
-        assert f"`{kind}` v{version}" in contract
+        assert named(contract, kind, version)
 
 
 def test_the_released_logs_fit_the_snapshot() -> None:
@@ -406,6 +436,9 @@ def test_drift_refuses_a_removed_or_retyped_field_and_accepts_a_declared_bump() 
         f"k.a: removal (v2) is not named in {CONTRACT.name}"
     ]
     assert drift(old, gone, steps={"k.a": [1]}, contract="`k.a` v2 becomes k.b") == []
+    assert drift(old, gone, steps={"k.a": [1]}, contract="`k.a` v20 becomes k.b") == [
+        f"k.a: removal (v2) is not named in {CONTRACT.name}"
+    ]
     bumped = new(2, x=["int"])
     assert drift(old, bumped, steps={}, contract="") == [
         "k.a: v2 has no upcaster from v1",
