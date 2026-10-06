@@ -665,7 +665,7 @@ def _scope(repo, cfg, st, log, it, say, revs, *, locals_: dict[str, Any]):
     if why:
         return kind, done, forced, diff, how, why, None
     if delta:
-        diff, how, why = _delta_scope(repo, it, log, gate, a["branch"])
+        diff, how, why = _delta_scope(repo, it, log, gate, a["branch"], cfg.worktree.base_ref or "")
     elif a["commit"]:
         diff, how = commit_diff(repo, a["commit"])
     else:
@@ -794,8 +794,9 @@ def _budget(cfg, item, gate, done, force, reason, say) -> tuple[str, str]:
     return _budget_refusal(item, gate, done, cap), ""
 
 
-def _delta_scope(repo, it, log, gate, branch) -> tuple[str, str, str]:
-    """(diff, how, why not) for `--delta`: the changes since the recorded review's head."""
+def _delta_scope(repo, it, log, gate, branch, base: str = "") -> tuple[str, str, str]:
+    """(diff, how, why not) for `--delta`: the item's own changes since the recorded
+    review's head -- never what a merge brought in from ``base`` (Bccf6d1aec7)."""
     head = _last_head(log, it.id, gate) if it else ""
     if not head:
         return (
@@ -804,7 +805,10 @@ def _delta_scope(repo, it, log, gate, branch) -> tuple[str, str, str]:
             f"--delta rechecks what changed since the head of the item's recorded {gate} "
             "review, and none is on record: run the full review first.",
         )
-    diff = _delta_diff(repo, it, branch, head)
+    try:
+        diff = _delta_diff(repo, it, branch, head, base)
+    except RuntimeError as exc:
+        return "", "", f"the delta could not be produced ({exc}); `--full` reviews the whole diff."
     if not diff.strip():
         return (
             "",
@@ -812,16 +816,63 @@ def _delta_scope(repo, it, log, gate, branch) -> tuple[str, str, str]:
             f"nothing changed since the reviewed head {head[:10]}. `--full` reviews the "
             "whole diff again (a full round).",
         )
-    n = _commits_since(repo, it, branch, head)
+    n = _commits_since(repo, it, branch, head, base)
     what = f"{n} commit{'' if n == 1 else 's'}" if n else "uncommitted changes"
-    return diff, f"delta review of {what} since {head[:10]}", ""
+    return (
+        diff,
+        f"delta review of {what} since {head[:10]}",
+        "",
+    )
 
 
-def _commits_since(repo: Path, it, branch: str, head: str) -> int:
-    """How many commits the item's tip has past `head` (0: only working-tree edits)."""
+def _commits_since(repo: Path, it, branch: str, head: str, base: str = "") -> int:
+    """How many commits the item's tip has past `head` (0: only working-tree edits): its
+    OWN, so the commits a merge brought in from ``base`` (default: the default branch)
+    are not counted (Bccf6d1aec7)."""
     tip = _head_of(repo, it, branch, "")
-    r = W.git(repo, "rev-list", "--count", f"{head}..{tip}") if tip else None
+    base = base or W.default_branch(repo)
+    r = W.git(repo, "rev-list", "--count", f"{head}..{tip}", "--not", base) if tip else None
     return int(r.out) if r is not None and r.ok and r.out.strip().isdigit() else 0
+
+
+def _delta_start(repo: Path, tip: str, head: str, base: str) -> str:
+    """What a delta diffs the tip against: ``head``, the reviewed commit -- or, when the
+    branch has merged ``base`` since (Bccf6d1aec7), ``head`` merged with what came in.
+    The commits from ``base`` were reviewed as their own items, so only what the branch
+    did on top of them is new: its own commits, and its side of the merge.
+
+    What came in is every merge base of ``base`` and the tip that ``head`` lacks (one in
+    a plain history, more after criss-cross merges). Each is merged onto ``head`` with
+    ``git merge-tree --write-tree -X theirs``: where the two conflict the incoming side
+    is kept, so the diff to the tip shows exactly where the item's result departs from
+    the base's: a conflict it resolved its own way (overriding another item's change)
+    is its decision and is reviewed; one where it took the base's side is not new code.
+    Returns ``head`` when nothing came in, else the merged tree. When a merge cannot be
+    written (a modify/delete or rename conflict, which ``-X theirs`` does not settle):
+    with one incoming base, that commit -- the item's whole own change on top of it, and
+    none of the base's; with several, ``head`` -- everything since the reviewed head, the
+    pre-fix range, since no single one of them excludes the others' work. More than the
+    item's own, never less."""
+    found = W.git(repo, "merge-base", "--all", base, tip) if base and tip else None
+    bases = found.out.split() if found is not None and found.ok else []
+    came_in = sorted(
+        b for b in bases if not W.git(repo, "merge-base", "--is-ancestor", b, head).ok
+    )  # sorted: `merge-base --all` names them in no particular order
+    start = head
+    for i, commit in enumerate(came_in):
+        merged = W.git(repo, "merge-tree", "--write-tree", "-X", "theirs", start, commit)
+        tree = merged.out.splitlines()[0].strip() if merged.ok and merged.out.strip() else ""
+        if not tree:
+            return came_in[0] if len(came_in) == 1 else head
+        if i == len(came_in) - 1:
+            return tree
+        # Another base to merge: the tree as a commit merge-tree can take (unreferenced,
+        # like the tree itself; git's gc removes both).
+        made = W.git(repo, "commit-tree", tree, "-p", start, "-p", commit, "-m", "delta base")
+        if not made.ok or not made.out.strip():
+            return head
+        start = made.out.strip()
+    return head
 
 
 def _head_of(repo: Path, it, branch: str, commit: str) -> str:
@@ -842,19 +893,46 @@ def _head_of(repo: Path, it, branch: str, commit: str) -> str:
     return r.out.strip() if r.ok else ""
 
 
-def _delta_diff(repo: Path, it, branch: str, head: str) -> str:
-    """What changed since `head`: the item's branch or tree against that commit."""
+def _delta_diff(repo: Path, it, branch: str, head: str, base: str = "") -> str:
+    """What the item changed since `head`: its branch or tree against that commit --
+    against `head` merged with ``base``'s incoming work when the branch merged ``base``
+    since (`_delta_start`), so other items' commits are never sent (Bccf6d1aec7)."""
     from ..infra import worktree as W
     from ..services.enforce import SELF_MANAGED
 
+    base = base or W.default_branch(repo)
     wt = W.load_path(repo, it.worktree) if it and it.worktree else None
     if not branch and wt and wt.exists():
-        return W.capture_diff(wt, head, include_untracked=False)
+        return _delta_of_tree(wt, head, base)
     tip = branch or (it.branch if it and it.branch else "")
     if tip:
-        d = W.git(repo, "diff", "--no-color", f"{head}...{tip}")
-        return (d.out + "\n") if d.ok and d.out else ""
+        return _delta_of_branch(repo, tip, head, base)
     return W.capture_diff(repo, head, include_untracked=False, exclude=SELF_MANAGED)
+
+
+def _delta_of_tree(wt: Path, head: str, base: str) -> str:
+    """The delta of an item's worktree: its commits and tracked edits since the start.
+    Raises RuntimeError when a diff cannot be produced: never "nothing changed"."""
+    start = _delta_start(wt, "HEAD", head, base)
+    # `start..HEAD` plus the tracked edits: what `capture_diff(wt, head)` sent (a delta is
+    # only taken from a head the branch contains), with each git call's failure kept.
+    committed = W.git(wt, "diff", "--no-color", start, "HEAD")
+    working = W.git(wt, "diff", "--no-color", "HEAD")
+    for part in (committed, working):
+        if not part.ok:  # could not run: never "nothing changed"
+            raise RuntimeError(f"git diff in {wt} failed: {part.err or part.out}")
+    return "\n".join(p.out for p in (committed, working) if p.out.strip())
+
+
+def _delta_of_branch(repo: Path, tip: str, head: str, base: str) -> str:
+    """The delta of a named branch. Raises RuntimeError when no diff can be produced: a
+    delta that could not run is never "nothing changed"."""
+    start = _delta_start(repo, tip, head, base)
+    rng = (f"{head}...{tip}",) if start == head else (start, tip)
+    d = W.git(repo, "diff", "--no-color", *rng)
+    if not d.ok:  # never a wider range than asked: that would send the base's work
+        raise RuntimeError(f"git diff {' '.join(rng)} failed: {d.err or d.out}")
+    return (d.out + "\n") if d.out else ""
 
 
 def _log_started(log, it, item: str, gate: str) -> None:

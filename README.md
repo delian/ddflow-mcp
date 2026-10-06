@@ -1256,7 +1256,18 @@ counted from the log's recorded reviews (`review_kind`, `round`, `rounds` and `r
 in the gate evidence), so a re-claim, a delta or a manual `gate skip` does not reset the
 count; a round that reached no reviewer is not counted. `--delta` reads the reviewed head
 from the log too, so it works after a re-claim or a `gate skip`; it is refused only when no
-review was ever recorded or nothing changed.
+review was ever recorded or nothing changed. A delta is the item's OWN change: after
+`git merge main` into the branch, the commits that came in from the base branch are not
+sent (they were reviewed as their own items). The delta diffs the tip against the reviewed
+head merged with what came in (keeping the incoming side where the two conflict), so the
+branch's own commits and where its merge result departs from main are what the reviewer
+sees: a conflict resolved the item's own way (overriding another item's change) is
+reviewed, one where it took main's side is not. Criss-cross histories (more than one merge
+base) merge each base the reviewed head lacks. When that merge cannot be written (a
+modify/delete conflict, say), the delta is the item's whole own change on top of the
+merged-in main commit, or, with several merge bases, everything since the reviewed head. A
+delta of the item's tree or branch whose diff cannot be produced is refused with the
+reason, never reported as "nothing changed".
 
 **Delta re-reviews are the default.** Once a gate has a recorded review that reviewed the
 whole diff, a plain `ddflow review T1 --gate critic` is a delta: it reviews only the commits
