@@ -29,7 +29,7 @@ def _fix_task_after(st, cfg, bug) -> str:
     mine = [
         st.items[t]
         for t in dict.fromkeys((bug.fix_task, IDS.render(cfg, "fix_task", parent=bug.id)))
-        if t in st.items and not st.items[t].removed and bug.id in fixes_of(st, t)
+        if t in st.items and not st.items[t].removed and bug.id in fixes_of(st, t, cfg)
     ]
     for it in mine:
         if it.state not in (DONE, ABANDONED):

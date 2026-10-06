@@ -130,7 +130,10 @@ def lesson_add(repo: Path, draft: LessonDraft, *, agent: str = "") -> O.Outcome:
     if chk.extension:
         return DD.extend(log, cfg, chk, "lesson.recorded")
     with log.transaction():
-        log.append("lesson.recorded", lid, data | chk.fields)
+        minted = IDS.confirm(
+            cfg, "lesson", minted, used=IDS.used_now(log), hash_parts=(draft.title, draft.rule)
+        )
+        log.append("lesson.recorded", lid, data | IDS.key_field(minted) | chk.fields)
         DD.after_add(log, cfg, lid, chk)
     return O.ok("lesson.recorded", id=lid, sites=len(sites), inventory=sites, **chk.data())
 
@@ -763,6 +766,13 @@ def research_add(repo: Path, finding: Finding, *, agent: str = "") -> O.Outcome:
             raced = _research_id_taken(fold(log.read_all(), strict=False), rid, finding)
             if raced is not None:
                 return raced
+        minted = IDS.confirm(
+            cfg,
+            "research",
+            minted,
+            used=IDS.used_now(log),
+            hash_parts=(finding.question, finding.claim),
+        )
         log.append(
             "research.recorded",
             rid,
@@ -924,6 +934,7 @@ def bug_found(  # noqa: PLR0913 -- BACKLOG B179: a BugDraft record, as task_add'
         filing = cfg.bugs.file_task and not no_task and (prior is None or dangling)
         fix_id = _fix_task_id(st, cfg, bid, item) if filing else ""
         linked = {"fix_task": fix_id} if fix_id else {}
+        minted = IDS.confirm(cfg, "bug", minted, used=IDS.used_now(log), hash_parts=(summary, item))
         log.append(
             "bug.found",
             bid,
@@ -998,11 +1009,14 @@ def _own_fix_id(st, cfg, bug_id: str) -> str:
     id is free when it is filed (L-free-id-before-add)."""
     from ..core.model import ABANDONED
 
-    tid = IDS.render(cfg, "fix_task", parent=bug_id)
+    used = IDS.taken(st)
+    # seq=1: the bug's OWN fix task is one fixed name (a `{seq}` in its template is the
+    # first number), so a second report finds it instead of minting the next number
+    tid = IDS.render(cfg, "fix_task", used=used, parent=bug_id, seq=1)
     n = 1
     while (it := st.items.get(tid)) is not None and not it.removed and it.state == ABANDONED:
         n += 1
-        tid = IDS.render(cfg, "fix_task_followup", parent=bug_id, seq=n)
+        tid = IDS.render(cfg, "fix_task_followup", used=used, parent=bug_id, seq=n)
     return tid
 
 
@@ -1106,7 +1120,7 @@ def _live(st, item: str) -> bool:
     return it is not None and not it.removed
 
 
-def _needs_fix_task(st, b) -> bool:
+def _needs_fix_task(st, b, cfg=None) -> bool:
     """Whether open bug ``b`` has no fix task that will ever fix it: none in the queue; a
     DONE task it was merely reported against -- `bug found --item <open fix task>` links
     a report to that task, and the task's completion does not fix it (B8dcbf2f8da); or an
@@ -1121,7 +1135,7 @@ def _needs_fix_task(st, b) -> bool:
     state = st.items[b.fix_task].state
     if state == ABANDONED:
         return True
-    return state == DONE and b.id not in fixes_of(st, b.fix_task)
+    return state == DONE and b.id not in fixes_of(st, b.fix_task, cfg)
 
 
 def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.Outcome:
@@ -1141,7 +1155,7 @@ def bug_file_tasks(repo: Path, *, dry_run: bool = False, agent: str = "") -> O.O
     with log.transaction():
         st = fold(log.read_all(), strict=False)
         todo = sorted(
-            (b for b in st.bugs.values() if b.open and _needs_fix_task(st, b)),
+            (b for b in st.bugs.values() if b.open and _needs_fix_task(st, b, cfg)),
             key=lambda b: (b.found_at, b.id),
         )
         for b in todo:
@@ -1902,7 +1916,8 @@ def memory_add(
         # (cross-family critic).
         data["tags"] = csv_list(tags)
     with log.transaction():
-        log.append("memory.recorded", mid, data)
+        minted = IDS.confirm(cfg, "memory", minted, used=IDS.used_now(log), hash_parts=(text,))
+        log.append("memory.recorded", mid, data | IDS.key_field(minted))
         DD.after_add(log, cfg, mid, chk)
     replaced = bool(id) and id in st.memories
     return O.ok("memory.recorded", id=mid, replaced=replaced, **chk.data())

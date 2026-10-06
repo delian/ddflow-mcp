@@ -90,7 +90,7 @@ TEMPLATE_OF: dict[str, Callable[[Config], str]] = {
 }
 
 
-def render(cfg: Config, kind: str, *, check: bool = True, **fields: Any) -> str:
+def render(cfg: Config, kind: str, *, check: bool = True, used: Any = (), **fields: Any) -> str:
     """The id ``kind``'s `[ids]` template makes of ``fields``. ``{prefix}``, ``{hash}``
     (from ``hash_parts``), ``{time}``, ``{date}`` and ``{pid}`` are filled here when not
     given; every other token must be passed. The result is held to the id characters
@@ -98,9 +98,11 @@ def render(cfg: Config, kind: str, *, check: bool = True, **fields: Any) -> str:
     False`` is for ids spelled by a source the project already uses (an imported file's
     headings), which keep that spelling as they always have.
 
-    Rendering only: the id service (B-id-generator) owns sequence allocation and the
-    taken-key check under the log lock."""
+    A template holding `{seq}` with no ``seq`` given takes the next free number among
+    ``used`` (every id taken); `make` adds the taken-id check and suffixing on top."""
     template = TEMPLATE_OF[kind](cfg)
+    if "{seq}" in template and "seq" not in fields:
+        fields = {**fields, "seq": next_seq(template, used, **_fixed(fields))}
     minted = re.sub(r"\{([^{}]*)\}", lambda m: _token_value(kind, m.group(1), fields), template)
     # The template was valid; the VALUES may still not be (an empty slug between two
     # dots, a caller's prefix with a slash): an id is a file name, a branch name and a
@@ -124,6 +126,22 @@ class Minted:
     key: str
 
 
+#: The events that record a minted record and may carry its `key` (`key_field`).
+KEYED_EVENTS = frozenset(
+    {
+        "bug.found",
+        "lesson.recorded",
+        "research.recorded",
+        "decision.recorded",
+        "memory.recorded",
+        "job.started",
+        "session.started",
+        "task.added",
+        "phase.added",
+    }
+)
+
+
 def taken(state: Any, events: Any = ()) -> dict[str, str]:
     """Every id in the fold -- and every key a record was minted under (an event's
     ``key``) -- -> the kind holding it: the one namespace every minted id is checked
@@ -131,6 +149,8 @@ def taken(state: Any, events: Any = ()) -> dict[str, str]:
     never reused."""
     out: dict[str, str] = {}
     for ev in (events() if callable(events) else events) or ():
+        if getattr(ev, "kind", "") not in KEYED_EVENTS:
+            continue  # a `key` elsewhere (a trigger's dedupe key) is not an id
         key = ev.data.get("key") if isinstance(getattr(ev, "data", None), dict) else None
         if isinstance(key, str) and key:
             out.setdefault(key, "key")
@@ -212,10 +232,7 @@ def make(cfg: Config, kind: str, *, used: Any = (), **fields: Any) -> Minted:
         if holder not in (None, "", _record_kind(kind)):
             raise ValueError(f"the {kind} id {key} is already taken by a {holder}")
         return Minted(key, key)
-    vals = dict(fields)
-    if "{seq}" in template and "seq" not in vals:
-        vals["seq"] = next_seq(template, holders, **_fixed(fields))
-    key = _free(render(cfg, kind, **vals), holders)
+    key = _free(render(cfg, kind, used=holders, **fields), holders)
     if "{seq}" in template and template != default and "{seq}" not in default:
         # A key over an internal id minted as ever (D-id-schemes-final, 3).
         internal = _free(_render_template(default, kind, fields), holders)
@@ -237,22 +254,52 @@ def _render_template(template: str, kind: str, fields: dict[str, Any]) -> str:
     return re.sub(r"\{([^{}]*)\}", lambda m: _token_value(kind, m.group(1), fields), template)
 
 
-def bug_of_fix_task(cfg: Config | None, item_id: str) -> str:
-    """The bug a fix-task id names (`fix-<bug>` by default), read back through the
-    `[ids].fix_task` template -- never by a hard-coded prefix -- or ""."""
-    cfgs = [cfg] if cfg is not None else []
-    for template in [*(TEMPLATE_OF["fix_task"](c) for c in cfgs), _default("fix_task")]:
+def bugs_named_by_fix_task(cfg: Config | None, item_id: str) -> list[str]:
+    """The bug ids a fix-task id may name -- `fix-<bug>` or a follow-up `fix-<bug>-2` by
+    default -- read back through the `[ids].fix_task` and `fix_task_followup` templates
+    (the configured ones and the shipped ones), never by a prefix written elsewhere. A
+    candidate, not a verdict: the caller keeps only ids that are bugs."""
+    templates: list[str] = []
+    for c in [cfg] if cfg is not None else []:
+        templates += [TEMPLATE_OF["fix_task_followup"](c), TEMPLATE_OF["fix_task"](c)]
+    templates += [_default("fix_task_followup"), _default("fix_task")]
+    out: list[str] = []
+    for template in templates:
         if "{parent}" not in template:
             continue
-        head, _, tail = template.partition("{parent}")
-        if (
-            item_id.startswith(head)
-            and item_id.endswith(tail)
-            and len(item_id) > len(head) + len(tail)
-            and "{" not in head + tail
-        ):
-            return item_id[len(head) : len(item_id) - len(tail)]
-    return ""
+        rx = _pattern(template.replace("{parent}", "\x00"))
+        pattern = rx.pattern.replace(re.escape("\x00"), "(?P<parent>.+)")
+        if (m := re.fullmatch(pattern, item_id)) and m.group("parent") not in out:
+            out.append(m.group("parent"))
+    return out
+
+
+def refile(base: str, sha: str) -> str:
+    """A stable id filed AGAIN after its first record closed (a CI check failing after its
+    bug was fixed): the stable id and the failing commit's short sha."""
+    return "-".join((base, sha[:7]))
+
+
+def is_filing_of(rid: str, base: str) -> bool:
+    """Whether ``rid`` is ``base`` itself or exactly one of its re-filings (`refile`):
+    the suffix must be the seven-hex-digit sha, so another stable id that merely starts
+    with ``base`` is not taken for one."""
+    return rid == base or re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
+
+
+def confirm(cfg: Config, kind: str, minted: Minted, *, used: Any, **fields: Any) -> Minted:
+    """``minted`` re-checked against ``used`` read again under the log lock: a key another
+    writer took since the mint is minted afresh (the internal id is time-salted and
+    keeps). Call it inside the transaction that appends the record; ``used`` may be a
+    callable, read only when there is a key to check."""
+    if minted.key == minted.id:
+        return minted  # a time-salted or caller-named id: nothing to re-check
+    used = used() if callable(used) else used
+    holders = used if isinstance(used, dict) else dict.fromkeys(used, "")
+    if minted.key not in holders:
+        return minted
+    again = make(cfg, kind, used=holders, **fields)
+    return Minted(minted.id, again.key)
 
 
 def mint(
@@ -268,3 +315,15 @@ def mint(
 def key_field(minted: Minted) -> dict[str, str]:
     """``{"key": ...}`` for the record's event when its key is not its id, else ``{}``."""
     return {"key": minted.key} if minted.key != minted.id else {}
+
+
+def used_now(log: Any) -> Callable[[], dict[str, str]]:
+    """`taken` of the log as it is NOW, for `confirm` under the log's lock (lazy)."""
+
+    def read() -> dict[str, str]:
+        from .model import fold
+
+        events = log.read_all()
+        return taken(fold(events, strict=False), events)
+
+    return read

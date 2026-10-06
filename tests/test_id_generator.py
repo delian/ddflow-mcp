@@ -153,7 +153,7 @@ def test_a_configured_fix_task_template_is_used_and_read_back(repo) -> None:
     assert bug.data["fix_task"] == f"bugfix-{bid}"
     cfg = Config.load(repo)
     st = fold(EventLog(repo, "t").read_all(), strict=False)
-    assert ids.bug_of_fix_task(cfg, f"bugfix-{bid}") == bid
+    assert bid in ids.bugs_named_by_fix_task(cfg, f"bugfix-{bid}")
     assert bid in fixes_of(st, f"bugfix-{bid}", cfg)
 
 
@@ -180,9 +180,11 @@ def test_the_session_template_is_honoured(repo) -> None:
 HAND_BUILT = re.compile(
     r"\bauto_id\("
     r"|f\"(?:fix|promote)-\{"
+    r"|\"(?:fix|promote)-(?:\{|%|\"\s*\+)"
+    r"|\"(?:fix|promote)-\"\s*\+"
     r"|\"Bci-"
     r"|strftime\(\"s%Y"
-    r"|startswith\(\"fix-\"\)"
+    r"|startswith\(\"(?:fix|promote|Bci)-"
     r"|FIX_TASK_PREFIX|_FIX_PREFIX"
     r"|\bf\"\{item\}\.\{i\}\""
 )
@@ -209,6 +211,12 @@ def test_the_ratchet_can_see() -> None:
         'b = "Bci-" + slug',
         'sid = time.strftime("s%Y%m%d")',
         'if i.startswith("fix-"):',
+        'if i.startswith("promote-"):',
+        "tid = FIX_TASK_PREFIX + bug",
+        'tid = "fix-" + bug',
+        'p = "promote-%s-%d" % (env, n)',
+        'p = "fix-{}".format(bug)',
+        'sub = f"{item}.{i}"',
     ):
         assert HAND_BUILT.search(planted), planted
 
@@ -216,3 +224,49 @@ def test_the_ratchet_can_see() -> None:
 def test_the_cli_runs_in_a_git_repo(repo) -> None:
     # sanity for the helpers above: the fixture is a real repository
     assert subprocess.run(["git", "-C", str(repo), "rev-parse"], check=False).returncode == 0
+
+
+def test_a_follow_up_fix_task_names_its_bug(repo) -> None:
+    from ddflow.services.completion import fixes_of
+
+    _init(repo)
+    bid = K.bug_found(repo, summary="the sprocket fails", no_task=True).data["id"]
+    run_cli(repo, "task", "add", f"fix-{bid}-2", "--globs", "a.py")
+    st = fold(EventLog(repo, "t").read_all(), strict=False)
+    assert fixes_of(st, f"fix-{bid}-2") == {bid}
+
+
+def test_a_refiling_is_told_apart_from_another_stable_id() -> None:
+    base = "Bci-abc-0123456789"
+    assert ids.is_filing_of(base, base)
+    assert ids.is_filing_of(ids.refile(base, "deadbeefcafe"), base)
+    assert not ids.is_filing_of(base + "-abc1234-ffffffffff", base)  # another check's id
+
+
+def test_a_key_taken_meanwhile_is_minted_afresh() -> None:
+    cfg = Config()
+    cfg.ids.bug = "BUG-{seq}"
+    first = ids.make(cfg, "bug", used={}, hash_parts=("x",))
+    assert first.key == "BUG-1"
+    again = ids.confirm(cfg, "bug", first, used=lambda: {"BUG-1": "key"}, hash_parts=("x",))
+    assert (again.id, again.key) == (first.id, "BUG-2")
+    plain = ids.make(Config(), "bug", hash_parts=("x",))
+    calls = []
+    assert ids.confirm(Config(), "bug", plain, used=lambda: calls.append(1) or {}) == plain
+    assert calls == []  # no key to check: the log is not even read
+
+
+def test_only_record_events_put_keys_in_the_namespace() -> None:
+    from ddflow.core.events import Event
+
+    trig = Event(kind="trigger.fired", subject="T1", data={"key": "BUG-5"}, agent="a", ts="")
+    rec = Event(kind="bug.found", subject="B1", data={"key": "BUG-3"}, agent="a", ts="")
+    used = ids.taken(None, [trig, rec])
+    assert "BUG-3" in used and "BUG-5" not in used
+
+
+def test_a_seq_in_a_rendered_template_is_allocated() -> None:
+    cfg = Config()
+    cfg.ids.fix_task = "fix-{parent}-{seq}"
+    assert ids.render(cfg, "fix_task", parent="B1") == "fix-B1-1"
+    assert ids.render(cfg, "fix_task", used={"fix-B1-1": "item"}, parent="B1") == "fix-B1-2"
