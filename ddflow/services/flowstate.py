@@ -350,9 +350,14 @@ def limit_for(repo: Path, cfg: Config, state: State, events: Events = ()) -> FC.
     try:
         return current_limit(FlowCtx(repo=Path(repo), cfg=cfg, state=state, events=events))
     except Exception as exc:  # never let the derived limit stop a command
-        start = FP.params(cfg).bounds()[1]
+        from ..core.schedule import LIMIT_UNAVAILABLE
+
+        try:
+            start = FP.params(cfg).bounds()[1]  # (floor, start, ceiling)
+        except Exception:
+            start = max(1, int(cfg.schedule.max_parallel_tasks or 1))
         why = f"the adaptive limit could not be derived ({type(exc).__name__}: {exc})"
-        return FC.Decision(start, "start", "unavailable", why)
+        return FC.Decision(start, "start", LIMIT_UNAVAILABLE, why)
 
 
 def doctor_notes(repo: Path) -> list[str]:

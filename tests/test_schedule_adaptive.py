@@ -172,8 +172,10 @@ def test_an_underivable_limit_still_says_so(repo, monkeypatch) -> None:
     monkeypatch.setattr(FL, "current_limit", boom)
     d = FL.limit_for(repo, Config(), State())
     assert d.limit == 4 and "ring exploded" in d.reason
-    p = plan(_state(repo, 2), Config(), now=NOW, parallel=d)
-    assert p.parallel_line.startswith("parallel: 4 (auto")
+    p = plan(_state(repo, 2), Config(), now=NOW, parallel=d)  # under capacity
+    assert p.parallel_line.startswith("parallel: 4 (auto: unavailable"), p.parallel_line
+    assert "ring exploded" in p.parallel_line
+    assert "independent work" not in p.parallel_line
 
 
 def test_wait_plans_with_the_same_limit_as_next(repo, monkeypatch) -> None:
