@@ -1291,19 +1291,9 @@ def bug_fixed(
             **({"changelog": entry} if entry else {}),
         },
     )
-    captured = ""
+    capture: dict[str, Any] = {}
     if cfg.lessons.auto_capture_on_bug and lesson_title:
-        captured = f"L-{item}"
-        log.append(
-            "lesson.recorded",
-            captured,
-            {
-                "title": lesson_title,
-                "rule": lesson_rule,
-                "seen_in": [item],
-                "tags": ["bug"],
-            },
-        )
+        capture = _capture_lesson(repo, log, cfg, st, item, lesson_title, lesson_rule)
     return O.ok(
         "bug.fixed",
         id=item,
@@ -1311,9 +1301,43 @@ def bug_fixed(
         regression_tests=tests,
         regression_verified=verified,
         regression_verify=verify_ev,
-        lesson_captured=captured,
         unchecked=unchecked,
+        # The lesson that now holds the text: the new one, or the one it was added to.
+        lesson_captured=capture.get("captured") or capture.get("extended", ""),
+        lesson_capture=capture,
     )
+
+
+def _capture_lesson(repo: Path, log, cfg, st, bug: str, title: str, rule: str) -> dict[str, Any]:
+    """The lesson `bug fixed --lesson-title` captures, through the same duplicate check as
+    `lesson add` (B4ea345b51e: it was appended unchecked, so the same lesson was filed
+    twice). Nobody can answer a question here -- the bug is already closed -- so the
+    answer is automatic and on the record (`dedupe.auto`): an identical open lesson
+    receives the text (no new id), and a lesson that merely reads like one is filed
+    LINKED to it (`related`), so the two meet in the next sweep instead of drifting.
+    Returns `lesson_capture`: {captured, extended | related | not_captured, candidates,
+    dedupe_unavailable}, as `chk.data()` names them."""
+    rid = f"L-{bug}"
+    rec = DD.Record(
+        kind="lesson", event_kind="lesson.recorded", rid=rid, title=title, body=rule, item=bug
+    )
+    chk = DD.check_add(repo, log, cfg, st, rec)
+    if chk.refusal is not None and chk.shown:
+        chk = DD.check_add(repo, log, cfg, st, rec, DD.Answer("related", chk.shown[0]["id"]))
+        if "dedupe" in chk.fields:
+            chk.fields["dedupe"]["auto"] = True
+    if chk.refusal is not None:
+        return {"captured": "", "not_captured": chk.refusal.reason, **chk.data()}
+    if chk.extension:
+        DD.extend(log, cfg, chk, "lesson.recorded")
+        return {"captured": "", "extended": chk.extension["target"], **chk.data()}
+    data = {"title": title, "rule": rule, "seen_in": [bug], "tags": ["bug"], **chk.fields}
+    with log.transaction():
+        log.append("lesson.recorded", rid, data)
+        DD.after_add(log, cfg, rid, chk)
+    # `chk.data()` carries `related` / `extends` / `duplicate_of`, the candidates shown and
+    # `dedupe_unavailable` when the check could not run: never reported as a clean capture.
+    return {"captured": rid, **chk.data()}
 
 
 def bug_invalid(

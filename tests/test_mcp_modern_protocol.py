@@ -1,0 +1,173 @@
+"""B149: the server negotiates `2026-07-28` -- and honours what that revision REQUIRES.
+
+`2026-07-28` is stateless: no `initialize`; each request names its protocol version and
+the client's capabilities in `params._meta`. A server MUST answer `server/discover`, MUST
+refuse a version it does not serve with -32022 naming the ones it does, MUST refuse a
+request missing a required `_meta` field with -32602, and every result MUST carry a
+`resultType`; list/read results carry `ttlMs` + `cacheScope`, and each result SHOULD name
+the server in `_meta`. The server is dual-era: `initialize` keeps selecting the legacy
+revisions, byte-for-byte as before.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import subprocess
+
+import pytest
+
+from ddflow.surfaces import mcp as M
+from ddflow.surfaces.mcp import SERVER_INFO, SUPPORTED_PROTOCOLS, Server, serve
+
+MODERN = "2026-07-28"
+SERVER_KEY = "io.modelcontextprotocol/serverInfo"
+
+
+@pytest.fixture
+def repo(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    return tmp_path
+
+
+def meta(version=MODERN, caps=True, **extra):
+    m = {"io.modelcontextprotocol/protocolVersion": version}
+    if caps:
+        m["io.modelcontextprotocol/clientCapabilities"] = {}
+    m.update(extra)
+    return m
+
+
+def req(method, params=None, mid=1, **meta_kw):
+    p = dict(params or {})
+    p["_meta"] = meta(**meta_kw)
+    return {"jsonrpc": "2.0", "id": mid, "method": method, "params": p}
+
+
+def call(repo, msg):
+    return Server(repo, agent="modern").handle(msg)
+
+
+def test_discover_names_the_versions_capabilities_and_identity(repo):
+    res = call(repo, req("server/discover"))["result"]
+    assert res["supportedVersions"][0] == MODERN
+    assert set(SUPPORTED_PROTOCOLS) <= set(res["supportedVersions"])
+    assert set(res["capabilities"]) == {"tools", "resources", "prompts"}
+    assert res["instructions"].strip()
+    assert res["resultType"] == "complete"
+    assert res["_meta"][SERVER_KEY] == SERVER_INFO
+    assert res["cacheScope"] == "private" and isinstance(res["ttlMs"], int)
+
+
+def test_discover_without_the_version_is_malformed_not_unknown(repo):
+    """-32601 would tell a dual-era client's probe that this is a LEGACY server."""
+    r = call(repo, {"jsonrpc": "2.0", "id": 7, "method": "server/discover", "params": {}})
+    assert r["error"]["code"] == -32602 and r["id"] == 7
+
+
+@pytest.mark.parametrize("version", ["1900-01-01", "2025-06-18", "2099-12-31"])
+def test_a_version_not_served_per_request_is_refused_with_32022(repo, version):
+    r = call(repo, req("tools/list", version=version))
+    err = r["error"]
+    assert err["code"] == -32022
+    assert err["data"]["requested"] == version
+    assert MODERN in err["data"]["supported"]
+
+
+def test_a_non_string_version_is_invalid_params(repo):
+    assert call(repo, req("tools/list", version=20260728))["error"]["code"] == -32602
+
+
+def test_missing_client_capabilities_is_invalid_params(repo):
+    r = call(repo, req("tools/list", caps=False))
+    assert r["error"]["code"] == -32602 and "clientCapabilities" in r["error"]["message"]
+
+
+def test_a_malformed_modern_notification_gets_no_reply(repo):
+    msg = {"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"_meta": meta("x")}}
+    assert call(repo, msg) is None
+
+
+def test_a_modern_notification_is_never_answered_even_by_discover(repo):
+    """Review finding: `server/discover` sent without an id got a result with id null."""
+    for method in ("server/discover", "tools/list", "notifications/cancelled"):
+        msg = req(method)
+        del msg["id"]
+        assert call(repo, msg) is None, method
+
+
+def test_modern_tools_list_is_the_same_list_with_cache_hints(repo):
+    legacy = call(repo, {"jsonrpc": "2.0", "id": 1, "method": "tools/list"})["result"]
+    modern = call(repo, req("tools/list"))["result"]
+    assert modern["tools"] == legacy["tools"]
+    assert modern["resultType"] == "complete"
+    assert modern["ttlMs"] == 3_600_000 and modern["cacheScope"] == "private"
+    assert modern["_meta"][SERVER_KEY] == SERVER_INFO
+
+
+@pytest.mark.parametrize(
+    "method,params",
+    [
+        ("resources/list", {}),
+        ("resources/read", {"uri": "ddflow://decisions"}),
+        ("prompts/list", {}),
+    ],
+)
+def test_every_cacheable_result_carries_ttl_and_scope(repo, method, params):
+    res = call(repo, req(method, params))["result"]
+    assert res["resultType"] == "complete"
+    assert isinstance(res["ttlMs"], int) and res["cacheScope"] == "private"
+
+
+def test_a_modern_tool_call_needs_no_handshake_and_keeps_its_exit(repo):
+    """Stateless: a fresh connection, no `initialize`, and the call is served."""
+    r = call(repo, req("tools/call", {"name": "ddflow_status", "arguments": {}}))
+    res = r["result"]
+    assert res["resultType"] == "complete"
+    assert "exit" in res["_meta"] and res["_meta"][SERVER_KEY] == SERVER_INFO
+    assert "ttlMs" not in res  # tools/call is not a cacheable result
+
+
+def test_errors_stay_errors_in_the_modern_era(repo):
+    r = call(repo, req("resources/read", {"uri": "ddflow://nope"}))
+    assert r["error"]["code"] == -32602  # never the retired -32002
+    assert "result" not in r
+
+
+def test_the_legacy_era_is_unchanged(repo):
+    """No `_meta` version: exactly the old shapes -- no resultType, no cache hints."""
+    srv = Server(repo, agent="legacy")
+    init = srv.handle(
+        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": MODERN}}
+    )["result"]
+    assert init["protocolVersion"] == SUPPORTED_PROTOCOLS[0]  # `initialize` is legacy-only
+    assert "resultType" not in init
+    listed = srv.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})["result"]
+    assert set(listed) == {"tools"}
+
+
+def test_an_offloaded_call_with_a_bad_version_is_refused_without_a_worker(repo, monkeypatch):
+    def no_worker(*a, **k):
+        raise AssertionError("a worker was started for a refused request")
+
+    monkeypatch.setattr(M, "_offload", no_worker)
+    msg = req("tools/call", {"name": "ddflow_wait", "arguments": {}}, version="1900-01-01")
+    out = io.StringIO()
+    serve(repo, stdin=io.StringIO(json.dumps(msg) + "\n"), stdout=out, offload=True)
+    frames = [json.loads(ln) for ln in out.getvalue().splitlines() if ln.strip()]
+    assert [f["error"]["code"] for f in frames] == [-32022]
+
+
+def test_offload_own_replies_are_modern(repo, monkeypatch):
+    """`_offload`'s own answers (here: busy) are shaped like every other modern result."""
+
+    def busy(srv, msg, send, n):
+        send(M._ok(msg["id"], M._text("busy", meta={"exit": 2})))
+
+    monkeypatch.setattr(M, "_offload", busy)
+    msg = req("tools/call", {"name": "ddflow_wait", "arguments": {}})
+    out = io.StringIO()
+    serve(repo, stdin=io.StringIO(json.dumps(msg) + "\n"), stdout=out, offload=True)
+    sent = [json.loads(ln) for ln in out.getvalue().splitlines() if ln.strip()]
+    assert sent[0]["result"]["resultType"] == "complete"
+    assert sent[0]["result"]["_meta"] == {"exit": 2, SERVER_KEY: SERVER_INFO}
