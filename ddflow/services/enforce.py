@@ -41,7 +41,7 @@ from pathlib import Path
 from ..config import Config
 from ..core.flow import env_chain
 from ..core.model import Lease, fold
-from ..core.schedule import globs_overlap, is_shared, shared_globs
+from ..core.schedule import globs_overlap, is_shared, path_in_glob, shared_globs
 from ..infra import proc as P
 from ..infra import worktree as W
 from ..infra.log import EventLog
@@ -1257,14 +1257,14 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]
     # to edit (D-shared-globs): the changelog line each item adds is not a trespass.
     shared = shared_globs(cfg) if holds_any else []
     uncovered = [
-        p for p in paths if not is_shared(p, shared) and not any(globs_overlap(p, g) for g in mine)
+        p for p in paths if not is_shared(p, shared) and not any(path_in_glob(p, g) for g in mine)
     ]
     if not uncovered:
         return 0, ""
 
     # A path another agent holds is the dangerous case and gets named separately: the
     # remedy is not "claim it", it is "stop".
-    stolen = {p: owner for p in uncovered for g, owner in others.items() if globs_overlap(p, g)}
+    stolen = {p: owner for p in uncovered for g, owner in others.items() if path_in_glob(p, g)}
 
     # A lease that WOULD have been mine, by the same two tests, but has lapsed and was
     # not taken over. Invisible above, so the message said "(no live lease)" and "claim
@@ -1277,7 +1277,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]
         (item_id, lease)
         for item_id, lease in state.expired_leases(now, cfg.lease.grace_s).items()
         if _counts_as_mine(repo, lease, me, here)
-        and any(globs_overlap(p, g) for p in uncovered for g in lease.globs)
+        and any(path_in_glob(p, g) for p in uncovered for g in lease.globs)
         and not any(globs_overlap(g, o) for g in lease.globs for o in others)
     ]
 
@@ -1302,7 +1302,7 @@ def _check_lease(repo: Path, cfg: Config, *, agent: str = "") -> tuple[int, str]
             held_by = {
                 item_id: lease
                 for item_id, lease in state.active_leases(now, cfg.lease.grace_s).items()
-                if any(globs_overlap(p, g) for p in stolen for g in lease.globs)
+                if any(path_in_glob(p, g) for p in stolen for g in lease.globs)
             }
             lines += _derived_identity_lines(me, held_by)
     for item_id, lease in lapsed:

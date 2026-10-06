@@ -27,7 +27,7 @@ from typing import Any
 from ..config import Config
 from ..core.events import Event
 from ..core.model import State
-from ..core.schedule import conflicts
+from ..core.schedule import path_in_glob
 from . import backfill as BF
 from . import gates as G
 from . import ledger as LG
@@ -216,7 +216,9 @@ def _declared(repo: Path, led: dict[str, Any], tracked: set[str] | None) -> Clai
         notes.append(
             f"exists here but is untracked, so no other checkout has it: {_trim(local_only)}"
         )
-    if led["done"]["files_known"] and globs and not conflicts(sorted(landed), globs):
+    # A landed PATH inside a glob, not a prefix of one (B1997c64c5a).
+    inside = any(path_in_glob(p, g) for p in landed for g in globs)
+    if led["done"]["files_known"] and globs and not inside:
         notes.append("the landing touched nothing inside its declared globs")
     if notes:
         return Claim("declared_files", WARN, "; ".join(notes))
