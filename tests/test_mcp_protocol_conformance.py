@@ -518,3 +518,26 @@ def test_a_worker_adopts_its_parents_state_key(repo):
     )
     reply = json.loads(run.stdout.strip().splitlines()[-1])
     assert "result" in reply, reply
+
+
+def test_a_state_built_from_the_binding_mac_is_refused_not_a_crash(repo):
+    """B3c910a1147: the sealed state carries `b`, the MAC of a binding preimage the client
+    can rebuild exactly from its own request. With one key for both MACs, presenting that
+    preimage with `b` as its tag verified, and the payload -- a JSON list -- raised
+    TypeError out of `modern_check`. The two MACs are domain-separated now, and any payload
+    that is not the issued shape is a refusal."""
+    import base64
+
+    params = _modern_params()
+    token = P.input_required("tools/call", params, state=1)["requestState"]
+    body = token.split(".")[0]
+    payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
+    preimage = json.dumps(
+        ["tools/call", {"arguments": {}, "name": "ddflow_status", "uri": None}, ""],
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    forged = base64.urlsafe_b64encode(preimage).decode().rstrip("=") + "." + payload["b"]
+    reply = M.Server(repo, agent="conformance").handle(_retry(params, forged))
+    check_reply(MODERN[0], "tools/call", reply)
+    assert reply["error"]["code"] == -32602
