@@ -112,3 +112,31 @@ def test_the_missing_second_test_is_reported(tmp_path):
         tmp_path, "tests/test_a.py::test_param[x]y],tests/test_missing.py::test_nope"
     )
     assert missing == ["tests/test_missing.py::test_nope"], missing
+
+
+def _repo_with(tmp_path, source: str):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_a.py").write_text(source)
+    return tmp_path
+
+
+def test_a_class_parametrized_id_is_resolved_to_its_method(tmp_path):
+    """Bug Bb3ef73d53b: the node id was cut at its FIRST `[`, so `TestC[1]::test_missing`
+    resolved to the class alone and was accepted though the method does not exist."""
+    repo = _repo_with(tmp_path, "class TestC:\n    def test_m(self):\n        pass\n")
+    missing, _ = _unresolved_tests(repo, "tests/test_a.py::TestC[1]::test_missing")
+    assert missing, "a method the class does not define was accepted"
+    missing, _ = _unresolved_tests(
+        repo.joinpath(), "tests/test_a.py::TestC[1]::test_m,tests/test_a.py::TestC[a::b]::test_m"
+    )
+    assert missing == [], missing
+
+
+def test_a_value_shaped_like_a_test_list_is_read_as_a_list():
+    """The documented tie-break (sixth review): when both readings are well-formed, the list
+    of tests wins, so a value that is itself `x],tests/b.py::u[y]` is cut."""
+    assert _split_outside_brackets("tests/a.py::t[a],tests/b.py::u[x]]") == [
+        "tests/a.py::t[a]",
+        "tests/b.py::u[x]]",
+    ]

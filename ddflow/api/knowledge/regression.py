@@ -28,9 +28,11 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         if not path.endswith(".py") or any(c.isspace() for c in path):
             unchecked.append(entry)
             continue
-        # The parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
-        # `[...]`, and splitting them refused a real test (B-bfu-param-sep).
-        wanted = names.split("[", 1)[0].split("::") if sep else []
+        # Each parametrize id is cut off BEFORE splitting: `::` and `,` are legal inside
+        # `[...]`, and splitting them refused a real test (B-bfu-param-sep). Each, not the
+        # first: a class-parametrized `TestC[1]::test_m` resolved to `TestC` alone, so a
+        # method the class lacks was accepted (Bb3ef73d53b).
+        wanted = _bare_names(names) if sep else []
         # `path::` or `path::[p]` names no test; an empty part must not pass for one.
         # Several tests joined by whitespace are never one test: `a.py::t[1] a.py::t2`
         # resolved `t` and accepted the unchecked rest (B227585c781).
@@ -41,6 +43,20 @@ def _unresolved_tests(repo: Path, spec: str) -> tuple[list[str], list[str]]:
         ):
             missing.append(entry)
     return missing, unchecked
+
+
+#: A parametrize id: `[` to the nearest `]` that ends a name -- before `::`, whitespace
+#: or the end.
+_PARAMS = re.compile(r"\[.*?\](?=::|\s|$)", re.S)
+
+
+def _bare_names(names: str) -> list[str]:
+    """`TestC[1]::test_m[a::b]` -> ['TestC', 'test_m']: every parametrize id removed, then
+    anything after whitespace (tests joined by spaces are `_looks_like_several`'s), then
+    -- for an id that never closes -- everything from its `[`."""
+    bare = _PARAMS.sub("", names)
+    bare = bare.split(None, 1)[0] if bare.strip() else ""
+    return bare.split("[", 1)[0].split("::")
 
 
 def _looks_like_several(entry: str) -> bool:
