@@ -225,6 +225,18 @@ def test_stamp_leaves_a_version_1_payload_byte_identical(monkeypatch) -> None:
     assert U.stamp("task.added", {"title": "t"}) == {"title": "t", "v": 2}
 
 
+def test_the_log_writes_a_kind_at_its_current_version(tmp_path, monkeypatch) -> None:
+    from ddflow.infra.log import EventLog
+
+    log = EventLog(tmp_path, agent_id="a1")
+    assert "v" not in log.append("phase.added", "P1", {"title": "t"}).data
+    monkeypatch.setitem(U.PAYLOAD_VERSIONS, "phase.added", 2)
+    monkeypatch.setitem(U.UPCASTERS, ("phase.added", 1), lambda k, d: (k, dict(d)))
+    assert log.append("phase.added", "P2", {"title": "t"}).data["v"] == 2
+    st = fold(log.read_all())
+    assert {"P1", "P2"} <= set(st.items)
+
+
 def test_the_fold_hands_handlers_the_upcast_shape(monkeypatch) -> None:
     monkeypatch.setitem(U.PAYLOAD_VERSIONS, "phase.added", 2)
     monkeypatch.setitem(
