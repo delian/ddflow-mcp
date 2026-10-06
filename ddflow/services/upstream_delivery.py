@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import Protocol, runtime_checkable
 from urllib.parse import quote
 
+from ..infra import fsio
 from ..infra import upstream_gh as gh
 from .bugreport import Bundle
 from .redact_report import redact_report
@@ -102,9 +103,7 @@ def write_report(root: Path, bundle: Bundle) -> tuple[Path, Path]:
     d = reports_dir(root)
     d.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(d, 0o700)
-    ignore = local / ".gitignore"
-    if not ignore.exists():
-        _write(ignore, "*\n")
+    fsio.ensure_ignored_dir(local, mode=0o600)
     md, js = d / f"{bundle.digest}.md", d / f"{bundle.digest}.json"
     _write(md, bundle.rendered)
     _write(js, bundle.json)
