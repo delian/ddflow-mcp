@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import ddflow.api._dedupe as DD
+
 from ..core import outcome as O
 from ..services.rules import Rule, RulesStorage
 from ._base import _load
@@ -49,6 +51,109 @@ class RuleDedupAnswer:
         if self.relation != "new" and not self.target:
             return f"{self.relation!r} needs the id of the rule it points at"
         return ""
+
+
+def _cross_kind(
+    repo: Path, rule: Rule, agent: str, answer: Any = None, *, event_kind: str = "rule.added"
+) -> Any:
+    """The add-time check of ``rule`` against every OTHER record kind -- decisions,
+    lessons, research, tasks, bugs, memories (D-rule-dedupe-everywhere): `check_add`
+    itself, with its refusal, its candidates and its answers. None while ``rule`` is not
+    in ``[dedupe].kinds``. The other rules are compared by `rule_dedup_check`: rules are
+    files, so the index this check reads holds none of them."""
+
+    log, cfg, st = _load(repo, agent)
+    if "rule" not in cfg.dedupe.kinds:
+        return None
+    rec = DD.Record(
+        kind="rule", event_kind=event_kind, rid=rule.id, title=rule.title, body=rule.content
+    )
+    return DD.check_add(repo, log, cfg, st, rec, answer)
+
+
+def _is_rule(repo: Path, rid: str) -> bool:
+    try:
+        RulesStorage(repo).get(rid)
+    except FileNotFoundError:
+        return False
+    return True
+
+
+def _answer_other_kind(
+    repo: Path, rule: Rule, answer: RuleDedupAnswer, agent: str
+) -> O.Outcome | None:
+    """An answer that points at a decision, lesson, task... rather than a rule. None
+    when the cross-kind check is off. ``extends`` / ``duplicate_of`` an open record put
+    the rule's text on that record (`record.extended`) and file no rule, as every other
+    add does; onto a closed or claimed one, and ``related``, the rule is filed and the
+    result names the record (a rule is a file: it carries no link in the log)."""
+
+    if not DD.kind_of(_load(repo, agent)[2], answer.target):
+        return O.failed(
+            "rule.added",
+            f"Target {answer.target} not found: no rule or record has that id",
+            id=rule.id,
+        )
+    chk = _cross_kind(repo, rule, agent, DD.Answer(answer.relation, answer.target))
+    if chk is None:
+        return None
+    if chk.refusal is not None:
+        return chk.refusal
+    if chk.extension is not None:
+        log, cfg, _ = _load(repo, agent)
+        return DD.extend(log, cfg, chk, "rule.added")
+    out = apply_rule_update(repo, rule, agent=agent, operation="created")
+    if out.exit == O.OK:
+        out.data[answer.relation] = answer.target
+        out.data.update({k: v for k, v in chk.data().items() if k != answer.relation})
+    return out
+
+
+def _other_kind_rows(repo: Path, rule: Rule, agent: str) -> list[dict[str, Any]]:
+    """The records of other kinds ``rule`` reads like, as the check would list them;
+    nothing written. Empty while the cross-kind check is off or cannot run."""
+    chk = _cross_kind(repo, rule, agent, DD.Answer(check_only=True))
+    if chk is None or chk.refusal is None:
+        return []
+    return list(chk.refusal.data.get("candidates", []))
+
+
+def _points_elsewhere(repo: Path, rule: Rule, answer: RuleDedupAnswer | None) -> bool:
+    """Whether ``answer`` points at a record that is not a rule."""
+    return (
+        answer is not None
+        and not answer.problem
+        and answer.relation != "new"
+        and answer.target != rule.id
+        and not _is_rule(repo, answer.target)
+    )
+
+
+def _add_checked_against_others(
+    repo: Path, rule: Rule, agent: str, answer: RuleDedupAnswer | None
+) -> O.Outcome:
+    """File ``rule`` -- no other rule reads like it -- unless it reads like a record of
+    another kind and nobody has answered ``new``."""
+
+    chk = _cross_kind(repo, rule, agent, DD.Answer("new") if answer else None)
+    if chk is not None and chk.refusal is not None:
+        return chk.refusal
+    out = apply_rule_update(repo, rule, agent=agent, operation="created")
+    if chk is not None and out.exit == O.OK:
+        out.data.update(chk.data())
+    return out
+
+
+def _related_to_rule(
+    repo: Path, rule: Rule, agent: str, answer: RuleDedupAnswer | None
+) -> O.Outcome:
+    """File ``rule`` with an answer that names another RULE: checked against the other
+    kinds as if unanswered -- a relation to a rule says nothing about a decision it may
+    restate -- and reported as ``related`` when it is one."""
+    out = _add_checked_against_others(repo, rule, agent, None)
+    if out.exit == O.OK and answer is not None and answer.relation == "related":
+        out.data["related"] = answer.target
+    return out
 
 
 def _compared(rule: Rule, title: str, content: str) -> tuple[float, str, str]:
@@ -121,6 +226,8 @@ def rule_dedup_check_dry_run(
     threshold: float = 0.55,
     *,
     title: str = "",
+    rule_id: str = "",
+    agent: str = "",
 ) -> O.Outcome:
     """Dry-run check: show what dedup would do without writing anything.
 
@@ -136,11 +243,24 @@ def rule_dedup_check_dry_run(
     existing_rules = storage.list()
 
     is_duplicate, candidates = rule_dedup_check(content, existing_rules, threshold, title=title)
+    # And every other kind (D-rule-dedupe-everywhere), as `rule add` would meet it.
+
+    probe = Rule(id=rule_id or "rule-check", title=title, content=content)
+    chk = _cross_kind(repo, probe, agent, DD.Answer(check_only=True), event_kind="rule.check")
+    other = chk.refusal.data if chk is not None and chk.refusal is not None else {}
+    if other.get("dedupe_unavailable"):
+        return O.failed(
+            "rule.check",
+            f"the duplicate check could not run: {other['dedupe_unavailable']}",
+            candidates=candidates,
+        )
+    candidates = [*({**c, "kind": "rule"} for c in candidates), *other.get("candidates", [])]
+    would_ask = is_duplicate or bool(other.get("would_ask"))
 
     if not candidates:
         return O.nothing(
             "rule.check",
-            "No similar rules found",
+            "No similar rules or other records found",
             candidates=[],
             would_ask=False,
         )
@@ -148,7 +268,7 @@ def rule_dedup_check_dry_run(
     return O.ok(
         "rule.check",
         candidates=candidates,
-        would_ask=is_duplicate,
+        would_ask=would_ask,
     )
 
 
@@ -368,6 +488,18 @@ def _over_limits(repo: Path, rule: Rule, agent: str) -> O.Outcome | None:
     return O.refused("rule.added", problem) if problem else None
 
 
+def _refused_up_front(
+    repo: Path, rule: Rule, agent: str, answer: RuleDedupAnswer | None
+) -> O.Outcome | None:
+    """The project's [rules] limits, then an answer that is not one: refused before any
+    check runs. Never joined with `or`: an Outcome is falsy unless OK, so a refusal would
+    read as "nothing" (roborev)."""
+    refusal = _over_limits(repo, rule, agent)
+    if refusal is None and answer is not None and answer.problem:
+        refusal = O.failed("rule.added", answer.problem, id=rule.id)
+    return refusal
+
+
 def rule_add(
     repo: Path,
     rule: Rule,
@@ -391,11 +523,18 @@ def rule_add(
     Returns:
         Outcome with rule_id and other details, or refusal if duplicate found
     """
-    refusal = _over_limits(repo, rule, agent)
+    refusal = _refused_up_front(repo, rule, agent, dedup_answer)
     if refusal is not None:
         return refusal
     if not check_dedup:
         return apply_rule_update(repo, rule, agent=agent, operation="created")
+
+    # An answer naming a record that is not a rule answers the check against the other
+    # kinds (D-rule-dedupe-everywhere).
+    if _points_elsewhere(repo, rule, dedup_answer):
+        other = _answer_other_kind(repo, rule, dedup_answer, agent)
+        if other is not None:
+            return other
 
     # Check for duplicates
     storage = RulesStorage(repo)
@@ -405,13 +544,22 @@ def rule_add(
         rule.content, existing_rules, dedup_threshold, title=rule.title
     )
 
-    # If no duplicates found, proceed with add
+    # Against every other kind too: a rule restating a decision is refused like a
+    # decision restating one. `new` answers both checks.
+    if not is_duplicate and (dedup_answer is None or dedup_answer.relation == "new"):
+        return _add_checked_against_others(repo, rule, agent, dedup_answer)
+
+    # No other rule reads like it, and the answer names a rule: that answers nothing about
+    # the other kinds, so they are still checked (rubber-duck, critic).
     if not is_duplicate:
-        return apply_rule_update(repo, rule, agent=agent, operation="created")
+        return _related_to_rule(repo, rule, agent, dedup_answer)
 
     # Duplicates found - handle based on answer
     if dedup_answer is None:
-        # No answer provided - refuse and list candidates
+        # No answer provided - refuse and list candidates: the other rules, and the
+        # records of other kinds it reads like too (rubber-duck), so that `new` answers
+        # what the adder was actually shown.
+        others = _other_kind_rows(repo, rule, agent)
         return O.refused(
             "rule.added",
             "Possible duplicate rule. It reads like:\n"
@@ -420,24 +568,26 @@ def rule_add(
                 f"{c['title']}" + (f" [{', '.join(c['overlap'])}]" if c["overlap"] else "")
                 for c in candidates
             )
+            + "".join(
+                f"\n  {c['id']} ({c['kind']}, {c['state']}, score {c['score']:.2f}): "
+                f"{c['title'][:100]}"
+                for c in others
+            )
             + f"\n\nAnswer: new (different rule), extends {candidates[0]['id']} "
             f"(add to existing), duplicate_of {candidates[0]['id']} (same rule), or "
             f"related {candidates[0]['id']} (a different rule about the same thing)",
             id=rule.id,
-            candidates=candidates,
+            candidates=[*({**c, "kind": "rule"} for c in candidates), *others],
         )
 
-    # Validate the answer
-    bad = dedup_answer.problem
-    if bad:
-        return O.failed("rule.added", bad, id=rule.id)
+    # The answer itself was validated up front (`_refused_up_front`).
 
     if dedup_answer.target and dedup_answer.target == rule.id:
         return O.failed("rule.added", "a rule cannot point at itself", id=rule.id)
 
-    # If answer is "new", add anyway
+    # If answer is "new", add anyway -- it answered the other kinds' candidates too
     if dedup_answer.relation == "new":
-        return apply_rule_update(repo, rule, agent=agent, operation="created")
+        return _add_checked_against_others(repo, rule, agent, dedup_answer)
 
     try:
         storage.get(dedup_answer.target)  # must exist; the value is not needed here
@@ -452,10 +602,7 @@ def rule_add(
     # there is no link to record; the answer is reported (bug B3be768717c: it was
     # advertised by both surfaces and failed as an unknown relation).
     if dedup_answer.relation == "related":
-        out = apply_rule_update(repo, rule, agent=agent, operation="created")
-        if out.exit == O.OK:
-            out.data["related"] = dedup_answer.target
-        return out
+        return _related_to_rule(repo, rule, agent, dedup_answer)
 
     # "extends" or "duplicate_of": always extend the existing rule (merge new content)
     if dedup_answer.relation in ("extends", "duplicate_of"):
@@ -464,18 +611,88 @@ def rule_add(
     return O.failed("rule.added", f"Unknown relation: {dedup_answer.relation}", id=rule.id)
 
 
-def rule_update(repo: Path, rule_id: str, **fields: Any) -> O.Outcome:
+def _check_edit(
+    repo: Path,
+    rule_id: str,
+    fields: dict[str, Any],
+    answer: RuleDedupAnswer | None,
+    agent: str,
+) -> tuple[O.Outcome | None, dict[str, Any]]:
+    """(why the edit stops -- None when it goes ahead --, what its result carries about
+    the check: `related`, `candidates`, `dedupe_unavailable`). Only a new title or content
+    is checked; an answer naming another RULE relates the two and needs no check against
+    the other kinds, as on `rule add`."""
+    if "title" not in fields and "content" not in fields:
+        return None, {}
+    storage = RulesStorage(repo)
+    try:
+        current = storage.get(rule_id)
+    except FileNotFoundError:
+        return O.failed("rule.updated", f"Rule {rule_id} not found", id=rule_id), {}
+    if answer is not None and answer.problem:
+        return O.failed("rule.updated", answer.problem, id=rule_id), {}
+    if answer is not None and answer.target == rule_id:
+        return O.failed("rule.updated", "a rule cannot point at itself", id=rule_id), {}
+    if answer is not None and answer.relation in ("extends", "duplicate_of"):
+        return O.failed(
+            "rule.updated",
+            f"an edit cannot be folded into another record: answer new or related "
+            f"{answer.target}, or `ddflow rule remove {rule_id}` and extend {answer.target}",
+            id=rule_id,
+        ), {}
+    related = {"related": answer.target} if answer and answer.relation == "related" else {}
+    if answer is not None and answer.target and _is_rule(repo, answer.target):
+        # A relation to another rule answers nothing about the other kinds: they are
+        # checked as if unanswered (rubber-duck, critic).
+        answer = None
+    edited = dataclasses.replace(
+        current,
+        title=fields.get("title", current.title),
+        content=fields.get("content", current.content),
+    )
+    chk = _cross_kind(
+        repo,
+        edited,
+        agent,
+        DD.Answer(answer.relation, answer.target) if answer else None,
+        event_kind="rule.updated",
+    )
+    if chk is None:
+        return None, related
+    if chk.refusal is not None:
+        return chk.refusal, {}
+    return None, {**chk.data(), **related}
+
+
+def rule_update(
+    repo: Path,
+    rule_id: str,
+    *,
+    dedup_answer: RuleDedupAnswer | None = None,
+    agent: str = "",
+    **fields: Any,
+) -> O.Outcome:
     """Update an existing rule.
+
+    A new title or content is checked against every other record kind first, as an add
+    is (D-rule-dedupe-everywhere): refused while it reads like a decision, lesson, task...
+    until answered ``new`` or ``related ID``. An edit cannot be folded INTO another
+    record (``extends`` / ``duplicate_of``): remove the rule and extend that record.
 
     Args:
         repo: Path to the repository root
         rule_id: The rule ID to update
+        dedup_answer: The answer to the duplicate check (new | related ID)
+        agent: Agent ID for the duplicate check
         **fields: Fields to update
 
     Returns:
         Outcome indicating success or failure
     """
     storage = RulesStorage(repo)
+    stop, extra = _check_edit(repo, rule_id, fields, dedup_answer, agent)
+    if stop is not None:
+        return stop
 
     try:
         _rule, _event_fields = storage.update(rule_id, **fields)
@@ -489,6 +706,7 @@ def rule_update(repo: Path, rule_id: str, **fields: Any) -> O.Outcome:
             "rule.updated",
             id=rule_id,
             **fields,
+            **extra,
         )
 
     except FileNotFoundError:
