@@ -127,6 +127,8 @@ def drift(
         if now is None:
             if was["v"] not in steps.get(kind, []):
                 out.append(f"{kind}: kind removed without an upcaster from v{was['v']}")
+            if f"`{kind}` v{was['v'] + 1}" not in contract:
+                out.append(f"{kind}: removal (v{was['v'] + 1}) is not named in {CONTRACT.name}")
             continue
         if now["v"] < was["v"]:
             out.append(f"{kind}: payload version went down, v{was['v']} -> v{now['v']}")
@@ -271,6 +273,17 @@ def test_one_malformed_event_no_longer_aborts_the_fold() -> None:
     assert p.error.startswith("TypeError")
 
 
+@pytest.mark.parametrize("payload", [[], None, "x", 5])
+def test_a_payload_that_is_not_a_mapping_is_a_fold_problem(payload) -> None:
+    evs = [
+        _ev("phase.added", payload, subject="P0"),
+        _ev("phase.added", {"title": "t"}, subject="P1"),
+    ]
+    st = fold(evs, strict=False)
+    assert [p.error.split(":")[0] for p in st.fold_problems] == ["AttributeError"]
+    assert "P1" in st.items
+
+
 def test_a_strict_fold_still_raises_on_a_malformed_event() -> None:
     with pytest.raises(TypeError):
         fold(_malformed_then_good(), strict=True)
@@ -316,8 +329,16 @@ def test_the_snapshot_records_every_kind_at_its_current_version() -> None:
         "`python tests/test_event_upcasters.py --write`"
     )
     steps = registered_steps()
-    gone = sorted(k for k in set(snap) - known_kinds() if snap[k]["v"] not in steps.get(k, []))
-    assert not gone, f"kind(s) {gone} removed without an upcaster from their last version"
+    contract = CONTRACT.read_text(encoding="utf-8")
+    gone = sorted(
+        k
+        for k in set(snap) - known_kinds()
+        if snap[k]["v"] not in steps.get(k, []) or f"`{k}` v{snap[k]['v'] + 1}" not in contract
+    )
+    assert not gone, (
+        f"kind(s) {gone} removed without an upcaster from their last version and an entry "
+        f"in {CONTRACT.name}"
+    )
     wrong = {k: (e["v"], U.current_version(k)) for k, e in snap.items() if k in known_kinds()}
     assert {k: v for k, v in wrong.items() if v[0] != v[1]} == {}
 
@@ -364,10 +385,15 @@ def test_drift_refuses_a_removed_or_retyped_field_and_accepts_a_declared_bump() 
     assert drift(old, new(x=["int"], y=["int"]), steps={}, contract="") == [
         "k.a.x: type changed ['str'] -> ['int'] without a version bump"
     ]
-    assert drift(old, {"format": 1, "kinds": {}}, steps={}, contract="") == [
-        "k.a: kind removed without an upcaster from v1"
+    gone = {"format": 1, "kinds": {}}
+    assert drift(old, gone, steps={}, contract="") == [
+        "k.a: kind removed without an upcaster from v1",
+        f"k.a: removal (v2) is not named in {CONTRACT.name}",
     ]
-    assert drift(old, {"format": 1, "kinds": {}}, steps={"k.a": [1]}, contract="") == []
+    assert drift(old, gone, steps={"k.a": [1]}, contract="") == [
+        f"k.a: removal (v2) is not named in {CONTRACT.name}"
+    ]
+    assert drift(old, gone, steps={"k.a": [1]}, contract="`k.a` v2 becomes k.b") == []
     bumped = new(2, x=["int"])
     assert drift(old, bumped, steps={}, contract="") == [
         "k.a: v2 has no upcaster from v1",
