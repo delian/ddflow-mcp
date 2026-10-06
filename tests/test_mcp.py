@@ -57,7 +57,7 @@ def test_handshake_falls_back_for_an_unknown_protocol(proj):
             }
         ],
     )
-    assert r[0]["result"]["protocolVersion"] in ("2025-06-18",)
+    assert r[0]["result"]["protocolVersion"] in ("2025-11-25",)
 
 
 def test_every_tool_has_a_valid_schema_and_a_real_description():
