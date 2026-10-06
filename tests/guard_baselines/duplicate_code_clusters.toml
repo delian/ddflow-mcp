@@ -1,0 +1,6 @@
+# Ratchet `duplicate_code_clusters` (tests/test_architecture_guards.py) counts
+# pylint duplicate-code (R0801) clusters, with the guard test's DUPLICATE_ARGS.
+#
+# Lower the baseline in the same change that removes sites; the failure message
+# prints the exact value. Never raise it.
+baseline = 6

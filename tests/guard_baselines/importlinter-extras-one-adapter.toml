@@ -1,0 +1,12 @@
+# The `ignore_imports` allowlist of the .importlinter contract `extras-one-adapter`
+# (Optional extras are imported only by their one adapter module), which
+# tests/test_architecture_guards.py joins back into the contract before it runs
+# import-linter.
+#
+# Each entry is an import that breaks the contract TODAY. An entry may only be removed,
+# never added: a new violation fails the contract, and an entry that no longer matches
+# any import fails too. When a refactor moves an import, edit its entry in the same
+# change; never add one to make a new import pass. An entry marked "home" is permanent:
+# the one module allowed to own that import. The task that writes an extra's adapter
+# adds its one home entry here, e.g. `ddflow.services.searchcore.fuzzy -> rapidfuzz`.
+ignore_imports = []
