@@ -271,6 +271,21 @@ def test_region_a_last_end_line_without_newline_is_replaced_whole():
     assert r.splice("<!-- begin -->\nold\n<!-- end -->", "B\n") == "B\n"
 
 
+def test_region_one_marker_line_can_open_and_close():
+    r = fsio.Region("---", "---")
+    assert r.splice("---\nold: 1\n---\nbody\n", "---\nnew: 2\n---\n") == (
+        "---\nnew: 2\n---\nbody\n"
+    )
+    with pytest.raises(fsio.RegionError):
+        r.find("---\na\n---\nb\n---\n")
+
+
+def test_region_crlf_marker_lines_are_markers():
+    r = fsio.Region(BEGIN, END)
+    text = "x\r\n<!-- begin -->\r\nold\r\n<!-- end -->\r\ny\r\n"
+    assert r.splice(text, "N\n") == "x\r\nN\ny\r\n"
+
+
 def test_region_body_is_what_lies_between_the_marker_lines():
     r = fsio.Region(BEGIN, END)
     assert r.body("a\n<!-- begin -->\nx\ny\n<!-- end -->\n") == "x\ny\n"
