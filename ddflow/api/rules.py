@@ -6,6 +6,7 @@ including manifest generation and integration with the event log.
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -50,12 +51,33 @@ class RuleDedupAnswer:
         return ""
 
 
+def _compared(rule: Rule, title: str, content: str) -> tuple[float, str, str]:
+    """(score, my text, its text) for a new rule against `rule`.
+
+    Content against content, as always, while both have content. A rule with no content
+    is a title-only rule, and content alone scored every pair of them 1.0 (two empty
+    contents are "identical"): a second title-only rule was refused as a duplicate of each
+    of them whatever it said (bug Bd4c9bcb87e). So two title-only rules compare their
+    titles, and a title-only rule against one with content compares title and content
+    together. With no `title` given, the content-only comparison is kept unchanged."""
+    if not title or (content and rule.content):
+        return rule.similarity_score(content), content, rule.content
+    if not content and not rule.content:
+        mine, theirs = title, rule.title
+    else:
+        mine = "\n".join(x for x in (title, content) if x)
+        theirs = "\n".join(x for x in (rule.title, rule.content) if x)
+    return dataclasses.replace(rule, content=theirs).similarity_score(mine), mine, theirs
+
+
 def rule_dedup_check(
     content: str,
     existing_rules: list[Rule],
     threshold: float = 0.55,
+    *,
+    title: str = "",
 ) -> tuple[bool, list[dict[str, Any]]]:
-    """Check if a rule's content is similar to existing rules.
+    """Check if a rule is similar to existing rules (`_compared` says by what).
 
     Uses the same similarity engine as the Rule class.
 
@@ -63,6 +85,7 @@ def rule_dedup_check(
         content: The rule content to check
         existing_rules: List of existing Rule objects
         threshold: Score threshold for considering a match (default 0.55)
+        title: The rule's title, compared when a rule has no content
 
     Returns:
         Tuple of (is_duplicate, candidates) where:
@@ -73,7 +96,7 @@ def rule_dedup_check(
     candidates: list[dict[str, Any]] = []
 
     for rule in existing_rules:
-        score = rule.similarity_score(content)
+        score, text, theirs = _compared(rule, title, content)
         if score >= threshold:
             candidates.append(
                 {
@@ -82,7 +105,7 @@ def rule_dedup_check(
                     "score": score,
                     "scope": rule.scope,
                     "tags": rule.tags,
-                    "overlap": _get_overlap_terms(content, rule.content),
+                    "overlap": _get_overlap_terms(text, theirs),
                 }
             )
 
@@ -96,6 +119,8 @@ def rule_dedup_check_dry_run(
     repo: Path,
     content: str,
     threshold: float = 0.55,
+    *,
+    title: str = "",
 ) -> O.Outcome:
     """Dry-run check: show what dedup would do without writing anything.
 
@@ -110,7 +135,7 @@ def rule_dedup_check_dry_run(
     storage = RulesStorage(repo)
     existing_rules = storage.list()
 
-    is_duplicate, candidates = rule_dedup_check(content, existing_rules, threshold)
+    is_duplicate, candidates = rule_dedup_check(content, existing_rules, threshold, title=title)
 
     if not candidates:
         return O.nothing(
@@ -359,7 +384,8 @@ def rule_add(
         rule: The Rule to add
         agent: Agent ID for event logging
         check_dedup: Whether to check for duplicates (default True)
-        dedup_answer: Answer to any dedup candidates ("new", "extends ID", "duplicate_of ID")
+        dedup_answer: Answer to any dedup candidates ("new", "extends ID", "duplicate_of ID",
+            "related ID")
         dedup_threshold: Score threshold for considering a match (default 0.55)
 
     Returns:
@@ -375,7 +401,9 @@ def rule_add(
     storage = RulesStorage(repo)
     existing_rules = storage.list()
 
-    is_duplicate, candidates = rule_dedup_check(rule.content, existing_rules, dedup_threshold)
+    is_duplicate, candidates = rule_dedup_check(
+        rule.content, existing_rules, dedup_threshold, title=rule.title
+    )
 
     # If no duplicates found, proceed with add
     if not is_duplicate:
@@ -393,7 +421,8 @@ def rule_add(
                 for c in candidates
             )
             + f"\n\nAnswer: new (different rule), extends {candidates[0]['id']} "
-            f"(add to existing), or duplicate_of {candidates[0]['id']} (same rule)",
+            f"(add to existing), duplicate_of {candidates[0]['id']} (same rule), or "
+            f"related {candidates[0]['id']} (a different rule about the same thing)",
             id=rule.id,
             candidates=candidates,
         )
@@ -410,18 +439,26 @@ def rule_add(
     if dedup_answer.relation == "new":
         return apply_rule_update(repo, rule, agent=agent, operation="created")
 
-    # If "extends" or "duplicate_of", handle based on whether target is open
-    if dedup_answer.relation in ("extends", "duplicate_of"):
-        try:
-            storage.get(dedup_answer.target)  # must exist; the value is not needed here
-        except FileNotFoundError:
-            return O.failed(
-                "rule.added",
-                f"Target rule {dedup_answer.target} not found",
-                id=rule.id,
-            )
+    try:
+        storage.get(dedup_answer.target)  # must exist; the value is not needed here
+    except FileNotFoundError:
+        return O.failed(
+            "rule.added",
+            f"Target rule {dedup_answer.target} not found",
+            id=rule.id,
+        )
 
-        # For now, always extend the existing rule (merge new content)
+    # "related": a different rule, filed as such. Rules are files, not log records, so
+    # there is no link to record; the answer is reported (bug B3be768717c: it was
+    # advertised by both surfaces and failed as an unknown relation).
+    if dedup_answer.relation == "related":
+        out = apply_rule_update(repo, rule, agent=agent, operation="created")
+        if out.exit == O.OK:
+            out.data["related"] = dedup_answer.target
+        return out
+
+    # "extends" or "duplicate_of": always extend the existing rule (merge new content)
+    if dedup_answer.relation in ("extends", "duplicate_of"):
         return _extend_rule(repo, dedup_answer.target, rule.content, agent=agent)
 
     return O.failed("rule.added", f"Unknown relation: {dedup_answer.relation}", id=rule.id)
