@@ -718,6 +718,20 @@ class Session:
     summary: str = ""
 
 
+@dataclass(frozen=True)
+class FoldProblem:
+    """One event a non-strict fold could not apply (B-uni-compat-events): its handler or its
+    upcaster raised. The fold records it and goes on, so one malformed event no longer hides
+    every event after it; `ddflow doctor` names each one. Whatever the handler had already
+    changed before it raised stays changed -- the fold does not copy the state per event."""
+
+    event: str
+    kind: str
+    lamport: int
+    agent: str
+    error: str
+
+
 @dataclass
 class State:
     #: `ci.result`: the last CI_RESULTS_KEPT outcomes of the CI command, oldest first.
@@ -805,6 +819,9 @@ class State:
     #: kind -> count, for events a non-strict fold could not interpret. Counted rather
     #: than ignored so a caller can refuse to act on a partially-understood log.
     skipped_kinds: dict[str, int] = field(default_factory=dict)
+    #: Events a non-strict fold could not apply, in fold order (`FoldProblem`). A strict
+    #: fold raises instead.
+    fold_problems: list[FoldProblem] = field(default_factory=list)
     #: ddflow version -> who has worked on this log under it: {"agents", "at", "install"}
     #: (`ddflow.seen`, decision D-upgrade-event-kinds). The project's version is the highest
     #: key under `events.version_key`, not the latest write -- an older ddflow stamping after
