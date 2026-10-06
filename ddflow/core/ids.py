@@ -287,17 +287,15 @@ def refile(base: str, sha: str) -> str:
     return "-".join((base, short))
 
 
-def is_filing_of(rid: str, base: str) -> bool:
-    """Whether ``rid`` is the STABLE id ``base`` (a `{digest}` template's id, such as a CI
-    failure's bug) or one of its re-filings (`refile`: seven hex digits). Only stable ids
-    are re-filed, and no stable template holds `{seq}`, so a sequence number never follows
-    a stable id; another stable id that merely starts with ``base`` ends in its own
-    ten-digit digest, which is not seven. Enforced, not assumed: a ``base`` that does not
-    end in a ten-digit digest has no re-filings at all."""
+def is_filing_of(cfg: Config, kind: str, rid: str, base: str) -> bool:
+    """Whether ``rid`` is ``base`` -- an id of ``kind`` -- or one of its re-filings
+    (`refile`: seven hex digits). Decided by the kind's template, not by the id's look:
+    only a STABLE template (`{digest}`, such as the CI failure bug) is re-filed, so a
+    kind minted any other way (a `{seq}` or `{hash}` one) has no re-filings at all."""
     if rid == base:
         return True
-    if not re.search(r"-[0-9a-f]{10}$", base):
-        return False  # not a stable id (no trailing digest): it has no re-filings
+    if "{digest}" not in TEMPLATE_OF[kind](cfg):
+        return False
     return re.fullmatch(re.escape(base) + r"-[0-9a-f]{7}", rid) is not None
 
 

@@ -54,7 +54,7 @@ def file_failures(
     for c in failing:
         bid = CI.bug_id(c.id, cfg)
         # Open under the base id or under any sha-suffixed re-file of it: one bug while open.
-        if any(b.open and CI.is_filing_of(k, bid) for k, b in st.bugs.items()):
+        if any(b.open and CI.is_filing_of(k, bid, cfg) for k, b in st.bugs.items()):
             continue
         if bid in st.bugs:  # fixed before and failing again: a new bug, not a reopening
             bid = CI.refile_id(bid, res.sha)

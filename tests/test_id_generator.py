@@ -238,9 +238,11 @@ def test_a_follow_up_fix_task_names_its_bug(repo) -> None:
 
 def test_a_refiling_is_told_apart_from_another_stable_id() -> None:
     base = "Bci-abc-0123456789"
-    assert ids.is_filing_of(base, base)
-    assert ids.is_filing_of(ids.refile(base, "deadbeefcafe"), base)
-    assert not ids.is_filing_of(base + "-abc1234-ffffffffff", base)  # another check's id
+    assert ids.is_filing_of(Config(), "ci_bug", base, base)
+    assert ids.is_filing_of(Config(), "ci_bug", ids.refile(base, "deadbeefcafe"), base)
+    assert not ids.is_filing_of(
+        Config(), "ci_bug", base + "-abc1234-ffffffffff", base
+    )  # another check's id
 
 
 def test_a_key_taken_meanwhile_is_minted_afresh() -> None:
@@ -274,14 +276,16 @@ def test_a_seq_in_a_rendered_template_is_allocated() -> None:
 
 def test_a_short_sha_refiling_round_trips() -> None:
     for sha in ("a1b2", "", "deadbeefcafe"):
-        assert ids.is_filing_of(ids.refile("Bci-x-0123456789", sha), "Bci-x-0123456789")
+        assert ids.is_filing_of(
+            Config(), "ci_bug", ids.refile("Bci-x-0123456789", sha), "Bci-x-0123456789"
+        )
 
 
 def test_only_a_seven_digit_suffix_is_a_refiling_of_a_stable_id() -> None:
     base = ids.make(Config(), "ci_bug", slug="x", digest="0123456789").id
-    assert ids.is_filing_of(base + "-abc1234", base)
+    assert ids.is_filing_of(Config(), "ci_bug", base + "-abc1234", base)
     for other in (base + "-abc12", base + "-abc12345", base + "-ffffffffff", base + "x"):
-        assert not ids.is_filing_of(other, base), other
+        assert not ids.is_filing_of(Config(), "ci_bug", other, base), other
 
 
 def test_a_repeated_parent_token_reads_back() -> None:
@@ -291,10 +295,14 @@ def test_a_repeated_parent_token_reads_back() -> None:
     assert "B1" not in ids.bugs_named_by_fix_task(cfg, "B1-fix-B2")
 
 
-def test_a_sequence_numbered_id_is_never_a_refiling() -> None:
-    for rid, base in (
-        ("promote-prod-1234567", "promote-prod"),
-        ("fix-B1-1234567", "fix-B1"),
-        ("promote-prod-1234", "promote-prod"),
+def test_only_a_stable_kind_has_refilings() -> None:
+    cfg = Config()
+    for kind, rid, base in (
+        ("promotion", "promote-prod-1234567", "promote-prod"),
+        ("fix_task_followup", "fix-B1-1234567", "fix-B1"),
+        ("promotion", "promote-prod-1723456789-abcdef1", "promote-prod-1723456789"),
     ):
-        assert not ids.is_filing_of(rid, base), rid
+        assert not ids.is_filing_of(cfg, kind, rid, base), rid
+    cfg.ids.ci_bug = "{digest}-{slug}"  # any stable shape, the digest anywhere
+    base = ids.make(cfg, "ci_bug", slug="x", digest="0123456789abcdef").id
+    assert ids.is_filing_of(cfg, "ci_bug", ids.refile(base, "deadbeef"), base)
