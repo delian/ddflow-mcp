@@ -19,8 +19,8 @@ from typing import Any
 import ddflow.api._dedupe as DD
 
 from ..config import Config, csv_list
+from ..core import ids as IDS
 from ..core import outcome as O
-from ..core.ids import auto_id
 from ..core.plain import plain as _plain
 from ..infra.store import Store
 from ..services.export.query import ExportError, _cutoff
@@ -79,7 +79,15 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
             "what was discussed.",
         )
     log, cfg, st = _load(repo, agent)
-    did = draft.id or auto_id("D", draft.title, draft.decision)
+    minted = IDS.mint(
+        cfg,
+        st,
+        "decision",
+        events=log.read_all,
+        given=draft.id,
+        hash_parts=(draft.title, draft.decision),
+    )
+    did = minted.id
     chk = DD.check_add(
         repo,
         log,
@@ -114,7 +122,7 @@ def decision_add(repo: Path, draft: Draft, *, agent: str = "") -> O.Outcome:
         "supersedes": csv_list(draft.supersedes),
     }
     with log.transaction():
-        log.append("decision.recorded", did, fields | chk.fields)
+        log.append("decision.recorded", did, fields | IDS.key_field(minted) | chk.fields)
         DD.after_add(log, cfg, did, chk)
     return O.ok(
         "decision.recorded",

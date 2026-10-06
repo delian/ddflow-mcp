@@ -13,6 +13,7 @@ import os
 import re
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 from ..config import ID_PREFIXES, Config, id_problem
@@ -89,11 +90,13 @@ TEMPLATE_OF: dict[str, Callable[[Config], str]] = {
 }
 
 
-def render(cfg: Config, kind: str, **fields: Any) -> str:
+def render(cfg: Config, kind: str, *, check: bool = True, **fields: Any) -> str:
     """The id ``kind``'s `[ids]` template makes of ``fields``. ``{prefix}``, ``{hash}``
     (from ``hash_parts``), ``{time}``, ``{date}`` and ``{pid}`` are filled here when not
     given; every other token must be passed. The result is held to the id characters
-    (`config.id_problem`): a value that makes it unusable raises ValueError.
+    (`config.id_problem`): a value that makes it unusable raises ValueError. ``check=
+    False`` is for ids spelled by a source the project already uses (an imported file's
+    headings), which keep that spelling as they always have.
 
     Rendering only: the id service (B-id-generator) owns sequence allocation and the
     taken-key check under the log lock."""
@@ -102,6 +105,166 @@ def render(cfg: Config, kind: str, **fields: Any) -> str:
     # The template was valid; the VALUES may still not be (an empty slug between two
     # dots, a caller's prefix with a slash): an id is a file name, a branch name and a
     # glob token, so a bad one is refused here rather than written into the log.
-    if problem := id_problem(minted):
+    if check and (problem := id_problem(minted)):
         raise ValueError(f"the {kind} id {minted!r} {problem}")
     return minted
+
+
+# -- the id service (B-id-generator) ---------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Minted:
+    """What `make` minted. ``id`` is the internal id every event names; ``key`` is what
+    people see and type. They differ only when a `{seq}` template is configured over a
+    kind whose shipped id has no `{seq}` (D-id-schemes-final, 3): the record keeps the
+    id ddflow always minted, and the key is resolved to it (B-id-aliases)."""
+
+    id: str
+    key: str
+
+
+def taken(state: Any, events: Any = ()) -> dict[str, str]:
+    """Every id in the fold -- and every key a record was minted under (an event's
+    ``key``) -- -> the kind holding it: the one namespace every minted id is checked
+    against (D-id-schemes-final, 2). Removed and finished records included: an id is
+    never reused."""
+    out: dict[str, str] = {}
+    for ev in (events() if callable(events) else events) or ():
+        key = ev.data.get("key") if isinstance(getattr(ev, "data", None), dict) else None
+        if isinstance(key, str) and key:
+            out.setdefault(key, "key")
+    for coll, kind in (
+        ("items", "item"),
+        ("bugs", "bug"),
+        ("lessons", "lesson"),
+        ("research", "research"),
+        ("decisions", "decision"),
+        ("memories", "memory"),
+        ("jobs", "job"),
+        ("sessions", "session"),
+    ):
+        for rid in getattr(state, coll, {}) or {}:
+            out.setdefault(rid, kind)
+    return out
+
+
+def _pattern(template: str) -> re.Pattern[str]:
+    """A regex matching the ids `template` mints, `{seq}` captured."""
+    parts = re.split(r"(\{[^{}]*\})", template)
+    rx = ""
+    for part in parts:
+        if part == "{seq}":
+            rx += r"(?P<seq>\d+)"
+        elif part.startswith("{") and part.endswith("}"):
+            rx += r".+?"
+        else:
+            rx += re.escape(part)
+    return re.compile(rx)
+
+
+def next_seq(template: str, used: Any, **fields: Any) -> int:
+    """The highest `{seq}` already minted from ``template`` (with ``fields`` fixed, so
+    `fix-{parent}-{seq}` counts per bug), plus one; 1 when there is none. Counted over
+    every id ever recorded, so a number is never reused."""
+    fixed = template
+    for name, value in fields.items():
+        fixed = fixed.replace("{" + name + "}", str(value))
+    rx = _pattern(fixed)
+    high = 0
+    for rid in used:
+        m = rx.fullmatch(rid)
+        if m and m.group("seq"):
+            high = max(high, int(m.group("seq")))
+    return high + 1
+
+
+def _default(kind: str) -> str:
+    from ..config import IdsConfig
+
+    return str(getattr(IdsConfig(), kind))
+
+
+def _free(candidate: str, used: Any) -> str:
+    """``candidate``, or ``candidate-2``, ``-3`` ... -- the first one nobody holds."""
+    if candidate not in used:
+        return candidate
+    n = 2
+    while f"{candidate}-{n}" in used:
+        n += 1
+    return f"{candidate}-{n}"
+
+
+def make(cfg: Config, kind: str, *, used: Any = (), **fields: Any) -> Minted:
+    """Mint ``kind``'s id from its `[ids]` template: the one place ids are made.
+
+    ``used`` is every id already taken (`taken(state)`; the caller holds the fold it is
+    about to append to). `{seq}` is allocated as the next free number unless given; a
+    taken result gets `-2`, `-3`. A STABLE template (`{digest}`) maps the same content to
+    the same id on purpose: a taken one is returned as it is when a record of the same
+    kind holds it, and refused (ValueError) when anything else does."""
+    template = TEMPLATE_OF[kind](cfg)
+    default = _default(kind)
+    holders = used if isinstance(used, dict) else dict.fromkeys(used, "")
+    if "{digest}" in template:
+        key = render(cfg, kind, **fields)
+        holder = holders.get(key)
+        if holder not in (None, "", _record_kind(kind)):
+            raise ValueError(f"the {kind} id {key} is already taken by a {holder}")
+        return Minted(key, key)
+    vals = dict(fields)
+    if "{seq}" in template and "seq" not in vals:
+        vals["seq"] = next_seq(template, holders, **_fixed(fields))
+    key = _free(render(cfg, kind, **vals), holders)
+    if "{seq}" in template and template != default and "{seq}" not in default:
+        # A key over an internal id minted as ever (D-id-schemes-final, 3).
+        internal = _free(_render_template(default, kind, fields), holders)
+        return Minted(internal, key)
+    return Minted(key, key)
+
+
+def _fixed(fields: dict[str, Any]) -> dict[str, Any]:
+    """The fields a sequence is counted under: the content tokens, not the salt."""
+    return {k: v for k, v in fields.items() if k in ("parent", "phase", "env", "slug", "prefix")}
+
+
+def _record_kind(kind: str) -> str:
+    """The `taken` kind a minted kind's records are folded as."""
+    return {"ci_bug": "bug", "fix_task": "item", "fix_task_followup": "item"}.get(kind, kind)
+
+
+def _render_template(template: str, kind: str, fields: dict[str, Any]) -> str:
+    return re.sub(r"\{([^{}]*)\}", lambda m: _token_value(kind, m.group(1), fields), template)
+
+
+def bug_of_fix_task(cfg: Config | None, item_id: str) -> str:
+    """The bug a fix-task id names (`fix-<bug>` by default), read back through the
+    `[ids].fix_task` template -- never by a hard-coded prefix -- or ""."""
+    cfgs = [cfg] if cfg is not None else []
+    for template in [*(TEMPLATE_OF["fix_task"](c) for c in cfgs), _default("fix_task")]:
+        if "{parent}" not in template:
+            continue
+        head, _, tail = template.partition("{parent}")
+        if (
+            item_id.startswith(head)
+            and item_id.endswith(tail)
+            and len(item_id) > len(head) + len(tail)
+            and "{" not in head + tail
+        ):
+            return item_id[len(head) : len(item_id) - len(tail)]
+    return ""
+
+
+def mint(
+    cfg: Config, state: Any, kind: str, *, events: Any = (), given: str = "", **fields: Any
+) -> Minted:
+    """The id for a new record of ``kind``: the caller's own (``given``) when it named one,
+    else `make` checked against everything the fold holds (`taken`)."""
+    if given:
+        return Minted(given, given)
+    return make(cfg, kind, used=taken(state, events), **fields)
+
+
+def key_field(minted: Minted) -> dict[str, str]:
+    """``{"key": ...}`` for the record's event when its key is not its id, else ``{}``."""
+    return {"key": minted.key} if minted.key != minted.id else {}

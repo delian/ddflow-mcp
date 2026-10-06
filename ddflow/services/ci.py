@@ -227,10 +227,25 @@ def main_command(repo: Path, cfg: Config) -> tuple[str, str]:
     return f"SKIP={FAST_SKIP} {cmd}", ""
 
 
-def bug_id(check: str) -> str:
-    """A stable bug id per failing check, so the same failure is one bug while it is open.
+def bug_id(check: str, cfg: Config | None = None) -> str:
+    """A stable bug id per failing check, so the same failure is one bug while it is open:
+    `[ids].ci_bug` (`Bci-{slug}-{digest}`, a stable template) through the id service.
 
     The slug is for people; the digest of the whole check id is what keeps two long ids
     that share a prefix (pytest node ids) from being one bug."""
+    from ..core import ids as IDS
+
     slug = re.sub(r"[^A-Za-z0-9]+", "-", check).strip("-").lower()[:30].strip("-")
-    return f"Bci-{slug}-{hashlib.sha1(check.encode()).hexdigest()[:10]}"  # nosec B324 - not security
+    digest = hashlib.sha1(check.encode()).hexdigest()[:10]  # nosec B324 - not security
+    return IDS.render(cfg if cfg is not None else Config(), "ci_bug", slug=slug, digest=digest)
+
+
+def is_filing_of(bug: str, base: str) -> bool:
+    """Whether ``bug`` is ``base`` itself or one of its re-filings (`refile_id`)."""
+    return bug == base or bug.startswith(base + "-")
+
+
+def refile_id(base: str, sha: str) -> str:
+    """A failing check's bug filed AGAIN after its first bug was fixed: the stable id with
+    the failing commit's short sha, so it is a new bug and not a reopening."""
+    return "-".join((base, sha[:7]))

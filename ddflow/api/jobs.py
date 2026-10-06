@@ -6,8 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ..core import ids as IDS
 from ..core import outcome as O
-from ..core.ids import auto_id
 from ._base import _load
 
 #: Where launched jobs write their output: under `.ddflow/local/`, which `init` ignores.
@@ -63,14 +63,16 @@ def _not_held(log, cfg, it) -> O.Outcome | None:
     return O.refused("job.started", why, id="")
 
 
-def _record(log, item: str, command: str, pid: int, log_path: str, cwd: str) -> str:
+def _record(log, cfg, st, item: str, command: str, pid: int, log_path: str, cwd: str) -> str:
     from ..services import jobs as J
 
-    jid = auto_id("J", item, command, str(pid))
+    minted = IDS.mint(cfg, st, "job", events=log.read_all, hash_parts=(item, command, str(pid)))
+    jid = minted.id
     log.append(
         "job.started",
         jid,
         {
+            **IDS.key_field(minted),
             "item": item,
             "command": command,
             "pid": pid,
@@ -116,7 +118,7 @@ def job_run(
         pid = J.launch(command, where, out)
     except RuntimeError as exc:
         return O.failed("job.started", str(exc), id="")
-    jid = _record(log, item, command, pid, str(out), str(where))
+    jid = _record(log, cfg, st, item, command, pid, str(out), str(where))
     return O.ok("job.started", id=jid, pid=pid, log=str(out), cwd=str(where))
 
 
@@ -140,7 +142,7 @@ def job_add(
             f"identity (pid + start time) can be recorded",
             id="",
         )
-    jid = _record(log, item, command, pid, log_file, "")
+    jid = _record(log, cfg, st, item, command, pid, log_file, "")
     return O.ok("job.started", id=jid, pid=pid, log=log_file, cwd="")
 
 

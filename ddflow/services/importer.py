@@ -863,6 +863,17 @@ def _box_disposition(
     return "", ""
 
 
+def _ids_config(repo: Path):
+    """The project's config for the id templates an import mints with; the shipped
+    defaults when it cannot be read (a proposal must not fail for it)."""
+    from ..config import Config
+
+    try:
+        return Config.load(repo)
+    except Exception:
+        return Config()
+
+
 def scan_todos(
     repo: Path, globs: tuple[str, ...] = TODO_GLOBS, archive: tuple[str, ...] = ()
 ) -> tuple[list[Found], list[str]]:
@@ -872,6 +883,9 @@ def scan_todos(
     convention rather than a law, which is exactly why the result is a *proposal* the
     agent reviews with the operator rather than something written straight to the log.
     """
+    from ..core import ids as IDS
+
+    ids_cfg = _ids_config(repo)
     found: list[Found] = []
     empty: list[str] = []
     taken: set[str] = set()
@@ -966,7 +980,13 @@ def scan_todos(
                 # `142.A`, which then existed nowhere, and unknown dependencies are
                 # treated as unmet, so the work imported permanently blocked.
                 declared, rest = _split_id(heading)
-                phase_ident = _unique(declared, _slug(heading, 24).upper(), taken)
+                derived = IDS.render(  # the source's own spelling: not re-checked
+                    ids_cfg,
+                    "imported_phase",
+                    check=False,
+                    **{"user-text": _slug(heading, 24).upper()},
+                )
+                phase_ident = _unique(declared, derived, taken)
                 phase_found = Found(
                     kind="phase",
                     ident=phase_ident,
@@ -986,7 +1006,14 @@ def scan_todos(
                     },
                 )
                 found.append(phase_found)
-            chosen = _unique(ident, f"{phase_ident or 'T'}.{_slug(unsplit or body, 20)}", taken)
+            derived = IDS.render(
+                ids_cfg,
+                "imported_task",
+                check=False,
+                phase=phase_ident or "T",
+                slug=_slug(unsplit or body, 20),
+            )
+            chosen = _unique(ident, derived, taken)
             anchor = Found(
                 kind="task",
                 ident=chosen,

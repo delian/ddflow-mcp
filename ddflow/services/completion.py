@@ -68,20 +68,19 @@ class Verdict:
 OPEN_BUG_BLOCKER = "fixes open bug(s) "
 
 
-#: `bug found` files a bug's fix task as `fix-<bug>` (`api.knowledge.FIX_TASK_PREFIX`;
-#: services do not import the api layer).
-_FIX_PREFIX = "fix-"
-
-
-def fixes_of(state: State, item_id: str) -> set[str]:
+def fixes_of(state: State, item_id: str, cfg: Config | None = None) -> set[str]:
     """The bugs ``item_id`` was filed to fix: its `fixes` list, plus the bug a hand-filed
-    `fix-<bug>` names. NOT every bug whose `fix_task` points here: `bug found --item <open
-    fix task>` links a mere report to the task it was filed against, and completing
-    fix-B297ede2447 closed four such reports nobody had fixed (B7bdcc6b212)."""
+    fix task names (`fix-<bug>`, read back through the `[ids].fix_task` template by the
+    id service, never by a prefix written here). NOT every bug whose `fix_task` points
+    here: `bug found --item <open fix task>` links a mere report to the task it was filed
+    against, and completing fix-B297ede2447 closed four such reports nobody had fixed
+    (B7bdcc6b212)."""
+    from ..core import ids as IDS
+
     it = state.items.get(item_id)
     named = set(it.fixes) if it is not None else set()
-    if item_id.startswith(_FIX_PREFIX):
-        named.add(item_id[len(_FIX_PREFIX) :])
+    if bug := IDS.bug_of_fix_task(cfg, item_id):
+        named.add(bug)
     return {b for b in named if b in state.bugs}
 
 

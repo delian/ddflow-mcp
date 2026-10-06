@@ -47,17 +47,17 @@ def file_failures(
 ) -> tuple[list[str], dict[str, str]]:
     """A bug and its fix task per failing check, once while the bug is open (the dedupe key
     is the check id: Bci-<check>). Returns the bug ids this call filed, and the fix task of each that got one."""
-    _log, _cfg, st = _load(repo, agent)
+    _log, cfg, st = _load(repo, agent)
     filed: list[str] = []
     fixes: dict[str, str] = {}
     failing = [c for c in res.checks if not c.ok]
     for c in failing:
-        bid = CI.bug_id(c.id)
+        bid = CI.bug_id(c.id, cfg)
         # Open under the base id or under any sha-suffixed re-file of it: one bug while open.
-        if any(b.open and (k == bid or k.startswith(bid + "-")) for k, b in st.bugs.items()):
+        if any(b.open and CI.is_filing_of(k, bid) for k, b in st.bugs.items()):
             continue
         if bid in st.bugs:  # fixed before and failing again: a new bug, not a reopening
-            bid = f"{bid}-{res.sha[:7]}"
+            bid = CI.refile_id(bid, res.sha)
         out = bug_found(
             repo,
             id=bid,
