@@ -80,6 +80,8 @@ def test_replace_swaps_only_the_region_and_refuses_a_readme_without_one():
         KT.replace(f"{OLD_BEGIN}\nbut no end", "NEW")
     with pytest.raises(ValueError):
         KT.replace(f"{KT.END}\n{OLD_BEGIN}\n", "NEW")
+    # A CRLF checkout: the markers are still whole lines.
+    assert KT.replace(text.replace("\n", "\r\n"), "NEW") == "head\r\nNEW\r\ntail\r\n"
 
 
 def test_main_rewrites_a_stale_region_and_leaves_a_current_one(tmp_path, capsys):
@@ -91,19 +93,34 @@ def test_main_rewrites_a_stale_region_and_leaves_a_current_one(tmp_path, capsys)
     assert "already current" in capsys.readouterr().out
 
 
+def _count_claims(text: str) -> list[tuple[str, str]]:
+    """Every knob count `text` states, as (knobs, sections or ""): "N knobs [across M
+    sections]", and the parenthetical "knobs (K of the N)" a section's own list uses."""
+    claims = re.findall(r"(\d+) knobs(?: across (\d+) sections)?", text)
+    claims += [(n, "") for n in re.findall(r"knobs\W{0,4}\(\d+ of the (\d+)\)", text)]
+    return claims
+
+
+def test_the_count_claims_are_the_knob_counts_and_nothing_else():
+    """The "of the N" form is read only as the parenthetical after "knobs": another
+    number after "of the" is not a knob count."""
+    assert _count_claims("**The `[export]` knobs** (5 of the 150): ...") == [("150", "")]
+    assert _count_claims("All 70 knobs across 15 sections. See the knobs of the 15 sections.") == [
+        ("70", "15")
+    ]
+
+
 def test_the_readme_knob_counts_match_the_config():
     """Both numbers were stale when `[log]` was added — one said 58, the other "61
     across 12 sections", and the truth was 70 across 15. Then "(5 of the 150)" survived
-    beside 189, because this ratchet only read "N knobs" (B55895bdfc7): it reads a count
-    phrased "knobs ... of the N" too.
+    beside 189, because this ratchet only read "N knobs" (B55895bdfc7): it reads the
+    "knobs (K of the N)" form too.
 
     Pinned rather than corrected-and-hoped: a hand-maintained count in prose drifts the
     first time anyone adds a knob, and a reader who finds a wrong number trusts it.
     """
     knobs, sections = _counts()
-    readme = _readme()
-    claims = re.findall(r"(\d+) knobs(?: across (\d+) sections)?", readme)
-    claims += [(n, "") for n in re.findall(r"knobs[^.\n]{0,20}?\bof the (\d+)\b", readme)]
+    claims = _count_claims(_readme())
     assert claims, "the README no longer states a knob count; this ratchet has gone blind"
     for stated_knobs, stated_sections in claims:
         assert int(stated_knobs) == knobs, (
