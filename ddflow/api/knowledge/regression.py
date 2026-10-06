@@ -65,13 +65,28 @@ def _looks_like_several(entry: str) -> bool:
     return any(tok.split("::", 1)[0].endswith(".py") for tok in tokens[1:] if tok)
 
 
+#: A node id's path: no whitespace, ends in `.py`, then `::` or nothing.
+_NODE_PATH = re.compile(r"[^\s:]+\.py(::|$)")
+
+
 def _malformed(entry: str) -> bool:
-    """An entry no list was written with: a `]` before any `[`, or brackets that do not
-    end it (a node id's parametrize part is its LAST part)."""
+    """A piece no list was written with: a node id (or a bare token) with a `]` before any
+    `[`, or with brackets followed by anything but `::name` (`TestC[x]::test_m` is a
+    class-parametrized id) or whitespace. A command -- whitespace, not a node id -- is never malformed:
+    `pytest -k "a]b"` must not be glued onto the id before it."""
     e = entry.strip()
+    if not e or (not _NODE_PATH.match(e) and any(c.isspace() for c in e)):
+        return False
     if "]" in e and ("[" not in e or e.index("]") < e.index("[")):
         return True
-    return "[" in e and not e.endswith("]")
+    if "[" not in e:
+        return False
+    if "]" not in e:
+        return True
+    # After the brackets: nothing, `::name`, or whitespace and more words -- tests joined
+    # by spaces, which `_looks_like_several` refuses with its own hint.
+    tail = e[e.rindex("]") + 1 :]
+    return not (tail == "" or tail[0].isspace() or (tail.startswith("::") and "[" not in tail))
 
 
 def _split_outside_brackets(spec: str) -> list[str]:
@@ -79,14 +94,14 @@ def _split_outside_brackets(spec: str) -> list[str]:
 
     ';' as well as ',' (B227585c781): a ';'-joined list was resolved as one node id and
     refused as a single missing test. Brackets cannot be counted: a parametrize value may
-    hold `]`, `[`, `,` and `;` in any order (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`,
-    `t[a],b.py,c]`). Counting drove the depth negative and swallowed every later
+    hold `]`, `[`, `,` and `;` (`t[x]y]`, `t[a]b]c,d]`, `t[a],b]`, `t[a],b.py,c]`). Counting drove the depth negative and swallowed every later
     separator, so a missing second test was never resolved (Bfc9daca269), and every local
     rule tried after it had a counterexample. So the whole list is parsed at once: of all
     the ways to cut it at its separators, the one with the fewest malformed entries
     (`_malformed`), then the most cuts -- every separator is one unless cutting there
-    breaks an entry. A list nobody could have written well-formed (`t[x], pytest -k "a]b"`)
-    still gets its best cut.
+    breaks an entry. Where two readings are both well-formed
+    (`t[a],tests/b.py::u[x]`), the one with more entries wins: a list of tests is likelier
+    than a value shaped like one.
     """
     cuts = [-1, *(i for i, ch in enumerate(spec) if ch in ",;"), len(spec)]
     # best[j] for spec[: cuts[j]]: (malformed entries, -cuts made, the cut before)

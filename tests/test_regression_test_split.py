@@ -72,6 +72,15 @@ def test_a_value_whose_inner_bracket_meets_a_separator_stays_one_entry(node):
         ("tests/a.py::t[a],tests/b.py::u]", ["tests/a.py::t[a],tests/b.py::u]"]),
         # nothing well-formed exists: the best cut still separates the command
         ('tests/a.py::t[x], pytest -k "a]b"', ["tests/a.py::t[x]", 'pytest -k "a]b"']),
+        # sixth review: a class-parametrized id, and a command holding a stray `]`
+        (
+            "tests/a.py::TestC[x]::test_m,tests/b.py::test_n[y]",
+            ["tests/a.py::TestC[x]::test_m", "tests/b.py::test_n[y]"],
+        ),
+        (
+            "tests/a.py::t[a],tests/missing.py::nope,run x]",
+            ["tests/a.py::t[a]", "tests/missing.py::nope", "run x]"],
+        ),
     ],
 )
 def test_third_review_cases(spec, entries):
