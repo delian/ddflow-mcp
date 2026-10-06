@@ -43,8 +43,8 @@ def _bad(kind: str, rid: str) -> str:
 def _fields_problem(fields: Any, *, nulls: bool = False) -> str:
     """Why ``fields`` cannot be stored, or "". A null removes a field in an update, so a
     whole definition holds none (``nulls`` is the update's allowance)."""
-    if not isinstance(fields, dict):
-        return "fields must be a JSON object"
+    if not isinstance(fields, dict) or not all(isinstance(k, str) for k in fields):
+        return "fields must be a JSON object (string keys)"
     if not nulls and (empty := sorted(k for k, v in fields.items() if v is None)):
         return f"field(s) {', '.join(map(str, empty))} are null: leave them out instead"
     try:
@@ -155,10 +155,14 @@ def def_update(
     merged = {**rec.fields, **fields}
     merged = {k: v for k, v in merged.items() if not (k in fields and fields[k] is None)}
     digest = D.digest(merged)
-    same_prov = provenance is None or {"by": cfg.agent.id, **provenance} == rec.provenance
+    # None keeps the recorded provenance (under this author); a mapping replaces it.
+    prov = (
+        {k: v for k, v in rec.provenance.items() if k != "by"} if provenance is None else provenance
+    )
+    same_prov = {"by": cfg.agent.id, **prov} == rec.provenance
     if digest == rec.digest and (source is None or source == rec.source) and same_prov:
         return O.nothing("def.updated", f"{kind} {rid}: nothing changed", def_kind=kind, id=rid)
-    data = _envelope(cfg, kind, rid, rec.source if source is None else source, provenance)
+    data = _envelope(cfg, kind, rid, rec.source if source is None else source, prov)
     data.update(fields=dict(fields), digest=digest)
     log.append("def.updated", D.key(kind, rid), data)
     changed = sorted(k for k in fields if rec.fields.get(k) != fields[k])

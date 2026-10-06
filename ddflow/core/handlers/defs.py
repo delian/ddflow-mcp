@@ -49,11 +49,14 @@ def _record(st: State, ev: Event) -> DefRecord:
     return rec
 
 
-def _envelope(rec: DefRecord, ev: Event) -> None:
+def _envelope(rec: DefRecord, ev: Event, *, content: bool = True) -> None:
+    """Source and provenance from the event. Only a CONTENT event (recorded, updated)
+    sets the provenance: a status change's author is in the history, and taking its
+    provenance would drop what the content's said (where an import read it, say)."""
     if "source" in ev.data:
         rec.source = str(ev.data.get("source") or "")
     prov = ev.data.get("provenance")
-    if isinstance(prov, dict):
+    if content and isinstance(prov, dict):
         rec.provenance = dict(prov)
 
 
@@ -65,6 +68,10 @@ def h_recorded(st: State, ev: Event) -> None:
     fields = ev.data.get("fields")
     rec.fields = dict(fields) if isinstance(fields, dict) else {}
     rec.digest = str(ev.data.get("digest") or digest(rec.fields))
+    if rec.status == MERGED:  # brought back: no longer part of what absorbed it
+        into = st.defs.get(key(rec.kind, rec.successor))
+        if into is not None and rec.id in into.merged_from:
+            into.merged_from.remove(rec.id)
     rec.status, rec.successor, rec.reason = ACTIVE, "", ""
     _envelope(rec, ev)
     _note(rec, ev)
@@ -88,7 +95,7 @@ def h_retired(st: State, ev: Event) -> None:
     rec = _record(st, ev)
     rec.status, rec.successor = RETIRED, ""
     rec.reason = str(ev.data.get("reason") or "")
-    _envelope(rec, ev)
+    _envelope(rec, ev, content=False)
     _note(rec, ev, reason=rec.reason)
 
 
@@ -98,7 +105,7 @@ def h_superseded(st: State, ev: Event) -> None:
     rec.status = SUPERSEDED
     rec.successor = str(ev.data.get("successor") or "")
     rec.reason = str(ev.data.get("reason") or "")
-    _envelope(rec, ev)
+    _envelope(rec, ev, content=False)
     _note(rec, ev, reason=rec.reason, successor=rec.successor)
 
 
@@ -108,7 +115,7 @@ def h_merged(st: State, ev: Event) -> None:
     rec.status = MERGED
     rec.successor = str(ev.data.get("successor") or "")
     rec.reason = str(ev.data.get("reason") or "")
-    _envelope(rec, ev)
+    _envelope(rec, ev, content=False)
     _note(rec, ev, reason=rec.reason, successor=rec.successor)
     into = st.defs.get(key(rec.kind, rec.successor))
     if into is not None and rec.id not in into.merged_from:

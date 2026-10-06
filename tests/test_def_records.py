@@ -7,6 +7,7 @@ with its refusals, and the add-time duplicate check a new definition runs.
 from __future__ import annotations
 
 import hashlib
+import itertools
 import json
 import sys
 from pathlib import Path
@@ -100,6 +101,17 @@ def test_null_means_remove_in_an_update_and_is_refused_in_a_whole_definition(rep
     assert rec.fields == {"b": 2} and rec.digest == D.digest({"b": 2})
 
 
+def test_provenance_survives_a_field_edit_and_a_status_change(repo):
+    A.def_record(repo, "skill", "s", {"b": 1}, provenance={"via": "import"}, agent="a")
+    A.def_record(repo, "skill", "t", {"b": 1}, agent="a")
+    A.def_update(repo, "skill", "s", {"b": 2}, agent="b")
+    assert _state(repo).defs["skill:s"].provenance == {"by": "b", "via": "import"}
+    A.def_supersede(repo, "skill", "s", "t", agent="c")
+    rec = _state(repo).defs["skill:s"]
+    assert rec.provenance == {"by": "b", "via": "import"}
+    assert rec.history[-1]["by"] == "c"  # who changed the status is in the history
+
+
 def test_a_provenance_only_update_is_written(repo):
     A.def_record(repo, "skill", "s", {"b": 1}, agent="a")
     out = A.def_update(repo, "skill", "s", {}, provenance={"reviewed": "yes"}, agent="a")
@@ -171,6 +183,7 @@ def test_one_name_in_two_kinds_is_two_definitions(repo):
         ("recipe", "x", {}, "unknown definition kind"),
         ("skill", "../x", {}, "definition id"),
         ("skill", "x", ["not", "an", "object"], "JSON object"),
+        ("skill", "x", {1: "int key"}, "string keys"),
         ("skill", "x", {"n": float("nan")}, "plain JSON"),
     ],
 )
@@ -250,6 +263,14 @@ def test_a_merge_is_listed_by_its_successor_whichever_arrives_first():
         st = fold(order)
         assert st.defs["skill:B"].merged_from == ["A"], [e.kind for e in order]
         assert st.defs["skill:A"].status == "merged"
+    # A's definition AFTER its merge brings it back: in every order the successor lists
+    # A exactly when A is merged.
+    for order in itertools.permutations([a, merge, b]):
+        st = fold(list(order))
+        merged = st.defs["skill:A"].status == "merged"
+        assert st.defs["skill:B"].merged_from == (["A"] if merged else []), [
+            e.subject + " " + e.kind for e in order
+        ]
 
 
 # -- the add-time duplicate check -------------------------------------------------------------
