@@ -432,7 +432,7 @@ def test_a_flood_of_untracked_files_degrades_LOUDLY_rather_than_silently(repo, m
     """
     from ddflow.services import gates as G
 
-    monkeypatch.setattr(G, "MAX_UNTRACKED_HASHED", 2)
+    monkeypatch.setattr(G.evidence, "MAX_UNTRACKED_HASHED", 2)
     for i in range(5):
         (repo / f"scratch{i}.py").write_text(f"x = {i}\n")
     assert "names-only:5" in G._untracked_digest(repo)
